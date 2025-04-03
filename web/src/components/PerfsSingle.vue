@@ -1,0 +1,335 @@
+<template>
+
+  <div class="performance-comparison">
+    <el-descriptions title="抖音" :column="1" class="beautified-descriptions">
+      <el-descriptions-item label="应用版本：">1.0.1</el-descriptions-item>
+      <el-descriptions-item label="场景名称：">douyin_0010</el-descriptions-item>
+    </el-descriptions>
+    <el-row :gutter="20">
+      <el-col :span="12">
+        <div class="data-panel">
+          <PieChart />
+        </div>
+
+      </el-col>
+      <el-col :span="12">
+        <div class="data-panel">
+          <BarChart />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="12">
+        <div class="data-panel">
+          <LineChart />
+        </div>
+      </el-col>
+      <el-col :span="12">
+        <div class="data-panel">
+          <LineCharts />
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- 测试步骤导航 -->
+    <div class="step-nav">
+      <div v-for="(step, index) in testSteps" :key="index" :class="[
+        'step-item',
+        {
+          active: currentStepIndex === step.id,
+        },
+      ]" @click="handleStepClick(step.id)">
+        <div class="step-header">
+          <span class="step-order">STEP {{ step.id + 1 }}</span>
+          <span class="step-duration">{{ formatDuration(step.count) }}</span>
+        </div>
+        <div class="step-name">{{ step.step_name }}</div>
+      </div>
+    </div>
+
+    <!-- 性能对比区域 -->
+    <div>
+      <!-- 基准版本 -->
+      <div class="data-panel">
+        <h3 class="panel-title">
+          <span class="version-tag">文件负载</span>
+        </h3>
+        <PerfsTable :stepId="currentStepIndex" :data="filteredPerformanceData" />
+      </div>
+    </div>
+
+    <el-dialog v-model="symbolDialogVisible" :title="selectedFile" width="100%">
+      <div>
+        <!-- 基准版本 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">Base</span>
+            {{ performanceData.version }}
+          </h3>
+          <PerfSymbolTable :data="symbolData.instructions" />
+        </div>
+      </div>
+    </el-dialog>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { ref, computed, onMounted } from 'vue';
+import { Timer } from '@element-plus/icons-vue';
+import PerfsTable from './PerfsTable.vue';
+import PerfSymbolTable from './PerfSymbolTable.vue';
+import { getCurrentInstance } from 'vue';
+import PieChart from './PieChart.vue';
+import BarChart from './BarChart.vue';
+import LineChart from './LineChart.vue';
+import LineCharts from './LineCharts.vue';
+import { column } from 'element-plus/es/components/table-v2/src/common.mjs';
+import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
+import { throwError } from 'element-plus/es/utils/error.mjs';
+
+// 获取存储实例
+const jsonDataStore = useJsonDataStore();
+// 通过 getter 获取 JSON 数据
+const json = jsonDataStore.jsonData;
+console.log('从元素获取到的 JSON 数据:');
+// 模拟数据
+// const testSteps = ref([
+//   { id: 0, step_name: '步骤 1', count: 1000 },
+//   { id: 1, step_name: '步骤 2', count: 2000 },
+//   { id: 2, step_name: '步骤 3', count: 1500 },
+// ]);
+
+// const performanceData = ref({
+//   version: '1.0.0',
+//   instructions: [
+//     { stepId: 0, instructions: 100, name: '文件 01' },
+//     { stepId: 0, instructions: 200, name: '文件 02' },
+//     { stepId: 1, instructions: 150, name: '文件 11' },
+//     { stepId: 1, instructions: 250, name: '文件 12' },
+//     { stepId: 2, instructions: 120, name: '文件 21' },
+//     { stepId: 2, instructions: 220, name: '文件 22' },
+//   ],
+// });
+
+const testSteps = ref(json!.steps.map((step, index) => ({
+  id: index,
+  step_name: step.step_name,
+  count: step.count
+})));
+
+const performanceData = ref({
+  version: json!.app_version,
+  instructions: json!.steps.flatMap((step) =>
+    step.data.flatMap((item) =>
+      item.subData.flatMap((subItem) =>
+        subItem.files.map((file) => ({
+          stepId: step.step_id,
+          instructions: file.count,
+          name: file.file
+        }))
+      )
+    )
+  )
+});
+
+const symbolData = ref({
+  instructions: [
+    { symbol: 'Symbol1', count: 50 },
+    { symbol: 'Symbol2', count: 100 },
+  ],
+});
+
+const currentStepIndex = ref(0);
+const symbolDialogVisible = ref(false);
+const selectedFile = ref('');
+
+// 格式化持续时间的方法
+const formatDuration = (milliseconds: any) => {
+  return `指令数：${milliseconds}`;
+};
+
+// 处理步骤点击事件的方法
+const handleStepClick = (stepId: any) => {
+  currentStepIndex.value = stepId;
+};
+
+// 计算属性，根据当前步骤 ID 过滤性能数据
+const filteredPerformanceData = computed(() => {
+  return performanceData.value.instructions.filter(item => item.stepId === currentStepIndex.value);
+});
+</script>
+
+<style scoped>
+.performance-comparison {
+  padding: 20px;
+  background: #f5f7fa;
+}
+
+/* 步骤导航样式 */
+.step-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.step-item {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+
+  &.active {
+    border: 2px solid #2196f3;
+  }
+}
+
+.step-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.9em;
+}
+
+.step-order {
+  color: #2196f3;
+  font-weight: bold;
+}
+
+.step-duration {
+  color: #757575;
+}
+
+.step-duration-compare {
+  color: #d81b60;
+}
+
+.step-name {
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* 对比区域样式 */
+.comparison-container {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 32px;
+}
+
+.data-panel {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px 0;
+}
+
+.version-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+
+  .data-panel:nth-child(1) & {
+    background: #e3f2fd;
+    color: #1976d2;
+  }
+
+  .data-panel:nth-child(3) & {
+    background: #fce4ec;
+    color: #d81b60;
+  }
+}
+
+/* 差异指示器 */
+.indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.diff-box {
+  width: 120px;
+  height: 120px;
+  border: 2px solid;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.diff-value {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.diff-label {
+  font-size: 12px;
+  color: #757575;
+}
+
+.time-diff {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #757575;
+}
+
+
+
+.beautified-descriptions {
+  /* 设置容器的背景颜色和边框 */
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+}
+
+/* 标题样式 */
+.beautified-descriptions .el-descriptions__title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+/* 描述项容器样式 */
+.beautified-descriptions .el-descriptions__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 描述项标签样式 */
+.beautified-descriptions .el-descriptions__label {
+  font-size: 16px;
+  font-weight: 500;
+  color: #666;
+}
+
+/* 描述项内容样式 */
+.beautified-descriptions .el-descriptions__content {
+  font-size: 16px;
+  color: #333;
+}
+</style>
