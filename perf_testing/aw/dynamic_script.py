@@ -228,6 +228,10 @@ def perform_step_2(driver, config):
     # 滑动返回
     driver.swipe_to_back()
     driver.wait(1)
+
+    # 滑动返回
+    driver.swipe_to_back()
+    driver.wait(1)
     
     # 等待 hiperf 线程完成
     hiperf_thread.join()

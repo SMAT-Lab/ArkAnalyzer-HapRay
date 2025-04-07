@@ -175,3 +175,31 @@ def save_testInfo(driver: UiDriver, app_id: str, scene: str, output_dir: str, su
         json.dump(result, f, indent=4, ensure_ascii=False)
     
     return result
+
+def generate_hapray_report(scene_dir: str) -> bool:
+    """
+    执行 hapray-cmd.js 命令生成性能分析报告
+    :param scene_dir: 场景目录路径，包含 hiperf_output 目录
+    :return: bool 表示是否成功生成报告
+    """
+    input_dir = os.path.join(scene_dir, 'hiperf_output')
+    output_dir = os.path.join(scene_dir, 'report', 'hapray_report.html')
+    
+    # 确保输出目录存在
+    os.makedirs(os.path.dirname(output_dir), exist_ok=True)
+    
+    # 构建并执行命令
+    cmd = [
+        'node', 'hapray-cmd.js',
+        'hapray', 'dbtools',
+        '-i', input_dir,
+        '-o', output_dir
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True)
+        print(f"Successfully generated HapRay report at: {output_dir}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to generate HapRay report: {str(e)}")
+        return False
