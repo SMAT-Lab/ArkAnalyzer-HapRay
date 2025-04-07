@@ -15,9 +15,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Component, ComponentCategory, ComponentCategoryType, OriginKind, SoOriginal } from '../component';
+// import { Component, ComponentCategory, ComponentCategoryType, OriginKind, SoOriginal } from '../component';
+import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
 import { AnalyzerProjectBase } from '../project';
-import { getConfig } from '../../config';
+// import { getConfig } from '../../config';
 
 export interface TestSceneInfo {
     packageName: string; // 应用包名
@@ -87,7 +88,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected cfgThreadComponent: Map<string, { name: string; category: ComponentCategory }>;
     protected cfgFileComponent: Map<string, { name: string; category: ComponentCategory }>;
     protected cfgRegexComponent: Map<RegExp, { name: string; category: ComponentCategory }>;
-    protected soOrigins: Map<string, SoOriginal>;
+    // protected soOrigins: Map<string, SoOriginal>;
 
     constructor(workspace: string) {
         super(workspace);
@@ -96,10 +97,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.cfgThreadComponent = new Map();
         this.cfgFileComponent = new Map();
         this.cfgRegexComponent = new Map();
-        this.soOrigins = getConfig().perf.soOrigins as Map<string, SoOriginal>;
+        // this.soOrigins = getConfig().perf.soOrigins as Map<string, SoOriginal>;
 
         this.loadHapComponents();
-        this.loadPerfKindCfg();
+        // this.loadPerfKindCfg();
     }
 
     private loadHapComponents(): void {
@@ -114,23 +115,23 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         }
     }
 
-    private loadPerfKindCfg(): void {
-        for (const kit of getConfig().perf.kinds) {
-            if (kit.threads) {
-                for (const thread of kit.threads) {
-                    this.cfgThreadComponent.set(thread, { name: kit.name, category: kit.kind });
-                }
-            }
+    // private loadPerfKindCfg(): void {
+    //     for (const kit of getConfig().perf.kinds) {
+    //         if (kit.threads) {
+    //             for (const thread of kit.threads) {
+    //                 this.cfgThreadComponent.set(thread, { name: kit.name, category: kit.kind });
+    //             }
+    //         }
 
-            if (kit.files) {
-                for (const file of kit.files) {
-                    if (file.indexOf('*') >= 0) {
-                        this.cfgRegexComponent.set(new RegExp(file), { name: kit.name, category: kit.kind });
-                    } else {
-                        this.cfgFileComponent.set(file, { name: kit.name, category: kit.kind });
-                    }
-                }
-            }
-        }
-    }
+    //         if (kit.files) {
+    //             for (const file of kit.files) {
+    //                 if (file.indexOf('*') >= 0) {
+    //                     this.cfgRegexComponent.set(new RegExp(file), { name: kit.name, category: kit.kind });
+    //                 } else {
+    //                     this.cfgFileComponent.set(file, { name: kit.name, category: kit.kind });
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 }

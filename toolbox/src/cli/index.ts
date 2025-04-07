@@ -14,14 +14,23 @@
  */
 
 import { program } from 'commander';
-import Logger, { LOG_LEVEL } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { HapPerfCli } from './commands/hap_analyzer_cli';
+import { HaprayCli } from './commands/hapray_cli';
 
-Logger.configure('arkanalyzer-hapray.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO);
+Logger.configure('arkanalyzer-hapray.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, false);
+const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
-program
+try {
+    program
     .name('arkanalyzer-hapray')
     .description('CLI to arkanalyzer hapray')
     .version('1.0.0')
     .addCommand(HapPerfCli)
+    .addCommand(HaprayCli)
     .parse();
+
+} catch (error) {
+    logger.error('error', error);
+}
+

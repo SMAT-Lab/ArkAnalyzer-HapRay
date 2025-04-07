@@ -73,6 +73,57 @@ export interface TestStep {
     end: number;
 }
 
+
+// 定义单个 step 的结构
+export interface Step {
+    name: string;
+    stepIdx: number;
+}
+
+interface FileItem {
+    file: string;
+    count: number;
+};
+
+interface SubItem {
+    name: string;
+    count: number;
+    files: FileItem[];
+ };
+
+ interface CategoryItem {
+    category: number;
+    count: number;
+    subData: SubItem[];
+};
+
+export interface StepItem {
+    step_name: string;
+    step_id: number;
+    count: number;
+    data: CategoryItem[];
+};
+
+interface FileInfo {
+    file: string,
+    fileEvents: number;
+    category: ComponentCategory; // 组件大类
+    subCategory: string; // 小类
+}
+
+interface CategoryInfo {
+    category: ComponentCategory;
+    name: string;
+    count: number;
+    subData: Map<string, subCategoryInfo>;
+}
+
+interface subCategoryInfo {
+    name: string;
+    count: number;
+    files: FileItem[];
+}
+
 export const DEFAULT_PERF_DB = 'perf.db';
 // 应用相关进程存在5种场景 :appBundleName, :appBundleName|| ':ui', :appBundleName || ':render', :appBundleName || ':background', :appBundleName|| 'service:ui'
 const PERF_PROCESS_STEP_SAMPLE_SQL = `
@@ -126,6 +177,7 @@ WHERE
 ORDER BY callchain_id, depth desc
 `;
 
+// TODO: check why set process.pid = 66666 ?
 // Test Step timestamp
 const TEST_STEP_TIMESTAMPS = `
 SELECT
@@ -386,6 +438,123 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         }
 
         return perf;
+    }
+    async analyze2(dbPath: string, app_id: string, step: Step): Promise<StepItem> {
+        // const fileBuffer = fs.readFileSync(dbPath);
+        // const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
+        let stepInfo: StepItem = {
+            step_id: step.stepIdx,
+            step_name: step.name,
+            count: 0,
+            data: []
+        };
+        // stepInfo.step_id = step.stepIdx;
+        // stepInfo.step_name = step.name;
+        // 读取数据并统计
+        await this.loadDbAndStatistics(dbPath, app_id);
+        let steps = this.stepsSample.map((value) => value.statistics);
+        let total = 0;
+        for (let i = 0; i < steps[0].components.length; i++) {
+            total += steps[0].components[i].instructions;
+            // logger.info(`${steps[0].components[i].name} :  ${steps[0].components[i].instructions}`)
+        }
+        logger.info(steps.length, total);
+        
+        for (const data of this.stepsSample[0].details) {
+            if (!data.componentName) {
+                logger.info(`${data.componentCategory}, ${data.componentName}`)
+            }
+        }
+        let tidFileMap: Map<string, number> = new Map();
+        let fileMap: Map<string, FileInfo> = new Map();
+        const filter_event = PerfEvent.INSTRUCTION_EVENT;
+        for (const data of this.stepsSample[0].details) {
+            if (data.eventType !== filter_event || data.componentCategory === ComponentCategory.UNKNOWN) {
+                continue;
+            }
+            if (tidFileMap.has(`${data.tid}_${data.file}`)) {
+                if (tidFileMap.get(`${data.tid}_${data.file}`) !== data.fileEvents) {
+                    logger.error(`duplicate file ${data.file}: ${tidFileMap.get(`${data.tid}_${data.file}`)}, ${data.fileEvents} TID ${data.tid}`);
+                }
+            } else {
+                tidFileMap.set(`${data.tid}_${data.file}`, data.fileEvents);
+                // logger.info(`### set ${data.file}, ${data.fileEvents} TID ${data.tid}`);
+                if (!fileMap.has(data.file)) {
+                    fileMap.set(data.file, {
+                        file: data.file,
+                        fileEvents: data.fileEvents,
+                        category: data.componentCategory,
+                        subCategory: data.componentName!
+                    })
+                } else {
+                    let fileInfo = fileMap.get(data.file)!;
+                    fileInfo.fileEvents += data.fileEvents;
+                }
+            }
+        }
+
+        let categoryInfoMap: Map<ComponentCategory, CategoryInfo> = new Map();
+        for (const [_, data] of fileMap) {
+            if (!categoryInfoMap.has(data.category)) {
+                let categoryInfo: CategoryInfo = {
+                    category: data.category,
+                    name: getComponentCategories()[data.category].name,
+                    count: data.fileEvents,
+                    subData: new Map(),
+                }
+                
+                let subData = {
+                    name: data.subCategory,
+                    count: data.fileEvents,
+                    files: [{
+                        file: data.file,
+                        count: data.fileEvents
+                    }]
+                }
+                categoryInfo.subData.set(data.subCategory, subData);
+                categoryInfoMap.set(data.category, categoryInfo);
+            } else {
+                let categoryInfo = categoryInfoMap.get(data.category);
+                categoryInfo!.count += data.fileEvents;
+                if (!categoryInfo!.subData.has(data.subCategory)) {
+                    let subData = {
+                        name: data.subCategory,
+                        count: data.fileEvents,
+                        files: [{
+                            file: data.file,
+                            count: data.fileEvents
+                        }]
+                    }
+                    categoryInfo!.subData.set(data.subCategory, subData);
+                } else {
+                    let subData = categoryInfo!.subData.get(data.subCategory);
+                    subData!.count += data.fileEvents;
+                    subData!.files.push({
+                        file: data.file,
+                        count: data.fileEvents
+                    })
+                }
+            }
+        }
+
+        for (const [_, data] of categoryInfoMap) {
+            let categoryItem: CategoryItem = {
+                category: data.category,
+                count: data.count,
+                subData: []
+            }
+            stepInfo.count += data.count;
+            for (const [_, subdata] of data.subData) {
+                let sub : SubItem = {
+                    name: subdata.name,
+                    count: subdata.count,
+                    files: subdata.files
+                }
+                categoryItem.subData.push(sub);
+            }
+            stepInfo.data.push(categoryItem);
+        }
+        return stepInfo;
     }
 
     private async saveSqlite(perf: PerfSum, outputFileName: string): Promise<void> {
@@ -952,18 +1121,18 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             let name = path.basename(file);
             if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
                 fileClassify.category = ComponentCategory.ABC_SO;
-                if (this.soOrigins.has(path.basename(file))) {
-                    let origin = this.soOrigins.get(name)!.broad_category;
-                    if (origin === 'THIRD_PARTY') {
-                        fileClassify.originKind = OriginKind.THIRD_PARTY;
-                        fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
-                    } else if (origin === 'OPENSOURCE') {
-                        fileClassify.originKind = OriginKind.OPEN_SOURCE;
-                        fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
-                    } else if (origin === 'FIRST_PARTY') {
-                        fileClassify.originKind = OriginKind.FIRST_PARTY;
-                    }
-                }
+                // if (this.soOrigins.has(path.basename(file))) {
+                //     let origin = this.soOrigins.get(name)!.broad_category;
+                //     if (origin === 'THIRD_PARTY') {
+                //         fileClassify.originKind = OriginKind.THIRD_PARTY;
+                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
+                //     } else if (origin === 'OPENSOURCE') {
+                //         fileClassify.originKind = OriginKind.OPEN_SOURCE;
+                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
+                //     } else if (origin === 'FIRST_PARTY') {
+                //         fileClassify.originKind = OriginKind.FIRST_PARTY;
+                //     }
+                // }
 
                 return fileClassify;
             }

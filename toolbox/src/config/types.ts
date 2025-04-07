@@ -54,5 +54,5 @@ export interface GlobalConfig {
     jobs: number;
     input: string;
     output: string;
-    extToolsPath: string;
+    // extToolsPath: string;
 }
