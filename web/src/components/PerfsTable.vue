@@ -17,6 +17,11 @@
           <div class="name-cell">{{ row.name }}</div>
         </template>
       </el-table-column>
+      <el-table-column prop="category" label="分类" sortable>
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.category }}</div>
+        </template>
+      </el-table-column>
       <el-table-column label="指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">

@@ -1,9 +1,9 @@
 <template>
 
   <div class="performance-comparison">
-    <el-descriptions title="抖音" :column="1" class="beautified-descriptions">
-      <el-descriptions-item label="应用版本：">1.0.1</el-descriptions-item>
-      <el-descriptions-item label="场景名称：">douyin_0010</el-descriptions-item>
+    <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
+      <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
+      <el-descriptions-item label="场景名称：">{{ performanceData.scene }}</el-descriptions-item>
     </el-descriptions>
     <el-row :gutter="20">
       <el-col :span="12">
@@ -40,7 +40,7 @@
         },
       ]" @click="handleStepClick(step.id)">
         <div class="step-header">
-          <span class="step-order">STEP {{ step.id + 1 }}</span>
+          <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
         </div>
         <div class="step-name">{{ step.step_name }}</div>
@@ -48,44 +48,39 @@
     </div>
 
     <!-- 性能对比区域 -->
-    <div>
-      <!-- 基准版本 -->
-      <div class="data-panel">
-        <h3 class="panel-title">
-          <span class="version-tag">文件负载</span>
-        </h3>
-        <PerfsTable :stepId="currentStepIndex" :data="filteredPerformanceData" />
-      </div>
-    </div>
-
-    <el-dialog v-model="symbolDialogVisible" :title="selectedFile" width="100%">
-      <div>
-        <!-- 基准版本 -->
+  
+     
+    
+    <el-row :gutter="20">
+      <el-col :span="8">
+        <!-- 步骤饼图 -->
+        <div class="data-panel">
+          <PieChartStep :stepId="currentStepIndex" :data="stepPieData" />
+        </div>
+      </el-col>
+      <el-col :span="16">
+          <!-- 基准版本 -->
         <div class="data-panel">
           <h3 class="panel-title">
-            <span class="version-tag">Base</span>
-            {{ performanceData.version }}
+            <span class="version-tag">文件负载</span>
           </h3>
-          <PerfSymbolTable :data="symbolData.instructions" />
+          <PerfsTable :stepId="currentStepIndex" :data="filteredPerformanceData" />
         </div>
-      </div>
-    </el-dialog>
+      
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue';
-import { Timer } from '@element-plus/icons-vue';
 import PerfsTable from './PerfsTable.vue';
-import PerfSymbolTable from './PerfSymbolTable.vue';
-import { getCurrentInstance } from 'vue';
 import PieChart from './PieChart.vue';
+import PieChartStep from './PieChartStep.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import LineCharts from './LineCharts.vue';
-import { column } from 'element-plus/es/components/table-v2/src/common.mjs';
 import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
-import { throwError } from 'element-plus/es/utils/error.mjs';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -112,20 +107,25 @@ console.log('从元素获取到的 JSON 数据:');
 // });
 
 const testSteps = ref(json!.steps.map((step, index) => ({
-  id: index,
+  //从1开始
+  id: index + 1,
   step_name: step.step_name,
   count: step.count
 })));
 
 const performanceData = ref({
+  id: json!.app_id,
+  name: json!.app_name,
   version: json!.app_version,
+  scene: json!.scene,
   instructions: json!.steps.flatMap((step) =>
     step.data.flatMap((item) =>
       item.subData.flatMap((subItem) =>
         subItem.files.map((file) => ({
           stepId: step.step_id,
           instructions: file.count,
-          name: file.file
+          name: file.file,
+          category: json!.categories[item.category]
         }))
       )
     )
@@ -148,15 +148,70 @@ const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
 };
 
+let stepPieData = processJSONData(json);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
+  stepPieData = processJSONData(json);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
 const filteredPerformanceData = computed(() => {
+  if(currentStepIndex.value === 0){
+    return performanceData.value.instructions;
+  }
   return performanceData.value.instructions.filter(item => item.stepId === currentStepIndex.value);
 });
+
+
+// 处理 JSON 数据生成steps饼状图所需数据
+function processJSONData(data: JSONData |null) {
+    if(data === null){
+      return {}
+    }
+    const { categories, steps } = data;
+    const categoryCountMap = new Map<string, number>();
+
+    // 初始化每个分类的计数为 0
+    categories.forEach(category => {
+        categoryCountMap.set(category, 0);
+    });
+
+    // 遍历所有步骤中的数据，累加每个分类的计数
+    steps.forEach(step => {
+          if(currentStepIndex.value===0){
+       
+            step.data.forEach(item => {
+            const categoryName = categories[item.category];
+            const currentCount = categoryCountMap.get(categoryName) || 0;
+            categoryCountMap.set(categoryName, currentCount + item.count);
+        });
+        
+          }else{
+            if(step.step_id === currentStepIndex.value){
+            step.data.forEach(item => {
+            const categoryName = categories[item.category];
+            const currentCount = categoryCountMap.get(categoryName) || 0;
+            categoryCountMap.set(categoryName, currentCount + item.count);
+        });
+        }
+          }
+    });
+
+    const legendData: string[] = [];
+    const seriesData: { name: string; value: number }[] = [];
+
+    // 将分类名称和对应的计数转换为饼状图所需的数据格式
+    categoryCountMap.forEach((count, category) => {
+        legendData.push(category);
+        seriesData.push({ name: category, value: count });
+    });
+
+    return { legendData, seriesData };
+}
+
+
+
 </script>
 
 <style scoped>
