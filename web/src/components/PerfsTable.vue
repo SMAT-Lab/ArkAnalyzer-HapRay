@@ -1,5 +1,5 @@
 <template>
-  <div class="instructions-table">
+  <div class="instructions-table" id="perfsTable" >
     <!-- 搜索输入框 -->
     <div class="search-container">
       <el-input v-model="searchQuery" placeholder="根据文件名搜索" @input="filterTable"></el-input>
@@ -11,13 +11,14 @@
       style="width: 100%"
       :default-sort="{ prop: 'instructions', order: 'descending' }"
       @sort-change="handleSortChange"
+      :filter-options="{ confirm: false, reset: false }"
     >
       <el-table-column prop="name" label="文件" sortable>
         <template #default="{ row }">
           <div class="name-cell">{{ row.name }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="分类" sortable>
+      <el-table-column prop="category" label="分类" :filters="categoryFilters" :filter-method="filterCategory" :filter-options="{ confirm: false, reset: false }">
         <template #default="{ row }">
           <div class="category-cell">{{ row.category }}</div>
         </template>
@@ -134,6 +135,26 @@ const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending
     currentPage.value = 1;
   }
 };
+
+
+// 分类过滤选项
+const categoryFilters: {text: string, value: string}[] = [
+  { text: 'ABC_APP', value: 'ABC_APP' },
+  { text: 'ABC_SO', value: 'ABC_SO' },
+  { text: 'ABC_LIB', value: 'ABC_LIB' },
+  { text: 'OS_Runtime', value: 'OS_Runtime' },
+  { text: 'SYS_SDK', value: 'SYS_SDK' },
+  { text: 'RN', value: 'RN' },
+  { text: 'Flutter', value: 'Flutter' },
+  { text: 'WEB', value: 'WEB' },
+  { text: 'SYS_Other', value: 'SYS_Other' },
+];
+
+// 分类过滤方法
+const filterCategory = (value: string, row: any) => {
+  return row.category === value;
+};
+
 </script>
 
 <style scoped>
