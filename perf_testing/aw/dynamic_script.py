@@ -23,6 +23,7 @@ def perform_dynamic_test(driver, config):
     perform_step_2(driver, config)
     perform_step_3(driver, config)
 
+
 def get_hiperf_cmd(pid, output_path, duration):
     """生成 hiperf 命令
     
@@ -34,9 +35,10 @@ def get_hiperf_cmd(pid, output_path, duration):
     Returns:
         str: 完整的 hiperf 命令
     """
-    cmd = f"hiperf record -p {pid} -o {output_path} -s dwarf --kernel-callchain --clockid monotonic -m 1024 -d {duration}"
+    cmd = f"hiperf record -p {pid} -o {output_path} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
     print(f"\n[DEBUG] Hiperf Command: {cmd}\n")  # 添加调试输出
     return cmd
+
 
 def run_hiperf(driver, cmd):
     """在后台线程中运行 hiperf 命令"""
@@ -225,6 +227,10 @@ def perform_step_2(driver, config):
     # 按下回车键发送消息
     driver.press_key(KeyCode.ENTER)
     driver.wait(1)
+    # 滑动返回
+    driver.swipe_to_back()
+    driver.wait(1)
+
     # 滑动返回
     driver.swipe_to_back()
     driver.wait(1)

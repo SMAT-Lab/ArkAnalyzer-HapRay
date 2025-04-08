@@ -6,8 +6,9 @@ from hypium.advance.perf.driver_perf.uiexplorer_perf import UiExplorerPerf
 import time
 import os
 import yaml
-from aw.Utils import convert_data_to_db, save_testInfo
+from aw.Utils import convert_data_to_db, save_testInfo, generate_hapray_report
 from aw.dynamic_script import perform_dynamic_test # 导入动态测试函数
+import subprocess
 
 
 class Example(TestCase):
@@ -113,5 +114,12 @@ class Example(TestCase):
             success=self.test_success,
             config=self.config
         )
+
+        # 生成 HapRay 报告
+        Step(f'{self.current_step + 3}.生成HapRay报告')
+        if not generate_hapray_report(self.scene_dir):
+            self.test_success = False
+
+        
 
 
