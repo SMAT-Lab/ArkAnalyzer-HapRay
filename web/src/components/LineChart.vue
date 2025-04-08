@@ -1,5 +1,5 @@
 <template>
-    <div ref="chartRef" style="width: 100%; height: 400px;"></div>
+    <div ref="chartRef" style="width: 100%; height: 400px; display: grid;"></div>
   </template>
   
   <script lang='ts' setup>
@@ -44,8 +44,10 @@ const { xData, legendData, series } = processData(json);
 
 const option = {
     title: {
-        text: '场景负载情况：',
-        left: 'left'
+        text: '场景负载：instructions',
+        left: 'left', 
+        botton: 20,      
+        textStyle: { fontSize: 16 } 
     },
     tooltip: {
         trigger: 'axis',
@@ -57,6 +59,10 @@ const option = {
         }
     },
     legend: {
+        type: 'scroll',
+        left: 'center',           
+        top: 20,            
+        bottom: 20,         
         data: legendData
     },
     xAxis: {
@@ -74,5 +80,9 @@ const option = {
     const myChart = echarts.init(chartRef.value);
     
     myChart.setOption(option);
+
+    window.addEventListener('resize', () => {
+    myChart.resize(); // 重新计算图表尺寸
+  });
   });
   </script>    

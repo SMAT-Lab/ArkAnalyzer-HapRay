@@ -53,7 +53,8 @@ function processJSONToEchartsBar(json: JSONData) {
             type: 'value'
         },
         legend: {
-            data: categories
+            data: categories,
+            left: 'right'
         },
         series: seriesData,
         tooltip: {
@@ -138,7 +139,10 @@ function processJSONToEchartsLine(json: JSONData|null) {
 
     return {
       title: {
-    text: '场景负载情况：'
+    text: '场景负载情况：',
+    left: 'left', 
+        botton: 20,      
+        textStyle: { fontSize: 16 } 
   },
         xAxis: {
             type: 'category',
@@ -148,6 +152,10 @@ function processJSONToEchartsLine(json: JSONData|null) {
             type: 'value'
         },
         legend: {
+            type: 'scroll',
+            left: 'center',           
+            top: 20,            
+            bottom: 20, 
             data: categories
         },
         series: seriesData,
@@ -173,6 +181,10 @@ function processJSONToEchartsLine(json: JSONData|null) {
     const myChart = echarts.init(chartRef.value);
 
     myChart.setOption(processJSONToEchartsLine(json));
+
+    window.addEventListener('resize', () => {
+    myChart.resize(); // 重新计算图表尺寸
+  });
   });
 
 

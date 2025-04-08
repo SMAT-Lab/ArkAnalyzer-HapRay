@@ -67,6 +67,10 @@ const chartRef = ref(null);
 onMounted(() => {
   const myChart = echarts.init(chartRef.value);
   myChart.setOption(option);
+
+  window.addEventListener('resize', () => {
+    myChart.resize(); // 重新计算图表尺寸
+  });
 });
 
 

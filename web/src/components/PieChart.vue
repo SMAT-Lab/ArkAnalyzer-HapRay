@@ -1,5 +1,5 @@
 <template>
-  <div ref="chartRef" style="width: 100%; height: 400px;"></div>
+  <div ref="chartRef" class="chart-container"></div>
 </template>
 
 <script lang="ts" setup>
@@ -94,5 +94,18 @@ onMounted(() => {
   const myChart = echarts.init(chartRef.value);
 
   myChart.setOption(option);
+
+  window.addEventListener('resize', () => {
+    myChart.resize(); // 重新计算图表尺寸
+  });
 });
 </script>
+
+<style scoped>
+.chart-container {
+    width: 100%;
+    height: 400px;
+    /* 添加弹性容器支持 */
+    display: flex;
+  }
+</style>

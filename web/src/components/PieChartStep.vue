@@ -73,6 +73,8 @@ onMounted(() => {
       },
       { deep: true }
     );
-  
+    window.addEventListener('resize', () => {
+    myChart.resize(); // 重新计算图表尺寸
+  });
 });
 </script>
