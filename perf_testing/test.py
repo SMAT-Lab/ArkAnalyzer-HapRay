@@ -9,7 +9,7 @@ from aw.Utils import generate_hapray_report
 
 def main():
     # 直接使用场景目录路径
-    scene_dir = 'perf_output/wechat002'
+    scene_dir = 'perf_output/wechat001'
     
     print(f"Testing generate_hapray_report function...")
     print(f"Scene directory: {scene_dir}")
@@ -22,6 +22,7 @@ def main():
         print("Test passed: Report generated successfully")
     else:
         print("Test failed: Failed to generate report")
+
 
 if __name__ == "__main__":
     main()
