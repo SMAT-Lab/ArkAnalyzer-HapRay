@@ -2,25 +2,72 @@
 test_settings:
   
   # 应用相关
-  app_package: "com.example.wsywechat"  # 被测应用的包名
-  app_name: "mini wechat"  # 被测应用的显示名称
-  scene: "wechat002"  # 测试场景
+  # 微信应用配置（已注释）
+  # app_package: "com.example.wsywechat"  # 被测应用的包名
+  # app_name: "mini wechat"  # 被测应用的显示名称
+  # scene: "wechat003"  # 测试场景
+
+  # 支付宝应用配置
+  app_package: "com.alipay.mobile.client"  # 被测应用的包名
+  app_name: "alipay"  # 被测应用的显示名称
+  scene: "ResourceUsage_PerformanceDynamic_zhifubao0030"  # 测试场景
+
+  # 测试类型
+  test_type: "alipay"  # 可选值: "default", "custom", "alipay" 等
   
   # 工具路径
   trace_streamer: "D:/chromeDownload/trace_streamer_binary/trace_streamer_binary/trace_streamer_window.exe"  # trace_streamer工具路径
 
-    # 性能采样相关
+  # 性能采样相关
   duration: 30  # 默认采样时长（秒）
   output_path: "/data/local/tmp/perf.data"  # 性能数据在手机中的输出路径
-  output_dir: "pref_output"  # 本地输出根目录
+  output_dir: "perf_output"  # 本地输出根目录
   data_filename: "perf.data"  # 性能数据文件名
   db_filename: "perf.db"  # 数据库文件名
 
   # 测试步骤配置
   steps:
+    # 注释掉原来的步骤
+    # - name: "step1"
+    #   description: "1. 启动支付宝"
+    # - name: "step2"
+    #   description: "2. 首页上滑3次"
+    # - name: "step3"
+    #   description: "3. 首页下滑3次"
+    # - name: "step4"
+    #   description: "4. 点击更多"
+    # - name: "step5"
+    #   description: "5. 更多上滑"
+    # - name: "step6"
+    #   description: "6. 更多下滑"
+    # - name: "step7"
+    #   description: "7. 侧滑返回首页"
+    # - name: "step8"
+    #   description: "8. 点击蚂蚁森林，等待10s"
+    # - name: "step9"
+    #   description: "9. 侧滑返回首页"
+    # - name: "step10"
+    #   description: "10. 返回桌面"
+    
+    # 添加支付宝的10个步骤
     - name: "step1"
-      description: "执行与丁真的聊天操作，发送多条消息并返回"
+      description: "1. 启动支付宝"
     - name: "step2"
-      description: "执行扫一扫和收付款操作，发送告别消息并返回"
+      description: "2. 首页上滑3次"
     - name: "step3"
-      description: "执行发现和联系人操作，发送位置信息并滑动"
+      description: "3. 首页下滑3次"
+    - name: "step4"
+      description: "4. 点击更多"
+    - name: "step5"
+      description: "5. 更多上滑"
+    - name: "step6"
+      description: "6. 更多下滑"
+    - name: "step7"
+      description: "7. 侧滑返回首页"
+    - name: "step8"
+      description: "8. 点击蚂蚁森林，等待10s"
+    - name: "step9"
+      description: "9. 侧滑返回首页"
+    - name: "step10"
+      description: "10. 返回桌面"
+
