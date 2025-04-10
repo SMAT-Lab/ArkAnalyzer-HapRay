@@ -7,7 +7,7 @@ import time
 import os
 import yaml
 from aw.Utils import convert_data_to_db, save_testInfo, generate_hapray_report
-from aw.dynamic_script import perform_dynamic_test # 导入动态测试函数
+from aw.dynamic_script import perform_dynamic_test, perform_custom_step, perform_alipay_test # 导入动态测试函数
 import subprocess
 
 
@@ -71,35 +71,70 @@ class Example(TestCase):
         self.driver.start_app(package_name=self.app_package)
 
     def process(self):
-        # 使用动态步骤执行功能
-        steps_info = []  # 用于存储步骤信息
+        """执行测试流程"""
+        # 获取测试类型
+        test_type = self.config['test_settings']['test_type']
         
-        # 从配置中获取步骤信息
-        steps = self.config['test_settings']['steps']
+        # 根据测试类型选择执行函数
+        if test_type == "default":
+            # 执行默认的测试步骤
+            perform_dynamic_test(self.driver, self.config)
+            
+            # 读取配置文件中的步骤信息
+            steps = self.config['test_settings']['steps']
+            steps_info = []
+            for i, step in enumerate(steps, 1):
+                steps_info.append({
+                    "name": step['name'],
+                    "description": step['description'],
+                    "stepIdx": i
+                })
+            
+            # 保存步骤信息到steps.json
+            steps_json_path = os.path.join(self.hiperf_dir, 'steps.json')
+            import json
+            with open(steps_json_path, 'w', encoding='utf-8') as f:
+                json.dump(steps_info, f, ensure_ascii=False, indent=4)
+        elif test_type == "custom":
+            # 执行自定义测试步骤
+            perform_custom_step(self.driver, self.config, "用户自定义操作", self.config['test_settings']['duration'])
+            
+            # 添加自定义步骤信息
+            steps_info = [{
+                "name": "用户自定义操作",
+                "description": "用户手动执行UI操作",
+                "stepIdx": 1
+            }]
+            
+            # 保存步骤信息到steps.json
+            steps_json_path = os.path.join(self.hiperf_dir, 'steps.json')
+            import json
+            with open(steps_json_path, 'w', encoding='utf-8') as f:
+                json.dump(steps_info, f, ensure_ascii=False, indent=4)
+        elif test_type == "alipay":
+            # 执行支付宝特定测试步骤
+            perform_alipay_test(self.driver, self.config)
+            
+            # 读取配置文件中的步骤信息
+            steps = self.config['test_settings']['steps']
+            steps_info = []
+            for i, step in enumerate(steps, 1):
+                steps_info.append({
+                    "name": step['name'],
+                    "description": step['description'],
+                    "stepIdx": i
+                })
+            
+            # 保存步骤信息到steps.json
+            steps_json_path = os.path.join(self.hiperf_dir, 'steps.json')
+            import json
+            with open(steps_json_path, 'w', encoding='utf-8') as f:
+                json.dump(steps_info, f, ensure_ascii=False, indent=4)
+        else:
+            raise ValueError(f"不支持的测试类型: {test_type}")
         
-        # 记录步骤信息
-        for i, step in enumerate(steps, 1):
-            Step(f'{i + 2}.{step["name"]}')
-            if step.get('description'):
-                Step(f'描述: {step["description"]}')
-            
-            # 设置当前步骤
-            self.current_step = i
-            
-            # 记录步骤信息
-            steps_info.append({
-                "name": step['name'],
-                "stepIdx": i
-            })
-            
-        # 保存步骤信息到steps.json
-        steps_json_path = os.path.join(self.hiperf_dir, 'steps.json')
-        import json
-        with open(steps_json_path, 'w', encoding='utf-8') as f:
-            json.dump(steps_info, f, ensure_ascii=False, indent=4)
-            
-        # 执行动态测试步骤
-        perform_dynamic_test(self.driver, self.config)
+        # 生成性能报告
+        generate_hapray_report(self.scene_dir)
 
     def teardown(self):
         Step(f'{self.current_step + 2}.关闭被测应用')
@@ -120,6 +155,5 @@ class Example(TestCase):
         if not generate_hapray_report(self.scene_dir):
             self.test_success = False
 
-        
 
 
