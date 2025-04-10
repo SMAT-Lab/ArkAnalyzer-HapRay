@@ -33,6 +33,18 @@
 
     <!-- 测试步骤导航 -->
     <div class="step-nav">
+      <div :class="[
+        'step-item',
+        {
+          active: currentStepIndex === 0,
+        },
+      ]" @click="handleStepClick(0)">
+        <div class="step-header">
+          <span class="step-order">STEP 0</span>
+          <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
+        </div>
+        <div class="step-name">全部步骤</div>
+      </div>
       <div v-for="(step, index) in testSteps" :key="index" :class="[
         'step-item',
         {
@@ -113,6 +125,16 @@ const testSteps = ref(json!.steps.map((step, index) => ({
   count: step.count
 })));
 
+
+const getTotalTestStepsCount = (testSteps:any[]) => {
+  let total = 0;
+
+  testSteps.forEach( step =>{
+    total += step.count
+  });
+  return total;
+}
+
 const performanceData = ref({
   id: json!.app_id,
   name: json!.app_name,
@@ -158,9 +180,9 @@ const handleStepClick = (stepId: any) => {
 // 计算属性，根据当前步骤 ID 过滤性能数据
 const filteredPerformanceData = computed(() => {
   if(currentStepIndex.value === 0){
-    return performanceData.value.instructions;
+    return performanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
   }
-  return performanceData.value.instructions.filter(item => item.stepId === currentStepIndex.value);
+  return performanceData.value.instructions.filter(item => item.stepId === currentStepIndex.value).sort((a, b) => b.instructions - a.instructions);
 });
 
 
