@@ -1,24 +1,51 @@
 <template>
-  <div class="instructions-table" id="perfsTable" >
-    <!-- 搜索输入框 -->
-    <div class="search-container">
-      <el-input v-model="searchQuery" placeholder="根据文件名搜索" @input="filterTable"></el-input>
+  <div class="instructions-table" id="perfsTable">
+    <!-- 搜索和过滤容器 -->
+    <div class="filter-container">
+      <el-input
+        v-model="searchQuery"
+        placeholder="根据文件名搜索"
+        clearable
+        @input="handleFilterChange"
+        class="search-input"
+      >
+        <template #prefix>
+          <el-icon><search /></el-icon>
+        </template>
+      </el-input>
+
+      <el-select
+        v-model="activeCategory"
+        placeholder="选择分类"
+        clearable
+        @change="handleFilterChange"
+        class="category-select"
+      >
+        <el-option
+          v-for="filter in categoryFilters"
+          :key="filter.value"
+          :label="filter.text"
+          :value="filter.value"
+        />
+      </el-select>
     </div>
 
+    <!-- 数据表格 -->
     <el-table
       :data="paginatedData"
       @row-click="handleRowClick"
       style="width: 100%"
       :default-sort="{ prop: 'instructions', order: 'descending' }"
       @sort-change="handleSortChange"
-      :filter-options="{ confirm: false, reset: false }"
+      stripe
+      highlight-current-row
     >
       <el-table-column prop="name" label="文件" sortable>
         <template #default="{ row }">
           <div class="name-cell">{{ row.name }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="分类" :filters="categoryFilters" :filter-method="filterCategory" :filter-options="{ confirm: false, reset: false }">
+      <el-table-column prop="category" label="分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.category }}</div>
         </template>
@@ -34,11 +61,22 @@
 
     <!-- 分页控件 -->
     <div class="pagination-container">
-      <div class="pagination-info">共 {{ total }} 条</div>
+      <div class="pagination-info">
+        显示 {{ rangeStart }} - {{ rangeEnd }} 条，共 {{ total }} 条
+      </div>
 
       <div class="pagination-controls">
-        <el-select v-model="pageSize" class="page-size-select" @change="handlePageSizeChange">
-          <el-option v-for="size in pageSizeOptions" :key="size" :label="`每页 ${size} 条`" :value="size" />
+        <el-select
+          v-model="pageSize"
+          class="page-size-select"
+          @change="handlePageSizeChange"
+        >
+          <el-option
+            v-for="size in pageSizeOptions"
+            :key="size"
+            :label="`每页 ${size} 条`"
+            :value="size"
+          />
         </el-select>
 
         <el-pagination
@@ -54,12 +92,20 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, type PropType } from 'vue';
 const emit = defineEmits(['custom-event']);
+
+// 定义数据类型接口
+interface DataItem {
+  stepId: number
+  name: string
+  category: string
+  instructions: number
+}
 
 const props = defineProps({
   data: {
-    type: Array,
+    type: Array as PropType<DataItem[]>,
     required: true,
   },
 });
@@ -78,29 +124,69 @@ const handleRowClick = (row: { name: string }) => {
 
 // 搜索功能
 const searchQuery = ref('');
-const filteredData = computed(() => {
-  return props.data.filter((item:any) =>
-    item.name.includes(searchQuery.value)
-  );
-});
+const activeCategory = ref('');
+
 
 // 分页状态
 const currentPage = ref(1);
 const pageSize = ref(10);
 const pageSizeOptions = [10, 20, 50];
+const sortState = ref<{
+  prop: SortKey
+  order: SortOrder
+}>({ 
+  prop: 'instructions', 
+  order: 'descending' 
+})
 
-// 分页数据计算
+
+// 数据处理（添加完整类型注解）
+const filteredData = computed<DataItem[]>(() => {
+  let result = [...props.data]
+
+  // 应用搜索过滤
+  if (searchQuery.value) {
+    const searchTerm = searchQuery.value.toLowerCase()
+    result = result.filter((item: DataItem) => 
+      item.name.toLowerCase().includes(searchTerm))
+  }
+
+  // 应用分类过滤
+  if (activeCategory.value) {
+    result = result.filter((item: DataItem) => 
+      item.category === activeCategory.value)
+  }
+
+  // 应用排序（添加类型安全）
+  if (sortState.value.order) {
+    const sortProp = sortState.value.prop
+    const modifier = sortState.value.order === 'ascending' ? 1 : -1
+
+    result.sort((a: DataItem, b: DataItem) => {
+      // 添加类型断言确保数值比较
+      const aVal = a[sortProp] as number
+      const bVal = b[sortProp] as number
+      return (aVal - bVal) * modifier
+    })
+  }
+
+  return result
+})
+
+
+
+// 分页数据
 const total = computed(() => filteredData.value.length);
-
 const paginatedData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
-  const end = start + pageSize.value;
-  return filteredData.value.slice(start, end);
+  return filteredData.value.slice(start, start + pageSize.value);
 });
 
 // 显示范围
 const rangeStart = computed(() => (currentPage.value - 1) * pageSize.value + 1);
-const rangeEnd = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
+const rangeEnd = computed(() =>
+  Math.min(currentPage.value * pageSize.value, total.value)
+);
 
 // 数据变化重置页码
 watch(
@@ -110,32 +196,42 @@ watch(
   }
 );
 
-// 分页事件处理
+// 事件处理
+const handleFilterChange = () => {
+  currentPage.value = 1;
+};
 const handlePageSizeChange = (newSize: number) => {
   pageSize.value = newSize;
   currentPage.value = 1;
 };
 
-const filterTable = () => {
-  // 触发过滤计算属性更新
-  currentPage.value = 1;
-};
+// 1. 定义严格的类型
+type SortKey = keyof DataItem; // 例如：'name' | 'category' | 'instructions'
+type SortOrder = 'ascending' | 'descending' | null;
 
-// 排序功能
-const handleSortChange = (sort: { prop: string; order: 'ascending' | 'descending' | null }) => {
-  if (sort.order) {
-    const { prop, order } = sort;
-    filteredData.value.sort((a:any, b:any) => {
-      if (order === 'ascending') {
-        return a[prop] - b[prop];
-      } else {
-        return b[prop] - a[prop];
-      }
-    });
+// 2. 修改事件处理函数类型
+const handleSortChange = (sort: {
+  prop: string; // Element Plus 原始类型为string
+  order: SortOrder;
+}) => {
+  // 3. 添加类型保护
+  const validKeys: SortKey[] = ['name', 'category', 'instructions'];
+  
+  if (validKeys.includes(sort.prop as SortKey)) {
+    sortState.value = {
+      prop: sort.prop as SortKey, // 安全断言
+      order: sort.order
+    };
     currentPage.value = 1;
+  } else {
+    // 处理无效排序字段的情况
+    console.warn(`Invalid sort property: ${sort.prop}`);
+    sortState.value = {
+      prop: 'instructions', // 重置为默认值
+      order: null
+    };
   }
 };
-
 
 // 分类过滤选项
 const categoryFilters: {text: string, value: string}[] = [
@@ -149,11 +245,6 @@ const categoryFilters: {text: string, value: string}[] = [
   { text: 'WEB', value: 'WEB' },
   { text: 'SYS_Other', value: 'SYS_Other' },
 ];
-
-// 分类过滤方法
-const filterCategory = (value: string, row: any) => {
-  return row.category === value;
-};
 
 </script>
 
@@ -241,5 +332,35 @@ const filterCategory = (value: string, row: any) => {
     font-size: 0.9em;
     padding-left: 12px;
   }
+}
+
+.filter-container {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 300px;
+}
+
+.category-select {
+  width: 200px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+}
+
+.pagination-info {
+  color: #606266;
+  font-size: 0.9em;
 }
 </style>
