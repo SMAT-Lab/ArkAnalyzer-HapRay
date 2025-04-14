@@ -62,21 +62,21 @@ module.exports = {
             patterns: [
                 { from: 'res', to: 'res' },
                 { from: 'README.md', to: 'README.md' },
-                { from: './node_modules/arkanalyzer/config/', to: 'config' },
+                { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 {
-                    from: './node_modules/sql.js/package.json',
+                    from: '../node_modules/sql.js/package.json',
                     to: 'node_modules/sql.js/package.json',
                 },
                 {
-                    from: './node_modules/sql.js/dist/sql-wasm.js',
+                    from: '../node_modules/sql.js/dist/sql-wasm.js',
                     to: 'node_modules/sql.js/dist/sql-wasm.js',
                 },
                 {
-                    from: './node_modules/sql.js/dist/sql-wasm.wasm',
+                    from: '../node_modules/sql.js/dist/sql-wasm.wasm',
                     to: 'node_modules/sql.js/dist/sql-wasm.wasm',
                 },
                 {
-                    from: './node_modules/sql.js/dist/worker.sql-wasm.js',
+                    from: '../node_modules/sql.js/dist/worker.sql-wasm.js',
                     to: 'node_modules/sql.js/dist/worker.sql-wasm.js',
                 },
                 {
