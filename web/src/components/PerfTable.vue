@@ -10,7 +10,7 @@
       <el-table-column label="指令数" width="160">
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.instructions) }}</span>
+            <span class="value">{{ formatScientific(row.count) }}</span>
           </div>
         </template>
       </el-table-column>

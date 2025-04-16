@@ -109,7 +109,7 @@ interface TestStep {
 
 interface Instruction {
   name: string;
-  instructions: number;
+  count: number;
 }
 
 let testSteps = ref<Array<TestStep>>([]);
@@ -142,11 +142,11 @@ const selectedFile = ref('');
 // 指令数差异计算
 const instructionsDiff = computed(() => {
   const baseTotal = performanceData.value.base.instructions.reduce(
-    (sum: number, item: Instruction) => sum + item.instructions,
+    (sum: number, item: Instruction) => sum + item.count,
     0
   );
   const compareTotal = performanceData.value.compare.instructions.reduce(
-    (sum: number, item: Instruction) => sum + item.instructions,
+    (sum: number, item: Instruction) => sum + item.count,
     0
   );
   return Number((((compareTotal - baseTotal) / baseTotal) * 100).toFixed(2));
@@ -154,11 +154,11 @@ const instructionsDiff = computed(() => {
 
 const fileDiff = computed(() => {
   const baseTotal = symbolData.value.base.instructions.reduce(
-    (sum: number, item: Instruction) => sum + item.instructions,
+    (sum: number, item: Instruction) => sum + item.count,
     0
   );
   const compareTotal = symbolData.value.compare.instructions.reduce(
-    (sum: number, item: Instruction) => sum + item.instructions,
+    (sum: number, item: Instruction) => sum + item.count,
     0
   );
   return Number((((compareTotal - baseTotal) / baseTotal) * 100).toFixed(2));
