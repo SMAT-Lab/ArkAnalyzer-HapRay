@@ -18,12 +18,6 @@
           </transition>
 
           <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'perfs'">
-              <PerfsSingle />
-            </div>
-          </transition>
-
-          <transition name="el-fade-in-linear">
             <div v-if="showPage === 'deps'">
               <ComponentsDeps />
             </div>
@@ -44,7 +38,6 @@ import type { TreeNodeData } from 'element-plus/es/components/tree/src/tree.type
 import PerfCompare from '@/components/PerfCompare.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
-import PerfsSingle from '@/components/PerfsSingle.vue';
 
 import { getCurrentInstance } from 'vue';
 import { ElMessage } from 'element-plus';
@@ -69,7 +62,7 @@ function handleLanguageChange(newLanguage: string) {
 
 onMounted(() => {
   //changeContent(window.initialPage?.toLowerCase())
-  changeContent('perfs')
+  changeContent('perf')
 });
 </script>
 
