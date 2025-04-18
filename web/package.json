@@ -7,7 +7,7 @@
     "dist"
   ],
   "scripts": {
-    "dev": "vite",
+    "dev": "cross-env NODE_ENV=development vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "prepack": "npm run build",
     "preview": "vite preview",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "axios": "^1.7.9",
+    "cross-env": "^7.0.3",
     "echarts": "^5.5.1",
     "element-plus": "^2.9.1",
     "highlight.js": "^11.11.1",
