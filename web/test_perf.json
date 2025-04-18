@@ -1,0 +1,4278 @@
+{
+  "app_id": "com.example.wsywechat",
+  "app_name": "mini wechat",
+  "app_version": "1.0.0",
+  "scene": "wechat002",
+  "timestamp": 1743998101256,
+  "perfPath": [
+    "/home/lq/hapray_prj/Hapray/packages/@hapray/toolbox/test/wechat004/hiperf/1/perf.db",
+    "/home/lq/hapray_prj/Hapray/packages/@hapray/toolbox/test/wechat004/hiperf/2/perf.db",
+    "/home/lq/hapray_prj/Hapray/packages/@hapray/toolbox/test/wechat004/hiperf/3/perf.db"
+  ],
+  "categories": [
+    "ABC_APP",
+    "ABC_SO",
+    "ABC_LIB",
+    "OS_Runtime",
+    "SYS_SDK",
+    "RN",
+    "Flutter",
+    "WEB",
+    "SYS_Other"
+  ],
+  "steps": [
+    {
+      "step_id": 1,
+      "step_name": "step1",
+      "count": 1538524879,
+      "data": [
+        {
+          "category": 8,
+          "count": 1451869814,
+          "subData": [
+            {
+              "name": "libipc_common.z.so",
+              "count": 61649774,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libipc_common.z.so",
+                  "count": 61649774
+                }
+              ]
+            },
+            {
+              "name": "libipc_core.z.so",
+              "count": 68631599,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libipc_core.z.so",
+                  "count": 68631599
+                }
+              ]
+            },
+            {
+              "name": "ld-musl-aarch64.so.1",
+              "count": 1249392,
+              "files": [
+                {
+                  "file": "/system/lib/ld-musl-aarch64.so.1",
+                  "count": 1249392
+                }
+              ]
+            },
+            {
+              "name": "libaccessibility_interface.z.so",
+              "count": 10566199,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibility_interface.z.so",
+                  "count": 10566199
+                }
+              ]
+            },
+            {
+              "name": "libeventhandler.z.so",
+              "count": 55558660,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libeventhandler.z.so",
+                  "count": 55558660
+                }
+              ]
+            },
+            {
+              "name": "libappkit_native.z.so",
+              "count": 258227,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappkit_native.z.so",
+                  "count": 258227
+                }
+              ]
+            },
+            {
+              "name": "libappspawn_ace.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/appspawn/appspawn/libappspawn_ace.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "appspawn",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/bin/appspawn",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libbegetutil.z.so",
+              "count": 33249277,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libbegetutil.z.so",
+                  "count": 33249277
+                }
+              ]
+            },
+            {
+              "name": "libace_compatible.z.so",
+              "count": 381909632,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_compatible.z.so",
+                  "count": 381909632
+                }
+              ]
+            },
+            {
+              "name": "libhitrace_meter.so",
+              "count": 117338227,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhitrace_meter.so",
+                  "count": 117338227
+                }
+              ]
+            },
+            {
+              "name": "libffrt.so",
+              "count": 21200163,
+              "files": [
+                {
+                  "file": "/system/lib64/ndk/libffrt.so",
+                  "count": 21200163
+                }
+              ]
+            },
+            {
+              "name": "libframe_trace_intf.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_trace_intf.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libaccessibilityclient.z.so",
+              "count": 1628621,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibilityclient.z.so",
+                  "count": 1628621
+                }
+              ]
+            },
+            {
+              "name": "libutils.z.so",
+              "count": 121034692,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libutils.z.so",
+                  "count": 121034692
+                }
+              ]
+            },
+            {
+              "name": "libaccessibility_common.z.so",
+              "count": 2843745,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibility_common.z.so",
+                  "count": 2843745
+                }
+              ]
+            },
+            {
+              "name": "librender_service_client.z.so",
+              "count": 75720142,
+              "files": [
+                {
+                  "file": "/system/lib64/librender_service_client.z.so",
+                  "count": 75720142
+                }
+              ]
+            },
+            {
+              "name": "libmmi-client.z.so",
+              "count": 2303261,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmmi-client.z.so",
+                  "count": 2303261
+                }
+              ]
+            },
+            {
+              "name": "libmmi-util.z.so",
+              "count": 413697,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmmi-util.z.so",
+                  "count": 413697
+                }
+              ]
+            },
+            {
+              "name": "libdm.z.so",
+              "count": 1237426,
+              "files": [
+                {
+                  "file": "/system/lib64/libdm.z.so",
+                  "count": 1237426
+                }
+              ]
+            },
+            {
+              "name": "libwm.z.so",
+              "count": 8429118,
+              "files": [
+                {
+                  "file": "/system/lib64/libwm.z.so",
+                  "count": 8429118
+                }
+              ]
+            },
+            {
+              "name": "libscene_session.z.so",
+              "count": 331963,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libscene_session.z.so",
+                  "count": 331963
+                }
+              ]
+            },
+            {
+              "name": "libvsync.z.so",
+              "count": 9083260,
+              "files": [
+                {
+                  "file": "/system/lib64/libvsync.z.so",
+                  "count": 9083260
+                }
+              ]
+            },
+            {
+              "name": "librtg_interface.z.so",
+              "count": 22435800,
+              "files": [
+                {
+                  "file": "/system/lib64/librtg_interface.z.so",
+                  "count": 22435800
+                }
+              ]
+            },
+            {
+              "name": "libhmulibs.so.0.1",
+              "count": 7825524,
+              "files": [
+                {
+                  "file": "/lib/libhmulibs.so.0.1",
+                  "count": 7825524
+                }
+              ]
+            },
+            {
+              "name": "libressched_client.z.so",
+              "count": 324221,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libressched_client.z.so",
+                  "count": 324221
+                }
+              ]
+            },
+            {
+              "name": "libhilog.so",
+              "count": 25955395,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhilog.so",
+                  "count": 25955395
+                }
+              ]
+            },
+            {
+              "name": "[shmm]",
+              "count": 7243488,
+              "files": [
+                {
+                  "file": "[shmm]",
+                  "count": 7243488
+                }
+              ]
+            },
+            {
+              "name": "libc++.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libc++.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "librender_service_base.z.so",
+              "count": 16954511,
+              "files": [
+                {
+                  "file": "/system/lib64/librender_service_base.z.so",
+                  "count": 16954511
+                }
+              ]
+            },
+            {
+              "name": "libace_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libark_jsruntime.so",
+              "count": 11507628,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libark_jsruntime.so",
+                  "count": 11507628
+                }
+              ]
+            },
+            {
+              "name": "stub.an",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/arkcompiler/stub.an",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "stateMgmt.abc",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/etc/abc/framework/stateMgmt.abc",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "[anon:ArkTS Code:384833523712]",
+              "count": 344008,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:384833523712]",
+                  "count": 344008
+                }
+              ]
+            },
+            {
+              "name": "libskia_canvaskit.z.so",
+              "count": 147984428,
+              "files": [
+                {
+                  "file": "/system/lib64/libskia_canvaskit.z.so",
+                  "count": 147984428
+                }
+              ]
+            },
+            {
+              "name": "lib2d_graphics.z.so",
+              "count": 23553719,
+              "files": [
+                {
+                  "file": "/system/lib64/lib2d_graphics.z.so",
+                  "count": 23553719
+                }
+              ]
+            },
+            {
+              "name": "libhicollie.z.so",
+              "count": 1194411,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhicollie.z.so",
+                  "count": 1194411
+                }
+              ]
+            },
+            {
+              "name": "libdh-lnxbase.so.1.0",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libdh-lnxbase.so.1.0",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdh-linux.so",
+              "count": 2150814,
+              "files": [
+                {
+                  "file": "/lib/libdh-linux.so",
+                  "count": 2150814
+                }
+              ]
+            },
+            {
+              "name": "devhost.ko",
+              "count": 52707,
+              "files": [
+                {
+                  "file": "/liblinux/devhost.ko",
+                  "count": 52707
+                }
+              ]
+            },
+            {
+              "name": "devhost.elf",
+              "count": 2331,
+              "files": [
+                {
+                  "file": "/bin/devhost.elf",
+                  "count": 2331
+                }
+              ]
+            },
+            {
+              "name": "libwindow_scene_common.z.so",
+              "count": 48087,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwindow_scene_common.z.so",
+                  "count": 48087
+                }
+              ]
+            },
+            {
+              "name": "libtp_proxy_1.0.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libtp_proxy_1.0.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libthp_extra_innerapi.z.so",
+              "count": 131012,
+              "files": [
+                {
+                  "file": "/system/lib64/libthp_extra_innerapi.z.so",
+                  "count": 131012
+                }
+              ]
+            },
+            {
+              "name": "libhdc_register.z.so",
+              "count": 7720,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhdc_register.z.so",
+                  "count": 7720
+                }
+              ]
+            },
+            {
+              "name": "libhitracechain.so",
+              "count": 8360132,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhitracechain.so",
+                  "count": 8360132
+                }
+              ]
+            },
+            {
+              "name": "libframe_ui_utils.z.so",
+              "count": 3144749,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_ui_utils.z.so",
+                  "count": 3144749
+                }
+              ]
+            },
+            {
+              "name": "libframeawaresched.so",
+              "count": 8628348,
+              "files": [
+                {
+                  "file": "/system/lib64/libframeawaresched.so",
+                  "count": 8628348
+                }
+              ]
+            },
+            {
+              "name": "kstate.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/kstate.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdhext_kstate.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_kstate.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "librouter.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/librouter.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libappexecfwk_base.z.so",
+              "count": 457837,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappexecfwk_base.z.so",
+                  "count": 457837
+                }
+              ]
+            },
+            {
+              "name": "libappexecfwk_core.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappexecfwk_core.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libruntime.z.so",
+              "count": 47205,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libruntime.z.so",
+                  "count": 47205
+                }
+              ]
+            },
+            {
+              "name": "libextractortool.z.so",
+              "count": 395397,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libextractortool.z.so",
+                  "count": 395397
+                }
+              ]
+            },
+            {
+              "name": "libbundlemanager.z.so",
+              "count": 2934325,
+              "files": [
+                {
+                  "file": "/system/lib64/module/bundle/libbundlemanager.z.so",
+                  "count": 2934325
+                }
+              ]
+            },
+            {
+              "name": "mapLibrary.hsp",
+              "count": 10990924,
+              "files": [
+                {
+                  "file": "/system/app/appServiceFwk/HwMapKitHsp/mapLibrary.hsp",
+                  "count": 10990924
+                }
+              ]
+            },
+            {
+              "name": "libtaskpool.z.so",
+              "count": 6136555,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libtaskpool.z.so",
+                  "count": 6136555
+                }
+              ]
+            },
+            {
+              "name": "libuv.so",
+              "count": 41775,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libuv.so",
+                  "count": 41775
+                }
+              ]
+            },
+            {
+              "name": "file_info.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/file_info.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdhext_file_info.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_file_info.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libark_tooling.so",
+              "count": 2839751,
+              "files": [
+                {
+                  "file": "/system/lib64/libark_tooling.so",
+                  "count": 2839751
+                }
+              ]
+            },
+            {
+              "name": "liblbsservice_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/liblbsservice_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libgeofence_sdk.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libgeofence_sdk.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libtel_cellular_data_api.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libtel_cellular_data_api.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "liblocator_sdk.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/liblocator_sdk.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libcomponentsnapshot.z.so",
+              "count": 3261588,
+              "files": [
+                {
+                  "file": "/system/lib64/module/arkui/libcomponentsnapshot.z.so",
+                  "count": 3261588
+                }
+              ]
+            },
+            {
+              "name": "libcloud_auth_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libcloud_auth_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libclouddevelopproxy_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libclouddevelopproxy_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libai_framework_innerapi.z.so",
+              "count": 291864,
+              "files": [
+                {
+                  "file": "/system/lib64/libai_framework_innerapi.z.so",
+                  "count": 291864
+                }
+              ]
+            },
+            {
+              "name": "libtexttospeech.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/hms/ai/libtexttospeech.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "json.js]",
+              "count": 21383566,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:libjson.z.so/json.js]",
+                  "count": 21383566
+                }
+              ]
+            },
+            {
+              "name": "libasync_stack.z.so",
+              "count": 1166824,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libasync_stack.z.so",
+                  "count": 1166824
+                }
+              ]
+            },
+            {
+              "name": "libmedia_service_utils.z.so",
+              "count": 109143,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_service_utils.z.so",
+                  "count": 109143
+                }
+              ]
+            },
+            {
+              "name": "libaudio_capturer.z.so",
+              "count": 3390438,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaudio_capturer.z.so",
+                  "count": 3390438
+                }
+              ]
+            },
+            {
+              "name": "libaudio.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/multimedia/libaudio.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libextplugin.z.so",
+              "count": 1656458,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libextplugin.z.so",
+                  "count": 1656458
+                }
+              ]
+            },
+            {
+              "name": "libimage_native.z.so",
+              "count": 1570919,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_native.z.so",
+                  "count": 1570919
+                }
+              ]
+            },
+            {
+              "name": "libimage_utils.z.so",
+              "count": 484053,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_utils.z.so",
+                  "count": 484053
+                }
+              ]
+            },
+            {
+              "name": "libhisysevent.z.so",
+              "count": 4527390,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhisysevent.z.so",
+                  "count": 4527390
+                }
+              ]
+            },
+            {
+              "name": "libpluginmanager.z.so",
+              "count": 148623,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libpluginmanager.z.so",
+                  "count": 148623
+                }
+              ]
+            },
+            {
+              "name": "libhmicuuc.z.so",
+              "count": 12547199,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhmicuuc.z.so",
+                  "count": 12547199
+                }
+              ]
+            },
+            {
+              "name": "libglobal_resmgr.z.so",
+              "count": 1692596,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libglobal_resmgr.z.so",
+                  "count": 1692596
+                }
+              ]
+            },
+            {
+              "name": "libfwmark_client.z.so",
+              "count": 3060815,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libfwmark_client.z.so",
+                  "count": 3060815
+                }
+              ]
+            },
+            {
+              "name": "libace_container_scope.z.so",
+              "count": 964748,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_container_scope.z.so",
+                  "count": 964748
+                }
+              ]
+            },
+            {
+              "name": "libinputmethod_client.z.so",
+              "count": 3146049,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libinputmethod_client.z.so",
+                  "count": 3146049
+                }
+              ]
+            },
+            {
+              "name": "libpasteboard_framework.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libpasteboard_framework.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libpasteboard_client.z.so",
+              "count": 414508,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libpasteboard_client.z.so",
+                  "count": 414508
+                }
+              ]
+            },
+            {
+              "name": "libsamgr_proxy.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libsamgr_proxy.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsecurity_component_sdk.z.so",
+              "count": 1462796,
+              "files": [
+                {
+                  "file": "/system/lib64/libsecurity_component_sdk.z.so",
+                  "count": 1462796
+                }
+              ]
+            },
+            {
+              "name": "libsecurity_component_client_enhance.z.so",
+              "count": 2217185,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsecurity_component_client_enhance.z.so",
+                  "count": 2217185
+                }
+              ]
+            },
+            {
+              "name": "libcrypto_openssl.z.so",
+              "count": 6441704,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libcrypto_openssl.z.so",
+                  "count": 6441704
+                }
+              ]
+            },
+            {
+              "name": "libframe_analyzer.z.so",
+              "count": 2874740,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_analyzer.z.so",
+                  "count": 2874740
+                }
+              ]
+            },
+            {
+              "name": "libutil.z.so",
+              "count": 361772,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libutil.z.so",
+                  "count": 361772
+                }
+              ]
+            },
+            {
+              "name": "util.js]",
+              "count": 0,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:libutil.z.so/util.js]",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libresmgr_napi_core.z.so",
+              "count": 148285,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libresmgr_napi_core.z.so",
+                  "count": 148285
+                }
+              ]
+            },
+            {
+              "name": "libstack_utils_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libstack_utils_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhttp.z.so",
+              "count": 2900543,
+              "files": [
+                {
+                  "file": "/system/lib64/module/net/libhttp.z.so",
+                  "count": 2900543
+                }
+              ]
+            },
+            {
+              "name": "libnative_preferences.z.so",
+              "count": 9967787,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnative_preferences.z.so",
+                  "count": 9967787
+                }
+              ]
+            },
+            {
+              "name": "libpreferences.z.so",
+              "count": 5553028,
+              "files": [
+                {
+                  "file": "/system/lib64/module/data/libpreferences.z.so",
+                  "count": 5553028
+                }
+              ]
+            },
+            {
+              "name": "libpreferences_jscommon.z.so",
+              "count": 3319550,
+              "files": [
+                {
+                  "file": "/system/lib64/libpreferences_jscommon.z.so",
+                  "count": 3319550
+                }
+              ]
+            },
+            {
+              "name": "libxml2.z.so",
+              "count": 8823492,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libxml2.z.so",
+                  "count": 8823492
+                }
+              ]
+            },
+            {
+              "name": "libnet_conn_manager_if.z.so",
+              "count": 1083004,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnet_conn_manager_if.z.so",
+                  "count": 1083004
+                }
+              ]
+            },
+            {
+              "name": "libcurl_shared_http3.z.so",
+              "count": 5806995,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libcurl_shared_http3.z.so",
+                  "count": 5806995
+                }
+              ]
+            },
+            {
+              "name": "libnetsys_client.z.so",
+              "count": 834,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnetsys_client.z.so",
+                  "count": 834
+                }
+              ]
+            },
+            {
+              "name": "net_socket.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/net_socket.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdhext_net_socket.so.0.1",
+              "count": 32644,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_net_socket.so.0.1",
+                  "count": 32644
+                }
+              ]
+            },
+            {
+              "name": "libmedia_avplayer.z.so",
+              "count": 160759,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_avplayer.z.so",
+                  "count": 160759
+                }
+              ]
+            },
+            {
+              "name": "libmedia_client.z.so",
+              "count": 920098,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_client.z.so",
+                  "count": 920098
+                }
+              ]
+            },
+            {
+              "name": "libmedia_foundation.z.so",
+              "count": 443710,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_foundation.z.so",
+                  "count": 443710
+                }
+              ]
+            },
+            {
+              "name": "libdataobs_manager.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libdataobs_manager.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libinputmethod_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libinputmethod_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libemitter.z.so",
+              "count": 119335,
+              "files": [
+                {
+                  "file": "/system/lib64/module/events/libemitter.z.so",
+                  "count": 119335
+                }
+              ]
+            },
+            {
+              "name": "libdh.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libdh.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhmsrv_io.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libhmsrv_io.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libshared_libz.z.so",
+              "count": 132882,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libshared_libz.z.so",
+                  "count": 132882
+                }
+              ]
+            },
+            {
+              "name": "libnet_bundle_utils.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libnet_bundle_utils.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libai_text_to_speech_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libai_text_to_speech_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libability_manager.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libability_manager.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libability_connect_callback_stub.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libability_connect_callback_stub.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libai_common.z.so",
+              "count": 1195087,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libai_common.z.so",
+                  "count": 1195087
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_base.z.so",
+              "count": 3362609,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhiappevent_base.z.so",
+                  "count": 3362609
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_innerapi.z.so",
+              "count": 33085,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhiappevent_innerapi.z.so",
+                  "count": 33085
+                }
+              ]
+            },
+            {
+              "name": "libha_app_event.z.so",
+              "count": 286562,
+              "files": [
+                {
+                  "file": "/system/lib64/libha_app_event.z.so",
+                  "count": 286562
+                }
+              ]
+            },
+            {
+              "name": "libha_client_core.z.so",
+              "count": 68355,
+              "files": [
+                {
+                  "file": "/system/lib64/libha_client_core.z.so",
+                  "count": 68355
+                }
+              ]
+            },
+            {
+              "name": "libnative_rdb.z.so",
+              "count": 1287053,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnative_rdb.z.so",
+                  "count": 1287053
+                }
+              ]
+            },
+            {
+              "name": "libsqlite.z.so",
+              "count": 20239636,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsqlite.z.so",
+                  "count": 20239636
+                }
+              ]
+            },
+            {
+              "name": "libdistributeddb.z.so",
+              "count": 360118,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libdistributeddb.z.so",
+                  "count": 360118
+                }
+              ]
+            },
+            {
+              "name": "libunwinder.z.so",
+              "count": 23646034,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libunwinder.z.so",
+                  "count": 23646034
+                }
+              ]
+            },
+            {
+              "name": "libthread_sampler.z.so",
+              "count": 575597,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libthread_sampler.z.so",
+                  "count": 575597
+                }
+              ]
+            },
+            {
+              "name": "libapp_manager.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libapp_manager.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libframe_ui_intf.z.so",
+              "count": 1809211,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_ui_intf.z.so",
+                  "count": 1809211
+                }
+              ]
+            },
+            {
+              "name": "libwmutil_base.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwmutil_base.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdevicestatus_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libdevicestatus_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libconsole.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libconsole.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhmsrv_sec.so.0.1",
+              "count": 88666,
+              "files": [
+                {
+                  "file": "/lib/libhmsrv_sec.so.0.1",
+                  "count": 88666
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "category": 0,
+          "count": 86655065,
+          "subData": [
+            {
+              "name": "entry",
+              "count": 86655065,
+              "files": [
+                {
+                  "file": "/proc/{pid}/root/data/storage/el1/bundle/entry.hap",
+                  "count": 86655065
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step_id": 2,
+      "step_name": "step2",
+      "count": 835492333,
+      "data": [
+        {
+          "category": 8,
+          "count": 783396066,
+          "subData": [
+            {
+              "name": "libipc_common.z.so",
+              "count": 34563612,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libipc_common.z.so",
+                  "count": 34563612
+                }
+              ]
+            },
+            {
+              "name": "libipc_core.z.so",
+              "count": 4181799,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libipc_core.z.so",
+                  "count": 4181799
+                }
+              ]
+            },
+            {
+              "name": "ld-musl-aarch64.so.1",
+              "count": 877404,
+              "files": [
+                {
+                  "file": "/system/lib/ld-musl-aarch64.so.1",
+                  "count": 877404
+                }
+              ]
+            },
+            {
+              "name": "libutils.z.so",
+              "count": 61121276,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libutils.z.so",
+                  "count": 61121276
+                }
+              ]
+            },
+            {
+              "name": "libhilog.so",
+              "count": 10144015,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhilog.so",
+                  "count": 10144015
+                }
+              ]
+            },
+            {
+              "name": "libaccessibilityclient.z.so",
+              "count": 877907,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibilityclient.z.so",
+                  "count": 877907
+                }
+              ]
+            },
+            {
+              "name": "libaccessibility_interface.z.so",
+              "count": 6820212,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibility_interface.z.so",
+                  "count": 6820212
+                }
+              ]
+            },
+            {
+              "name": "libeventhandler.z.so",
+              "count": 25969269,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libeventhandler.z.so",
+                  "count": 25969269
+                }
+              ]
+            },
+            {
+              "name": "libappkit_native.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappkit_native.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libappspawn_ace.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/appspawn/appspawn/libappspawn_ace.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "appspawn",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/bin/appspawn",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libbegetutil.z.so",
+              "count": 10287630,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libbegetutil.z.so",
+                  "count": 10287630
+                }
+              ]
+            },
+            {
+              "name": "libace_compatible.z.so",
+              "count": 204762575,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_compatible.z.so",
+                  "count": 204762575
+                }
+              ]
+            },
+            {
+              "name": "libffrt.so",
+              "count": 7291251,
+              "files": [
+                {
+                  "file": "/system/lib64/ndk/libffrt.so",
+                  "count": 7291251
+                }
+              ]
+            },
+            {
+              "name": "libhitrace_meter.so",
+              "count": 49937516,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhitrace_meter.so",
+                  "count": 49937516
+                }
+              ]
+            },
+            {
+              "name": "librender_service_client.z.so",
+              "count": 44680564,
+              "files": [
+                {
+                  "file": "/system/lib64/librender_service_client.z.so",
+                  "count": 44680564
+                }
+              ]
+            },
+            {
+              "name": "libmmi-client.z.so",
+              "count": 741317,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmmi-client.z.so",
+                  "count": 741317
+                }
+              ]
+            },
+            {
+              "name": "libwm.z.so",
+              "count": 1851297,
+              "files": [
+                {
+                  "file": "/system/lib64/libwm.z.so",
+                  "count": 1851297
+                }
+              ]
+            },
+            {
+              "name": "libmmi-util.z.so",
+              "count": 153984,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmmi-util.z.so",
+                  "count": 153984
+                }
+              ]
+            },
+            {
+              "name": "libscene_session.z.so",
+              "count": 576554,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libscene_session.z.so",
+                  "count": 576554
+                }
+              ]
+            },
+            {
+              "name": "librtg_interface.z.so",
+              "count": 8620915,
+              "files": [
+                {
+                  "file": "/system/lib64/librtg_interface.z.so",
+                  "count": 8620915
+                }
+              ]
+            },
+            {
+              "name": "libvsync.z.so",
+              "count": 7260723,
+              "files": [
+                {
+                  "file": "/system/lib64/libvsync.z.so",
+                  "count": 7260723
+                }
+              ]
+            },
+            {
+              "name": "[shmm]",
+              "count": 2483524,
+              "files": [
+                {
+                  "file": "[shmm]",
+                  "count": 2483524
+                }
+              ]
+            },
+            {
+              "name": "libc++.so",
+              "count": 31143,
+              "files": [
+                {
+                  "file": "/system/lib64/libc++.so",
+                  "count": 31143
+                }
+              ]
+            },
+            {
+              "name": "libressched_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libressched_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhmulibs.so.0.1",
+              "count": 1006819,
+              "files": [
+                {
+                  "file": "/lib/libhmulibs.so.0.1",
+                  "count": 1006819
+                }
+              ]
+            },
+            {
+              "name": "libdh-lnxbase.so.1.0",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libdh-lnxbase.so.1.0",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdh-linux.so",
+              "count": 520771,
+              "files": [
+                {
+                  "file": "/lib/libdh-linux.so",
+                  "count": 520771
+                }
+              ]
+            },
+            {
+              "name": "devhost.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/devhost.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "devhost.elf",
+              "count": 120892,
+              "files": [
+                {
+                  "file": "/bin/devhost.elf",
+                  "count": 120892
+                }
+              ]
+            },
+            {
+              "name": "libaccessibility_common.z.so",
+              "count": 616230,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibility_common.z.so",
+                  "count": 616230
+                }
+              ]
+            },
+            {
+              "name": "libframe_ui_utils.z.so",
+              "count": 53186,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_ui_utils.z.so",
+                  "count": 53186
+                }
+              ]
+            },
+            {
+              "name": "libframeawaresched.so",
+              "count": 662787,
+              "files": [
+                {
+                  "file": "/system/lib64/libframeawaresched.so",
+                  "count": 662787
+                }
+              ]
+            },
+            {
+              "name": "stateMgmt.abc",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/etc/abc/framework/stateMgmt.abc",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libark_jsruntime.so",
+              "count": 37193199,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libark_jsruntime.so",
+                  "count": 37193199
+                }
+              ]
+            },
+            {
+              "name": "stub.an",
+              "count": 5098359,
+              "files": [
+                {
+                  "file": "/system/lib64/module/arkcompiler/stub.an",
+                  "count": 5098359
+                }
+              ]
+            },
+            {
+              "name": "libimage_utils.z.so",
+              "count": 124661,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_utils.z.so",
+                  "count": 124661
+                }
+              ]
+            },
+            {
+              "name": "libextplugin.z.so",
+              "count": 3341559,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libextplugin.z.so",
+                  "count": 3341559
+                }
+              ]
+            },
+            {
+              "name": "libimage_native.z.so",
+              "count": 3310600,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_native.z.so",
+                  "count": 3310600
+                }
+              ]
+            },
+            {
+              "name": "libskia_canvaskit.z.so",
+              "count": 158078686,
+              "files": [
+                {
+                  "file": "/system/lib64/libskia_canvaskit.z.so",
+                  "count": 158078686
+                }
+              ]
+            },
+            {
+              "name": "libhisysevent.z.so",
+              "count": 10102485,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhisysevent.z.so",
+                  "count": 10102485
+                }
+              ]
+            },
+            {
+              "name": "libhicollie.z.so",
+              "count": 351889,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhicollie.z.so",
+                  "count": 351889
+                }
+              ]
+            },
+            {
+              "name": "librender_service_base.z.so",
+              "count": 6992655,
+              "files": [
+                {
+                  "file": "/system/lib64/librender_service_base.z.so",
+                  "count": 6992655
+                }
+              ]
+            },
+            {
+              "name": "libhitracechain.so",
+              "count": 3097064,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhitracechain.so",
+                  "count": 3097064
+                }
+              ]
+            },
+            {
+              "name": "libthp_extra_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libthp_extra_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libtp_proxy_1.0.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libtp_proxy_1.0.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libace_container_scope.z.so",
+              "count": 916956,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_container_scope.z.so",
+                  "count": 916956
+                }
+              ]
+            },
+            {
+              "name": "libdm.z.so",
+              "count": 619160,
+              "files": [
+                {
+                  "file": "/system/lib64/libdm.z.so",
+                  "count": 619160
+                }
+              ]
+            },
+            {
+              "name": "libdevicestatus_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libdevicestatus_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libframe_ui_intf.z.so",
+              "count": 540172,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_ui_intf.z.so",
+                  "count": 540172
+                }
+              ]
+            },
+            {
+              "name": "libglobal_resmgr.z.so",
+              "count": 2910442,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libglobal_resmgr.z.so",
+                  "count": 2910442
+                }
+              ]
+            },
+            {
+              "name": "libhmicuuc.z.so",
+              "count": 983871,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhmicuuc.z.so",
+                  "count": 983871
+                }
+              ]
+            },
+            {
+              "name": "libextractortool.z.so",
+              "count": 120981,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libextractortool.z.so",
+                  "count": 120981
+                }
+              ]
+            },
+            {
+              "name": "lib2d_graphics.z.so",
+              "count": 16037758,
+              "files": [
+                {
+                  "file": "/system/lib64/lib2d_graphics.z.so",
+                  "count": 16037758
+                }
+              ]
+            },
+            {
+              "name": "libace_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhttp.z.so",
+              "count": 394359,
+              "files": [
+                {
+                  "file": "/system/lib64/module/net/libhttp.z.so",
+                  "count": 394359
+                }
+              ]
+            },
+            {
+              "name": "libwmutil_base.z.so",
+              "count": 143427,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwmutil_base.z.so",
+                  "count": 143427
+                }
+              ]
+            },
+            {
+              "name": "librouter.z.so",
+              "count": 723416,
+              "files": [
+                {
+                  "file": "/system/lib64/module/librouter.z.so",
+                  "count": 723416
+                }
+              ]
+            },
+            {
+              "name": "libframe_trace_intf.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_trace_intf.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_base.z.so",
+              "count": 1622143,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhiappevent_base.z.so",
+                  "count": 1622143
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhiappevent_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libscanha_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/hms/core/scan/libscanha_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsqlite.z.so",
+              "count": 3405057,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsqlite.z.so",
+                  "count": 3405057
+                }
+              ]
+            },
+            {
+              "name": "libnative_rdb.z.so",
+              "count": 497282,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnative_rdb.z.so",
+                  "count": 497282
+                }
+              ]
+            },
+            {
+              "name": "libscanencode_napi.z.so",
+              "count": 5584351,
+              "files": [
+                {
+                  "file": "/system/lib64/module/hms/core/scan/libscanencode_napi.z.so",
+                  "count": 5584351
+                }
+              ]
+            },
+            {
+              "name": "libpixelconvertadapter.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libpixelconvertadapter.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libimage_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libuv.so",
+              "count": 11149,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libuv.so",
+                  "count": 11149
+                }
+              ]
+            },
+            {
+              "name": "libhdc_register.z.so",
+              "count": 2728,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhdc_register.z.so",
+                  "count": 2728
+                }
+              ]
+            },
+            {
+              "name": "libinputmethod_common.z.so",
+              "count": 1587430,
+              "files": [
+                {
+                  "file": "/system/lib64/libinputmethod_common.z.so",
+                  "count": 1587430
+                }
+              ]
+            },
+            {
+              "name": "libinputmethod_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libinputmethod_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libwmutil.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwmutil.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libbase.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libbase.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libwant.z.so",
+              "count": 415893,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwant.z.so",
+                  "count": 415893
+                }
+              ]
+            },
+            {
+              "name": "libability_manager.z.so",
+              "count": 62175,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libability_manager.z.so",
+                  "count": 62175
+                }
+              ]
+            },
+            {
+              "name": "libability_thread.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libability_thread.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhilog.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libhilog.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libuiabilitykit_native.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libuiabilitykit_native.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libevent_report.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libevent_report.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libai_text_to_speech_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libai_text_to_speech_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libtexttospeech.z.so",
+              "count": 238499,
+              "files": [
+                {
+                  "file": "/system/lib64/module/hms/ai/libtexttospeech.z.so",
+                  "count": 238499
+                }
+              ]
+            },
+            {
+              "name": "libapp_context.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libapp_context.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libapp_manager.z.so",
+              "count": 64801,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libapp_manager.z.so",
+                  "count": 64801
+                }
+              ]
+            },
+            {
+              "name": "libqos.z.so",
+              "count": 321404,
+              "files": [
+                {
+                  "file": "/system/lib64/libqos.z.so",
+                  "count": 321404
+                }
+              ]
+            },
+            {
+              "name": "libruntime.z.so",
+              "count": 5556349,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libruntime.z.so",
+                  "count": 5556349
+                }
+              ]
+            },
+            {
+              "name": "libfreeze_util.z.so",
+              "count": 227355,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libfreeze_util.z.so",
+                  "count": 227355
+                }
+              ]
+            },
+            {
+              "name": "libnapi_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnapi_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libpreferences.z.so",
+              "count": 1536682,
+              "files": [
+                {
+                  "file": "/system/lib64/module/data/libpreferences.z.so",
+                  "count": 1536682
+                }
+              ]
+            },
+            {
+              "name": "libpreferences_jscommon.z.so",
+              "count": 3601576,
+              "files": [
+                {
+                  "file": "/system/lib64/libpreferences_jscommon.z.so",
+                  "count": 3601576
+                }
+              ]
+            },
+            {
+              "name": "json.js]",
+              "count": 7290248,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:libjson.z.so/json.js]",
+                  "count": 7290248
+                }
+              ]
+            },
+            {
+              "name": "[anon:ArkTS Code:384833523712]",
+              "count": 0,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:384833523712]",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libmedia_service_utils.z.so",
+              "count": 116875,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_service_utils.z.so",
+                  "count": 116875
+                }
+              ]
+            },
+            {
+              "name": "libfwmark_client.z.so",
+              "count": 667155,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libfwmark_client.z.so",
+                  "count": 667155
+                }
+              ]
+            },
+            {
+              "name": "libpluginmanager.z.so",
+              "count": 198344,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libpluginmanager.z.so",
+                  "count": 198344
+                }
+              ]
+            },
+            {
+              "name": "libhichecker.so",
+              "count": 951951,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhichecker.so",
+                  "count": 951951
+                }
+              ]
+            },
+            {
+              "name": "libasync_stack.z.so",
+              "count": 1917961,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libasync_stack.z.so",
+                  "count": 1917961
+                }
+              ]
+            },
+            {
+              "name": "kstate.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/kstate.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdhext_kstate.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_kstate.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libframe_analyzer.z.so",
+              "count": 1011270,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_analyzer.z.so",
+                  "count": 1011270
+                }
+              ]
+            },
+            {
+              "name": "libsecurity_component_sdk.z.so",
+              "count": 932331,
+              "files": [
+                {
+                  "file": "/system/lib64/libsecurity_component_sdk.z.so",
+                  "count": 932331
+                }
+              ]
+            },
+            {
+              "name": "libpasteboard_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libpasteboard_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsecurity_component_client_enhance.z.so",
+              "count": 156865,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsecurity_component_client_enhance.z.so",
+                  "count": 156865
+                }
+              ]
+            },
+            {
+              "name": "libresmgr_napi_core.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libresmgr_napi_core.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libnative_preferences.z.so",
+              "count": 2423407,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnative_preferences.z.so",
+                  "count": 2423407
+                }
+              ]
+            },
+            {
+              "name": "libnetsys_client.z.so",
+              "count": 1033562,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnetsys_client.z.so",
+                  "count": 1033562
+                }
+              ]
+            },
+            {
+              "name": "libcurl_shared_http3.z.so",
+              "count": 109738,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libcurl_shared_http3.z.so",
+                  "count": 109738
+                }
+              ]
+            },
+            {
+              "name": "libxml2.z.so",
+              "count": 1919010,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libxml2.z.so",
+                  "count": 1919010
+                }
+              ]
+            },
+            {
+              "name": "net_socket.ko",
+              "count": 11966,
+              "files": [
+                {
+                  "file": "/liblinux/net_socket.ko",
+                  "count": 11966
+                }
+              ]
+            },
+            {
+              "name": "libdhext_net_socket.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_net_socket.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdh.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libdh.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhmsrv_io.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libhmsrv_io.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdataobs_manager.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libdataobs_manager.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libmedia_avplayer.z.so",
+              "count": 107403,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_avplayer.z.so",
+                  "count": 107403
+                }
+              ]
+            },
+            {
+              "name": "libmedia_client.z.so",
+              "count": 365052,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_client.z.so",
+                  "count": 365052
+                }
+              ]
+            },
+            {
+              "name": "libemitter.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/events/libemitter.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libmedia_foundation.z.so",
+              "count": 48152,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_foundation.z.so",
+                  "count": 48152
+                }
+              ]
+            },
+            {
+              "name": "libimf_hisysevent.z.so",
+              "count": 136163,
+              "files": [
+                {
+                  "file": "/system/lib64/libimf_hisysevent.z.so",
+                  "count": 136163
+                }
+              ]
+            },
+            {
+              "name": "libai_framework_innerapi.z.so",
+              "count": 72026,
+              "files": [
+                {
+                  "file": "/system/lib64/libai_framework_innerapi.z.so",
+                  "count": 72026
+                }
+              ]
+            },
+            {
+              "name": "libai_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libai_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libaudio_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaudio_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libaudio_renderer.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaudio_renderer.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libaudio.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/multimedia/libaudio.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libjs_environment.z.so",
+              "count": 1894842,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libjs_environment.z.so",
+                  "count": 1894842
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "category": 0,
+          "count": 52096267,
+          "subData": [
+            {
+              "name": "entry",
+              "count": 52096267,
+              "files": [
+                {
+                  "file": "/proc/{pid}/root/data/storage/el1/bundle/entry.hap",
+                  "count": 52096267
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step_id": 3,
+      "step_name": "step3",
+      "count": 2280441063,
+      "data": [
+        {
+          "category": 8,
+          "count": 1911375710,
+          "subData": [
+            {
+              "name": "libipc_common.z.so",
+              "count": 59181371,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libipc_common.z.so",
+                  "count": 59181371
+                }
+              ]
+            },
+            {
+              "name": "libipc_core.z.so",
+              "count": 15568222,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libipc_core.z.so",
+                  "count": 15568222
+                }
+              ]
+            },
+            {
+              "name": "ld-musl-aarch64.so.1",
+              "count": 1487148,
+              "files": [
+                {
+                  "file": "/system/lib/ld-musl-aarch64.so.1",
+                  "count": 1487148
+                }
+              ]
+            },
+            {
+              "name": "libutils.z.so",
+              "count": 135875551,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libutils.z.so",
+                  "count": 135875551
+                }
+              ]
+            },
+            {
+              "name": "libaccessibility_interface.z.so",
+              "count": 11568608,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibility_interface.z.so",
+                  "count": 11568608
+                }
+              ]
+            },
+            {
+              "name": "libeventhandler.z.so",
+              "count": 53715900,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libeventhandler.z.so",
+                  "count": 53715900
+                }
+              ]
+            },
+            {
+              "name": "libappkit_native.z.so",
+              "count": 122331,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappkit_native.z.so",
+                  "count": 122331
+                }
+              ]
+            },
+            {
+              "name": "libappspawn_ace.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/appspawn/appspawn/libappspawn_ace.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "appspawn",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/bin/appspawn",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libbegetutil.z.so",
+              "count": 21948944,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libbegetutil.z.so",
+                  "count": 21948944
+                }
+              ]
+            },
+            {
+              "name": "libace_compatible.z.so",
+              "count": 452468606,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_compatible.z.so",
+                  "count": 452468606
+                }
+              ]
+            },
+            {
+              "name": "libffrt.so",
+              "count": 54477995,
+              "files": [
+                {
+                  "file": "/system/lib64/ndk/libffrt.so",
+                  "count": 54477995
+                }
+              ]
+            },
+            {
+              "name": "libhitrace_meter.so",
+              "count": 134342415,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhitrace_meter.so",
+                  "count": 134342415
+                }
+              ]
+            },
+            {
+              "name": "libaccessibilityclient.z.so",
+              "count": 2081492,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibilityclient.z.so",
+                  "count": 2081492
+                }
+              ]
+            },
+            {
+              "name": "librender_service_client.z.so",
+              "count": 74162364,
+              "files": [
+                {
+                  "file": "/system/lib64/librender_service_client.z.so",
+                  "count": 74162364
+                }
+              ]
+            },
+            {
+              "name": "libmmi-client.z.so",
+              "count": 10206092,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmmi-client.z.so",
+                  "count": 10206092
+                }
+              ]
+            },
+            {
+              "name": "libhilog.so",
+              "count": 62656671,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhilog.so",
+                  "count": 62656671
+                }
+              ]
+            },
+            {
+              "name": "libmmi-util.z.so",
+              "count": 3248135,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmmi-util.z.so",
+                  "count": 3248135
+                }
+              ]
+            },
+            {
+              "name": "libdm.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libdm.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libwm.z.so",
+              "count": 9398977,
+              "files": [
+                {
+                  "file": "/system/lib64/libwm.z.so",
+                  "count": 9398977
+                }
+              ]
+            },
+            {
+              "name": "libhmulibs.so.0.1",
+              "count": 19806950,
+              "files": [
+                {
+                  "file": "/lib/libhmulibs.so.0.1",
+                  "count": 19806950
+                }
+              ]
+            },
+            {
+              "name": "libdh-lnxbase.so.1.0",
+              "count": 123396,
+              "files": [
+                {
+                  "file": "/lib/libdh-lnxbase.so.1.0",
+                  "count": 123396
+                }
+              ]
+            },
+            {
+              "name": "libdh-linux.so",
+              "count": 4515625,
+              "files": [
+                {
+                  "file": "/lib/libdh-linux.so",
+                  "count": 4515625
+                }
+              ]
+            },
+            {
+              "name": "kstate.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/kstate.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdhext_kstate.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_kstate.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "devhost.elf",
+              "count": 2944958,
+              "files": [
+                {
+                  "file": "/bin/devhost.elf",
+                  "count": 2944958
+                }
+              ]
+            },
+            {
+              "name": "libressched_client.z.so",
+              "count": 21365,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libressched_client.z.so",
+                  "count": 21365
+                }
+              ]
+            },
+            {
+              "name": "libframe_ui_utils.z.so",
+              "count": 1606840,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_ui_utils.z.so",
+                  "count": 1606840
+                }
+              ]
+            },
+            {
+              "name": "libframeawaresched.so",
+              "count": 6971841,
+              "files": [
+                {
+                  "file": "/system/lib64/libframeawaresched.so",
+                  "count": 6971841
+                }
+              ]
+            },
+            {
+              "name": "libvsync.z.so",
+              "count": 8443082,
+              "files": [
+                {
+                  "file": "/system/lib64/libvsync.z.so",
+                  "count": 8443082
+                }
+              ]
+            },
+            {
+              "name": "libscene_session.z.so",
+              "count": 952820,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libscene_session.z.so",
+                  "count": 952820
+                }
+              ]
+            },
+            {
+              "name": "libaccessibility_common.z.so",
+              "count": 3018041,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libaccessibility_common.z.so",
+                  "count": 3018041
+                }
+              ]
+            },
+            {
+              "name": "libasync_stack.z.so",
+              "count": 4910275,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libasync_stack.z.so",
+                  "count": 4910275
+                }
+              ]
+            },
+            {
+              "name": "libhitracechain.so",
+              "count": 7615743,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhitracechain.so",
+                  "count": 7615743
+                }
+              ]
+            },
+            {
+              "name": "librender_service_base.z.so",
+              "count": 19302607,
+              "files": [
+                {
+                  "file": "/system/lib64/librender_service_base.z.so",
+                  "count": 19302607
+                }
+              ]
+            },
+            {
+              "name": "libhisysevent.z.so",
+              "count": 6867999,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhisysevent.z.so",
+                  "count": 6867999
+                }
+              ]
+            },
+            {
+              "name": "stateMgmt.abc",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/etc/abc/framework/stateMgmt.abc",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libark_jsruntime.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libark_jsruntime.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "stub.an",
+              "count": 3356600,
+              "files": [
+                {
+                  "file": "/system/lib64/module/arkcompiler/stub.an",
+                  "count": 3356600
+                }
+              ]
+            },
+            {
+              "name": "libskia_canvaskit.z.so",
+              "count": 331854289,
+              "files": [
+                {
+                  "file": "/system/lib64/libskia_canvaskit.z.so",
+                  "count": 331854289
+                }
+              ]
+            },
+            {
+              "name": "lib2d_graphics.z.so",
+              "count": 38411681,
+              "files": [
+                {
+                  "file": "/system/lib64/lib2d_graphics.z.so",
+                  "count": 38411681
+                }
+              ]
+            },
+            {
+              "name": "[shmm]",
+              "count": 8766339,
+              "files": [
+                {
+                  "file": "[shmm]",
+                  "count": 8766339
+                }
+              ]
+            },
+            {
+              "name": "libc++.so",
+              "count": 91438,
+              "files": [
+                {
+                  "file": "/system/lib64/libc++.so",
+                  "count": 91438
+                }
+              ]
+            },
+            {
+              "name": "libhicollie.z.so",
+              "count": 61039,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libhicollie.z.so",
+                  "count": 61039
+                }
+              ]
+            },
+            {
+              "name": "libace_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "devhost.ko",
+              "count": 62792,
+              "files": [
+                {
+                  "file": "/liblinux/devhost.ko",
+                  "count": 62792
+                }
+              ]
+            },
+            {
+              "name": "libframe_trace_intf.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_trace_intf.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhdc_register.z.so",
+              "count": 2081,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhdc_register.z.so",
+                  "count": 2081
+                }
+              ]
+            },
+            {
+              "name": "libhttp.z.so",
+              "count": 571239,
+              "files": [
+                {
+                  "file": "/system/lib64/module/net/libhttp.z.so",
+                  "count": 571239
+                }
+              ]
+            },
+            {
+              "name": "librtg_interface.z.so",
+              "count": 19453423,
+              "files": [
+                {
+                  "file": "/system/lib64/librtg_interface.z.so",
+                  "count": 19453423
+                }
+              ]
+            },
+            {
+              "name": "libthp_extra_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libthp_extra_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libace_container_scope.z.so",
+              "count": 160984,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libace_container_scope.z.so",
+                  "count": 160984
+                }
+              ]
+            },
+            {
+              "name": "libwmutil_base.z.so",
+              "count": 7388,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwmutil_base.z.so",
+                  "count": 7388
+                }
+              ]
+            },
+            {
+              "name": "libglobal_resmgr.z.so",
+              "count": 9811150,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libglobal_resmgr.z.so",
+                  "count": 9811150
+                }
+              ]
+            },
+            {
+              "name": "librouter.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/librouter.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libpreferences_jscommon.z.so",
+              "count": 5517100,
+              "files": [
+                {
+                  "file": "/system/lib64/libpreferences_jscommon.z.so",
+                  "count": 5517100
+                }
+              ]
+            },
+            {
+              "name": "libpreferences.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/data/libpreferences.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "json.js]",
+              "count": 5915752,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:libjson.z.so/json.js]",
+                  "count": 5915752
+                }
+              ]
+            },
+            {
+              "name": "[anon:ArkTS Code:384833523712]",
+              "count": 3061663,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:384833523712]",
+                  "count": 3061663
+                }
+              ]
+            },
+            {
+              "name": "libuv.so",
+              "count": 12764361,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libuv.so",
+                  "count": 12764361
+                }
+              ]
+            },
+            {
+              "name": "libmedia_service_utils.z.so",
+              "count": 3117017,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_service_utils.z.so",
+                  "count": 3117017
+                }
+              ]
+            },
+            {
+              "name": "libmedia_avplayer.z.so",
+              "count": 37815,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_avplayer.z.so",
+                  "count": 37815
+                }
+              ]
+            },
+            {
+              "name": "libmedia_soundpool.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_soundpool.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libruntime.z.so",
+              "count": 87037,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libruntime.z.so",
+                  "count": 87037
+                }
+              ]
+            },
+            {
+              "name": "libextplugin.z.so",
+              "count": 1874363,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libextplugin.z.so",
+                  "count": 1874363
+                }
+              ]
+            },
+            {
+              "name": "libpluginmanager.z.so",
+              "count": 21379,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libpluginmanager.z.so",
+                  "count": 21379
+                }
+              ]
+            },
+            {
+              "name": "libimage_native.z.so",
+              "count": 4632151,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_native.z.so",
+                  "count": 4632151
+                }
+              ]
+            },
+            {
+              "name": "libimage_utils.z.so",
+              "count": 346448,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_utils.z.so",
+                  "count": 346448
+                }
+              ]
+            },
+            {
+              "name": "libfwmark_client.z.so",
+              "count": 1272021,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libfwmark_client.z.so",
+                  "count": 1272021
+                }
+              ]
+            },
+            {
+              "name": "libhmicuuc.z.so",
+              "count": 2878581,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhmicuuc.z.so",
+                  "count": 2878581
+                }
+              ]
+            },
+            {
+              "name": "libinputmethod_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libinputmethod_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libark_tooling.so",
+              "count": 922281,
+              "files": [
+                {
+                  "file": "/system/lib64/libark_tooling.so",
+                  "count": 922281
+                }
+              ]
+            },
+            {
+              "name": "libapp_manager.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libapp_manager.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libinputmethod_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libinputmethod_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libextractortool.z.so",
+              "count": 11745975,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libextractortool.z.so",
+                  "count": 11745975
+                }
+              ]
+            },
+            {
+              "name": "mapLibrary.hsp",
+              "count": 39156770,
+              "files": [
+                {
+                  "file": "/system/app/appServiceFwk/HwMapKitHsp/mapLibrary.hsp",
+                  "count": 39156770
+                }
+              ]
+            },
+            {
+              "name": "libapp_context.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libapp_context.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libapp_context_utils.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libapp_context_utils.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "Context.js]",
+              "count": 0,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:libcontext.z.so/Context.js]",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "librawfile.z.so",
+              "count": 458598,
+              "files": [
+                {
+                  "file": "/system/lib64/librawfile.z.so",
+                  "count": 458598
+                }
+              ]
+            },
+            {
+              "name": "libhilog_ndk.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/ndk/libhilog_ndk.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libEGL.so",
+              "count": 6931349,
+              "files": [
+                {
+                  "file": "/system/lib64/libEGL.so",
+                  "count": 6931349
+                }
+              ]
+            },
+            {
+              "name": "libhvgr_v200.so",
+              "count": 57307654,
+              "files": [
+                {
+                  "file": "/vendor/lib64/chipsetsdk/libhvgr_v200.so",
+                  "count": 57307654
+                }
+              ]
+            },
+            {
+              "name": "libsqlite.z.so",
+              "count": 27712627,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsqlite.z.so",
+                  "count": 27712627
+                }
+              ]
+            },
+            {
+              "name": "libdistributeddb.z.so",
+              "count": 35150,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libdistributeddb.z.so",
+                  "count": 35150
+                }
+              ]
+            },
+            {
+              "name": "libnative_rdb.z.so",
+              "count": 44260911,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnative_rdb.z.so",
+                  "count": 44260911
+                }
+              ]
+            },
+            {
+              "name": "libnative_rdb_ndk.z.so",
+              "count": 5507352,
+              "files": [
+                {
+                  "file": "/system/lib64/ndk/libnative_rdb_ndk.z.so",
+                  "count": 5507352
+                }
+              ]
+            },
+            {
+              "name": "libnative_preferences.z.so",
+              "count": 1541975,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnative_preferences.z.so",
+                  "count": 1541975
+                }
+              ]
+            },
+            {
+              "name": "libbeget_proxy.z.so",
+              "count": 78104,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libbeget_proxy.z.so",
+                  "count": 78104
+                }
+              ]
+            },
+            {
+              "name": "libiGraphicsCore.z.so",
+              "count": 4871563,
+              "files": [
+                {
+                  "file": "/system/lib64/libiGraphicsCore.z.so",
+                  "count": 4871563
+                }
+              ]
+            },
+            {
+              "name": "libgame_acc_sched_client.z.so",
+              "count": 964249,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libgame_acc_sched_client.z.so",
+                  "count": 964249
+                }
+              ]
+            },
+            {
+              "name": "libappexecfwk_core.z.so",
+              "count": 2043927,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappexecfwk_core.z.so",
+                  "count": 2043927
+                }
+              ]
+            },
+            {
+              "name": "libresmgr_napi_core.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libresmgr_napi_core.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libappexecfwk_base.z.so",
+              "count": 136635,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libappexecfwk_base.z.so",
+                  "count": 136635
+                }
+              ]
+            },
+            {
+              "name": "libabr.so",
+              "count": 421347,
+              "files": [
+                {
+                  "file": "/system/lib64/ndk/libabr.so",
+                  "count": 421347
+                }
+              ]
+            },
+            {
+              "name": "libmeasure.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libmeasure.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "measure.js]",
+              "count": 0,
+              "files": [
+                {
+                  "file": "[anon:ArkTS Code:libmeasure.z.so/measure.js]",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsamgr_proxy.z.so",
+              "count": 30202,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libsamgr_proxy.z.so",
+                  "count": 30202
+                }
+              ]
+            },
+            {
+              "name": "libcesfwk_core.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libcesfwk_core.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libcesfwk_innerkits.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libcesfwk_innerkits.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libcommoneventmanager.z.so",
+              "count": 5429,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libcommoneventmanager.z.so",
+                  "count": 5429
+                }
+              ]
+            },
+            {
+              "name": "libdhext_iaware_notify.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_iaware_notify.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsurface.z.so",
+              "count": 736331,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libsurface.z.so",
+                  "count": 736331
+                }
+              ]
+            },
+            {
+              "name": "libdisplay_buffer_vdi_impl.z.so",
+              "count": 118417,
+              "files": [
+                {
+                  "file": "/vendor/lib64/libdisplay_buffer_vdi_impl.z.so",
+                  "count": 118417
+                }
+              ]
+            },
+            {
+              "name": "libmetadata_service_1.1.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/vendor/lib64/chipsetsdk/libmetadata_service_1.1.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdisplay_buffer_hdi_impl_v1_2.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libdisplay_buffer_hdi_impl_v1_2.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdh.so.0.1",
+              "count": 68315,
+              "files": [
+                {
+                  "file": "/lib/libdh.so.0.1",
+                  "count": 68315
+                }
+              ]
+            },
+            {
+              "name": "libtaskpool.z.so",
+              "count": 974522,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libtaskpool.z.so",
+                  "count": 974522
+                }
+              ]
+            },
+            {
+              "name": "libshared_libz.z.so",
+              "count": 5760088,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libshared_libz.z.so",
+                  "count": 5760088
+                }
+              ]
+            },
+            {
+              "name": "libsensor.z.so",
+              "count": 852224,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libsensor.z.so",
+                  "count": 852224
+                }
+              ]
+            },
+            {
+              "name": "libimage_napi.z.so",
+              "count": 1969135,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libimage_napi.z.so",
+                  "count": 1969135
+                }
+              ]
+            },
+            {
+              "name": "libhilog.z.so",
+              "count": 1806737,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libhilog.z.so",
+                  "count": 1806737
+                }
+              ]
+            },
+            {
+              "name": "libsensor_client.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsensor_client.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsensor_agent.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libsensor_agent.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "liblbsbase_module.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/liblbsbase_module.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "liblbsservice_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/liblbsservice_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "liblocator_sdk.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/liblocator_sdk.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libgeolocationmanager.z.so",
+              "count": 236691,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libgeolocationmanager.z.so",
+                  "count": 236691
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_base.z.so",
+              "count": 580341,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhiappevent_base.z.so",
+                  "count": 580341
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/hiviewdfx/libhiappevent_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libemitter.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/events/libemitter.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libha_app_event.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libha_app_event.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdisplay_napi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/libdisplay_napi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libsync_fence.z.so",
+              "count": 28730,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libsync_fence.z.so",
+                  "count": 28730
+                }
+              ]
+            },
+            {
+              "name": "libability_connect_callback_stub.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libability_connect_callback_stub.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libabilitykit_native.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libabilitykit_native.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libability_context_native.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libability_context_native.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "librpc.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/librpc.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libexif.z.so",
+              "count": 444854,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-sdk/libexif.z.so",
+                  "count": 444854
+                }
+              ]
+            },
+            {
+              "name": "libbishenggpucompiler_v200.so.15",
+              "count": 3138166,
+              "files": [
+                {
+                  "file": "/vendor/lib64/chipsetsdk/libbishenggpucompiler_v200.so.15",
+                  "count": 3138166
+                }
+              ]
+            },
+            {
+              "name": "libhmsrv_sec.so.0.1",
+              "count": 1149085,
+              "files": [
+                {
+                  "file": "/lib/libhmsrv_sec.so.0.1",
+                  "count": 1149085
+                }
+              ]
+            },
+            {
+              "name": "libwindow_scene_common.z.so",
+              "count": 475582,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwindow_scene_common.z.so",
+                  "count": 475582
+                }
+              ]
+            },
+            {
+              "name": "libGLESv3.so",
+              "count": 334971,
+              "files": [
+                {
+                  "file": "/system/lib64/libGLESv3.so",
+                  "count": 334971
+                }
+              ]
+            },
+            {
+              "name": "libc-sys.so",
+              "count": 80550,
+              "files": [
+                {
+                  "file": "/lib/libc-sys.so",
+                  "count": 80550
+                }
+              ]
+            },
+            {
+              "name": "libaccesstoken_sdk.z.so",
+              "count": 415623,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libaccesstoken_sdk.z.so",
+                  "count": 415623
+                }
+              ]
+            },
+            {
+              "name": "libunwinder.z.so",
+              "count": 33831304,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libunwinder.z.so",
+                  "count": 33831304
+                }
+              ]
+            },
+            {
+              "name": "libbacktrace_local.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libbacktrace_local.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libnetsys_client.z.so",
+              "count": 1459171,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libnetsys_client.z.so",
+                  "count": 1459171
+                }
+              ]
+            },
+            {
+              "name": "libcurl_shared_http3.z.so",
+              "count": 4239152,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libcurl_shared_http3.z.so",
+                  "count": 4239152
+                }
+              ]
+            },
+            {
+              "name": "libmedia_client.z.so",
+              "count": 105071,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_client.z.so",
+                  "count": 105071
+                }
+              ]
+            },
+            {
+              "name": "libxml2.z.so",
+              "count": 2748432,
+              "files": [
+                {
+                  "file": "/system/lib64/chipset-pub-sdk/libxml2.z.so",
+                  "count": 2748432
+                }
+              ]
+            },
+            {
+              "name": "net_socket.ko",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/liblinux/net_socket.ko",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libdhext_net_socket.so.0.1",
+              "count": 48713,
+              "files": [
+                {
+                  "file": "/lib/extension/libdhext_net_socket.so.0.1",
+                  "count": 48713
+                }
+              ]
+            },
+            {
+              "name": "libhmsrv_io.so.0.1",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/lib/libhmsrv_io.so.0.1",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libmedia_foundation.z.so",
+              "count": 136085,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libmedia_foundation.z.so",
+                  "count": 136085
+                }
+              ]
+            },
+            {
+              "name": "libframe_analyzer.z.so",
+              "count": 1391113,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_analyzer.z.so",
+                  "count": 1391113
+                }
+              ]
+            },
+            {
+              "name": "libframe_ui_intf.z.so",
+              "count": 328076,
+              "files": [
+                {
+                  "file": "/system/lib64/libframe_ui_intf.z.so",
+                  "count": 328076
+                }
+              ]
+            },
+            {
+              "name": "libwant.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libwant.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libai_text_to_speech_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libai_text_to_speech_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libtexttospeech.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/module/hms/ai/libtexttospeech.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libai_framework_innerapi.z.so",
+              "count": 37638,
+              "files": [
+                {
+                  "file": "/system/lib64/libai_framework_innerapi.z.so",
+                  "count": 37638
+                }
+              ]
+            },
+            {
+              "name": "libai_common.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libai_common.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libhiappevent_innerapi.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/platformsdk/libhiappevent_innerapi.z.so",
+                  "count": 0
+                }
+              ]
+            },
+            {
+              "name": "libtp_proxy_1.0.z.so",
+              "count": 0,
+              "files": [
+                {
+                  "file": "/system/lib64/libtp_proxy_1.0.z.so",
+                  "count": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "category": 0,
+          "count": 65344338,
+          "subData": [
+            {
+              "name": "entry",
+              "count": 65344338,
+              "files": [
+                {
+                  "file": "/proc/{pid}/root/data/storage/el1/bundle/entry.hap",
+                  "count": 65344338
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "category": 1,
+          "count": 303721015,
+          "subData": [
+            {
+              "name": "libmap.so",
+              "count": 294196516,
+              "files": [
+                {
+                  "file": "/proc/{pid}/root/data/storage/el1/bundle/com.huawei.hms.mapservice.kit/mapLibrary/libs/arm64/libmap.so",
+                  "count": 294196516
+                }
+              ]
+            },
+            {
+              "name": "libaki_jsbind.so",
+              "count": 9524499,
+              "files": [
+                {
+                  "file": "/proc/{pid}/root/data/storage/el1/bundle/com.huawei.hms.mapservice.kit/mapLibrary/libs/arm64/libaki_jsbind.so",
+                  "count": 9524499
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
