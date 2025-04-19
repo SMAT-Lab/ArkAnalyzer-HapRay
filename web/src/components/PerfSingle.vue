@@ -7,7 +7,7 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart />
+          <PieChart :chart-data="totalPieData" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -71,7 +71,7 @@
       <el-col :span="8">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChartStep :stepId="currentStepIndex" :data="stepPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
         </div>
       </el-col>
       <el-col :span="16">
@@ -91,7 +91,6 @@
 import { ref, computed, onMounted } from 'vue';
 import PerfTable from './PerfTable.vue';
 import PieChart from './PieChart.vue';
-import PieChartStep from './PieChartStep.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
@@ -158,11 +157,28 @@ const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
 };
 
-let stepPieData = processJSONData(json);
+const totalPieData = ref({
+  legendData: ['类别A', '类别B'],
+  seriesData: [
+    { name: '类别A', value: 335 },
+    { name: '类别B', value: 310 }
+  ]
+});
+
+const stepPieData = ref({
+  legendData: ['类别A', '类别B'],
+  seriesData: [
+    { name: '类别A', value: 335 },
+    { name: '类别B', value: 310 }
+  ]
+});
+
+totalPieData.value = processJSONData(json);
+stepPieData.value = processJSONData(json);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
-  stepPieData = processJSONData(json);
+  stepPieData.value = processJSONData(json);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
@@ -178,7 +194,7 @@ const filteredPerformanceData = computed(() => {
 // 处理 JSON 数据生成steps饼状图所需数据
 function processJSONData(data: JSONData | null) {
   if (data === null) {
-    return {};
+    return {legendData: [], seriesData: []};
   }
   const { categories, steps } = data;
   const categoryCountMap = new Map<string, number>();
@@ -216,7 +232,7 @@ function processJSONData(data: JSONData | null) {
     seriesData.push({ name: category, value: count });
   });
 
-  return { legendData, seriesData };
+  return { legendData: legendData, seriesData: seriesData };
 }
 </script>
 
