@@ -15,7 +15,6 @@
 
 import fs from 'fs';
 import path from 'path';
-// import { Component, ComponentCategory, ComponentCategoryType, OriginKind, SoOriginal } from '../component';
 import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
 import { AnalyzerProjectBase } from '../project';
 // import { getConfig } from '../../config';

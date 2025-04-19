@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 
-import { defineConfig } from 'vite';
+import { defineConfig, PluginOption } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import injectJson from './vite-plugin-inject-json';
@@ -9,7 +9,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [vue(), vueDevTools(), injectJson, viteSingleFile()],
+  plugins: [vue() as PluginOption, vueDevTools() as PluginOption, injectJson, viteSingleFile() as PluginOption],
   resolve: {
     alias: {
       '@': resolve('src'),
@@ -22,8 +22,8 @@ export default defineConfig({
     reportCompressedSize: false,
     rollupOptions: {
       output: {
-        inlineDynamicImports: true
-      }
-    }
+        inlineDynamicImports: true,
+      },
+    },
   },
 });

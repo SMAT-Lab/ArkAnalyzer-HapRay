@@ -1,13 +1,12 @@
 export enum ComponentCategory {
-    ABC_APP = 0,
-    ABC_SO = 1,
-    ABC_LIB = 2,
+    APP_ABC = 0,
+    APP_SO = 1,
+    APP_LIB = 2,
     OS_Runtime = 3,
     SYS_SDK = 4,
     RN = 5,
     Flutter = 6,
     WEB = 7,
-    SYS_Other = 8,
     UNKNOWN = -1,
 }
 

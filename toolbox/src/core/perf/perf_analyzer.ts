@@ -948,7 +948,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             };
 
             // ets 需要基于symbol 进一步分类
-            if (call.classification.category === ComponentCategory.ABC_APP) {
+            if (call.classification.category === ComponentCategory.APP_ABC) {
                 call.classification = this.classifySymbol(call.symbolId, call.classification);
             }
 
@@ -1090,7 +1090,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     private classifyFile(file: string): FileClassification {
         let fileClassify: FileClassification = {
             file: file,
-            category: ComponentCategory.SYS_Other,
+            category: ComponentCategory.SYS_SDK,
             subCategory: path.basename(file),
             originKind: OriginKind.UNKNOWN,
         };
@@ -1120,7 +1120,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         if (file.match(regex)) {
             let name = path.basename(file);
             if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
-                fileClassify.category = ComponentCategory.ABC_SO;
+                fileClassify.category = ComponentCategory.APP_SO;
                 // if (this.soOrigins.has(path.basename(file))) {
                 //     let origin = this.soOrigins.get(name)!.broad_category;
                 //     if (origin === 'THIRD_PARTY') {
@@ -1137,7 +1137,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 return fileClassify;
             }
 
-            fileClassify.category = ComponentCategory.ABC_APP;
+            fileClassify.category = ComponentCategory.APP_ABC;
             return fileClassify;
         }
 
