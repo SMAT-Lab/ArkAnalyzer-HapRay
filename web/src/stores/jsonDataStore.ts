@@ -30,10 +30,19 @@ export interface JSONData {
 export const useJsonDataStore = defineStore('config', {
   state: () => ({
     jsonData: null as JSONData | null,
+    compareJsonData: null as JSONData | null
   }),
   actions: {
-    setJsonData(data: JSONData) {
-      this.jsonData = data;
+    setJsonData(jsonData: JSONData,compareJsonData: JSONData) {
+      if( JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\""){
+        this.jsonData = jsonData;
+        window.initialPage = 'perf';
+      }else{
+        this.jsonData = jsonData;
+        this.compareJsonData = compareJsonData;
+        window.initialPage = 'perf_compare';
+      }
+      
     },
   },
 });

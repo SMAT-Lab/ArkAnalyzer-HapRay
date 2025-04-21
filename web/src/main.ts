@@ -23,11 +23,12 @@ const jsonDataStore = useJsonDataStore();
 declare global {
     interface Window {
         initialPage: string;
-        jsonData: JSONData
+        jsonData: JSONData;
+        compareJsonData: JSONData;
     }
 }
 
 if (window.jsonData) {
-    jsonDataStore.setJsonData(window.jsonData);
+    jsonDataStore.setJsonData(window.jsonData,window.compareJsonData);
 }
 app.mount('#app');

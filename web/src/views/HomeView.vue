@@ -61,8 +61,8 @@ function handleLanguageChange(newLanguage: string) {
 }
 
 onMounted(() => {
-  //changeContent(window.initialPage?.toLowerCase())
-  changeContent('perf')
+  changeContent(window.initialPage?.toLowerCase())
+  // changeContent('perf')
 });
 </script>
 

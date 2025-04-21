@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "cross-env NODE_ENV=development vite",
+    "debug": "node ../node_modules/vite/bin/vite.js",
     "build": "run-p type-check \"build-only {@}\" --",
     "prepack": "npm run build",
     "preview": "vite preview",

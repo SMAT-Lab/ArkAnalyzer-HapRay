@@ -2,7 +2,11 @@
   <div class="performance-comparison">
     <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
       <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
-      <el-descriptions-item label="场景名称：">{{ performanceData.scene }}</el-descriptions-item>
+      <el-descriptions-item>
+        <div class="description-item-content">
+          场景名称：{{ performanceData.scene }}
+          <UploadHtml/>
+        </div></el-descriptions-item>
     </el-descriptions>
     <el-row :gutter="20">
       <el-col :span="12">
@@ -12,7 +16,7 @@
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart />
+          <BarChart :chart-data="json"/>
         </div>
       </el-col>
     </el-row>
@@ -94,6 +98,7 @@ import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
+import UploadHtml from './UploadHtml.vue';
 
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -229,7 +234,9 @@ function processJSONData(data: JSONData | null) {
   // 将分类名称和对应的计数转换为饼状图所需的数据格式
   categoryCountMap.forEach((count, category) => {
     legendData.push(category);
-    seriesData.push({ name: category, value: count });
+    if(count != 0){
+      seriesData.push({ name: category, value: count });
+    }
   });
 
   return { legendData: legendData, seriesData: seriesData };
@@ -406,5 +413,11 @@ function processJSONData(data: JSONData | null) {
 .beautified-descriptions .el-descriptions__content {
   font-size: 16px;
   color: #333;
+}
+
+.description-item-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 </style>

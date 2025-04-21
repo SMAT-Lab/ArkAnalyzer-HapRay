@@ -5,14 +5,15 @@
 <script lang='ts' setup>
 import { ref, onMounted } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
+import type { PropType } from 'vue';
+import { type JSONData } from '../stores/jsonDataStore.ts';
 
-// 获取存储实例
-const jsonDataStore = useJsonDataStore();
-// 通过 getter 获取 JSON 数据
-const jsonData = jsonDataStore.jsonData;
-console.log('从元素获取到的 JSON 数据:');
-
+const props = defineProps({
+  chartData: {
+    type: Object as PropType<JSONData | null>,
+    required: true,
+  },
+});
 
 // 处理 JSON 数据，统计每个步骤的 count 值并降序排序
 function processData(data: JSONData|null) {
@@ -34,7 +35,7 @@ function processData(data: JSONData|null) {
     return { xData, yData };
 }
 
-const { xData, yData } = processData(jsonData);
+const { xData, yData } = processData(props.chartData);
 
 const option = {
     title: {
