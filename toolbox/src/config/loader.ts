@@ -30,14 +30,6 @@ const ConfigSchema = z.object({
                 versions: z.array(z.string()),
             })
         ),
-        npm: z.array(
-            z.object({
-                name: z.string(),
-                version: z.string(),
-                versions: z.array(z.string()),
-            })
-        ),
-        invalidNpm: z.array(z.string()),
     }),
     perf: z.object({
         kinds: z
@@ -45,12 +37,16 @@ const ConfigSchema = z.object({
                 z.object({
                     name: z.string(),
                     kind: z.number(),
-                    files: z.array(z.string()),
-                    threads: z.array(z.string()).optional(),
+                    components: z.array(
+                        z.object({
+                            name: z.string().optional(),
+                            files: z.array(z.string()),
+                            threads: z.array(z.string()).optional(),
+                        })
+                    ),
                 })
             )
             .default([]),
-        soOrigins: z.map(z.string(), z.object({})),
     }),
     save: z.object({
         callchain: z.boolean().default(false),
@@ -59,20 +55,7 @@ const ConfigSchema = z.object({
     jobs: z.number().default(4),
     input: z.string().default(''),
     output: z.string().default('output'),
-    // extToolsPath: z.string(),
 });
-
-// function getExtToolsRoot(): string {
-//     let root = path.join(__dirname, 'third-party');
-//     if (!fs.existsSync(root)) {
-//         root = path.join(__dirname, '../../../../../third-party');
-//     }
-
-//     if (fs.existsSync(root)) {
-//         return path.resolve(root);
-//     }
-//     throw new Error('not found ext_tools');
-// }
 
 function loadResCfg(): Partial<GlobalConfig> {
     let res = path.join(__dirname, 'res');
@@ -83,19 +66,15 @@ function loadResCfg(): Partial<GlobalConfig> {
     const config: Record<string, any> = {
         analysis: { reSo: false, reAbc: false },
         perf: {},
+        save: {},
     };
+    let perfKind = path.join(res, 'perf/kind.json');
+    config['perf']['kinds'] = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' }));
     let ohpmCfg = path.join(res, 'ohpm/ohpm.json');
-    let npmCfg = path.join(res, 'ohpm/npm.json');
 
     if (fs.existsSync(ohpmCfg)) {
         config['analysis']['ohpm'] = JSON.parse(fs.readFileSync(ohpmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
     }
-
-    if (fs.existsSync(npmCfg)) {
-        config['analysis']['npm'] = JSON.parse(fs.readFileSync(npmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
-    }
-
-    // config['extToolsPath'] = getExtToolsRoot();
 
     return config;
 }

@@ -19,8 +19,8 @@ import { Command } from 'commander';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { getComponentCategories } from '../../core/component';
 import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
-// import { GlobalConfig } from '../../config/types';
-// import { getConfig, initConfig } from '../../config';
+import { GlobalConfig } from '../../config/types';
+import { initConfig } from '../../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -28,16 +28,11 @@ const VERSION = '1.0.0';
 const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
     .action(async (...args: any[]) => {
+        let cliArgs: Partial<GlobalConfig> = { ...args[0] };
+        initConfig(cliArgs, (config) => {});
+
         await main(args[0].input);
     });
-    // .action(async (...args: any[]) => {
-    //     let cliArgs: Partial<GlobalConfig> = {...args[0]};
-    //     initConfig(cliArgs, (config) => {
-
-    //     });
-
-    //     await main(getConfig());
-    // });
 
 // 定义 testinfo.json 数据的结构
 export interface TestInfo {
@@ -48,13 +43,11 @@ export interface TestInfo {
     timestamp: number;
 }
 
-
-
 // 定义整个 steps 数组的结构
 export type Steps = Step[];
 
 function getPerfPaths(inputPath: string, steps: Steps): string[] {
-    return steps.map(step => path.join(inputPath, 'hiperf', step.stepIdx.toString(), 'perf.db'));
+    return steps.map((step) => path.join(inputPath, 'hiperf', step.stepIdx.toString(), 'perf.db'));
 }
 
 // async function main(config: GlobalConfig): Promise<void> {
@@ -81,31 +74,29 @@ async function main(input: string): Promise<void> {
     let paths = getPerfPaths(input, steps);
 
     let stepsCollect: StepItem[] = [];
-    for (let i = 0; i < steps.length; i++) {    
+    for (let i = 0; i < steps.length; i++) {
         let dbPath = path.join(input, 'hiperf', steps[i].stepIdx.toString(), 'perf.db');
         let perfAnalyzer = new PerfAnalyzer('');
-        stepsCollect.push(await perfAnalyzer.analyze2(dbPath, testInfo.app_id, steps[i]))
-
+        stepsCollect.push(await perfAnalyzer.analyze2(dbPath, testInfo.app_id, steps[i]));
     }
 
     saveReport(output, testInfo, paths, stepsCollect);
 }
 
-
 function replaceAndWriteToNewFile(
-  inputPath: string,
-  outputPath: string,
-  placeholder: string,
-  replacement: string
+    inputPath: string,
+    outputPath: string,
+    placeholder: string,
+    replacement: string
 ): void {
-  try {
-    const fileContent = fs.readFileSync(inputPath, 'utf-8');
-    const updatedContent = fileContent.replace(placeholder, replacement);
+    try {
+        const fileContent = fs.readFileSync(inputPath, 'utf-8');
+        const updatedContent = fileContent.replace(placeholder, replacement);
 
-    fs.writeFileSync(outputPath, updatedContent, 'utf-8');
-  } catch (error) {
-    console.error('replaceAndWriteToNewFile:', error);
-  }
+        fs.writeFileSync(outputPath, updatedContent, 'utf-8');
+    } catch (error) {
+        console.error('replaceAndWriteToNewFile:', error);
+    }
 }
 
 function saveReport(output: string, testInfo: TestInfo, perfPaths: string[], steps: StepItem[]) {
@@ -123,9 +114,9 @@ function saveReport(output: string, testInfo: TestInfo, perfPaths: string[], ste
         timestamp: testInfo.timestamp,
         perfPath: perfPaths,
         categories: getComponentCategories()
-                        .filter(category => category.id >= 0)
-                        .map(category => category.name),
-        steps: steps
+            .filter((category) => category.id >= 0)
+            .map((category) => category.name),
+        steps: steps,
     };
     let jsContent = JSON.stringify(jsonObject, null, 0);
     replaceAndWriteToNewFile(htmlTemplate, output, 'JSON_DATA_PLACEHOLDER', jsContent);

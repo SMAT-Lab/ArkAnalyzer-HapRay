@@ -25,11 +25,16 @@ export interface Ohpm {
     filesSet?: Set<string>;
 }
 
-export interface KindConfig {
-    name: string;
-    kind: number;
+export interface SubComponentConfig {
+    name?: string;
     files: string[];
     threads?: string[];
+}
+
+export interface ComponentConfig {
+    name: string;
+    kind: number;
+    components: SubComponentConfig[];
 }
 
 export interface GlobalConfig {
@@ -38,13 +43,10 @@ export interface GlobalConfig {
         reSo: boolean;
         reAbc: boolean;
         ohpm: Ohpm[];
-        npm: Ohpm[];
-        invalidNpm: string[];
     };
 
     perf: {
-        kinds: KindConfig[];
-        soOrigins: Map<string, any>;
+        kinds: ComponentConfig[];
     };
 
     save: {
@@ -54,5 +56,4 @@ export interface GlobalConfig {
     jobs: number;
     input: string;
     output: string;
-    // extToolsPath: string;
 }
