@@ -17,6 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
 import { AnalyzerProjectBase } from '../project';
+import { getConfig } from '../../config';
 // import { getConfig } from '../../config';
 
 export interface TestSceneInfo {
@@ -84,22 +85,20 @@ export interface PerfSum {
 
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected hapComponents: Map<string, Component>;
-    protected cfgThreadComponent: Map<string, { name: string; category: ComponentCategory }>;
+    protected threadClassifyCfg: Map<RegExp, { name: string; category: ComponentCategory }>;
     protected cfgFileComponent: Map<string, { name: string; category: ComponentCategory }>;
     protected cfgRegexComponent: Map<RegExp, { name: string; category: ComponentCategory }>;
-    // protected soOrigins: Map<string, SoOriginal>;
 
     constructor(workspace: string) {
         super(workspace);
 
         this.hapComponents = new Map();
-        this.cfgThreadComponent = new Map();
+        this.threadClassifyCfg = new Map();
         this.cfgFileComponent = new Map();
         this.cfgRegexComponent = new Map();
-        // this.soOrigins = getConfig().perf.soOrigins as Map<string, SoOriginal>;
 
         this.loadHapComponents();
-        // this.loadPerfKindCfg();
+        this.loadPerfKindCfg();
     }
 
     private loadHapComponents(): void {
@@ -114,23 +113,46 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         }
     }
 
-    // private loadPerfKindCfg(): void {
-    //     for (const kit of getConfig().perf.kinds) {
-    //         if (kit.threads) {
-    //             for (const thread of kit.threads) {
-    //                 this.cfgThreadComponent.set(thread, { name: kit.name, category: kit.kind });
-    //             }
-    //         }
+    private loadPerfKindCfg(): void {
+        for (const componentConfig of getConfig().perf.kinds) {
+            for (const sub of componentConfig.components) {
+                if (sub.threads) {
+                    for (const thread of sub.threads) {
+                        this.threadClassifyCfg.set(new RegExp(thread), {
+                            name: componentConfig.name,
+                            category: componentConfig.kind,
+                        });
+                    }
+                }
 
-    //         if (kit.files) {
-    //             for (const file of kit.files) {
-    //                 if (file.indexOf('*') >= 0) {
-    //                     this.cfgRegexComponent.set(new RegExp(file), { name: kit.name, category: kit.kind });
-    //                 } else {
-    //                     this.cfgFileComponent.set(file, { name: kit.name, category: kit.kind });
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+                for (const file of sub.files) {
+                    if (this.hasRegexChart(file)) {
+                        if (file.indexOf('*') >= 0) {
+                            this.cfgRegexComponent.set(new RegExp(file), {
+                                name: componentConfig.name,
+                                category: componentConfig.kind,
+                            });
+                        } else {
+                            this.cfgFileComponent.set(file, {
+                                name: componentConfig.name,
+                                category: componentConfig.kind,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private hasRegexChart(symbol: string): boolean {
+        if (
+            symbol.indexOf('$') >= 0 ||
+            symbol.indexOf('d+') >= 0 ||
+            symbol.indexOf('.*') >= 0 ||
+            symbol.indexOf('.+') >= 0
+        ) {
+            return true;
+        }
+        return false;
+    }
 }

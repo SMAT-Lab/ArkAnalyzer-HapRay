@@ -825,6 +825,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             await this.queryTestStepTimestamps(db);
             // 读取样本数据
             await this.queryProcessSample(db, processName);
+        } catch(error) {
+            logger.error(`loadDbAndStatistics ${error}`);
         } finally {
             await db.close();
         }
@@ -1184,14 +1186,19 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     }
 
     private classifyThread(threadName: string): FileClassification | undefined {
-        if (this.cfgThreadComponent.has(threadName)) {
-            let component = this.cfgThreadComponent.get(threadName)!;
-            return {
-                file: '',
-                originKind: OriginKind.UNKNOWN,
-                category: component.category,
-                subCategory: component.name,
-            };
+        if (threadName === null) {
+            return undefined;
+        }
+        
+        for (const [reg, component] of this.threadClassifyCfg) {
+            if (threadName?.match(reg)) {
+                return {
+                    file: '',
+                    originKind: OriginKind.UNKNOWN,
+                    category: component.category,
+                    subCategory: component.name,
+                };
+            }
         }
 
         return undefined;
