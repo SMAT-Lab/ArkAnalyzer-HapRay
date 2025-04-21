@@ -9,18 +9,15 @@
                     "/system/lib64/chipset-pub-sdk/libextractortool.z.so",
                     "/system/lib64/module/ability/libfeatureability.z.so",
                     "/system/lib64/module/ability/libwantconstant.z.so",
-                    "/system/lib64/module/app/ability/libabilityconstant.z.so",
-                    "/system/lib64/module/app/ability/libappmanager_napi.z.so",
-                    "/system/lib64/module/app/ability/liberrormanager.z.so",
-                    "/system/lib64/module/app/ability/libsendablecontextmanager_napi.z.so",
-                    "/system/lib64/module/app/ability/libwantagent_napi.z.so",
+                    "/system/lib64/module/app/ability/.*.z.so",
+                    "/system/lib64/module/application/libappmanager_napi.z.so",
                     "/system/lib64/platformsdk/libability_manager.z.so",
                     "/system/lib64/platformsdk/libability_thread.z.so",
                     "/system/lib64/platformsdk/libabilitykit_native.z.so",
                     "/system/lib64/platformsdk/libace_napi.z.so",
                     "/system/lib64/platformsdk/libappkit_native.z.so",
-                    "/system/lib64/platformsdk/libconfiguration_ipc.z.so",
                     "/system/lib64/platformsdk/libconfiguration.z.so",
+                    "/system/lib64/platformsdk/libcontinuation_ipc.z.so",
                     "/system/lib64/platformsdk/libjs_environment.z.so",
                     "/system/lib64/platformsdk/libruntime.z.so",
                     "/system/lib64/platformsdk/libuiabilitykit_native.z.so"
@@ -61,7 +58,7 @@
                     "/system/lib64/module/arkui/libfocuscontroller.z.so",
                     "/system/lib64/module/arkui/libinspector.z.so",
                     "/system/lib64/module/arkui/libobserver.z.so",
-                    "/system/lib64/platformsdk/libace_compatiable.z.so",
+                    "/system/lib64/platformsdk/libace_compatible.z.so",
                     "/system/lib64/platformsdk/libace_container_scope.z.so",
                     "/system/lib64/platformsdk/libace_forward_compatibility.z.so",
                     "/system/lib64/platformsdk/libace_network.z.so",
@@ -109,7 +106,7 @@
                     "DartWorker",
                     "dart:io EventHa",
                     "io.flutter.work",
-                    "io.worker"
+                    "io.worker."
                 ]
             }
         ]
@@ -142,8 +139,8 @@
                     "Chrome_InProcGp",
                     "Chrome_IOThread",
                     "Compositor",
-                    "compositorGpuTh",
-                    "compositorTileW",
+                    "CompositorGpuTh",
+                    "CompositorTileW",
                     "ThreadPoolForeg",
                     "VizCompositorTh",
                     "VSync-webview",
