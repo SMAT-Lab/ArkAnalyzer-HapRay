@@ -9,7 +9,7 @@
   "driver": {
     "type": "DeviceTest",
     "py_file": [
-      "Example.py"
+      "PerformanceDynamic_com_example_wsywechat_0010.py"
     ]
   }
 }
