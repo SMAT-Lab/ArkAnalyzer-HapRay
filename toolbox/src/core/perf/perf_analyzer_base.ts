@@ -18,7 +18,6 @@ import path from 'path';
 import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
 import { AnalyzerProjectBase } from '../project';
 import { getConfig } from '../../config';
-// import { getConfig } from '../../config';
 
 export interface TestSceneInfo {
     packageName: string; // 应用包名

@@ -55,7 +55,19 @@ const ConfigSchema = z.object({
     jobs: z.number().default(4),
     input: z.string().default(''),
     output: z.string().default('output'),
+    extToolsPath: z.string()
 });
+
+function getExtToolsRoot(): string {
+    let root = path.join(__dirname, 'third-party');
+    if (!fs.existsSync(root)) {
+        root = path.join(__dirname, '../../../third-party');
+    }
+    if (fs.existsSync(root)) {
+        return path.resolve(root);
+    }
+    throw new Error('not found ext_tools');
+}
 
 function loadResCfg(): Partial<GlobalConfig> {
     let res = path.join(__dirname, 'res');
@@ -75,6 +87,8 @@ function loadResCfg(): Partial<GlobalConfig> {
     if (fs.existsSync(ohpmCfg)) {
         config['analysis']['ohpm'] = JSON.parse(fs.readFileSync(ohpmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
     }
+
+    config['extToolsPath'] = getExtToolsRoot();
 
     return config;
 }
