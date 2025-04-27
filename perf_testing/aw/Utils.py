@@ -145,8 +145,7 @@ def generate_test_info(driver: UiDriver, app_id: str, scene: str, output_dir: st
     return test_info
 
 
-def save_testInfo(driver: UiDriver, app_id: str, scene: str, output_dir: str, success: bool = True,
-                  config: dict = None):
+def save_testInfo(driver: UiDriver, app_id: str, app_name: str, scene: str, output_dir: str, success: bool = True):
     """
     生成并保存测试信息到testInfo.json
     :param driver: UI驱动实例
@@ -161,8 +160,7 @@ def save_testInfo(driver: UiDriver, app_id: str, scene: str, output_dir: str, su
     os.makedirs(output_dir, exist_ok=True)
 
     # 从配置中获取应用名称，如果没有配置则自动获取
-    config_name = config.get('test_settings', {}).get('app_name') if config else None
-    app_name = get_app_name(driver, app_id, config_name)
+    app_name = get_app_name(driver, app_id, app_name)
     app_version = get_app_version(driver, app_id)
 
     # 准备结果信息
