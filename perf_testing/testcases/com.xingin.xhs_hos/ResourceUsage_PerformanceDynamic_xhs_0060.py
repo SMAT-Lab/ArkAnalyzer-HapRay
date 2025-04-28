@@ -16,7 +16,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
-        self.driver = UiExplorerPerf(self.device1)
+
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
         self._steps = [
@@ -42,10 +42,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             }
 
         ]
-
-    @property
-    def report_path(self) -> str:
-        return self.get_case_report_path()
 
     @property
     def steps(self) -> []:

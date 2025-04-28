@@ -6,13 +6,16 @@ import time
 from abc import abstractmethod
 
 from devicetest.core.test_case import TestCase
-from aw.config.config import Config
 from devicetest.log.logger import DeviceTestLog as Log
+from hypium.advance.perf.driver_perf.uiexplorer_perf import UiExplorerPerf
+
+from aw.config.config import Config
 
 
 class PerfTestCase(TestCase):
     def __init__(self, tag: str, configs):
         super().__init__(tag, configs)
+        self.driver = UiExplorerPerf(self.device1)
         self.TAG = tag
         self.pid = -1
 
@@ -35,176 +38,8 @@ class PerfTestCase(TestCase):
     def report_path(self) -> str:
         return self.get_case_report_path()
 
-    def make_reports(self):
-        # 读取配置文件中的步骤信息
-        steps_info = []
-        for i, step in enumerate(self.steps, 1):
-            steps_info.append({
-                "name": step['name'],
-                "description": step['description'],
-                "stepIdx": i
-            })
-
-        # 保存步骤信息到steps.json
-        steps_json_path = os.path.join(self.report_path, 'hiperf/steps.json')
-
-        with open(steps_json_path, 'w', encoding='utf-8') as f:
-            json.dump(steps_info, f, ensure_ascii=False, indent=4)
-
-        # 保存测试信息
-        self.save_testInfo()
-
-        # 生成 HapRay 报告
-        PerfTestCase.generate_hapray_report(self.report_path)
-
-    def get_app_pid(self) -> int:
-        pid_cmd = f"pidof {self.app_package}"
-        return self.driver.shell(pid_cmd).strip()
-
-    def execute_step_with_perf(self, step_id, action_func, duration=5):
-        """
-        执行一个步骤并收集性能数据
-
-        Args:
-            driver: 测试驱动对象
-            config: 测试配置字典
-            pid: 应用进程ID
-            step_id: 步骤ID
-            action_func: 要执行的动作函数
-            duration: 性能数据采集持续时间（秒）
-        """
-        # 设置当前步骤的输出路径
-        output_file = f"/data/local/tmp/hiperf_step{step_id}.data"
-
-        # 确保设备上的目标目录存在
-        output_dir = os.path.dirname(output_file)
-        self.driver.shell(f"mkdir -p {output_dir}")
-
-        # 清理可能存在的旧文件
-        self.driver.shell(f"rm -f {output_file}")
-
-        if self.pid == -1:
-            self.pid = self.get_app_pid()
-
-        # 创建并启动 hiperf 线程
-        hiperf_cmd = PerfTestCase.get_hiperf_cmd(self.pid, output_file, duration)
-        hiperf_thread = threading.Thread(target=PerfTestCase.run_hiperf, args=(self.driver, hiperf_cmd))
-        hiperf_thread.start()
-
-        # 执行动作
-        action_func(self.driver)
-
-        # 等待 hiperf 线程完成
-        hiperf_thread.join()
-
-        # 保存性能数据
-        self.save_perf_data(output_file, step_id)
-
-    def save_perf_data(self, device_file, step_id):
-        """保存性能数据"""
-
-        # 构建完整的目录结构
-        hiperf_dir = os.path.join(self.report_path, 'hiperf')
-        step_dir = os.path.join(hiperf_dir, f'step{str(step_id)}')
-
-        # 构建文件路径
-        local_output_path = os.path.join(step_dir, Config.get('hiperf.data_filename', 'perf.data'))
-        local_output_db_path = os.path.join(step_dir, Config.get('hiperf.db_filename', 'perf.db'))
-
-        # 确保所有必要的目录都存在
-        os.makedirs(step_dir, exist_ok=True)
-
-        # 检查设备上的文件是否存在
-        try:
-            # 使用 ls 命令检查文件是否存在
-            result = self.driver.shell(f"ls -l {device_file}")
-
-            if "No such file" in result:
-                # 尝试列出目录内容以进行调试
-                dir_path = os.path.dirname(device_file)
-                self.driver.shell(f"ls -l {dir_path}")
-                return
-
-            # 如果文件存在，尝试拉取
-            self.driver.pull_file(device_file, local_output_path)
-
-            # 检查本地文件是否成功拉取
-            if not os.path.exists(local_output_path):
-                return
-
-            # 检查转换后的文件是否存在
-            if not os.path.exists(local_output_db_path):
-                return
-
-        except Exception as e:
-            # 尝试获取更多调试信息
-            self.driver.shell("df -h")
-            self.driver.shell("ls -l /data/local/tmp/")
-
-    def save_testInfo(self):
-        """
-        生成并保存测试信息到testInfo.json
-        :param driver: UI驱动实例
-        :param app_id: 应用包名
-        :param scene: 测试场景
-        :param output_dir: 输出目录
-        :param success: 测试是否成功
-        :param config: 配置字典，包含app_name等配置信息
-        :return: 保存的结果字典
-        """
-        # 确保输出目录存在
-        os.makedirs(self.report_path, exist_ok=True)
-
-        # 从配置中获取应用名称，如果没有配置则自动获取
-        app_version = self.get_app_version()
-
-        # 准备结果信息
-        result = {
-            "app_id": self.app_package,
-            "app_name": self.app_name,
-            "app_version": app_version,
-            "scene": self.TAG,
-            "timestamp": int(time.time() * 1000)  # 毫秒级时间戳
-        }
-
-        # 保存到文件
-        result_path = os.path.join(self.report_path, 'testInfo.json')
-        with open(result_path, 'w', encoding='utf-8') as f:
-            json.dump(result, f, indent=4, ensure_ascii=False)
-
-        return result
-
-    def get_app_version(self) -> str:
-        """
-        获取应用版本号
-        :param driver: UiDriver: UI驱动实例
-        :param bundle: str: 应用包名
-        :return: str: 应用版本号
-        """
-        # 使用 bm dump 命令获取版本号
-        cmd = f"bm dump -n {self.app_package}"
-        result = self.driver.shell(cmd)
-        Log.debug(f"Debug - bm dump result: {result}")  # 添加调试输出
-
-        try:
-            # 解析 JSON 结果
-            # 移除开头的包名和冒号
-            json_str = result.split(':', 1)[1].strip()
-            data = json.loads(json_str)
-
-            if 'applicationInfo' in data and 'versionName' in data['applicationInfo']:
-                version = data['applicationInfo']['versionName']
-                if version:
-                    Log.debug(f"Debug - Found version: {version}")  # 添加调试输出
-                    return version
-        except json.JSONDecodeError as e:
-            Log.debug(f"Debug - JSON parsing error: {e}")  # 添加调试输出
-
-        Log.debug(f"Debug - No version found for {self.app_package}")  # 添加调试输出
-        return "Unknown Version"  # 如果无法获取版本号，返回未知版本
-
     @staticmethod
-    def get_hiperf_cmd(pid, output_path, duration):
+    def _get_hiperf_cmd(pid, output_path, duration):
         """生成 hiperf 命令
 
         Args:
@@ -220,12 +55,12 @@ class PerfTestCase(TestCase):
         return cmd
 
     @staticmethod
-    def run_hiperf(driver, cmd):
+    def _run_hiperf(driver, cmd):
         """在后台线程中运行 hiperf 命令"""
         driver.shell(cmd)
 
     @staticmethod
-    def generate_hapray_report(scene_dir: str) -> bool:
+    def _generate_hapray_report(scene_dir: str) -> bool:
         """
         执行 hapray 命令生成性能分析报告
         :param scene_dir: 场景目录路径，例如 perf_output/wechat002 或完整路径
@@ -325,3 +160,160 @@ class PerfTestCase(TestCase):
         except FileNotFoundError:
             Log.error("Error: Node.js command not found. Please make sure Node.js is installed and in your PATH.")
             return False
+
+    def make_reports(self):
+        # 读取配置文件中的步骤信息
+        steps_info = []
+        for i, step in enumerate(self.steps, 1):
+            steps_info.append({
+                "name": step['name'],
+                "description": step['description'],
+                "stepIdx": i
+            })
+
+        # 保存步骤信息到steps.json
+        steps_json_path = os.path.join(self.report_path, 'hiperf/steps.json')
+
+        with open(steps_json_path, 'w', encoding='utf-8') as f:
+            json.dump(steps_info, f, ensure_ascii=False, indent=4)
+
+        # 保存测试信息
+        self._save_test_info()
+
+        # 生成 HapRay 报告
+        PerfTestCase._generate_hapray_report(self.report_path)
+
+    def execute_step_with_perf(self, step_id, action_func, duration=5):
+        """
+        执行一个步骤并收集性能数据
+
+        Args:
+            step_id: 步骤ID
+            action_func: 要执行的动作函数
+            duration: 性能数据采集持续时间（秒）
+        """
+        # 设置当前步骤的输出路径
+        output_file = f"/data/local/tmp/hiperf_step{step_id}.data"
+
+        # 确保设备上的目标目录存在
+        output_dir = os.path.dirname(output_file)
+        self.driver.shell(f"mkdir -p {output_dir}")
+
+        # 清理可能存在的旧文件
+        self.driver.shell(f"rm -f {output_file}")
+
+        if self.pid == -1:
+            self.pid = self._get_app_pid()
+
+        # 创建并启动 hiperf 线程
+        hiperf_cmd = PerfTestCase._get_hiperf_cmd(self.pid, output_file, duration)
+        hiperf_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, hiperf_cmd))
+        hiperf_thread.start()
+
+        # 执行动作
+        action_func(self.driver)
+
+        # 等待 hiperf 线程完成
+        hiperf_thread.join()
+
+        # 保存性能数据
+        self._save_perf_data(output_file, step_id)
+
+    def _save_perf_data(self, device_file, step_id):
+        """保存性能数据"""
+
+        # 构建完整的目录结构
+        hiperf_dir = os.path.join(self.report_path, 'hiperf')
+        step_dir = os.path.join(hiperf_dir, f'step{str(step_id)}')
+
+        # 构建文件路径
+        local_output_path = os.path.join(step_dir, Config.get('hiperf.data_filename', 'perf.data'))
+        local_output_db_path = os.path.join(step_dir, Config.get('hiperf.db_filename', 'perf.db'))
+
+        # 确保所有必要的目录都存在
+        os.makedirs(step_dir, exist_ok=True)
+
+        # 检查设备上的文件是否存在
+        try:
+            # 使用 ls 命令检查文件是否存在
+            result = self.driver.shell(f"ls -l {device_file}")
+
+            if "No such file" in result:
+                # 尝试列出目录内容以进行调试
+                dir_path = os.path.dirname(device_file)
+                self.driver.shell(f"ls -l {dir_path}")
+                return
+
+            # 如果文件存在，尝试拉取
+            self.driver.pull_file(device_file, local_output_path)
+
+            # 检查本地文件是否成功拉取
+            if not os.path.exists(local_output_path):
+                return
+
+            # 检查转换后的文件是否存在
+            if not os.path.exists(local_output_db_path):
+                return
+
+        except Exception as e:
+            # 尝试获取更多调试信息
+            self.driver.shell("df -h")
+            self.driver.shell("ls -l /data/local/tmp/")
+
+    def _save_test_info(self):
+        """
+        生成并保存测试信息到testInfo.json
+        :return: 保存的结果字典
+        """
+        # 确保输出目录存在
+        os.makedirs(self.report_path, exist_ok=True)
+
+        # 从配置中获取应用名称，如果没有配置则自动获取
+        app_version = self._get_app_version()
+
+        # 准备结果信息
+        result = {
+            "app_id": self.app_package,
+            "app_name": self.app_name,
+            "app_version": app_version,
+            "scene": self.TAG,
+            "timestamp": int(time.time() * 1000)  # 毫秒级时间戳
+        }
+
+        # 保存到文件
+        result_path = os.path.join(self.report_path, 'testInfo.json')
+        with open(result_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=4, ensure_ascii=False)
+
+        return result
+
+    def _get_app_version(self) -> str:
+        """
+        获取应用版本号
+        :return: str: 应用版本号
+        """
+        # 使用 bm dump 命令获取版本号
+        cmd = f"bm dump -n {self.app_package}"
+        result = self.driver.shell(cmd)
+        Log.debug(f"Debug - bm dump result: {result}")  # 添加调试输出
+
+        try:
+            # 解析 JSON 结果
+            # 移除开头的包名和冒号
+            json_str = result.split(':', 1)[1].strip()
+            data = json.loads(json_str)
+
+            if 'applicationInfo' in data and 'versionName' in data['applicationInfo']:
+                version = data['applicationInfo']['versionName']
+                if version:
+                    Log.debug(f"Debug - Found version: {version}")  # 添加调试输出
+                    return version
+        except json.JSONDecodeError as e:
+            Log.debug(f"Debug - JSON parsing error: {e}")  # 添加调试输出
+
+        Log.debug(f"Debug - No version found for {self.app_package}")  # 添加调试输出
+        return "Unknown Version"  # 如果无法获取版本号，返回未知版本
+
+    def _get_app_pid(self) -> int:
+        pid_cmd = f"pidof {self.app_package}"
+        return self.driver.shell(pid_cmd).strip()

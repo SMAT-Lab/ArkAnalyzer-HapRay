@@ -2,8 +2,7 @@
 # coding: utf-8
 
 import os
-from devicetest.core.test_case import TestCase, Step
-from hypium.advance.perf.driver_perf.uiexplorer_perf import UiExplorerPerf
+from devicetest.core.test_case import Step
 
 from hypium.model import KeyCode
 from hypium import BY
@@ -16,7 +15,7 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
-        self.driver = UiExplorerPerf(self.device1)
+
         self._app_package = 'com.example.wsywechat'
         self._app_name = 'mini wechat'
         self._steps = [
@@ -238,7 +237,7 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
         self.driver.start_app(package_name=self.app_package)
 
         # 执行步骤1：与丁真的聊天操作
-        self.execute_step_with_perf( 1, chat_with_dingzhen)
+        self.execute_step_with_perf(1, chat_with_dingzhen)
 
         # 执行步骤2：扫一扫和收付款操作
         self.execute_step_with_perf(2, scan_and_payment)
