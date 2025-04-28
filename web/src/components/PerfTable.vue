@@ -234,9 +234,9 @@ const handleSortChange = (sort: {
 
 // 分类过滤选项
 const categoryFilters: {text: string, value: string}[] = [
-  { text: 'ABC_APP', value: 'ABC_APP' },
-  { text: 'ABC_SO', value: 'ABC_SO' },
-  { text: 'ABC_LIB', value: 'ABC_LIB' },
+  { text: 'APP_ABC', value: 'APP_ABC' },
+  { text: 'APP_SO', value: 'APP_SO' },
+  { text: 'APP_LIB', value: 'APP_LIB' },
   { text: 'OS_Runtime', value: 'OS_Runtime' },
   { text: 'SYS_SDK', value: 'SYS_SDK' },
   { text: 'RN', value: 'RN' },
