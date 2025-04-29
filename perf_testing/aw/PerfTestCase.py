@@ -7,7 +7,7 @@ from abc import abstractmethod
 
 from devicetest.core.test_case import TestCase
 from devicetest.log.logger import DeviceTestLog as Log
-from hypium.advance.perf.driver_perf.uiexplorer_perf import UiExplorerPerf
+from hypium import UiDriver
 
 from aw.config.config import Config
 
@@ -15,7 +15,7 @@ from aw.config.config import Config
 class PerfTestCase(TestCase):
     def __init__(self, tag: str, configs):
         super().__init__(tag, configs)
-        self.driver = UiExplorerPerf(self.device1)
+        self.driver = UiDriver(self.device1)
         self.TAG = tag
         self.pid = -1
 

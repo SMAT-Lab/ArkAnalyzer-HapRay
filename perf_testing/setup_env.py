@@ -8,13 +8,12 @@ import zipfile
 
 # Configuration Constants
 VENV_NAME = ".venv"
-PYTHON_VERSION = (3, 10)
 VERSION = "5.0.7.200"
 
 # Path Configuration
 CURRENT_DIR = Path(__file__).parent
-HYPIUM_ZIP_PATH = CURRENT_DIR.parent / "third-party" / "hypium" / f"hypium-{VERSION}.zip"
-HYPIUM_PERF_ZIP_PATH = CURRENT_DIR.parent / "third-party" / "hypium" / f"hypium_perf-{VERSION}.zip"
+HYPIUM_ZIP_PATH = CURRENT_DIR.parent / "third-party" / f"hypium-{VERSION}.zip"
+
 HYPIUM_DIR = f"hypium-{VERSION}"
 REQUIREMENTS_FILE = "requirements.txt"
 
@@ -23,17 +22,8 @@ PACKAGE_INSTALL_ORDER = {
     'xdevice': 0,
     'xdevice-devicetest': 1,
     'xdevice-ohos': 2,
-    'hypium': 3,
-    'perf_resource': 5,
-    'hypium_perf': 6,
-    'perf_common': 7,
-    'perf_analyzer': 8,
-    'perf_collector': 9
+    'hypium': 3
 }
-
-def validate_python_version() -> bool:
-    """Check if current Python version matches required version."""
-    return sys.version_info[:2] == PYTHON_VERSION
 
 def execute_command(command: list, working_dir: Path = None, error_message: str = "") -> None:
     """
@@ -94,7 +84,7 @@ def extract_package_prefix(file_name: str) -> str:
 
 def setup_virtual_environment() -> None:
     """Create Python virtual environment if it doesn't exist."""
-    print(f"\n[1/4] Creating virtual environment: {VENV_NAME}...")
+    print(f"\n[1/3] Creating virtual environment: {VENV_NAME}...")
     venv_path = Path(VENV_NAME)
     
     if venv_path.exists():
@@ -127,7 +117,7 @@ def extract_hypium_package(zip_path: Path) -> None:
     Args:
         zip_path: Path to the zip file
     """
-    print(f"\n[3/4] Processing Hypium package: {zip_path.name}...")
+    print(f"\n[2/3] Extract Hypium package: {zip_path.name}...")
     
     if not zip_path.exists():
         sys.exit(f"Error: Hypium package not found: {zip_path}")
@@ -144,10 +134,10 @@ def install_project_dependencies(pip_executable: Path) -> None:
     # Install requirements.txt
     requirements_path = Path(REQUIREMENTS_FILE)
     if not requirements_path.exists():
-        print(f"\n[4/4] Warning: Requirements file not found: {requirements_path}")
+        print(f"\n[3/3] Warning: Requirements file not found: {requirements_path}")
         return
 
-    print(f"\n[4/4] Installing dependencies from {REQUIREMENTS_FILE}...")
+    print(f"\n[3/3] Installing dependencies from {REQUIREMENTS_FILE}...")
     execute_command(
         [str(pip_executable), "install", "-r", str(requirements_path)],
         error_message="Failed to install requirements"
@@ -179,14 +169,11 @@ def display_activation_instructions() -> None:
 
 def main() -> None:
     """Main execution flow."""
-    if not validate_python_version():
-        sys.exit("Error: Requires Python 3.10. Please check your Python version.")
     
     setup_virtual_environment()
-    python_executable, pip_executable = get_virtualenv_paths()
+    _, pip_executable = get_virtualenv_paths()
     
     extract_hypium_package(HYPIUM_ZIP_PATH)
-    extract_hypium_package(HYPIUM_PERF_ZIP_PATH)
     
     install_project_dependencies(pip_executable)
     display_activation_instructions()
