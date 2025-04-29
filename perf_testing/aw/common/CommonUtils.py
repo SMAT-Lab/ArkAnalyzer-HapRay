@@ -29,6 +29,12 @@ class CommonUtils(object):
         return ret
 
     @staticmethod
+    def swipes_up_load(driver: UiDriver, swip_num: int, sleep: int, timeout=300):
+        for i in range(swip_num):
+            CommonUtils.swipe(driver.device_sn, 630, 1904, 630, 954, timeout)
+            time.sleep(sleep)
+
+    @staticmethod
     def swipes_down_load(driver: UiDriver, swip_num: int, sleep: int, timeout=300):
         for i in range(swip_num):
             CommonUtils.swipe(driver.device_sn, 630, 816, 630, 1766, timeout)
