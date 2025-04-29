@@ -6,3 +6,4 @@ run_testcases:
   - PerformanceDynamic_com_alipay_mobile_client_0020
   - PerformanceDynamic_com_alipay_mobile_client_0060
   - PerformanceDynamic_com_alipay_mobile_client_0070
+  - PerformanceDynamic_com_ss_hm_ugc_aweme_0010
