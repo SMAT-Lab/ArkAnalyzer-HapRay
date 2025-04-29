@@ -21,6 +21,7 @@ import { getComponentCategories } from '../../core/component';
 import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { initConfig } from '../../config';
+import { traceStreamerCmd } from '../../services/external/trace_streamer';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -47,7 +48,7 @@ export interface TestInfo {
 export type Steps = Step[];
 
 function getPerfPaths(inputPath: string, steps: Steps): string[] {
-    return steps.map((step) => path.join(inputPath, 'hiperf', step.stepIdx.toString(), 'perf.db'));
+    return steps.map((step) => path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`, 'perf.db'));
 }
 
 // async function main(config: GlobalConfig): Promise<void> {
@@ -75,7 +76,11 @@ async function main(input: string): Promise<void> {
 
     let stepsCollect: StepItem[] = [];
     for (let i = 0; i < steps.length; i++) {
-        let dbPath = path.join(input, 'hiperf', steps[i].stepIdx.toString(), 'perf.db');
+        let tracePath = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
+        let dbPath = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
+        if (!fs.existsSync(dbPath)) {
+            traceStreamerCmd(tracePath, dbPath);
+        }
         let perfAnalyzer = new PerfAnalyzer('');
         stepsCollect.push(await perfAnalyzer.analyze2(dbPath, testInfo.app_id, steps[i]));
     }

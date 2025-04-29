@@ -1,0 +1,5 @@
+hiperf: # 性能采样相关
+  duration: 30  # 默认采样时长（秒）
+  output_path: "/data/local/tmp/perf.data"  # 性能数据在手机中的输出路径
+  data_filename: "perf.data"  # 性能数据文件名
+  db_filename: "perf.db"  # 数据库文件名

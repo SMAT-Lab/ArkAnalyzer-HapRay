@@ -1,0 +1,3 @@
+run_testcases:
+  - PerformanceDynamic_com_example_wsywechat_0010
+  - ResourceUsage_PerformanceDynamic_xhs_0060

@@ -1,5 +1,5 @@
 {
-  "description": "Config for MeeTimeTest",
+  "description": "",
   "environment": [
     {
       "type": "device",
@@ -9,8 +9,7 @@
   "driver": {
     "type": "DeviceTest",
     "py_file": [
-      "Example.py"
+      "ResourceUsage_PerformanceDynamic_bilibili_0020.py"
     ]
   }
 }
-

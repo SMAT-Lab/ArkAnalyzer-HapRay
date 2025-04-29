@@ -1,55 +1,113 @@
 import os
+import re
 import sys
 import subprocess
 import platform
 from pathlib import Path
 import zipfile
 
-# 配置参数（按需修改）
-VENV_NAME = ".venv"  # 虚拟环境目录名
-GIT_REPO = "https://gitcode.com/sfoolish/HapRayDep.git"  # Git 仓库地址
-REPO_DIR = "HapRayDep"  # 本地克隆的仓库目录名
-HYPIUM_FILE = "hypium-5.0.7.200.zip"    # 需要解压安装的 ZIP 文件名
-HYPIUM_DIR = "hypium-5.0.7.200"     # 解压后的目录名
-HYPIUM_PERF_DIR = "hypium_perf-5.0.7.200"
+# Configuration Constants
+VENV_NAME = ".venv"
+PYTHON_VERSION = (3, 10)
+VERSION = "5.0.7.200"
 
+# Path Configuration
+CURRENT_DIR = Path(__file__).parent
+HYPIUM_ZIP_PATH = CURRENT_DIR.parent / "third-party" / "hypium" / f"hypium-{VERSION}.zip"
+HYPIUM_PERF_ZIP_PATH = CURRENT_DIR.parent / "third-party" / "hypium" / f"hypium_perf-{VERSION}.zip"
+HYPIUM_DIR = f"hypium-{VERSION}"
+REQUIREMENTS_FILE = "requirements.txt"
 
-def run_command(cmd, cwd=None, error_msg=""):
-    """执行命令并处理错误"""
+# Package Installation Order
+PACKAGE_INSTALL_ORDER = {
+    'xdevice': 0,
+    'xdevice-devicetest': 1,
+    'xdevice-ohos': 2,
+    'hypium': 3,
+    'perf_resource': 5,
+    'hypium_perf': 6,
+    'perf_common': 7,
+    'perf_analyzer': 8,
+    'perf_collector': 9
+}
+
+def validate_python_version() -> bool:
+    """Check if current Python version matches required version."""
+    return sys.version_info[:2] == PYTHON_VERSION
+
+def execute_command(command: list, working_dir: Path = None, error_message: str = "") -> None:
+    """
+    Execute a shell command with error handling.
+    
+    Args:
+        command: List of command arguments
+        working_dir: Working directory for the command
+        error_message: Custom error message for exception handling
+    """
     try:
         subprocess.run(
-            cmd,
-            cwd=cwd,
+            command,
+            cwd=working_dir,
             check=True,
-            shell=(platform.system() == "Windows"),
+            shell=platform.system() == "Windows",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
     except subprocess.CalledProcessError as e:
-        print(f"错误: {error_msg}")
-        print(f"命令行: {e.cmd}")
-        print(f"错误输出: {e.stderr}")
+        print(f"Error: {error_message}")
+        print(f"Command: {e.cmd}")
+        print(f"Error output: {e.stderr}")
         sys.exit(1)
 
-def get_packages(directory):
-    packages = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.tar.gz') or f.endswith('.whl')]
-    return packages
+def get_package_files(directory: Path) -> list[Path]:
+    """Get all .tar.gz and .whl files in the specified directory."""
+    return [
+        file for file in directory.iterdir() 
+        if file.suffix in ('.tar.gz', '.whl') or file.name.endswith('.tar.gz')
+    ]
 
-def create_virtualenv():
-    """创建虚拟环境"""
-    print(f"\n[1/5] 创建虚拟环境 {VENV_NAME}...")
-    if Path(VENV_NAME).exists():
-        print(f"警告: {VENV_NAME} 已存在，将复用现有环境")
+def extract_package_prefix(file_name: str) -> str:
+    """
+    Extract package name prefix from a package filename.
+    
+    Args:
+        file_name: Name of the package file (e.g., "perf_analyzer-5.0.7.200b0-py3-none-any.whl")
+    
+    Returns:
+        Extracted package name prefix (e.g., "perf_analyzer")
+    """
+    patterns = [
+        r"^([a-zA-Z0-9_]+?)-\d.*\.(whl|tar\.gz)$",  # Standard package naming
+        r"^([a-zA-Z0-9_-]+?)-\d+[a-zA-Z0-9.]*\.(whl|tar\.gz)$"  # Complex package names
+    ]
+    
+    for pattern in patterns:
+        match = re.match(pattern, file_name)
+        if match:
+            prefix = match.group(1)
+            # Filter numeric suffixes
+            if any(c.isdigit() for c in prefix.split('-')[-1]):
+                return '-'.join(prefix.split('-')[:-1])
+            return prefix
+    return ""
+
+def setup_virtual_environment() -> None:
+    """Create Python virtual environment if it doesn't exist."""
+    print(f"\n[1/4] Creating virtual environment: {VENV_NAME}...")
+    venv_path = Path(VENV_NAME)
+    
+    if venv_path.exists():
+        print(f"Warning: Virtual environment {VENV_NAME} already exists")
         return
 
-    run_command(
+    execute_command(
         [sys.executable, "-m", "venv", VENV_NAME],
-        error_msg="创建虚拟环境失败，请检查 Python 环境"
+        error_message="Failed to create virtual environment"
     )
 
-def activate_virtualenv():
-    """激活虚拟环境并返回激活后的 Python/pip 路径"""
+def get_virtualenv_paths() -> tuple[Path, Path]:
+    """Get paths to virtual environment executables."""
     if platform.system() == "Windows":
         python_path = Path(VENV_NAME) / "Scripts" / "python.exe"
         pip_path = Path(VENV_NAME) / "Scripts" / "pip.exe"
@@ -58,105 +116,80 @@ def activate_virtualenv():
         pip_path = Path(VENV_NAME) / "bin" / "pip"
 
     if not python_path.exists():
-        print(f"错误: 虚拟环境未正确创建，缺少 {python_path}")
-        sys.exit(1)
+        sys.exit(f"Error: Missing Python executable in virtual environment: {python_path}")
 
     return python_path, pip_path
 
-def clone_repository():
-    """克隆 Git 仓库"""
-    print(f"\n[3/5] 克隆仓库 {GIT_REPO}...")
-    if Path(REPO_DIR).exists():
-        print(f"警告: 目录 {REPO_DIR} 已存在，跳过克隆")
-        return
-
-    run_command(
-        ["git", "clone", GIT_REPO, REPO_DIR],
-        error_msg="克隆仓库失败，请检查 Git 配置和网络连接"
-    )
-
-def unzip_hypium():
-    """解压 ZIP 包并安装"""
-    print(f"\n[4/5] 处理 ZIP 包 {HYPIUM_FILE}...")
+def extract_hypium_package(zip_path: Path) -> None:
+    """
+    Extract Hypium package from zip archive.
     
-    # 构造完整路径
-    zip_path = Path(REPO_DIR) / HYPIUM_FILE
-    extract_path = Path(REPO_DIR) / HYPIUM_DIR
+    Args:
+        zip_path: Path to the zip file
+    """
+    print(f"\n[3/4] Processing Hypium package: {zip_path.name}...")
     
-    # 检查 ZIP 文件是否存在
     if not zip_path.exists():
-        print(f"错误: ZIP 文件 {zip_path} 不存在")
-        sys.exit(1)
-    
-    # 解压操作（使用 Python 内置库，避免依赖外部工具）
+        sys.exit(f"Error: Hypium package not found: {zip_path}")
+
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-        print(f"解压完成 -> {extract_path}")
-    except Exception as e:
-        print(f"解压失败: {str(e)}")
-        sys.exit(1)
-    
-def install_dependencies(pip_path):
-    REQUIREMENTS_FILE = "requirements.txt"  # 依赖文件名（或设为 None 跳过安装）
-    """安装依赖"""
-    if not REQUIREMENTS_FILE:
-        print("\n[5/5] 跳过依赖安装(未配置 REQUIREMENTS_FILE)")
+            zip_ref.extractall(HYPIUM_DIR)
+        print(f"Extracted to: {HYPIUM_DIR}")
+    except zipfile.BadZipFile as e:
+        sys.exit(f"Error: Failed to extract {zip_path}: {str(e)}")
+
+def install_project_dependencies(pip_executable: Path) -> None:
+    """Install project dependencies from requirements file and Hypium packages."""
+    # Install requirements.txt
+    requirements_path = Path(REQUIREMENTS_FILE)
+    if not requirements_path.exists():
+        print(f"\n[4/4] Warning: Requirements file not found: {requirements_path}")
         return
 
-    req_path = Path(REQUIREMENTS_FILE)
-    if not req_path.exists():
-        print(f"\n[5/5] 警告: 依赖文件 {req_path} 不存在，跳过安装")
-        return
-
-    print(f"\n[5/5] 安装依赖文件 {REQUIREMENTS_FILE}...")
-    run_command(
-        [str(pip_path), "install", "-r", str(req_path)],
-        error_msg="安装依赖失败，请检查 requirements.txt 文件"
+    print(f"\n[4/4] Installing dependencies from {REQUIREMENTS_FILE}...")
+    execute_command(
+        [str(pip_executable), "install", "-r", str(requirements_path)],
+        error_message="Failed to install requirements"
     )
 
-    for pkg in get_packages(Path(REPO_DIR) / HYPIUM_DIR) :
-        run_command(
-            [str(pip_path), "install",  str(pkg)],
-            error_msg="安装依赖失败，请检查 pkg 文件"
+    # Install Hypium packages in specific order
+    packages_dir = Path(HYPIUM_DIR)
+    package_files = get_package_files(packages_dir)
+    
+    package_files.sort(key=lambda p: PACKAGE_INSTALL_ORDER.get(extract_package_prefix(p.name), float('inf')))
+    
+    for package in package_files:
+        print(f"Installing package: {package.name}")
+        execute_command(
+            [str(pip_executable), "install", str(package)],
+            error_message=f"Failed to install package: {package.name}"
         )
 
-    for pkg in get_packages(Path(REPO_DIR) / HYPIUM_PERF_DIR):
-        run_command(
-            [str(pip_path), "install", str(pkg)],
-            error_msg="安装依赖失败，请检查 pkg 文件"
-        )
+def display_activation_instructions() -> None:
+    """Display virtual environment activation instructions."""
+    print("\nSetup complete! Next steps:")
+    
+    activate_cmd = (
+        f"{VENV_NAME}\\Scripts\\activate" if platform.system() == "Windows"
+        else f"source {VENV_NAME}/bin/activate"
+    )
+    
+    print(f"\n1. Activate virtual environment:\n   {activate_cmd}\n")
 
-
-def final_instructions(python_path):
-    """输出最终使用说明"""
-    print(f"\n 完成！请按以下步骤操作：")
-
-    if platform.system() == "Windows":
-        activate_cmd = f"{VENV_NAME}\\Scripts\\activate"
-    else:
-        activate_cmd = f"source {VENV_NAME}/bin/activate"
-
-    print(f"""
-1. 激活虚拟环境:
-   {activate_cmd}
-    """)
+def main() -> None:
+    """Main execution flow."""
+    if not validate_python_version():
+        sys.exit("Error: Requires Python 3.10. Please check your Python version.")
+    
+    setup_virtual_environment()
+    python_executable, pip_executable = get_virtualenv_paths()
+    
+    extract_hypium_package(HYPIUM_ZIP_PATH)
+    extract_hypium_package(HYPIUM_PERF_ZIP_PATH)
+    
+    install_project_dependencies(pip_executable)
+    display_activation_instructions()
 
 if __name__ == "__main__":
-    # 步骤 1: 创建虚拟环境
-    create_virtualenv()
-
-    # 步骤 2: 获取虚拟环境路径
-    python_path, pip_path = activate_virtualenv()
-
-    # 步骤 3: 克隆仓库
-    clone_repository()
-
-    # 步骤 4: unzip hypium
-    unzip_hypium()
-
-     # 步骤 5: 安装依赖
-    install_dependencies(pip_path)
-
-    # 输出使用说明
-    final_instructions(python_path)
+    main()

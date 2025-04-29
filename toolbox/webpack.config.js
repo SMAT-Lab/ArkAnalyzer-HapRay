@@ -23,11 +23,11 @@ class PackPlugin {
                 if (fs.statSync(realFile).isDirectory()) {
                     archive.directory(realFile, filename);
                 } else {
-                    archive.file(realFile, {name: filename});
+                    archive.file(realFile, { name: filename });
                 }
-            })
+            });
 
-            archive.finalize()
+            archive.finalize();
         });
     }
 }
@@ -37,8 +37,8 @@ module.exports = {
     mode: 'production',
     externals: [
         {
-            'sql.js':'commonjs sql.js',
-        }
+            'sql.js': 'commonjs sql.js',
+        },
     ],
     entry: './src/cli/index.ts',
     module: {
@@ -47,21 +47,22 @@ module.exports = {
                 test: /\.tsx?$/,
                 use: 'ts-loader',
                 exclude: /node_modules/,
-            }
-        ]
+            },
+        ],
     },
     resolve: {
-        extensions: ['.tsx', '.ts', '.js']
+        extensions: ['.tsx', '.ts', '.js'],
     },
     output: {
         filename: 'hapray-cmd.js',
-        path: path.resolve(__dirname, 'dist')
+        path: path.resolve(__dirname, 'dist'),
     },
     plugins: [
         new CopyPlugin({
             patterns: [
                 { from: 'res', to: 'res' },
                 { from: 'README.md', to: 'README.md' },
+                { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 {
                     from: '../node_modules/sql.js/package.json',
@@ -83,9 +84,9 @@ module.exports = {
                     from: '../web/dist/index.html',
                     to: 'res/report_template.html',
                 },
-            ]
+            ],
         }),
 
         new PackPlugin(),
-    ]
-}
+    ],
+};
