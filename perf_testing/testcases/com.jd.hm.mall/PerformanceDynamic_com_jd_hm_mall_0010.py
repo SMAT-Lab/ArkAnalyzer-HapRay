@@ -17,20 +17,16 @@ class PerformanceDynamic_com_jd_hm_mall_0010(PerfTestCase):
 
         self._app_package = 'com.jd.hm.mall'
         self._app_name = '京东'
-        steps = []
-        for i in range(1, 6):
-            step = {
-                "name": f"step{i}",
-                "description": f"1. 京东首页-滑动-应用内操作-京东首页-1.京东首页第{i}次上滑"
+        self._steps = [
+            {
+                "name": "step1",
+                "description": "1. 京东首页-滑动-应用内操作-京东首页-1.京东首页上滑"
+            },
+            {
+                "name": "step2",
+                "description": "2. 京东首页-滑动-应用内操作-京东首页-2.京东首页下滑"
             }
-            steps.append(step)
-        for i in range(6, 11):
-            step = {
-                "name": f"step{i}",
-                "description": f"1. 京东首页-滑动-应用内操作-京东首页-1.京东首页第{i}次下滑"
-            }
-            steps.append(step)
-        self._steps = steps
+        ]
 
     @property
     def steps(self) -> []:
@@ -58,18 +54,18 @@ class PerformanceDynamic_com_jd_hm_mall_0010(PerfTestCase):
 
         def step1(driver):
             Step('京东首页上滑操作')
-            CommonUtils.swipe(driver.device_sn, 630, 1904, 630, 954, 300)
-            time.sleep(2)
+            for i in range(1, 6):
+                CommonUtils.swipe(driver.device_sn, 630, 1904, 630, 954, 300)
+                time.sleep(2)
 
         def step2(driver):
             Step('京东首页下滑操作')
-            CommonUtils.swipe(driver.device_sn, 630, 816, 630, 1766, 300)
-            time.sleep(2)
+            for i in range(1, 6):
+                CommonUtils.swipe(driver.device_sn, 630, 816, 630, 1766, 300)
+                time.sleep(2)
 
-        for i in range(5):
-            self.execute_step_with_perf(1, step1, 3)
-        for i in range(5):
-            self.execute_step_with_perf(2, step2, 3)
+        self.execute_step_with_perf(1, step1)
+        self.execute_step_with_perf(2, step2)
 
 
     def teardown(self):
