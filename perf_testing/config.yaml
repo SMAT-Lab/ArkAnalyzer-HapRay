@@ -3,3 +3,4 @@ run_testcases:
   - ResourceUsage_PerformanceDynamic_xhs_0060
   - PerformanceDynamic_com_jd_hm_mall_0010
   - PerformanceDynamic_com_alipay_mobile_client_0010
+  - PerformanceDynamic_com_alipay_mobile_client_0020
