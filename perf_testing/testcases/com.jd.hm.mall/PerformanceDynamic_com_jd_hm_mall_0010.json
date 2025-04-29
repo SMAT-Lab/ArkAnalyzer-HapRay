@@ -1,0 +1,17 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "PerformanceDynamic_com_jd_hm_mall_0010.py"
+        ]
+    },
+    "kits":[
+    ]
+}
