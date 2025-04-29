@@ -5,3 +5,4 @@ run_testcases:
   - PerformanceDynamic_com_alipay_mobile_client_0010
   - PerformanceDynamic_com_alipay_mobile_client_0020
   - PerformanceDynamic_com_alipay_mobile_client_0060
+  - PerformanceDynamic_com_alipay_mobile_client_0070
