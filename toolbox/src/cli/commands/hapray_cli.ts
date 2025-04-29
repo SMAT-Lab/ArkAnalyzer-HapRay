@@ -48,7 +48,7 @@ export interface TestInfo {
 export type Steps = Step[];
 
 function getPerfPaths(inputPath: string, steps: Steps): string[] {
-    return steps.map((step) => path.join(inputPath, 'hiperf', step.stepIdx.toString(), 'perf.db'));
+    return steps.map((step) => path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`, 'perf.db'));
 }
 
 // async function main(config: GlobalConfig): Promise<void> {
@@ -76,8 +76,8 @@ async function main(input: string): Promise<void> {
 
     let stepsCollect: StepItem[] = [];
     for (let i = 0; i < steps.length; i++) {
-        let tracePath = path.join(input, 'hiperf', steps[i].stepIdx.toString(), 'perf.data');
-        let dbPath = path.join(input, 'hiperf', steps[i].stepIdx.toString(), 'perf.db');
+        let tracePath = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
+        let dbPath = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
         if (!fs.existsSync(dbPath)) {
             traceStreamerCmd(tracePath, dbPath);
         }

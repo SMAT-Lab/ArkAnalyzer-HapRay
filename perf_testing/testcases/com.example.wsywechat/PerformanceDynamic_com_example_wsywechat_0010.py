@@ -2,28 +2,23 @@
 # coding: utf-8
 
 import os
-from devicetest.core.test_case import TestCase, Step
-from hypium.advance.perf.driver_perf.uiexplorer_perf import UiExplorerPerf
+from devicetest.core.test_case import Step
 
-from aw.Utils import save_testInfo, generate_hapray_report
 from hypium.model import KeyCode
 from hypium import BY
 
-from aw.config.config import Config
-from aw.dynamic_script import execute_step_with_perf
+from aw.PerfTestCase import PerfTestCase
 
 
-class PerformanceDynamic_com_example_wsywechat_0010(TestCase):
+class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
+
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
-        TestCase.__init__(self, self.TAG, controllers)
-        self.driver = UiExplorerPerf(self.device1)
-        self.test_success = True  # 添加测试状态标志
-        self.current_step = 1  # 当前测试步骤
-        self.report_path = self.configs['report_path']
-        self.app_package = 'com.example.wsywechat'
-        self.app_name = 'mini wechat'
-        self.steps = [
+        super().__init__(self.TAG, controllers)
+
+        self._app_package = 'com.example.wsywechat'
+        self._app_name = 'mini wechat'
+        self._steps = [
             {
                 "name": "step1",
                 "description": "1. 启动微信"
@@ -37,78 +32,30 @@ class PerformanceDynamic_com_example_wsywechat_0010(TestCase):
                 "description": "3. 返回桌面"
             }]
 
-    def settings(self, duration=None):
-        # 如果提供了duration参数，则覆盖配置文件中的值
-        self.duration = duration if duration is not None else Config.get('hiperf.duration')
+    @property
+    def steps(self) -> []:
+        return self._steps
 
-        # 从配置文件加载其他设置
-        self.pid = None  # 稍后通过包名获取 PID
+    @property
+    def app_package(self) -> str:
+        return self._app_package
 
-        # 构建本地输出路径
-        step_dir = str(self.current_step)
-
-        # 构建完整的目录结构
-        self.hiperf_dir = os.path.join(self.report_path, 'hiperf')
-        self.step_dir = os.path.join(self.hiperf_dir, step_dir)
-
-        # 确保所有必要的目录都存在
-        os.makedirs(self.step_dir, exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+    @property
+    def app_name(self) -> str:
+        return self._app_name
 
     def setup(self):
-        Step('1.初始化设置')
-        self.settings()
-
-        Step('2.回到桌面')
-        self.driver.swipe_to_home()
-
-        Step('3.启动被测应用')
-        self.driver.stop_app(package_name=self.app_package)
-        self.driver.start_app(package_name=self.app_package)
-
-    def process(self):
-        """执行测试流程"""
-
-        # 执行默认的测试步骤
-        self.perform_dynamic_test()
+        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def teardown(self):
-        Step(f'{self.current_step + 2}.关闭被测应用')
         self.driver.stop_app(self.app_package)
+        self.make_reports()
 
-        # 读取配置文件中的步骤信息
-        steps_info = []
-        for i, step in enumerate(self.steps, 1):
-            steps_info.append({
-                "name": step['name'],
-                "description": step['description'],
-                "stepIdx": i
-            })
-
-        # 保存步骤信息到steps.json
-        steps_json_path = os.path.join(self.hiperf_dir, 'steps.json')
-        import json
-        with open(steps_json_path, 'w', encoding='utf-8') as f:
-            json.dump(steps_info, f, ensure_ascii=False, indent=4)
-
-        # 保存测试信息
-        save_testInfo(
-            driver=self.driver,
-            app_id=self.app_package,
-            app_name=self.app_name,
-            scene=self.TAG,
-            output_dir=self.report_path,
-            success=self.test_success
-        )
-
-        # 生成 HapRay 报告
-        Step(f'{self.current_step + 3}.生成HapRay报告')
-        if not generate_hapray_report(self.report_path):
-            self.test_success = False
-
-    def perform_dynamic_test(self):
+    def process(self):
         # 定义步骤1的动作函数：与丁真的聊天操作
         def chat_with_dingzhen(driver):
+            Step('1. 与丁真的聊天操作')
             # 点击type为{Text}并且text为{联系人}的控件
             driver.touch(BY.type('Text').text('联系人'))
             driver.wait(1)
@@ -186,6 +133,8 @@ class PerformanceDynamic_com_example_wsywechat_0010(TestCase):
 
         # 定义步骤2的动作函数：扫一扫和收付款操作
         def scan_and_payment(driver):
+            Step('2. 扫一扫和收付款操作')
+
             driver.start_app(package_name=self.app_package)
             driver.wait(2)
 
@@ -237,6 +186,7 @@ class PerformanceDynamic_com_example_wsywechat_0010(TestCase):
 
         # 定义步骤3的动作函数：发现和联系人操作
         def discover_and_contacts(driver):
+            Step('3. 发现和联系人操作')
             driver.start_app(package_name=self.app_package)
 
             # 点击type为{Text}并且text为{我的}的控件
@@ -283,15 +233,14 @@ class PerformanceDynamic_com_example_wsywechat_0010(TestCase):
             driver.slide((1073, 1547), (1272, 1420))
             driver.wait(0.5)
 
-        # 获取应用 PID
-        pid_cmd = f"pidof {self.app_package}"
-        pid = self.driver.shell(pid_cmd).strip()
+        self.driver.swipe_to_home()
+        self.driver.start_app(package_name=self.app_package)
 
         # 执行步骤1：与丁真的聊天操作
-        execute_step_with_perf(self.driver, self.report_path, pid, 1, chat_with_dingzhen)
+        self.execute_step_with_perf(1, chat_with_dingzhen)
 
         # 执行步骤2：扫一扫和收付款操作
-        execute_step_with_perf(self.driver, self.report_path, pid, 2, scan_and_payment)
+        self.execute_step_with_perf(2, scan_and_payment)
 
         # 执行步骤3：发现和联系人操作
-        execute_step_with_perf(self.driver, self.report_path, pid, 3, discover_and_contacts)
+        self.execute_step_with_perf(3, discover_and_contacts)
