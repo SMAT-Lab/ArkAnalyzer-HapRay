@@ -89,9 +89,9 @@ interface SubItem {
     name: string;
     count: number;
     files: FileItem[];
- };
+};
 
- interface CategoryItem {
+interface CategoryItem {
     category: number;
     count: number;
     subData: SubItem[];
@@ -191,6 +191,16 @@ FROM
 WHERE
     process.pid = 66666
 ORDER BY ts
+`;
+
+const PERF_PROCESS_TOTAL_SQL = `
+SELECT
+    SUM(perf_sample.event_count)
+FROM
+    perf_sample
+    INNER JOIN perf_report ON perf_report.id = perf_sample.event_type_id
+WHERE
+    perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired')
 `;
 
 class PerfStepSample {
@@ -403,6 +413,42 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         this.stepsSample = [];
     }
 
+    public async calcPerfDbTotalInstruction(dbfile: string): Promise<number> {
+        let total = 0;
+
+        let SQL = await initSqlJs();
+
+        logger.info(`calcTotalInstruction ${dbfile} start`);
+        let db: Database | null = null;
+        try {
+            db = new SQL.Database(fs.readFileSync(dbfile!));
+            // 读取样本数据
+            total = await this.queryProcessTotal(db);
+        } catch (error) {
+            logger.error(`${error} ${dbfile}`);
+        } finally {
+            if (db) {
+                db.close();
+            }
+        }
+        logger.info(`calcTotalInstruction ${dbfile} done`);
+
+        return total;
+    }
+
+    private async queryProcessTotal(db: Database): Promise<number> {
+        let total = 0;
+        const results = await db.exec(PERF_PROCESS_TOTAL_SQL);
+        if (results.length === 0) {
+            return total;
+        }
+
+        results[0].values.map((row) => {
+            total += row[0] as number;
+        });
+        return total;
+    }
+
     async analyze(dbPath: string, testInfo: TestSceneInfo, output: string): Promise<PerfSum> {
         const fileBuffer = fs.readFileSync(dbPath);
         const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
@@ -459,7 +505,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // logger.info(`${steps[0].components[i].name} :  ${steps[0].components[i].instructions}`)
         }
         logger.info(steps.length, total);
-        
+
         for (const data of this.stepsSample[0].details) {
             if (!data.componentName) {
                 logger.info(`${data.componentCategory}, ${data.componentName}`)
@@ -502,7 +548,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                     count: data.fileEvents,
                     subData: new Map(),
                 }
-                
+
                 let subData = {
                     name: data.subCategory,
                     count: data.fileEvents,
@@ -545,7 +591,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             }
             stepInfo.count += data.count;
             for (const [_, subdata] of data.subData) {
-                let sub : SubItem = {
+                let sub: SubItem = {
                     name: subdata.name,
                     count: subdata.count,
                     files: subdata.files
@@ -825,7 +871,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             await this.queryTestStepTimestamps(db);
             // 读取样本数据
             await this.queryProcessSample(db, processName);
-        } catch(error) {
+        } catch (error) {
             logger.error(`loadDbAndStatistics ${error}`);
         } finally {
             await db.close();
@@ -1189,7 +1235,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         if (threadName === null) {
             return undefined;
         }
-        
+
         for (const [reg, component] of this.threadClassifyCfg) {
             if (threadName?.match(reg)) {
                 return {
