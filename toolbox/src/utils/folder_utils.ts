@@ -16,14 +16,14 @@ export function getFirstLevelFolders(dirPath: string): string[] {
             // 检查该路径是否为目录
             const stat = fs.statSync(itemPath);
             if (stat.isDirectory() && item!=='report') {
-                logger.info('轮次路径：'+ itemPath);
+                logger.info('Round path: '+ itemPath);
                 folders.push(itemPath);
             }
         }
 
         return folders;
     } catch (error) {
-        logger.error('读取目录时出错:'+dirPath, error);
+        logger.error('Access directory :' + dirPath, error);
         return [];
     }
 }

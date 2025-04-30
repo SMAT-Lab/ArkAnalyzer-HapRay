@@ -70,11 +70,11 @@ async function main(input: string): Promise<void> {
     }
     output = path.join(input, 'report', 'hapray_report.html');
     // load testinfo.json
-    let rawData = fs.readFileSync(path.join(roundFolders[0], 'testInfo.json'), 'utf8');
+    let rawData = fs.readFileSync(path.join(roundFolders[0], '../', 'testInfo.json'), 'utf8');
     const testInfo: TestInfo = JSON.parse(rawData);
 
     // load steps.json
-    rawData = fs.readFileSync(path.join(roundFolders[0], 'hiperf', 'steps.json'), 'utf8');
+    rawData = fs.readFileSync(path.join(roundFolders[0], '../', 'hiperf', 'steps.json'), 'utf8');
     const steps: Steps = JSON.parse(rawData);
     let paths = getPerfPaths(roundFolders[0], steps);
     let stepsCollect: StepItem[] = [];
@@ -87,8 +87,8 @@ async function main(input: string): Promise<void> {
         for (let index = 0; index < roundFolders.length; index++) {
             const roundFolder = roundFolders[index];
 
-            let tracePath = path.join(roundFolder, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
-            let dbPath = path.join(roundFolder, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
+            let tracePath = path.join(roundFolder, '../', 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
+            let dbPath = path.join(roundFolder, '../', 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
             if (!fs.existsSync(dbPath)) {
                 traceStreamerCmd(tracePath, dbPath);
             }
@@ -125,7 +125,7 @@ async function main(input: string): Promise<void> {
                 choose = idx;
             }
         }
-        logger.info(dbPaths[choose]+':第'+(i+1)+'步骤，选择了第'+choose+'轮数据');
+        logger.info(dbPaths[choose] + ' : setp' + (i + 1) + ' select round' + choose + ' .');
         stepItem = await perfAnalyzer.analyze2(dbPaths[choose], testInfo.app_id, steps[i]);
         stepsCollect.push(stepItem);
     }
