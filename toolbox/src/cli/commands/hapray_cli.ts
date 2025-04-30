@@ -22,6 +22,7 @@ import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { initConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
+import { getFirstLevelFolders } from '../../utils/folder_utils';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -30,7 +31,7 @@ const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
     .action(async (...args: any[]) => {
         let cliArgs: Partial<GlobalConfig> = { ...args[0] };
-        initConfig(cliArgs, (config) => {});
+        initConfig(cliArgs, (config) => { });
 
         await main(args[0].input);
     });
@@ -53,36 +54,80 @@ function getPerfPaths(inputPath: string, steps: Steps): string[] {
 
 // async function main(config: GlobalConfig): Promise<void> {
 async function main(input: string): Promise<void> {
+
+
+
     if (!fs.existsSync(input)) {
         logger.error(`${input} is not exists.`);
         return;
     }
     logger.info(`Input dir is: ${input}`);
+    const roundFolders = getFirstLevelFolders(input);
     let output = path.join(input, 'report');
     if (!fs.existsSync(output)) {
         logger.info(`Creating output dir: ${output}`);
         fs.mkdirSync(output, { recursive: true });
     }
     output = path.join(input, 'report', 'hapray_report.html');
-
     // load testinfo.json
-    let rawData = fs.readFileSync(path.join(input, 'testInfo.json'), 'utf8');
+    let rawData = fs.readFileSync(path.join(roundFolders[0], 'testInfo.json'), 'utf8');
     const testInfo: TestInfo = JSON.parse(rawData);
 
     // load steps.json
-    rawData = fs.readFileSync(path.join(input, 'hiperf', 'steps.json'), 'utf8');
+    rawData = fs.readFileSync(path.join(roundFolders[0], 'hiperf', 'steps.json'), 'utf8');
     const steps: Steps = JSON.parse(rawData);
-    let paths = getPerfPaths(input, steps);
-
+    let paths = getPerfPaths(roundFolders[0], steps);
     let stepsCollect: StepItem[] = [];
+
     for (let i = 0; i < steps.length; i++) {
-        let tracePath = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
-        let dbPath = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
-        if (!fs.existsSync(dbPath)) {
-            traceStreamerCmd(tracePath, dbPath);
-        }
+        let stepItem: StepItem;
+        let result: number[] = [];
         let perfAnalyzer = new PerfAnalyzer('');
-        stepsCollect.push(await perfAnalyzer.analyze2(dbPath, testInfo.app_id, steps[i]));
+        let dbPaths = [];
+        for (let index = 0; index < roundFolders.length; index++) {
+            const roundFolder = roundFolders[index];
+
+            let tracePath = path.join(roundFolder, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
+            let dbPath = path.join(roundFolder, 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
+            if (!fs.existsSync(dbPath)) {
+                traceStreamerCmd(tracePath, dbPath);
+            }
+            dbPaths.push(dbPath);
+            const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
+            result[index] = sum;
+        }
+
+
+        let total = 0;
+        let max = Math.max(...result);
+        let min = Math.min(...result);
+        result.map((v)=>(total += v));
+        let avg = (total - max - min)/ (result.length-2);
+
+        let choose = 0;
+        let skipMax = false;
+        let skipMin = false;
+        let diffMin = max;
+
+        for (let idx = 0; idx < result.length; idx++) {
+            const v = result[idx];
+            if (v ===max && !skipMax){
+                skipMax = true;
+                continue;
+            }
+            if (v ===min && !skipMin){
+                skipMin = true;
+                continue;
+            }
+            let diff = Math.abs(v-avg);
+            if (diff < diffMin) {
+                diffMin = diff;
+                choose = idx;
+            }
+        }
+        logger.info(dbPaths[choose]+':第'+(i+1)+'步骤，选择了第'+choose+'轮数据');
+        stepItem = await perfAnalyzer.analyze2(dbPaths[choose], testInfo.app_id, steps[i]);
+        stepsCollect.push(stepItem);
     }
 
     saveReport(output, testInfo, paths, stepsCollect);
