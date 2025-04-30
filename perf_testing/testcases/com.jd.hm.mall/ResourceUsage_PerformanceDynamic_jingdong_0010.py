@@ -1,11 +1,9 @@
 # coding: utf-8
 import os
-import time
 
 from devicetest.core.test_case import Step
-from devicetest.log.logger import DeviceTestLog as Log
 
-from aw.PerfTestCase import PerfTestCase
+from aw.PerfTestCase import PerfTestCase, Log
 from aw.common.CommonUtils import CommonUtils
 
 

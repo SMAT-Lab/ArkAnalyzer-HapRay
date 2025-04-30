@@ -6,10 +6,10 @@ import time
 from abc import abstractmethod
 
 from devicetest.core.test_case import TestCase
+from xdevice import platform_logger
 from hypium import UiDriver
 
 from aw.config.config import Config
-from xdevice import platform_logger
 
 Log = platform_logger("PerfTestCase")
 
@@ -320,4 +320,4 @@ class PerfTestCase(TestCase):
 
     def _get_app_pid(self) -> int:
         pid_cmd = f"pidof {self.app_package}"
-        return self.driver.shell(pid_cmd).strip()
+        return int(self.driver.shell(pid_cmd).strip())

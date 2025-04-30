@@ -3,11 +3,9 @@ import os
 import time
 
 from devicetest.core.test_case import Step
-from devicetest.log.logger import DeviceTestLog as Log
-
-from aw.PerfTestCase import PerfTestCase
-from aw.common.CommonUtils import CommonUtils
 from hypium import BY
+
+from aw.PerfTestCase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
@@ -84,7 +82,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
         time.sleep(10)
         finish(self.driver)
         time.sleep(10)
-
 
     def teardown(self):
         Log.info('teardown')
