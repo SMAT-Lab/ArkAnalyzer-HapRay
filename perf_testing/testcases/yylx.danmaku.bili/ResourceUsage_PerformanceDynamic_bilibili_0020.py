@@ -69,12 +69,14 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
 
             # 评论区上滑10次
             for i in range(10):
-                CommonUtils.swipe(driver.device_sn, 703, 2471, 703, 1471)
+                # CommonUtils.swipe(driver.device_sn, 703, 2471, 703, 1471)
+                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271) # Mate70
                 time.sleep(2)
 
             # 评论区下滑10次
             for i in range(10):
-                CommonUtils.swipe(driver.device_sn, 703, 1471, 703, 2471)
+                # CommonUtils.swipe(driver.device_sn, 703, 1471, 703, 2471)
+                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271)  # Mate70
                 time.sleep(2)
 
         def step3(driver):
@@ -84,7 +86,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
             time.sleep(1)
 
             # 2. 点击全屏按钮，等待1s
-            driver.touch((1232, 770))
+            # driver.touch((1232, 770))
+            driver.touch((1144, 709)) #Mate70
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -98,7 +101,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
             time.sleep(1)
 
             # 2. 点击关闭弹幕，等待1s
-            driver.touch((557, 1210))
+            # driver.touch((557, 1210))
+            driver.touch((526, 1125)) # Mate70
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -133,15 +137,18 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         # 暂停播放
         self.driver.touch((600, 500))
         time.sleep(1)
-        self.driver.touch((68, 776))
+        # self.driver.touch((68, 776))
+        self.driver.touch((71, 709)) # Mate70
         time.sleep(1)
 
         # 点击到视频00分00秒
-        self.driver.touch((182, 781))
+        # self.driver.touch((182, 781))
+        self.driver.touch((169, 709)) # Mate70
         time.sleep(1)
 
         # 点击视频播放
-        self.driver.touch((68, 776))
+        # self.driver.touch((68, 776))
+        self.driver.touch((71, 709))  # Mate70
         time.sleep(1)
 
         # 视频播放30s
@@ -149,7 +156,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         # 点击评论
         self.driver.touch(BY.text('评论'))
         time.sleep(3)
-        self.execute_step_with_perf(2, step2, 60)
+        self.execute_step_with_perf(2, step2, 55)
         self.execute_step_with_perf(3, step3, 40)
         self.execute_step_with_perf(4, step4, 40)
         self.execute_step_with_perf(5, step5, 30)
