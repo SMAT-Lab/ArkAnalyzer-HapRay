@@ -10,7 +10,7 @@ from aw.common.CommonUtils import CommonUtils
 from hypium import BY
 
 
-class PerformanceDynamic_com_alipay_mobile_client_0070(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -21,7 +21,7 @@ class PerformanceDynamic_com_alipay_mobile_client_0070(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1. 支付宝 点击视频播放，拖滑切换视频5次，每次间隔10s"
+                "description": "1. 支付宝-理财-我的-消息-首页"
             }
         ]
 
@@ -46,31 +46,33 @@ class PerformanceDynamic_com_alipay_mobile_client_0070(PerfTestCase):
         self.driver.swipe_to_home()
 
         Step('启动被测应用')
-        # 定义步骤1的动作函数：启动支付宝
-        # TODO: 冷启动支付宝，**进入多任务界面**
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
         def step1(driver):
-            Step('1. 支付宝 点击视频播放，拖滑切换视频5次，每次间隔10s')
-            time_start = time.time()
-            component = driver.find_component(BY.type('Text').text('视频'))
+            Step('1. 支付宝-理财-我的-消息-首页')
+            component = driver.find_component(BY.type('Text').text('理财'))
             driver.touch(component)
-            time.sleep(2)
-            for _ in range(5):
-                driver.slide((604, 2020), (604, 930), slide_time=0.3)  # 从上往下滑   ## TODO swipe_OH()
-                # driver.wait(1)  # TODO driver.wait 和 sleep 有什么区别
-                # driver.drag((604, 2020), (604, 930), drag_time=0.5) # TODO drag 和 slide 区别？
-                time.sleep(10)
-            time.sleep(3)
-            time_end = time.time()
-            if time_end - time_start < 60:   # TODO 这一步的sleep 是否要加？
-                time.sleep(60 - (time_end - time_start))
+            time.sleep(5)
+            # 点击 “我的”
+            # driver.touch((1178, 2640))
+            component = driver.find_component(BY.type('Text').text('我的'))
+            driver.touch(component)
+            time.sleep(5)
+            # 点击 “消息”
+            # driver.touch((924, 2618))
+            component = driver.find_component(BY.type('Text').text('消息'))
+            driver.touch(component)
+            time.sleep(5)
+            component = driver.find_component(BY.type('Text').text('首页'))
+            driver.touch(component)
+            time.sleep(5)
 
         def finish(driver):
             time.sleep(10)
+            driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1)
+        self.execute_step_with_perf(1, step1, 30)
         finish(self.driver)
 
 

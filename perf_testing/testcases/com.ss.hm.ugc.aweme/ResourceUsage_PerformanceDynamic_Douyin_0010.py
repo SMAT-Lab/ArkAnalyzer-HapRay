@@ -11,7 +11,7 @@ from hypium import BY
 
 
 
-class PerformanceDynamic_com_ss_hm_ugc_aweme_0010(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -109,8 +109,8 @@ class PerformanceDynamic_com_ss_hm_ugc_aweme_0010(PerfTestCase):
             driver.swipe_to_home()
 
         start(self.driver)
-        self.execute_step_with_perf(1, step1)
-        self.execute_step_with_perf(2, step2)
+        self.execute_step_with_perf(1, step1, 10)
+        self.execute_step_with_perf(2, step2, 30)
         finish(self.driver)
 
     def teardown(self):
