@@ -1,13 +1,9 @@
 run_testcases:
   - PerformanceDynamic_com_example_wsywechat_0010
   - ResourceUsage_PerformanceDynamic_xhs_0060
-<<<<<<< HEAD
   - ResourceUsage_PerformanceDynamic_jingdong_0010
-=======
-  - PerformanceDynamic_com_jd_hm_mall_0010
   - PerformanceDynamic_com_alipay_mobile_client_0010
   - PerformanceDynamic_com_alipay_mobile_client_0020
   - PerformanceDynamic_com_alipay_mobile_client_0060
   - PerformanceDynamic_com_alipay_mobile_client_0070
   - PerformanceDynamic_com_ss_hm_ugc_aweme_0010
->>>>>>> c516b866115269daa7e7446c44dc1a0480977f97
