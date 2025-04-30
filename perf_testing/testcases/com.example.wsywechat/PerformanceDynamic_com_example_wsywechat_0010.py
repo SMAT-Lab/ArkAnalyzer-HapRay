@@ -237,10 +237,10 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
         self.driver.start_app(package_name=self.app_package)
 
         # 执行步骤1：与丁真的聊天操作
-        self.execute_step_with_perf(1, chat_with_dingzhen)
+        self.execute_step_with_perf(1, chat_with_dingzhen, 5)
 
         # 执行步骤2：扫一扫和收付款操作
-        self.execute_step_with_perf(2, scan_and_payment)
+        self.execute_step_with_perf(2, scan_and_payment, 5)
 
         # 执行步骤3：发现和联系人操作
-        self.execute_step_with_perf(3, discover_and_contacts)
+        self.execute_step_with_perf(3, discover_and_contacts, 5)

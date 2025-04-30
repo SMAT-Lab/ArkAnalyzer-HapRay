@@ -3,14 +3,12 @@ import os
 import time
 
 from devicetest.core.test_case import Step
-from devicetest.log.logger import DeviceTestLog as Log
-
-from aw.PerfTestCase import PerfTestCase
-from aw.common.CommonUtils import CommonUtils
 from hypium import BY
 
+from aw.PerfTestCase import PerfTestCase, Log
 
-class PerformanceDynamic_com_alipay_mobile_client_0060(PerfTestCase):
+
+class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -72,9 +70,8 @@ class PerformanceDynamic_com_alipay_mobile_client_0060(PerfTestCase):
             time.sleep(10)
             driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1)
+        self.execute_step_with_perf(1, step1, 30)
         finish(self.driver)
-
 
     def teardown(self):
         Log.info('teardown')

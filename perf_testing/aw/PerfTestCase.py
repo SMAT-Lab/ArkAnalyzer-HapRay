@@ -6,10 +6,12 @@ import time
 from abc import abstractmethod
 
 from devicetest.core.test_case import TestCase
-from devicetest.log.logger import DeviceTestLog as Log
+from xdevice import platform_logger
 from hypium import UiDriver
 
 from aw.config.config import Config
+
+Log = platform_logger("PerfTestCase")
 
 
 class PerfTestCase(TestCase):
@@ -183,7 +185,7 @@ class PerfTestCase(TestCase):
         # 生成 HapRay 报告
         PerfTestCase._generate_hapray_report(self.report_path)
 
-    def execute_step_with_perf(self, step_id, action_func, duration=5):
+    def execute_step_with_perf(self, step_id, action_func, duration):
         """
         执行一个步骤并收集性能数据
 
@@ -205,6 +207,7 @@ class PerfTestCase(TestCase):
         if self.pid == -1:
             self.pid = self._get_app_pid()
 
+        Log.info(f'execute_step_with_perf thread start run {duration}s')
         # 创建并启动 hiperf 线程
         hiperf_cmd = PerfTestCase._get_hiperf_cmd(self.pid, output_file, duration)
         hiperf_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, hiperf_cmd))
@@ -215,6 +218,7 @@ class PerfTestCase(TestCase):
 
         # 等待 hiperf 线程完成
         hiperf_thread.join()
+        Log.info(f'execute_step_with_perf thread end')
 
         # 保存性能数据
         self._save_perf_data(output_file, step_id)
@@ -316,4 +320,4 @@ class PerfTestCase(TestCase):
 
     def _get_app_pid(self) -> int:
         pid_cmd = f"pidof {self.app_package}"
-        return self.driver.shell(pid_cmd).strip()
+        return int(self.driver.shell(pid_cmd).strip())

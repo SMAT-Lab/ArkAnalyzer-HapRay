@@ -3,14 +3,12 @@ import os
 import time
 
 from devicetest.core.test_case import Step
-from devicetest.log.logger import DeviceTestLog as Log
-
-from aw.PerfTestCase import PerfTestCase
-from aw.common.CommonUtils import CommonUtils
 from hypium import BY
 
+from aw.PerfTestCase import PerfTestCase, Log
 
-class PerformanceDynamic_com_alipay_mobile_client_0020(PerfTestCase):
+
+class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -66,9 +64,9 @@ class PerformanceDynamic_com_alipay_mobile_client_0020(PerfTestCase):
             time.sleep(5)
 
         def finish(driver):
-            # 点击右上角关闭
+            # 点击当前页面的第一个图片
             # driver.touch(BY.key('Selector_0')) // TODO
-            # time.sleep(3)
+            time.sleep(3)
             component = driver.find_component(BY.type('Text').text('完成'))
             driver.touch(component)
             time.sleep(2)
@@ -78,13 +76,12 @@ class PerformanceDynamic_com_alipay_mobile_client_0020(PerfTestCase):
             # 上滑返回桌面
             driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1)
+        self.execute_step_with_perf(1, step1, 10)
         time.sleep(10)
-        self.execute_step_with_perf(2, step2)
+        self.execute_step_with_perf(2, step2, 10)
         time.sleep(10)
         finish(self.driver)
         time.sleep(10)
-
 
     def teardown(self):
         Log.info('teardown')

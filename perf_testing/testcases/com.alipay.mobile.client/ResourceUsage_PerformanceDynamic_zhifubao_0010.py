@@ -3,14 +3,13 @@ import os
 import time
 
 from devicetest.core.test_case import Step
-from devicetest.log.logger import DeviceTestLog as Log
-
-from aw.PerfTestCase import PerfTestCase
-from aw.common.CommonUtils import CommonUtils
 from hypium import BY
 
+from aw.PerfTestCase import PerfTestCase, Log
+from aw.common.CommonUtils import CommonUtils
 
-class PerformanceDynamic_com_alipay_mobile_client_0010(PerfTestCase):
+
+class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -62,12 +61,12 @@ class PerformanceDynamic_com_alipay_mobile_client_0010(PerfTestCase):
         self.driver.wait(5)
 
         def step1(driver):
-            Step('支付宝首页上下滑操作')
+            Step('1. 支付宝-首页上下滑5次，间隔2s')
             for i in range(5):
-                CommonUtils.swipe(driver.device_sn, 630, 1904, 630, 954, 300)
+                CommonUtils.swipe(driver.device_sn, 625, 2000, 625, 1000, 300)
                 time.sleep(2)
-            for i in range(1, 6):
-                CommonUtils.swipe(driver.device_sn, 630, 816, 630, 1766, 300)
+            for i in range(5):
+                CommonUtils.swipe(driver.device_sn, 625, 1100, 625, 2100, 300)
                 time.sleep(2)
             time.sleep(3)
 
@@ -93,27 +92,29 @@ class PerformanceDynamic_com_alipay_mobile_client_0010(PerfTestCase):
             time.sleep(2)
 
         def step2(driver):
-            Step('支付宝-切换回到支付宝主界面')
+            Step('2. 支付宝-切换回到支付宝主界面')
             component = driver.find_component(BY.type('Text').text('首页'))
             driver.touch(component)
             time.sleep(5)
 
         def step3(driver):
-            Step('支付宝-点击收付款')
+            Step('3. 支付宝-点击收付款')
             component = driver.find_component(BY.type('Text').text('收付款'))
             driver.touch(component)
             time.sleep(5)
 
         def step4(driver):
-            Step('支付宝-点击收转账')
+            Step('4. 支付宝-点击收转账')
             # component = driver.find_component(BY.type('Text').text('转账'))
             # driver.touch(component)
-            driver.touch((662, 2520))  # TODO
+            # driver.touch((662, 2330))  # TODO Mate60
+            driver.touch((662, 2520))  # TODO Mate70
             time.sleep(5)
 
         def finish(driver):
             # 点击右上角关闭
-            driver.touch((1224, 216))  # TODO
+            # driver.touch((1131, 181))  # TODO Mate60
+            driver.touch((1224, 216))  # TODO Mate70
             time.sleep(2)
             # 侧滑返回
             driver.swipe_to_back()
@@ -121,12 +122,12 @@ class PerformanceDynamic_com_alipay_mobile_client_0010(PerfTestCase):
             # 上滑返回桌面
             driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1)
+        self.execute_step_with_perf(1, step1, 30)
         time.sleep(10)
         without_perf_after_step1(self.driver)
-        self.execute_step_with_perf(2, step2)
-        self.execute_step_with_perf(3, step3)
-        self.execute_step_with_perf(4, step4)
+        self.execute_step_with_perf(2, step2, 10)
+        self.execute_step_with_perf(3, step3, 10)
+        self.execute_step_with_perf(4, step4, 10)
         finish(self.driver)
 
     def teardown(self):
