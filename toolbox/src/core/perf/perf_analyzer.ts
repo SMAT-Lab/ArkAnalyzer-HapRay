@@ -83,6 +83,7 @@ export interface Step {
 interface FileItem {
     file: string;
     count: number;
+    symbols: SymbolInfo[];
 };
 
 interface SubItem {
@@ -105,10 +106,16 @@ export interface StepItem {
 };
 
 interface FileInfo {
-    file: string,
+    file: string;
     fileEvents: number;
     category: ComponentCategory; // 组件大类
     subCategory: string; // 小类
+    symbolInfos: SymbolInfo[];
+}
+
+interface SymbolInfo {
+    symbol: string;
+    count: number;
 }
 
 interface CategoryInfo {
@@ -518,23 +525,25 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             if (data.eventType !== filter_event || data.componentCategory === ComponentCategory.UNKNOWN) {
                 continue;
             }
-            if (tidFileMap.has(`${data.tid}_${data.file}`)) {
+            if (tidFileMap.has(`${data.tid}_${data.file}_${data.symbol}`)) {
                 if (tidFileMap.get(`${data.tid}_${data.file}`) !== data.fileEvents) {
-                    logger.error(`duplicate file ${data.file}: ${tidFileMap.get(`${data.tid}_${data.file}`)}, ${data.fileEvents} TID ${data.tid}`);
+                    logger.error(`duplicate file ${data.file}: ${tidFileMap.get(`${data.tid}_${data.file}_${data.symbol}`)}, ${data.fileEvents} TID ${data.tid}`);
                 }
             } else {
-                tidFileMap.set(`${data.tid}_${data.file}`, data.fileEvents);
+                tidFileMap.set(`${data.tid}_${data.file}_${data.symbol}`, data.fileEvents);
                 // logger.info(`### set ${data.file}, ${data.fileEvents} TID ${data.tid}`);
                 if (!fileMap.has(data.file)) {
                     fileMap.set(data.file, {
                         file: data.file,
                         fileEvents: data.fileEvents,
                         category: data.componentCategory,
-                        subCategory: data.componentName!
+                        subCategory: data.componentName!,
+                        symbolInfos: [{ symbol: data.symbol, count: data.symbolEvents }]
                     })
                 } else {
                     let fileInfo = fileMap.get(data.file)!;
                     fileInfo.fileEvents += data.fileEvents;
+                    fileInfo.symbolInfos.push({ symbol: data.symbol, count: data.symbolEvents });
                 }
             }
         }
@@ -554,7 +563,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                     count: data.fileEvents,
                     files: [{
                         file: data.file,
-                        count: data.fileEvents
+                        count: data.fileEvents,
+                        symbols: data.symbolInfos
                     }]
                 }
                 categoryInfo.subData.set(data.subCategory, subData);
@@ -568,7 +578,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                         count: data.fileEvents,
                         files: [{
                             file: data.file,
-                            count: data.fileEvents
+                            count: data.fileEvents,
+                            symbols: data.symbolInfos
                         }]
                     }
                     categoryInfo!.subData.set(data.subCategory, subData);
@@ -577,7 +588,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                     subData!.count += data.fileEvents;
                     subData!.files.push({
                         file: data.file,
-                        count: data.fileEvents
+                        count: data.fileEvents,
+                        symbols: data.symbolInfos
                     })
                 }
             }

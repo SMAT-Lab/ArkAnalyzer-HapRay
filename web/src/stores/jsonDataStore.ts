@@ -21,6 +21,46 @@ export interface JSONData {
         files: {
           file: string;
           count: number;
+          symbols: {
+            symbol: string;
+            count: number;
+          }[];
+        }[];
+      }[];
+    }[];
+  }[];
+}
+
+export interface MergeJSONData {
+  app_id: string;
+  app_name: string;
+  app_version: string;
+  scene: string;
+  timestamp: number;
+  perfPath: string[];
+  categories: string[];
+  steps: {
+    step_name: string;
+    step_id: number;
+    count: number;
+    compareCount: number;
+    data: {
+      category: number;
+      count?: number;
+      compareCount?: number;
+      subData: {
+        name: string;
+        count?: number;
+        compareCount?: number;
+        files: {
+          file: string;
+          count?: number;
+          compareCount?: number;
+          symbols: {
+            symbol: string;
+            count?: number;
+            compareCount?: number;
+          }[];
         }[];
       }[];
     }[];
@@ -33,16 +73,16 @@ export const useJsonDataStore = defineStore('config', {
     compareJsonData: null as JSONData | null
   }),
   actions: {
-    setJsonData(jsonData: JSONData,compareJsonData: JSONData) {
-      if( JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\""){
+    setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
+      if (JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\"") {
         this.jsonData = jsonData;
         window.initialPage = 'perf';
-      }else{
+      } else {
         this.jsonData = jsonData;
         this.compareJsonData = compareJsonData;
         window.initialPage = 'perf_compare';
       }
-      
+
     },
   },
 });

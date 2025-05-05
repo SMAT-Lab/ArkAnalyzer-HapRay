@@ -2,44 +2,24 @@
   <div class="instructions-table" id="perfsTable">
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
-      <el-input
-        v-model="searchQuery"
-        placeholder="根据文件名搜索"
-        clearable
-        @input="handleFilterChange"
-        class="search-input"
-      >
+      <el-input v-model="searchQuery" placeholder="根据文件名搜索" clearable @input="handleFilterChange" class="search-input">
         <template #prefix>
-          <el-icon><search /></el-icon>
+          <el-icon>
+            <search />
+          </el-icon>
         </template>
       </el-input>
 
-      <el-select
-        v-model="activeCategory"
-        placeholder="选择分类"
-        clearable
-        @change="handleFilterChange"
-        class="category-select"
-      >
-        <el-option
-          v-for="filter in categoryFilters"
-          :key="filter.value"
-          :label="filter.text"
-          :value="filter.value"
-        />
+      <el-select v-model="activeCategory" placeholder="选择分类" clearable @change="handleFilterChange"
+        class="category-select">
+        <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
     </div>
 
     <!-- 数据表格 -->
-    <el-table
-      :data="paginatedData"
-      @row-click="handleRowClick"
-      style="width: 100%"
-      :default-sort="{ prop: 'instructions', order: 'descending' }"
-      @sort-change="handleSortChange"
-      stripe
-      highlight-current-row
-    >
+    <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
+      :default-sort="{ prop: 'instructions', order: 'descending' }" @sort-change="handleSortChange" stripe
+      highlight-current-row>
       <el-table-column prop="name" label="文件" sortable>
         <template #default="{ row }">
           <div class="name-cell">{{ row.name }}</div>
@@ -50,10 +30,24 @@
           <div class="category-cell">{{ row.category }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="指令数" width="160" prop="instructions" sortable>
+      <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.instructions) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="对比指令数" width="160" prop="instructions" sortable>
+        <template #default="{ row }">
+          <div class="count-cell">
+            <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="指令数差值" width="160" prop="instructions" sortable>
+        <template #default="{ row }">
+          <div class="count-cell">
+            <span class="value">{{ formatScientific(row.instructions - row.compareInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -66,26 +60,12 @@
       </div>
 
       <div class="pagination-controls">
-        <el-select
-          v-model="pageSize"
-          class="page-size-select"
-          @change="handlePageSizeChange"
-        >
-          <el-option
-            v-for="size in pageSizeOptions"
-            :key="size"
-            :label="`每页 ${size} 条`"
-            :value="size"
-          />
+        <el-select v-model="pageSize" class="page-size-select" @change="handlePageSizeChange">
+          <el-option v-for="size in pageSizeOptions" :key="size" :label="`每页 ${size} 条`" :value="size" />
         </el-select>
 
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          :background="true"
-          layout="prev, pager, next"
-        />
+        <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="total" :background="true"
+          layout="prev, pager, next" />
       </div>
     </div>
   </div>
@@ -133,9 +113,9 @@ const pageSizeOptions = [10, 20, 50];
 const sortState = ref<{
   prop: SortKey
   order: SortOrder
-}>({ 
-  prop: 'instructions', 
-  order: 'descending' 
+}>({
+  prop: 'instructions',
+  order: 'descending'
 })
 
 
@@ -146,13 +126,13 @@ const filteredData = computed<DataItem[]>(() => {
   // 应用搜索过滤
   if (searchQuery.value) {
     const searchTerm = searchQuery.value.toLowerCase()
-    result = result.filter((item: DataItem) => 
+    result = result.filter((item: DataItem) =>
       item.name.toLowerCase().includes(searchTerm))
   }
 
   // 应用分类过滤
   if (activeCategory.value) {
-    result = result.filter((item: DataItem) => 
+    result = result.filter((item: DataItem) =>
       item.category === activeCategory.value)
   }
 
@@ -215,7 +195,7 @@ const handleSortChange = (sort: {
 }) => {
   // 3. 添加类型保护
   const validKeys: SortKey[] = ['name', 'category', 'instructions'];
-  
+
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
       prop: sort.prop as SortKey, // 安全断言
@@ -233,7 +213,7 @@ const handleSortChange = (sort: {
 };
 
 // 分类过滤选项
-const categoryFilters: {text: string, value: string}[] = [
+const categoryFilters: { text: string, value: string }[] = [
   { text: 'APP_ABC', value: 'APP_ABC' },
   { text: 'APP_SO', value: 'APP_SO' },
   { text: 'APP_LIB', value: 'APP_LIB' },
@@ -242,7 +222,6 @@ const categoryFilters: {text: string, value: string}[] = [
   { text: 'RN', value: 'RN' },
   { text: 'Flutter', value: 'Flutter' },
   { text: 'WEB', value: 'WEB' },
-  { text: 'SYS_Other', value: 'SYS_Other' },
 ];
 
 </script>

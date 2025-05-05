@@ -14,7 +14,7 @@
         </el-descriptions>
       </el-col>
     </el-row>
-    
+
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
@@ -30,12 +30,12 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart :chart-data="json"/>
+          <BarChart :chart-data="json" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart :chart-data="compareJson"/>
+          <BarChart :chart-data="compareJson" />
         </div>
       </el-col>
     </el-row>
@@ -67,32 +67,24 @@
 
     <!-- 测试步骤导航 -->
     <div class="step-nav">
-      <div
-        :class="[
-          'step-item',
-          {
-            active: currentStepIndex === 0,
-          },
-        ]"
-        @click="handleStepClick(0)"
-      >
+      <div :class="[
+        'step-item',
+        {
+          active: currentStepIndex === 0,
+        },
+      ]" @click="handleStepClick(0)">
         <div class="step-header">
           <span class="step-order">STEP 0</span>
           <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
         </div>
         <div class="step-name">全部步骤</div>
       </div>
-      <div
-        v-for="(step, index) in testSteps"
-        :key="index"
-        :class="[
-          'step-item',
-          {
-            active: currentStepIndex === step.id,
-          },
-        ]"
-        @click="handleStepClick(step.id)"
-      >
+      <div v-for="(step, index) in testSteps" :key="index" :class="[
+        'step-item',
+        {
+          active: currentStepIndex === step.id,
+        },
+      ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
@@ -104,49 +96,51 @@
     <!-- 性能对比区域 -->
     <el-row :gutter="20">
       <el-col :span="12">
-          <!-- 基准步骤饼图 -->
-          <div class="data-panel">
-            <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
-          </div>
+        <!-- 基准步骤饼图 -->
+        <div class="data-panel">
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
+        </div>
       </el-col>
       <el-col :span="12">
-          <!-- 对比步骤饼图 -->
-          <div class="data-panel">
-            <PieChart :stepId="currentStepIndex" height="585px" :chart-data="compareStepPieData" />
-          </div>
+        <!-- 对比步骤饼图 -->
+        <div class="data-panel">
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="compareStepPieData" />
+        </div>
       </el-col>
     </el-row>
     <el-row :gutter="20">
-      <el-col :span="12">
-          <!-- 基准版本 -->
-          <div class="data-panel">
-            <h3 class="panel-title">
-              <span class="version-tag">文件负载</span>
-            </h3>
-            <PerfTable :stepId="currentStepIndex" :data="filteredPerformanceData" />
-          </div>
-      </el-col>
-      <el-col :span="12">
-          <!-- 对比版本 -->
-          <div class="data-panel">
-            <h3 class="panel-title">
-              <span class="version-tag">文件负载</span>
-            </h3>
-            <PerfTable :stepId="currentStepIndex" :data="filteredComparePerformanceData" />
-          </div>
+      <el-col :span="24">
+        <!-- 文件负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">文件负载</span>
+          </h3>
+          <PerfTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData" />
+        </div>
       </el-col>
     </el-row>
-
+    <el-row :gutter="20">
+      <el-col :span="24">
+        <!-- 符号负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">符号负载</span>
+          </h3>
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolsPerformanceData" />
+        </div>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue';
 import PerfTable from './PerfTable.vue';
+import PerfSymbolTable from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
-import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, type JSONData, type MergeJSONData } from '../stores/jsonDataStore.ts';
 
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -156,6 +150,101 @@ const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
 const json = jsonDataStore.jsonData;
 const compareJson = jsonDataStore.compareJsonData;
+const mergedJson = mergeJSONData(json!, compareJson!);
+// 合并函数
+function mergeJSONData(jsonData: JSONData, compareJSONData: JSONData): MergeJSONData {
+  const mergedData: MergeJSONData = {
+    ...jsonData,
+    steps: []
+  };
+
+  const stepMap = new Map<number, typeof compareJSONData.steps[0]>();
+  compareJSONData.steps.forEach(step => {
+    stepMap.set(step.step_id, step);
+  });
+
+  jsonData.steps.forEach(step => {
+    const compareStep = stepMap.get(step.step_id);
+    const mergedStep = {
+      ...step,
+      compareCount: compareStep?.count || -1
+    };
+
+    type DataItem = JSONData['steps'][0]['data'][0];
+    const dataMap = new Map<number, DataItem>();
+    if (compareStep) {
+      compareStep.data.forEach(dataItem => {
+        dataMap.set(dataItem.category, dataItem);
+      });
+    }
+
+    mergedStep.data = step.data.map(dataItem => {
+      const compareDataItem = dataMap.get(dataItem.category);
+      const mergedDataItem = {
+        ...dataItem,
+        compareCount: compareDataItem?.count
+      };
+
+      type SubDataItem = DataItem['subData'][0];
+      const subDataMap = new Map<string, SubDataItem>();
+      if (compareDataItem) {
+        compareDataItem.subData.forEach(subDataItem => {
+          subDataMap.set(subDataItem.name, subDataItem);
+        });
+      }
+
+      mergedDataItem.subData = dataItem.subData.map(subDataItem => {
+        const compareSubDataItem = subDataMap.get(subDataItem.name);
+        const mergedSubDataItem = {
+          ...subDataItem,
+          compareCount: compareSubDataItem?.count
+        };
+
+        type FileItem = SubDataItem['files'][0];
+        const fileMap = new Map<string, FileItem>();
+        if (compareSubDataItem) {
+          compareSubDataItem.files.forEach(fileItem => {
+            fileMap.set(fileItem.file, fileItem);
+          });
+        }
+
+        mergedSubDataItem.files = subDataItem.files.map(fileItem => {
+          const compareFileItem = fileMap.get(fileItem.file);
+          const mergedFileItem = {
+            ...fileItem,
+            compareCount: compareFileItem?.count
+          };
+
+          type SymbolItem = FileItem['symbols'][0];
+          const symbolMap = new Map<string, SymbolItem>();
+          if (compareFileItem) {
+            compareFileItem.symbols.forEach(symbolItem => {
+              symbolMap.set(symbolItem.symbol, symbolItem);
+            });
+          }
+
+          mergedFileItem.symbols = fileItem.symbols.map(symbolItem => {
+            const compareSymbolItem = symbolMap.get(symbolItem.symbol);
+            return {
+              ...symbolItem,
+              compareCount: compareSymbolItem?.count
+            };
+          });
+
+          return mergedFileItem;
+        });
+
+        return mergedSubDataItem;
+      });
+
+      return mergedDataItem;
+    });
+
+    mergedData.steps.push(mergedStep);
+  });
+
+  return mergedData;
+}
 console.log('从元素获取到的 JSON 数据:');
 
 const testSteps = ref(
@@ -187,6 +276,7 @@ const performanceData = ref({
         subItem.files.map((file) => ({
           stepId: step.step_id,
           instructions: file.count,
+          compareInstructions: file.count,
           name: file.file,
           category: json!.categories[item.category],
         }))
@@ -194,6 +284,8 @@ const performanceData = ref({
     )
   ),
 });
+
+
 
 const comparePerformanceData = ref({
   id: compareJson!.app_id,
@@ -209,6 +301,51 @@ const comparePerformanceData = ref({
           name: file.file,
           category: compareJson!.categories[item.category],
         }))
+      )
+    )
+  ),
+});
+
+const mergedFilesPerformanceData = ref({
+  id: mergedJson!.app_id,
+  name: mergedJson!.app_name,
+  version: mergedJson!.app_version,
+  scene: mergedJson!.scene,
+  instructions: mergedJson!.steps.flatMap((step) =>
+    step.data.flatMap((item) =>
+      item.subData.flatMap((subItem) =>
+        subItem.files.map((file) => ({
+          stepId: step.step_id,
+          instructions: file.count!,
+          compareInstructions: file.compareCount || 0,
+          name: file.file,
+          category: mergedJson!.categories[item.category],
+        }))
+      )
+    )
+  ),
+});
+
+const mergedSymbolsPerformanceData = ref({
+  id: mergedJson!.app_id,
+  name: mergedJson!.app_name,
+  version: mergedJson!.app_version,
+  scene: mergedJson!.scene,
+  instructions: mergedJson!.steps.flatMap((step) =>
+    step.data.flatMap((item) =>
+      item.subData.flatMap((subItem) =>
+        subItem.files.flatMap((file) =>
+          file.symbols.map((symbol) =>
+          ({
+            stepId: step.step_id,
+            instructions: symbol.count!,
+            compareInstructions: symbol.compareCount || 0,
+            name: symbol.symbol,
+            file: file.file,
+            category: mergedJson!.categories[item.category],
+          })
+          )
+        )
       )
     )
   ),
@@ -261,20 +398,20 @@ const handleStepClick = (stepId: any) => {
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
-const filteredPerformanceData = computed(() => {
+const filteredFilesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return performanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedFilesPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
   }
-  return performanceData.value.instructions
+  return mergedFilesPerformanceData.value.instructions
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
 
-const filteredComparePerformanceData = computed(() => {
+const filteredSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return comparePerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedSymbolsPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
   }
-  return comparePerformanceData.value.instructions
+  return mergedSymbolsPerformanceData.value.instructions
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
@@ -282,7 +419,7 @@ const filteredComparePerformanceData = computed(() => {
 // 处理 JSON 数据生成steps饼状图所需数据
 function processJSONData(data: JSONData | null) {
   if (data === null) {
-    return {legendData: [], seriesData: []};
+    return { legendData: [], seriesData: [] };
   }
   const { categories, steps } = data;
   const categoryCountMap = new Map<string, number>();
@@ -317,7 +454,7 @@ function processJSONData(data: JSONData | null) {
   // 将分类名称和对应的计数转换为饼状图所需的数据格式
   categoryCountMap.forEach((count, category) => {
     legendData.push(category);
-    if(count != 0){
+    if (count != 0) {
       seriesData.push({ name: category, value: count });
     }
   });
