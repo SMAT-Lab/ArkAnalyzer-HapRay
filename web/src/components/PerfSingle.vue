@@ -84,7 +84,18 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfTable :stepId="currentStepIndex" :data="filteredPerformanceData" />
+          <PerfTable :stepId="currentStepIndex" :data="filteredPerformanceData" :hideColumn="isHidden"/>
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="24">
+        <!-- 符号负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">符号负载</span>
+          </h3>
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden" />
         </div>
       </el-col>
     </el-row>
@@ -94,12 +105,13 @@
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue';
 import PerfTable from './PerfTable.vue';
+import PerfSymbolTable from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
-
+const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
 
@@ -141,6 +153,30 @@ const performanceData = ref({
           name: file.file,
           category: json!.categories[item.category],
         }))
+      )
+    )
+  ),
+});
+
+const mergedSymbolsPerformanceData = ref({
+  id: json!.app_id,
+  name: json!.app_name,
+  version: json!.app_version,
+  scene: json!.scene,
+  instructions: json!.steps.flatMap((step) =>
+    step.data.flatMap((item) =>
+      item.subData.flatMap((subItem) =>
+        subItem.files.flatMap((file) =>
+          file.symbols.map((symbol) =>
+          ({
+            stepId: step.step_id,
+            instructions: symbol.count!,
+            name: symbol.symbol,
+            file: file.file,
+            category: json!.categories[item.category],
+          })
+          )
+        )
       )
     )
   ),
@@ -192,6 +228,15 @@ const filteredPerformanceData = computed(() => {
     return performanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
   }
   return performanceData.value.instructions
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+
+const filteredSymbolPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return mergedSymbolsPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+  }
+  return mergedSymbolsPerformanceData.value.instructions
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });

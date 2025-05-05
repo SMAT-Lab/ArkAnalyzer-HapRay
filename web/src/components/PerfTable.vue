@@ -37,14 +37,14 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="对比指令数" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="对比指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="指令数差值" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="指令数差值" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.instructions - row.compareInstructions) }}</span>
@@ -88,7 +88,13 @@ const props = defineProps({
     type: Array as PropType<DataItem[]>,
     required: true,
   },
+  hideColumn:{
+    type: Boolean,
+    required: true,
+  }
 });
+
+const isHidden = !props.hideColumn;
 
 const formatScientific = (num: number) => {
   if (typeof num !== 'number') {

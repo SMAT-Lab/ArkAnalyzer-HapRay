@@ -1,30 +1,11 @@
 <template>
   <div class="performance-comparison">
     <el-row :gutter="20">
-      <el-col :span="12">
+      <el-col :span="24">
         <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
           <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
           <el-descriptions-item label="场景名称：">{{ performanceData.scene }}</el-descriptions-item>
         </el-descriptions>
-      </el-col>
-      <el-col :span="12">
-        <el-descriptions :title="comparePerformanceData.name" :column="1" class="beautified-descriptions">
-          <el-descriptions-item label="应用版本：">{{ comparePerformanceData.version }}</el-descriptions-item>
-          <el-descriptions-item label="场景名称：">{{ comparePerformanceData.scene }}</el-descriptions-item>
-        </el-descriptions>
-      </el-col>
-    </el-row>
-
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <div class="data-panel">
-          <PieChart :chart-data="totalPieData" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="data-panel">
-          <PieChart :chart-data="compareTotalPieData" />
-        </div>
       </el-col>
     </el-row>
     <el-row :gutter="20">
@@ -51,20 +32,6 @@
         </div>
       </el-col>
     </el-row>
-
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <div class="data-panel">
-          <LineChart :chartData="json" :seriesType="RightLineChartSeriesType" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="data-panel">
-          <LineChart :chartData="compareJson" :seriesType="RightLineChartSeriesType" />
-        </div>
-      </el-col>
-    </el-row>
-
     <!-- 测试步骤导航 -->
     <div class="step-nav">
       <div :class="[
@@ -110,12 +77,19 @@
     </el-row>
     <el-row :gutter="20">
       <el-col :span="24">
+        <div class="data-panel">
+          <LineChart :stepId="currentStepIndex" :chartData="compareLineChartData" :seriesType="RightLineChartSeriesType" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="24">
         <!-- 文件负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData" />
+          <PerfTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData" :hideColumn="isHidden" />
         </div>
       </el-col>
     </el-row>
@@ -126,7 +100,7 @@
           <h3 class="panel-title">
             <span class="version-tag">符号负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolsPerformanceData" />
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolsPerformanceData" :hideColumn="isHidden" />
         </div>
       </el-col>
     </el-row>
@@ -141,7 +115,7 @@ import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore, type JSONData, type MergeJSONData } from '../stores/jsonDataStore.ts';
-
+const isHidden = false;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
 
@@ -285,27 +259,6 @@ const performanceData = ref({
   ),
 });
 
-
-
-const comparePerformanceData = ref({
-  id: compareJson!.app_id,
-  name: compareJson!.app_name,
-  version: compareJson!.app_version,
-  scene: compareJson!.scene,
-  instructions: compareJson!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.map((file) => ({
-          stepId: step.step_id,
-          instructions: file.count,
-          name: file.file,
-          category: compareJson!.categories[item.category],
-        }))
-      )
-    )
-  ),
-});
-
 const mergedFilesPerformanceData = ref({
   id: mergedJson!.app_id,
   name: mergedJson!.app_name,
@@ -351,50 +304,34 @@ const mergedSymbolsPerformanceData = ref({
   ),
 });
 
-const symbolData = ref({
-  instructions: [
-    { symbol: 'Symbol1', count: 50 },
-    { symbol: 'Symbol2', count: 100 },
-  ],
-});
 
 const currentStepIndex = ref(0);
-const symbolDialogVisible = ref(false);
-const selectedFile = ref('');
 
 // 格式化持续时间的方法
 const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
 };
 
-const totalPieData = ref({
-  legendData: ['类别A', '类别B'],
-  seriesData: [
-    { name: '类别A', value: 335 },
-    { name: '类别B', value: 310 }
-  ]
-});
+const totalPieData = ref();
 
-const stepPieData = ref({
-  legendData: ['类别A', '类别B'],
-  seriesData: [
-    { name: '类别A', value: 335 },
-    { name: '类别B', value: 310 }
-  ]
-});
+const stepPieData = ref();
 
 const compareStepPieData = ref();
 const compareTotalPieData = ref();
+
+const compareLineChartData = ref();
 
 totalPieData.value = processJSONData(json);
 compareTotalPieData.value = processJSONData(compareJson);
 stepPieData.value = processJSONData(json);
 compareStepPieData.value = processJSONData(compareJson);
+compareLineChartData.value = selectJSONData(json!, compareJson!);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
   stepPieData.value = processJSONData(json);
   compareStepPieData.value = processJSONData(compareJson);
+  compareLineChartData.value = selectJSONData(json!, compareJson!);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
@@ -461,6 +398,87 @@ function processJSONData(data: JSONData | null) {
 
   return { legendData: legendData, seriesData: seriesData };
 }
+
+// 合并基线和对比数据，根据步骤选择对比内容
+function selectJSONData(data1: JSONData, data2: JSONData): JSONData {
+    // 合并 steps 数组
+    let mergedSteps = [...data1.steps, ...data2.steps];
+    // 对 steps 数组按照 step_id 排序
+    mergedSteps.sort((a, b) => a.step_id-b.step_id);
+    if (currentStepIndex.value !== 0) {
+      mergedSteps = mergedSteps.filter((item) => item.step_id === currentStepIndex.value)
+    }
+    
+
+    // 处理每个 step 中的 data 数组
+    mergedSteps.forEach(step => {
+        const dataMap = new Map<number, typeof step.data[0]>();
+        step.data.forEach(dataItem => {
+            const existingItem = dataMap.get(dataItem.category);
+            if (existingItem) {
+                existingItem.count += dataItem.count;
+            } else {
+                dataMap.set(dataItem.category, { ...dataItem });
+            }
+        });
+        step.data = Array.from(dataMap.values());
+        // 对 data 数组按照 category 排序
+        step.data.sort((a, b) => a.category - b.category);
+
+        // 处理每个 data 中的 subData 数组
+        step.data.forEach(dataItem => {
+            const subDataMap = new Map<string, typeof dataItem.subData[0]>();
+            dataItem.subData.forEach(subDataItem => {
+                const existingSubData = subDataMap.get(subDataItem.name);
+                if (existingSubData) {
+                    existingSubData.count += subDataItem.count;
+                } else {
+                    subDataMap.set(subDataItem.name, { ...subDataItem });
+                }
+            });
+            dataItem.subData = Array.from(subDataMap.values());
+            // 对 subData 数组按照 name 排序
+            dataItem.subData.sort((a, b) => a.name.localeCompare(b.name));
+
+            // 处理每个 subData 中的 files 数组
+            dataItem.subData.forEach(subDataItem => {
+                const fileMap = new Map<string, typeof subDataItem.files[0]>();
+                subDataItem.files.forEach(fileItem => {
+                    const existingFile = fileMap.get(fileItem.file);
+                    if (existingFile) {
+                        existingFile.count += fileItem.count;
+                    } else {
+                        fileMap.set(fileItem.file, { ...fileItem });
+                    }
+                });
+                subDataItem.files = Array.from(fileMap.values());
+                // 对 files 数组按照 file 排序
+                subDataItem.files.sort((a, b) => a.file.localeCompare(b.file));
+
+                // 处理每个 file 中的 symbols 数组
+                subDataItem.files.forEach(fileItem => {
+                    const symbolMap = new Map<string, typeof fileItem.symbols[0]>();
+                    fileItem.symbols.forEach(symbolItem => {
+                        const existingSymbol = symbolMap.get(symbolItem.symbol);
+                        if (existingSymbol) {
+                            existingSymbol.count += symbolItem.count;
+                        } else {
+                            symbolMap.set(symbolItem.symbol, { ...symbolItem });
+                        }
+                    });
+                    fileItem.symbols = Array.from(symbolMap.values());
+                    // 对 symbols 数组按照 symbol 排序
+                    fileItem.symbols.sort((a, b) => a.symbol.localeCompare(b.symbol));
+                });
+            });
+        });
+    });
+
+    return {
+        ...data1,
+        steps: mergedSteps
+    };
+  }
 </script>
 
 <style scoped>
