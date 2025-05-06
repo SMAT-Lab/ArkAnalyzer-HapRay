@@ -76,6 +76,7 @@ cd $WORKSPACE/perf_testing
 pip install -r requirements.txt
 
 cd ${WORKSPACE}
+source .venv/bin/activate
 npm install
 npm run build
 chmod +x toolbox/dist/third-party/trace_streamer_binary/trace_streamer*
