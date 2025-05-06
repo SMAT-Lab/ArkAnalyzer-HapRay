@@ -20,7 +20,7 @@ class CommonUtils(object):
     def exe_cmd(cmd, timeout=120000):
         ret = 'error'
         try:
-            ret = subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.STDOUT)
+            ret = subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.STDOUT, shell=True)
             return ret.decode('gbk', 'ignore').encode('utf-8')
         except subprocess.CalledProcessError as e:
             print(f'cmd->{cmd} excute error output={e.output}')

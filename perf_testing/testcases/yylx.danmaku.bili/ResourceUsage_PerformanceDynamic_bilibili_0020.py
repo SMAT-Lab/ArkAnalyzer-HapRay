@@ -66,7 +66,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         def step2(driver):
             # 依赖提前关注 EDIFIER漫步者
             Step('2. 视频区评论')
-
+            time_start = time.time()
             # 评论区上滑10次
             for i in range(10):
                 # CommonUtils.swipe(driver.device_sn, 703, 2471, 703, 1471)
@@ -78,6 +78,9 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
                 # CommonUtils.swipe(driver.device_sn, 703, 1471, 703, 2471)
                 CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271)  # Mate70
                 time.sleep(2)
+            time_end = time.time()
+            if time_end - time_start < 60:
+                time.sleep(60 - (time_end - time_start))
 
         def step3(driver):
             Step('3. 全屏播放30s')
@@ -156,7 +159,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         # 点击评论
         self.driver.touch(BY.text('评论'))
         time.sleep(3)
-        self.execute_step_with_perf(2, step2, 55)
+        self.execute_step_with_perf(2, step2, 60)
         self.execute_step_with_perf(3, step3, 40)
         self.execute_step_with_perf(4, step4, 40)
         self.execute_step_with_perf(5, step5, 30)

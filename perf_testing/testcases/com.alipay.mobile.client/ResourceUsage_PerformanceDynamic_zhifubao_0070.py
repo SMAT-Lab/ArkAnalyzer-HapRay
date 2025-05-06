@@ -51,7 +51,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
 
         def step1(driver):
             Step('1. 支付宝 点击视频播放，拖滑切换视频5次，每次间隔10s')
-            # time_start = time.time()
+            time_start = time.time()
             component = driver.find_component(BY.type('Text').text('视频'))
             driver.touch(component)
             time.sleep(2)
@@ -61,14 +61,14 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
                 # driver.drag((604, 2020), (604, 930), drag_time=0.5) # TODO drag 和 slide 区别？
                 time.sleep(10)
             time.sleep(3)
-            # time_end = time.time()
-            # if time_end - time_start < 60:   # TODO 这一步的sleep 是否要加？
-            #     time.sleep(60 - (time_end - time_start))
+            time_end = time.time()
+            if time_end - time_start < 60:
+                time.sleep(60 - (time_end - time_start))
 
         def finish(driver):
             time.sleep(10)
 
-        self.execute_step_with_perf(1, step1, 55) # TODO 60 ERROR
+        self.execute_step_with_perf(1, step1, 60)
         finish(self.driver)
 
     def teardown(self):

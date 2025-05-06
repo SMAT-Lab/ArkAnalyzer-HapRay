@@ -6,6 +6,7 @@ import time
 from abc import abstractmethod
 
 from devicetest.core.test_case import TestCase
+from hypium.utils import timeout
 from xdevice import platform_logger
 from hypium import UiDriver
 
@@ -59,7 +60,7 @@ class PerfTestCase(TestCase):
     @staticmethod
     def _run_hiperf(driver, cmd):
         """在后台线程中运行 hiperf 命令"""
-        driver.shell(cmd)
+        driver.shell(cmd, timeout=120)
 
     @staticmethod
     def _generate_hapray_report(scene_dir: str) -> bool:
