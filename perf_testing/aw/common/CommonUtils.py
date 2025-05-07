@@ -30,15 +30,25 @@ class CommonUtils(object):
 
     @staticmethod
     def swipes_up_load(driver: UiDriver, swip_num: int, sleep: int, timeout=300):
-        for i in range(swip_num):
+        for _ in range(swip_num):
             CommonUtils.swipe(driver.device_sn, 630, 1904, 630, 954, timeout)
             time.sleep(sleep)
 
     @staticmethod
     def swipes_down_load(driver: UiDriver, swip_num: int, sleep: int, timeout=300):
-        for i in range(swip_num):
+        for _ in range(swip_num):
             CommonUtils.swipe(driver.device_sn, 630, 816, 630, 1766, timeout)
             time.sleep(sleep)
+
+    @staticmethod
+    def swipes_left_load(driver: UiDriver, swip_num: int, sleep: int, timeout=300):
+        for _ in range(swip_num):
+            CommonUtils.swipe(driver.device_sn, 1008, 1360, 504, 1360, timeout)
+
+    @staticmethod
+    def swipes_right_load(driver: UiDriver, swip_num: int, sleep: int, timeout=300):
+        for _ in range(swip_num):
+            CommonUtils.swipe(driver.device_sn, 504, 1360, 1008, 1360, timeout)
 
     @staticmethod
     def swipe(sn, x1, y1, x2, y2, _time=300):
