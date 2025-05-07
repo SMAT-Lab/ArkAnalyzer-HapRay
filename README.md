@@ -10,14 +10,36 @@ npm run build
 
 ----
 
-## Mac M系列芯片下使用指导
+## Mac & Linux 使用指导
+
+### Ubuntu 系统下的系统基础依赖安装
+
+```bash
+# 可选配置 ubuntu-22.04 mirror 源加速配置
+sed -i "s@http://.*security.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list
+sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list
+[setup.sh](setup.sh)
+# 可选配置 ubuntu-24.04 mirror 源加速配置
+sed -i "s@http://.*security.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list.d/ubuntu.sources
+sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list.d/ubuntu.sources
+
+apt-get update && \
+apt-get install -y \
+    git \
+    python3 \
+    python3-pip \
+    python3-venv \
+    unzip
+```
+
+### Mac & Linux 安装使用
 
 ```bash
 # 初始化环境，仅需要执行一次
-./setup_darwin_arm64.sh
+./setup.sh
 
 # 每次运行测试前执行
-source HapRayVenv/bin/activate
+source .venv/bin/activate
 cd perf_testing
 python main.py
 ```
