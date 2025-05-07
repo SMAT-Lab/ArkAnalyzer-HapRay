@@ -12,6 +12,8 @@ export interface JSONData {
     step_name: string;
     step_id: number;
     count: number;
+    round: number;
+    perf_data_path: string;
     data: {
       category: number;
       count: number;

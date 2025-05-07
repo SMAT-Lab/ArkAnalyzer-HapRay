@@ -57,14 +57,14 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="负载提升指令数" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="负载增长指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.compareInstructions - row.instructions) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="负载提升百分比" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="负载增长百分比" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ calculatePercentageWithFixed(row.compareInstructions - row.instructions,row.instructions) }}</span>

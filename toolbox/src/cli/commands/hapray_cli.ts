@@ -84,6 +84,7 @@ async function main(input: string): Promise<void> {
         let result: number[] = [];
         let perfAnalyzer = new PerfAnalyzer('');
         let dbPaths = [];
+        let tracePaths = [];
         for (let index = 0; index < roundFolders.length; index++) {
             const roundFolder = roundFolders[index];
 
@@ -93,6 +94,7 @@ async function main(input: string): Promise<void> {
                 traceStreamerCmd(tracePath, dbPath);
             }
             dbPaths.push(dbPath);
+            tracePaths.push(tracePath);
             const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
             result[index] = sum;
         }
@@ -101,8 +103,8 @@ async function main(input: string): Promise<void> {
         let total = 0;
         let max = Math.max(...result);
         let min = Math.min(...result);
-        result.map((v)=>(total += v));
-        let avg = (total - max - min)/ (result.length-2);
+        result.map((v) => (total += v));
+        let avg = (total - max - min) / (result.length - 2);
 
         let choose = 0;
         let skipMax = false;
@@ -111,15 +113,15 @@ async function main(input: string): Promise<void> {
 
         for (let idx = 0; idx < result.length; idx++) {
             const v = result[idx];
-            if (v ===max && !skipMax){
+            if (v === max && !skipMax) {
                 skipMax = true;
                 continue;
             }
-            if (v ===min && !skipMin){
+            if (v === min && !skipMin) {
                 skipMin = true;
                 continue;
             }
-            let diff = Math.abs(v-avg);
+            let diff = Math.abs(v - avg);
             if (diff < diffMin) {
                 diffMin = diff;
                 choose = idx;
@@ -127,6 +129,8 @@ async function main(input: string): Promise<void> {
         }
         logger.info(dbPaths[choose] + ' : setp' + (i + 1) + ' select round' + choose + ' .');
         stepItem = await perfAnalyzer.analyze2(dbPaths[choose], testInfo.app_id, steps[i]);
+        stepItem.round = choose;
+        stepItem.perf_data_path = tracePaths[choose];
         stepsCollect.push(stepItem);
     }
 

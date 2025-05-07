@@ -78,6 +78,7 @@ export interface TestStep {
 export interface Step {
     name: string;
     stepIdx: number;
+    description: string;
 }
 
 interface FileItem {
@@ -102,6 +103,8 @@ export interface StepItem {
     step_name: string;
     step_id: number;
     count: number;
+    round: number;
+    perf_data_path: string;
     data: CategoryItem[];
 };
 
@@ -497,8 +500,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
         let stepInfo: StepItem = {
             step_id: step.stepIdx,
-            step_name: step.name,
+            step_name: step.description,
             count: 0,
+            round: -1,
+            perf_data_path:'',
             data: []
         };
         // stepInfo.step_id = step.stepIdx;

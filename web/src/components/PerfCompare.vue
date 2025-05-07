@@ -53,7 +53,7 @@
               </template>
               <div style="padding: 16px;">
                 <p>
-                  负载提升：<br>
+                  负载增长：<br>
                   <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">{{ item.diff }}</span>
                 </p>
               </div>
@@ -131,6 +131,8 @@
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
         </div>
         <div class="step-name">{{ step.step_name }}</div>
+        <div class="step-name">测试轮次：{{ step.round }}</div>
+        <div class="step-name">perf文件位置：{{ step.perf_data_path }}</div>
       </div>
     </div>
 
@@ -165,7 +167,7 @@
               </template>
               <div style="padding: 16px;">
                 <p>
-                  负载提升：<br>
+                  负载增长：<br>
                   <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">{{ item.diff }}</span>
                 </p>
               </div>
@@ -355,6 +357,8 @@ const testSteps = ref(
     id: index + 1,
     step_name: step.step_name,
     count: step.count,
+    round: step.round,
+    perf_data_path: step.perf_data_path,
   }))
 );
 
@@ -481,14 +485,14 @@ totalPieData.value = processJSONData(json);
 compareTotalPieData.value = processJSONData(compareJson);
 stepPieData.value = processJSONData(json);
 compareStepPieData.value = processJSONData(compareJson);
-compareSceneLineChartData.value = selectJSONData(mergeSteps(json!, '基线场景'), mergeSteps(compareJson!, '对比场景'));
+compareSceneLineChartData.value = selectJSONData(mergeSteps(json!), mergeSteps(compareJson!));
 compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : selectJSONData(json!, compareJson!);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
   stepPieData.value = processJSONData(json);
   compareStepPieData.value = processJSONData(compareJson);
-  compareLineChartData.value = selectJSONData(json!, compareJson!);
+  compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : selectJSONData(json!, compareJson!);
   stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 };
 
@@ -575,7 +579,7 @@ function processJSONData(data: JSONData | null) {
   return { legendData: legendData, seriesData: seriesData };
 }
 
-function mergeSteps(data: JSONData, xName: string): JSONData {
+function mergeSteps(data: JSONData): JSONData {
   if (data.steps.length === 0) {
     return {
       ...data,
@@ -584,9 +588,11 @@ function mergeSteps(data: JSONData, xName: string): JSONData {
   }
 
   const mergedStep: JSONData['steps'][0] = {
-    step_name: xName,
+    step_name: '',
     step_id: 0,
     count: 0,
+    round:-1,
+    perf_data_path:'',
     data: []
   };
 
@@ -663,9 +669,19 @@ function selectJSONData(data1: JSONData, data2: JSONData): JSONData {
     mergedSteps = mergedSteps.filter((item) => item.step_id === currentStepIndex.value)
   }
 
-
+  let isBase = true;
   // 处理每个 step 中的 data 数组
   mergedSteps.forEach(step => {
+    if(isBase){
+      if(!step.step_name.includes('基线：')){
+        step.step_name = '基线：'+step.step_name;
+      }
+      isBase = false;
+    }else{
+      if(!step.step_name.includes('对比：')){
+        step.step_name = '对比：'+step.step_name;
+      }
+    }
     const dataMap = new Map<number, typeof step.data[0]>();
     step.data.forEach(dataItem => {
       const existingItem = dataMap.get(dataItem.category);

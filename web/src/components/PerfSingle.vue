@@ -70,6 +70,8 @@
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
         </div>
         <div class="step-name">{{ step.step_name }}</div>
+        <div class="step-name">测试轮次：{{ step.round }}</div>
+        <div class="step-name">perf文件位置：{{ step.perf_data_path }}</div>
       </div>
     </div>
 
@@ -131,6 +133,8 @@ const testSteps = ref(
     id: index + 1,
     step_name: step.step_name,
     count: step.count,
+    round: step.round,
+    perf_data_path: step.perf_data_path,
   }))
 );
 
