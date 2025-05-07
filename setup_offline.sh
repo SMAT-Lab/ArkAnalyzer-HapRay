@@ -68,7 +68,7 @@ mv trace_streamer_binary ../
 
 PIP_ARGS=""
 if [ "$OS_ARCH_TYPE" = "Darwin_ARM64" ]; then
-    PIP_ARGS="--no-index --find-links=../hapray_dependencies_macos_arm64"
+    PIP_ARGS="--no-index --find-links=${HapRayDep}/hapray_dependencies_macos_arm64"
 fi
 cd ${HapRayDep}/hypium-5.0.7.200
 pip install ${PIP_ARGS} xdevice-5.0.7.200.tar.gz
