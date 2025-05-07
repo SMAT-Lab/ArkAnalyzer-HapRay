@@ -36,10 +36,13 @@ apt-get install -y \
 
 ```bash
 # 初始化环境，仅需要执行一次
+git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
+cd ArkAnalyzer-HapRay/
 ./setup.sh
 
-# 每次运行测试前执行
+# 每次运行测试前执行（需要先切换到 ArkAnalyzer-HapRay 目录）
 source .venv/bin/activate
 cd perf_testing
+# 根据需要配置 config.yaml 测试用例，不要跑的用例，可以删除或在开头用`#`注释掉
 python main.py
 ```
