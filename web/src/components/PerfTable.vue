@@ -2,7 +2,8 @@
   <div class="instructions-table" id="perfsTable">
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
-      <el-input v-model="searchQuery" placeholder="根据文件名搜索" clearable @input="handleFilterChange" class="search-input">
+      <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件名搜索" clearable @input="handleFilterChange"
+        class="search-input">
         <template #prefix>
           <el-icon>
             <search />
@@ -10,7 +11,7 @@
         </template>
       </el-input>
 
-      <el-select v-model="activeCategory" placeholder="选择分类" clearable @change="handleFilterChange"
+      <el-select v-model="category.categoryQuery" placeholder="选择分类" clearable @change="handleFilterChange"
         class="category-select">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
@@ -44,10 +45,17 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="指令数差值" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="负载提升指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.instructions - row.compareInstructions) }}</span>
+            <span class="value">{{ formatScientific(row.compareInstructions - row.instructions) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="isHidden" label="负载提升指百分比" width="160" prop="instructions" sortable>
+        <template #default="{ row }">
+          <div class="count-cell">
+            <span class="value">{{ calculatePercentageWithFixed(row.compareInstructions - row.instructions, row.instructions) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -73,6 +81,7 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
+import { useFileNameQueryStore, useCategoryStore } from '../stores/jsonDataStore.ts';
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
@@ -88,7 +97,7 @@ const props = defineProps({
     type: Array as PropType<DataItem[]>,
     required: true,
   },
-  hideColumn:{
+  hideColumn: {
     type: Boolean,
     required: true,
   }
@@ -103,13 +112,22 @@ const formatScientific = (num: number) => {
   return num.toExponential(2);
 };
 
+function calculatePercentageWithFixed(part: number, total: number, decimalPlaces: number = 2): string {
+  if (total === 0) {
+       //throw new Error('总值不能为零');
+       return 0 + '%';
+  }
+  const percentage = (part / total) * 100;
+  return percentage.toFixed(decimalPlaces) + '%';
+}
+
 const handleRowClick = (row: { name: string }) => {
   emit('custom-event', row.name);
 };
 
 // 搜索功能
-const searchQuery = ref('');
-const activeCategory = ref('');
+const fileNameQuery = useFileNameQueryStore();
+const category = useCategoryStore();
 
 
 // 分页状态
@@ -130,16 +148,16 @@ const filteredData = computed<DataItem[]>(() => {
   let result = [...props.data]
 
   // 应用搜索过滤
-  if (searchQuery.value) {
-    const searchTerm = searchQuery.value.toLowerCase()
+  if (fileNameQuery.fileNameQuery) {
+    const searchTerm = fileNameQuery.fileNameQuery.toLowerCase()
     result = result.filter((item: DataItem) =>
       item.name.toLowerCase().includes(searchTerm))
   }
 
   // 应用分类过滤
-  if (activeCategory.value) {
+  if (category.categoryQuery) {
     result = result.filter((item: DataItem) =>
-      item.category === activeCategory.value)
+      item.category === category.categoryQuery)
   }
 
   // 应用排序（添加类型安全）

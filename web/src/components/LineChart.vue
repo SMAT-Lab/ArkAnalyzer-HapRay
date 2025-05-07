@@ -62,7 +62,7 @@ const updateChart = () => {
 
   const option = {
     title: {
-      text: '场景负载：instructions',
+      text: '步骤负载：instructions',
       left: 'left',
       textStyle: { fontSize: 16 },
     },

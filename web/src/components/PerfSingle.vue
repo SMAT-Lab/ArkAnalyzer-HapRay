@@ -1,12 +1,24 @@
 <template>
   <div class="performance-comparison">
+    <div class="info-box">
+      负载分类说明：
+      <p>APP_ABC => 应用代码 |
+        APP_LIB => 应用三方ArkTS库 |
+        APP_SO => 应用native库 |
+        OS_Runtime => 系统运行时 |
+        SYS_SDK => 系统SDK |
+        RN => 三方框架React Native |
+        Flutter => 三方框架Flutter |
+        WEB => 三方框架ArkWeb</p>
+    </div>
     <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
       <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
       <el-descriptions-item>
         <div class="description-item-content">
           场景名称：{{ performanceData.scene }}
-          <UploadHtml/>
-        </div></el-descriptions-item>
+          <UploadHtml />
+        </div>
+      </el-descriptions-item>
     </el-descriptions>
     <el-row :gutter="20">
       <el-col :span="12">
@@ -16,7 +28,7 @@
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart :chart-data="json"/>
+          <BarChart :chart-data="json" />
         </div>
       </el-col>
     </el-row>
@@ -35,32 +47,24 @@
 
     <!-- 测试步骤导航 -->
     <div class="step-nav">
-      <div
-        :class="[
-          'step-item',
-          {
-            active: currentStepIndex === 0,
-          },
-        ]"
-        @click="handleStepClick(0)"
-      >
+      <div :class="[
+        'step-item',
+        {
+          active: currentStepIndex === 0,
+        },
+      ]" @click="handleStepClick(0)">
         <div class="step-header">
           <span class="step-order">STEP 0</span>
           <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
         </div>
         <div class="step-name">全部步骤</div>
       </div>
-      <div
-        v-for="(step, index) in testSteps"
-        :key="index"
-        :class="[
-          'step-item',
-          {
-            active: currentStepIndex === step.id,
-          },
-        ]"
-        @click="handleStepClick(step.id)"
-      >
+      <div v-for="(step, index) in testSteps" :key="index" :class="[
+        'step-item',
+        {
+          active: currentStepIndex === step.id,
+        },
+      ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
@@ -84,16 +88,16 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfTable :stepId="currentStepIndex" :data="filteredPerformanceData" :hideColumn="isHidden"/>
+          <PerfTable :stepId="currentStepIndex" :data="filteredPerformanceData" :hideColumn="isHidden" />
         </div>
       </el-col>
     </el-row>
     <el-row :gutter="20">
       <el-col :span="24">
-        <!-- 符号负载 -->
+        <!-- 函数负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
-            <span class="version-tag">符号负载</span>
+            <span class="version-tag">函数负载</span>
           </h3>
           <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden" />
         </div>
@@ -244,7 +248,7 @@ const filteredSymbolPerformanceData = computed(() => {
 // 处理 JSON 数据生成steps饼状图所需数据
 function processJSONData(data: JSONData | null) {
   if (data === null) {
-    return {legendData: [], seriesData: []};
+    return { legendData: [], seriesData: [] };
   }
   const { categories, steps } = data;
   const categoryCountMap = new Map<string, number>();
@@ -279,7 +283,7 @@ function processJSONData(data: JSONData | null) {
   // 将分类名称和对应的计数转换为饼状图所需的数据格式
   categoryCountMap.forEach((count, category) => {
     legendData.push(category);
-    if(count != 0){
+    if (count != 0) {
       seriesData.push({ name: category, value: count });
     }
   });
@@ -464,5 +468,20 @@ function processJSONData(data: JSONData | null) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.info-box {
+  background-color: #e7f3fe;
+  border-left: 6px solid #2196F3;
+  padding: 12px;
+  margin-bottom: 9px;
+  font-family: Arial, sans-serif;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.info-box p {
+  margin: 0;
+  color: #333;
 }
 </style>

@@ -86,3 +86,17 @@ export const useJsonDataStore = defineStore('config', {
     },
   },
 });
+
+
+export const useFileNameQueryStore = defineStore('fileNameQuery', {
+  state: () => ({
+    fileNameQuery: '' as string,
+  })
+});
+
+
+export const useCategoryStore = defineStore('fileNameQuery', {
+  state: () => ({
+    categoryQuery: '' as string,
+  })
+});
