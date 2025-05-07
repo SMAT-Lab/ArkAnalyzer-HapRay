@@ -21,15 +21,15 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1. 启动微信"
+                "description": "1. 启动微信(同时收集perf和trace数据)"
             },
             {
                 "name": "step2",
-                "description": "2. 与丁真聊天"
+                "description": "2. 与丁真聊天(同时收集perf和trace数据)"
             },
             {
                 "name": "step3",
-                "description": "3. 返回桌面"
+                "description": "3. 返回桌面(同时收集perf和trace数据)"
             }]
 
     @property
@@ -45,7 +45,9 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
         return self._app_name
 
     def setup(self):
+        # 创建所有必要的目录
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def teardown(self):
@@ -76,60 +78,54 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
             driver.press_key(KeyCode.ENTER)
             driver.wait(1)
 
-            driver.touch(BY.type('TextInput'))
-            driver.wait(1)
-
-            # 输入文本
-            driver.input_text(BY.type('TextInput'), "最近在忙什么呢？")
-            driver.wait(1)
-
-            # 按下回车键发送消息
-            driver.press_key(KeyCode.ENTER)
-            driver.wait(1)
-
-            driver.touch(BY.type('TextInput'))
-            driver.wait(1)
-
-            # 输入文本
-            driver.input_text(BY.type('TextInput'), "那就好，辛苦了")
-            driver.wait(1)
-
-            # 按下回车键发送消息
-            driver.press_key(KeyCode.ENTER)
-            driver.wait(1)
-
-            driver.touch(BY.type('TextInput'))
-            driver.wait(1)
-
-            # 输入文本
-            driver.input_text(BY.type('TextInput'), "谢谢关心，我先去忙了")
-            driver.wait(1)
-
-            # 按下回车键发送消息
-            driver.press_key(KeyCode.ENTER)
-            driver.wait(1)
-
-            driver.touch(BY.type('TextInput'))
-            driver.wait(1)
-
-            # 输入文本
-            driver.input_text(BY.type('TextInput'), "好的，再见")
-            driver.wait(1)
-
-            # 按下回车键发送消息
-            driver.press_key(KeyCode.ENTER)
-            driver.wait(1)
-
-            # 滑动返回
-            driver.swipe_to_back()
-
-            driver.wait(1)
-
-            driver.swipe_to_back()
+            # driver.touch(BY.type('TextInput'))
+            # driver.wait(1)
+            #
+            # # 输入文本
+            # driver.input_text(BY.type('TextInput'), "最近在忙什么呢？")
+            # driver.wait(1)
+            #
+            # # 按下回车键发送消息
+            # driver.press_key(KeyCode.ENTER)
+            # driver.wait(1)
+            #
+            # driver.touch(BY.type('TextInput'))
+            # driver.wait(1)
+            #
+            # # 输入文本
+            # driver.input_text(BY.type('TextInput'), "那就好，辛苦了")
+            # driver.wait(1)
+            #
+            # # 按下回车键发送消息
+            # driver.press_key(KeyCode.ENTER)
+            # driver.wait(1)
+            #
+            # driver.touch(BY.type('TextInput'))
+            # driver.wait(1)
+            #
+            # # 输入文本
+            # driver.input_text(BY.type('TextInput'), "谢谢关心，我先去忙了")
+            # driver.wait(1)
+            #
+            # # 按下回车键发送消息
+            # driver.press_key(KeyCode.ENTER)
+            # driver.wait(1)
+            #
+            # driver.touch(BY.type('TextInput'))
+            # driver.wait(1)
+            #
+            # # 输入文本
+            # driver.input_text(BY.type('TextInput'), "好的，再见")
+            # driver.wait(1)
+            #
+            # # 按下回车键发送消息
+            # driver.press_key(KeyCode.ENTER)
+            # driver.wait(1)
 
             # 滑动返回
             driver.swipe_to_back()
             driver.wait(1)
+            driver.swipe_to_back()
 
         # 定义步骤2的动作函数：扫一扫和收付款操作
         def scan_and_payment(driver):
@@ -160,29 +156,29 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
             driver.wait(2)  # 等待应用启动
 
             # 点击type为{Text}并且text为{丁真}的控件
-            driver.touch(BY.type('Text').text('丁真'))
-            driver.wait(0.5)
-            # 滑动返回
-            driver.swipe_to_back()
-            driver.wait(1)
-
-            driver.touch(BY.type('TextInput'))
-            driver.wait(1)
-
-            # 输入文本
-            driver.input_text(BY.type('TextInput'), "我又来了，告辞")
-            driver.wait(1)
-
-            # 按下回车键发送消息
-            driver.press_key(KeyCode.ENTER)
-            driver.wait(1)
-            # 滑动返回
-            driver.swipe_to_back()
-            driver.wait(1)
-
-            # 滑动返回
-            driver.swipe_to_back()
-            driver.wait(1)
+            # driver.touch(BY.type('Text').text('丁真'))
+            # driver.wait(0.5)
+            # # 滑动返回
+            # driver.swipe_to_back()
+            # driver.wait(1)
+            #
+            # driver.touch(BY.type('TextInput'))
+            # driver.wait(1)
+            #
+            # # 输入文本
+            # driver.input_text(BY.type('TextInput'), "我又来了，告辞")
+            # driver.wait(1)
+            #
+            # # 按下回车键发送消息
+            # driver.press_key(KeyCode.ENTER)
+            # driver.wait(1)
+            # # 滑动返回
+            # driver.swipe_to_back()
+            # driver.wait(1)
+            #
+            # # 滑动返回
+            # driver.swipe_to_back()
+            # driver.wait(1)
 
         # 定义步骤3的动作函数：发现和联系人操作
         def discover_and_contacts(driver):
@@ -235,12 +231,17 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
 
         self.driver.swipe_to_home()
         self.driver.start_app(package_name=self.app_package)
+        self.driver.wait(5)  # 增加启动等待时间
 
         # 执行步骤1：与丁真的聊天操作
-        self.execute_step_with_perf(1, chat_with_dingzhen, 5)
+        self.execute_step_with_perf_and_trace(1, chat_with_dingzhen, 20)  # 增加到30秒
+        self.driver.wait(5)  # 添加步骤间等待
 
         # 执行步骤2：扫一扫和收付款操作
-        self.execute_step_with_perf(2, scan_and_payment, 5)
+        self.execute_step_with_perf_and_trace(2, scan_and_payment, 20)  # 增加到30秒
+        self.driver.wait(5)  # 添加步骤间等待
 
         # 执行步骤3：发现和联系人操作
-        self.execute_step_with_perf(3, discover_and_contacts, 5)
+        self.execute_step_with_perf_and_trace(3, discover_and_contacts, 20)  # 增加到30秒
+        self.driver.wait(5)  # 添加步骤间等待
+
