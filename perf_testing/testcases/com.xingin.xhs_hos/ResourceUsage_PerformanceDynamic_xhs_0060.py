@@ -105,19 +105,19 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             Step('直播间点击购物车，并在购物车商品列表页面上下滑动5次')
             # 1. 点击直播间购物车图标，等待2s
             # driver.touch((1187, 2685))
-            driver.touch((1112, 2559)) # Mate70
+            driver.touch((1112, 2559)) # Mate70 Mate60Pro
             time.sleep(1)
 
             # 直播间商品列表上滑下滑
             for i in range(5):
                 # 2. 直播间商品列表上滑，等待2s
                 # CommonUtils.swipe(driver.device_sn, 630, 2520, 630, 1570, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70
+                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70 Mate60Pro
                 time.sleep(2)
 
                 # 3. 直播间商品列表下滑，等待2s
                 # CommonUtils.swipe(driver.device_sn, 630, 1570, 630, 2520, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300) # Mate70
+                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300) # Mate70 Mate60Pro
                 time.sleep(2)
 
         def step4(driver):
@@ -125,42 +125,42 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
 
             # 1. 点击直播间购物车图标，等待2s
             # driver.touch((1060, 720))
-            driver.touch((985, 702)) # Mate70
+            driver.touch((985, 702)) # Mate70 Mate60Pro
             time.sleep(1)
 
             # 购物车商品列表上滑5次
             for i in range(5):
                 # 2. 购物车商品列表上滑5次，等待2s
                 # CommonUtils.swipe(driver.device_sn, 630, 2520, 630, 1570, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70
+                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70 Mate60Pro
                 time.sleep(2)
 
             # 购物车商品列表下滑5次
             for i in range(5):
                 # 3. 购物车商品列表下滑5次，等待2s
                 # CommonUtils.swipe(driver.device_sn, 630, 1570, 630, 2520, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300)  # Mate70
+                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300)  # Mate70 Mate60Pro
                 time.sleep(2)
 
         def step5(driver):
             Step('点击购物车列表第一个商品，进入商品详情页面上下滑动5次')
             # 1. 点击购物车列表第一个商品，进入商品详情，等待1s
             # driver.touch((320, 630))
-            driver.touch((320, 420)) # Mate70
+            driver.touch((320, 420)) # Mate70 Mate60Pro
             time.sleep(1)
 
             # 购物车商品列表上滑5次
             for i in range(5):
                 # 2. 购物车商品列表上滑5次，等待2s
                 # CommonUtils.swipe(driver.device_sn, 630, 2520, 630, 1570, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70
+                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70 Mate60Pro
                 time.sleep(2)
 
             # 购物车商品列表下滑5次
             for i in range(5):
                 # 3. 购物车商品列表下滑5次，等待2s
                 # CommonUtils.swipe(driver.device_sn, 630, 1570, 630, 2520, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300)  # Mate70
+                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300)  # Mate70 Mate60Pro
                 time.sleep(2)
 
         self.execute_step_with_perf(1, step1, 10)
