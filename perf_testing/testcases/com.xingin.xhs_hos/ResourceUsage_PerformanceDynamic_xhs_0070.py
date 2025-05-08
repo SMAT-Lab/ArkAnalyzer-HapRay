@@ -59,11 +59,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
         time.sleep(2)
         # 点击评论 输入框
         # self.driver.touch((1140, 2630))
-        self.driver.touch((1054, 2520)) # Mate70
+        # self.driver.touch((1054, 2520)) # Mate70
+        self.driver.touch((1124, 2552))  # Mate60Pro
         time.sleep(1)
         # 点击相册图标，调起图库picker
         # self.driver.touch((1180, 2620))
-        self.driver.touch((1088, 2506)) # Mate70
+        # self.driver.touch((1088, 2506)) # Mate70
+        self.driver.touch((1137, 2538))  # Mate60Pro
         time.sleep(1)
 
         # 点击任一动态图片，在动态图片大图界面，上滑退出小红书，再启动，操作5次
@@ -73,7 +75,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
 
             # 点击第一排第四张（最后一张）动态图片
             # driver.touch((1198, 1093))
-            driver.touch((1152, 1031)) # Mate70
+            driver.touch((1152, 1031)) # Mate70 Mate60Pro
             time.sleep(1)
 
             # 上滑退出小红书，再启动，操作5次，观察启动/退出动效是否流畅

@@ -60,7 +60,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
 
             # 1. 点击顶部隐藏tab页进入直播页，等待2s
             # driver.touch((950, 2126))
-            driver.touch((308, 1942)) # Mate70
+            driver.touch((308, 1942)) # Mate70 Mate60Pro
             time.sleep(30)
 
         self.execute_step_with_perf(1, step1, 30)
