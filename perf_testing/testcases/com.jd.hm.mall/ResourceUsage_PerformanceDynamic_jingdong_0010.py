@@ -18,7 +18,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1.京东首页-滑动-应用内操作"
+                "description": "1.京东首页-滑动-应用内操作(同时收集perf和trace数据)"
             }
         ]
 
@@ -36,7 +36,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
 
     def setup(self):
         Log.info('setup')
+        # 创建所有必要的目录
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -52,7 +54,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
             Step('京东首页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
