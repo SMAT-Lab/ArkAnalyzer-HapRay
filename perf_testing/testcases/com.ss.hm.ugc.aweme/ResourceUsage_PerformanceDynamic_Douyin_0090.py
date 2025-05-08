@@ -62,7 +62,8 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
 
         def step1(driver):
             Step('1. 点击+号，停留30s，相机预览')
-            driver.touch((657, 2636))
+            camera_component = driver.find_component(BY.id('camera_entrance_plus_icon'))
+            driver.touch(camera_component)
             time.sleep(2)
 
         def step2(driver):
@@ -73,7 +74,13 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
             driver.touch(component)
             time.sleep(4)
 
-            driver.touch((161, 2486))
+            component = driver.find_component(BY.text('高清'))
+            if component:
+                point = component.getBoundsCenter()
+                component = (point.x, point.y - 200)
+            else:
+                component = (156, 2511)
+            driver.touch(component)
             time.sleep(3)
 
         def step3(driver):
@@ -91,9 +98,11 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
             time.sleep(1)
 
         start(self.driver)
-        self.execute_step_with_perf(1, step1, 10)
-        self.execute_step_with_perf(2, step2, 10)
-        self.execute_step_with_perf(3, step3, 20)
+        self.execute_step_with_perf_and_trace(1, step1, 10)
+        self.execute_step_with_perf_and_trace(2, step2, 10)
+        self.driver.touch((600, 600))
+        time.sleep(2)
+        self.execute_step_with_perf_and_trace(3, step3, 20)
 
         self.driver.touch((600, 600))
         finish(self.driver)
