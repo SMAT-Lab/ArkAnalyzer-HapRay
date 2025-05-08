@@ -58,11 +58,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
             driver.wait(2)  # 等待应用启动
             time.sleep(3)
 
-            self.driver.swipe(UiParam.RIGHT, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
+            component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
+            self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1),
+                              swipe_time=0.4)
             time.sleep(2)
             component_hotspots = self.driver.find_component(BY.id('home-top-tab-text-homepage_pad_hot'))
-            time.sleep(5)
-            driver.touch(component_hotspots)
+            self.driver.touch(component_hotspots)
             time.sleep(5)
 
             # 2. 点击第一个抖音热榜进入视频页，点击进入第一个视频
@@ -90,10 +91,10 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
             driver.swipe_to_home()
 
         start(self.driver)
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
         self.driver.swipe_to_back()
         time.sleep(5)
-        self.execute_step_with_perf(2, step2, 60)
+        self.execute_step_with_perf_and_trace(2, step2, 60)
         finish(self.driver)
 
     def teardown(self):

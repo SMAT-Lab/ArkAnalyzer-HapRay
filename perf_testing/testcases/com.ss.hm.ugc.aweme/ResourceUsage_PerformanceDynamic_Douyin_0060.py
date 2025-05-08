@@ -43,7 +43,6 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
-
         Step('启动被测应用')
         self.driver.wake_up_display()
         time.sleep(1)
@@ -55,18 +54,19 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
         time.sleep(3)
 
         Step('1. 抖音-热点、关注、朋友tab页切换场景')
-        self.driver.swipe(UiParam.RIGHT, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
-        time.sleep(2)
-        component_hotspots = self.driver.find_component(BY.text('热点'))
-        if not component_hotspots:
-            self.driver.swipe(UiParam.RIGHT, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
+        component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
+        for _ in range(3):
+            self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
             time.sleep(2)
-            component_hotspots = self.driver.find_component(BY.text('热点'))
-        if not component_hotspots:
-            component_hotspots = (420, 205)
-        component_follow = self.driver.find_component(BY.text('关注'))
+            component_hotspots = self.driver.find_component(BY.id('home-top-tab-text-homepage_pad_hot'))
+            if component_hotspots:
+                break
+        component_follow = self.driver.find_component(BY.id('home-top-tab-text-homepage_follow'))
+        if not component_follow:
+            component_follow = self.driver.find_component(BY.text('关注'))
         if not component_follow:
             component_follow = (1050, 205)
+
         component_friend = self.driver.find_component(BY.id('main-bottom-tab-text-homepage_familiar'))
         if not component_friend:
             component_friend = self.driver.find_component(BY.text('朋友'))
@@ -101,12 +101,10 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
 
 
         def finish(driver):
-            for _ in range(6):
-                driver.swipe_to_back()
-                time.sleep(1)
+            driver.swipe_to_back()
             driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1, 35)
+        self.execute_step_with_perf_and_trace(1, step1, 35)
         finish(self.driver)
 
     def teardown(self):

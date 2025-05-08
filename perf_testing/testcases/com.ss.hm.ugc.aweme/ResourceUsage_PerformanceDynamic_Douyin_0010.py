@@ -6,6 +6,7 @@ from devicetest.core.test_case import Step
 from hypium import BY
 
 from aw.PerfTestCase import PerfTestCase, Log
+from aw.common.CommonUtils import CommonUtils
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
@@ -55,29 +56,14 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
             self.driver.start_app(self.app_package)
             driver.wait(2)  # 等待应用启动
             time.sleep(3)
-            # 去掉之前存的草稿
-            component1 = driver.find_component(BY.text('存草稿'))
-            component2 = driver.find_component(BY.text('去编辑'))
-            if component1 or component2:
-                driver.swipe_to_back()
-                time.sleep(2)
 
-            # TODO
-            # 2. 抖音首页浏览推荐视频，上滑切换视频5次，每次等待1s
-            # swipes_up(driver, 5, 1)
-            # time.sleep(1)
-            # for _ in range(5):
-            #     driver.swipes_up((600, 2200), (600, 800), drag_time=0.1)
-            #     time.sleep(1)
-
-            # 3. 抖音点击“我”，等待 2s
+            # 2. 抖音点击“我”，等待 2s
             driver.touch(BY.text('我'))
             time.sleep(2)
 
-            # 4. 抖音“我”页面点击右上角选项，等待2s
+            # 3. 抖音“我”页面点击右上角选项，等待2s
             driver.touch((1114, 180))
             time.sleep(2)
-            time.sleep(1)
 
         def step1(driver):
             Step('1. 抖音“我”页面点击观看历史，等待2s')
@@ -90,14 +76,10 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
         def step2(driver):
             Step('2. 观看历史上滑5次，每次等待1s;观看历史下滑5次，每次等待1s')
             for _ in range(5):
-                driver.drag((600, 2200), (600, 800), drag_time=0.5)
-                time.sleep(1)
-            time.sleep(1)
+                CommonUtils.swipes_up_load(driver, 1, 1, 300)
 
             for _ in range(5):
-                driver.drag((600, 800), (600, 2200), drag_time=0.5)
-                time.sleep(1)
-            time.sleep(1)
+                CommonUtils.swipes_down_load(driver, 1, 1, 300)
 
         def finish(driver):
             for _ in range(6):
@@ -106,8 +88,8 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
             driver.swipe_to_home()
 
         start(self.driver)
-        self.execute_step_with_perf(1, step1, 10)
-        self.execute_step_with_perf(2, step2, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 10)
+        self.execute_step_with_perf_and_trace(2, step2, 20)
         finish(self.driver)
 
     def teardown(self):
