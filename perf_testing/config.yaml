@@ -3,6 +3,11 @@ run_testcases:
   - ResourceUsage_PerformanceDynamic_xhs_0060
   - ResourceUsage_PerformanceDynamic_bilibili_0020
   - ResourceUsage_PerformanceDynamic_jingdong_0010
+  - ResourceUsage_PerformanceDynamic_jingdong_0020
+  - ResourceUsage_PerformanceDynamic_jingdong_0030
+  - ResourceUsage_PerformanceDynamic_jingdong_0080
+  - ResourceUsage_PerformanceDynamic_jingdong_0090
+  - ResourceUsage_PerformanceDynamic_jingdong_0120
   - ResourceUsage_PerformanceDynamic_zhifubao_0010
   - ResourceUsage_PerformanceDynamic_zhifubao_0020
   - ResourceUsage_PerformanceDynamic_zhifubao_0060
