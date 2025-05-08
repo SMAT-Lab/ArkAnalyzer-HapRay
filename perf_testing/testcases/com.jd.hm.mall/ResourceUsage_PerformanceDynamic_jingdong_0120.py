@@ -9,7 +9,7 @@ from aw.PerfTestCase import PerfTestCase, Log
 from aw.common.CommonUtils import CommonUtils
 
 
-class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -20,7 +20,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1.京东超市购物-点击3次，滑动8次"
+                "description": "1.京东9.9包邮场景，进入9.9页面，等3s，上滑3次，下滑3次，每次停留2s"
             }
         ]
 
@@ -51,29 +51,17 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
 
 
         def step1(driver):
-            # 点击京东超市
-            self.driver.touch(BY.text('京东超市'))
-            self.driver.wait(2)
+            # 点击9.9包邮
+            self.driver.touch((904, 1233))
+            time.sleep(3)
 
-            # 点击粮油调味
-            self.driver.touch(BY.text('粮油调味'))
-            self.driver.wait(2)
-
-            Step('粮油调味页上滑操作')
+            Step('上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
-            Step('粮油调味页下滑操作')
+            Step('下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-            # 加入第一个商品到购物车
-            self.driver.touch((1124, 1119))
-            self.driver.wait(2)
 
-
-        self.execute_step_with_perf(1, step1, 40)
-
-        # 从购物车移除第一个商品
-        self.driver.touch((972, 1119))
-        self.driver.wait(2)
+        self.execute_step_with_perf(1, step1, 30)
 
 
 

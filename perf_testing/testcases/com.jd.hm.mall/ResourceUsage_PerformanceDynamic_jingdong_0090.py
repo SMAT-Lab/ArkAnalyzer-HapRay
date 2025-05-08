@@ -9,7 +9,7 @@ from aw.PerfTestCase import PerfTestCase, Log
 from aw.common.CommonUtils import CommonUtils
 
 
-class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -20,7 +20,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1.京东-搜索商品购物"
+                "description": "1.京东-浏览评价页面：点击一次，滑动10次"
             }
         ]
 
@@ -49,22 +49,35 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
         self.driver.wait(5)
         time.sleep(3)
 
+        # 点击搜索框
+        self.driver.touch((494, 314))
+        time.sleep(2)
 
+        # 搜索华为手机
+        self.driver.input_text((525, 198), '华为手机')
+        self.driver.touch(BY.text('搜索'))
+        time.sleep(2)
+
+        # 点击顶部销量，等待2s
+        self.driver.touch((442, 1338))
+        time.sleep(2)
+
+        # 点击第一个商品进入详情页，等待2s
+        self.driver.touch((608, 1888))
+        time.sleep(2)
+
+        # 上划到评价
+        CommonUtils.swipes_up_load(self.driver, swip_num=1, sleep=2)
 
         def step1(driver):
-            # 点击搜索框
-            self.driver.touch((494, 314))
+
+            # 点击全部评价，等待2s
+            self.driver.touch((608, 615))
             time.sleep(2)
 
-            # 搜索华为手机
-            self.driver.input_text((525, 198),'华为手机')
-            self.driver.touch(BY.text('搜索'))
-            time.sleep(2)
-
-
-            Step('搜索结果页浏览，上滑操作')
-            CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
-            Step('搜索结果页浏览，下滑操作')
+            Step('浏览全部评价，上滑操作')
+            CommonUtils.swipes_up_load(self.driver, swip_num=5, sleep=2)
+            Step('浏览全部评价，下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
 

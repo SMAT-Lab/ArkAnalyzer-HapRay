@@ -1,5 +1,6 @@
 # coding: utf-8
 import os
+import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
@@ -51,7 +52,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
         # 通过相对位置点击控件
-        self.driver.touch(BY.isAfter(BY.text('直播')).isBefore(BY.text('新品')).type('Image'))
+        self.driver.touch(BY.text('新品'))
         self.driver.wait(0.5)
 
 
@@ -61,37 +62,31 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             Step('京东新品页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
+        self.execute_step_with_perf(1, step1, 30)
 
-        # 通过相对位置点击控件
-        self.driver.touch(BY.isAfter(BY.type('TabBar')).isBefore(BY.text('首页')).type('Image'))
-        self.driver.wait(0.5)
+        # 返回首页
+        self.driver.swipe_to_back()
+        time.sleep(2)
 
-        # 通过相对位置点击控件
-        self.driver.touch(BY.isAfter(BY.text('购物车')).isBefore(BY.text('我的')).type('Image'))
-        self.driver.wait(0.5)
-        # 点击type为{Text}并且text为{商品收藏}的控件
-        self.driver.touch(BY.type('Text').text('商品收藏'))
+        # 点击我的
+        self.driver.touch(BY.text('我的'))
+        time.sleep(2)
 
-        self.driver.wait(0.5)
-        # 通过相对位置点击控件
-        # 点击坐标(478, 1061)
-        self.driver.touch((478, 1061))
-        self.driver.wait(0.5)
-        self.driver.touch(BY.text('要获取缺失的图片说明，请打开上下文菜单。'))
-        self.driver.wait(0.5)
-        # 断言text为{要获取缺失的图片说明，请打开上下文菜单。}的控件存在
-        self.driver.check_component_exist(BY.text('要获取缺失的图片说明，请打开上下文菜单。'))
-        self.driver.wait(0.5)
+        # 选择收藏商品
+        self.driver.touch(BY.text('商品收藏'))
+        time.sleep(2)
+
+        # 点击收藏页第一个商品
+        self.driver.touch((256,980))
+        time.sleep(2)
+
 
         def step2(driver):
             Step('京东新品页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
 
-
-        self.execute_step_with_perf(1, step1, 30)
         self.execute_step_with_perf(2, step2, 10)
 
-        self.driver.swipe_to_back()
 
     def teardown(self):
         Log.info('teardown')
