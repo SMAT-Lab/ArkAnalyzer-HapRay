@@ -69,14 +69,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0040(PerfTestCase):
                 CommonUtils.swipes_up_load(driver, 1, 10, 300)
 
         def finish(driver):
-            for _ in range(6):
-                driver.swipe_to_back()
-                time.sleep(1)
+            driver.swipe_to_back()
             driver.swipe_to_home()
 
         start(self.driver)
-        self.execute_step_with_perf(1, step1, 30)
-        self.execute_step_with_perf(2, step2, 60)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_step_with_perf_and_trace(2, step2, 60)
         finish(self.driver)
 
     def teardown(self):

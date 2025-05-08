@@ -66,16 +66,14 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
         time.sleep(3)
 
         # 2. 点击热点，等待5s
-        self.driver.swipe(UiParam.RIGHT, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
-        time.sleep(5)
-
-        component_hotspots = self.driver.find_component(BY.id('home-top-tab-text-homepage_pad_hot'))
+        component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
+        self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1),
+                          swipe_time=0.4)
         time.sleep(2)
+        component_hotspots = self.driver.find_component(BY.id('home-top-tab-text-homepage_pad_hot'))
         self.driver.touch(component_hotspots)
         time.sleep(5)
-
         component_all_hotspots = self.driver.find_component(BY.text('完整热榜'))
-
 
         def step1(driver):
             Step('1. 点击查看热榜，等待2s')
@@ -107,10 +105,10 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
                 time.sleep(1)
             driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1, 10)
-        self.execute_step_with_perf(2, step2, 20)
-        self.execute_step_with_perf(3, step3, 10)
-        self.execute_step_with_perf(4, step4, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 10)
+        self.execute_step_with_perf_and_trace(2, step2, 20)
+        self.execute_step_with_perf_and_trace(3, step3, 10)
+        self.execute_step_with_perf_and_trace(4, step4, 30)
         finish(self.driver)
 
     def teardown(self):
