@@ -1,0 +1,218 @@
+[
+    {
+        "kind": 0,
+        "name": "三方应用",
+        "subsystem": []
+    },
+    {
+        "kind": 1,
+        "name": "大桌面",
+        "subsystem": [
+            {
+                "name": "桌面",
+                "processes": [
+                    "com.ohos.sceneboard"
+                ]
+            }
+        ]
+    },
+    {
+        "kind": 2,
+        "name": "媒体应用",
+        "subsystem": [
+            {
+                "name": "图库",
+                "processes": [
+                    "com.huawei.hmos.photos"
+                ]
+            },
+            {
+                "name": "相机",
+                "processes": [
+                    "com.huawei.hmos.camera"
+                ]
+            },
+            {
+                "name": "播控中心",
+                "processes": [
+                    "com.huawei.hmos.mediacontroller"
+                ]
+            },
+            {
+                "name": "华为音频产品管家",
+                "processes": [
+                    "com.huawei.hmos.audioaccessorymanager"
+                ]
+            },
+            {
+                "name": "花瓣剪辑",
+                "processes": [
+                    "com.huawei.hms.petalclip"
+                ]
+            }
+        ]
+    },
+    {
+        "kind": 3,
+        "name": "系统应用",
+        "subsystem": [
+            {
+                "name": "计算器",
+                "processes": [
+                    "com.huawei.hmos.calculator"
+                ]
+            },
+            {
+                "name": "健康使用手机-管控服务",
+                "processes": [
+                    "parent_control_service"
+                ]
+            },
+            {
+                "name": "录屏",
+                "processes": [
+                    "com.huawei.ohos.screenrecorder"
+                ]
+            },
+            {
+                "name": "设置",
+                "processes": [
+                    "com.huawei.hmos.settings"
+                ]
+            },
+            {
+                "name": "时钟",
+                "processes": [
+                    "com.huawei.hmos.clock"
+                ]
+            },
+            {
+                "name": "通知弹框",
+                "processes": [
+                    "com.ohos.notificationdialog"
+                ]
+            },
+            {
+                "name": "玩机技巧",
+                "processes": [
+                    "com.huawei.hmos.tips"
+                ]
+            },
+            {
+                "name": "文件选择器",
+                "processes": [
+                    "filePicker"
+                ]
+            },
+            {
+                "name": "智灵键",
+                "processes": [
+                    "com.huawei.hmos.hwquickaccessmenu"
+                ]
+            },
+            {
+                "name": "智能提醒",
+                "processes": [
+                    "com.huawei.hmos.advisor"
+                ]
+            },
+            {
+                "name": "中转站",
+                "processes": [
+                    "com.huawei.hmos.superhub"
+                ]
+            },
+            {
+                "name": "主题引擎",
+                "processes": [
+                    "com.ohos.sceneboard:EngineServiceAbility:.+",
+                    "com.ohos.sceneboard:sys/commonUI",
+                    "com.ohos.sceneboard:SettingThemeComponentExtAbility",
+                    "com.ohos.sceneboard:HomeThemeComponentExtAbility"
+                ]
+            }
+        ]
+    },
+    {
+        "kind": 4,
+        "name": "云服务应用",
+        "subsystem": [
+            {
+                "name": "default",
+                "processes": [
+                    "com.huawei.hmos.finddevice",
+                    "com.huawei.hmos.mapservice",
+                    "com.huawei.hmos.vmall",
+                    "com.huawei.hmsapp.himovie",
+                    "com.huawei.hmsapp.music",
+                    "com.huawei.hmsapp.books",
+                    "com.huawei.hmos.browser",
+                    "com.huawei.hms.scanservice",
+                    "com.huawei.hmos.skytone",
+                    "skytone_service",
+                    "com.huawei.hmsapp.totemweather",
+                    "com.ohos.UserFile.ExternalFileManager:fileAccess",
+                    "com.huawei.hmos.filemanager",
+                    "com.huawei.hms.gameservice",
+                    "com.huawei.hmsapp.gamecenter",
+                    "com.huawei.hmos.clouddrive",
+                    "com.huawei.hmsapp.compass",
+                    "com.huawei.hmsapp.thememanager",
+                    "com.ohos.FusionSearch",
+                    "com.huawei.hmsapp.hisearch",
+                    "com.huawei.hmos.inputmethod",
+                    "com.huawei.hmos.location",
+                    "com.huawei.hms.huaweiid",
+                    "huawei_id_svc",
+                    "huaweiid_svc",
+                    "accountmgr",
+                    "com.huawei.hms.myfamily",
+                    "com.huawei.hmos.wallet",
+                    "com.huawei.hmos.walletservice"
+                ]
+            },
+            {
+                "name": "负一屏",
+                "processes": [
+                    "com.huawei.hmsapp.intelligent",
+                    "com.huawei.hmsapp.intelligentUI"
+                ]
+            },
+            {
+                "name": "应用市场",
+                "processes": [
+                    "com.huawei.hmsapp.appgallery",
+                    "appgalleray_service",
+                    "AppGalleryService"
+                ]
+            },
+            {
+                
+            }
+        ]
+    },
+    {
+        "kind": 5,
+        "name": "AI全场景应用",
+        "processes": [
+            "com.huawei.hmos.vassistant"
+        ]
+    },
+    {
+        "kind": 6,
+        "name": "畅联",
+        "processes": [
+            "com.huawei.hmos.meetime",
+            "com.huawei.hmos.meetimeservice",
+            "caas_service"
+        ]
+    },
+    {
+        "kind": 7,
+        "name": "通讯互联应用",
+        "processes": [
+            "com.ohos.mms",
+            "com.ohos.telephonydataability"
+        ]
+    }
+]

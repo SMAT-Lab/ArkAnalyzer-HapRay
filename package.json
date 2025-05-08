@@ -1,0 +1,23 @@
+{
+  "name": "happerf",
+  "version": "1.0.0",
+  "description": "Code-oriented Performance Analysis for OpenHarmony Apps",
+  "private": true,
+  "files": [],
+  "workspaces": [
+    "web",
+    "toolbox"
+  ],
+  "scripts": {
+    "build": "npm run build --ws",
+    "release": "npm pack --ws"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitcode.com/bbsun/Hapray.git"
+  },
+  "bugs": {
+    "url": "https://gitcode.com/bbsun/Hapray/issues"
+  },
+  "homepage": "https://gitcode.com/bbsun/Hapray#readme"
+}
