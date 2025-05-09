@@ -1,7 +1,11 @@
 run_testcases:
   - PerformanceDynamic_com_example_wsywechat_0010
   - ResourceUsage_PerformanceDynamic_xhs_0060
+  - ResourceUsage_PerformanceDynamic_bilibili_0010
   - ResourceUsage_PerformanceDynamic_bilibili_0020
+  - ResourceUsage_PerformanceDynamic_bilibili_0030
+  - ResourceUsage_PerformanceDynamic_bilibili_0040
+  - ResourceUsage_PerformanceDynamic_bilibili_0050
   - ResourceUsage_PerformanceDynamic_jingdong_0010
   - ResourceUsage_PerformanceDynamic_jingdong_0020
   - ResourceUsage_PerformanceDynamic_jingdong_0030
