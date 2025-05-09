@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -48,26 +49,24 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-
-
         def step1(driver):
             # 点击购物车
             self.driver.touch(BY.text('购物车'))
             self.driver.wait(0.5)
             # 选中购物车提前预置的商品
-            self.driver.touch((83, 748))
+            self.driver.touch((85, 709))
             time.sleep(2)
             # 点击去结算
-            self.driver.touch((994, 2361))
+            self.driver.touch((1029, 2389))
             time.sleep(2)
 
-        self.execute_step_with_perf(1, step1, 15)
+        self.execute_step_with_perf_and_trace(1, step1, 15)
 
         # 返回购物车
         self.driver.swipe_to_back()
         self.driver.wait(2)
         # 取消选中购物车提前预置的商品
-        self.driver.touch((82, 748))
+        self.driver.touch((85, 709))
         self.driver.wait(2)
 
 
