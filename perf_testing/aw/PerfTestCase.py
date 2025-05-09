@@ -325,8 +325,8 @@ CONFIG"""
                 return
 
             # 检查转换后的文件是否存在
-            if not os.path.exists(local_output_db_path):
-                return
+            # if not os.path.exists(local_output_db_path):
+            #     return
 
         except Exception as e:
             # 尝试获取更多调试信息
