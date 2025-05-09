@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -49,15 +50,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
         self.driver.wait(5)
         time.sleep(3)
 
-
-
         def step1(driver):
             # 点击搜索框
-            self.driver.touch((494, 314))
+            self.driver.touch((512, 325))
             time.sleep(2)
 
             # 搜索华为手机
-            self.driver.input_text((525, 198),'华为手机')
+            self.driver.input_text((545, 201),'华为手机')
             self.driver.touch(BY.text('搜索'))
             time.sleep(2)
 
@@ -67,10 +66,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
             Step('搜索结果页浏览，下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-
-        self.execute_step_with_perf(1, step1, 30)
-
-
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
