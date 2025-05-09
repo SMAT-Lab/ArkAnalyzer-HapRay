@@ -110,6 +110,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 }
             }
         }
+        getConfig().analysis.ohpm.forEach((pkg) => {
+            this.hapComponents.set(pkg.name, {name: pkg.name, kind: ComponentCategory.APP_LIB})
+        });
     }
 
     private loadPerfKindCfg(): void {

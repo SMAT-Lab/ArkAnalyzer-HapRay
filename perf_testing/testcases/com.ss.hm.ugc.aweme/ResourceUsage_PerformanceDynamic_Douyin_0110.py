@@ -65,7 +65,8 @@ class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
             time.sleep(2)
 
             # 5. 点击评论区
-            driver.touch((1197, 1817))
+            comment_component = (1187, 1750)
+            driver.touch(comment_component)
             time.sleep(2)
 
         def step1(driver):
@@ -83,7 +84,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
             driver.swipe_to_home()
 
         start(self.driver)
-        self.execute_step_with_perf(1, step1, 20)
+        self.execute_step_with_perf_and_trace(1, step1, 20)
         finish(self.driver)
 
     def teardown(self):
