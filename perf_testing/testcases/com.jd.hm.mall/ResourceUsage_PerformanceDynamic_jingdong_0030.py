@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -47,8 +48,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
         Step('启动京东应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
-
-
 
         def step1(driver):
             # 点击京东超市
@@ -65,14 +64,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
             # 加入第一个商品到购物车
-            self.driver.touch((1124, 1119))
+            self.driver.touch((1160, 1167))
             self.driver.wait(2)
 
-
-        self.execute_step_with_perf(1, step1, 40)
+        self.execute_step_with_perf_and_trace(1, step1, 40)
 
         # 从购物车移除第一个商品
-        self.driver.touch((972, 1119))
+        self.driver.touch((1005, 1167))
         self.driver.wait(2)
 
 

@@ -43,6 +43,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -62,7 +63,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             Step('京东新品页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
         # 返回首页
         self.driver.swipe_to_back()
@@ -77,15 +78,15 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
         time.sleep(2)
 
         # 点击收藏页第一个商品
-        self.driver.touch((256,980))
+        self.driver.touch((256, 980))
         time.sleep(2)
 
 
         def step2(driver):
-            Step('京东新品页上滑操作')
+            Step('京东收藏页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
 
-        self.execute_step_with_perf(2, step2, 10)
+        self.execute_step_with_perf_and_trace(2, step2, 10)
 
 
     def teardown(self):

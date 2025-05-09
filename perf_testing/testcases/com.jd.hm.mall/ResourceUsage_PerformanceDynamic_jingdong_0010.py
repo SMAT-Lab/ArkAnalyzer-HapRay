@@ -18,7 +18,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1.京东首页-滑动-应用内操作(同时收集perf和trace数据)"
+                "description": "1.京东首页-滑动-应用内操作"
             }
         ]
 

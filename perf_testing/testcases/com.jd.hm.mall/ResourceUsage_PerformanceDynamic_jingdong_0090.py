@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -50,7 +51,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         time.sleep(3)
 
         # 点击搜索框
-        self.driver.touch((494, 314))
+        self.driver.touch((512, 325))
         time.sleep(2)
 
         # 搜索华为手机
@@ -59,11 +60,11 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         time.sleep(2)
 
         # 点击顶部销量，等待2s
-        self.driver.touch((442, 1338))
+        self.driver.touch(BY.text('销量'))
         time.sleep(2)
 
         # 点击第一个商品进入详情页，等待2s
-        self.driver.touch((608, 1888))
+        self.driver.touch((864, 1645))
         time.sleep(2)
 
         # 上划到评价
@@ -72,7 +73,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         def step1(driver):
 
             # 点击全部评价，等待2s
-            self.driver.touch((608, 615))
+            self.driver.touch(BY.text('评价'))
             time.sleep(2)
 
             Step('浏览全部评价，上滑操作')
@@ -81,7 +82,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
 
 
