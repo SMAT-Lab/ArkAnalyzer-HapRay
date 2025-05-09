@@ -71,7 +71,7 @@
         </div>
         <div class="step-name">{{ step.step_name }}</div>
         <div class="step-name">测试轮次：{{ step.round }}</div>
-        <div class="step-name">perf文件位置：{{ step.perf_data_path }}</div>
+        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
       </div>
     </div>
 
@@ -350,6 +350,12 @@ function processJSONData(data: JSONData | null) {
 .step-name {
   font-weight: 500;
   margin-bottom: 12px;
+  white-space: nowrap;
+  /* 禁止文本换行 */
+  overflow: hidden;
+  /* 隐藏超出部分 */
+  text-overflow: ellipsis;
+  /* 显示省略号 */
 }
 
 /* 对比区域样式 */
