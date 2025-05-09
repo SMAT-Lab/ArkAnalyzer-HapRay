@@ -132,7 +132,7 @@
         </div>
         <div class="step-name">{{ step.step_name }}</div>
         <div class="step-name">测试轮次：{{ step.round }}</div>
-        <div class="step-name">perf文件位置：{{ step.perf_data_path }}</div>
+        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
       </div>
     </div>
 
@@ -591,8 +591,8 @@ function mergeSteps(data: JSONData): JSONData {
     step_name: '',
     step_id: 0,
     count: 0,
-    round:-1,
-    perf_data_path:'',
+    round: -1,
+    perf_data_path: '',
     data: []
   };
 
@@ -672,14 +672,14 @@ function selectJSONData(data1: JSONData, data2: JSONData): JSONData {
   let isBase = true;
   // 处理每个 step 中的 data 数组
   mergedSteps.forEach(step => {
-    if(isBase){
-      if(!step.step_name.includes('基线：')){
-        step.step_name = '基线：'+step.step_name;
+    if (isBase) {
+      if (!step.step_name.includes('基线：')) {
+        step.step_name = '基线：' + step.step_name;
       }
       isBase = false;
-    }else{
-      if(!step.step_name.includes('对比：')){
-        step.step_name = '对比：'+step.step_name;
+    } else {
+      if (!step.step_name.includes('对比：')) {
+        step.step_name = '对比：' + step.step_name;
       }
     }
     const dataMap = new Map<number, typeof step.data[0]>();
@@ -861,6 +861,12 @@ function calculatePercentageWithFixed(part: number, total: number, decimalPlaces
 .step-name {
   font-weight: 500;
   margin-bottom: 12px;
+  white-space: nowrap;
+  /* 禁止文本换行 */
+  overflow: hidden;
+  /* 隐藏超出部分 */
+  text-overflow: ellipsis;
+  /* 显示省略号 */
 }
 
 /* 对比区域样式 */
