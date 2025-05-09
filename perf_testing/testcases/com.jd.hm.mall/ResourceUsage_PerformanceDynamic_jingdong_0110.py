@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -49,9 +50,16 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
         self.driver.wait(5)
 
         def step1(driver):
-            time.sleep(30)
+            self.driver.touch(BY.text('直播'))
+            time.sleep(2)
+            self.driver.touch((321, 1173))
+            time.sleep(2)
+            CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
+            CommonUtils.swipes_down_load(self.driver, swip_num=3, sleep=2)
 
-        self.execute_step_with_perf(1, step1, 30)
+
+
+        self.execute_step_with_perf_and_trace(1, step1, 20)
 
 
     def teardown(self):

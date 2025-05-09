@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -49,7 +50,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
         self.driver.wait(5)
         # 点击直播
         self.driver.touch(BY.text('直播'))
-        self.driver.wait(0.5)
+        self.driver.wait(1)
 
 
         def step1(driver):
@@ -58,7 +59,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
             Step('京东直播下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=3, sleep=2)
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
 
 

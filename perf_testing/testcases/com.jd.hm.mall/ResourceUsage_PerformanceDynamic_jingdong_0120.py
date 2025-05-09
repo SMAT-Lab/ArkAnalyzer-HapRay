@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
@@ -48,11 +49,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-
-
         def step1(driver):
             # 点击9.9包邮
-            self.driver.touch((904, 1233))
+            self.driver.touch((938, 1278))
             time.sleep(3)
 
             Step('上滑操作')
@@ -61,7 +60,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
 
 
