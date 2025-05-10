@@ -19,4 +19,6 @@ run_testcases:
   - ResourceUsage_PerformanceDynamic_zhifubao_0020
   - ResourceUsage_PerformanceDynamic_zhifubao_0060
   - ResourceUsage_PerformanceDynamic_zhifubao_0070
+  - ResourceUsage_PerformanceDynamic_zhifubao_0080
+  - ResourceUsage_PerformanceDynamic_zhifubao_0100
   - ResourceUsage_PerformanceDynamic_Douyin_0010
