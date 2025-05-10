@@ -52,6 +52,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         self.driver.swipe_to_home()
@@ -110,10 +111,10 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
                 CommonUtils.swipes_down_load(driver, 1, 2, 300)
 
 
-        self.execute_step_with_perf(1, step1, 10)
-        self.execute_step_with_perf(2, step2, 10)
-        self.execute_step_with_perf(3, step3, 10)
-        self.execute_step_with_perf(4, step4, 20)
+        self.execute_step_with_perf_and_trace(1, step1, 10)
+        self.execute_step_with_perf_and_trace(2, step2, 10)
+        self.execute_step_with_perf_and_trace(3, step3, 10)
+        self.execute_step_with_perf_and_trace(4, step4, 20)
 
     def teardown(self):
         Log.info('teardown')

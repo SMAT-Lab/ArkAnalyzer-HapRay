@@ -40,6 +40,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         self.driver.swipe_to_home()
@@ -91,7 +92,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
             driver.touch(component)
             time.sleep(1)
 
-        self.execute_step_with_perf(1, step1, 40)
+        self.execute_step_with_perf_and_trace(1, step1, 40)
         # 侧滑两次返回
         self.driver.swipe_to_back()
         time.sleep(1)
