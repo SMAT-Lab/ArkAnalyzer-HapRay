@@ -8,7 +8,7 @@ const version = require('./package.json').version;
 class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
-            let dist = path.resolve(__dirname, 'dist');
+            let dist = path.resolve(__dirname, '../perf_testing/toolbox');
             if (!fs.existsSync(dist)) {
                 return;
             }
@@ -55,7 +55,7 @@ module.exports = {
     },
     output: {
         filename: 'hapray-cmd.js',
-        path: path.resolve(__dirname, 'dist'),
+        path: path.resolve(__dirname, '../perf_testing/toolbox'),
     },
     plugins: [
         new CopyPlugin({
