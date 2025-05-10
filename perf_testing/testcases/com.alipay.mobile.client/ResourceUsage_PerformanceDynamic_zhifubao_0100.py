@@ -61,7 +61,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
             Step('1. 支付宝-饿了么 页面浏览 上滑10次，间隔2s')
             for i in range(10):
                 CommonUtils.swipes_up_load(driver, 1, 2, 300)
-                time.sleep(2)
 
         def step2(driver):
             Step('2. 支付宝-饿了么 任意店铺浏览 上滑10次，间隔2s')
@@ -69,7 +68,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
             time.sleep(2)
             for i in range(10):
                 CommonUtils.swipes_up_load(driver, 1, 2, 300)
-                time.sleep(2)
 
         self.execute_step_with_perf_and_trace(1, step1, 30)
         time.sleep(10)
