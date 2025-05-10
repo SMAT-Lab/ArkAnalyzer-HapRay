@@ -44,5 +44,5 @@ cd ArkAnalyzer-HapRay/
 source .venv/bin/activate
 cd perf_testing
 # 根据需要配置 config.yaml 测试用例，不要跑的用例，可以删除或在开头用`#`注释掉
-python main.py
+python scripts/main.py
 ```
