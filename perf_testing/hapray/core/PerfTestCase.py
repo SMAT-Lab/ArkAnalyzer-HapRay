@@ -207,7 +207,7 @@ CONFIG"""
         os.makedirs(output_dir, exist_ok=True)
 
         # 获取 hapray-cmd.js 的绝对路径
-        hapray_cmd_path = os.path.abspath(os.path.join(perf_testing_dir, 'toolbox', 'hapray-cmd.js'))
+        hapray_cmd_path = os.path.abspath(os.path.join(perf_testing_dir, 'hapray-toolbox', 'hapray-cmd.js'))
 
         # 检查 hapray-cmd.js 是否存在
         if not os.path.exists(hapray_cmd_path):

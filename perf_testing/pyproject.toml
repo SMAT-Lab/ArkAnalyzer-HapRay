@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-hapray = "main:main"
+hapray = "scripts.main:main"
 
 [project.urls]
 Homepage = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
@@ -43,14 +43,14 @@ hapray = [
 ]
 
 [tool.setuptools.data-files]
-"toolbox" = [
-    "toolbox/*.js",
-    "toolbox/config/*.json",
-    "toolbox/node_modules/sql.js/dist/*.js",
-    "toolbox/node_modules/sql.js/dist/*.wasm",
-    "toolbox/node_modules/sql.js/*.json",
-    "toolbox/res/*.html",
-    "toolbox/res/**/*.json",
-    "toolbox/third-party/trace_streamer_binary/lib/*.dylib",
-    "toolbox/third-party/trace_streamer_binary/trace_streamer_*"
+"hapray-toolbox" = [
+    "hapray-toolbox/*.js",
+    "hapray-toolbox/config/*.json",
+    "hapray-toolbox/node_modules/sql.js/dist/*.js",
+    "hapray-toolbox/node_modules/sql.js/dist/*.wasm",
+    "hapray-toolbox/node_modules/sql.js/*.json",
+    "hapray-toolbox/res/*.html",
+    "hapray-toolbox/res/**/*.json",
+    "hapray-toolbox/third-party/trace_streamer_binary/lib/*.dylib",
+    "hapray-toolbox/third-party/trace_streamer_binary/trace_streamer_*"
 ]
