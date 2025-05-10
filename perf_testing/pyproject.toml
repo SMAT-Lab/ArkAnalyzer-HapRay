@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arkanayzer-hapray"
+version = "1.0.0"
+description = "HapRay Performance Analysis Toolkit"
+authors = [
+    { name = "Your Name", email = "your@email.com" }
+]
+
+requires-python = ">=3.8"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS"
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "psutil>=5.9.0",
+    "rich>=13.0"
+]
+
+[project.scripts]
+hapray = "main:main"
+
+[project.urls]
+Homepage = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
+Documentation = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/-/wikis"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+hapray = [
+    "core/config/*.yaml",
+    "testcases/**/*.json",
+    "testcases/**/*.py"
+]
+
+[tool.setuptools.data-files]
+"toolbox" = [
+    "toolbox/*.js",
+    "toolbox/config/*.json",
+    "toolbox/node_modules/sql.js/dist/*.js",
+    "toolbox/node_modules/sql.js/dist/*.wasm",
+    "toolbox/node_modules/sql.js/*.json",
+    "toolbox/res/*.html",
+    "toolbox/res/**/*.json",
+    "toolbox/third-party/trace_streamer_binary/lib/*.dylib",
+    "toolbox/third-party/trace_streamer_binary/trace_streamer_*"
+]

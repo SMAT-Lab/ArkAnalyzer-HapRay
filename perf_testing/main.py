@@ -3,27 +3,8 @@ import time
 
 import yaml
 from xdevice.__main__ import main_process
-
-from aw.config.config import Config, ConfigError
-
-
-def load_all_testcases() -> dict:
-    all_testcases = dict()
-    testcases_path = os.path.join(os.path.dirname(__file__), 'testcases')
-    for second_dir in os.listdir(testcases_path):
-        second_path = os.path.join(testcases_path, second_dir)
-
-        if not os.path.isdir(second_path):
-            continue
-        for third_file in os.listdir(second_path):
-            third_path = os.path.join(second_path, third_file)
-
-            if os.path.isdir(third_path) or not third_file.endswith('.py'):
-                continue
-            case_name = os.path.splitext(third_file)[0]
-            all_testcases[case_name] = second_path
-    return all_testcases
-
+from hapray.core.config.config import Config, ConfigError
+from hapray.core.common.CommonUtils import CommonUtils
 
 def main():
     _ = Config()
@@ -31,7 +12,7 @@ def main():
     reports_path = os.path.join(root_path, 'reports')
     time_str = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
-    all_testcases = load_all_testcases()
+    all_testcases = CommonUtils.load_all_testcases()
     config_path = os.path.join(root_path, 'config.yaml')
     try:
         with open(config_path, 'r', encoding='utf-8') as f:

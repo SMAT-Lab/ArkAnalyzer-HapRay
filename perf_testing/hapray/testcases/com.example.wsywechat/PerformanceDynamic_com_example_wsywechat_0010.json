@@ -1,0 +1,16 @@
+{
+  "description": "Config for MeeTimeTest",
+  "environment": [
+    {
+      "type": "device",
+      "label": "phone"
+    }
+  ],
+  "driver": {
+    "type": "DeviceTest",
+    "py_file": [
+      "PerformanceDynamic_com_example_wsywechat_0010.py"
+    ]
+  }
+}
+

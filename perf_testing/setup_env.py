@@ -1,16 +1,18 @@
 import re
 import sys
+import os
 import subprocess
 import platform
 from pathlib import Path
 import zipfile
+from typing import List, Tuple
 
 # Configuration Constants
 VENV_NAME = ".venv"
 VERSION = "5.0.7.200"
 
 # Path Configuration
-CURRENT_DIR = Path(__file__).parent
+CURRENT_DIR = Path(os.path.abspath(Path(__file__).parent))
 HYPIUM_ZIP_PATH = CURRENT_DIR.parent / "third-party" / f"hypium-{VERSION}.zip"
 
 HYPIUM_DIR = f"hypium-{VERSION}"
@@ -49,7 +51,7 @@ def execute_command(command: list, working_dir: Path = None, error_message: str 
         print(f"Error output: {e.stderr}")
         sys.exit(1)
 
-def get_package_files(directory: Path) -> list[Path]:
+def get_package_files(directory: Path) -> List[Path]:
     """Get all .tar.gz and .whl files in the specified directory."""
     return [
         file for file in directory.iterdir() 
@@ -95,7 +97,7 @@ def setup_virtual_environment() -> None:
         error_message="Failed to create virtual environment"
     )
 
-def get_virtualenv_paths() -> tuple[Path, Path]:
+def get_virtualenv_paths() -> Tuple[Path, Path]:
     """Get paths to virtual environment executables."""
     if platform.system() == "Windows":
         python_path = Path(VENV_NAME) / "Scripts" / "python.exe"
