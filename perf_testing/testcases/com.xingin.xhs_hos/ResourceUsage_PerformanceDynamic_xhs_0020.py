@@ -9,7 +9,7 @@ from aw.PerfTestCase import PerfTestCase, Log
 from aw.common.CommonUtils import CommonUtils
 
 
-class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -20,7 +20,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1. 观看长视频"
+                "description": "1. 搜索 穿搭图片"
             }
         ]
 
@@ -49,24 +49,22 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-        # 首页点击 ”我“
-        self.driver.touch(BY.text('我'))
-        time.sleep(1)
-        # ”我“ 页面点击“收藏”
-        self.driver.touch(BY.text('收藏'))
-        time.sleep(1)
-
         def step1(driver):
-            Step('点击收藏的视频链接“一口气看完历史上最荒唐的王朝北齐！”，观看30s')
+            Step('1. 搜索 穿搭图片')
 
-            # 1. 点击顶部隐藏tab页进入直播页，等待2s
-            # driver.touch((950, 2126))
-            driver.touch((941, 1970)) # Mate70 Mate60Pro
-            time.sleep(30)
+            # 点击右上角搜索，停留1s
+            # driver.touch((1215， 205))
+            driver.touch((1169, 195)) # Mate60Pro  Mate70
+            time.sleep(1)
+            for i in range(3):
+                driver.input_text((300, 200), '穿搭图片')
+                time.sleep(1)
+                driver.touch(BY.text('搜索'))
+                time.sleep(2)
+                driver.swipe_to_back()
+                time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
-        self.driver.swipe_to_back()
-        time.sleep(1)
+        self.execute_step_with_perf_and_trace(1, step1, 20)
 
     def teardown(self):
         Log.info('teardown')

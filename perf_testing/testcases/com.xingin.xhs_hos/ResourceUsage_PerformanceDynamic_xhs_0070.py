@@ -40,6 +40,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         self.driver.swipe_to_home()
@@ -89,7 +90,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
             if time_end - time_start < 30:
                 time.sleep(30 - (time_end - time_start))
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
