@@ -13,7 +13,7 @@ class PackPlugin {
                 return;
             }
 
-            const outputName = path.resolve(__dirname, `Hapray-Toolbox_V${version}.zip`);
+            const outputName = path.resolve(__dirname, `hapray-toolbox_v${version}.zip`);
             const outpuZipStream = fs.createWriteStream(outputName);
             const archive = archiver('zip');
             archive.pipe(outpuZipStream);
