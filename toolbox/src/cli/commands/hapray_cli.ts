@@ -23,6 +23,7 @@ import { GlobalConfig } from '../../config/types';
 import { initConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { getFirstLevelFolders } from '../../utils/folder_utils';
+import { saveJsonArray } from '../../utils/json_utils';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -43,6 +44,12 @@ export interface TestInfo {
     app_version: string;
     scene: string;
     timestamp: number;
+}
+
+export interface RoundInfo {
+    step_name: string,
+    step_id: number,
+    round: number,
 }
 
 // 定义整个 steps 数组的结构
@@ -134,7 +141,7 @@ async function main(input: string): Promise<void> {
         stepsCollect.push(stepItem);
     }
 
-    saveReport(output, testInfo, paths, stepsCollect);
+    await saveReport(output, testInfo, paths, stepsCollect);
 }
 
 function replaceAndWriteToNewFile(
@@ -153,7 +160,7 @@ function replaceAndWriteToNewFile(
     }
 }
 
-function saveReport(output: string, testInfo: TestInfo, perfPaths: string[], steps: StepItem[]) {
+async function saveReport(output: string, testInfo: TestInfo, perfPaths: string[], steps: StepItem[]): Promise<void> {
     let res = path.join(__dirname, 'res');
     if (!fs.existsSync(res)) {
         res = path.join(__dirname, '../../../res');
@@ -174,7 +181,18 @@ function saveReport(output: string, testInfo: TestInfo, perfPaths: string[], ste
     };
     let jsContent = JSON.stringify(jsonObject, null, 0);
     replaceAndWriteToNewFile(htmlTemplate, output, 'JSON_DATA_PLACEHOLDER', jsContent);
-    return;
+
+    let roundsJsonObject: RoundInfo[] = []
+    steps.forEach(step => {
+        const roundJsonObject: RoundInfo = {
+            step_name: step.step_name,
+            step_id: step.step_id,
+            round: step.round,
+        }
+        roundsJsonObject.push(roundJsonObject);
+    })
+    await saveJsonArray(roundsJsonObject, path.join(output, '../rounds_info.json'));
+
 }
 
 export const HaprayCli = new Command('hapray').version(VERSION).addCommand(DbtoolsCli);
