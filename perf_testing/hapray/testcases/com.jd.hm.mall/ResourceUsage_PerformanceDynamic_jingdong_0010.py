@@ -21,6 +21,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
                 "description": "1.京东首页-滑动-应用内操作"
             }
         ]
+        
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:

@@ -6,7 +6,7 @@ from devicetest.core.test_case import Step
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
-
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
 
@@ -22,6 +22,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
                 "description": "1.京东9.9包邮场景，进入9.9页面，等3s，上滑3次，下滑3次，每次停留2s"
             }
         ]
+
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -49,18 +53,22 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
         self.driver.wait(5)
 
         def step1(driver):
-            # 点击9.9包邮
-            self.driver.touch((938, 1278))
-            time.sleep(3)
+            # 点击9.9包邮第一个商品
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=938,  # 原始x坐标
+                y=1278,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
+            time.sleep(2)
 
             Step('上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
             Step('下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-
         self.execute_step_with_perf_and_trace(1, step1, 30)
-
 
 
     def teardown(self):

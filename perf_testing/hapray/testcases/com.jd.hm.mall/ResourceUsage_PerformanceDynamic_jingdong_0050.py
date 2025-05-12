@@ -22,6 +22,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
                 "description": "1.京东观看直播场景，上滑3次，下滑3次"
             }
         ]
+        
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
