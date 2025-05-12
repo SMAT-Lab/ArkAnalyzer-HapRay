@@ -2,7 +2,6 @@
 import os
 import time
 
-from Python311.Lib.asyncio import sleep
 from devicetest.core.test_case import Step
 from hypium import BY
 
