@@ -39,6 +39,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         self.driver.swipe_to_home()
@@ -70,7 +71,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
             time.sleep(10)
             driver.swipe_to_home()
 
-        self.execute_step_with_perf(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
         finish(self.driver)
 
     def teardown(self):
