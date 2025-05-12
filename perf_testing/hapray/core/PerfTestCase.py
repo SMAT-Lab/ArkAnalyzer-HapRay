@@ -148,7 +148,7 @@ class PerfTestCase(TestCase):
   config_data {{
    is_root: false
    outfile_name: "{output_path}"
-   record_args: "-f 1000 -p {pid} --cpu-limit 100 -e raw-instruction-retired --call-stack fp --clockid monotonic --kernel-callchain -m 256"
+   record_args: "-p {pid} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
   }}
  }}
 CONFIG"""
