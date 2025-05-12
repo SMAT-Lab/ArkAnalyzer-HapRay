@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
@@ -23,6 +24,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
                 "description": "1.京东观看直播场景，上滑3次，下滑3次"
             }
         ]
+        
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -52,15 +57,18 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
         def step1(driver):
             self.driver.touch(BY.text('直播'))
             time.sleep(2)
-            self.driver.touch((321, 1173))
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=321,  # 原始x坐标
+                y=1173,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
             CommonUtils.swipes_down_load(self.driver, swip_num=3, sleep=2)
 
-
-
         self.execute_step_with_perf_and_trace(1, step1, 20)
-
 
     def teardown(self):
         Log.info('teardown')

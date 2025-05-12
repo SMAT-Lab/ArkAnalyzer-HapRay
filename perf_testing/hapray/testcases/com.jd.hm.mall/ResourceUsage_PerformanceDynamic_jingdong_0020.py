@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
@@ -27,6 +28,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
                 "description": "2.京东商品详情页-向上滑动3次"
             }
         ]
+        
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -78,7 +83,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
         time.sleep(2)
 
         # 点击收藏页第一个商品
-        self.driver.touch((256, 980))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=256,  # 原始x坐标
+            y=980,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
 
 
