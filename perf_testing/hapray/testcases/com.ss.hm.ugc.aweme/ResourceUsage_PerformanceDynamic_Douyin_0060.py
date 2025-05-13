@@ -8,6 +8,7 @@ from hypium.model import UiParam
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
@@ -24,9 +25,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
                 "description": "1. 抖音-热点、关注、朋友tab页切换场景"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -57,7 +61,8 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
         Step('1. 抖音-热点、关注、朋友tab页切换场景')
         component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
         for _ in range(3):
-            self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
+            self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1),
+                              swipe_time=0.4)
             time.sleep(2)
             component_hotspots = self.driver.find_component(BY.id('home-top-tab-text-homepage_pad_hot'))
             if component_hotspots:
@@ -66,14 +71,23 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
         if not component_follow:
             component_follow = self.driver.find_component(BY.text('关注'))
         if not component_follow:
-            component_follow = (1050, 205)
+            component_follow = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1050,  # 原始x坐标
+                y=205,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height)
 
         component_friend = self.driver.find_component(BY.id('main-bottom-tab-text-homepage_familiar'))
         if not component_friend:
             component_friend = self.driver.find_component(BY.text('朋友'))
             if not component_friend:
-                component_friend = (400, 2640)
-
+                component_friend = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=400,  # 原始x坐标
+                    y=2640,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
 
         def step1(driver):
             # 1. 点击热点
@@ -99,7 +113,6 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
             # 6. 朋友页面上滑3次，间隔2秒
             for _ in range(3):
                 CommonUtils.swipes_up_load(driver, 1, 2, 300)
-
 
         def finish(driver):
             driver.swipe_to_back()
