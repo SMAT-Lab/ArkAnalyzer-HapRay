@@ -6,6 +6,7 @@ from devicetest.core.test_case import Step
 from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
@@ -30,9 +31,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
                 "description": "3. 点击开始拍摄，拍摄15s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -71,7 +75,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
             Step('2. 点击滤镜图标、点击底部第一个滤镜高清')
             component = driver.find_component(BY.text('滤镜'))
             if not component:
-                component = (1218, 1417)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=1218,  # 原始x坐标
+                    y=1417,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(4)
 
@@ -80,7 +89,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
                 point = component.getBoundsCenter()
                 component = (point.x, point.y - 200)
             else:
-                component = (156, 2511)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=156,  # 原始x坐标
+                    y=2511,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(3)
 
@@ -88,7 +102,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
             Step('3. 点击开始拍摄，拍摄15s')
             component = driver.find_component(BY.id('shoot'))
             if not component:
-                component = (658, 2307)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=658,  # 原始x坐标
+                    y=2307,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(15)
 
@@ -101,11 +120,21 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
         start(self.driver)
         self.execute_step_with_perf_and_trace(1, step1, 10)
         self.execute_step_with_perf_and_trace(2, step2, 10)
-        self.driver.touch((600, 600))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=600,  # 原始x坐标
+            y=600,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height))
         time.sleep(2)
         self.execute_step_with_perf_and_trace(3, step3, 20)
 
-        self.driver.touch((600, 600))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=600,  # 原始x坐标
+            y=600,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height))
         finish(self.driver)
 
     def teardown(self):
