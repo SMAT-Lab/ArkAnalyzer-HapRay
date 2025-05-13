@@ -6,6 +6,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
@@ -22,6 +23,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
                 "description": "1.京东超市购物-点击3次，滑动8次"
             }
         ]
+        
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -63,16 +68,26 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
             # 加入第一个商品到购物车
-            self.driver.touch((1160, 1167))
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1160,  # 原始x坐标
+                y=1167,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             self.driver.wait(2)
 
         self.execute_step_with_perf_and_trace(1, step1, 40)
 
         # 从购物车移除第一个商品
-        self.driver.touch((1005, 1167))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1005,  # 原始x坐标
+            y=1167,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         self.driver.wait(2)
-
-
 
     def teardown(self):
         Log.info('teardown')

@@ -36,9 +36,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
                 "description": "4. 点击长视频"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -53,6 +56,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         Step('启动被测应用')

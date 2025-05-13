@@ -27,9 +27,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0040(PerfTestCase):
                 "description": "2. 直播页签上滑5次，每次等待10s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -44,6 +47,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0040(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         def start(driver):

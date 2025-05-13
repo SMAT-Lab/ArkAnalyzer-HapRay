@@ -148,7 +148,7 @@ class PerfTestCase(TestCase):
   config_data {{
    is_root: false
    outfile_name: "{output_path}"
-   record_args: "-f 1000 -p {pid} --cpu-limit 100 -e raw-instruction-retired --call-stack fp --clockid monotonic --kernel-callchain -m 256"
+   record_args: "-p {pid} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
   }}
  }}
 CONFIG"""
@@ -161,7 +161,7 @@ CONFIG"""
         driver.shell(cmd, timeout=120)
 
     @staticmethod
-    def _generate_hapray_report(scene_dirs: list[str], scene_dir: str) -> bool:
+    def generate_hapray_report(scene_dirs: list[str], scene_dir: str) -> bool:
         if not scene_dirs:
             Log.error("Error: scene_dirs length is 0!")
             return False

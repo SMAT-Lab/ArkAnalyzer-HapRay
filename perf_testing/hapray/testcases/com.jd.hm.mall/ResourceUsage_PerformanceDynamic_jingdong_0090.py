@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
@@ -23,6 +24,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
                 "description": "1.京东-浏览评价页面：点击一次，滑动10次"
             }
         ]
+
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -50,12 +55,35 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         self.driver.wait(5)
         time.sleep(3)
 
-        # 点击搜索框
-        self.driver.touch((512, 325))
+        # 点击收藏页第一个商品
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=512,  # 原始x坐标
+            y=325,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
+        time.sleep(2)
+
+        # 点击收藏页第二个商品
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=864,  # 原始x坐标
+            y=1645,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
 
         # 搜索华为手机
-        self.driver.input_text((525, 198), '华为手机')
+        search_coords = CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=525,  # 原始x坐标
+            y=198,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        )
+        self.driver.input_text(search_coords, '华为手机')
         self.driver.touch(BY.text('搜索'))
         time.sleep(2)
 
@@ -64,7 +92,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         time.sleep(2)
 
         # 点击第一个商品进入详情页，等待2s
-        self.driver.touch((864, 1645))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=864,  # 原始x坐标
+            y=1645,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
 
         # 上划到评价

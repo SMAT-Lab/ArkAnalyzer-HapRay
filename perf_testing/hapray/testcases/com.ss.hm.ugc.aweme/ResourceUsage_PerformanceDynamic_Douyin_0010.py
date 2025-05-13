@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
@@ -27,9 +28,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
                 "description": "2. 观看历史上滑5次，每次等待1s;观看历史下滑5次，每次等待1s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -44,6 +48,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         def start(driver):
@@ -69,7 +74,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
             Step('1. 抖音“我”页面点击观看历史，等待2s')
             component = driver.find_component(BY.text('观看历史'))
             if not component:
-                component = (758, 726)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=758,  # 原始x坐标
+                    y=726,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(2)
 

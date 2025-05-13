@@ -143,7 +143,9 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         self.execute_step_with_perf_and_trace(3, step3, 30)
         time.sleep(10)
         # 点击右上角
-        self.driver.touch((1184, 213))
+        # self.driver.touch((1184, 213))
+        self.driver.touch((1175, 197)) # Mate60Pro
+        # self.driver.touch((1131, 184))  # Mate70
         time.sleep(2)
         # 点击左上角返回蚂蚁庄园
         self.driver.touch((387, 628))

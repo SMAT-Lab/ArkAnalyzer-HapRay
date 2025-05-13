@@ -6,6 +6,7 @@ from devicetest.core.test_case import Step
 from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
@@ -22,6 +23,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
                 "description": "1.京东超市购物-点击3次，滑动8次"
             }
         ]
+
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -53,10 +58,22 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
             self.driver.touch(BY.text('购物车'))
             self.driver.wait(0.5)
             # 选中购物车提前预置的商品
-            self.driver.touch((85, 709))
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=85,  # 原始x坐标
+                y=709,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             # 点击去结算
-            self.driver.touch((1029, 2389))
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1029,  # 原始x坐标
+                y=2389,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
 
         self.execute_step_with_perf_and_trace(1, step1, 15)
@@ -65,10 +82,14 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
         self.driver.swipe_to_back()
         self.driver.wait(2)
         # 取消选中购物车提前预置的商品
-        self.driver.touch((85, 709))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=85,  # 原始x坐标
+            y=709,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         self.driver.wait(2)
-
-
 
     def teardown(self):
         Log.info('teardown')
