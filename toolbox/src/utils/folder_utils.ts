@@ -112,14 +112,14 @@ async function copyFile(
   const targetExists = fs.existsSync(targetPath);
   
   if (targetExists && !overwrite) {
-    console.log(`跳过已有文件: ${targetPath}`);
+    logger.info(`跳过已有文件: ${targetPath}`);
     return;
   }
 
   await ensureDirectoryExists(path.dirname(targetPath));
 
   await fs.promises.copyFile(sourcePath, targetPath);
-  console.log(`复制文件: ${sourcePath} -> ${targetPath}`);
+  logger.info(`复制文件: ${sourcePath} -> ${targetPath}`);
 
   if (preserveTimestamps) {
     const stat = await fs.promises.stat(sourcePath);

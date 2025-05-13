@@ -192,7 +192,7 @@ function replaceAndWriteToNewFile(
 
         fs.writeFileSync(outputPath, updatedContent, 'utf-8');
     } catch (error) {
-        console.error('replaceAndWriteToNewFile:', error);
+        logger.error('replaceAndWriteToNewFile:', error);
     }
 }
 
