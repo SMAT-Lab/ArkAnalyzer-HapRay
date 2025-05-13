@@ -8,14 +8,14 @@ import zipfile
 from typing import List, Tuple
 
 # Version requirements
-REQUIRED_PYTHON_VERSION = (3, 10)
-MAX_PYTHON_VERSION = (3, 13)  # Allow up to Python 3.12
+MIN_PYTHON_VERSION = (3, 9)
+MAX_PYTHON_VERSION = (3, 12)
 
 def check_python_version():
     """Check if the current Python version meets the requirements."""
     current_version = sys.version_info[:2]
-    if current_version < REQUIRED_PYTHON_VERSION or current_version >= MAX_PYTHON_VERSION:
-        print(f"Error: Python version must be between {REQUIRED_PYTHON_VERSION[0]}.{REQUIRED_PYTHON_VERSION[1]} and {MAX_PYTHON_VERSION[0]}.{MAX_PYTHON_VERSION[1]-1}")
+    if not (MIN_PYTHON_VERSION <= current_version <= MAX_PYTHON_VERSION):
+        print(f"Error: Python version must be between {MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]} and {MAX_PYTHON_VERSION[0]}.{MAX_PYTHON_VERSION[1]}")
         print(f"Current Python version: {current_version[0]}.{current_version[1]}")
         sys.exit(1)
 
