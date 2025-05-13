@@ -20,24 +20,6 @@ def merge_folders(source_folders, target_folder, overwrite=False, dry_run=False)
     if not dry_run:
         os.makedirs(target_folder, exist_ok=True)
 
-    report_path = os.path.join(source_folders[0], 'report')
-
-    try:
-        # 读取所有 JSON 对象
-        objects = read_json_arrays_from_dir(report_path)
-
-        # 打印结果统计
-        print(f"\n共读取 {len(objects)} 个步骤的轮次信息")
-
-
-        if objects:
-            for obj in objects:
-                print(json.dumps(obj, ensure_ascii=False, indent=2))
-
-    except FileNotFoundError as e:
-        print(e)
-
-
     # 遍历每个源文件夹
     for source in source_folders:
         if not os.path.exists(source):

@@ -22,7 +22,7 @@ import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { initConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
-import { getFirstLevelFolders } from '../../utils/folder_utils';
+import { copyDirectory, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -55,8 +55,16 @@ export interface RoundInfo {
 // 定义整个 steps 数组的结构
 export type Steps = Step[];
 
-function getPerfPaths(inputPath: string, steps: Steps): string[] {
+function getPerfDataPaths(inputPath: string, steps: Steps): string[] {
+    return steps.map((step) => path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`, 'perf.data'));
+}
+
+function getPerfDbPaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`, 'perf.db'));
+}
+
+function getHtracePaths(inputPath: string, steps: Steps): string[] {
+    return steps.map((step) => path.join(inputPath, 'htrace', `step${step.stepIdx.toString()}`, 'trace.htrace'));
 }
 
 // async function main(config: GlobalConfig): Promise<void> {
@@ -69,7 +77,11 @@ async function main(input: string): Promise<void> {
         return;
     }
     logger.info(`Input dir is: ${input}`);
-    const roundFolders = getFirstLevelFolders(input);
+    const roundFolders = getSceneRoundsFolders(input);
+    if (roundFolders.length === 0) {
+        logger.error(input + '一轮测试信息都没有,无法生成报告！');
+        return;
+    }
     let output = path.join(input, 'report');
     if (!fs.existsSync(output)) {
         logger.info(`Creating output dir: ${output}`);
@@ -77,72 +89,96 @@ async function main(input: string): Promise<void> {
     }
     output = path.join(input, 'report', 'hapray_report.html');
     // load testinfo.json
-    let rawData = fs.readFileSync(path.join(roundFolders[0], '../', 'testInfo.json'), 'utf8');
+    let rawData = fs.readFileSync(path.join(roundFolders[0], 'testInfo.json'), 'utf8');
     const testInfo: TestInfo = JSON.parse(rawData);
 
     // load steps.json
-    rawData = fs.readFileSync(path.join(roundFolders[0], '../', 'hiperf', 'steps.json'), 'utf8');
+    rawData = fs.readFileSync(path.join(roundFolders[0], 'hiperf', 'steps.json'), 'utf8');
     const steps: Steps = JSON.parse(rawData);
-    let paths = getPerfPaths(roundFolders[0], steps);
+    let perfDataPaths = getPerfDataPaths(input, steps);
+    let perfDbPaths = getPerfDbPaths(input, steps);
+    let htracePaths = getHtracePaths(input, steps);
     let stepsCollect: StepItem[] = [];
 
     for (let i = 0; i < steps.length; i++) {
         let stepItem: StepItem;
         let result: number[] = [];
         let perfAnalyzer = new PerfAnalyzer('');
-        let dbPaths = [];
-        let tracePaths = [];
-        for (let index = 0; index < roundFolders.length; index++) {
-            const roundFolder = roundFolders[index];
+        let dbPaths: string[] = [];
+        let tracePaths: string[] = [];
+        let choose = 0;
+        let tracePath = '';
+        let dbPath = '';
+        if (roundFolders.length >= 5) {
+            for (let index = 0; index < roundFolders.length; index++) {
+                const roundFolder = roundFolders[index];
 
-            let tracePath = path.join(roundFolder, '../', 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
-            let dbPath = path.join(roundFolder, '../', 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
+                tracePath = path.join(roundFolders[index], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
+                dbPath = path.join(roundFolders[index], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
+                if (!fs.existsSync(dbPath)) {
+                    traceStreamerCmd(tracePath, dbPath);
+                }
+                dbPaths.push(dbPath);
+                tracePaths.push(tracePath);
+
+                const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
+                result[index] = sum;
+                logger.info(roundFolder + '步骤：' + i + '轮次：' + index + '负载总数:' + sum);
+            }
+            let total = 0;
+            let max = Math.max(...result);
+            let min = Math.min(...result);
+            result.map((v) => (total += v));
+            let avg = (total - max - min) / (result.length - 2);
+
+
+            let skipMax = false;
+            let skipMin = false;
+            let diffMin = max;
+
+            for (let idx = 0; idx < result.length; idx++) {
+                const v = result[idx];
+                if (v === max && !skipMax) {
+                    skipMax = true;
+                    continue;
+                }
+                if (v === min && !skipMin) {
+                    skipMin = true;
+                    continue;
+                }
+                let diff = Math.abs(v - avg);
+                if (diff < diffMin) {
+                    diffMin = diff;
+                    choose = idx;
+                }
+            }
+        } else {
+            tracePath = path.join(roundFolders[0], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
+            dbPath = path.join(roundFolders[0], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
             if (!fs.existsSync(dbPath)) {
                 traceStreamerCmd(tracePath, dbPath);
             }
             dbPaths.push(dbPath);
             tracePaths.push(tracePath);
-            const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
-            result[index] = sum;
         }
 
-
-        let total = 0;
-        let max = Math.max(...result);
-        let min = Math.min(...result);
-        result.map((v) => (total += v));
-        let avg = (total - max - min) / (result.length - 2);
-
-        let choose = 0;
-        let skipMax = false;
-        let skipMin = false;
-        let diffMin = max;
-
-        for (let idx = 0; idx < result.length; idx++) {
-            const v = result[idx];
-            if (v === max && !skipMax) {
-                skipMax = true;
-                continue;
-            }
-            if (v === min && !skipMin) {
-                skipMin = true;
-                continue;
-            }
-            let diff = Math.abs(v - avg);
-            if (diff < diffMin) {
-                diffMin = diff;
-                choose = idx;
-            }
-        }
-        logger.info(dbPaths[choose] + ' : setp' + (i + 1) + ' select round' + choose + ' .');
+        logger.info(dbPaths[choose] + ' : setp' + i + ' select round' + choose + ' .');
+        //将hiperf和htrace文件复制到最终目录
+        const choosePerfDir = path.join(roundFolders[choose], 'hiperf', `step${steps[i].stepIdx.toString()}`);
+        const chooseHtraceDir = path.join(roundFolders[choose], 'htrace', `step${steps[i].stepIdx.toString()}`);
+        const scenePerfDir = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`);
+        const sceneHtraceDir = path.join(input, 'htrace', `step${steps[i].stepIdx.toString()}`);
+        await copyDirectory(choosePerfDir, scenePerfDir);
+        await copyDirectory(chooseHtraceDir, sceneHtraceDir);
         stepItem = await perfAnalyzer.analyze2(dbPaths[choose], testInfo.app_id, steps[i]);
         stepItem.round = choose;
         stepItem.perf_data_path = tracePaths[choose];
         stepsCollect.push(stepItem);
     }
 
-    await saveReport(output, testInfo, paths, stepsCollect);
+    await saveReport(output, testInfo, perfDataPaths, perfDbPaths, htracePaths, stepsCollect);
 }
+
 
 function replaceAndWriteToNewFile(
     inputPath: string,
@@ -160,7 +196,7 @@ function replaceAndWriteToNewFile(
     }
 }
 
-async function saveReport(output: string, testInfo: TestInfo, perfPaths: string[], steps: StepItem[]): Promise<void> {
+async function saveReport(output: string, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepItem[]): Promise<void> {
     let res = path.join(__dirname, 'res');
     if (!fs.existsSync(res)) {
         res = path.join(__dirname, '../../../res');
@@ -173,7 +209,9 @@ async function saveReport(output: string, testInfo: TestInfo, perfPaths: string[
         app_version: testInfo.app_version,
         scene: testInfo.scene,
         timestamp: testInfo.timestamp,
-        perfPath: perfPaths,
+        perfDataPath: perfDataPaths,
+        perfDbPath: perfDbPaths,
+        htracePath: htracePaths,
         categories: getComponentCategories()
             .filter((category) => category.id >= 0)
             .map((category) => category.name),
