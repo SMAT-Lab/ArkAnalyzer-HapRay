@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 export interface JSONData {
+  rom_version:string;
   app_id: string;
   app_name: string;
   app_version: string;

@@ -14,12 +14,14 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
+          <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
           <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
           <el-descriptions-item label="场景名称：">{{ performanceData.scene }}</el-descriptions-item>
         </el-descriptions>
       </el-col>
       <el-col :span="12">
         <el-descriptions :title="comparePerformanceData.name" :column="1" class="beautified-descriptions">
+          <el-descriptions-item label="系统版本：">{{ comparePerformanceData.rom_version }}</el-descriptions-item>
           <el-descriptions-item label="应用版本：">{{ comparePerformanceData.version }}</el-descriptions-item>
           <el-descriptions-item label="场景名称：">{{ comparePerformanceData.scene }}</el-descriptions-item>
         </el-descriptions>
@@ -130,7 +132,7 @@
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
         </div>
-        <div class="step-name" :title="step.step_name" >{{ step.step_name }}</div>
+        <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <div class="step-name">测试轮次：{{ step.round }}</div>
         <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
       </div>
@@ -372,6 +374,7 @@ const getTotalTestStepsCount = (testSteps: any[]) => {
 };
 
 const performanceData = ref({
+  rom_version: json!.rom_version,
   id: json!.app_id,
   name: json!.app_name,
   version: json!.app_version,
@@ -397,6 +400,7 @@ const performanceData = ref({
 });
 
 const comparePerformanceData = ref({
+  rom_version: compareJson!.rom_version,
   id: compareJson!.app_id,
   name: compareJson!.app_name,
   version: compareJson!.app_version,
@@ -790,8 +794,8 @@ function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
     baseCount += count1;
     compareCount += count2;
   });
-   
-  difference.splice(0,0,{ category: '总值', diff: compareCount-baseCount, percentage: calculatePercentageWithFixed(compareCount - baseCount, baseCount) });
+
+  difference.splice(0, 0, { category: '总值', diff: compareCount - baseCount, percentage: calculatePercentageWithFixed(compareCount - baseCount, baseCount) });
 
   return difference;
 }
