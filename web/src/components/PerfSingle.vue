@@ -12,6 +12,7 @@
         WEB => 三方框架ArkWeb</p>
     </div>
     <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
+      <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
       <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
       <el-descriptions-item>
         <div class="description-item-content">
@@ -69,7 +70,7 @@
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
         </div>
-        <div class="step-name" :title="step.step_name" >{{ step.step_name }}</div>
+        <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <div class="step-name">测试轮次：{{ step.round }}</div>
         <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
       </div>
@@ -148,6 +149,7 @@ const getTotalTestStepsCount = (testSteps: any[]) => {
 };
 
 const performanceData = ref({
+  rom_version: json!.rom_version,
   id: json!.app_id,
   name: json!.app_name,
   version: json!.app_version,
@@ -158,6 +160,7 @@ const performanceData = ref({
         subItem.files.map((file) => ({
           stepId: step.step_id,
           instructions: file.count,
+          compareInstructions: -1,
           name: file.file,
           category: json!.categories[item.category],
         }))
