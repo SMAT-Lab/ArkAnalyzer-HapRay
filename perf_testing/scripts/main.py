@@ -17,7 +17,7 @@ def main():
     time_str = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
     all_testcases = CommonUtils.load_all_testcases()
-    config_path = os.path.join(root_path, '../', 'config.yaml')
+    config_path = os.path.join(root_path, 'config.yaml')
     scene_round_dirs = []
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -33,7 +33,7 @@ def main():
                 merge_folder_path = os.path.join(reports_path, time_str, case_name)
                 merge_folders(scene_round_dirs, merge_folder_path)
                 # 生成 HapRay 报告
-                PerfTestCase._generate_hapray_report(scene_round_dirs, merge_folder_path)
+                PerfTestCase.generate_hapray_report(scene_round_dirs, merge_folder_path)
                 scene_round_dirs.clear()
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")

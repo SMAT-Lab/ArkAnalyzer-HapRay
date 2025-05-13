@@ -36,9 +36,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
                 "description": "4. 点击长视频"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property

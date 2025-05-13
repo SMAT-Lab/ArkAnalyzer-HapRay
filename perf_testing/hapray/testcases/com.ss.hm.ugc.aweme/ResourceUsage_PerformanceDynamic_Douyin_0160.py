@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0160(PerfTestCase):
@@ -27,9 +28,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0160(PerfTestCase):
                 "description": "2. 观看收藏的5个固定图文轮播视频，每个观看10s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -67,7 +71,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0160(PerfTestCase):
             time.sleep(2)
 
             # 4. 点击进入第一个视频
-            driver.touch((235, 2020))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=235,  # 原始x坐标
+                y=2020,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height))
             time.sleep(2)
 
         def step1(driver):
