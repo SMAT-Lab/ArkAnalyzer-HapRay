@@ -38,7 +38,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="对比指令数" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="对比指令数" width="160" prop="compareInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
@@ -90,6 +90,7 @@ interface DataItem {
   name: string
   category: string
   instructions: number
+  compareInstructions:number
 }
 
 const props = defineProps({
@@ -218,7 +219,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['name', 'category', 'instructions'];
+  const validKeys: SortKey[] = ['name', 'category', 'instructions','compareInstructions'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
