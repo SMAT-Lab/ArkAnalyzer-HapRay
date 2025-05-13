@@ -6,7 +6,9 @@ export interface JSONData {
   app_version: string;
   scene: string;
   timestamp: number;
-  perfPath: string[];
+  perfDataPath: string[],
+  perfDbPath: string[],
+  htracePath: string[],
   categories: string[];
   steps: {
     step_name: string;
@@ -39,7 +41,9 @@ export interface MergeJSONData {
   app_version: string;
   scene: string;
   timestamp: number;
-  perfPath: string[];
+  perfDataPath: string[],
+  perfDbPath: string[],
+  htracePath: string[],
   categories: string[];
   steps: {
     step_name: string;
