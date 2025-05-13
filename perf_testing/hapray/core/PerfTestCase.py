@@ -295,9 +295,6 @@ CONFIG"""
         # 保存测试信息
         self._save_test_info()
 
-        # 生成 HapRay 报告
-        # PerfTestCase._generate_hapray_report(self.report_path)
-
     def _save_perf_data(self, device_file, step_id):
         """保存性能数据"""
 
