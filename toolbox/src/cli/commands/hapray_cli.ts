@@ -109,7 +109,7 @@ async function main(input: string): Promise<void> {
         let choose = 0;
         let tracePath = '';
         let dbPath = '';
-        if (roundFolders.length >= 5) {
+        if (roundFolders.length >= 3) {
             for (let index = 0; index < roundFolders.length; index++) {
                 const roundFolder = roundFolders[index];
 
