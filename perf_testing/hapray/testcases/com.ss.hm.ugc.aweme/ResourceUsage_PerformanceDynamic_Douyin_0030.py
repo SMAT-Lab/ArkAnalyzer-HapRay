@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
@@ -31,9 +32,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
                 "description": "3. 点击输入框，收起输入框，反复操作10次，每次间隔1s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -51,7 +55,13 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
-        comment_component = (1187, 1750)
+        comment_component = CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1187,  # 原始x坐标
+            y=1750,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height)
+
         def start(driver):
 
             # 1. 打开抖音，等待 5s
@@ -61,7 +71,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
             # 2. 搜索“李点点简笔画”， 进入该主页
             component = driver.find_component(BY.id('topTabsRightSlot'))
             if not component:
-                component = (1228, 200)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=1228,  # 原始x坐标
+                    y=200,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(1)
             driver.input_text(BY.type('TextInput'), '李点点简笔画')
@@ -69,17 +84,33 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
 
             component = driver.find_component(BY.id('search_button'))
             if not component:
-                component = (1196, 196)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=1196,  # 原始x坐标
+                    y=196,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(3)
             component = driver.find_component(BY.text('李点点'))
             if not component:
-                component = (306, 411)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=306,  # 原始x坐标
+                    y=411,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component)
             time.sleep(5)
 
             # 3. 点开置顶的第一个视频（内容为画篮球，排球，足球，棒球);
-            driver.touch((200, 2000))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=200,  # 原始x坐标
+                y=2000,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height))
+
             time.sleep(3)
 
         def step1(driver):
@@ -88,7 +119,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
             time.sleep(2)
 
             # 点击空白处，收起评论界面
-            driver.touch((630, 338))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=630,  # 原始x坐标
+                y=338,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height))
             time.sleep(2)
 
         def step2(driver):
@@ -105,8 +141,18 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
             Step('3. 点击输入框，收起输入框，反复操作10次，每次间隔1s')
             component = driver.find_component(BY.text('善语结善缘，恶语伤人心'))
             if not component:
-                component = (150, 2594)
-            component2 = (630, 338)
+                component = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=150,  # 原始x坐标
+                    y=2594,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
+            component2 = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=630,  # 原始x坐标
+                y=338,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height)
 
             for _ in range(10):
                 driver.touch(component)
