@@ -7,7 +7,7 @@ from xdevice.__main__ import main_process
 from hapray.core.PerfTestCase import PerfTestCase
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
-from scripts.merge_folders import merge_folders
+from hapray.core.common.merge_folders import merge_folders
 
 
 def main():
