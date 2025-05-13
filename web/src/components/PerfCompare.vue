@@ -777,7 +777,8 @@ function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
 
   // 合并所有存在的 category（包括两个 Map 中的所有键）
   const allCategories = new Set([...categoryMap1.keys(), ...categoryMap2.keys()]);
-
+  let baseCount = 0;
+  let compareCount = 0;
   allCategories.forEach(category => {
     const count1 = categoryMap1.get(category) || 0; // 不存在时默认 0
     const count2 = categoryMap2.get(category) || 0;
@@ -786,7 +787,11 @@ function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
     diff.diff = count2 - count1;
     diff.percentage = calculatePercentageWithFixed(count2 - count1, count1);
     difference.push(diff);
+    baseCount += count1;
+    compareCount += count2;
   });
+   
+  difference.splice(0,0,{ category: '总值', diff: compareCount-baseCount, percentage: calculatePercentageWithFixed(compareCount - baseCount, baseCount) });
 
   return difference;
 }

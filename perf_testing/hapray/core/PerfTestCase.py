@@ -161,7 +161,11 @@ CONFIG"""
         driver.shell(cmd, timeout=120)
 
     @staticmethod
-    def _generate_hapray_report(scene_dir: str) -> bool:
+    def _generate_hapray_report(scene_dirs: list[str], scene_dir: str) -> bool:
+        if not scene_dirs:
+            Log.error("Error: scene_dirs length is 0!")
+            return False
+
         """
         执行 hapray 命令生成性能分析报告
         :param scene_dir: 场景目录路径，例如 perf_output/wechat002 或完整路径
@@ -267,8 +271,10 @@ CONFIG"""
                 Log.error(f"Command stderr: {e.stderr}")
             return False
         except FileNotFoundError:
-            Log.error("Error: Node.js command not found. Please make sure Node.js is installed and in your PATH.")
+            Log.error(
+                "Error: Node.js command not found. Please make sure Node.js is installed and in your PATH.")
             return False
+
 
     def make_reports(self):
         # 读取配置文件中的步骤信息
@@ -290,7 +296,7 @@ CONFIG"""
         self._save_test_info()
 
         # 生成 HapRay 报告
-        PerfTestCase._generate_hapray_report(self.report_path)
+        # PerfTestCase._generate_hapray_report(self.report_path)
 
     def _save_perf_data(self, device_file, step_id):
         """保存性能数据"""
@@ -455,7 +461,7 @@ CONFIG"""
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
-        
+
         # 创建并启动同时收集perf和trace的线程
         cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration)
         perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
@@ -528,4 +534,3 @@ CONFIG"""
     def _get_app_pid(self) -> int:
         pid_cmd = f"pidof {self.app_package}"
         return int(self.driver.shell(pid_cmd).strip())
-
