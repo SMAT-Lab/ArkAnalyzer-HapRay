@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
@@ -23,6 +24,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
                 "description": "1.京东-搜索商品购物"
             }
         ]
+        
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1212
+        self.source_screen_height = 2616
 
     @property
     def steps(self) -> []:
@@ -52,7 +57,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
 
         def step1(driver):
             # 点击搜索框
-            self.driver.touch((512, 325))
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=512,  # 原始x坐标
+                y=325,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
 
             # 搜索华为手机

@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
@@ -23,9 +24,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
                 "description": "1. 搜索列表上滑10次，下滑10次，每次间隔1s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -40,6 +44,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         def start(driver):
@@ -56,7 +61,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
             # 2. 点击搜索框，输入【与辉同行】
             component_search = driver.find_component(BY.id('topTabsRightSlot'))
             if not component_search:
-                component_search = (1228, 200)
+                component_search = CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=1228,  # 原始x坐标
+                    y=200,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height)
             driver.touch(component_search)
             time.sleep(2)
 

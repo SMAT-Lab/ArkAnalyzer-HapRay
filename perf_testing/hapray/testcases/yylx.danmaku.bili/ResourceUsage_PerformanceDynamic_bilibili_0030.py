@@ -47,6 +47,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         def step1(driver):
@@ -117,8 +118,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
 
         # 竖屏视频播放30s
         self.execute_step_with_perf_and_trace(1, step1, 30)
-        self.execute_step_with_perf(2, step2, 40)
-        self.execute_step_with_perf(3, step3, 40)
+        self.execute_step_with_perf_and_trace(2, step2, 40)
+        self.execute_step_with_perf_and_trace(3, step3, 40)
 
         # 侧滑4次返回哔哩哔哩首页
         for i in range(4):

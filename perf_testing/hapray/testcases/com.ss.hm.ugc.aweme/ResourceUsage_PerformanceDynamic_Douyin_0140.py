@@ -8,6 +8,7 @@ from hypium.model import UiParam
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
@@ -28,9 +29,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
                 "description": "2. 点击下一个热榜跳转视频，每次间隔10s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -45,6 +49,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         def start(driver):
@@ -67,12 +72,22 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
             time.sleep(5)
 
             # 2. 点击第一个抖音热榜进入视频页，点击进入第一个视频
-            driver.touch((269, 520))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=269,  # 原始x坐标
+                y=520,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height))
             time.sleep(2)
 
         def step1(driver):
             Step('1. 点击底部热榜，左右拖滑切换tab页5次，每次间隔2s')
-            driver.touch((520, 2620))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=520,  # 原始x坐标
+                y=2620,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height))
             time.sleep(2)
 
             for _ in range(5):
@@ -84,7 +99,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
         def step2(driver):
             Step('2. 点击下一个热榜跳转视频，每次间隔10s')
             for _ in range(5):
-                driver.touch((1196, 2621))
+                driver.touch(CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=1196,  # 原始x坐标
+                    y=2621,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height))
                 time.sleep(10)
 
         def finish(driver):

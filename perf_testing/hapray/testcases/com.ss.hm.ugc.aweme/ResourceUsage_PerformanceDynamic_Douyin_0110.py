@@ -6,6 +6,7 @@ from devicetest.core.test_case import Step
 from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
@@ -22,9 +23,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
                 "description": "1. 点击评论区图片放大、侧滑缩小各5次，每次间隔1s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Pura 70 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2844
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list[dict[str, str]]:
         return self._steps
 
     @property
@@ -39,6 +43,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         def start(driver):
@@ -61,18 +66,33 @@ class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
             time.sleep(2)
 
             # 4. 点击第一个视频
-            driver.touch((222, 1877))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=222,  # 原始x坐标
+                y=1877,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height))
             time.sleep(2)
 
             # 5. 点击评论区
-            comment_component = (1187, 1750)
+            comment_component = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1187,  # 原始x坐标
+                y=1750,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height)
             driver.touch(comment_component)
             time.sleep(2)
 
         def step1(driver):
             Step('1. 点击评论区图片放大、侧滑缩小各5次，每次间隔1s')
             for _ in range(5):
-                driver.touch((427, 1465))
+                driver.touch(CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=427,  # 原始x坐标
+                    y=1465,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height))
                 time.sleep(1)
                 driver.swipe_to_back()
                 time.sleep(1)
