@@ -75,7 +75,7 @@ export async function copyDirectory(
   } = options;
 
   if (!fs.existsSync(sourceDir)) {
-    throw new Error(`源目录不存在: ${sourceDir}`);
+    logger.error(`源目录不存在: ${sourceDir}`);
   }
 
   await ensureDirectoryExists(targetDir);

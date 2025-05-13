@@ -16,6 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
+import { DOMParser } from 'xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { getComponentCategories } from '../../core/component';
 import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
@@ -50,6 +51,11 @@ export interface RoundInfo {
     step_name: string,
     step_id: number,
     round: number,
+}
+
+export interface ResultInfo {
+    rom_version: string;
+    device_sn: string;
 }
 
 // 定义整个 steps 数组的结构
@@ -88,6 +94,42 @@ async function main(input: string): Promise<void> {
         fs.mkdirSync(output, { recursive: true });
     }
     output = path.join(input, 'report', 'hapray_report.html');
+
+    //load result.xml
+    let resultXml = path.join(input, 'result', path.basename(input) + '.xml');
+    let resultInfo: ResultInfo = { rom_version: '', device_sn: '' };
+    if (!fs.existsSync(resultXml)) {
+        logger.error('load' + resultXml + ':失败！');
+    } else {
+        try {
+            // 使用 DOMParser 解析 XML字符串
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(fs.readFileSync(resultXml, 'utf-8'), 'text/xml');
+
+            // 获取 testsuites 元素
+            const testsuitesElement = xmlDoc.getElementsByTagName('testsuites')[0];
+
+            // 提取starttime 属性
+            let devicesAttr = testsuitesElement.getAttribute('devices');
+
+            if (!devicesAttr) {
+                logger.error('parse' + resultXml + ':失败！');
+            } else {
+                const devices = JSON.parse(
+                    devicesAttr
+                        .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
+                        .replace(/^\[+/, '')
+                        .replace(/]+$/, '')
+                        .replace(/\\"/g, '"')
+                        .replace(/'/g, '"'));
+                resultInfo.rom_version = devices.version;
+                resultInfo.device_sn = devices.sn;
+            }
+        } catch (error) {
+            logger.error('parse' + resultXml + ':失败！');
+        }
+    }
+
     // load testinfo.json
     let rawData = fs.readFileSync(path.join(roundFolders[0], 'testInfo.json'), 'utf8');
     const testInfo: TestInfo = JSON.parse(rawData);
@@ -176,7 +218,7 @@ async function main(input: string): Promise<void> {
         stepsCollect.push(stepItem);
     }
 
-    await saveReport(output, testInfo, perfDataPaths, perfDbPaths, htracePaths, stepsCollect);
+    await saveReport(output, resultInfo, testInfo, perfDataPaths, perfDbPaths, htracePaths, stepsCollect);
 }
 
 
@@ -196,7 +238,7 @@ function replaceAndWriteToNewFile(
     }
 }
 
-async function saveReport(output: string, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepItem[]): Promise<void> {
+async function saveReport(output: string, resultInfo: ResultInfo, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepItem[]): Promise<void> {
     let res = path.join(__dirname, 'res');
     if (!fs.existsSync(res)) {
         res = path.join(__dirname, '../../../res');
@@ -204,6 +246,7 @@ async function saveReport(output: string, testInfo: TestInfo, perfDataPaths: str
     let htmlTemplate = path.join(res, 'report_template.html');
 
     const jsonObject = {
+        rom_version: resultInfo.rom_version,
         app_id: testInfo.app_id,
         app_name: testInfo.app_name,
         app_version: testInfo.app_version,
