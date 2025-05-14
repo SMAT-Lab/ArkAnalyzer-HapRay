@@ -27,18 +27,20 @@
         </el-descriptions>
       </el-col>
     </el-row>
+    <!--场景负载饼状图 -->
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="totalPieData" />
+          <PieChart :chart-data="scenePieData" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="compareTotalPieData" />
+          <PieChart :chart-data="compareScenePieData" />
         </div>
       </el-col>
     </el-row>
+    <!-- 场景负载增长卡片 -->
     <el-row :gutter="20">
       <el-col :span="24">
 
@@ -64,7 +66,7 @@
         </div>
       </el-col>
     </el-row>
-
+    <!-- 场景负载对比折线图 -->
     <el-row :gutter="20">
       <el-col :span="24">
         <div class="data-panel">
@@ -72,6 +74,7 @@
         </div>
       </el-col>
     </el-row>
+    <!-- 步骤负载排名横向柱状图 -->
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
@@ -84,6 +87,7 @@
         </div>
       </el-col>
     </el-row>
+    <!-- 步骤负载柱状图 -->
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
@@ -96,6 +100,7 @@
         </div>
       </el-col>
     </el-row>
+    <!-- 步骤负载折线图 -->
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
@@ -153,6 +158,7 @@
         </div>
       </el-col>
     </el-row>
+    <!-- 步骤负载增长卡片 -->
     <el-row :gutter="20">
       <el-col :span="24">
 
@@ -178,6 +184,7 @@
         </div>
       </el-col>
     </el-row>
+    <!-- 步骤负载对比折线图-->
     <el-row :gutter="20">
       <el-col :span="24">
         <div class="data-panel">
@@ -188,7 +195,7 @@
     </el-row>
     <el-row :gutter="20">
       <el-col :span="24">
-        <!-- 文件负载 -->
+        <!-- 文件负载表格 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
@@ -199,7 +206,7 @@
     </el-row>
     <el-row :gutter="20">
       <el-col :span="24">
-        <!-- 函数负载 -->
+        <!-- 函数负载表格 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
@@ -210,7 +217,7 @@
     </el-row>
     <el-row :gutter="20">
       <el-col :span="12">
-        <!-- 基线函数负载 -->
+        <!-- 基线函数负载top10表格 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">基线函数负载top10</span>
@@ -219,7 +226,7 @@
         </div>
       </el-col>
       <el-col :span="12">
-        <!-- 对比函数负载 -->
+        <!-- 对比函数负载top10表格 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">对比函数负载top10</span>
@@ -246,10 +253,12 @@ interface SceneLoadDiff {
   diff: number;
   percentage: string;
 }
+//初始化数据
 const isHidden = false;
 const hidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
+const currentStepIndex = ref(0);
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -351,27 +360,6 @@ function mergeJSONData(jsonData: JSONData, compareJSONData: JSONData): MergeJSON
 
   return mergedData;
 }
-console.log('从元素获取到的 JSON 数据:');
-
-const testSteps = ref(
-  json!.steps.map((step, index) => ({
-    //从1开始
-    id: index + 1,
-    step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
-  }))
-);
-
-const getTotalTestStepsCount = (testSteps: any[]) => {
-  let total = 0;
-
-  testSteps.forEach((step) => {
-    total += step.count;
-  });
-  return total;
-};
 
 const performanceData = ref({
   rom_version: json!.rom_version,
@@ -388,6 +376,8 @@ const performanceData = ref({
             stepId: step.step_id,
             instructions: symbol.count!,
             compareInstructions: 0,
+            increaseInstructions: 0,
+            increasePercentage: 0,
             name: symbol.symbol,
             file: file.file,
             category: compareJson!.categories[item.category],
@@ -414,6 +404,8 @@ const comparePerformanceData = ref({
             stepId: step.step_id,
             instructions: symbol.count!,
             compareInstructions: 0,
+            increaseInstructions: 0,
+            increasePercentage: 0,
             name: symbol.symbol,
             file: file.file,
             category: compareJson!.categories[item.category],
@@ -435,8 +427,10 @@ const mergedFilesPerformanceData = ref({
       item.subData.flatMap((subItem) =>
         subItem.files.map((file) => ({
           stepId: step.step_id,
-          instructions: file.count!,
+          instructions: file.count || 0,
           compareInstructions: file.compareCount || 0,
+          increaseInstructions: (file.compareCount || 0) - (file.count || 0),
+          increasePercentage: calculatePercentageWithFixed((file.compareCount || 0) - (file.count || 0), file.count || 0),
           name: file.file,
           category: mergedJson!.categories[item.category],
         }))
@@ -457,8 +451,10 @@ const mergedSymbolsPerformanceData = ref({
           file.symbols.map((symbol) =>
           ({
             stepId: step.step_id,
-            instructions: symbol.count!,
+            instructions: symbol.count || 0,
             compareInstructions: symbol.compareCount || 0,
+            increaseInstructions: (symbol.compareCount || 0) - (symbol.count || 0),
+            increasePercentage: calculatePercentageWithFixed((symbol.compareCount || 0) - (symbol.count || 0), symbol.count || 0),
             name: symbol.symbol,
             file: file.file,
             category: mergedJson!.categories[item.category],
@@ -471,27 +467,49 @@ const mergedSymbolsPerformanceData = ref({
 });
 
 
-const currentStepIndex = ref(0);
+// 场景负载对比折线图
+const compareSceneLineChartData = ref();
+compareSceneLineChartData.value = selectJSONData(mergeSteps(json!), mergeSteps(compareJson!));
+
+// 场景负载饼状图
+const scenePieData = ref();
+const compareScenePieData = ref();
+scenePieData.value = processJSONData(json);
+compareScenePieData.value = processJSONData(compareJson);
+// 场景负载增长卡片
+const sceneDiff = ref();
+sceneDiff.value = calculateCategoryCountDifference(compareSceneLineChartData.value);
+
+
+
+//测试步骤导航卡片
+const testSteps = ref(
+  json!.steps.map((step, index) => ({
+    //从1开始
+    id: index + 1,
+    step_name: step.step_name,
+    count: step.count,
+    round: step.round,
+    perf_data_path: step.perf_data_path,
+  }))
+);
+
+// 全部步骤负载总数 
+const getTotalTestStepsCount = (testSteps: any[]) => {
+  let total = 0;
+
+  testSteps.forEach((step) => {
+    total += step.count;
+  });
+  return total;
+};
 
 // 格式化持续时间的方法
 const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
 };
 
-const totalPieData = ref();
-const stepPieData = ref();
-const compareStepPieData = ref();
-const compareTotalPieData = ref();
-const compareSceneLineChartData = ref();
-const compareLineChartData = ref();
-
-totalPieData.value = processJSONData(json);
-compareTotalPieData.value = processJSONData(compareJson);
-stepPieData.value = processJSONData(json);
-compareStepPieData.value = processJSONData(compareJson);
-compareSceneLineChartData.value = selectJSONData(mergeSteps(json!), mergeSteps(compareJson!));
-compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : selectJSONData(json!, compareJson!);
-// 处理步骤点击事件的方法
+// 处理步骤点击事件的方法，切换步骤，更新数据
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
   stepPieData.value = processJSONData(json);
@@ -500,7 +518,22 @@ const handleStepClick = (stepId: any) => {
   stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 };
 
-// 计算属性，根据当前步骤 ID 过滤性能数据
+// 性能对比区域
+// 基线步骤饼图
+const stepPieData = ref();
+stepPieData.value = processJSONData(json);
+// 对比步骤饼图
+const compareStepPieData = ref();
+compareStepPieData.value = processJSONData(compareJson);
+// 步骤负载对比折线图
+const compareLineChartData = ref();
+compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : selectJSONData(json!, compareJson!);
+//步骤负载增长卡片
+const stepDiff = ref();
+stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
+
+
+// 文件负载表格
 const filteredFilesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
     return mergedFilesPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
@@ -509,7 +542,7 @@ const filteredFilesPerformanceData = computed(() => {
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
-
+// 函数负载表格
 const filteredSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
     return mergedSymbolsPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
@@ -518,7 +551,7 @@ const filteredSymbolsPerformanceData = computed(() => {
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
-
+// 基线函数负载top10表格
 const filteredBaseSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
     return performanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
@@ -527,7 +560,7 @@ const filteredBaseSymbolsPerformanceData = computed(() => {
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
-
+// 对比函数负载top10表格
 const filteredCompareSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
     return comparePerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
@@ -536,6 +569,7 @@ const filteredCompareSymbolsPerformanceData = computed(() => {
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
+
 
 // 处理 JSON 数据生成steps饼状图所需数据
 function processJSONData(data: JSONData | null) {
@@ -753,11 +787,8 @@ function selectJSONData(data1: JSONData, data2: JSONData): JSONData {
     steps: mergedSteps
   };
 }
-const sceneDiff = ref();
-const stepDiff = ref();
 
-sceneDiff.value = calculateCategoryCountDifference(compareSceneLineChartData.value);
-stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
+
 function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
   if (data === undefined) {
     return [];
@@ -789,24 +820,24 @@ function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
     let diff: SceneLoadDiff = { category: '', diff: 0, percentage: '' };
     diff.category = data.categories[category];
     diff.diff = count2 - count1;
-    diff.percentage = calculatePercentageWithFixed(count2 - count1, count1);
+    diff.percentage = calculatePercentageWithFixed(count2 - count1, count1) + '%';
     difference.push(diff);
     baseCount += count1;
     compareCount += count2;
   });
 
-  difference.splice(0, 0, { category: '总值', diff: compareCount - baseCount, percentage: calculatePercentageWithFixed(compareCount - baseCount, baseCount) });
+  difference.splice(0, 0, { category: '总值', diff: compareCount - baseCount, percentage: calculatePercentageWithFixed(compareCount - baseCount, baseCount) + '%' });
 
   return difference;
 }
 
-function calculatePercentageWithFixed(part: number, total: number, decimalPlaces: number = 2): string {
+function calculatePercentageWithFixed(part: number, total: number, decimalPlaces: number = 2): number {
   if (total === 0) {
     //throw new Error('总值不能为零');
-    return 0 + '%';
+    total = 1;
   }
   const percentage = (part / total) * 100;
-  return percentage.toFixed(decimalPlaces) + '%';
+  return Number.parseFloat(percentage.toFixed(decimalPlaces));
 }
 </script>
 
