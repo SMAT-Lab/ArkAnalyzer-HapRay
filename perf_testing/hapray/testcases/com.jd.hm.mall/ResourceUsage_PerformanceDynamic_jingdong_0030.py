@@ -49,7 +49,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
     def process(self):
         self.driver.swipe_to_home()
 
-        Step('启动京东应用')
+        # Step('启动京东应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
@@ -62,9 +62,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             self.driver.touch(BY.text('粮油调味'))
             self.driver.wait(2)
 
-            Step('粮油调味页上滑操作')
+            # Step('粮油调味页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
-            Step('粮油调味页下滑操作')
+            # Step('粮油调味页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
             # 加入第一个商品到购物车

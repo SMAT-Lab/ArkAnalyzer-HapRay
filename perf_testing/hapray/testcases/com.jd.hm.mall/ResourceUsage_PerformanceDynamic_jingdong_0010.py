@@ -48,14 +48,14 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
     def process(self):
         self.driver.swipe_to_home()
 
-        Step('启动被测应用')
+        # Step('启动被测应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
         def step1(driver):
-            Step('京东首页上滑操作')
+            # Step('京东首页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=5, sleep=2)
-            Step('京东首页下滑操作')
+            # Step('京东首页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
         self.execute_step_with_perf_and_trace(1, step1, 30)
