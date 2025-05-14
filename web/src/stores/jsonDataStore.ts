@@ -101,9 +101,15 @@ export const useFileNameQueryStore = defineStore('fileNameQuery', {
   })
 });
 
-
-export const useCategoryStore = defineStore('fileNameQuery', {
+export const useSymbolNameQueryStore = defineStore('symbolNameQuery', {
   state: () => ({
-    categoryQuery: '' as string,
+    symbolNameQuery: '' as string,
+  })
+});
+
+
+export const useCategoryStore = defineStore('categoryNameQuery', {
+  state: () => ({
+    categoriesQuery: '' as string,
   })
 });
