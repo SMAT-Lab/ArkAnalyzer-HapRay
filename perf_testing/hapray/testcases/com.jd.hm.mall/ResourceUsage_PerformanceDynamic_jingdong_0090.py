@@ -50,26 +50,16 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
     def process(self):
         self.driver.swipe_to_home()
 
-        Step('启动京东应用')
+        # Step('启动京东应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
         time.sleep(3)
 
-        # 点击收藏页第一个商品
+        #点击搜索框
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
             x=512,  # 原始x坐标
             y=325,  # 原始y坐标
-            source_width=self.source_screen_width,
-            source_height=self.source_screen_height
-        ))
-        time.sleep(2)
-
-        # 点击收藏页第二个商品
-        self.driver.touch(CoordinateAdapter.convert_coordinate(
-            self.driver,
-            x=864,  # 原始x坐标
-            y=1645,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
         ))
@@ -89,13 +79,14 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
 
         # 点击顶部销量，等待2s
         self.driver.touch(BY.text('销量'))
-        time.sleep(2)
+
+        time.sleep(3)
 
         # 点击第一个商品进入详情页，等待2s
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
-            x=864,  # 原始x坐标
-            y=1645,  # 原始y坐标
+            x=231,  # 原始x坐标
+            y=1956,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
         ))
@@ -110,15 +101,12 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
             self.driver.touch(BY.text('评价'))
             time.sleep(2)
 
-            Step('浏览全部评价，上滑操作')
+            # Step('浏览全部评价，上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=5, sleep=2)
-            Step('浏览全部评价，下滑操作')
+            # Step('浏览全部评价，下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-
         self.execute_step_with_perf_and_trace(1, step1, 30)
-
-
 
     def teardown(self):
         Log.info('teardown')
