@@ -54,7 +54,7 @@ class PerfTestCase(TestCase):
             str: 完整的 hiperf 命令
         """
         cmd = f"hiperf record -p {pid} -o {output_path} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
-        Log.debug(f"\n[DEBUG] Hiperf Command: {cmd}\n")  # 添加调试输出
+        # Log.debug(f"\n[DEBUG] Hiperf Command: {cmd}\n")  # 添加调试输出
         return cmd
 
     @staticmethod
@@ -152,7 +152,7 @@ class PerfTestCase(TestCase):
   }}
  }}
 CONFIG"""
-        Log.debug(f"\n[DEBUG] Hiprofiler Command: {cmd}\n")
+        # Log.debug(f"\n[DEBUG] Hiprofiler Command: {cmd}\n")
         return cmd
 
     @staticmethod
@@ -274,7 +274,6 @@ CONFIG"""
             Log.error(
                 "Error: Node.js command not found. Please make sure Node.js is installed and in your PATH.")
             return False
-
 
     def make_reports(self):
         # 读取配置文件中的步骤信息
@@ -443,6 +442,7 @@ CONFIG"""
             action_func: 要执行的动作函数
             duration: 数据采集持续时间（秒）
         """
+        import threading
         # 设置当前步骤的输出路径
         output_file = f"/data/local/tmp/hiperf_step{step_id}.data"
 
@@ -459,7 +459,7 @@ CONFIG"""
 
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
 
-        # 创建并启动同时收集perf和trace的线程
+        # 启动采集线程
         cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration)
         perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
         perf_trace_thread.start()
@@ -471,8 +471,13 @@ CONFIG"""
         perf_trace_thread.join()
         Log.info(f'execute_step_with_perf_and_trace thread end')
 
-        # 保存性能数据和htrace数据
-        self._save_perf_and_htrace_data(output_file, step_id)
+        # 保存性能数据和htrace数据（异步）
+        def save_data_async():
+            self._save_perf_and_htrace_data(output_file, step_id)
+
+        save_thread = threading.Thread(target=save_data_async)
+        save_thread.start()
+        # 不等待 save_thread，主流程直接返回
 
     def _save_test_info(self):
         """
