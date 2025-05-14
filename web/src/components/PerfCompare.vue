@@ -217,6 +217,26 @@
     </el-row>
     <el-row :gutter="20">
       <el-col :span="12">
+        <!-- 新增文件负载表格 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">新增文件负载表格</span>
+          </h3>
+          <PerfTable :stepId="currentStepIndex" :data="increaseFilesPerformanceData" :hideColumn="hidden" />
+        </div>
+      </el-col>
+      <el-col :span="12">
+        <!-- 新增符号负载表格 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">新增符号负载表格</span>
+          </h3>
+          <PerfSymbolTable :stepId="currentStepIndex" :data="increaseSymbolsPerformanceData" :hideColumn="hidden" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="12">
         <!-- 基线函数负载top10表格 -->
         <div class="data-panel">
           <h3 class="panel-title">
@@ -241,8 +261,8 @@
 
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue';
-import PerfTable from './PerfTable.vue';
-import PerfSymbolTable from './PerfSymbolTable.vue';
+import PerfTable, { type FileDataItem } from './PerfTable.vue';
+import PerfSymbolTable, { type SymbolDataItem } from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
@@ -265,101 +285,501 @@ const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
 const json = jsonDataStore.jsonData;
 const compareJson = jsonDataStore.compareJsonData;
-const mergedJson = mergeJSONData(json!, compareJson!);
-// 合并函数
-function mergeJSONData(jsonData: JSONData, compareJSONData: JSONData): MergeJSONData {
-  const mergedData: MergeJSONData = {
-    ...jsonData,
-    steps: []
-  };
 
-  const stepMap = new Map<number, typeof compareJSONData.steps[0]>();
-  compareJSONData.steps.forEach(step => {
-    stepMap.set(step.step_id, step);
-  });
 
-  jsonData.steps.forEach(step => {
-    const compareStep = stepMap.get(step.step_id);
-    const mergedStep = {
-      ...step,
-      compareCount: compareStep?.count || -1
-    };
+const fileDataItem: FileDataItem[] = convertToFileDataItem(json!, compareJson!);
+const symbolDataItem: SymbolDataItem[] = convertToSymbolDataItem(json!, compareJson!);
 
-    type DataItem = JSONData['steps'][0]['data'][0];
-    const dataMap = new Map<number, DataItem>();
-    if (compareStep) {
-      compareStep.data.forEach(dataItem => {
-        dataMap.set(dataItem.category, dataItem);
+const increaseFile: FileDataItem[] = collectZeroToNonZeroFiles(json!, compareJson!);
+const increaseSymbol: SymbolDataItem[] = collectZeroToNonZeroSymbols(json!, compareJson!);
+
+
+/**
+ * 将 JSONData 转换为 FileDataItem 数组（解析到file层，包含两个数据源的所有文件）
+ */
+function convertToFileDataItem(
+  data: JSONData,
+  compareData?: JSONData
+): FileDataItem[] {
+  const dataItems: FileDataItem[] = [];
+
+  // 创建主数据源的步骤映射
+  const primaryStepMap = new Map<number, JSONData['steps'][0]>(
+    data.steps.map(step => [step.step_id, step])
+  );
+
+  // 创建对比数据源的步骤映射
+  const compareStepMap = compareData
+    ? new Map<number, JSONData['steps'][0]>(
+      compareData.steps.map(step => [step.step_id, step])
+    )
+    : null;
+
+  // 获取所有步骤ID的并集
+  const allStepIds = new Set([
+    ...primaryStepMap.keys(),
+    ...(compareStepMap?.keys() || [])
+  ]);
+
+  // 处理每个步骤
+  allStepIds.forEach(stepId => {
+    const primaryStep = primaryStepMap.get(stepId);
+    const compareStep = compareStepMap?.get(stepId);
+
+    // 创建category到dataItem的映射
+    const primaryDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
+    if (primaryStep) {
+      primaryStep.data.forEach(item => {
+        primaryDataMap.set(item.category, item);
       });
     }
 
-    mergedStep.data = step.data.map(dataItem => {
-      const compareDataItem = dataMap.get(dataItem.category);
-      const mergedDataItem = {
-        ...dataItem,
-        compareCount: compareDataItem?.count
-      };
+    const compareDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
+    if (compareStep) {
+      compareStep.data.forEach(item => {
+        compareDataMap.set(item.category, item);
+      });
+    }
 
-      type SubDataItem = DataItem['subData'][0];
-      const subDataMap = new Map<string, SubDataItem>();
-      if (compareDataItem) {
-        compareDataItem.subData.forEach(subDataItem => {
-          subDataMap.set(subDataItem.name, subDataItem);
+    // 获取所有category的并集
+    const allCategories = new Set([
+      ...primaryDataMap.keys(),
+      ...compareDataMap.keys()
+    ]);
+
+    // 处理每个category
+    allCategories.forEach(category => {
+      const categoryName = data.categories[category] || `category_${category}`;
+      const primaryDataItem = primaryDataMap.get(category);
+      const compareDataItem = compareDataMap.get(category);
+
+      // 创建subDataName到subDataItem的映射
+      const primarySubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
+      if (primaryDataItem) {
+        primaryDataItem.subData.forEach(item => {
+          primarySubDataMap.set(item.name, item);
         });
       }
 
-      mergedDataItem.subData = dataItem.subData.map(subDataItem => {
-        const compareSubDataItem = subDataMap.get(subDataItem.name);
-        const mergedSubDataItem = {
-          ...subDataItem,
-          compareCount: compareSubDataItem?.count
-        };
+      const compareSubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
+      if (compareDataItem) {
+        compareDataItem.subData.forEach(item => {
+          compareSubDataMap.set(item.name, item);
+        });
+      }
 
-        type FileItem = SubDataItem['files'][0];
-        const fileMap = new Map<string, FileItem>();
-        if (compareSubDataItem) {
-          compareSubDataItem.files.forEach(fileItem => {
-            fileMap.set(fileItem.file, fileItem);
+      // 获取所有subDataName的并集
+      const allSubDataNames = new Set([
+        ...primarySubDataMap.keys(),
+        ...compareSubDataMap.keys()
+      ]);
+
+      // 处理每个subData
+      allSubDataNames.forEach(subDataName => {
+        const primarySubData = primarySubDataMap.get(subDataName);
+        const compareSubData = compareSubDataMap.get(subDataName);
+
+        // 创建fileName到fileItem的映射
+        const primaryFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
+        if (primarySubData) {
+          primarySubData.files.forEach(item => {
+            primaryFileMap.set(item.file, item);
           });
         }
 
-        mergedSubDataItem.files = subDataItem.files.map(fileItem => {
-          const compareFileItem = fileMap.get(fileItem.file);
-          const mergedFileItem = {
-            ...fileItem,
-            compareCount: compareFileItem?.count
-          };
+        const compareFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
+        if (compareSubData) {
+          compareSubData.files.forEach(item => {
+            compareFileMap.set(item.file, item);
+          });
+        }
 
-          type SymbolItem = FileItem['symbols'][0];
-          const symbolMap = new Map<string, SymbolItem>();
-          if (compareFileItem) {
-            compareFileItem.symbols.forEach(symbolItem => {
-              symbolMap.set(symbolItem.symbol, symbolItem);
+        // 获取所有fileName的并集
+        const allFileNames = new Set([
+          ...primaryFileMap.keys(),
+          ...compareFileMap.keys()
+        ]);
+
+        // 处理每个文件
+        allFileNames.forEach(fileName => {
+          const primaryFile = primaryFileMap.get(fileName);
+          const compareFile = compareFileMap.get(fileName);
+
+          // 计算指令数（如果文件不存在，指令数为0）
+          const instructions = primaryFile
+            ? primaryFile.symbols.reduce((sum, symbol) => sum + symbol.count, 0)
+            : 0;
+
+          const compareInstructions = compareFile
+            ? compareFile.symbols.reduce((sum, symbol) => sum + symbol.count, 0)
+            : 0;
+
+          const increaseInstructions = compareInstructions - instructions;
+          const increasePercentage = calculatePercentageWithFixed(increaseInstructions, instructions);
+
+          dataItems.push({
+            stepId,
+            name: fileName,
+            category: categoryName,
+            instructions,
+            compareInstructions,
+            increaseInstructions,
+            increasePercentage: Number(increasePercentage.toFixed(2))
+          });
+        });
+      });
+    });
+  });
+
+  return dataItems;
+}
+
+
+
+/**
+ * 收集 data 中指令数为 0 但 compareData 中指令数不为 0 的文件层级信息
+ * @param data JSONData 数据源
+ * @param compareData 对比数据源
+ * @returns 符合条件的文件层级 FileDataItem 数组
+ */
+function collectZeroToNonZeroFiles(
+  data: JSONData,
+  compareData: JSONData
+): FileDataItem[] {
+  const dataItems: FileDataItem[] = [];
+
+  // 构建主数据源的文件映射（stepId-category-subDataName-file → 指令数）
+  const primaryFileMap = buildFileInstructionMap(data);
+
+  // 遍历对比数据源的所有文件
+  compareData.steps.forEach(step => {
+    step.data.forEach(dataItem => {
+      const categoryName = compareData.categories[dataItem.category] || `category_${dataItem.category}`;
+
+      dataItem.subData.forEach(subData => {
+        subData.files.forEach(file => {
+          // 构建文件唯一标识
+          const fileKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}`;
+
+          // 计算文件在对比数据源中的总指令数
+          const compareInstructions = file.symbols.reduce(
+            (sum, symbol) => sum + symbol.count,
+            0
+          );
+
+          // 跳过对比数据源中指令数为0的文件
+          if (compareInstructions === 0) return;
+
+          // 获取主数据源中该文件的指令数
+          const instructions = primaryFileMap.get(fileKey) || 0;
+
+          // 仅收集主数据源中指令数为0，对比数据源中不为0的文件
+          if (instructions === 0) {
+            dataItems.push({
+              stepId: step.step_id,
+              name: file.file,
+              category: categoryName,
+              instructions: compareInstructions,
+              compareInstructions,
+              increaseInstructions: compareInstructions, // 增长值等于对比值
+              increasePercentage: Infinity // 无限增长（从0到非0）
+            });
+          }
+        });
+      });
+    });
+  });
+
+  return dataItems;
+}
+
+/**
+ * 构建文件指令数映射
+ */
+function buildFileInstructionMap(data: JSONData): Map<string, number> {
+  const fileMap = new Map<string, number>();
+
+  data.steps.forEach(step => {
+    step.data.forEach(dataItem => {
+      dataItem.subData.forEach(subData => {
+        subData.files.forEach(file => {
+          const fileKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}`;
+          const instructions = file.symbols.reduce(
+            (sum, symbol) => sum + symbol.count,
+            0
+          );
+          fileMap.set(fileKey, instructions);
+        });
+      });
+    });
+  });
+
+  return fileMap;
+}
+
+
+
+
+
+
+
+/**
+ * 将 JSONData 转换为 SymbolDataItem 数组（解析到symbol层，包含文件信息）
+ * @param data JSONData 数据源
+ * @param compareData 对比数据源（可选）
+ * @returns 转换后的 SymbolDataItem 数组
+ */
+function convertToSymbolDataItem(
+  data: JSONData,
+  compareData?: JSONData
+): SymbolDataItem[] {
+  const dataItems: SymbolDataItem[] = [];
+
+  // 创建主数据源的步骤映射
+  const primaryStepMap = new Map<number, JSONData['steps'][0]>(
+    data.steps.map(step => [step.step_id, step])
+  );
+
+  // 创建对比数据源的步骤映射
+  const compareStepMap = compareData
+    ? new Map<number, JSONData['steps'][0]>(
+      compareData.steps.map(step => [step.step_id, step])
+    )
+    : null;
+
+  // 获取所有步骤ID的并集
+  const allStepIds = new Set([
+    ...primaryStepMap.keys(),
+    ...(compareStepMap?.keys() || [])
+  ]);
+
+  // 处理每个步骤
+  allStepIds.forEach(stepId => {
+    const primaryStep = primaryStepMap.get(stepId);
+    const compareStep = compareStepMap?.get(stepId);
+
+    // 创建category到dataItem的映射
+    const primaryDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
+    if (primaryStep) {
+      primaryStep.data.forEach(item => {
+        primaryDataMap.set(item.category, item);
+      });
+    }
+
+    const compareDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
+    if (compareStep) {
+      compareStep.data.forEach(item => {
+        compareDataMap.set(item.category, item);
+      });
+    }
+
+    // 获取所有category的并集
+    const allCategories = new Set([
+      ...primaryDataMap.keys(),
+      ...compareDataMap.keys()
+    ]);
+
+    // 处理每个category
+    allCategories.forEach(category => {
+      const categoryName = data.categories[category] || `category_${category}`;
+      const primaryDataItem = primaryDataMap.get(category);
+      const compareDataItem = compareDataMap.get(category);
+
+      // 创建subDataName到subDataItem的映射
+      const primarySubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
+      if (primaryDataItem) {
+        primaryDataItem.subData.forEach(item => {
+          primarySubDataMap.set(item.name, item);
+        });
+      }
+
+      const compareSubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
+      if (compareDataItem) {
+        compareDataItem.subData.forEach(item => {
+          compareSubDataMap.set(item.name, item);
+        });
+      }
+
+      // 获取所有subDataName的并集
+      const allSubDataNames = new Set([
+        ...primarySubDataMap.keys(),
+        ...compareSubDataMap.keys()
+      ]);
+
+      // 处理每个subData
+      allSubDataNames.forEach(subDataName => {
+        const primarySubData = primarySubDataMap.get(subDataName);
+        const compareSubData = compareSubDataMap.get(subDataName);
+
+        // 创建fileName到fileItem的映射
+        const primaryFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
+        if (primarySubData) {
+          primarySubData.files.forEach(item => {
+            primaryFileMap.set(item.file, item);
+          });
+        }
+
+        const compareFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
+        if (compareSubData) {
+          compareSubData.files.forEach(item => {
+            compareFileMap.set(item.file, item);
+          });
+        }
+
+        // 获取所有fileName的并集
+        const allFileNames = new Set([
+          ...primaryFileMap.keys(),
+          ...compareFileMap.keys()
+        ]);
+
+        // 处理每个文件
+        allFileNames.forEach(fileName => {
+          const primaryFile = primaryFileMap.get(fileName);
+          const compareFile = compareFileMap.get(fileName);
+
+          // 创建symbol到symbolItem的映射
+          const primarySymbolMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]['symbols'][0]>();
+          if (primaryFile) {
+            primaryFile.symbols.forEach(item => {
+              primarySymbolMap.set(item.symbol, item);
             });
           }
 
-          mergedFileItem.symbols = fileItem.symbols.map(symbolItem => {
-            const compareSymbolItem = symbolMap.get(symbolItem.symbol);
-            return {
-              ...symbolItem,
-              compareCount: compareSymbolItem?.count
-            };
+          const compareSymbolMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]['symbols'][0]>();
+          if (compareFile) {
+            compareFile.symbols.forEach(item => {
+              compareSymbolMap.set(item.symbol, item);
+            });
+          }
+
+          // 获取所有symbol的并集
+          const allSymbols = new Set([
+            ...primarySymbolMap.keys(),
+            ...compareSymbolMap.keys()
+          ]);
+
+          // 处理每个符号
+          allSymbols.forEach(symbol => {
+            const primarySymbol = primarySymbolMap.get(symbol);
+            const compareSymbol = compareSymbolMap.get(symbol);
+
+            // 计算指令数（如果符号不存在，指令数为0）
+            const instructions = primarySymbol?.count ?? 0;
+            const compareInstructions = compareSymbol?.count ?? 0;
+
+            const increaseInstructions = compareInstructions - instructions;
+            const increasePercentage = calculatePercentageWithFixed(increaseInstructions, instructions);
+
+            dataItems.push({
+              stepId,
+              name: symbol, // 使用符号名作为name
+              category: categoryName,
+              instructions,
+              compareInstructions,
+              increaseInstructions,
+              increasePercentage: Number(increasePercentage.toFixed(2)),
+              file: fileName // 添加文件信息
+            });
           });
-
-          return mergedFileItem;
         });
-
-        return mergedSubDataItem;
       });
-
-      return mergedDataItem;
     });
-
-    mergedData.steps.push(mergedStep);
   });
 
-  return mergedData;
+  return dataItems;
 }
+
+
+
+/**
+ * 收集 data 中指令数为 0 但 compareData 中指令数不为 0 的符号层级信息
+ * @param data JSONData 数据源
+ * @param compareData 对比数据源
+ * @returns 符合条件的符号层级 SymbolDataItem 数组
+ */
+function collectZeroToNonZeroSymbols(
+  data: JSONData,
+  compareData: JSONData
+): SymbolDataItem[] {
+  const dataItems: SymbolDataItem[] = [];
+
+  // 构建主数据源的符号映射（stepId-category-subDataName-file-symbol → 指令数）
+  const primarySymbolMap = buildSymbolInstructionMap(data);
+
+  // 遍历对比数据源的所有符号
+  compareData.steps.forEach(step => {
+    step.data.forEach(dataItem => {
+      const categoryName = compareData.categories[dataItem.category] || `category_${dataItem.category}`;
+
+      dataItem.subData.forEach(subData => {
+        subData.files.forEach(file => {
+          file.symbols.forEach(symbol => {
+            // 构建符号唯一标识
+            const symbolKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}-${symbol.symbol}`;
+
+            // 获取对比数据源中符号的指令数
+            const compareInstructions = symbol.count;
+
+            // 跳过对比数据源中指令数为0的符号
+            if (compareInstructions === 0) return;
+
+            // 获取主数据源中该符号的指令数
+            const instructions = primarySymbolMap.get(symbolKey) || 0;
+
+            // 仅收集主数据源中指令数为0，对比数据源中不为0的符号
+            if (instructions === 0) {
+              dataItems.push({
+                stepId: step.step_id,
+                name: symbol.symbol,
+                category: categoryName,
+                instructions: compareInstructions,
+                compareInstructions,
+                increaseInstructions: compareInstructions, // 增长值等于对比值
+                increasePercentage: Infinity, // 无限增长（从0到非0）
+                file: file.file // 保留文件信息
+              });
+            }
+          });
+        });
+      });
+    });
+  });
+
+  return dataItems;
+}
+
+/**
+ * 构建符号指令数映射
+ */
+function buildSymbolInstructionMap(data: JSONData): Map<string, number> {
+  const symbolMap = new Map<string, number>();
+
+  data.steps.forEach(step => {
+    step.data.forEach(dataItem => {
+      dataItem.subData.forEach(subData => {
+        subData.files.forEach(file => {
+          file.symbols.forEach(symbol => {
+            const symbolKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}-${symbol.symbol}`;
+            symbolMap.set(symbolKey, symbol.count);
+          });
+        });
+      });
+    });
+  });
+
+  return symbolMap;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 const performanceData = ref({
   rom_version: json!.rom_version,
@@ -416,56 +836,6 @@ const comparePerformanceData = ref({
     )
   ),
 });
-
-const mergedFilesPerformanceData = ref({
-  id: mergedJson!.app_id,
-  name: mergedJson!.app_name,
-  version: mergedJson!.app_version,
-  scene: mergedJson!.scene,
-  instructions: mergedJson!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.map((file) => ({
-          stepId: step.step_id,
-          instructions: file.count || 0,
-          compareInstructions: file.compareCount || 0,
-          increaseInstructions: (file.compareCount || 0) - (file.count || 0),
-          increasePercentage: calculatePercentageWithFixed((file.compareCount || 0) - (file.count || 0), file.count || 0),
-          name: file.file,
-          category: mergedJson!.categories[item.category],
-        }))
-      )
-    )
-  ),
-});
-
-const mergedSymbolsPerformanceData = ref({
-  id: mergedJson!.app_id,
-  name: mergedJson!.app_name,
-  version: mergedJson!.app_version,
-  scene: mergedJson!.scene,
-  instructions: mergedJson!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.flatMap((file) =>
-          file.symbols.map((symbol) =>
-          ({
-            stepId: step.step_id,
-            instructions: symbol.count || 0,
-            compareInstructions: symbol.compareCount || 0,
-            increaseInstructions: (symbol.compareCount || 0) - (symbol.count || 0),
-            increasePercentage: calculatePercentageWithFixed((symbol.compareCount || 0) - (symbol.count || 0), symbol.count || 0),
-            name: symbol.symbol,
-            file: file.file,
-            category: mergedJson!.categories[item.category],
-          })
-          )
-        )
-      )
-    )
-  ),
-});
-
 
 // 场景负载对比折线图
 const compareSceneLineChartData = ref();
@@ -536,18 +906,37 @@ stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 // 文件负载表格
 const filteredFilesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilesPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return fileDataItem.sort((a, b) => b.instructions - a.instructions);
   }
-  return mergedFilesPerformanceData.value.instructions
+  return fileDataItem
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
 // 函数负载表格
 const filteredSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return symbolDataItem.sort((a, b) => b.instructions - a.instructions);
   }
-  return mergedSymbolsPerformanceData.value.instructions
+  return symbolDataItem
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+
+// 新增文件负载表格
+const increaseFilesPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return increaseFile.sort((a, b) => b.instructions - a.instructions);
+  }
+  return increaseFile
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+// 新增函数负载表格
+const increaseSymbolsPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return increaseSymbol.sort((a, b) => b.instructions - a.instructions);
+  }
+  return increaseSymbol
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
