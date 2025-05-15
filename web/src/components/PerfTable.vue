@@ -10,9 +10,8 @@
           </el-icon>
         </template>
       </el-input>
-
-      <el-select v-model="category.categoryQuery" placeholder="选择分类" clearable @change="handleFilterChange"
-        class="category-select">
+      <el-select v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable
+        @change="handleFilterChange" class="category-select">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
     </div>
@@ -45,17 +44,17 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="负载增长指令数" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="负载增长指令数" width="160" prop="increaseInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.compareInstructions - row.instructions) }}</span>
+            <span class="value">{{ formatScientific(row.increaseInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="负载增长指百分比" width="160" prop="instructions" sortable>
+      <el-table-column v-if="isHidden" label="负载增长指百分比" width="160" prop="increasePercentage" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ calculatePercentageWithFixed(row.compareInstructions - row.instructions, row.instructions) }}</span>
+            <span class="value">{{ row.increasePercentage }} %</span>
           </div>
         </template>
       </el-table-column>
@@ -85,17 +84,19 @@ import { useFileNameQueryStore, useCategoryStore } from '../stores/jsonDataStore
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
-interface DataItem {
+export interface FileDataItem {
   stepId: number
   name: string
   category: string
   instructions: number
-  compareInstructions:number
+  compareInstructions: number
+  increaseInstructions: number
+  increasePercentage: number
 }
 
 const props = defineProps({
   data: {
-    type: Array as PropType<DataItem[]>,
+    type: Array as PropType<FileDataItem[]>,
     required: true,
   },
   hideColumn: {
@@ -112,15 +113,6 @@ const formatScientific = (num: number) => {
   }
   return num.toExponential(2);
 };
-
-function calculatePercentageWithFixed(part: number, total: number, decimalPlaces: number = 2): string {
-  if (total === 0) {
-       //throw new Error('总值不能为零');
-       return 0 + '%';
-  }
-  const percentage = (part / total) * 100;
-  return percentage.toFixed(decimalPlaces) + '%';
-}
 
 const handleRowClick = (row: { name: string }) => {
   emit('custom-event', row.name);
@@ -145,20 +137,22 @@ const sortState = ref<{
 
 
 // 数据处理（添加完整类型注解）
-const filteredData = computed<DataItem[]>(() => {
+const filteredData = computed<FileDataItem[]>(() => {
   let result = [...props.data]
 
   // 应用搜索过滤
   if (fileNameQuery.fileNameQuery) {
     const searchTerm = fileNameQuery.fileNameQuery.toLowerCase()
-    result = result.filter((item: DataItem) =>
+    result = result.filter((item: FileDataItem) =>
       item.name.toLowerCase().includes(searchTerm))
   }
 
   // 应用分类过滤
-  if (category.categoryQuery) {
-    result = result.filter((item: DataItem) =>
-      item.category === category.categoryQuery)
+  if (category.categoriesQuery) {
+    if (category.categoriesQuery.length > 0) {
+      result = result.filter((item: FileDataItem) =>
+        category.categoriesQuery.includes(item.category))
+    }
   }
 
   // 应用排序（添加类型安全）
@@ -166,7 +160,7 @@ const filteredData = computed<DataItem[]>(() => {
     const sortProp = sortState.value.prop
     const modifier = sortState.value.order === 'ascending' ? 1 : -1
 
-    result.sort((a: DataItem, b: DataItem) => {
+    result.sort((a: FileDataItem, b: FileDataItem) => {
       // 添加类型断言确保数值比较
       const aVal = a[sortProp] as number
       const bVal = b[sortProp] as number
@@ -210,7 +204,7 @@ const handlePageSizeChange = (newSize: number) => {
 };
 
 // 1. 定义严格的类型
-type SortKey = keyof DataItem; // 例如：'name' | 'category' | 'instructions'
+type SortKey = keyof FileDataItem; // 例如：'name' | 'category' | 'instructions'
 type SortOrder = 'ascending' | 'descending' | null;
 
 // 2. 修改事件处理函数类型
@@ -219,7 +213,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['name', 'category', 'instructions','compareInstructions'];
+  const validKeys: SortKey[] = ['name', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
@@ -237,17 +231,17 @@ const handleSortChange = (sort: {
   }
 };
 
+let categoriesExit = new Set();
+
+props.data.forEach((item) => {
+  categoriesExit.add(item.category);
+})
+
 // 分类过滤选项
-const categoryFilters: { text: string, value: string }[] = [
-  { text: 'APP_ABC', value: 'APP_ABC' },
-  { text: 'APP_SO', value: 'APP_SO' },
-  { text: 'APP_LIB', value: 'APP_LIB' },
-  { text: 'OS_Runtime', value: 'OS_Runtime' },
-  { text: 'SYS_SDK', value: 'SYS_SDK' },
-  { text: 'RN', value: 'RN' },
-  { text: 'Flutter', value: 'Flutter' },
-  { text: 'WEB', value: 'WEB' },
-];
+const categoryFilters = Array.from(categoriesExit).map(item => ({
+  text: item,
+  value: item
+}));
 
 </script>
 

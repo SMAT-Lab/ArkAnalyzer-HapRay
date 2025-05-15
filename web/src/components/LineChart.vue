@@ -34,25 +34,42 @@ const processData = (data: JSONData | null, seriesType: string) => {
 
   const { steps, categories } = data;
   const xData = steps.map((step) => step.step_name);
-  const seriesData: number[][] = Array.from({ length: categories.length }, () => []);
+  
+  // 记录每个category是否有数据
+  const categoryHasData = new Set<number>();
+  // 初始化seriesData，使用Map存储有数据的category
+  const seriesDataMap = new Map<number, number[]>();
 
   steps.forEach((step, stepIndex) => {
     step.data.forEach((item) => {
-      const categoryIndex = item.category;
-      seriesData[categoryIndex][stepIndex] = item.count;
+      const { category, count } = item;
+      categoryHasData.add(category);
+      
+      // 如果该category还没有对应的数组，则初始化
+      if (!seriesDataMap.has(category)) {
+        seriesDataMap.set(category, Array(steps.length).fill(0));
+      }
+      
+      // 设置对应位置的数据
+      seriesDataMap.get(category)![stepIndex] = count;
     });
   });
 
+  // 生成最终的series和legendData，只包含有数据的category
+  const series = Array.from(categoryHasData).sort((a, b) => a - b).map((categoryIndex) => ({
+    name: categories[categoryIndex],
+    type: seriesType,
+    data: seriesDataMap.get(categoryIndex)!,
+  }));
+
+  const legendData = series.map((item) => item.name);
+
   return {
     xData,
-    legendData: categories,
-    series: seriesData.map((data, index) => ({
-      name: categories[index],
-      type: seriesType,
-      data,
-    })),
+    legendData,
+    series,
   };
-};
+};  
 
 // 更新图表函数
 const updateChart = () => {
