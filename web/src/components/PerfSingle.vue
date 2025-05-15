@@ -160,7 +160,9 @@ const performanceData = ref({
         subItem.files.map((file) => ({
           stepId: step.step_id,
           instructions: file.count,
-          compareInstructions: -1,
+          compareInstructions: 0,
+          increaseInstructions: 0,
+          increasePercentage: 0,
           name: file.file,
           category: json!.categories[item.category],
         }))
@@ -181,7 +183,10 @@ const mergedSymbolsPerformanceData = ref({
           file.symbols.map((symbol) =>
           ({
             stepId: step.step_id,
-            instructions: symbol.count!,
+            instructions: symbol.count,
+            compareInstructions: 0,
+            increaseInstructions: 0,
+            increasePercentage: 0,
             name: symbol.symbol,
             file: file.file,
             category: json!.categories[item.category],
