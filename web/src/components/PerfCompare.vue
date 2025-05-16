@@ -139,7 +139,7 @@
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <div class="step-name">测试轮次：{{ step.round }}</div>
-        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
+        <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
       </div>
     </div>
 
