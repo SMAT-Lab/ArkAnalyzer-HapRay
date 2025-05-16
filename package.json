@@ -10,7 +10,9 @@
   ],
   "scripts": {
     "build": "npm run build --ws",
-    "release": "npm pack --ws"
+    "release": "npm pack --ws",
+    "downloadHiSmartPerfPackage": "cd third-party && curl -L --insecure -O https://gitee.com/openharmony/developtools_smartperf_host/releases/download/5.1.0.47/HiSmartPerf_20250109.zip",
+    "extractHiSmartPerfPackage": "cd third-party && unzip -q HiSmartPerf_20250109.zip && rm -rf HiSmartPerf_20250109.zip"
   },
   "repository": {
     "type": "git",

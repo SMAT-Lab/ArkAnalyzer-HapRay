@@ -72,7 +72,15 @@
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <div class="step-name">测试轮次：{{ step.round }}</div>
-        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
+        <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
+        <button class="beautiful-btn primary-btn"
+          @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
+          下载perf
+        </button>
+        <button class="beautiful-btn primary-btn"
+          @click="handleDownloadAndRedirect('trace.htrace', step.id, step.step_name)">
+          下载trace
+        </button>
       </div>
     </div>
 
@@ -302,6 +310,29 @@ function processJSONData(data: JSONData | null) {
 
   return { legendData: legendData, seriesData: seriesData };
 }
+
+const handleDownloadAndRedirect = (file: string, stepId: number, name: string) => {
+  const link = document.createElement('a');
+  if(file==='perf.data'){
+    link.href = '../hiperf/step' + stepId + '/' + file;  // 替换为实际文件路径
+    link.download = name + file;       // 自定义文件名
+  }else{
+    link.href = '../htrace/step' + stepId + '/' + file;  // 替换为实际文件路径
+    link.download = name + file;       // 自定义文件名
+  }
+  
+  document.body.appendChild(link);
+
+  link.click();
+
+  setTimeout(() => {
+    document.body.removeChild(link);
+  }, 100);
+
+  setTimeout(() => {
+    window.open('https://localhost:9000/application/', 'trace example');
+  }, 300);
+};
 </script>
 
 <style scoped>
@@ -501,5 +532,34 @@ function processJSONData(data: JSONData | null) {
 .info-box p {
   margin: 0;
   color: #333;
+}
+
+.beautiful-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-left: 10px;
+}
+
+.primary-btn {
+  background-color: #3B82F6;
+  /* 蓝色 */
+  color: white;
+}
+
+.primary-btn:hover {
+  background-color: #2563EB;
+  box-shadow: 0 6px 10px rgba(59, 130, 246, 0.25);
+  transform: translateY(-2px);
+}
+
+.primary-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
 }
 </style>
