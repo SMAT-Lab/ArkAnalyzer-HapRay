@@ -540,14 +540,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 if (!fileMap.has(data.file)) {
                     fileMap.set(data.file, {
                         file: data.file,
-                        fileEvents: data.fileEvents,
+                        fileEvents: data.symbolEvents,
                         category: data.componentCategory,
                         subCategory: data.componentName!,
                         symbolInfos: [{ symbol: data.symbol, count: data.symbolEvents }]
                     })
                 } else {
                     let fileInfo = fileMap.get(data.file)!;
-                    fileInfo.fileEvents += data.fileEvents;
+                    fileInfo.fileEvents += data.symbolEvents;
                     fileInfo.symbolInfos.push({ symbol: data.symbol, count: data.symbolEvents });
                 }
             }
