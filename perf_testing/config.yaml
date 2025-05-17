@@ -7,6 +7,7 @@ run_testcases:
   - ResourceUsage_PerformanceDynamic_xhs_0050
   - ResourceUsage_PerformanceDynamic_xhs_0060
   - ResourceUsage_PerformanceDynamic_xhs_0070
+  - ResourceUsage_PerformanceDynamic_xhs_1000
   - ResourceUsage_PerformanceDynamic_bilibili_0010
   - ResourceUsage_PerformanceDynamic_bilibili_0020
   - ResourceUsage_PerformanceDynamic_bilibili_0030

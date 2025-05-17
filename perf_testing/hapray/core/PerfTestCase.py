@@ -42,7 +42,7 @@ class PerfTestCase(TestCase):
         return self.get_case_report_path()
 
     @staticmethod
-    def _get_hiperf_cmd(pid, output_path, duration):
+    def _get_hiperf_cmd(pid, output_path, duration, sample_all=False):
         """生成 hiperf 命令
 
         Args:
@@ -54,11 +54,13 @@ class PerfTestCase(TestCase):
             str: 完整的 hiperf 命令
         """
         cmd = f"hiperf record -p {pid} -o {output_path} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
+        if sample_all:
+            cmd = f"hiperf record -a -o {output_path} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
         # Log.debug(f"\n[DEBUG] Hiperf Command: {cmd}\n")  # 添加调试输出
         return cmd
 
     @staticmethod
-    def _get_trace_and_perf_cmd(pid, output_path, duration):
+    def _get_trace_and_perf_cmd(pid, output_path, duration, sample_all=False):
         """生成同时抓取trace和perf数据的命令
 
         Args:
@@ -69,6 +71,9 @@ class PerfTestCase(TestCase):
         Returns:
             str: 完整的命令
         """
+        recort_args = f"-p {pid} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
+        if sample_all:
+            recort_args = f"-a -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
         # 基础命令部分
         cmd = f"""hiprofiler_cmd \\
   -c - \\
@@ -148,7 +153,7 @@ class PerfTestCase(TestCase):
   config_data {{
    is_root: false
    outfile_name: "{output_path}"
-   record_args: "-p {pid} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
+   record_args: "{recort_args}"
   }}
  }}
 CONFIG"""
@@ -433,7 +438,7 @@ CONFIG"""
         # 保存性能数据和htrace数据
         self._save_perf_data(output_file, step_id)
 
-    def execute_step_with_perf_and_trace(self, step_id, action_func, duration):
+    def execute_step_with_perf_and_trace(self, step_id, action_func, duration, sample_all=False):
         """
         执行一个步骤并同时收集性能数据和trace数据
 
@@ -460,7 +465,7 @@ CONFIG"""
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
 
         # 启动采集线程
-        cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration)
+        cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration, sample_all)
         perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
         perf_trace_thread.start()
 
