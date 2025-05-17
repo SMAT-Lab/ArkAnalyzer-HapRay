@@ -10,16 +10,16 @@ from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
 
 
-class ResourceUsage_PerformanceDynamic_xhs_1000(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
 
         self._app_package = 'com.ohos.sceneboard'
-        self._start_app_package = 'com.xingin.xhs_hos'
-        self._app_icon_key = 'AppIcon_Image_com.xingin.xhs_hosEntryAbilityredbook0_undefined'
-        self._app_name = '小红书'
+        self._start_app_package = 'com.jd.hm.mall'
+        self._app_icon_key = 'AppIcon_Image_com.jd.hm.mallEntryAbilityentry0_undefined'
+        self._app_name = '京东'
         self._steps = [
             {
                 "name": "step1",
