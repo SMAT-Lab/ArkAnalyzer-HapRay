@@ -1,0 +1,85 @@
+# coding: utf-8
+import os
+import time
+
+from devicetest.core.test_case import Step
+
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.CommonUtils import CommonUtils
+
+
+class ResourceUsage_PerformanceDynamic_xhs_1000(PerfTestCase):
+
+    def __init__(self, controllers):
+        self.TAG = self.__class__.__name__
+        super().__init__(self.TAG, controllers)
+
+        self._app_package = 'com.ohos.sceneboard'
+        self._start_app_package = 'com.xingin.xhs_hos'
+        self._app_name = '小红书'
+        self._steps = [
+            {
+                "name": "step1",
+                "description": "1. 应用冷启动"
+            }
+        ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
+
+    @property
+    def steps(self) -> []:
+        return self._steps
+
+    @property
+    def app_package(self) -> str:
+        return self._app_package
+
+    @property
+    def app_name(self) -> str:
+        return self._app_name
+
+    def setup(self):
+        Log.info('setup')
+        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
+
+    def process(self):
+        # self.driver.swipe_to_home()
+        self.driver.press_home()
+        CommonUtils.exe('hdc shell kill -9 $(pidof com.xingin.xhs_hos)')
+        time.sleep(2)
+        CommonUtils.swipes_left_load(self.driver, swip_num=1, sleep=1)
+
+        def step1(driver):
+            Step('1. 应用冷启动')
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=180,  # 原始x坐标
+                y=1366,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
+            time.sleep(5)
+            driver.swipe_to_home()
+
+        self.execute_step_with_perf_and_trace(1, step1, 10, True)
+        # 杀掉进程，等待5s
+        self.driver.swipe_to_recent_task()
+        time.sleep(1)
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=630,   # 原始x坐标
+            y=2459,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
+        time.sleep(5)
+
+
+    def teardown(self):
+        Log.info('teardown')
+        self._app_package = self._start_app_package
+        self.make_reports()
