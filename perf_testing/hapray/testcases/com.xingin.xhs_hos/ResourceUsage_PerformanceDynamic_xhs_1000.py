@@ -4,6 +4,7 @@ import time
 
 from devicetest.core.test_case import Step
 
+from hypium import BY
 from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
@@ -51,17 +52,15 @@ class ResourceUsage_PerformanceDynamic_xhs_1000(PerfTestCase):
         self.driver.press_home()
         CommonUtils.exe('hdc shell kill -9 $(pidof com.xingin.xhs_hos)')
         time.sleep(2)
-        CommonUtils.swipes_left_load(self.driver, swip_num=1, sleep=1)
+        xhs_icon = self.driver.find_component(BY.key("AppIcon_Image_com.xingin.xhs_hosEntryAbilityredbook0_undefined"))
+        while not xhs_icon:
+            CommonUtils.swipes_left_load(self.driver, swip_num=1, sleep=1)
+            xhs_icon = self.driver.find_component(
+                BY.key("AppIcon_Image_com.xingin.xhs_hosEntryAbilityredbook0_undefined"))
 
         def step1(driver):
             Step('1. 应用冷启动')
-            self.driver.touch(CoordinateAdapter.convert_coordinate(
-                self.driver,
-                x=180,  # 原始x坐标
-                y=1366,  # 原始y坐标
-                source_width=self.source_screen_width,
-                source_height=self.source_screen_height
-            ))
+            driver.touch(xhs_icon)
             time.sleep(5)
             driver.swipe_to_home()
 
