@@ -111,7 +111,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             }
         }
         getConfig().analysis.ohpm.forEach((pkg) => {
-            this.hapComponents.set(pkg.name, {name: pkg.name, kind: ComponentCategory.APP_LIB})
+            this.hapComponents.set(pkg.name, { name: pkg.name, kind: ComponentCategory.APP_LIB });
+        });
+        getConfig().analysis.npm.forEach((pkg) => {
+            this.hapComponents.set(pkg.name, { name: pkg.name, kind: ComponentCategory.APP_LIB });
         });
     }
 

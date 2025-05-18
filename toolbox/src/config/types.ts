@@ -43,6 +43,7 @@ export interface GlobalConfig {
         reSo: boolean;
         reAbc: boolean;
         ohpm: Ohpm[];
+        npm: Ohpm[];
     };
 
     perf: {

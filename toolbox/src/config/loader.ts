@@ -30,6 +30,13 @@ const ConfigSchema = z.object({
                 versions: z.array(z.string()),
             })
         ),
+        npm: z.array(
+            z.object({
+                name: z.string(),
+                version: z.string(),
+                versions: z.array(z.string()),
+            })
+        ),
     }),
     perf: z.object({
         kinds: z
@@ -83,9 +90,11 @@ function loadResCfg(): Partial<GlobalConfig> {
     let perfKind = path.join(res, 'perf/kind.json');
     config['perf']['kinds'] = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' }));
     let ohpmCfg = path.join(res, 'ohpm/ohpm.json');
+    let npmCfg = path.join(res, 'ohpm/npm.json');
 
     if (fs.existsSync(ohpmCfg)) {
         config['analysis']['ohpm'] = JSON.parse(fs.readFileSync(ohpmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
+        config['analysis']['npm'] = JSON.parse(fs.readFileSync(npmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
     }
 
     config['extToolsPath'] = getExtToolsRoot();

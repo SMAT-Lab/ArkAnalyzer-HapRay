@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import * as tar from 'tar';
-import { Pkg } from '../src/deps/package_manager';
+import { Ohpm } from '../src/config/types';
 import Logger, { LOG_MODULE_TYPE, LOG_LEVEL } from 'arkanalyzer/lib/utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
-Logger.configure('arkanalyzer-toolbox.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO);
+Logger.configure('arkanalyzer-toolbox.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
 
 const TEMP = '.tmp';
 
@@ -63,14 +63,14 @@ async function parseTarball(tarballUrl: string, files: Set<string>): Promise<voi
     });
 }
 
-async function getPkgInfo(pkgName: string): Promise<Pkg | undefined> {
+async function getPkgInfo(pkgName: string): Promise<Ohpm | undefined> {
     const url = 'https://ohpm.openharmony.cn/ohpm';
     let response = await axios.get(`${url}/${pkgName}`);
     if (response.status !== 200) {
         return undefined;
     }
 
-    let pkg: Pkg = {
+    let pkg: Ohpm = {
         name: pkgName,
         version: response.data['dist-tags'].latest,
         versions: Object.keys(response.data.versions),
@@ -93,17 +93,23 @@ async function getPkgInfo(pkgName: string): Promise<Pkg | undefined> {
 }
 
 async function main() {
-    let pkgs: Pkg[] = [];
+    let pkgs: Ohpm[] = [];
     let pageNum = 1;
     let pkgNames: string[] = [];
     fs.mkdirSync(TEMP, { recursive: true });
     do {
         pkgNames = await listOhpmPage(pageNum++);
         for (const pkgName of pkgNames) {
-            let pkg = await getPkgInfo(pkgName);
-            if (pkg) {
-                pkgs.push(pkg);
-            } else {
+            try {
+                let pkg = await getPkgInfo(pkgName);
+                if (pkg) {
+                    pkgs.push(pkg);
+                } else {
+                    logger.error(`get ohpm ${pkgName} fail.`);
+                }
+            } catch (error) {
+                logger.error(error);
+            } finally {
                 logger.error(`get ohpm ${pkgName} fail.`);
             }
         }
