@@ -206,17 +206,17 @@ def get_virtualenv_paths() -> Tuple[Path, Path]:
     return python_path, pip_path
 
 
-def extract_hypium_package(zip_path: Path, extractall_dir: Path) -> None:
+def extract_package(zip_path: Path, extractall_dir: Path) -> None:
     """
-    Extract Hypium package from zip archive.
+    Extract package from zip archive.
     
     Args:
         zip_path: Path to the zip file
     """
-    print(f"\n[2/3] Extract Hypium package: {zip_path.name}...")
+    print(f"\n[2/3] Extract package: {zip_path.name}...")
 
     if not zip_path.exists():
-        sys.exit(f"Error: Hypium package not found: {zip_path}")
+        sys.exit(f"Error: package not found: {zip_path}")
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extractall_dir)
@@ -267,16 +267,19 @@ def display_activation_instructions() -> None:
 
 def main() -> None:
     """Main execution flow."""
-    download_strat_smart_perf()
-    extract_hypium_package(HISMARTPERF_ZIP_PATH, HISMARTPERF_ZIP_PATH.parent)
-    start_hi_smart_perf('main')
+
+
     setup_virtual_environment()
     _, pip_executable = get_virtualenv_paths()
 
-    extract_hypium_package(HYPIUM_ZIP_PATH, HYPIUM_DIR)
+    download_strat_smart_perf()
+    extract_package(HISMARTPERF_ZIP_PATH, HISMARTPERF_ZIP_PATH.parent)
+    extract_package(HYPIUM_ZIP_PATH, HYPIUM_DIR)
 
     install_project_dependencies(pip_executable)
     display_activation_instructions()
+
+    start_hi_smart_perf('main')
 
 
 if __name__ == "__main__":
