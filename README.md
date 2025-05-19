@@ -10,7 +10,10 @@ npm run build
 
 ----
 
-## Mac & Linux 使用指导
+## 使用指导
+
+依赖：
+Python > 3.10
 
 ### Ubuntu 系统下的系统基础依赖安装
 
@@ -41,8 +44,8 @@ cd ArkAnalyzer-HapRay/
 ./setup.sh
 
 # 每次运行测试前执行（需要先切换到 ArkAnalyzer-HapRay 目录）
-source .venv/bin/activate
 cd perf_testing
+source .venv/bin/activate
 # 根据需要配置 config.yaml 测试用例，不要跑的用例，可以删除或在开头用`#`注释掉
 python -m scripts.main
 ```
