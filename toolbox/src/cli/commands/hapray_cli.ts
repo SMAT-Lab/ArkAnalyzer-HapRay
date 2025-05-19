@@ -25,15 +25,19 @@ import { initConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { copyDirectory, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
+import { TestSceneInfo } from '../../core/perf/perf_analyzer_base';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
 
 const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
+    .option('--disable-dbtools', 'disable dbtools', false)
     .action(async (...args: any[]) => {
         let cliArgs: Partial<GlobalConfig> = { ...args[0] };
-        initConfig(cliArgs, (config) => { });
+        initConfig(cliArgs, (config) => {
+            config.inDbtools = !args[0].disableDbtools;
+        });
 
         await main(args[0].input);
     });
@@ -213,6 +217,8 @@ async function main(input: string): Promise<void> {
         await copyDirectory(choosePerfDir, scenePerfDir);
         await copyDirectory(chooseHtraceDir, sceneHtraceDir);
         stepItem = await perfAnalyzer.analyze2(dbPaths[choose], testInfo.app_id, steps[i]);
+        let testSceneInfo: TestSceneInfo = { packageName: testInfo.app_id, scene: testInfo.scene, osVersion: resultInfo.rom_version, timestamp: testInfo.timestamp };
+        await perfAnalyzer.analyze(dbPaths[choose], testSceneInfo, output, steps[i].stepIdx, choose);
         stepItem.round = choose;
         stepItem.perf_data_path = tracePaths[choose];
         stepsCollect.push(stepItem);
