@@ -459,12 +459,13 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return total;
     }
 
-    async analyze(dbPath: string, testInfo: TestSceneInfo, output: string): Promise<PerfSum> {
+    async analyze(dbPath: string, testInfo: TestSceneInfo, output: string, stepIdx: number, round: number): Promise<PerfSum> {
+        output = path.dirname(output);
         const fileBuffer = fs.readFileSync(dbPath);
         const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
 
         // 读取数据并统计
-        await this.loadDbAndStatistics(dbPath, testInfo.packageName);
+        // await this.loadDbAndStatistics(dbPath, testInfo.packageName);
 
         let perf: PerfSum = {
             scene: testInfo.scene,
@@ -480,7 +481,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         if (getConfig().inDbtools) {
             await this.saveDbtoolsXlsx(
                 perf,
-                path.join(output, `ecol_load_perf_${testInfo.packageName}_${testInfo.scene}_${now}.xlsx`)
+                path.join(output, `ecol_load_perf_${testInfo.packageName}_${testInfo.scene}_round${round}_step${stepIdx}_${now}.xlsx`)
             );
         } else {
             await this.saveSqlite(perf, path.join(this.getProjectRoot(), path.basename(dbPath)));
@@ -489,7 +490,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // for debug
         if (getConfig().save.callchain) {
             await this.saveCallchainXlsx(
-                path.join(output, `callchain_${testInfo.packageName}_${testInfo.scene}_${now}.xlsx`)
+                path.join(output, `callchain_${testInfo.packageName}_${testInfo.scene}_round${round}_step${stepIdx}_${now}.xlsx`)
             );
         }
 
@@ -503,7 +504,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             step_name: step.description,
             count: 0,
             round: -1,
-            perf_data_path:'',
+            perf_data_path: '',
             data: []
         };
         // stepInfo.step_id = step.stepIdx;
