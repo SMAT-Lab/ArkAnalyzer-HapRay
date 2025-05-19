@@ -23,7 +23,7 @@ import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { initConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
-import { copyDirectory, getSceneRoundsFolders } from '../../utils/folder_utils';
+import { copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
 import { TestSceneInfo } from '../../core/perf/perf_analyzer_base';
 
@@ -80,12 +80,6 @@ function getHtracePaths(inputPath: string, steps: Steps): string[] {
 // async function main(config: GlobalConfig): Promise<void> {
 async function main(input: string): Promise<void> {
 
-
-
-    if (!fs.existsSync(input)) {
-        logger.error(`${input} is not exists.`);
-        return;
-    }
     logger.info(`Input dir is: ${input}`);
     const roundFolders = getSceneRoundsFolders(input);
     if (roundFolders.length === 0) {
@@ -99,9 +93,10 @@ async function main(input: string): Promise<void> {
     }
     output = path.join(input, 'report', 'hapray_report.html');
 
-    //load result.xml
-    let resultXml = path.join(input, 'result', path.basename(input) + '.xml');
     let resultInfo: ResultInfo = { rom_version: '', device_sn: '' };
+
+    //load result.xml
+    let resultXml = path.join(roundFolders[0], 'result', path.basename(input) + '.xml');
     if (!fs.existsSync(resultXml)) {
         logger.error('load' + resultXml + ':失败！');
     } else {
@@ -135,11 +130,15 @@ async function main(input: string): Promise<void> {
     }
 
     // load testinfo.json
-    let rawData = fs.readFileSync(path.join(roundFolders[0], 'testInfo.json'), 'utf8');
+    let testInfoPath = path.join(roundFolders[0], 'testInfo.json')
+    await copyFile(testInfoPath, path.join(input,'testInfo.json'));
+    let rawData = fs.readFileSync(testInfoPath, 'utf8');
     const testInfo: TestInfo = JSON.parse(rawData);
 
     // load steps.json
-    rawData = fs.readFileSync(path.join(roundFolders[0], 'hiperf', 'steps.json'), 'utf8');
+    let stepsJsonPath = path.join(roundFolders[0], 'hiperf', 'steps.json')
+    await copyFile(stepsJsonPath, path.join(input, 'hiperf', 'steps.json'));
+    rawData = fs.readFileSync(stepsJsonPath, 'utf8');
     const steps: Steps = JSON.parse(rawData);
     let perfDataPaths = getPerfDataPaths(input, steps);
     let perfDbPaths = getPerfDbPaths(input, steps);
@@ -212,13 +211,16 @@ async function main(input: string): Promise<void> {
         //将hiperf和htrace文件复制到最终目录
         const choosePerfDir = path.join(roundFolders[choose], 'hiperf', `step${steps[i].stepIdx.toString()}`);
         const chooseHtraceDir = path.join(roundFolders[choose], 'htrace', `step${steps[i].stepIdx.toString()}`);
+        const chooseResultDir = path.join(roundFolders[choose], 'result');
         const scenePerfDir = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`);
         const sceneHtraceDir = path.join(input, 'htrace', `step${steps[i].stepIdx.toString()}`);
+        const ResultDir = path.join(input, 'result');
         await copyDirectory(choosePerfDir, scenePerfDir);
         await copyDirectory(chooseHtraceDir, sceneHtraceDir);
+        await copyDirectory(chooseResultDir, ResultDir);
         stepItem = await perfAnalyzer.analyze2(dbPaths[choose], testInfo.app_id, steps[i]);
         let testSceneInfo: TestSceneInfo = { packageName: testInfo.app_id, scene: testInfo.scene, osVersion: resultInfo.rom_version, timestamp: testInfo.timestamp };
-        await perfAnalyzer.analyze(dbPaths[choose], testSceneInfo, output, steps[i].stepIdx, choose);
+        await perfAnalyzer.analyze(dbPaths[choose], testSceneInfo, output, steps[i].stepIdx);
         stepItem.round = choose;
         stepItem.perf_data_path = tracePaths[choose];
         stepsCollect.push(stepItem);

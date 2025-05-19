@@ -190,31 +190,6 @@ CONFIG"""
             # 否则，添加 perf_testing 目录前缀
             full_scene_dir = os.path.normpath(os.path.join(perf_testing_dir, scene_dir))
 
-        # 检查目录是否存在
-        if not os.path.exists(full_scene_dir):
-            Log.error(f"Error: Scene directory does not exist: {full_scene_dir}")
-            return False
-
-        # 检查 hiperf 目录是否存在
-        hiperf_dir = os.path.join(full_scene_dir, 'hiperf')
-        if not os.path.exists(hiperf_dir):
-            Log.error(f"Error: hiperf directory does not exist: {hiperf_dir}")
-            return False
-
-        # 检查 hiperf 目录中是否有文件
-        hiperf_files = os.listdir(hiperf_dir)
-        if not hiperf_files:
-            Log.error(f"Error: hiperf directory is empty: {hiperf_dir}")
-            return False
-
-        Log.info(f"Found {len(hiperf_files)} files in hiperf directory")
-
-        # 构建输出路径 - 直接输出到场景目录的 report 文件夹
-        output_dir = os.path.join(full_scene_dir, 'report')
-
-        # 确保输出目录存在
-        os.makedirs(output_dir, exist_ok=True)
-
         # 获取 hapray-cmd.js 的绝对路径
         hapray_cmd_path = os.path.abspath(os.path.join(perf_testing_dir, 'hapray-toolbox', 'hapray-cmd.js'))
 
@@ -226,7 +201,6 @@ CONFIG"""
         # 打印调试信息
         Log.info(f"Project root: {project_root}")
         Log.info(f"Scene directory: {full_scene_dir}")
-        Log.info(f"Hiperf directory: {hiperf_dir}")
         Log.info(f"Hapray command path: {hapray_cmd_path}")
         Log.info(f"Current working directory: {os.getcwd()}")
 
@@ -258,15 +232,6 @@ CONFIG"""
             Log.info(f"Command output: {result.stdout}")
             if result.stderr:
                 Log.error(f"Command stderr: {result.stderr}")
-
-            # 检查输出目录中是否有文件
-            report_files = os.listdir(output_dir)
-            if not report_files:
-                Log.warn(f"Warning: No files found in report directory: {output_dir}")
-                return False
-
-            Log.info(f"Found {len(report_files)} files in report directory")
-            Log.info(f"Successfully generated HapRay report in: {output_dir}")
             return True
         except subprocess.CalledProcessError as e:
             Log.error(f"Failed to generate HapRay report: {str(e)}")
