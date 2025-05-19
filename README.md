@@ -12,8 +12,11 @@ npm run build
 
 ## 使用指导
 
-依赖：
+
+依赖：  
+pip > 23.0.1  
 Python > 3.10
+
 
 ### Ubuntu 系统下的系统基础依赖安装
 
