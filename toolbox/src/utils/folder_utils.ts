@@ -82,8 +82,13 @@ export async function copyDirectory(
     filter = () => true
   } = options;
 
+  if (sourceDir === targetDir){
+    return;
+  }
+
   if (!fs.existsSync(sourceDir)) {
     logger.error(`源目录不存在: ${sourceDir}`);
+    return;
   }
 
   await ensureDirectoryExists(targetDir);
@@ -115,6 +120,10 @@ export async function copyFile(
   targetPath: string,
   options: { overwrite?: boolean; preserveTimestamps?: boolean } = {}
 ): Promise<void> {
+  if (sourcePath === targetPath){
+    return;
+  }
+
   const { overwrite = true, preserveTimestamps = true } = options;
 
   const targetExists = fs.existsSync(targetPath);
