@@ -5,38 +5,46 @@ import * as path from 'path';
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 export function getFirstLevelFolders(dirPath: string): string[] {
-    try {
-        // 读取指定目录下的所有文件和文件夹
-        const items = fs.readdirSync(dirPath);
-        const folders: string[] = [];
+  try {
+    // 读取指定目录下的所有文件和文件夹
+    const items = fs.readdirSync(dirPath);
+    const folders: string[] = [];
 
-        for (const item of items) {
-            // 拼接完整路径
-            const itemPath = path.join(dirPath, item);
-            // 检查该路径是否为目录
-            const stat = fs.statSync(itemPath);
-            if (stat.isDirectory() && item !== 'report') {
-                logger.info('Round path: ' + itemPath);
-                folders.push(itemPath);
-            }
-        }
-
-        return folders;
-    } catch (error) {
-        logger.error('Access directory :' + dirPath, error);
-        return [];
+    for (const item of items) {
+      // 拼接完整路径
+      const itemPath = path.join(dirPath, item);
+      // 检查该路径是否为目录
+      const stat = fs.statSync(itemPath);
+      if (stat.isDirectory() && item !== 'report') {
+        logger.info('Round path: ' + itemPath);
+        folders.push(itemPath);
+      }
     }
+
+    return folders;
+  } catch (error) {
+    logger.error('Access directory :' + dirPath, error);
+    return [];
+  }
 }
 
 export function getSceneRoundsFolders(sceneDir: string): string[] {
-    let sceneRoundsFolders: string[] = [];
+  let sceneRoundsFolders: string[] = [];
+  if (!fs.existsSync(sceneDir)) {
+    logger.error(`${sceneDir} is not exists.`);
+
     for (let index = 0; index < 5; index++) {
-        const sceneRoundFolder = sceneDir + '_round' + index;
-        if (fs.existsSync(sceneRoundFolder)) {
-            sceneRoundsFolders.push(sceneRoundFolder);
-        }
+      const sceneRoundFolder = sceneDir + '_round' + index;
+      if (fs.existsSync(sceneRoundFolder)) {
+        sceneRoundsFolders.push(sceneRoundFolder);
+      }
     }
-    return sceneRoundsFolders
+
+  } else {
+    sceneRoundsFolders.push(sceneDir);
+  }
+
+  return sceneRoundsFolders
 }
 
 
@@ -46,7 +54,7 @@ export function getSceneRoundsFolders(sceneDir: string): string[] {
  */
 async function ensureDirectoryExists(dirPath: string): Promise<void> {
   if (fs.existsSync(dirPath)) return;
-  
+
   await ensureDirectoryExists(path.dirname(dirPath));
   await fs.promises.mkdir(dirPath);
 }
@@ -68,10 +76,10 @@ export async function copyDirectory(
   targetDir: string,
   options: CopyOptions = {}
 ): Promise<void> {
-  const { 
-    overwrite = true, 
+  const {
+    overwrite = true,
     preserveTimestamps = true,
-    filter = () => true 
+    filter = () => true
   } = options;
 
   if (!fs.existsSync(sourceDir)) {
@@ -82,7 +90,7 @@ export async function copyDirectory(
 
   // 兼容旧版 Node.js：先读取文件名列表，再逐个获取文件信息
   const fileNames = await fs.promises.readdir(sourceDir);
-  
+
   for (const fileName of fileNames) {
     const sourcePath = path.join(sourceDir, fileName);
     const targetPath = path.join(targetDir, fileName);
@@ -102,7 +110,7 @@ export async function copyDirectory(
 /**
  * 复制单个文件
  */
-async function copyFile(
+export async function copyFile(
   sourcePath: string,
   targetPath: string,
   options: { overwrite?: boolean; preserveTimestamps?: boolean } = {}
@@ -110,7 +118,7 @@ async function copyFile(
   const { overwrite = true, preserveTimestamps = true } = options;
 
   const targetExists = fs.existsSync(targetPath);
-  
+
   if (targetExists && !overwrite) {
     logger.info(`跳过已有文件: ${targetPath}`);
     return;

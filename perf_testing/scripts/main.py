@@ -8,7 +8,7 @@ from xdevice.__main__ import main_process
 from hapray.core.PerfTestCase import PerfTestCase
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.merge_folders import merge_folders
+from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_folder
 
 
 def main():
@@ -33,9 +33,16 @@ def main():
                         case_dir = all_testcases[case_name]
                         output = os.path.join(reports_path, time_str, f'{case_name}_round{round}')
                         main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
-                        scene_round_dirs.append(output)
+                        for i in range(5):
+                            if scan_folders(output):
+                                scene_round_dirs.append(output)
+                                break
+                            else:
+                                if delete_folder(output):
+                                    print('perf.data文件不全重试第'+str(i)+'次'+output)
+                                    main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
+
                     merge_folder_path = os.path.join(reports_path, time_str, case_name)
-                    merge_folders(scene_round_dirs, merge_folder_path)
                     # 生成 HapRay 报告
                     future = executor.submit(
                         PerfTestCase.generate_hapray_report,
