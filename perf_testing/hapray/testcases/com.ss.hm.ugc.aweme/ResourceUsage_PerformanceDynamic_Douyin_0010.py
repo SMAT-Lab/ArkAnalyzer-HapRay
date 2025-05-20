@@ -67,7 +67,13 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
             time.sleep(2)
 
             # 3. 抖音“我”页面点击右上角选项，等待2s
-            driver.touch((1114, 180))
+            component_history = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1114,  # 原始x坐标
+                y=180,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height)
+            driver.touch(component_history)
             time.sleep(2)
 
         def step1(driver):
