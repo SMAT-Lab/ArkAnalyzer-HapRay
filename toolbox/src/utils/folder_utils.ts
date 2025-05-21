@@ -30,23 +30,35 @@ export function getFirstLevelFolders(dirPath: string): string[] {
 
 export function getSceneRoundsFolders(sceneDir: string): string[] {
   let sceneRoundsFolders: string[] = [];
-  if (!fs.existsSync(sceneDir)) {
-    logger.error(`${sceneDir} is not exists.`);
-
+  if (fs.existsSync(sceneDir) && checkPerfData(sceneDir)) {
+    sceneRoundsFolders.push(sceneDir);
+  } else {
     for (let index = 0; index < 5; index++) {
       const sceneRoundFolder = sceneDir + '_round' + index;
-      if (fs.existsSync(sceneRoundFolder)) {
+      if (fs.existsSync(sceneRoundFolder) && checkPerfData(sceneRoundFolder)) {
         sceneRoundsFolders.push(sceneRoundFolder);
       }
     }
-
-  } else {
-    sceneRoundsFolders.push(sceneDir);
   }
-
   return sceneRoundsFolders
 }
 
+function checkPerfData(dir: string) {
+  let hasPerfData = true;
+  const hiperfDir = path.join(dir, 'hiperf');
+  const stepDirs = getFirstLevelFolders(hiperfDir);
+  if (stepDirs.length !== 0) {
+    stepDirs.forEach((stepDir) => {
+      const perfDataPath = path.join(stepDir, 'perf.data');
+      if (!fs.existsSync(perfDataPath)) {
+        hasPerfData = false;
+      }
+    });
+  } else {
+    hasPerfData = false;
+  }
+  return hasPerfData;
+}
 
 
 /**
@@ -82,7 +94,7 @@ export async function copyDirectory(
     filter = () => true
   } = options;
 
-  if (sourceDir === targetDir){
+  if (sourceDir === targetDir) {
     return;
   }
 
@@ -120,7 +132,7 @@ export async function copyFile(
   targetPath: string,
   options: { overwrite?: boolean; preserveTimestamps?: boolean } = {}
 ): Promise<void> {
-  if (sourcePath === targetPath){
+  if (sourcePath === targetPath) {
     return;
   }
 
