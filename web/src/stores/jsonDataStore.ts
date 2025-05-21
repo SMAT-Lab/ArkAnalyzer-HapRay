@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 
 export interface JSONData {
-  rom_version:string;
+  rom_version: string;
   app_id: string;
   app_name: string;
   app_version: string;
@@ -20,15 +20,19 @@ export interface JSONData {
     data: {
       category: number;
       count: number;
-      subData: {
-        name: string;
+      processes: {
+        process: string;
         count: number;
-        files: {
-          file: string;
+        threads: {
+          thread: string;
           count: number;
-          symbols: {
-            symbol: string;
+          files: {
+            file: string;
             count: number;
+            symbols: {
+              symbol: string;
+              count: number;
+            }[];
           }[];
         }[];
       }[];
@@ -51,22 +55,29 @@ export interface MergeJSONData {
     step_id: number;
     count: number;
     compareCount: number;
+    round: number;
+    perf_data_path: string;
     data: {
       category: number;
-      count?: number;
-      compareCount?: number;
-      subData: {
-        name: string;
-        count?: number;
-        compareCount?: number;
-        files: {
-          file: string;
-          count?: number;
-          compareCount?: number;
-          symbols: {
-            symbol: string;
-            count?: number;
-            compareCount?: number;
+      count: number;
+      compareCount: number;
+      processes: {
+        process: string;
+        count: number;
+        compareCount: number;
+        threads: {
+          thread: string;
+          count: number;
+          compareCount: number;
+          files: {
+            file: string;
+            count: number;
+            compareCount: number;
+            symbols: {
+              symbol: string;
+              count: number;
+              compareCount: number;
+            }[];
           }[];
         }[];
       }[];
@@ -94,6 +105,17 @@ export const useJsonDataStore = defineStore('config', {
   },
 });
 
+export const useProcessNameQueryStore = defineStore('processNameQuery', {
+  state: () => ({
+    processNameQuery: '' as string,
+  })
+});
+
+export const useThreadNameQueryStore = defineStore('threadNameQuery', {
+  state: () => ({
+    threadNameQuery: '' as string,
+  })
+});
 
 export const useFileNameQueryStore = defineStore('fileNameQuery', {
   state: () => ({

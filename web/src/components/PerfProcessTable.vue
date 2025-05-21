@@ -2,7 +2,7 @@
   <div class="instructions-table" id="perfsTable">
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
-      <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件名搜索" clearable @input="handleFilterChange"
+      <el-input v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable @input="handleFilterChange"
         class="search-input">
         <template #prefix>
           <el-icon>
@@ -20,9 +20,9 @@
     <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
       :default-sort="{ prop: 'instructions', order: 'descending' }" @sort-change="handleSortChange" stripe
       highlight-current-row>
-      <el-table-column prop="name" label="文件" sortable>
+      <el-table-column prop="category" label="进程">
         <template #default="{ row }">
-          <div class="name-cell">{{ row.name }}</div>
+          <div class="category-cell">{{ row.process }}</div>
         </template>
       </el-table-column>
       <el-table-column prop="category" label="分类">
@@ -80,23 +80,23 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useFileNameQueryStore, useCategoryStore } from '../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore,useThreadNameQueryStore, useCategoryStore } from '../stores/jsonDataStore.ts';
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
-export interface FileDataItem {
+export interface ProcessDataItem {
   stepId: number
-  name: string
   category: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
   increasePercentage: number
+  process: string
 }
 
 const props = defineProps({
   data: {
-    type: Array as PropType<FileDataItem[]>,
+    type: Array as PropType<ProcessDataItem[]>,
     required: true,
   },
   hideColumn: {
@@ -119,7 +119,7 @@ const handleRowClick = (row: { name: string }) => {
 };
 
 // 搜索功能
-const fileNameQuery = useFileNameQueryStore();
+const processNameQuery = useProcessNameQueryStore();
 const category = useCategoryStore();
 
 
@@ -137,20 +137,20 @@ const sortState = ref<{
 
 
 // 数据处理（添加完整类型注解）
-const filteredData = computed<FileDataItem[]>(() => {
+const filteredData = computed<ProcessDataItem[]>(() => {
   let result = [...props.data]
 
-  // 应用搜索过滤
-  if (fileNameQuery.fileNameQuery) {
-    const searchTerm = fileNameQuery.fileNameQuery.toLowerCase()
-    result = result.filter((item: FileDataItem) =>
-      item.name.toLowerCase().includes(searchTerm))
+  // 应用进程过滤
+  if (processNameQuery.processNameQuery) {
+    const searchTerm = processNameQuery.processNameQuery.toLowerCase()
+    result = result.filter((item: ProcessDataItem) =>
+      item.process.toLowerCase().includes(searchTerm))
   }
 
   // 应用分类过滤
   if (category.categoriesQuery) {
     if (category.categoriesQuery.length > 0) {
-      result = result.filter((item: FileDataItem) =>
+      result = result.filter((item: ProcessDataItem) =>
         category.categoriesQuery.includes(item.category))
     }
   }
@@ -160,7 +160,7 @@ const filteredData = computed<FileDataItem[]>(() => {
     const sortProp = sortState.value.prop
     const modifier = sortState.value.order === 'ascending' ? 1 : -1
 
-    result.sort((a: FileDataItem, b: FileDataItem) => {
+    result.sort((a: ProcessDataItem, b: ProcessDataItem) => {
       // 添加类型断言确保数值比较
       const aVal = a[sortProp] as number
       const bVal = b[sortProp] as number
@@ -204,7 +204,7 @@ const handlePageSizeChange = (newSize: number) => {
 };
 
 // 1. 定义严格的类型
-type SortKey = keyof FileDataItem; // 例如：'name' | 'category' | 'instructions'
+type SortKey = keyof ProcessDataItem; // 例如：'name' | 'category' | 'instructions'
 type SortOrder = 'ascending' | 'descending' | null;
 
 // 2. 修改事件处理函数类型
@@ -213,7 +213,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['name', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage'];
+  const validKeys: SortKey[] = ['category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage','process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
