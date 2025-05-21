@@ -78,49 +78,49 @@ class PerformanceDynamic_com_example_wsywechat_0010(PerfTestCase):
             driver.press_key(KeyCode.ENTER)
             driver.wait(1)
 
-            # driver.touch(BY.type('TextInput'))
-            # driver.wait(1)
-            #
-            # # 输入文本
-            # driver.input_text(BY.type('TextInput'), "最近在忙什么呢？")
-            # driver.wait(1)
-            #
-            # # 按下回车键发送消息
-            # driver.press_key(KeyCode.ENTER)
-            # driver.wait(1)
-            #
-            # driver.touch(BY.type('TextInput'))
-            # driver.wait(1)
-            #
-            # # 输入文本
-            # driver.input_text(BY.type('TextInput'), "那就好，辛苦了")
-            # driver.wait(1)
-            #
-            # # 按下回车键发送消息
-            # driver.press_key(KeyCode.ENTER)
-            # driver.wait(1)
-            #
-            # driver.touch(BY.type('TextInput'))
-            # driver.wait(1)
-            #
-            # # 输入文本
-            # driver.input_text(BY.type('TextInput'), "谢谢关心，我先去忙了")
-            # driver.wait(1)
-            #
-            # # 按下回车键发送消息
-            # driver.press_key(KeyCode.ENTER)
-            # driver.wait(1)
-            #
-            # driver.touch(BY.type('TextInput'))
-            # driver.wait(1)
-            #
-            # # 输入文本
-            # driver.input_text(BY.type('TextInput'), "好的，再见")
-            # driver.wait(1)
-            #
-            # # 按下回车键发送消息
-            # driver.press_key(KeyCode.ENTER)
-            # driver.wait(1)
+            driver.touch(BY.type('TextInput'))
+            driver.wait(1)
+
+            # 输入文本
+            driver.input_text(BY.type('TextInput'), "最近在忙什么呢？")
+            driver.wait(1)
+
+            # 按下回车键发送消息
+            driver.press_key(KeyCode.ENTER)
+            driver.wait(1)
+
+            driver.touch(BY.type('TextInput'))
+            driver.wait(1)
+
+            # 输入文本
+            driver.input_text(BY.type('TextInput'), "那就好，辛苦了")
+            driver.wait(1)
+
+            # 按下回车键发送消息
+            driver.press_key(KeyCode.ENTER)
+            driver.wait(1)
+
+            driver.touch(BY.type('TextInput'))
+            driver.wait(1)
+
+            # 输入文本
+            driver.input_text(BY.type('TextInput'), "谢谢关心，我先去忙了")
+            driver.wait(1)
+
+            # 按下回车键发送消息
+            driver.press_key(KeyCode.ENTER)
+            driver.wait(1)
+
+            driver.touch(BY.type('TextInput'))
+            driver.wait(1)
+
+            # 输入文本
+            driver.input_text(BY.type('TextInput'), "好的，再见")
+            driver.wait(1)
+
+            # 按下回车键发送消息
+            driver.press_key(KeyCode.ENTER)
+            driver.wait(1)
 
             # 滑动返回
             driver.swipe_to_back()
