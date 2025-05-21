@@ -2,23 +2,6 @@
   <div class="instructions-table" id="perfsTable">
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
-      <el-input v-model="searchSymbolQuery.symbolNameQuery" placeholder="根据函数搜索" clearable @input="handleFilterChange"
-        class="search-input">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
-
-      <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件搜索" clearable @input="handleFilterChange"
-        class="search-input">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
       <el-input v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable @input="handleFilterChange"
         class="search-input">
         <template #prefix>
@@ -45,17 +28,7 @@
     <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
       :default-sort="{ prop: 'instructions', order: 'descending' }" @sort-change="handleSortChange" stripe
       highlight-current-row>
-      <el-table-column prop="name" label="函数" sortable>
-        <template #default="{ row }">
-          <div class="name-cell">{{ row.symbol }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column prop="file" label="所属文件" sortable>
-        <template #default="{ row }">
-          <div class="name-cell">{{ row.file }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column prop="category" label="所属线程">
+      <el-table-column prop="category" label="线程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.thread }}</div>
         </template>
@@ -70,7 +43,7 @@
           <div class="category-cell">{{ row.category }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="指令数" width="160" prop="instructions" sortable>
+      <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.instructions) }}</span>
@@ -91,7 +64,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="负载增长百分比" width="160" prop="increasePercentage" sortable>
+      <el-table-column v-if="isHidden" label="负载增长指百分比" width="160" prop="increasePercentage" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ row.increasePercentage }} %</span>
@@ -120,26 +93,24 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore,useThreadNameQueryStore,useFileNameQueryStore, useSymbolNameQueryStore,useCategoryStore } from '../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore,useThreadNameQueryStore, useCategoryStore } from '../stores/jsonDataStore.ts';
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
-export interface SymbolDataItem {
+export interface ThreadDataItem {
   stepId: number
-  symbol: string
   category: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
   increasePercentage: number
-  file: string
-  thread:string
-  process:string
+  thread: string
+  process: string
 }
 
 const props = defineProps({
   data: {
-    type: Array as PropType<SymbolDataItem[]>,
+    type: Array as PropType<ThreadDataItem[]>,
     required: true,
   },
   hideColumn: {
@@ -147,7 +118,9 @@ const props = defineProps({
     required: true,
   }
 });
+
 const isHidden = !props.hideColumn;
+
 const formatScientific = (num: number) => {
   if (typeof num !== 'number') {
     num = Number(num);
@@ -162,9 +135,8 @@ const handleRowClick = (row: { name: string }) => {
 // 搜索功能
 const processNameQuery = useProcessNameQueryStore();
 const threadNameQuery = useThreadNameQueryStore();
-const searchSymbolQuery = useSymbolNameQueryStore();
-const fileNameQuery = useFileNameQueryStore();
 const category = useCategoryStore();
+
 
 // 分页状态
 const currentPage = ref(1);
@@ -180,41 +152,27 @@ const sortState = ref<{
 
 
 // 数据处理（添加完整类型注解）
-const filteredData = computed<SymbolDataItem[]>(() => {
+const filteredData = computed<ThreadDataItem[]>(() => {
   let result = [...props.data]
 
- // 应用进程过滤
- if (processNameQuery.processNameQuery) {
+  // 应用进程过滤
+  if (processNameQuery.processNameQuery) {
     const searchTerm = processNameQuery.processNameQuery.toLowerCase()
-    result = result.filter((item: SymbolDataItem) =>
+    result = result.filter((item: ThreadDataItem) =>
       item.process.toLowerCase().includes(searchTerm))
   }
 
   // 应用线程过滤
   if (threadNameQuery.threadNameQuery) {
     const searchTerm = threadNameQuery.threadNameQuery.toLowerCase()
-    result = result.filter((item: SymbolDataItem) =>
+    result = result.filter((item: ThreadDataItem) =>
       item.thread.toLowerCase().includes(searchTerm))
-  }
-
-  // 函数搜索过滤
-  if (searchSymbolQuery.symbolNameQuery) {
-    const searchTerm = searchSymbolQuery.symbolNameQuery.toLowerCase()
-    result = result.filter((item: SymbolDataItem) =>
-      item.symbol.toLowerCase().includes(searchTerm))
-  }
-
-  // 文件搜索过滤
-  if (fileNameQuery.fileNameQuery) {
-    const searchTerm = fileNameQuery.fileNameQuery.toLowerCase()
-    result = result.filter((item: SymbolDataItem) =>
-      item.file.toLowerCase().includes(searchTerm))
   }
 
   // 应用分类过滤
   if (category.categoriesQuery) {
     if (category.categoriesQuery.length > 0) {
-      result = result.filter((item: SymbolDataItem) =>
+      result = result.filter((item: ThreadDataItem) =>
         category.categoriesQuery.includes(item.category))
     }
   }
@@ -224,7 +182,7 @@ const filteredData = computed<SymbolDataItem[]>(() => {
     const sortProp = sortState.value.prop
     const modifier = sortState.value.order === 'ascending' ? 1 : -1
 
-    result.sort((a: SymbolDataItem, b: SymbolDataItem) => {
+    result.sort((a: ThreadDataItem, b: ThreadDataItem) => {
       // 添加类型断言确保数值比较
       const aVal = a[sortProp] as number
       const bVal = b[sortProp] as number
@@ -268,7 +226,7 @@ const handlePageSizeChange = (newSize: number) => {
 };
 
 // 1. 定义严格的类型
-type SortKey = keyof SymbolDataItem; // 例如：'name' | 'category' | 'instructions'
+type SortKey = keyof ThreadDataItem; // 例如：'name' | 'category' | 'instructions'
 type SortOrder = 'ascending' | 'descending' | null;
 
 // 2. 修改事件处理函数类型
@@ -277,7 +235,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['symbol', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file','thread','process'];
+  const validKeys: SortKey[] = ['category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage','thread','process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
