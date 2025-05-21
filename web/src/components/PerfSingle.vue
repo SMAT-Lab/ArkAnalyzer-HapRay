@@ -11,12 +11,12 @@
         Flutter => 三方框架Flutter |
         WEB => 三方框架ArkWeb</p>
     </div>
-    <el-descriptions :title="performanceData.name" :column="1" class="beautified-descriptions">
-      <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
-      <el-descriptions-item label="应用版本：">{{ performanceData.version }}</el-descriptions-item>
+    <el-descriptions :title="mergedFilePerformanceData.name" :column="1" class="beautified-descriptions">
+      <el-descriptions-item label="系统版本：">{{ mergedFilePerformanceData.rom_version }}</el-descriptions-item>
+      <el-descriptions-item label="应用版本：">{{ mergedFilePerformanceData.version }}</el-descriptions-item>
       <el-descriptions-item>
         <div class="description-item-content">
-          场景名称：{{ performanceData.scene }}
+          场景名称：{{ mergedFilePerformanceData.scene }}
           <UploadHtml />
         </div>
       </el-descriptions-item>
@@ -95,11 +95,33 @@
       </el-col>
       <el-col :span="16">
         <!-- 基准版本 -->
+        
+        <!-- 进程负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">进程负载</span>
+          </h3>
+          <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessPerformanceData" :hideColumn="isHidden" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="12">
+        <!-- 线程负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">线程负载</span>
+          </h3>
+          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadPerformanceData" :hideColumn="isHidden" />
+        </div>
+      </el-col>
+      <el-col :span="12">
+         <!-- 文件负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfTable :stepId="currentStepIndex" :data="filteredPerformanceData" :hideColumn="isHidden" />
+          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData" :hideColumn="isHidden" />
         </div>
       </el-col>
     </el-row>
@@ -118,8 +140,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, onMounted } from 'vue';
-import PerfTable from './PerfTable.vue';
+import { ref, computed } from 'vue';
+import PerfProcessTable from './PerfProcessTable.vue';
+import PerfThreadTable from './PerfThreadTable.vue';
+import PerfFileTable from './PerfFileTable.vue';
 import PerfSymbolTable from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
@@ -156,7 +180,7 @@ const getTotalTestStepsCount = (testSteps: any[]) => {
   return total;
 };
 
-const performanceData = ref({
+const mergedProcessPerformanceData = ref({
   rom_version: json!.rom_version,
   id: json!.app_id,
   name: json!.app_name,
@@ -164,17 +188,74 @@ const performanceData = ref({
   scene: json!.scene,
   instructions: json!.steps.flatMap((step) =>
     step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.map((file) => ({
+      item.processes.flatMap((process) =>
+        ({
           stepId: step.step_id,
-          instructions: file.count,
+          instructions: process.count,
           compareInstructions: 0,
           increaseInstructions: 0,
           increasePercentage: 0,
-          name: file.file,
+          process: process.process,
           category: json!.categories[item.category],
-        }))
+        })
       )
+    )
+  ),
+});
+
+const mergedThreadPerformanceData = ref({
+  rom_version: json!.rom_version,
+  id: json!.app_id,
+  name: json!.app_name,
+  version: json!.app_version,
+  scene: json!.scene,
+  instructions: json!.steps.flatMap((step) =>
+    step.data.flatMap((item) =>
+      item.processes.flatMap((process) =>
+        process.threads.flatMap((thread) =>
+        ({
+          stepId: step.step_id,
+          instructions: thread.count,
+          compareInstructions: 0,
+          increaseInstructions: 0,
+          increasePercentage: 0,
+          thread: thread.thread,
+          process: process.process,
+          category: json!.categories[item.category],
+        })
+        )
+      )
+    )
+  ),
+});
+
+const mergedFilePerformanceData = ref({
+  rom_version: json!.rom_version,
+  id: json!.app_id,
+  name: json!.app_name,
+  version: json!.app_version,
+  scene: json!.scene,
+  instructions: json!.steps.flatMap((step) =>
+    step.data.flatMap((item) =>
+      item.processes.flatMap((process) =>
+        process.threads.flatMap((thread) =>
+          thread.files.flatMap((file) =>
+          ({
+            stepId: step.step_id,
+            instructions: file.count,
+            compareInstructions: 0,
+            increaseInstructions: 0,
+            increasePercentage: 0,
+            file: file.file,
+            thread: thread.thread,
+            process: process.process,
+            category: json!.categories[item.category],
+          })
+
+          )
+        )
+      )
+
     )
   ),
 });
@@ -186,19 +267,22 @@ const mergedSymbolsPerformanceData = ref({
   scene: json!.scene,
   instructions: json!.steps.flatMap((step) =>
     step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.flatMap((file) =>
-          file.symbols.map((symbol) =>
-          ({
-            stepId: step.step_id,
-            instructions: symbol.count,
-            compareInstructions: 0,
-            increaseInstructions: 0,
-            increasePercentage: 0,
-            name: symbol.symbol,
-            file: file.file,
-            category: json!.categories[item.category],
-          })
+      item.processes.flatMap((process) =>
+        process.threads.flatMap((thread) =>
+          thread.files.flatMap((file) =>
+            file.symbols.map((symbol) => ({
+              stepId: step.step_id,
+              instructions: symbol.count,
+              compareInstructions: 0,
+              increaseInstructions: 0,
+              increasePercentage: 0,
+              symbol: symbol.symbol,
+              file: file.file,
+              thread: thread.thread,
+              process: process.process,
+              category: json!.categories[item.category],
+            })
+            )
           )
         )
       )
@@ -247,11 +331,29 @@ const handleStepClick = (stepId: any) => {
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
-const filteredPerformanceData = computed(() => {
+const filteredProcessPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return performanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedProcessPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
   }
-  return performanceData.value.instructions
+  return mergedProcessPerformanceData.value.instructions
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+
+const filteredThreadPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return mergedThreadPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+  }
+  return mergedThreadPerformanceData.value.instructions
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+
+const filteredFilePerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return mergedFilePerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+  }
+  return mergedFilePerformanceData.value.instructions
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
@@ -313,14 +415,14 @@ function processJSONData(data: JSONData | null) {
 
 const handleDownloadAndRedirect = (file: string, stepId: number, name: string) => {
   const link = document.createElement('a');
-  if(file==='perf.data'){
+  if (file === 'perf.data') {
     link.href = '../hiperf/step' + stepId + '/' + file;  // 替换为实际文件路径
     link.download = name + file;       // 自定义文件名
-  }else{
+  } else {
     link.href = '../htrace/step' + stepId + '/' + file;  // 替换为实际文件路径
     link.download = name + file;       // 自定义文件名
   }
-  
+
   document.body.appendChild(link);
 
   link.click();

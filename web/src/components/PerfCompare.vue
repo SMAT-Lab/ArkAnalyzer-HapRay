@@ -195,12 +195,35 @@
     </el-row>
     <el-row :gutter="20">
       <el-col :span="24">
+        <!-- 进程负载表格 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">进程负载</span>
+          </h3>
+          <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessesPerformanceData"
+            :hideColumn="isHidden" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="24">
+        <!-- 线程负载表格 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">线程负载</span>
+          </h3>
+          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadsPerformanceData" :hideColumn="isHidden" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="24">
         <!-- 文件负载表格 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData" :hideColumn="isHidden" />
+          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData" :hideColumn="isHidden" />
         </div>
       </el-col>
     </el-row>
@@ -222,7 +245,7 @@
           <h3 class="panel-title">
             <span class="version-tag">新增文件负载表格</span>
           </h3>
-          <PerfTable :stepId="currentStepIndex" :data="increaseFilesPerformanceData" :hideColumn="hidden" />
+          <PerfFileTable :stepId="currentStepIndex" :data="increaseFilesPerformanceData" :hideColumn="hidden" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -261,7 +284,9 @@
 
 <script lang="ts" setup>
 import { ref, computed, onMounted } from 'vue';
-import PerfTable, { type FileDataItem } from './PerfTable.vue';
+import PerfProcessTable, { type ProcessDataItem } from './PerfProcessTable.vue';
+import PerfThreadTable, { type ThreadDataItem } from './PerfThreadTable.vue';
+import PerfFileTable, { type FileDataItem } from './PerfFileTable.vue';
 import PerfSymbolTable, { type SymbolDataItem } from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
@@ -286,500 +311,444 @@ const jsonDataStore = useJsonDataStore();
 const json = jsonDataStore.jsonData;
 const compareJson = jsonDataStore.compareJsonData;
 
-
-const fileDataItem: FileDataItem[] = convertToFileDataItem(json!, compareJson!);
-const symbolDataItem: SymbolDataItem[] = convertToSymbolDataItem(json!, compareJson!);
-
-const increaseFile: FileDataItem[] = collectZeroToNonZeroFiles(json!, compareJson!);
-const increaseSymbol: SymbolDataItem[] = collectZeroToNonZeroSymbols(json!, compareJson!);
+const mergedJson = mergeJSONData(json!, compareJson!);
 
 
 /**
- * 将 JSONData 转换为 FileDataItem 数组（解析到file层，包含两个数据源的所有文件）
+ * 创建对象映射，提高查找效率
+ * @param items 数组项
+ * @param keySelector 键选择器函数
+ * @returns 映射表
  */
-function convertToFileDataItem(
-  data: JSONData,
-  compareData?: JSONData
-): FileDataItem[] {
-  const dataItems: FileDataItem[] = [];
+function createMap<T, K extends string | number>(items: T[] | undefined, keySelector: (item: T) => K): Map<K, T> {
+  const map = new Map<K, T>();
+  items?.forEach(item => map.set(keySelector(item), item));
+  return map;
+}
 
-  // 创建主数据源的步骤映射
-  const primaryStepMap = new Map<number, JSONData['steps'][0]>(
-    data.steps.map(step => [step.step_id, step])
-  );
+/**
+ * 合并两个数组，生成包含count和compareCount的新结构
+ * @param array1 第一个数组
+ * @param array2 第二个数组
+ * @param keySelector 键选择器函数
+ * @param mergeItem 合并单个项的函数
+ * @returns 合并后的数组
+ */
+function mergeArrays<T1, T2, R>(
+  array1: T1[] | undefined,
+  array2: T2[] | undefined,
+  keySelector: (item: T1 | T2) => string | number,
+  mergeItem: (item1: T1 | undefined, item2: T2 | undefined) => R
+): R[] {
+  const map1 = createMap(array1, keySelector as (item: T1) => string | number);
+  const map2 = createMap(array2, keySelector as (item: T2) => string | number);
 
-  // 创建对比数据源的步骤映射
-  const compareStepMap = compareData
-    ? new Map<number, JSONData['steps'][0]>(
-      compareData.steps.map(step => [step.step_id, step])
-    )
-    : null;
+  const allKeys = [...new Set([...map1.keys(), ...map2.keys()])];
 
-  // 获取所有步骤ID的并集
-  const allStepIds = new Set([
-    ...primaryStepMap.keys(),
-    ...(compareStepMap?.keys() || [])
-  ]);
-
-  // 处理每个步骤
-  allStepIds.forEach(stepId => {
-    const primaryStep = primaryStepMap.get(stepId);
-    const compareStep = compareStepMap?.get(stepId);
-
-    // 创建category到dataItem的映射
-    const primaryDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
-    if (primaryStep) {
-      primaryStep.data.forEach(item => {
-        primaryDataMap.set(item.category, item);
-      });
-    }
-
-    const compareDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
-    if (compareStep) {
-      compareStep.data.forEach(item => {
-        compareDataMap.set(item.category, item);
-      });
-    }
-
-    // 获取所有category的并集
-    const allCategories = new Set([
-      ...primaryDataMap.keys(),
-      ...compareDataMap.keys()
-    ]);
-
-    // 处理每个category
-    allCategories.forEach(category => {
-      const categoryName = data.categories[category] || `category_${category}`;
-      const primaryDataItem = primaryDataMap.get(category);
-      const compareDataItem = compareDataMap.get(category);
-
-      // 创建subDataName到subDataItem的映射
-      const primarySubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
-      if (primaryDataItem) {
-        primaryDataItem.subData.forEach(item => {
-          primarySubDataMap.set(item.name, item);
-        });
-      }
-
-      const compareSubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
-      if (compareDataItem) {
-        compareDataItem.subData.forEach(item => {
-          compareSubDataMap.set(item.name, item);
-        });
-      }
-
-      // 获取所有subDataName的并集
-      const allSubDataNames = new Set([
-        ...primarySubDataMap.keys(),
-        ...compareSubDataMap.keys()
-      ]);
-
-      // 处理每个subData
-      allSubDataNames.forEach(subDataName => {
-        const primarySubData = primarySubDataMap.get(subDataName);
-        const compareSubData = compareSubDataMap.get(subDataName);
-
-        // 创建fileName到fileItem的映射
-        const primaryFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
-        if (primarySubData) {
-          primarySubData.files.forEach(item => {
-            primaryFileMap.set(item.file, item);
-          });
-        }
-
-        const compareFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
-        if (compareSubData) {
-          compareSubData.files.forEach(item => {
-            compareFileMap.set(item.file, item);
-          });
-        }
-
-        // 获取所有fileName的并集
-        const allFileNames = new Set([
-          ...primaryFileMap.keys(),
-          ...compareFileMap.keys()
-        ]);
-
-        // 处理每个文件
-        allFileNames.forEach(fileName => {
-          const primaryFile = primaryFileMap.get(fileName);
-          const compareFile = compareFileMap.get(fileName);
-
-          // 计算指令数（如果文件不存在，指令数为0）
-          const instructions = primaryFile
-            ? primaryFile.symbols.reduce((sum, symbol) => sum + symbol.count, 0)
-            : 0;
-
-          const compareInstructions = compareFile
-            ? compareFile.symbols.reduce((sum, symbol) => sum + symbol.count, 0)
-            : 0;
-
-          const increaseInstructions = compareInstructions - instructions;
-          const increasePercentage = calculatePercentageWithFixed(increaseInstructions, instructions);
-
-          dataItems.push({
-            stepId,
-            name: fileName,
-            category: categoryName,
-            instructions,
-            compareInstructions,
-            increaseInstructions,
-            increasePercentage: Number(increasePercentage.toFixed(2))
-          });
-        });
-      });
-    });
+  return allKeys.map(key => {
+    const item1 = map1.get(key);
+    const item2 = map2.get(key);
+    return mergeItem(item1, item2);
   });
+}
 
-  return dataItems;
+/**
+ * 合并两个JSONData类型的数据
+ * @param data1 第一个数据
+ * @param data2 第二个数据
+ * @returns 合并后的数据
+ */
+function mergeJSONData(data1: JSONData, data2: JSONData): MergeJSONData {
+  return {
+    app_id: data1.app_id,
+    app_name: data1.app_name,
+    app_version: data1.app_version,
+    scene: data1.scene,
+    timestamp: data1.timestamp,
+    perfDataPath: [...new Set([...data1.perfDataPath, ...data2.perfDataPath])],
+    perfDbPath: [...new Set([...data1.perfDbPath, ...data2.perfDbPath])],
+    htracePath: [...new Set([...data1.htracePath, ...data2.htracePath])],
+    categories: [...new Set([...data1.categories, ...data2.categories])],
+    steps: mergeArrays(
+      data1.steps,
+      data2.steps,
+      step => step.step_id,
+      (step1, step2) => ({
+        step_name: step1?.step_name || step2?.step_name || '',
+        step_id: step1?.step_id || step2!.step_id,
+        count: step1?.count || -1,
+        compareCount: step2?.count || -1,
+        round: step1?.round || step2?.round || 0,
+        perf_data_path: step1?.perf_data_path || step2?.perf_data_path || '',
+        data: mergeArrays(
+          step1?.data,
+          step2?.data,
+          data => data.category,
+          (data1, data2) => ({
+            category: data1?.category || data2!.category,
+            count: data1?.count || -1,
+            compareCount: data2?.count || -1,
+            processes: mergeArrays(
+              data1?.processes,
+              data2?.processes,
+              process => process.process,
+              (process1, process2) => ({
+                process: process1?.process || process2!.process,
+                count: process1?.count || -1,
+                compareCount: process2?.count || -1,
+                threads: mergeArrays(
+                  process1?.threads,
+                  process2?.threads,
+                  thread => thread.thread,
+                  (thread1, thread2) => ({
+                    thread: thread1?.thread || thread2!.thread,
+                    count: thread1?.count || -1,
+                    compareCount: thread2?.count || -1,
+                    files: mergeArrays(
+                      thread1?.files,
+                      thread2?.files,
+                      file => file.file,
+                      (file1, file2) => ({
+                        file: file1?.file || file2!.file,
+                        count: file1?.count || -1,
+                        compareCount: file2?.count || -1,
+                        symbols: mergeArrays(
+                          file1?.symbols,
+                          file2?.symbols,
+                          symbol => symbol.symbol,
+                          (symbol1, symbol2) => ({
+                            symbol: symbol1?.symbol || symbol2!.symbol,
+                            count: symbol1?.count || -1,
+                            compareCount: symbol2?.count || -1
+                          })
+                        )
+                      })
+                    )
+                  })
+                )
+              })
+            )
+          })
+        )
+      })
+    )
+  };
 }
 
 
+const processDataItem: ProcessDataItem[] = convertToProcessDataItems(mergedJson);
+const threadDataItem: ThreadDataItem[] = convertToThreadDataItems(mergedJson);
+const fileDataItem: FileDataItem[] = convertToFileDataItems(mergedJson);
+const symbolDataItem: SymbolDataItem[] = convertToSymbolDataItems(mergedJson);
+
+const increaseFile: FileDataItem[] = fileDataItem.filter((item) => (item.instructions === 0 || item.instructions === -1) && item.compareInstructions !== 0).map((item) => ({
+  stepId: item.stepId,
+  category: item.category,
+  instructions: item.compareInstructions,
+  compareInstructions: 0,
+  increaseInstructions: 0,
+  increasePercentage: 0,
+  file: item.file,
+  thread: item.thread,
+  process: item.process
+}));
+const increaseSymbol: SymbolDataItem[] = symbolDataItem.filter((item) => (item.instructions === 0 || item.instructions === -1) && item.compareInstructions !== 0).map((item) => ({
+  stepId: item.stepId,
+  category: item.category,
+  instructions: item.compareInstructions,
+  compareInstructions: 0,
+  increaseInstructions: 0,
+  increasePercentage: 0,
+  symbol: item.symbol,
+  file: item.file,
+  thread: item.thread,
+  process: item.process
+}));
+
 
 /**
- * 收集 data 中指令数为 0 但 compareData 中指令数不为 0 的文件层级信息
- * @param data JSONData 数据源
- * @param compareData 对比数据源
- * @returns 符合条件的文件层级 FileDataItem 数组
+ * 将MergeJSONData类型数据转换为ProcessDataItem数组
+ * @param mergedData 合并后的JSON数据
+ * @returns ProcessDataItem数组
  */
-function collectZeroToNonZeroFiles(
-  data: JSONData,
-  compareData: JSONData
-): FileDataItem[] {
-  const dataItems: FileDataItem[] = [];
+function convertToProcessDataItems(mergedData: MergeJSONData): ProcessDataItem[] {
+  const processDataMap = new Map<string, ProcessDataItem>();
 
-  // 构建主数据源的文件映射（stepId-category-subDataName-file → 指令数）
-  const primaryFileMap = buildFileInstructionMap(data);
+  // 遍历所有步骤
+  mergedData.steps.forEach(step => {
+    // 遍历步骤中的所有数据类别
+    step.data.forEach(data => {
 
-  // 遍历对比数据源的所有文件
-  compareData.steps.forEach(step => {
-    step.data.forEach(dataItem => {
-      const categoryName = compareData.categories[dataItem.category] || `category_${dataItem.category}`;
+      // 遍历子数据中的所有进程
+      data.processes.forEach(process => {
+        // 生成唯一键（步骤ID + 类别 + 进程名 + 线程名 + 文件名）
+        const key = `${step.step_id}-${data.category}-${process.process}`;
 
-      dataItem.subData.forEach(subData => {
-        subData.files.forEach(file => {
-          // 构建文件唯一标识
-          const fileKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}`;
+        // 累加文件层级的count
+        const existingItem = processDataMap.get(key);
 
-          // 计算文件在对比数据源中的总指令数
-          const compareInstructions = file.symbols.reduce(
-            (sum, symbol) => sum + symbol.count,
-            0
-          );
+        if (existingItem) {
+          // 如果已存在，累加instructions和compareInstructions
+          existingItem.instructions += process.count;
+          existingItem.compareInstructions += process.compareCount;
+        } else {
+          // 如果不存在，创建新的FileDataItem
+          processDataMap.set(key, {
+            stepId: step.step_id,
+            category: mergedData.categories[data.category],
+            instructions: process.count,
+            compareInstructions: process.compareCount,
+            increaseInstructions: 0, // 初始化为0，后续计算
+            increasePercentage: 0,   // 初始化为0，后续计算
+            process: process.process
+          });
+        }
+      });
 
-          // 跳过对比数据源中指令数为0的文件
-          if (compareInstructions === 0) return;
+    });
+  });
 
-          // 获取主数据源中该文件的指令数
-          const instructions = primaryFileMap.get(fileKey) || 0;
+  // 计算increaseInstructions和increasePercentage
+  const processDataItems = Array.from(processDataMap.values());
+  processDataItems.forEach(item => {
+    // 计算增加的指令数
+    item.increaseInstructions = item.compareInstructions - item.instructions;
 
-          // 仅收集主数据源中指令数为0，对比数据源中不为0的文件
-          if (instructions === 0) {
-            dataItems.push({
+    // 计算增加的百分比，避免除以零的情况
+    if (item.instructions !== 0) {
+      let percentage = (item.increaseInstructions / item.instructions) * 100;
+      if (item.instructions === -1) {
+        percentage = (item.increaseInstructions - 1) * 100;
+      }
+      item.increasePercentage = Number.parseFloat(percentage.toFixed(2))
+    } else {
+      // 如果instructions为0，根据compareInstructions的值设置百分比
+      item.increasePercentage = item.compareInstructions > 0 ? Infinity : 0;
+    }
+  });
+
+  return processDataItems;
+}
+
+
+/**
+ * 将MergeJSONData类型数据转换为ThreadDataItem数组
+ * @param mergedData 合并后的JSON数据
+ * @returns ThreadDataItem数组
+ */
+function convertToThreadDataItems(mergedData: MergeJSONData): ThreadDataItem[] {
+  const threadDataMap = new Map<string, ThreadDataItem>();
+
+  // 遍历所有步骤
+  mergedData.steps.forEach(step => {
+    // 遍历步骤中的所有数据类别
+    step.data.forEach(data => {
+
+      // 遍历子数据中的所有进程
+      data.processes.forEach(process => {
+        // 遍历进程中的所有线程
+        process.threads.forEach(thread => {
+          // 生成唯一键（步骤ID + 类别 + 进程名 + 线程名 + 文件名）
+          const key = `${step.step_id}-${data.category}-${process.process}-${thread.thread}`;
+
+          // 累加文件层级的count
+          const existingItem = threadDataMap.get(key);
+
+          if (existingItem) {
+            // 如果已存在，累加instructions和compareInstructions
+            existingItem.instructions += thread.count;
+            existingItem.compareInstructions += thread.compareCount;
+          } else {
+            // 如果不存在，创建新的FileDataItem
+            threadDataMap.set(key, {
               stepId: step.step_id,
-              name: file.file,
-              category: categoryName,
-              instructions: compareInstructions,
-              compareInstructions,
-              increaseInstructions: compareInstructions, // 增长值等于对比值
-              increasePercentage: Infinity // 无限增长（从0到非0）
+              category: mergedData.categories[data.category],
+              instructions: thread.count,
+              compareInstructions: thread.compareCount,
+              increaseInstructions: 0, // 初始化为0，后续计算
+              increasePercentage: 0,   // 初始化为0，后续计算
+              thread: thread.thread,
+              process: process.process
             });
           }
+
         });
       });
+
     });
   });
 
-  return dataItems;
-}
+  // 计算increaseInstructions和increasePercentage
+  const threadDataItems = Array.from(threadDataMap.values());
+  threadDataItems.forEach(item => {
+    // 计算增加的指令数
+    item.increaseInstructions = item.compareInstructions - item.instructions;
 
-/**
- * 构建文件指令数映射
- */
-function buildFileInstructionMap(data: JSONData): Map<string, number> {
-  const fileMap = new Map<string, number>();
-
-  data.steps.forEach(step => {
-    step.data.forEach(dataItem => {
-      dataItem.subData.forEach(subData => {
-        subData.files.forEach(file => {
-          const fileKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}`;
-          const instructions = file.symbols.reduce(
-            (sum, symbol) => sum + symbol.count,
-            0
-          );
-          fileMap.set(fileKey, instructions);
-        });
-      });
-    });
-  });
-
-  return fileMap;
-}
-
-
-
-
-
-
-
-/**
- * 将 JSONData 转换为 SymbolDataItem 数组（解析到symbol层，包含文件信息）
- * @param data JSONData 数据源
- * @param compareData 对比数据源（可选）
- * @returns 转换后的 SymbolDataItem 数组
- */
-function convertToSymbolDataItem(
-  data: JSONData,
-  compareData?: JSONData
-): SymbolDataItem[] {
-  const dataItems: SymbolDataItem[] = [];
-
-  // 创建主数据源的步骤映射
-  const primaryStepMap = new Map<number, JSONData['steps'][0]>(
-    data.steps.map(step => [step.step_id, step])
-  );
-
-  // 创建对比数据源的步骤映射
-  const compareStepMap = compareData
-    ? new Map<number, JSONData['steps'][0]>(
-      compareData.steps.map(step => [step.step_id, step])
-    )
-    : null;
-
-  // 获取所有步骤ID的并集
-  const allStepIds = new Set([
-    ...primaryStepMap.keys(),
-    ...(compareStepMap?.keys() || [])
-  ]);
-
-  // 处理每个步骤
-  allStepIds.forEach(stepId => {
-    const primaryStep = primaryStepMap.get(stepId);
-    const compareStep = compareStepMap?.get(stepId);
-
-    // 创建category到dataItem的映射
-    const primaryDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
-    if (primaryStep) {
-      primaryStep.data.forEach(item => {
-        primaryDataMap.set(item.category, item);
-      });
-    }
-
-    const compareDataMap = new Map<number, JSONData['steps'][0]['data'][0]>();
-    if (compareStep) {
-      compareStep.data.forEach(item => {
-        compareDataMap.set(item.category, item);
-      });
-    }
-
-    // 获取所有category的并集
-    const allCategories = new Set([
-      ...primaryDataMap.keys(),
-      ...compareDataMap.keys()
-    ]);
-
-    // 处理每个category
-    allCategories.forEach(category => {
-      const categoryName = data.categories[category] || `category_${category}`;
-      const primaryDataItem = primaryDataMap.get(category);
-      const compareDataItem = compareDataMap.get(category);
-
-      // 创建subDataName到subDataItem的映射
-      const primarySubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
-      if (primaryDataItem) {
-        primaryDataItem.subData.forEach(item => {
-          primarySubDataMap.set(item.name, item);
-        });
+    // 计算增加的百分比，避免除以零的情况
+    if (item.instructions !== 0) {
+      let percentage = (item.increaseInstructions / item.instructions) * 100;
+      if (item.instructions === -1) {
+        percentage = (item.increaseInstructions - 1) * 100;
       }
-
-      const compareSubDataMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]>();
-      if (compareDataItem) {
-        compareDataItem.subData.forEach(item => {
-          compareSubDataMap.set(item.name, item);
-        });
-      }
-
-      // 获取所有subDataName的并集
-      const allSubDataNames = new Set([
-        ...primarySubDataMap.keys(),
-        ...compareSubDataMap.keys()
-      ]);
-
-      // 处理每个subData
-      allSubDataNames.forEach(subDataName => {
-        const primarySubData = primarySubDataMap.get(subDataName);
-        const compareSubData = compareSubDataMap.get(subDataName);
-
-        // 创建fileName到fileItem的映射
-        const primaryFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
-        if (primarySubData) {
-          primarySubData.files.forEach(item => {
-            primaryFileMap.set(item.file, item);
-          });
-        }
-
-        const compareFileMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]>();
-        if (compareSubData) {
-          compareSubData.files.forEach(item => {
-            compareFileMap.set(item.file, item);
-          });
-        }
-
-        // 获取所有fileName的并集
-        const allFileNames = new Set([
-          ...primaryFileMap.keys(),
-          ...compareFileMap.keys()
-        ]);
-
-        // 处理每个文件
-        allFileNames.forEach(fileName => {
-          const primaryFile = primaryFileMap.get(fileName);
-          const compareFile = compareFileMap.get(fileName);
-
-          // 创建symbol到symbolItem的映射
-          const primarySymbolMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]['symbols'][0]>();
-          if (primaryFile) {
-            primaryFile.symbols.forEach(item => {
-              primarySymbolMap.set(item.symbol, item);
-            });
-          }
-
-          const compareSymbolMap = new Map<string, JSONData['steps'][0]['data'][0]['subData'][0]['files'][0]['symbols'][0]>();
-          if (compareFile) {
-            compareFile.symbols.forEach(item => {
-              compareSymbolMap.set(item.symbol, item);
-            });
-          }
-
-          // 获取所有symbol的并集
-          const allSymbols = new Set([
-            ...primarySymbolMap.keys(),
-            ...compareSymbolMap.keys()
-          ]);
-
-          // 处理每个符号
-          allSymbols.forEach(symbol => {
-            const primarySymbol = primarySymbolMap.get(symbol);
-            const compareSymbol = compareSymbolMap.get(symbol);
-
-            // 计算指令数（如果符号不存在，指令数为0）
-            const instructions = primarySymbol?.count ?? 0;
-            const compareInstructions = compareSymbol?.count ?? 0;
-
-            const increaseInstructions = compareInstructions - instructions;
-            const increasePercentage = calculatePercentageWithFixed(increaseInstructions, instructions);
-
-            dataItems.push({
-              stepId,
-              name: symbol, // 使用符号名作为name
-              category: categoryName,
-              instructions,
-              compareInstructions,
-              increaseInstructions,
-              increasePercentage: Number(increasePercentage.toFixed(2)),
-              file: fileName // 添加文件信息
-            });
-          });
-        });
-      });
-    });
+      item.increasePercentage = Number.parseFloat(percentage.toFixed(2))
+    } else {
+      // 如果instructions为0，根据compareInstructions的值设置百分比
+      item.increasePercentage = item.compareInstructions > 0 ? Infinity : 0;
+    }
   });
 
-  return dataItems;
+  return threadDataItems;
 }
 
-
-
 /**
- * 收集 data 中指令数为 0 但 compareData 中指令数不为 0 的符号层级信息
- * @param data JSONData 数据源
- * @param compareData 对比数据源
- * @returns 符合条件的符号层级 SymbolDataItem 数组
+ * 将MergeJSONData类型数据转换为FileDataItem数组
+ * @param mergedData 合并后的JSON数据
+ * @returns FileDataItem数组
  */
-function collectZeroToNonZeroSymbols(
-  data: JSONData,
-  compareData: JSONData
-): SymbolDataItem[] {
-  const dataItems: SymbolDataItem[] = [];
+function convertToFileDataItems(mergedData: MergeJSONData): FileDataItem[] {
+  const fileDataMap = new Map<string, FileDataItem>();
 
-  // 构建主数据源的符号映射（stepId-category-subDataName-file-symbol → 指令数）
-  const primarySymbolMap = buildSymbolInstructionMap(data);
+  // 遍历所有步骤
+  mergedData.steps.forEach(step => {
+    // 遍历步骤中的所有数据类别
+    step.data.forEach(data => {
 
-  // 遍历对比数据源的所有符号
-  compareData.steps.forEach(step => {
-    step.data.forEach(dataItem => {
-      const categoryName = compareData.categories[dataItem.category] || `category_${dataItem.category}`;
+      // 遍历子数据中的所有进程
+      data.processes.forEach(process => {
+        // 遍历进程中的所有线程
+        process.threads.forEach(thread => {
+          // 遍历线程中的所有文件
+          thread.files.forEach(file => {
+            // 生成唯一键（步骤ID + 类别 + 进程名 + 线程名 + 文件名）
+            const key = `${step.step_id}-${data.category}-${process.process}-${thread.thread}-${file.file}`;
 
-      dataItem.subData.forEach(subData => {
-        subData.files.forEach(file => {
-          file.symbols.forEach(symbol => {
-            // 构建符号唯一标识
-            const symbolKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}-${symbol.symbol}`;
+            // 累加文件层级的count
+            const existingItem = fileDataMap.get(key);
 
-            // 获取对比数据源中符号的指令数
-            const compareInstructions = symbol.count;
-
-            // 跳过对比数据源中指令数为0的符号
-            if (compareInstructions === 0) return;
-
-            // 获取主数据源中该符号的指令数
-            const instructions = primarySymbolMap.get(symbolKey) || 0;
-
-            // 仅收集主数据源中指令数为0，对比数据源中不为0的符号
-            if (instructions === 0) {
-              dataItems.push({
+            if (existingItem) {
+              // 如果已存在，累加instructions和compareInstructions
+              existingItem.instructions += file.count;
+              existingItem.compareInstructions += file.compareCount;
+            } else {
+              // 如果不存在，创建新的FileDataItem
+              fileDataMap.set(key, {
                 stepId: step.step_id,
-                name: symbol.symbol,
-                category: categoryName,
-                instructions: compareInstructions,
-                compareInstructions,
-                increaseInstructions: compareInstructions, // 增长值等于对比值
-                increasePercentage: Infinity, // 无限增长（从0到非0）
-                file: file.file // 保留文件信息
+                category: mergedData.categories[data.category],
+                instructions: file.count,
+                compareInstructions: file.compareCount,
+                increaseInstructions: 0, // 初始化为0，后续计算
+                increasePercentage: 0,   // 初始化为0，后续计算
+                file: file.file,
+                thread: thread.thread,
+                process: process.process
               });
             }
           });
         });
       });
+
     });
   });
 
-  return dataItems;
+  // 计算increaseInstructions和increasePercentage
+  const fileDataItems = Array.from(fileDataMap.values());
+  fileDataItems.forEach(item => {
+    // 计算增加的指令数
+    item.increaseInstructions = item.compareInstructions - item.instructions;
+
+    // 计算增加的百分比，避免除以零的情况
+    if (item.instructions !== 0) {
+      let percentage = (item.increaseInstructions / item.instructions) * 100;
+      if (item.instructions === -1) {
+        percentage = (item.increaseInstructions - 1) * 100;
+      }
+      item.increasePercentage = Number.parseFloat(percentage.toFixed(2))
+    } else {
+      // 如果instructions为0，根据compareInstructions的值设置百分比
+      item.increasePercentage = item.compareInstructions > 0 ? Infinity : 0;
+    }
+  });
+
+  return fileDataItems;
 }
 
-/**
- * 构建符号指令数映射
- */
-function buildSymbolInstructionMap(data: JSONData): Map<string, number> {
-  const symbolMap = new Map<string, number>();
 
-  data.steps.forEach(step => {
-    step.data.forEach(dataItem => {
-      dataItem.subData.forEach(subData => {
-        subData.files.forEach(file => {
-          file.symbols.forEach(symbol => {
-            const symbolKey = `${step.step_id}-${dataItem.category}-${subData.name}-${file.file}-${symbol.symbol}`;
-            symbolMap.set(symbolKey, symbol.count);
+
+/**
+ * 将MergeJSONData类型数据转换为SymbolDataItem数组
+ * @param mergedData 合并后的JSON数据
+ * @returns FileDataItem数组
+ */
+function convertToSymbolDataItems(mergedData: MergeJSONData): SymbolDataItem[] {
+  const symbolDataMap = new Map<string, SymbolDataItem>();
+
+  // 遍历所有步骤
+  mergedData.steps.forEach(step => {
+    // 遍历步骤中的所有数据类别
+    step.data.forEach(data => {
+
+      // 遍历子数据中的所有进程
+      data.processes.forEach(process => {
+        // 遍历进程中的所有线程
+        process.threads.forEach(thread => {
+          // 遍历线程中的所有文件
+          thread.files.forEach(file => {
+            //遍历文件中的所有符号
+            file.symbols.forEach(symbol => {
+              // 生成唯一键（步骤ID + 类别 + 进程名 + 线程名 + 文件名 + 符号名）
+              const key = `${step.step_id}-${data.category}-${process.process}-${thread.thread}-${file.file}-${symbol.symbol}`;
+
+              // 累加文件层级的count
+              const existingItem = symbolDataMap.get(key);
+
+              if (existingItem) {
+                // 如果已存在，累加instructions和compareInstructions
+                existingItem.instructions += symbol.count;
+                existingItem.compareInstructions += symbol.compareCount;
+              } else {
+                // 如果不存在，创建新的FileDataItem
+                symbolDataMap.set(key, {
+                  stepId: step.step_id,
+                  category: mergedData.categories[data.category],
+                  instructions: symbol.count,
+                  compareInstructions: symbol.compareCount,
+                  increaseInstructions: 0, // 初始化为0，后续计算
+                  increasePercentage: 0,   // 初始化为0，后续计算
+                  symbol: symbol.symbol,
+                  file: file.file,
+                  thread: thread.thread,
+                  process: process.process
+                });
+              }
+            });
           });
         });
       });
+
     });
   });
+  // 计算increaseInstructions和increasePercentage
+  const symbolDataItems = Array.from(symbolDataMap.values());
+  symbolDataItems.forEach(item => {
+    // 计算增加的指令数
+    item.increaseInstructions = item.compareInstructions - item.instructions;
 
-  return symbolMap;
+    // 计算增加的百分比，避免除以零的情况
+    if (item.instructions !== 0) {
+      let percentage = (item.increaseInstructions / item.instructions) * 100;
+      if (item.instructions === -1) {
+        percentage = (item.increaseInstructions - 1) * 100;
+      }
+      item.increasePercentage = Number.parseFloat(percentage.toFixed(2))
+    } else {
+      // 如果instructions为0，根据compareInstructions的值设置百分比
+      item.increasePercentage = item.compareInstructions > 0 ? Infinity : 0;
+    }
+  });
+
+  return symbolDataItems;
+
 }
-
-
-
-
-
-
-
-
-
-
-
 
 const performanceData = ref({
   rom_version: json!.rom_version,
@@ -789,24 +758,27 @@ const performanceData = ref({
   scene: json!.scene,
   instructions: json!.steps.flatMap((step) =>
     step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.flatMap((file) =>
-          file.symbols.map((symbol) =>
-          ({
-            stepId: step.step_id,
-            instructions: symbol.count!,
-            compareInstructions: 0,
-            increaseInstructions: 0,
-            increasePercentage: 0,
-            name: symbol.symbol,
-            file: file.file,
-            category: compareJson!.categories[item.category],
-          })
+      item.processes.flatMap((process) =>
+        process.threads.flatMap((thread) =>
+          thread.files.flatMap((file) =>
+            file.symbols.map((symbol) => ({
+              stepId: step.step_id,
+              instructions: symbol.count,
+              compareInstructions: 0,
+              increaseInstructions: 0,
+              increasePercentage: 0,
+              symbol: symbol.symbol,
+              file: file.file,
+              thread: thread.thread,
+              process: process.process,
+              category: json!.categories[item.category],
+            })
+            )
           )
         )
       )
     )
-  ),
+  )
 });
 
 const comparePerformanceData = ref({
@@ -817,24 +789,27 @@ const comparePerformanceData = ref({
   scene: compareJson!.scene,
   instructions: compareJson!.steps.flatMap((step) =>
     step.data.flatMap((item) =>
-      item.subData.flatMap((subItem) =>
-        subItem.files.flatMap((file) =>
-          file.symbols.map((symbol) =>
-          ({
-            stepId: step.step_id,
-            instructions: symbol.count!,
-            compareInstructions: 0,
-            increaseInstructions: 0,
-            increasePercentage: 0,
-            name: symbol.symbol,
-            file: file.file,
-            category: compareJson!.categories[item.category],
-          })
+      item.processes.flatMap((process) =>
+        process.threads.flatMap((thread) =>
+          thread.files.flatMap((file) =>
+            file.symbols.map((symbol) => ({
+              stepId: step.step_id,
+              instructions: symbol.count,
+              compareInstructions: 0,
+              increaseInstructions: 0,
+              increasePercentage: 0,
+              symbol: symbol.symbol,
+              file: file.file,
+              thread: thread.thread,
+              process: process.process,
+              category: json!.categories[item.category],
+            })
+            )
           )
         )
       )
     )
-  ),
+  )
 });
 
 // 场景负载对比折线图
@@ -903,6 +878,24 @@ const stepDiff = ref();
 stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 
 
+// 进程负载表格
+const filteredProcessesPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return processDataItem.sort((a, b) => b.instructions - a.instructions);
+  }
+  return processDataItem
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+// 线程负载表格
+const filteredThreadsPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return threadDataItem.sort((a, b) => b.instructions - a.instructions);
+  }
+  return threadDataItem
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
 // 文件负载表格
 const filteredFilesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
@@ -1037,36 +1030,36 @@ function mergeSteps(data: JSONData): JSONData {
         const existingItem = categoryMap.get(item.category)!;
         existingItem.count += item.count;
 
-        // 合并 subData
-        const subDataMap = new Map<string, typeof existingItem.subData[0]>();
-        existingItem.subData.forEach(sub => subDataMap.set(sub.name, sub));
-        item.subData.forEach(sub => {
-          if (subDataMap.has(sub.name)) {
-            subDataMap.get(sub.name)!.count += sub.count;
+        // 合并 processes
+        const processesDataMap = new Map<string, typeof existingItem.processes[0]>();
+        existingItem.processes.forEach(process => processesDataMap.set(process.process, process));
+        item.processes.forEach(process => {
+          if (processesDataMap.has(process.process)) {
+            processesDataMap.get(process.process)!.count += process.count;
 
-            // 合并 files
-            const fileMap = new Map<string, typeof sub.files[0]>();
-            subDataMap.get(sub.name)!.files.forEach(file => fileMap.set(file.file, file));
-            sub.files.forEach(file => {
-              if (fileMap.has(file.file)) {
-                fileMap.get(file.file)!.count += file.count;
+            // 合并 threads
+            const threadsDataMap = new Map<string, typeof process.threads[0]>();
+            processesDataMap.get(process.process)!.threads.forEach(thread => threadsDataMap.set(thread.thread, thread));
+            process.threads.forEach(thread => {
+              if (threadsDataMap.has(thread.thread)) {
+                threadsDataMap.get(thread.thread)!.count += thread.count;
 
-                // 合并 symbols
-                const symbolMap = new Map<string, typeof file.symbols[0]>();
-                fileMap.get(file.file)!.symbols.forEach(symbol => symbolMap.set(symbol.symbol, symbol));
-                file.symbols.forEach(symbol => {
-                  if (symbolMap.has(symbol.symbol)) {
-                    symbolMap.get(symbol.symbol)!.count += symbol.count;
+                // 合并 files
+                const filesMap = new Map<string, typeof thread.files[0]>();
+                threadsDataMap.get(thread.thread)!.files.forEach(file => filesMap.set(file.file, file));
+                thread.files.forEach(file => {
+                  if (filesMap.has(file.file)) {
+                    filesMap.get(file.file)!.count += file.count;
                   } else {
-                    fileMap.get(file.file)!.symbols.push({ ...symbol });
+                    threadsDataMap.get(thread.thread)!.files.push({ ...file });
                   }
                 });
               } else {
-                subDataMap.get(sub.name)!.files.push({ ...file });
+                processesDataMap.get(process.process)!.threads.push({ ...thread });
               }
             });
           } else {
-            existingItem.subData.push({ ...sub });
+            existingItem.processes.push({ ...process });
           }
         });
       } else {
@@ -1122,50 +1115,50 @@ function selectJSONData(data1: JSONData, data2: JSONData): JSONData {
     // 对 data 数组按照 category 排序
     step.data.sort((a, b) => a.category - b.category);
 
-    // 处理每个 data 中的 subData 数组
+    // 处理每个 data 中的 processes 数组
     step.data.forEach(dataItem => {
-      const subDataMap = new Map<string, typeof dataItem.subData[0]>();
-      dataItem.subData.forEach(subDataItem => {
-        const existingSubData = subDataMap.get(subDataItem.name);
+      const processesDataMap = new Map<string, typeof dataItem.processes[0]>();
+      dataItem.processes.forEach(process => {
+        const existingSubData = processesDataMap.get(process.process);
         if (existingSubData) {
-          existingSubData.count += subDataItem.count;
+          existingSubData.count += process.count;
         } else {
-          subDataMap.set(subDataItem.name, { ...subDataItem });
+          processesDataMap.set(process.process, { ...process });
         }
       });
-      dataItem.subData = Array.from(subDataMap.values());
-      // 对 subData 数组按照 name 排序
-      dataItem.subData.sort((a, b) => a.name.localeCompare(b.name));
+      dataItem.processes = Array.from(processesDataMap.values());
+      // 对 processes 数组按照 name 排序
+      dataItem.processes.sort((a, b) => a.process.localeCompare(b.process));
 
-      // 处理每个 subData 中的 files 数组
-      dataItem.subData.forEach(subDataItem => {
-        const fileMap = new Map<string, typeof subDataItem.files[0]>();
-        subDataItem.files.forEach(fileItem => {
-          const existingFile = fileMap.get(fileItem.file);
+      // 处理每个 processes 中的 threads 数组
+      dataItem.processes.forEach(process => {
+        const threadsMap = new Map<string, typeof process.threads[0]>();
+        process.threads.forEach(thread => {
+          const existingFile = threadsMap.get(thread.thread);
           if (existingFile) {
-            existingFile.count += fileItem.count;
+            existingFile.count += thread.count;
           } else {
-            fileMap.set(fileItem.file, { ...fileItem });
+            threadsMap.set(thread.thread, { ...thread });
           }
         });
-        subDataItem.files = Array.from(fileMap.values());
-        // 对 files 数组按照 file 排序
-        subDataItem.files.sort((a, b) => a.file.localeCompare(b.file));
+        process.threads = Array.from(threadsMap.values());
+        // 对 threads 数组按照 thread 排序
+        process.threads.sort((a, b) => a.thread.localeCompare(b.thread));
 
-        // 处理每个 file 中的 symbols 数组
-        subDataItem.files.forEach(fileItem => {
-          const symbolMap = new Map<string, typeof fileItem.symbols[0]>();
-          fileItem.symbols.forEach(symbolItem => {
-            const existingSymbol = symbolMap.get(symbolItem.symbol);
+        // 处理每个 threads 中的 files 数组
+        process.threads.forEach(thread => {
+          const filesMap = new Map<string, typeof thread.files[0]>();
+          thread.files.forEach(file => {
+            const existingSymbol = filesMap.get(file.file);
             if (existingSymbol) {
-              existingSymbol.count += symbolItem.count;
+              existingSymbol.count += file.count;
             } else {
-              symbolMap.set(symbolItem.symbol, { ...symbolItem });
+              filesMap.set(file.file, { ...file });
             }
           });
-          fileItem.symbols = Array.from(symbolMap.values());
+          thread.files = Array.from(filesMap.values());
           // 对 symbols 数组按照 symbol 排序
-          fileItem.symbols.sort((a, b) => a.symbol.localeCompare(b.symbol));
+          thread.files.sort((a, b) => a.file.localeCompare(b.file));
         });
       });
     });
