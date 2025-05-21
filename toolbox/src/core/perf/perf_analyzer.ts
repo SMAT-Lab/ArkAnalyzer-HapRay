@@ -19,6 +19,7 @@ import {
 import { PerfDatabase } from './perf_database';
 import { PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
+import { PerfDataTransformer, StepJsonData } from './perf_data_transformer';
 
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -73,65 +74,11 @@ export interface TestStep {
     end: number;
 }
 
-
 // 定义单个 step 的结构
 export interface Step {
     name: string;
     stepIdx: number;
     description: string;
-}
-
-interface FileItem {
-    file: string;
-    count: number;
-    symbols: SymbolInfo[];
-};
-
-interface SubItem {
-    name: string;
-    count: number;
-    files: FileItem[];
-};
-
-interface CategoryItem {
-    category: number;
-    count: number;
-    subData: SubItem[];
-};
-
-export interface StepItem {
-    step_name: string;
-    step_id: number;
-    count: number;
-    round: number;
-    perf_data_path: string;
-    data: CategoryItem[];
-};
-
-interface FileInfo {
-    file: string;
-    fileEvents: number;
-    category: ComponentCategory; // 组件大类
-    subCategory: string; // 小类
-    symbolInfos: SymbolInfo[];
-}
-
-interface SymbolInfo {
-    symbol: string;
-    count: number;
-}
-
-interface CategoryInfo {
-    category: ComponentCategory;
-    name: string;
-    count: number;
-    subData: Map<string, subCategoryInfo>;
-}
-
-interface subCategoryInfo {
-    name: string;
-    count: number;
-    files: FileItem[];
 }
 
 export const DEFAULT_PERF_DB = 'perf.db';
@@ -496,10 +443,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         return perf;
     }
-    async analyze2(dbPath: string, app_id: string, step: Step): Promise<StepItem> {
-        // const fileBuffer = fs.readFileSync(dbPath);
-        // const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
-        let stepInfo: StepItem = {
+    async analyze2(dbPath: string, app_id: string, step: Step): Promise<StepJsonData> {
+        let stepInfo: StepJsonData = {
             step_id: step.stepIdx,
             step_name: step.description,
             count: 0,
@@ -507,117 +452,17 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             perf_data_path: '',
             data: []
         };
-        // stepInfo.step_id = step.stepIdx;
-        // stepInfo.step_name = step.name;
+
         // 读取数据并统计
         await this.loadDbAndStatistics(dbPath, app_id);
-        let steps = this.stepsSample.map((value) => value.statistics);
-        let total = 0;
-        for (let i = 0; i < steps[0].components.length; i++) {
-            total += steps[0].components[i].instructions;
-            // logger.info(`${steps[0].components[i].name} :  ${steps[0].components[i].instructions}`)
-        }
-        logger.info(steps.length, total);
-
-        for (const data of this.stepsSample[0].details) {
-            if (!data.componentName) {
-                logger.info(`${data.componentCategory}, ${data.componentName}`)
-            }
-        }
-        let tidFileMap: Map<string, number> = new Map();
-        let fileMap: Map<string, FileInfo> = new Map();
-        const filter_event = PerfEvent.INSTRUCTION_EVENT;
-        for (const data of this.stepsSample[0].details) {
-            if (data.eventType !== filter_event || data.componentCategory === ComponentCategory.UNKNOWN) {
-                continue;
-            }
-            if (tidFileMap.has(`${data.tid}_${data.file}_${data.symbol}`)) {
-                if (tidFileMap.get(`${data.tid}_${data.file}`) !== data.fileEvents) {
-                    logger.error(`duplicate file ${data.file}: ${tidFileMap.get(`${data.tid}_${data.file}_${data.symbol}`)}, ${data.fileEvents} TID ${data.tid}`);
-                }
-            } else {
-                tidFileMap.set(`${data.tid}_${data.file}_${data.symbol}`, data.fileEvents);
-                // logger.info(`### set ${data.file}, ${data.fileEvents} TID ${data.tid}`);
-                if (!fileMap.has(data.file)) {
-                    fileMap.set(data.file, {
-                        file: data.file,
-                        fileEvents: data.symbolEvents,
-                        category: data.componentCategory,
-                        subCategory: data.componentName!,
-                        symbolInfos: [{ symbol: data.symbol, count: data.symbolEvents }]
-                    })
-                } else {
-                    let fileInfo = fileMap.get(data.file)!;
-                    fileInfo.fileEvents += data.symbolEvents;
-                    fileInfo.symbolInfos.push({ symbol: data.symbol, count: data.symbolEvents });
-                }
-            }
-        }
-
-        let categoryInfoMap: Map<ComponentCategory, CategoryInfo> = new Map();
-        for (const [_, data] of fileMap) {
-            if (!categoryInfoMap.has(data.category)) {
-                let categoryInfo: CategoryInfo = {
-                    category: data.category,
-                    name: getComponentCategories()[data.category].name,
-                    count: data.fileEvents,
-                    subData: new Map(),
-                }
-
-                let subData = {
-                    name: data.subCategory,
-                    count: data.fileEvents,
-                    files: [{
-                        file: data.file,
-                        count: data.fileEvents,
-                        symbols: data.symbolInfos
-                    }]
-                }
-                categoryInfo.subData.set(data.subCategory, subData);
-                categoryInfoMap.set(data.category, categoryInfo);
-            } else {
-                let categoryInfo = categoryInfoMap.get(data.category);
-                categoryInfo!.count += data.fileEvents;
-                if (!categoryInfo!.subData.has(data.subCategory)) {
-                    let subData = {
-                        name: data.subCategory,
-                        count: data.fileEvents,
-                        files: [{
-                            file: data.file,
-                            count: data.fileEvents,
-                            symbols: data.symbolInfos
-                        }]
-                    }
-                    categoryInfo!.subData.set(data.subCategory, subData);
-                } else {
-                    let subData = categoryInfo!.subData.get(data.subCategory);
-                    subData!.count += data.fileEvents;
-                    subData!.files.push({
-                        file: data.file,
-                        count: data.fileEvents,
-                        symbols: data.symbolInfos
-                    })
-                }
-            }
-        }
-
-        for (const [_, data] of categoryInfoMap) {
-            let categoryItem: CategoryItem = {
-                category: data.category,
-                count: data.count,
-                subData: []
-            }
-            stepInfo.count += data.count;
-            for (const [_, subdata] of data.subData) {
-                let sub: SubItem = {
-                    name: subdata.name,
-                    count: subdata.count,
-                    files: subdata.files
-                }
-                categoryItem.subData.push(sub);
-            }
-            stepInfo.data.push(categoryItem);
-        }
+        let perfDataTransformer = new PerfDataTransformer(
+            this.stepsSample[0].details,
+            step.description,//stepName
+            step.stepIdx,//stepid
+            -1,
+            ''
+        )
+        stepInfo = perfDataTransformer.transform()
         return stepInfo;
     }
 
