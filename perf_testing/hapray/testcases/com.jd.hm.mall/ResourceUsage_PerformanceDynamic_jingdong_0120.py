@@ -24,8 +24,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
         ]
 
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1212
-        self.source_screen_height = 2616
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -68,7 +68,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
             # Step('下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 30, is_multi_pid=True)
 
 
     def teardown(self):
