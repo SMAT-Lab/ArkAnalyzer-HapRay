@@ -19,13 +19,14 @@ import { Command } from 'commander';
 import { DOMParser } from 'xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { getComponentCategories } from '../../core/component';
-import { PerfAnalyzer, StepItem, Step } from '../../core/perf/perf_analyzer';
+import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { initConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
 import { TestSceneInfo } from '../../core/perf/perf_analyzer_base';
+import { StepJsonData } from '../../core/perf/perf_data_transformer';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -143,10 +144,10 @@ async function main(input: string): Promise<void> {
     let perfDataPaths = getPerfDataPaths(input, steps);
     let perfDbPaths = getPerfDbPaths(input, steps);
     let htracePaths = getHtracePaths(input, steps);
-    let stepsCollect: StepItem[] = [];
+    let stepsCollect: StepJsonData[] = [];
 
     for (let i = 0; i < steps.length; i++) {
-        let stepItem: StepItem;
+        let stepItem: StepJsonData;
         let result: number[] = [];
         let perfAnalyzer = new PerfAnalyzer('');
         let dbPaths: string[] = [];
@@ -246,7 +247,7 @@ function replaceAndWriteToNewFile(
     }
 }
 
-async function saveReport(output: string, resultInfo: ResultInfo, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepItem[]): Promise<void> {
+async function saveReport(output: string, resultInfo: ResultInfo, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepJsonData[]): Promise<void> {
     let res = path.join(__dirname, 'res');
     if (!fs.existsSync(res)) {
         res = path.join(__dirname, '../../../res');
