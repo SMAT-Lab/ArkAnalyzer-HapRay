@@ -502,7 +502,7 @@ CONFIG"""
         # 保存性能数据和htrace数据
         self._save_perf_data(output_file, step_id)
 
-    def execute_step_with_perf_and_trace(self, step_id, action_func, duration, sample_all=False, is_multi_pid=False):
+    def execute_step_with_perf_and_trace(self, step_id, action_func, duration, sample_all=False, is_multi_pid=True):
         """
         执行一个步骤并同时收集性能数据和trace数据
 
@@ -511,7 +511,7 @@ CONFIG"""
             action_func: 要执行的动作函数
             duration: 数据采集持续时间（秒）
             sample_all: 是否采样所有进程（需要root权限）
-            is_multi_pid: 是否采集多个进程的数据，默认为False
+            is_multi_pid: 是否采集多个进程的数据，默认为True
         """
         import threading
         # 设置当前步骤的输出路径
