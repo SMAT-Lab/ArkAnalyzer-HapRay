@@ -502,7 +502,7 @@ CONFIG"""
         # 保存性能数据和htrace数据
         self._save_perf_data(output_file, step_id)
 
-    def execute_step_with_perf_and_trace(self, step_id, action_func, duration, sample_all=False):
+    def execute_step_with_perf_and_trace(self, step_id, action_func, duration, sample_all=False, is_multi_pid=False):
         """
         执行一个步骤并同时收集性能数据和trace数据
 
@@ -510,6 +510,8 @@ CONFIG"""
             step_id: 步骤ID
             action_func: 要执行的动作函数
             duration: 数据采集持续时间（秒）
+            sample_all: 是否采样所有进程（需要root权限）
+            is_multi_pid: 是否采集多个进程的数据，默认为False
         """
         import threading
         # 设置当前步骤的输出路径
@@ -529,7 +531,18 @@ CONFIG"""
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
 
         # 启动采集线程
-        cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration, sample_all)
+        if is_multi_pid:
+            pids, process_names = self._get_app_pids()
+            if not pids:
+                Log.error("No process found for multi-pid collection")
+                return
+            # 记录进程信息
+            for pid, name in zip(pids, process_names):
+                Log.info(f"Found process: {name} (PID: {pid})")
+            cmd = PerfTestCase._get_trace_and_perf_cmd_multi(pids, output_file, duration)
+        else:
+            cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration, sample_all)
+
         perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
         perf_trace_thread.start()
 
@@ -601,6 +614,45 @@ CONFIG"""
 
         Log.debug(f"Debug - No version found for {self.app_package}")  # 添加调试输出
         return "Unknown Version"  # 如果无法获取版本号，返回未知版本
+
+    def _get_app_pids(self) -> tuple[list[int], list[str]]:
+        """获取应用的所有相关进程ID和进程名
+
+        使用 ps -ef | grep 命令获取所有相关进程，并过滤掉grep进程本身。
+        例如对于 com.jd.hm.mall 可能会返回:
+        - PIDs: [1234, 1235]
+        - 进程名: ["com.jd.hm.mall", "com.jd.hm.mall:render"]
+        等所有相关进程的PID和进程名
+
+        Returns:
+            tuple[list[int], list[str]]: 返回两个列表，第一个是进程ID列表，第二个是进程名列表
+        """
+        # 使用 ps -ef | grep 命令获取所有相关进程
+        cmd = f"ps -ef | grep {self.app_package}"
+        result = self.driver.shell(cmd)
+        
+        # 解析输出，提取PID和进程名
+        pids = []
+        process_names = []
+        for line in result.splitlines():
+            # 跳过grep进程本身
+            if 'grep' in line:
+                continue
+                
+            # 尝试从每行提取PID和进程名
+            try:
+                # ps -ef 输出格式: UID PID PPID ... CMD
+                parts = line.split()
+                if len(parts) >= 2:
+                    pid = int(parts[1])
+                    # 获取进程名（通常是最后一个部分）
+                    process_name = parts[-1]
+                    pids.append(pid)
+                    process_names.append(process_name)
+            except (ValueError, IndexError):
+                continue
+                
+        return pids, process_names
 
     def _get_app_pid(self) -> int:
         pid_cmd = f"pidof {self.app_package}"
