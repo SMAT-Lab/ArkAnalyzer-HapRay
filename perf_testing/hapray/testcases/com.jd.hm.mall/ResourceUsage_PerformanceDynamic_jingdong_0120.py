@@ -23,9 +23,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
             }
         ]
 
-        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1260
-        self.source_screen_height = 2720
+        # 原始采集设备的屏幕尺寸（Mate 60）
+        self.source_screen_width = 1216
+        self.source_screen_height = 2688
 
     @property
     def steps(self) -> []:
@@ -56,8 +56,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
             # 点击9.9包邮第一个商品
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=938,  # 原始x坐标
-                y=1278,  # 原始y坐标
+                x=120,  # 原始x坐标
+                y=1543,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
             ))

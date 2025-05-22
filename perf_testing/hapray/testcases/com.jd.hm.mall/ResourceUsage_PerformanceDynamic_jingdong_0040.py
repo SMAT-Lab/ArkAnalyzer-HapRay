@@ -24,9 +24,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
             }
         ]
 
-        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1212
-        self.source_screen_height = 2616
+        # 原始采集设备的屏幕尺寸（Mate 60）
+        self.source_screen_width = 1216
+        self.source_screen_height = 2688
 
     @property
     def steps(self) -> []:
@@ -60,8 +60,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
             # 选中购物车提前预置的商品
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=85,  # 原始x坐标
-                y=709,  # 原始y坐标
+                x=81,  # 原始x坐标
+                y=462,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
             ))
@@ -69,8 +69,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
             # 点击去结算
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=1029,  # 原始x坐标
-                y=2389,  # 原始y坐标
+                x=994,  # 原始x坐标
+                y=2361,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
             ))
@@ -84,8 +84,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
         # 取消选中购物车提前预置的商品
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
-            x=85,  # 原始x坐标
-            y=709,  # 原始y坐标
+            x=81,  # 原始x坐标
+            y=462,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
         ))

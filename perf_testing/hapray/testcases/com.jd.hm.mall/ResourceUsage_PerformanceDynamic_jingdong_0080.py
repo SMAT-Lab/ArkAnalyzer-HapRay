@@ -25,9 +25,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
             }
         ]
         
-        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1212
-        self.source_screen_height = 2616
+        # 原始采集设备的屏幕尺寸（Mate 60）
+        self.source_screen_width = 1216
+        self.source_screen_height = 2688
 
     @property
     def steps(self) -> []:
@@ -59,15 +59,22 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
             # 点击搜索框
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=512,  # 原始x坐标
-                y=325,  # 原始y坐标
+                x=608,  # 原始x坐标
+                y=315,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
             ))
             time.sleep(2)
 
             # 搜索华为手机
-            self.driver.input_text((545, 201),'华为手机')
+            search_coords = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=475,  # 原始x坐标
+                y=198,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
+            self.driver.input_text(search_coords, '华为手机')
             self.driver.touch(BY.text('搜索'))
             time.sleep(2)
 
