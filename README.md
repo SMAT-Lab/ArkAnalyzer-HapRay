@@ -50,8 +50,8 @@ cd ArkAnalyzer-HapRay/
 ./setup.sh
 
 # Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
-cd perf_testing
 source .venv/bin/activate
+cd perf_testing
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
 ```
