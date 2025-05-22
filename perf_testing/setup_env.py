@@ -33,10 +33,8 @@ VERSION = "5.0.7.200"
 # Path Configuration
 CURRENT_DIR = Path(os.path.abspath(Path(__file__).parent))
 HYPIUM_ZIP_PATH = CURRENT_DIR.parent / "third-party" / f"hypium-{VERSION}.zip"
-HISMARTPERF_ZIP_PATH = CURRENT_DIR.parent / "third-party" / "HiSmartPerf_20250109.zip"
 
 HYPIUM_DIR = f"hypium-{VERSION}"
-HISMARTPERF_DIR = "HiSmartPerf_20250109"
 REQUIREMENTS_FILE = "requirements.txt"
 
 # Package Installation Order
@@ -106,74 +104,6 @@ def extract_package_prefix(file_name: str) -> str:
                 return '-'.join(prefix.split('-')[:-1])
             return prefix
     return ""
-
-
-def download_strat_smart_perf() -> None:
-    print("downloading smart-perf")
-    # 规范化目录路径
-    directory = Path(CURRENT_DIR.parent).expanduser().resolve()
-
-    # 检查目录是否存在
-    if not directory.exists():
-        print(f"错误: 目录 '{directory}' 不存在")
-
-    if not directory.is_dir():
-        print(f"错误: '{directory}' 不是一个目录")
-
-    # 检查目录中是否有package.json文件
-    package_json = directory / "package.json"
-    if not package_json.exists():
-        print(f"错误: 目录 '{directory}' 中未找到package.json文件")
-    # 查找 npm 可执行文件
-    npm_cmd = shutil.which('npm.cmd') if os.name == 'nt' else shutil.which('npm')
-    # 构建npm命令
-    if os.name == "nt":  # Windows系统
-        npm_cmd = [npm_cmd, "run", "downloadHiSmartPerfPackage"]
-    else:  # Linux/macOS
-        npm_cmd = [npm_cmd, "run", "downloadHiSmartPerfPackage"]
-
-    execute_command(
-        npm_cmd,
-        error_message="Failed to download hi_smart_perf"
-    )
-
-
-def start_hi_smart_perf(binary_name) -> None:
-    """
-    根据当前操作系统选择并执行对应的可执行文件
-
-    参数:
-        binary_name (str): 可执行文件的基础名称（不含扩展名）
-    """
-    # 获取当前操作系统
-    current_os = platform.system()
-
-    # 根据操作系统确定可执行文件扩展名和名称
-    if current_os == "Windows":
-        executable_path = f"{binary_name}.exe"
-    elif current_os == "Darwin":  # macOS
-        executable_path = f"{binary_name}_darwin"
-    elif current_os == "Linux":
-        executable_path = f"{binary_name}_linux"
-    else:
-        raise RuntimeError(f"不支持的操作系统: {current_os}")
-
-    # 转换为绝对路径并验证文件存在
-    executable_path = Path(CURRENT_DIR.parent / "third-party" / HISMARTPERF_DIR / executable_path).resolve()
-    if not executable_path.exists():
-        raise FileNotFoundError(f"找不到可执行文件: {executable_path}")
-
-    # 确保 macOS/Linux 上的可执行文件有执行权限
-    if current_os in ["Darwin", "Linux"]:
-        if not os.access(executable_path, os.X_OK):
-            os.chmod(executable_path, 0o755)
-
-    # 构建命令
-    cmd = [str(executable_path)]
-    execute_command(
-        cmd,
-        error_message="Failed to start_hi_smart_perf"
-    )
 
 
 def setup_virtual_environment() -> None:
@@ -268,18 +198,13 @@ def display_activation_instructions() -> None:
 def main() -> None:
     """Main execution flow."""
 
-
     setup_virtual_environment()
     _, pip_executable = get_virtualenv_paths()
 
-    download_strat_smart_perf()
-    extract_package(HISMARTPERF_ZIP_PATH, HISMARTPERF_ZIP_PATH.parent)
     extract_package(HYPIUM_ZIP_PATH, HYPIUM_DIR)
 
     install_project_dependencies(pip_executable)
     display_activation_instructions()
-
-    start_hi_smart_perf('main')
 
 
 if __name__ == "__main__":
