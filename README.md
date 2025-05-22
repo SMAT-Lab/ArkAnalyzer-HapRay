@@ -8,6 +8,11 @@ npm install
 npm run build
 ```
 
+## release
+cd perf_testing
+source .venv/bin/activate
+pyinstaller pyinstaller main.spec
+
 ----
 
 ## 使用指导
@@ -35,7 +40,7 @@ apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
-    unzip
+    python3-dev
 ```
 
 ### Mac & Linux 安装使用
@@ -44,7 +49,8 @@ apt-get install -y \
 # 初始化环境，仅需要执行一次
 git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
-./setup.sh
+cd perf_testing
+python setup_env.py
 
 # 每次运行测试前执行（需要先切换到 ArkAnalyzer-HapRay 目录）
 cd perf_testing
