@@ -17,6 +17,11 @@ npm install
 npm run build
 ```
 
+## release
+cd perf_testing
+source .venv/bin/activate
+pyinstaller pyinstaller main.spec
+
 ## Usage Guide
 
 ### Dependencies
@@ -39,7 +44,7 @@ apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
-    unzip
+    python3-dev
 ```
 
 ### Mac & Linux Installation
