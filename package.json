@@ -6,7 +6,8 @@
   "files": [],
   "workspaces": [
     "web",
-    "toolbox"
+    "toolbox",
+    "perf_testing"
   ],
   "scripts": {
     "build": "npm run build --ws",
@@ -14,10 +15,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://gitcode.com/bbsun/Hapray.git"
+    "url": "git+https://gitcode.com/SMAT/ArkAnalyzer-HapRay.git"
   },
   "bugs": {
-    "url": "https://gitcode.com/bbsun/Hapray/issues"
+    "url": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/issues"
   },
-  "homepage": "https://gitcode.com/bbsun/Hapray#readme"
+  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme"
 }

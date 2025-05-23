@@ -17,10 +17,10 @@ npm install
 npm run build
 ```
 
-## release
-cd perf_testing
-source .venv/bin/activate
-pyinstaller pyinstaller main.spec
+## Release
+```
+npm run release
+```
 
 ## Usage Guide
 
@@ -52,11 +52,26 @@ apt-get install -y \
 # Initialize environment (only needed once)
 git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
-./setup.sh
+npm install
 
 # Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
-source .venv/bin/activate
 cd perf_testing
+source .venv/bin/activate
+# Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
+python -m scripts.main
+```
+
+### Windows Installation
+```bash
+# Initialize environment (only needed once)
+git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
+cd ArkAnalyzer-HapRay/
+npm install
+
+# Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
+cd perf_testing
+# Command-Line(CMD) Alternative the python virtual environment
+.venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
 ```
