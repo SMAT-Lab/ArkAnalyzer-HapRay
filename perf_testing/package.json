@@ -1,0 +1,21 @@
+{
+  "name": "arkanalyzer-hapray",
+  "version": "1.0.0",
+  "files": [
+    "arkanalyzer-hapray*"
+  ],
+  "scripts": {
+    "postinstall": "python setup_env.py",
+    "build": "",
+    "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
+    "prepack": "npm run build:python && shx cp dist/arkanalyzer-hapray* . && bestzip ../arkanalyzer-hapray.tgz arkanalyzer-hapray*",
+    "postpack": "shx rm -f arkanalyzer-hapray*"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "bestzip": "^2.2.1",
+    "shx": "^0.4.0"
+  }
+}
