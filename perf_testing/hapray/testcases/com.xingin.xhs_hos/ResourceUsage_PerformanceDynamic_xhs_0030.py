@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
@@ -35,6 +36,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
                 "description": "4. 查看评论，上下滑3次"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -67,8 +71,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
         self.driver.touch(BY.text('收藏'))
         time.sleep(1)
         # 点击收藏的图片链接“100件温暖幸福的小事（3）”
-        # self.driver.touch(330, 2057)
-        self.driver.touch((308, 1942))  # Mate70 Mate60Pro
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=308,   # 原始x坐标
+            y=1942,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(1)
 
         def step1(driver):
@@ -79,27 +88,65 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
 
         def step2(driver):
             Step('2. 点赞、取消点赞3次')
-            for i in range(5):
-                # driver.touch((550, 2630))
-                driver.touch((579, 2525)) # Mate60Pro  Mate70
+            for i in range(3):
+                like_pos = CoordinateAdapter.convert_coordinate(
+                    driver,
+                    x=579,   # 原始x坐标
+                    y=2525,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height
+                )
+                driver.touch(like_pos)
                 time.sleep(1)
-                # driver.touch((550, 2630))
-                driver.touch((579, 2525)) # Mate60Pro  Mate70
+                driver.touch(like_pos)
                 time.sleep(1)
 
         def step3(driver):
             Step('3. 双指捏合放大、缩小2次')
+            p1 = CoordinateAdapter.convert_coordinate(
+                    driver,
+                    x=820,   # 原始x坐标
+                    y=1040,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height
+                )
+            p2 = CoordinateAdapter.convert_coordinate(
+                driver,
+                x=480,  # 原始x坐标
+                y=1450,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
+            p3 = CoordinateAdapter.convert_coordinate(
+                    driver,
+                    x=1130,   # 原始x坐标
+                    y=720,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height
+                )
+            p4 = CoordinateAdapter.convert_coordinate(
+                    driver,
+                    x=180,   # 原始x坐标
+                    y=1850,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height
+                )
             for i in range(2):
-                driver._two_finger_swipe((820, 1040), (480, 1450), (1130, 720), (180, 1850))
+                driver._two_finger_swipe(p1, p2, p3, p4)
                 time.sleep(1)
-                driver._two_finger_swipe((1130, 720), (180, 1850), (820, 1040), (480, 1450))
+                driver._two_finger_swipe(p3, p4, p1, p2)
                 time.sleep(1)
 
         def step4(driver):
             Step('4. 查看评论，上下滑3次')
             # 点击评论
-            # driver.touch((1090, 2620))
-            driver.touch((1071, 2538))  # Mate60Pro Mate70
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=1071,  # 原始x坐标
+                y=2538,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
 
             # 上滑3次，停留2s

@@ -25,9 +25,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
             }
         ]
 
-        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1212
-        self.source_screen_height = 2616
+        # 原始采集设备的屏幕尺寸（Mate 60）
+        self.source_screen_width = 1216
+        self.source_screen_height = 2688
 
     @property
     def steps(self) -> []:
@@ -58,8 +58,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         #点击搜索框
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
-            x=512,  # 原始x坐标
-            y=325,  # 原始y坐标
+            x=608,  # 原始x坐标
+            y=315,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
         ))
@@ -68,7 +68,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         # 搜索华为手机
         search_coords = CoordinateAdapter.convert_coordinate(
             self.driver,
-            x=525,  # 原始x坐标
+            x=475,  # 原始x坐标
             y=198,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
@@ -85,8 +85,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         # 点击第一个商品进入详情页，等待2s
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
-            x=231,  # 原始x坐标
-            y=1956,  # 原始y坐标
+            x=259,  # 原始x坐标
+            y=1799,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
         ))
@@ -98,8 +98,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         def step1(driver):
 
             # 点击全部评价，等待2s
-            self.driver.touch(BY.text('评价'))
-            time.sleep(2)
+            self.driver.touch(BY.text('买家评价'))
+            time.sleep(3)
 
             # Step('浏览全部评价，上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=5, sleep=2)
