@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
@@ -31,6 +32,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
                 "description": "3. 点击评论区，上滑5次"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -76,13 +80,33 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             self.driver.touch(BY.text('赞过'))
             time.sleep(1)
             # 拖拽显示隐藏文字
-            CommonUtils.swipe(self.driver.device_sn, 630, 2370, 630, 1977, 500)
+            start = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=630,   # 原始x坐标
+                y=2370,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
+            end = CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=630,   # 原始x坐标
+                y=1977,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
+            CommonUtils.swipe(self.driver.device_sn, start[0], start[1], end[0], end[1], 500)
             time.sleep(1)
 
         def step2(driver):
             Step('2. 点击第一个视频，滑动切换视频上5次下5次，点击取消点赞/点赞各一次')
             # 点击进入任意视频
-            driver.touch((300, 1500))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=300,   # 原始x坐标
+                y=1500,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             # 点赞过的视频，上滑5次
             for i in range(5):
@@ -91,11 +115,21 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             for i in range(5):
                 CommonUtils.swipes_down_load(self.driver, 1, 2)
             # 取消点赞、点赞
-            # self.driver.touch((530, 2630))
-            self.driver.touch((609, 2551)) # Mate60Pro  TODO 这里有坑，不同视屏，点赞/收藏/评论数不同，坐标会便宜
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=621,   # 原始x坐标
+                y=2551,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )) # TODO 这里有坑，不同视屏，点赞/收藏/评论数不同，坐标会便宜
             time.sleep(1)
-            # self.driver.touch((530, 2630))
-            self.driver.touch((609, 2551))  # Mate60Pro
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=621,   # 原始x坐标
+                y=2551,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
 
         def after_step2():
@@ -106,15 +140,26 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             Step('3. 点击评论区，上滑5次')
             time.sleep(1)
             # 点击弹出视频评论区
-            # driver.touch((1140, 2630))
-            driver.touch((1047, 2552))  # Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1047,   # 原始x坐标
+                y=2552,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))  # Mate60Pro
             time.sleep(2)
 
             # 上滑5次
             for i in range(5):
                 CommonUtils.swipes_up_load(self.driver, 1, 2)
         def after_step3():
-            self.driver.touch((650, 360))
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=650,   # 原始x坐标
+                y=360,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
             self.driver.swipe_to_back()
             time.sleep(1)
