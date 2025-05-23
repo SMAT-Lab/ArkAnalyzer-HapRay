@@ -33,3 +33,6 @@ run_testcases:
   - ResourceUsage_PerformanceDynamic_zhifubao_1000
   - ResourceUsage_PerformanceDynamic_Douyin_0010
   - ResourceUsage_PerformanceDynamic_Douyin_1000
+so_path:
+  ResourceUsage_PerformanceDynamic_xxx:
+    - xxx
