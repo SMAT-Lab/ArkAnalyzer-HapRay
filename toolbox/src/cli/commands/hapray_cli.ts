@@ -34,6 +34,7 @@ const VERSION = '1.0.0';
 const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
     .option('--disable-dbtools', 'disable dbtools', false)
+    .option('-s, --soPath <string>', '--So_dir soPath', '')
     .action(async (...args: any[]) => {
         let cliArgs: Partial<GlobalConfig> = { ...args[0] };
         initConfig(cliArgs, (config) => {
@@ -132,7 +133,7 @@ async function main(input: string): Promise<void> {
 
     // load testinfo.json
     let testInfoPath = path.join(roundFolders[0], 'testInfo.json')
-    await copyFile(testInfoPath, path.join(input,'testInfo.json'));
+    await copyFile(testInfoPath, path.join(input, 'testInfo.json'));
     let rawData = fs.readFileSync(testInfoPath, 'utf8');
     const testInfo: TestInfo = JSON.parse(rawData);
 
