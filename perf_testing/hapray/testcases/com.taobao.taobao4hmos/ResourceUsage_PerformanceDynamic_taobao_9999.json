@@ -1,0 +1,16 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "ResourceUsage_PerformanceDynamic_taobao_9999.py"
+        ]
+    },
+    "kits": []
+} 

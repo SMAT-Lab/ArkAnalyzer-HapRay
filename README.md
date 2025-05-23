@@ -1,8 +1,17 @@
 # ArkAnalyzer-HapRay
 Code-oriented Performance Analysis for OpenHarmony Apps
 
-## build
+## Introduction
+ArkAnalyzer-HapRay is a tool designed for performance analysis of OpenHarmony applications. It provides detailed insights into app performance, helping developers optimize their applications for better user experience.
 
+## Documentation
+For more detailed information, please refer to the following documents:
+- [使用说明](docs/使用说明.md) - Usage Guide
+- [工具介绍](docs/工具介绍.md) - Tool Introduction
+- [收益测试分析](docs/收益测试分析.md) - Performance Test Analysis
+- [用例执行预置条件](docs/用例执行预置条件.md) - Test Case Prerequisites
+
+## Build
 ```
 npm install
 npm run build
@@ -13,24 +22,19 @@ cd perf_testing
 source .venv/bin/activate
 pyinstaller pyinstaller main.spec
 
-----
+## Usage Guide
 
-## 使用指导
+### Dependencies
+- pip > 23.0.1
+- Python > 3.10
 
-
-依赖：  
-pip > 23.0.1  
-Python > 3.10
-
-
-### Ubuntu 系统下的系统基础依赖安装
-
+### Ubuntu System Dependencies
 ```bash
-# 可选配置 ubuntu-22.04 mirror 源加速配置
+# Optional: Configure ubuntu-22.04 mirror for faster downloads
 sed -i "s@http://.*security.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list
 sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list
-[setup.sh](setup.sh)
-# 可选配置 ubuntu-24.04 mirror 源加速配置
+
+# Optional: Configure ubuntu-24.04 mirror for faster downloads
 sed -i "s@http://.*security.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list.d/ubuntu.sources
 sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt/sources.list.d/ubuntu.sources
 
@@ -43,18 +47,16 @@ apt-get install -y \
     python3-dev
 ```
 
-### Mac & Linux 安装使用
-
+### Mac & Linux Installation
 ```bash
-# 初始化环境，仅需要执行一次
+# Initialize environment (only needed once)
 git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
-cd perf_testing
-python setup_env.py
+./setup.sh
 
-# 每次运行测试前执行（需要先切换到 ArkAnalyzer-HapRay 目录）
-cd perf_testing
+# Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
 source .venv/bin/activate
-# 根据需要配置 config.yaml 测试用例，不要跑的用例，可以删除或在开头用`#`注释掉
+cd perf_testing
+# Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
 ```
