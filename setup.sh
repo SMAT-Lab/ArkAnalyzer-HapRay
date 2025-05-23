@@ -62,6 +62,7 @@ tar xf trace_streamer_binary.zip
 chmod +x trace_streamer_binary/trace_streamer*
 cd trace_streamer_binary
 ln -s trace_streamer_mac trace_streamer
+chmod +x trace_streamer_mac
 cd ../
 rm ../trace_streamer_binary
 mv trace_streamer_binary ../
@@ -80,3 +81,4 @@ source .venv/bin/activate
 npm install
 npm run build
 chmod +x toolbox/dist/third-party/trace_streamer_binary/trace_streamer*
+
