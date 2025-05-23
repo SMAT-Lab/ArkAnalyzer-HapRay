@@ -1,11 +1,10 @@
 # coding: utf-8
 import os
 
-from devicetest.core.test_case import Step
 from hypium import BY
-
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
@@ -50,10 +49,16 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
 
         # Step('启动京东应用')
         self.driver.start_app(self.app_package)
-        self.driver.wait(5)
+        self.driver.wait(3)
         # 点击直播
-        self.driver.touch(BY.text('直播'))
-        self.driver.wait(1)
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=698,  # 原始x坐标
+            y=1534,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
+        self.driver.wait(3)
 
 
         def step1(driver):

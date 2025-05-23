@@ -6,6 +6,7 @@ from devicetest.core.test_case import Step
 from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
@@ -40,6 +41,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     def process(self):
         self.driver.swipe_to_home()
@@ -57,10 +61,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
 
         def step1(driver):
             Step('点击收藏的视频链接“一口气看完历史上最荒唐的王朝北齐！”，观看30s')
-
-            # 1. 点击顶部隐藏tab页进入直播页，等待2s
-            # driver.touch((950, 2126))
-            driver.touch((941, 1970)) # Mate70 Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=941,   # 原始x坐标
+                y=1970,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(30)
 
         self.execute_step_with_perf_and_trace(1, step1, 30)

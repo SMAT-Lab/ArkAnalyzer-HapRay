@@ -25,9 +25,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
             }
         ]
         
-        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1212
-        self.source_screen_height = 2616
+        # 原始采集设备的屏幕尺寸（Mate 60）
+        self.source_screen_width = 1216
+        self.source_screen_height = 2688
 
     @property
     def steps(self) -> []:
@@ -55,16 +55,15 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
         self.driver.wait(5)
 
         def step1(driver):
-            self.driver.touch(BY.text('直播'))
-            time.sleep(2)
+            # 点击直播
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=321,  # 原始x坐标
-                y=1173,  # 原始y坐标
+                x=698,  # 原始x坐标
+                y=1534,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
             ))
-            time.sleep(2)
+            time.sleep(3)
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
             CommonUtils.swipes_down_load(self.driver, swip_num=3, sleep=2)
 

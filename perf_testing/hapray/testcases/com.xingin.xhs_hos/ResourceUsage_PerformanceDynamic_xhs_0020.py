@@ -6,6 +6,7 @@ from devicetest.core.test_case import Step
 from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
@@ -22,6 +23,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
                 "description": "1. 搜索 穿搭图片"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -52,11 +56,22 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
             Step('1. 搜索 穿搭图片')
 
             # 点击右上角搜索，停留1s
-            # driver.touch((1215， 205))
-            driver.touch((1169, 195)) # Mate60Pro  Mate70
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1169,   # 原始x坐标
+                y=195,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )) # Mate60Pro  Mate70
             time.sleep(1)
             for i in range(3):
-                driver.input_text((300, 200), '穿搭图片')
+                driver.input_text(CoordinateAdapter.convert_coordinate(
+                    self.driver,
+                    x=300,   # 原始x坐标
+                    y=200,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height
+                ), '穿搭图片')
                 time.sleep(1)
                 driver.touch(BY.text('搜索'))
                 time.sleep(2)

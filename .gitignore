@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+.npmrc
+package-lock.json
+
+# Virtual Environment
+.venv/
+
+# Build Artifacts
+web/dist/
+toolbox/hapray-toolbox_v1.0.0.zip
+*.tgz
+build
+dist
+
+# Third-party and Generated Directories
+third-party/HapRayDep/
+third-party/trace_streamer_binary/
+perf_testing/hapray-toolbox/ 
+third-party/HiSmartPerf_20250109/
+perf_testing/hypium-5.0.7.200/
