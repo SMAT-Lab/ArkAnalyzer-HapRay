@@ -26,7 +26,8 @@ npm run release
 
 ### Dependencies
 - pip > 23.0.1
-- Python > 3.10
+- Python > 3.9
+- [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
 ### Ubuntu System Dependencies
 ```bash
@@ -41,16 +42,29 @@ sed -i "s@http://.*archive.ubuntu.com@http://mirrors.huaweicloud.com@g" /etc/apt
 apt-get update && \
 apt-get install -y \
     git \
+    git-lfs \
     python3 \
     python3-pip \
     python3-venv \
     python3-dev
+
+# Add Command Line Tools for HarmonyOS to PATH
+# export command_line_tools=[Command Line Tools for HarmonyOS] directory
+export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/default/openharmony/toolchains
+```
+### MacOS Dependencies
+```bash
+brew install git git-lfs python@3.12
+
+# Add Command Line Tools for HarmonyOS to PATH
+# export command_line_tools=[Command Line Tools for HarmonyOS] directory
+export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/default/openharmony/toolchains
 ```
 
 ### Mac & Linux Installation
 ```bash
 # Initialize environment (only needed once)
-git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
+git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
 npm install
 
@@ -64,7 +78,7 @@ python -m scripts.main
 ### Windows Installation
 ```bash
 # Initialize environment (only needed once)
-git clone https://github.com/SMAT-Lab/ArkAnalyzer-HapRay
+git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
 npm install
 
