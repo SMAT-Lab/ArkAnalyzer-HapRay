@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -28,6 +29,11 @@ def main():
                 for case_name in raw_data['run_testcases']:
                     if case_name not in all_testcases:
                         continue
+                    so_path_key = re.sub(r'_[^_]*$', '', case_name)
+                    if so_path_key in raw_data['so_path']:
+                        so_path = raw_data['so_path'][so_path_key][0]
+                    else:
+                        so_path = None
                     scene_round_dirs = []
                     for round in range(5):
                         case_dir = all_testcases[case_name]
@@ -39,7 +45,7 @@ def main():
                                 break
                             else:
                                 if delete_folder(output):
-                                    print('perf.data文件不全重试第'+str(i)+'次'+output)
+                                    print('perf.data文件不全重试第' + str(i) + '次' + output)
                                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
 
                     merge_folder_path = os.path.join(reports_path, time_str, case_name)
@@ -47,7 +53,8 @@ def main():
                     future = executor.submit(
                         PerfTestCase.generate_hapray_report,
                         list(scene_round_dirs),  # 避免共享变量被修改
-                        merge_folder_path
+                        merge_folder_path,
+                        so_path  # debug包中的so文件存放地址
                     )
                     futures.append(future)
                 # 等待所有报告生成任务完成

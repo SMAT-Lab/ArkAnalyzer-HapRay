@@ -9,7 +9,10 @@
     ```
     node hapray-cmd.js  hapray dbtools -i <inputh_path>
     ```
-3.  xxxx
+3.  负载拆解支持带so符号导入
+    ```
+    node hapray-cmd.js  hapray dbtools -i <inputh_path> -s <so_path>
+    ```
 
 
 

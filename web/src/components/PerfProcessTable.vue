@@ -2,6 +2,10 @@
   <div class="instructions-table" id="perfsTable">
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
+      <el-radio-group v-model="filterModel.filterMode">
+        <el-radio-button label="string">字符串模式</el-radio-button>
+        <el-radio-button label="regex">正则模式</el-radio-button>
+      </el-radio-group>
       <el-input v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable @input="handleFilterChange"
         class="search-input">
         <template #prefix>
@@ -15,6 +19,40 @@
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
     </div>
+
+    <!-- 过滤后占比 -->
+    <el-row :gutter="20">
+      <el-col :span="8">
+        <div style="margin-bottom:10px;">
+          <div style="display: flex;  align-items: center;">
+            <span style="font-size: 16px; font-weight: bold;">过滤后行数占比：</span>
+            <span :style="{ color: 'blue' }">
+              {{ filterAllNumberCompareTotal }}
+            </span>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="8">
+        <div style="margin-bottom:10px;">
+          <div style="display: flex; align-items: center;">
+            <span style="font-size: 16px; font-weight: bold;">过滤后负载占总负载：</span>
+            <span :style="{ color: 'blue' }">
+              {{ filterAllBaseInstructionsCompareTotal }}
+            </span>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="8">
+        <div v-if="isHidden" style="margin-bottom:10px;">
+          <div style="display: flex;align-items: center;">
+            <span style="font-size: 16px; font-weight: bold;">过滤后对比负载占总负载：</span>
+            <span :style="{ color: 'blue' }">
+              {{ filterAllCompareInstructionsCompareTotal }}
+            </span>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
 
     <!-- 数据表格 -->
     <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
@@ -80,7 +118,7 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore,useThreadNameQueryStore, useCategoryStore } from '../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore } from '../stores/jsonDataStore.ts';
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
@@ -119,6 +157,7 @@ const handleRowClick = (row: { name: string }) => {
 };
 
 // 搜索功能
+const filterModel = useFilterModeStore();// 'string' 或 'regex'
 const processNameQuery = useProcessNameQueryStore();
 const category = useCategoryStore();
 
@@ -136,16 +175,27 @@ const sortState = ref<{
 })
 
 
+//过滤后的所有函数行对总体函数的占比统计
+const filterAllNumberCompareTotal = ref('');
+const filterAllBaseInstructionsCompareTotal = ref('');
+const filterAllCompareInstructionsCompareTotal = ref('');
+
 // 数据处理（添加完整类型注解）
 const filteredData = computed<ProcessDataItem[]>(() => {
   let result = [...props.data]
 
+  let beforeFilterNum = result.length;
+  let beforeFilterBaseInstructions = 0;
+  let beforeFilterCompareInstructions = 0;
+  result.forEach((dataItem) => {
+    beforeFilterBaseInstructions = beforeFilterBaseInstructions + dataItem.instructions;
+    beforeFilterCompareInstructions = beforeFilterCompareInstructions + dataItem.compareInstructions;
+  });
+
+
   // 应用进程过滤
-  if (processNameQuery.processNameQuery) {
-    const searchTerm = processNameQuery.processNameQuery.toLowerCase()
-    result = result.filter((item: ProcessDataItem) =>
-      item.process.toLowerCase().includes(searchTerm))
-  }
+  result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+
 
   // 应用分类过滤
   if (category.categoriesQuery) {
@@ -154,6 +204,23 @@ const filteredData = computed<ProcessDataItem[]>(() => {
         category.categoriesQuery.includes(item.category))
     }
   }
+
+  let afterFilterNum = result.length;
+  let afterFilterBaseInstructions = 0;
+  let afterFilterCompareInstructions = 0;
+  result.forEach((dataItem) => {
+    afterFilterBaseInstructions = afterFilterBaseInstructions + dataItem.instructions;
+    afterFilterCompareInstructions = afterFilterCompareInstructions + dataItem.compareInstructions;
+  });
+
+  let numPercent = (afterFilterNum / beforeFilterNum) * 100;
+  filterAllNumberCompareTotal.value = Number.parseFloat(numPercent.toFixed(2)) + '%';
+
+  let basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
+  filterAllBaseInstructionsCompareTotal.value = Number.parseFloat(basePercent.toFixed(2)) + '%';
+
+  let comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions) * 100;
+  filterAllCompareInstructionsCompareTotal.value = Number.parseFloat(comparePercent.toFixed(2)) + '%';
 
   // 应用排序（添加类型安全）
   if (sortState.value.order) {
@@ -170,6 +237,47 @@ const filteredData = computed<ProcessDataItem[]>(() => {
 
   return result
 })
+
+function filterQueryCondition(queryName: string, queryCondition: string, result: ProcessDataItem[]): ProcessDataItem[] {
+  try {
+    if (filterModel.filterMode === 'regex') {
+      // 正则表达式模式
+      // 允许用户直接输入正则模式，也支持 /pattern/flags 格式
+      // /^(?!.*@0x[0-9a-fA-F]+$).*$/ 找到不是偏移量的函数名正则
+      let pattern = queryCondition;
+      let flags = 'i'; // 默认忽略大小写
+
+      // 检查是否使用了 /pattern/flags 格式
+      if (pattern.startsWith('/') && pattern.lastIndexOf('/') > 0) {
+        const lastSlashIndex = pattern.lastIndexOf('/');
+        flags = pattern.substring(lastSlashIndex + 1);
+        pattern = pattern.substring(1, lastSlashIndex);
+      }
+
+      const regex = new RegExp(pattern, flags);
+      result = result.filter((item: ProcessDataItem) => {
+        return regex.test(getDataItemProperty(queryName, item));
+      })
+      return result;
+    } else {
+      const searchTerm = queryCondition.toLowerCase()
+      result = result.filter((item: ProcessDataItem) =>
+        getDataItemProperty(queryName, item).toLowerCase().includes(searchTerm))
+      return result;
+    }
+  } catch (error) {
+    return result;
+  }
+}
+
+function getDataItemProperty(queryName: string, dataItem: ProcessDataItem): string {
+  if (queryName === 'process') {
+    return dataItem.process;
+  } else {
+    return ''
+  }
+}
+
 
 
 
@@ -213,7 +321,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage','process'];
+  const validKeys: SortKey[] = ['category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {

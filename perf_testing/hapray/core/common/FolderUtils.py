@@ -8,7 +8,6 @@ from pathlib import Path
 
 Log = platform_logger("FolderUtils")
 
-
 """
 扫描ResourceUsage_PerformanceDynamic_jingdong_0020_round0\hiperf
 文件夹下是否每个step文件夹下都有perf.data
@@ -16,14 +15,21 @@ Log = platform_logger("FolderUtils")
 """
 def scan_folders(root_dir):
     root_dir = Path(root_dir) / 'hiperf'
-    has_perf_data = True
+    steps_json = read_json_arrays_from_dir(str(root_dir))
+    if len(steps_json) == 0:
+        return False
+    perf_data_num = 0
     for item in os.listdir(root_dir):
         item_path = os.path.join(root_dir, item)
         if os.path.isdir(item_path):
-            if not (Path(item_path) / 'perf.data').exists():
-                return False
+            if (Path(item_path) / 'perf.data').exists():
+                perf_data_num = perf_data_num + 1
 
-    return has_perf_data
+    perf_data_percent = perf_data_num / len(steps_json) * 100
+    if perf_data_percent > 50:
+        return True
+    else:
+        return False
 
 
 def delete_folder(folder_path):
@@ -105,7 +111,7 @@ def merge_folders(source_folders, target_folder, overwrite=False, dry_run=False)
 
 def read_json_arrays_from_dir(
         directory: str,
-        filename_pattern: str = "rounds_info.json",
+        filename_pattern: str = "steps.json",
         encoding: str = "utf-8"
 ) -> List[Dict[str, Any]]:
     """
@@ -123,7 +129,8 @@ def read_json_arrays_from_dir(
 
     # 检查目录是否存在
     if not os.path.exists(directory):
-        raise FileNotFoundError(f"目录不存在: {directory}")
+        Log.info(f"目录不存在: {directory}")
+        return all_objects
 
     # 遍历目录中的所有文件
     for filename in os.listdir(directory):

@@ -265,7 +265,7 @@ CONFIG"""
         driver.shell(cmd, timeout=120)
 
     @staticmethod
-    def generate_hapray_report(scene_dirs: list[str], scene_dir: str) -> bool:
+    def generate_hapray_report(scene_dirs: list[str], scene_dir: str, so_path: str | None) -> bool:
         if not scene_dirs:
             Log.error("Error: scene_dirs length is 0!")
             return False
@@ -308,11 +308,19 @@ CONFIG"""
         hapray_cmd_path_escaped = hapray_cmd_path.replace('\\', '\\\\')
 
         # 构建并执行命令 - 使用绝对路径
-        cmd = [
-            'node', hapray_cmd_path_escaped,
-            'hapray', 'dbtools',
-            '-i', full_scene_dir_escaped
-        ]
+        if so_path == None:
+            cmd = [
+                'node', hapray_cmd_path_escaped,
+                'hapray', 'dbtools',
+                '-i', full_scene_dir_escaped
+            ]
+        else:
+            cmd = [
+                'node', hapray_cmd_path_escaped,
+                'hapray', 'dbtools',
+                '-i', full_scene_dir_escaped,
+                '-s', so_path
+            ]
 
         # 打印完整命令
         Log.info(f"Executing command: {' '.join(cmd)}")
