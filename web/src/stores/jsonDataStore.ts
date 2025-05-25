@@ -105,6 +105,12 @@ export const useJsonDataStore = defineStore('config', {
   },
 });
 
+export const useFilterModeStore = defineStore('filterMode', {
+  state: () => ({
+    filterMode: 'string' as string,
+  })
+});
+
 export const useProcessNameQueryStore = defineStore('processNameQuery', {
   state: () => ({
     processNameQuery: '' as string,
