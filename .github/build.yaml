@@ -1,0 +1,45 @@
+name: Build Executables
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'  # 指定你的Python版本
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: |
+        npm install
+
+    - name: PyInstaller build
+      run: |
+        npm run release
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: arkanalyzer-hapray-${{ matrix.os }}
+        path: arkanalyzer-hapray.tgz
