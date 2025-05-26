@@ -51,7 +51,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_1000(PerfTestCase):
     def process(self):
         # self.driver.swipe_to_home()
         self.driver.press_home()
-        CommonUtils.exe(f'hdc shell kill -9 $(pidof {self._start_app_package})')
+        self.driver.stop_app(self._start_app_package)
         time.sleep(2)
         xhs_icon = self.driver.find_component(BY.key(self._app_icon_key))
         while not xhs_icon:
