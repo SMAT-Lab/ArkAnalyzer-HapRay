@@ -1,18 +1,36 @@
 import os
 import re
 import time
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 from xdevice.__main__ import main_process
 
-from hapray.core.PerfTestCase import PerfTestCase
+from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_folder
 
+def check_env() -> bool:
+    if shutil.which('hdc') and shutil.which('node'):
+        return True
+    return False
+
+ENV_ERR_STR = """
+The hdc or node command is not in PATH. 
+Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
+then add the following directories to PATH.
+    $command_line_tools/tool/node/ (for Windows)
+    $command_line_tools/tool/node/bin (for Mac/Linux)
+    $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
+"""
 
 def main():
+    if not check_env():
+        Log.error(ENV_ERR_STR)
+        return
+    
     _ = Config()
     root_path = os.getcwd()
     reports_path = os.path.join(root_path, 'reports')
