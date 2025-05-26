@@ -308,8 +308,49 @@ const currentStepIndex = ref(0);
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
-const json = jsonDataStore.jsonData;
-const compareJson = jsonDataStore.compareJsonData;
+const json = replaceThreadNulls(jsonDataStore.jsonData!);
+const compareJson = replaceThreadNulls(jsonDataStore.compareJsonData!);
+
+/**
+ * 校验并替换JSON对象中所有key为'thread'且值为null的项为'unknown'
+ * @param data - 待处理的JSON对象或数组
+ * @returns 处理后的新对象（原对象不会被修改）
+ */
+function replaceThreadNulls<T extends object | any[]>(data: T): T {
+  // 处理数组类型
+  if (Array.isArray(data)) {
+    return data.map(item => 
+      typeof item === 'object' && item !== null 
+        ? replaceThreadNulls(item) 
+        : item
+    ) as T;
+  }
+
+  // 处理普通对象类型
+  if (typeof data === 'object' && data !== null) {
+    const result: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(data)) {
+      // 如果key是'thread'且值为null，替换为'unknown'
+      if (key === 'thread' && value === null) {
+        result[key] = 'unknown';
+      } 
+      // 否则递归处理嵌套对象
+      else if (typeof value === 'object' && value !== null) {
+        result[key] = replaceThreadNulls(value);
+      } 
+      // 基本类型直接赋值
+      else {
+        result[key] = value;
+      }
+    }
+    
+    return result as T;
+  }
+
+  // 非对象类型直接返回
+  return data;
+}
 
 const mergedJson = mergeJSONData(json!, compareJson!);
 
