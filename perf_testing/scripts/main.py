@@ -31,11 +31,12 @@ def main():
     if not check_env():
         Log.error(ENV_ERR_STR)
         return
-    
+
     parser = argparse.ArgumentParser(description='处理命令行参数')
     parser.add_argument('--so_dir', default=None, help='debug包中的so文件存放目录')
     parser.add_argument('--run_testcases', nargs='+', default=None, help='指定要测试的用例')
     args = parser.parse_args()
+
     _ = Config()
     root_path = os.getcwd()
     reports_path = os.path.join(root_path, 'reports')
