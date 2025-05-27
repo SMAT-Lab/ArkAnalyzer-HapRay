@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
@@ -23,6 +24,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
                 "description": "1. 动态图片启动退出"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -56,17 +60,31 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
         self.driver.touch(BY.text('视频'))
         time.sleep(2)
         # 点击进入任意视频
-        self.driver.touch((350, 1010))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=350,  # 原始x坐标
+            y=1010,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
         # 点击评论 输入框
-        # self.driver.touch((1140, 2630))
-        # self.driver.touch((1054, 2520)) # Mate70
-        self.driver.touch((1124, 2552))  # Mate60Pro
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1124,  # 原始x坐标
+            y=2552,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(1)
         # 点击相册图标，调起图库picker
-        # self.driver.touch((1180, 2620))
-        # self.driver.touch((1088, 2506)) # Mate70
-        self.driver.touch((1137, 2538))  # Mate60Pro
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1137,  # 原始x坐标
+            y=2538,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(1)
 
         # 点击任一动态图片，在动态图片大图界面，上滑退出小红书，再启动，操作5次
@@ -75,8 +93,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
             time_start = time.time()
 
             # 点击第一排第四张（最后一张）动态图片
-            # driver.touch((1198, 1093))
-            driver.touch((1152, 1031)) # Mate70 Mate60Pro
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
+                x=1152,  # 原始x坐标
+                y=1031,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
 
             # 上滑退出小红书，再启动，操作5次，观察启动/退出动效是否流畅

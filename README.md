@@ -26,7 +26,7 @@ npm run release
 
 ### Dependencies
 - pip > 23.0.1
-- Python > 3.9
+- Python 3.9 ~ 3.12
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
 ### Ubuntu System Dependencies

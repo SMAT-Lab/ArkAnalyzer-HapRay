@@ -8,7 +8,7 @@
     "postinstall": "python setup_env.py",
     "build": "",
     "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
-    "prepack": "npm run build:python && shx cp dist/arkanalyzer-hapray* . && bestzip ../arkanalyzer-hapray.tgz arkanalyzer-hapray*",
+    "prepack": "npm run build:python && shx cp dist/arkanalyzer-hapray* . && bestzip ../hapray-$npm_package_version.tgz arkanalyzer-hapray*",
     "postpack": "shx rm -f arkanalyzer-hapray*"
   },
   "author": "",

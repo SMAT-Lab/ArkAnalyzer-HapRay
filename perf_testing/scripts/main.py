@@ -2,23 +2,40 @@ import argparse
 import os
 import re
 import time
+import shutil
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 from xdevice.__main__ import main_process
 
-from hapray.core.PerfTestCase import PerfTestCase
+from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_folder
 
+def check_env() -> bool:
+    if shutil.which('hdc') and shutil.which('node'):
+        return True
+    return False
+
+ENV_ERR_STR = """
+The hdc or node command is not in PATH. 
+Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
+then add the following directories to PATH.
+    $command_line_tools/tool/node/ (for Windows)
+    $command_line_tools/tool/node/bin (for Mac/Linux)
+    $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
+"""
 
 def main():
+    if not check_env():
+        Log.error(ENV_ERR_STR)
+        return
+    
     parser = argparse.ArgumentParser(description='处理命令行参数')
     parser.add_argument('--so_dir', default=None, help='debug包中的so文件存放目录')
     parser.add_argument('--run_testcases', nargs='+', default=None, help='指定要测试的用例')
     args = parser.parse_args()
-
     _ = Config()
     root_path = os.getcwd()
     reports_path = os.path.join(root_path, 'reports')
