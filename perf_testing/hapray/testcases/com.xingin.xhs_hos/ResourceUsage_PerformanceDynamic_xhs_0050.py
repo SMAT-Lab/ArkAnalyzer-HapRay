@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
@@ -23,6 +24,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
                 "description": "1. 查看图片及发布笔记"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -53,8 +57,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
         def step1(driver):
             Step('1. 查看图片及发布笔记')
             # 首页点击 ”+“
-            # driver.touch((650, 2650))
-            driver.touch((630, 2557)) # Mate60Pro Mate70
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=630,  # 原始x坐标
+                y=2557,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             # 上滑3次，停留2s
             for i in range(3):
@@ -66,7 +75,14 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
 
 
             # 点击第一张照片大图查看
-            driver.touch((142, 900)) # Mate60Pro Mate70
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=142,  # 原始x坐标
+                y=900,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
+
             time.sleep(2)
 
             # 左滑3次，停留2s
@@ -78,8 +94,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
                 CommonUtils.swipes_right_load(driver, 1, 2, 300)
 
             # 选择图片
-            # driver.touch((1162, 2402))
-            driver.touch((1162, 2302)) # Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=1162,  # 原始x坐标
+                y=2302,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
             # 点击 下一步
             # driver.touch((1019, 2420))

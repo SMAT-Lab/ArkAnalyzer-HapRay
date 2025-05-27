@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
@@ -40,6 +41,23 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             }
 
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
+        self.swipe_p1 = CoordinateAdapter.convert_coordinate(
+                            self.driver,
+                            x=630,  # 原始x坐标
+                            y=2320,  # 原始y坐标
+                            source_width=self.source_screen_width,
+                            source_height=self.source_screen_height
+                        )
+        self.swipe_p2 = CoordinateAdapter.convert_coordinate(
+                            self.driver,
+                            x=630,  # 原始x坐标
+                            y=1370,  # 原始y坐标
+                            source_width=self.source_screen_width,
+                            source_height=self.source_screen_height
+                        )
 
     @property
     def steps(self) -> []:
@@ -78,7 +96,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
 
             for i in range(5):
                 # 2. 点击进入左上角第一个直播间，等待2s
-                driver.touch((350, 1010))
+                driver.touch(CoordinateAdapter.convert_coordinate(
+                    driver,
+                    x=350,  # 原始x坐标
+                    y=1010,  # 原始y坐标
+                    source_width=self.source_screen_width,
+                    source_height=self.source_screen_height
+                ))
                 time.sleep(2)
 
                 # 3. 左滑返回直播列表页面, 等待2s
@@ -99,69 +123,84 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             time.sleep(1)
 
             # 1. 点击直播左上角第一个直播，等待30s
-            driver.touch((197, 520))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=197,  # 原始x坐标
+                y=520,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(30)
 
         def step3(driver):
             Step('直播间点击购物车，并在购物车商品列表页面上下滑动5次')
             # 1. 点击直播间购物车图标，等待2s
-            # driver.touch((1187, 2685))
-            driver.touch((1112, 2559)) # Mate70 Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=1112,  # 原始x坐标
+                y=2559,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
 
             # 直播间商品列表上滑下滑
             for i in range(5):
                 # 2. 直播间商品列表上滑，等待2s
-                # CommonUtils.swipe(driver.device_sn, 630, 2520, 630, 1570, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0], self.swipe_p2[1], 300)
                 time.sleep(2)
 
                 # 3. 直播间商品列表下滑，等待2s
-                # CommonUtils.swipe(driver.device_sn, 630, 1570, 630, 2520, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300) # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
                 time.sleep(2)
 
         def step4(driver):
             Step('点击购物车跳转到购物车列表页面并上下滑动5次')
 
             # 1. 点击直播间购物车图标，等待2s
-            # driver.touch((1060, 720))
-            driver.touch((985, 702)) # Mate70 Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=985,  # 原始x坐标
+                y=702,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
 
             # 购物车商品列表上滑5次
             for i in range(5):
                 # 2. 购物车商品列表上滑5次，等待2s
-                # CommonUtils.swipe(driver.device_sn, 630, 2520, 630, 1570, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0], self.swipe_p2[1], 300)
                 time.sleep(2)
 
             # 购物车商品列表下滑5次
             for i in range(5):
                 # 3. 购物车商品列表下滑5次，等待2s
-                # CommonUtils.swipe(driver.device_sn, 630, 1570, 630, 2520, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300)  # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
                 time.sleep(2)
 
         def step5(driver):
             Step('点击购物车列表第一个商品，进入商品详情页面上下滑动5次')
             # 1. 点击购物车列表第一个商品，进入商品详情，等待1s
-            # driver.touch((320, 630))
-            driver.touch((320, 420)) # Mate70 Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=320,  # 原始x坐标
+                y=420,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(1)
 
             # 购物车商品列表上滑5次
             for i in range(5):
                 # 2. 购物车商品列表上滑5次，等待2s
-                # CommonUtils.swipe(driver.device_sn, 630, 2520, 630, 1570, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 2320, 630, 1370, 300) # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0], self.swipe_p2[1], 300)
                 time.sleep(2)
 
             # 购物车商品列表下滑5次
             for i in range(5):
                 # 3. 购物车商品列表下滑5次，等待2s
-                # CommonUtils.swipe(driver.device_sn, 630, 1570, 630, 2520, 300)
-                CommonUtils.swipe(driver.device_sn, 630, 1370, 630, 2320, 300)  # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
                 time.sleep(2)
 
         self.execute_step_with_perf_and_trace(1, step1, 10)
