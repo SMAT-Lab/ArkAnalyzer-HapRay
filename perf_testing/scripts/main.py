@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 import time
@@ -13,6 +14,11 @@ from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_f
 
 
 def main():
+    parser = argparse.ArgumentParser(description='处理命令行参数')
+    parser.add_argument('--so_dir', default=None, help='debug包中的so文件存放目录')
+    parser.add_argument('--run_testcases', nargs='+', default=None, help='指定要测试的用例')
+    args = parser.parse_args()
+
     _ = Config()
     root_path = os.getcwd()
     reports_path = os.path.join(root_path, 'reports')
@@ -26,14 +32,22 @@ def main():
             raw_data = yaml.safe_load(f)
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = []
-                for case_name in raw_data['run_testcases']:
+                run_testcases = raw_data['run_testcases']
+                if args.run_testcases is not None:
+                    if run_testcases is not None:
+                        run_testcases = args.run_testcases + run_testcases
+                    else:
+                        run_testcases = args.run_testcases
+                for case_name in run_testcases:
                     if case_name not in all_testcases:
                         continue
-                    so_path_key = re.sub(r'_[^_]*$', '', case_name)
-                    if so_path_key in raw_data['so_path']:
-                        so_path = raw_data['so_path'][so_path_key][0]
+                    so_dir_key = re.sub(r'_[^_]*$', '', case_name)
+                    if so_dir_key in raw_data['so_dir']:
+                        so_dir = raw_data['so_dir'][so_dir_key][0]
                     else:
-                        so_path = None
+                        so_dir = None
+                    if args.so_dir is not None:
+                        so_dir = args.so_dir
                     scene_round_dirs = []
                     for round in range(5):
                         case_dir = all_testcases[case_name]
@@ -54,7 +68,7 @@ def main():
                         PerfTestCase.generate_hapray_report,
                         list(scene_round_dirs),  # 避免共享变量被修改
                         merge_folder_path,
-                        so_path  # debug包中的so文件存放地址
+                        so_dir  # debug包中的so文件存放地址
                     )
                     futures.append(future)
                 # 等待所有报告生成任务完成

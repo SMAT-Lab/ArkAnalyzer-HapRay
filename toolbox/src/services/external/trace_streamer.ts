@@ -55,8 +55,8 @@ export function traceStreamerCmd(htraceFile: string, outDbFile: string): string 
         throw new Error('not found trace_streamer_binary');
     }
 
-    if (getConfig().soPath !== '') {
-        return runCommandSync(_traceStreamer!, [htraceFile, '-e', outDbFile, '--So_dir', getConfig().soPath]);
+    if (getConfig().soDir !== '') {
+        return runCommandSync(_traceStreamer!, [htraceFile, '-e', outDbFile, '--So_dir', getConfig().soDir]);
     } else {
         return runCommandSync(_traceStreamer!, [htraceFile, '-e', outDbFile]);
     }

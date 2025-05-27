@@ -34,7 +34,7 @@ const VERSION = '1.0.0';
 const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
     .option('--disable-dbtools', 'disable dbtools', false)
-    .option('-s, --soPath <string>', '--So_dir soPath', '')
+    .option('-s, --soDir <string>', '--So_dir soDir', '')
     .action(async (...args: any[]) => {
         let cliArgs: Partial<GlobalConfig> = { ...args[0] };
         initConfig(cliArgs, (config) => {

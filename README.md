@@ -88,4 +88,69 @@ cd perf_testing
 .venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
+# Examples of optional parameters
+python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0010 ResourceUsage_PerformanceDynamic_jingdong_0020
 ```
+
+## Detailed Explanation of the config.yaml configuration File in perf_testing:
+
+### 1.Preset testcases
+run_testcases:
+ - PerformanceDynamic_com_example_wsywechat_0010
+ - ResourceUsage_PerformanceDynamic_xhs_0010
+ - ResourceUsage_PerformanceDynamic_xhs_0020
+ - ResourceUsage_PerformanceDynamic_xhs_0030
+ - ResourceUsage_PerformanceDynamic_xhs_0040
+ - ResourceUsage_PerformanceDynamic_xhs_0050
+ - ResourceUsage_PerformanceDynamic_xhs_0060
+ - ResourceUsage_PerformanceDynamic_xhs_0070
+ - ResourceUsage_PerformanceDynamic_bilibili_0010
+ - ResourceUsage_PerformanceDynamic_bilibili_0020
+ - ResourceUsage_PerformanceDynamic_bilibili_0030
+ - ResourceUsage_PerformanceDynamic_bilibili_0040
+ - ResourceUsage_PerformanceDynamic_bilibili_0050
+ - ResourceUsage_PerformanceDynamic_jingdong_0010
+ - ResourceUsage_PerformanceDynamic_jingdong_0020
+ - ResourceUsage_PerformanceDynamic_jingdong_0030
+ - ResourceUsage_PerformanceDynamic_jingdong_0040
+ - ResourceUsage_PerformanceDynamic_jingdong_0050
+ - ResourceUsage_PerformanceDynamic_jingdong_0080
+ - ResourceUsage_PerformanceDynamic_jingdong_0090
+ - ResourceUsage_PerformanceDynamic_jingdong_1000
+ - ResourceUsage_PerformanceDynamic_jingdong_0110
+ - ResourceUsage_PerformanceDynamic_jingdong_0120
+ - ResourceUsage_PerformanceDynamic_zhifubao_0010
+ - ResourceUsage_PerformanceDynamic_zhifubao_0020
+ - ResourceUsage_PerformanceDynamic_zhifubao_0060
+ - ResourceUsage_PerformanceDynamic_zhifubao_0070
+ - ResourceUsage_PerformanceDynamic_zhifubao_0080
+ - ResourceUsage_PerformanceDynamic_zhifubao_0100
+ - ResourceUsage_PerformanceDynamic_Douyin_0010
+ - ResourceUsage_PerformanceDynamic_taobao_9999
+### 2.After setting the so_dir parameter, the import with the symbol so can be supported. This address is the storage path of the.so files in the debug package or the release package
+so_dir:
+  ResourceUsage_PerformanceDynamic_xxx:
+    - xxx
+### Some functions show up as libtaskpool.z.so@0x5b19124734 when the so_dir path is filled in, and when imported, they show the normal function name
+The filling format is as follows, and multiple lines are supported：
+
+
+so_dir:
+  ResourceUsage_PerformanceDynamic_xhs:
+    - d:/xhs
+  ResourceUsage_PerformanceDynamic_bilibili:
+    - d:/bilibili
+### 3.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:
+```
+  Use case 1 is passed through the command line, and use case 2 is configured in the configuration file. Eventually, both use cases will be executed.
+```
+
+## About Flame diagram
+
+### start HiSmartPerf server:
+
+#### third-party/HiSmartPerf_20250109/main.exe
+#### third-party/HiSmartPerf_20250109/main_darwin
+#### third-party/HiSmartPerf_20250109/main_linux
+
+
