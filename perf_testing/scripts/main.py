@@ -12,6 +12,7 @@ from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_folder
+from hapray.core.common.FrameAnalyzer import FrameAnalyzer
 
 def check_env() -> bool:
     if shutil.which('hdc') and shutil.which('node'):
@@ -92,6 +93,13 @@ def main():
                 # 等待所有报告生成任务完成
                 for future in futures:
                     future.result()
+
+                # 在所有操作完成后进行卡顿帧分析
+                Log.info(f"Starting frame drops analysis for {case_name}...")
+                if FrameAnalyzer.analyze_frame_drops(merge_folder_path):
+                    Log.info(f"Successfully analyzed frame drops for {case_name}")
+                else:
+                    Log.error(f"Failed to analyze frame drops for {case_name}")
 
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")

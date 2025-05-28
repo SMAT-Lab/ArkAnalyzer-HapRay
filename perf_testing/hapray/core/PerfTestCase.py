@@ -54,9 +54,10 @@ class PerfTestCase(TestCase):
         Returns:
             str: 完整的 hiperf 命令
         """
-        cmd = f"hiperf record -p {pid} -o {output_path} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
         if sample_all:
-            cmd = f"hiperf record -a -o {output_path} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
+            cmd = f"hiperf record -a --call-stack dwarf --kernel-callchain -f 1000 --cpu-limit 100 -e raw-instruction-retired --enable-debuginfo-symbolic --clockid boottime -m 1024 -d {duration} -o {output_path}"
+        else:
+            cmd = f"hiperf record -p {pid} --call-stack dwarf --kernel-callchain -f 1000 --cpu-limit 100 -e raw-instruction-retired --enable-debuginfo-symbolic --clockid boottime -m 1024 -d {duration} -o {output_path}"
         return cmd
 
     @staticmethod
@@ -72,9 +73,10 @@ class PerfTestCase(TestCase):
         Returns:
             str: 完整的命令
         """
-        recort_args = f"-p {pid} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
         if sample_all:
-            recort_args = f"-a -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
+            recort_args = f"-a --call-stack dwarf --kernel-callchain -f 1000 --cpu-limit 100 -e raw-instruction-retired --enable-debuginfo-symbolic --clockid boottime -m 1024 -d {duration}"
+        else:
+            recort_args = f"-p {pid} --call-stack dwarf --kernel-callchain -f 1000 --cpu-limit 100 -e raw-instruction-retired --enable-debuginfo-symbolic --clockid boottime -m 1024 -d {duration}"
         # 基础命令部分
         cmd = f"""hiprofiler_cmd \\
   -c - \\
@@ -173,7 +175,7 @@ CONFIG"""
             str: 完整的命令
         """
         pid_args = ','.join(map(str, pids))
-        recort_args = f"-p {pid_args} -s dwarf --kernel-callchain -f 1000 -e raw-instruction-retired --clockid monotonic -m 1024 -d {duration}"
+        recort_args = f"-p {pid_args} --call-stack dwarf --kernel-callchain -f 1000 --cpu-limit 100 -e raw-instruction-retired --enable-debuginfo-symbolic --clockid boottime -m 1024 -d {duration}"
         # 基础命令部分
         cmd = f"""hiprofiler_cmd \\
   -c - \\
@@ -249,7 +251,7 @@ CONFIG"""
 # hiperf插件配置
  plugin_configs {{
   plugin_name: "hiperf-plugin"
-  sample_interval: 5000
+  debug_on: false
   config_data {{
    is_root: false
    outfile_name: "{output_path}"
@@ -539,7 +541,11 @@ CONFIG"""
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
 
         # 启动采集线程
-        if is_multi_pid:
+        if sample_all:
+            # 如果是root权限，直接使用sample_all模式
+            cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration, sample_all=True)
+        elif is_multi_pid:
+            # 如果不是root权限，且需要采集多个进程
             pids, process_names = self._get_app_pids()
             if not pids:
                 Log.error("No process found for multi-pid collection")
@@ -549,7 +555,8 @@ CONFIG"""
                 Log.info(f"Found process: {name} (PID: {pid})")
             cmd = PerfTestCase._get_trace_and_perf_cmd_multi(pids, output_file, duration)
         else:
-            cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration, sample_all)
+            # 如果不是root权限，且只需要采集单个进程
+            cmd = PerfTestCase._get_trace_and_perf_cmd(self.pid, output_file, duration, sample_all=False)
 
         perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
         perf_trace_thread.start()
