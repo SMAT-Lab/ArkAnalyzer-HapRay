@@ -6,7 +6,6 @@ import platform
 from pathlib import Path
 import zipfile
 from typing import List, Tuple
-import shutil
 
 # Version requirements
 MIN_PYTHON_VERSION = (3, 9)

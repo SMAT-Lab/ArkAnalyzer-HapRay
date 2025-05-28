@@ -265,7 +265,7 @@ CONFIG"""
         driver.shell(cmd, timeout=120)
 
     @staticmethod
-    def generate_hapray_report(scene_dirs: list[str], scene_dir: str, so_dir: str | None) -> bool:
+    def generate_hapray_report(scene_dirs: list[str], scene_dir: str, so_dir: str) -> bool:
         if not scene_dirs:
             Log.error("Error: scene_dirs length is 0!")
             return False
