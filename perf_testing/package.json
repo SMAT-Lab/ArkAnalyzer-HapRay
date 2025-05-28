@@ -5,7 +5,10 @@
     "arkanalyzer-hapray*"
   ],
   "scripts": {
-    "postinstall": "python setup_env.py",
+    "postinstall": "npm run setup",
+    "setup": "npm run setup:win --if-present || npm run setup:unix",
+    "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
+    "setup:unix": "python3 setup_env.py",
     "build": "",
     "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
     "prepack": "npm run build:python && shx cp dist/arkanalyzer-hapray* . && bestzip ../hapray-$npm_package_version.tgz arkanalyzer-hapray*",
