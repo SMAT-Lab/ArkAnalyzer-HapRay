@@ -396,8 +396,16 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
         stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"] * 100, 2)
 
         result = {
-            "statistics": stats,
-            "stutter_details": stats["stutter_details"]
+            "statistics": {
+                "total_frames": stats["total_frames"],
+                "ui_stutter_frames": stats["ui_stutter_frames"],
+                "render_stutter_frames": stats["render_stutter_frames"],
+                "total_stutter_frames": stats["total_stutter_frames"],
+                "stutter_rate": stats["stutter_rate"],
+                "stutter_levels": stats["stutter_levels"]
+            },
+            "stutter_details": stats["stutter_details"],
+            "fps_stats": stats["fps_stats"]
         }
 
         with open(output_path, 'w', encoding='utf-8') as f:
