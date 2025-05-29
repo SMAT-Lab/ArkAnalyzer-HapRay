@@ -54,31 +54,31 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
+        # 点击京东超市
+        # 从(824, 922)滑动至(7, 1344)
+        p1 = CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=824,  # 原始x坐标
+            y=922,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        )
+        p2 = CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=7,  # 原始x坐标
+            y=1344,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        )
+        self.driver.slide(p1, p2)
+        self.driver.wait(1)
+        # 点击type为{Text}并且text为{全部频道}的控件
+        self.driver.touch(BY.type('Text').text('全部频道'))
+        self.driver.wait(2)
+
+        CommonUtils.swipes_up_load(self.driver, swip_num=1, sleep=2)
+
         def step1(driver):
-            # 点击京东超市
-            # 从(824, 922)滑动至(7, 1344)
-            p1 = CoordinateAdapter.convert_coordinate(
-                self.driver,
-                x=824,  # 原始x坐标
-                y=922,  # 原始y坐标
-                source_width=self.source_screen_width,
-                source_height=self.source_screen_height
-            )
-            p2 = CoordinateAdapter.convert_coordinate(
-                self.driver,
-                x=7,  # 原始x坐标
-                y=1344,  # 原始y坐标
-                source_width=self.source_screen_width,
-                source_height=self.source_screen_height
-            )
-            self.driver.slide(p1, p2)
-            self.driver.wait(1)
-            # 点击type为{Text}并且text为{全部频道}的控件
-            self.driver.touch(BY.type('Text').text('全部频道'))
-            self.driver.wait(2)
-
-            CommonUtils.swipes_up_load(self.driver, swip_num=1, sleep=2)
-
             self.driver.touch(BY.text('京东超市'))
             self.driver.wait(2)
 
@@ -101,7 +101,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             ))
             self.driver.wait(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 40)
+        self.execute_step_with_perf_and_trace(1, step1, 40, sample_all=True)
 
         # 从购物车移除第一个商品
         self.driver.touch(CoordinateAdapter.convert_coordinate(
