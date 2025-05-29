@@ -4,10 +4,6 @@ import subprocess
 import json
 import sqlite3
 from typing import List, Dict, Any
-from datetime import datetime
-from pathlib import Path
-import glob
-import pandas as pd
 import sys
 import codecs
 from xdevice import platform_logger
@@ -263,8 +259,8 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
         data = parse_frame_slice_db(db_path)
 
         FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
-        STUTTER_LEVEL_1_FRAMES = 2
-        STUTTER_LEVEL_2_FRAMES = 6
+        STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧
+        STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧
         NS_TO_MS = 1_000_000
         WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
         LOW_FPS_THRESHOLD = 45  # 低FPS阈值
@@ -355,11 +351,11 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                         # 0-2帧：1级卡顿
                         # 2-6帧：2级卡顿
                         # 6帧及以上：3级严重卡顿
-                        if frame.get("flag") == 3 or exceed_frames < 2:
+                        if frame.get("flag") == 3 or exceed_frames < STUTTER_LEVEL_1_FRAMES:
                             stutter_level = 1
                             level_desc = "轻微卡顿"
                             stats["stutter_levels"]["level_1"] += 1
-                        elif exceed_frames < 6:
+                        elif exceed_frames < STUTTER_LEVEL_2_FRAMES:
                             stutter_level = 2
                             level_desc = "中度卡顿"
                             stats["stutter_levels"]["level_2"] += 1
