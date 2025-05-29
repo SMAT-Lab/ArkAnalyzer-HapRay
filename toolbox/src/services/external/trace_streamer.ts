@@ -39,7 +39,7 @@ function initTools() {
     let toolCmd = path.join(getConfig().extToolsPath, 'trace_streamer_binary', toolName);
     if (fs.existsSync(toolCmd)) {
         _traceStreamer = toolCmd;
-        if (process.platform === 'linux') {
+        if (process.platform === 'linux' || process.platform === 'darwin') {
             runCommandSync('chmod', ['+x', toolCmd]);
         }
     }
