@@ -6,7 +6,7 @@ ArkAnalyzer-HapRay is a tool designed for performance analysis of OpenHarmony ap
 
 ## Documentation
 For more detailed information, please refer to the following documents:
-- [使用说明](docs/使用说明.md) - Usage Guide
+- [使用前准备](docs/使用说明.md) - Pre-Use Preparation
 - [工具介绍](docs/工具介绍.md) - Tool Introduction
 - [收益测试分析](docs/收益测试分析.md) - Performance Test Analysis
 - [用例执行预置条件](docs/用例执行预置条件.md) - Test Case Prerequisites
@@ -26,8 +26,17 @@ npm run release
 
 ### Dependencies
 - pip > 23.0.1
-- Python 3.9 ~ 3.12
+- Python 3.9 ~ 3.12, 
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
+
+> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.12 range.
+> You can verify this by running:
+> ```bash
+> python --version
+> ```
+
+> ⚠️ When using `pip` to install dependencies, please ensure that your Python package source is reachable from your network.  
+> We recommend configuring a mirror (e.g., Tsinghua or Huawei Cloud) if needed.
 
 ### Ubuntu System Dependencies
 ```bash
@@ -67,7 +76,7 @@ export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/defa
 git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
 npm install
-
+npm run build
 # Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
 cd perf_testing
 source .venv/bin/activate
@@ -81,7 +90,7 @@ python -m scripts.main
 git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
 npm install
-
+npm run build
 # Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
 cd perf_testing
 # Command-Line(CMD) Alternative the python virtual environment
