@@ -273,6 +273,11 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
+        # 获取runtime时间
+        cursor.execute("SELECT value FROM meta WHERE name = 'runtime'")
+        runtime_result = cursor.fetchone()
+        runtime = runtime_result[0] if runtime_result else None
+        
         data = parse_frame_slice_db(db_path)
 
         FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
@@ -281,6 +286,9 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         NS_TO_MS = 1_000_000
         WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
         LOW_FPS_THRESHOLD = 45  # 低FPS阈值
+
+        # 初始化第一帧时间戳
+        first_frame_time = None
 
         stats = {
             "total_frames": 0,
@@ -336,9 +344,13 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     if window_fps < LOW_FPS_THRESHOLD:
                         stats["fps_stats"]["low_fps_window_count"] += 1
 
+                    # 计算相对于runtime的偏移时间（秒）
+                    start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
+                    end_offset = (current_window["end_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
+
                     fps_windows.append({
-                        "start_time": current_window["start_time"],
-                        "end_time": current_window["end_time"],
+                        "start_time": start_offset,
+                        "end_time": end_offset,
                         "frame_count": current_window["frame_count"],
                         "fps": window_fps
                     })
@@ -352,6 +364,10 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                 # 当前窗口更新
                 current_window["frame_count"] += 1
                 current_window["frames"].append(frame)
+
+                # 记录第一帧的时间戳
+                if first_frame_time is None:
+                    first_frame_time = frame_time
 
                 # 卡顿判断
                 if frame.get("flag") == 1:  # 表示这一帧比预期帧慢
@@ -411,14 +427,18 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             actual_end_time = current_window["frames"][-1]["ts"]
             window_duration_ms = (actual_end_time - current_window["start_time"]) / NS_TO_MS
 
-            if window_duration_ms >= WINDOW_SIZE_MS:  # 使用统一的窗口大小常量
+            if window_duration_ms >= WINDOW_SIZE_MS:
                 window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
                 if window_fps < LOW_FPS_THRESHOLD:
                     stats["fps_stats"]["low_fps_window_count"] += 1
 
+                # 计算最后一个窗口的偏移时间
+                start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000
+                end_offset = (actual_end_time - first_frame_time) / NS_TO_MS / 1000
+
                 fps_windows.append({
-                    "start_time": current_window["start_time"],
-                    "end_time": actual_end_time,
+                    "start_time": start_offset,
+                    "end_time": end_offset,
                     "frame_count": current_window["frame_count"],
                     "fps": window_fps
                 })
@@ -441,6 +461,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"] * 100, 2)
 
         result = {
+            "runtime": runtime,
             "statistics": {
                 "total_frames": stats["total_frames"],
                 "ui_stutter_frames": stats["ui_stutter_frames"],
@@ -462,7 +483,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
 def main():
     """测试卡顿帧分析功能的主函数"""
     # 设置要分析的报告目录路径
-    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250527155445\ResourceUsage_PerformanceDynamic_jingdong_0010'
+    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250528154741\ResourceUsage_PerformanceDynamic_jingdong_0020'
 
     # 检查路径是否存在
     if not os.path.exists(path):
