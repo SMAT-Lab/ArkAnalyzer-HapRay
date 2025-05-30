@@ -35,6 +35,7 @@ jobs:
             platform: darwin
             pyinstaller_arch: x86_64
         node-version: [18.x]
+        package_lock_path: .github/workflows/package-lock.json
     
     steps:
     - name: Checkout code
