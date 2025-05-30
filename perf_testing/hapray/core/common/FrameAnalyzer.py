@@ -344,13 +344,15 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     if window_fps < LOW_FPS_THRESHOLD:
                         stats["fps_stats"]["low_fps_window_count"] += 1
 
-                    # 计算相对于runtime的偏移时间（秒）
+                    # 计算相对于第一帧的偏移时间（秒）
                     start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
                     end_offset = (current_window["end_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
 
                     fps_windows.append({
                         "start_time": start_offset,
                         "end_time": end_offset,
+                        "start_time_ts": current_window["start_time"],
+                        "end_time_ts": current_window["end_time"],
                         "frame_count": current_window["frame_count"],
                         "fps": window_fps
                     })
@@ -439,6 +441,8 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                 fps_windows.append({
                     "start_time": start_offset,
                     "end_time": end_offset,
+                    "start_time_ts": current_window["start_time"],
+                    "end_time_ts": actual_end_time,
                     "frame_count": current_window["frame_count"],
                     "fps": window_fps
                 })
