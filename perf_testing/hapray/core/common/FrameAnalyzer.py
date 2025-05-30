@@ -122,6 +122,9 @@ class FrameAnalyzer:
                 Log.error(f"Error: htrace directory not found at {htrace_dir}")
                 return False
 
+            # 用于存储所有步骤的分析结果
+            all_results = []
+
             # 遍历所有步骤目录
             for step_dir in os.listdir(htrace_dir):
                 step_path = os.path.join(htrace_dir, step_dir)
@@ -145,9 +148,21 @@ class FrameAnalyzer:
 
                 # 分析卡顿帧数据
                 Log.info(f"Analyzing frame drops for {step_dir}...")
-                output_path = os.path.join(step_path, 'frame_analysis.json')
-                analyze_stuttered_frames(db_file, output_path)
-                Log.info(f"Frame analysis results saved to: {output_path}")
+                try:
+                    result = analyze_stuttered_frames(db_file)
+                    all_results.append(result)
+                except Exception as e:
+                    Log.error(f"Error analyzing frames for {step_dir}: {str(e)}")
+                    continue
+
+            # 保存汇总结果
+            if all_results:
+                summary_path = os.path.join(htrace_dir, 'frame_analysis_summary.json')
+                with open(summary_path, 'w', encoding='utf-8') as f:
+                    json.dump(all_results, f, indent=2, ensure_ascii=False)
+                Log.info(f"Summary results saved to: {summary_path}")
+            else:
+                Log.warning("No valid analysis results to summarize")
 
             return True
 
@@ -243,13 +258,15 @@ def get_frame_type(frame: dict, cursor) -> str:
         return "Render"
     return "UI"
 
-def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
+def analyze_stuttered_frames(db_path: str) -> dict:
     """
     分析卡顿帧数据并计算FPS
 
     Args:
         db_path: 数据库文件路径
-        output_path: 输出JSON文件路径
+
+    Returns:
+        dict: 分析结果数据
     """
     try:
         # 连接数据库
@@ -394,11 +411,8 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
             actual_end_time = current_window["frames"][-1]["ts"]
             window_duration_ms = (actual_end_time - current_window["start_time"]) / NS_TO_MS
 
-            MIN_VALID_WINDOW_MS = 500  # 设置最小窗口时长为 500ms
-
-            if window_duration_ms >= MIN_VALID_WINDOW_MS:
+            if window_duration_ms >= WINDOW_SIZE_MS:  # 使用统一的窗口大小常量
                 window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
-
                 if window_fps < LOW_FPS_THRESHOLD:
                     stats["fps_stats"]["low_fps_window_count"] += 1
 
@@ -409,7 +423,7 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                     "fps": window_fps
                 })
             else:
-                print(f"[跳过短窗口] 帧数: {current_window['frame_count']}, "
+                print(f"[跳过短窗口FPS计算] 帧数: {current_window['frame_count']}, "
                       f"窗口时长: {window_duration_ms:.2f}ms，不参与FPS统计。")
 
         # 计算 FPS 概览
@@ -439,27 +453,11 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
             "fps_stats": stats["fps_stats"]
         }
 
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(result, f, indent=2, ensure_ascii=False)
-
-        print("分析完成！")
-        print(f"总帧数: {stats['total_frames']}")
-        print(f"UI线程卡顿帧数: {stats['ui_stutter_frames']}")
-        print(f"Render线程卡顿帧数: {stats['render_stutter_frames']}")
-        print(f"轻微卡顿: {stats['stutter_levels']['level_1']}")
-        print(f"中度卡顿: {stats['stutter_levels']['level_2']}")
-        print(f"严重卡顿: {stats['stutter_levels']['level_3']}")
-        print(f"总卡顿率: {stats['stutter_rate']}%")
-        print(f"平均FPS: {stats['fps_stats']['average_fps']:.2f}")
-        print(f"最低FPS: {stats['fps_stats']['min_fps']:.2f}")
-        print(f"最高FPS: {stats['fps_stats']['max_fps']:.2f}")
-        print(f"低FPS窗口数 (<{LOW_FPS_THRESHOLD}fps): {stats['fps_stats'][f'low_fps_window_count ({LOW_FPS_THRESHOLD})']}")
-        print(f"结果已保存到: {output_path}")
+        return result
 
     except Exception as e:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
-
 
 def main():
     """测试卡顿帧分析功能的主函数"""
@@ -477,7 +475,6 @@ def main():
         Log.info("Frame drops analysis completed successfully")
     else:
         Log.error("Frame drops analysis failed")
-
 
 if __name__ == "__main__":
     main()
