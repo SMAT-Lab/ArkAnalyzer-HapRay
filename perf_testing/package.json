@@ -11,13 +11,9 @@
     "setup:unix": "python3 setup_env.py",
     "build": "",
     "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
-    "prepack": "npm run build:python && shx cd dist; bestzip ../../ArkAnalyzer-HapRay-$npm_package_version.tgz ArkAnalyzer-HapRay*"
+    "prepack": "npm run build:python"
   },
   "author": "",
   "license": "ISC",
-  "description": "",
-  "devDependencies": {
-    "bestzip": "^2.2.1",
-    "shx": "^0.4.0"
-  }
+  "description": ""
 }
