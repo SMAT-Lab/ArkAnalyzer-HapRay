@@ -462,7 +462,8 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             del stats["fps_stats"]["low_fps_threshold"]
 
         stats["total_stutter_frames"] = stats["ui_stutter_frames"] + stats["render_stutter_frames"]
-        stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"] * 100, 2)
+        # 计算卡顿率，直接使用小数形式，不乘以100
+        stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"], 4)
 
         result = {
             "runtime": runtime,
