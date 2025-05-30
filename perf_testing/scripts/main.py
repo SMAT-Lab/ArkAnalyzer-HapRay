@@ -9,6 +9,7 @@ import yaml
 from xdevice.__main__ import main_process
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.ExcelUtils import create_summary_excel
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_folder
@@ -100,6 +101,13 @@ def main():
                     Log.info(f"Successfully analyzed frame drops for {case_name}")
                 else:
                     Log.error(f"Failed to analyze frame drops for {case_name}")
+
+                # 生成汇总excel
+                Log.info(f"Starting create summary excel for {case_name}...")
+                if create_summary_excel(os.path.join(reports_path, time_str)):
+                    Log.info(f"Successfully  create summary excel for {case_name}")
+                else:
+                    Log.error(f"Failed to  create summary excel for {case_name}")
 
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")

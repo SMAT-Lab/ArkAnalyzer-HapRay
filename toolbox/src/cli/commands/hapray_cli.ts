@@ -53,10 +53,14 @@ export interface TestInfo {
     timestamp: number;
 }
 
-export interface RoundInfo {
+export interface SummaryInfo {
+    rom_version: string,
+    app_version: string,
+    scene: string,
     step_name: string,
     step_id: number,
     round: number,
+    count: number,
 }
 
 export interface ResultInfo {
@@ -273,16 +277,20 @@ async function saveReport(output: string, resultInfo: ResultInfo, testInfo: Test
     let jsContent = JSON.stringify(jsonObject, null, 0);
     replaceAndWriteToNewFile(htmlTemplate, output, 'JSON_DATA_PLACEHOLDER', jsContent);
 
-    let roundsJsonObject: RoundInfo[] = []
+    let summaryJsonObject: SummaryInfo[] = []
     steps.forEach(step => {
-        const roundJsonObject: RoundInfo = {
+        const summaryObject: SummaryInfo = {
+            rom_version: resultInfo.rom_version,
+            app_version: testInfo.app_version,
+            scene: testInfo.scene,
             step_name: step.step_name,
             step_id: step.step_id,
             round: step.round,
+            count: step.count
         }
-        roundsJsonObject.push(roundJsonObject);
+        summaryJsonObject.push(summaryObject);
     })
-    await saveJsonArray(roundsJsonObject, path.join(output, '../rounds_info.json'));
+    await saveJsonArray(summaryJsonObject, path.join(output, '../summary_info.json'));
 
 }
 

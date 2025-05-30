@@ -1,5 +1,19 @@
 <template>
-  <div class="performance-comparison">
+  <div class="container">
+    <!-- 标签页导航 -->
+    <div class="tab-nav">
+      <button class="tab-button"  :class="{ active: currentTab === 'tab1' }"
+        @click="currentTab = 'tab1'">
+        <i class="fa"></i>负载分析
+      </button>
+      <button class="tab-button" :class="{ active: currentTab === 'tab2' }"
+      @click="currentTab = 'tab2'">
+        <i class="fa"></i>卡顿帧分析
+      </button>
+    </div>
+  </div>
+
+  <div v-if="currentTab === 'tab1'" class="performance-comparison">
     <div class="info-box">
       负载分类说明：
       <p>APP_ABC => 应用代码 |
@@ -95,7 +109,7 @@
       </el-col>
       <el-col :span="16">
         <!-- 基准版本 -->
-        
+
         <!-- 进程负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
@@ -116,7 +130,7 @@
         </div>
       </el-col>
       <el-col :span="12">
-         <!-- 文件负载 -->
+        <!-- 文件负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
@@ -137,6 +151,9 @@
       </el-col>
     </el-row>
   </div>
+   <div v-if="currentTab === 'tab2'">
+    <StutterAnalysis />
+   </div>
 </template>
 
 <script lang="ts" setup>
@@ -150,9 +167,12 @@ import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
+import StutterAnalysis from './StutterAnalysis.vue';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
+// 当前激活的标签
+const currentTab = ref('tab1');
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -189,15 +209,15 @@ const mergedProcessPerformanceData = ref({
   instructions: json!.steps.flatMap((step) =>
     step.data.flatMap((item) =>
       item.processes.flatMap((process) =>
-        ({
-          stepId: step.step_id,
-          instructions: process.count,
-          compareInstructions: 0,
-          increaseInstructions: 0,
-          increasePercentage: 0,
-          process: process.process,
-          category: json!.categories[item.category],
-        })
+      ({
+        stepId: step.step_id,
+        instructions: process.count,
+        compareInstructions: 0,
+        increaseInstructions: 0,
+        increasePercentage: 0,
+        process: process.process,
+        category: json!.categories[item.category],
+      })
       )
     )
   ),
@@ -290,16 +310,9 @@ const mergedSymbolsPerformanceData = ref({
   ),
 });
 
-const symbolData = ref({
-  instructions: [
-    { symbol: 'Symbol1', count: 50 },
-    { symbol: 'Symbol2', count: 100 },
-  ],
-});
+
 
 const currentStepIndex = ref(0);
-const symbolDialogVisible = ref(false);
-const selectedFile = ref('');
 
 // 格式化持续时间的方法
 const formatDuration = (milliseconds: any) => {
@@ -663,5 +676,57 @@ const handleDownloadAndRedirect = (file: string, stepId: number, name: string) =
 .primary-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
+}
+
+/* 标签页导航样式 */
+.tab-nav {
+  display: flex;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tab-button {
+  flex: 1;
+  padding: 1rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #4a5568;
+  background-color: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  outline: none;
+}
+
+.tab-button:hover {
+  color: #2b6cb0;
+  background-color: #edf2f7;
+}
+
+.tab-button.active {
+  color: #2b6cb0;
+  border-bottom-color: #2b6cb0;
+  font-weight: 600;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+/* 图标样式 */
+.fa {
+  margin-right: 0.5rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 640px) {
+  .tab-button {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
 }
 </style>

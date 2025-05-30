@@ -3,8 +3,8 @@
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
       <el-radio-group v-model="filterModel.filterMode">
-        <el-radio-button label="string">字符串模式</el-radio-button>
-        <el-radio-button label="regex">正则模式</el-radio-button>
+        <el-radio-button value="string">字符串模式</el-radio-button>
+        <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
       <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件名搜索" clearable @input="handleFilterChange"
         class="search-input">
@@ -40,16 +40,6 @@
     <el-row :gutter="20">
       <el-col :span="8">
         <div style="margin-bottom:10px;">
-          <div style="display: flex;  align-items: center;">
-            <span style="font-size: 16px; font-weight: bold;">过滤后行数占比：</span>
-            <span :style="{ color: 'blue' }">
-              {{ filterAllNumberCompareTotal }}
-            </span>
-          </div>
-        </div>
-      </el-col>
-      <el-col :span="8">
-        <div style="margin-bottom:10px;">
           <div style="display: flex; align-items: center;">
             <span style="font-size: 16px; font-weight: bold;">过滤后负载占总负载：</span>
             <span :style="{ color: 'blue' }">
@@ -61,7 +51,7 @@
       <el-col :span="8">
         <div v-if="isHidden" style="margin-bottom:10px;">
           <div style="display: flex;align-items: center;">
-            <span style="font-size: 16px; font-weight: bold;">过滤后对比负载占总负载：</span>
+            <span style="font-size: 16px; font-weight: bold;">过滤后迭代负载占总负载：</span>
             <span :style="{ color: 'blue' }">
               {{ filterAllCompareInstructionsCompareTotal }}
             </span>
@@ -101,7 +91,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="对比指令数" width="160" prop="compareInstructions" sortable>
+      <el-table-column v-if="isHidden" label="迭代指令数" width="160" prop="compareInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
@@ -204,7 +194,6 @@ const sortState = ref<{
 })
 
 //过滤后的所有函数行对总体函数的占比统计
-const filterAllNumberCompareTotal = ref('');
 const filterAllBaseInstructionsCompareTotal = ref('');
 const filterAllCompareInstructionsCompareTotal = ref('');
 
@@ -212,7 +201,6 @@ const filterAllCompareInstructionsCompareTotal = ref('');
 const filteredData = computed<FileDataItem[]>(() => {
   let result = [...props.data]
 
-  let beforeFilterNum = result.length;
   let beforeFilterBaseInstructions = 0;
   let beforeFilterCompareInstructions = 0;
   result.forEach((dataItem) => {
@@ -237,7 +225,6 @@ const filteredData = computed<FileDataItem[]>(() => {
     }
   }
 
-  let afterFilterNum = result.length;
   let afterFilterBaseInstructions = 0;
   let afterFilterCompareInstructions = 0;
   result.forEach((dataItem) => {
@@ -245,8 +232,6 @@ const filteredData = computed<FileDataItem[]>(() => {
     afterFilterCompareInstructions = afterFilterCompareInstructions + dataItem.compareInstructions;
   });
 
-  let numPercent = (afterFilterNum / beforeFilterNum) * 100;
-  filterAllNumberCompareTotal.value = Number.parseFloat(numPercent.toFixed(2)) + '%';
 
   let basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
   filterAllBaseInstructionsCompareTotal.value = Number.parseFloat(basePercent.toFixed(2)) + '%';
