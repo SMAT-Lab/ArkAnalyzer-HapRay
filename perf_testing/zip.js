@@ -2,9 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
+const packageJson = require('./package.json');
+const version = packageJson.version;
+
 // 获取命令行参数
 const args = process.argv.slice(2);
-const outputFilename = args[0] || 'dist.zip'; // 使用参数或默认文件名
+const outputFilename = path.resolve(__dirname, `../${args[0] || 'dist'}-${version}.zip`);
 
 async function zipDistDirectory(outputPath) {
   const sourceDir = 'dist';
