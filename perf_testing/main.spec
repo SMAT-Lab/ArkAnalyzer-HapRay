@@ -40,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='arkanalyzer-hapray',
+    name='ArkAnalyzer-HapRay',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

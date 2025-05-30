@@ -64,5 +64,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: hapray-${{ matrix.platform }}-${{ matrix.arch }}
-        path: hapray-*.tgz
+        name: ArkAnalyzer-HapRay-${{ matrix.platform }}-${{ matrix.arch }}
+        path: ArkAnalyzer-HapRay-*.tgz

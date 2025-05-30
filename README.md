@@ -104,6 +104,7 @@ python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases ResourceUsa
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
 
 ### 1.Preset testcases
+```yaml
 run_testcases:
  - PerformanceDynamic_com_example_wsywechat_0010
  - ResourceUsage_PerformanceDynamic_xhs_0010
@@ -136,19 +137,26 @@ run_testcases:
  - ResourceUsage_PerformanceDynamic_zhifubao_0100
  - ResourceUsage_PerformanceDynamic_Douyin_0010
  - ResourceUsage_PerformanceDynamic_taobao_9999
+```
+
 ### 2.After setting the so_dir parameter, the import with the symbol so can be supported. This address is the storage path of the.so files in the debug package or the release package
+```yaml
 so_dir:
   ResourceUsage_PerformanceDynamic_xxx:
     - xxx
+```
+
 ### Some functions show up as libtaskpool.z.so@0x5b19124734 when the so_dir path is filled in, and when imported, they show the normal function name
 The filling format is as follows, and multiple lines are supported：
 
-
+```yaml
 so_dir:
   ResourceUsage_PerformanceDynamic_xhs:
     - d:/xhs
   ResourceUsage_PerformanceDynamic_bilibili:
     - d:/bilibili
+```
+
 ### 3.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:
 ```
   Use case 1 is passed through the command line, and use case 2 is configured in the configuration file. Eventually, both use cases will be executed.

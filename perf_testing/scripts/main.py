@@ -10,12 +10,22 @@ from logging.handlers import RotatingFileHandler
 
 import yaml
 from xdevice.__main__ import main_process
-from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.PerfTestCase import PerfTestCase
 from hapray.core.common.ExcelUtils import create_summary_excel
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import scan_folders, delete_folder
 from hapray.core.common.FrameAnalyzer import FrameAnalyzer
+
+ENV_ERR_STR = """
+The hdc or node command is not in PATH. 
+Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
+then add the following directories to PATH.
+    $command_line_tools/tool/node/ (for Windows)
+    $command_line_tools/tool/node/bin (for Mac/Linux)
+    $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
+"""
+VERSION = '1.0.0'
 
 
 def configure_logging(log_file='HapRay.log'):
@@ -50,24 +60,22 @@ def check_env() -> bool:
     return False
 
 
-ENV_ERR_STR = """
-The hdc or node command is not in PATH. 
-Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
-then add the following directories to PATH.
-    $command_line_tools/tool/node/ (for Windows)
-    $command_line_tools/tool/node/bin (for Mac/Linux)
-    $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
-"""
-
-
 def main():
     if not check_env():
         logging.error(ENV_ERR_STR)
         return
 
-    parser = argparse.ArgumentParser(description='处理命令行参数')
-    parser.add_argument('--so_dir', default=None, help='debug包中的so文件存放目录')
-    parser.add_argument('--run_testcases', nargs='+', default=None, help='指定要测试的用例')
+    parser = argparse.ArgumentParser(
+        description='%(prog)s: Code-oriented Performance Analysis for OpenHarmony Apps',
+        prog='ArkAnalyzer-HapRay')
+    parser.add_argument(
+        '-v', '--version',
+        action='version',
+        version=f'%(prog)s {VERSION}',
+        help="Show program's version number and exit"
+    )
+    parser.add_argument('--so_dir', default=None, help='Directory to load symbolicated .so files')
+    parser.add_argument('--run_testcases', nargs='+', default=None, help='Specify test cases to run')
     args = parser.parse_args()
 
     _ = Config()
@@ -141,11 +149,11 @@ def main():
                     future.result()
 
                 # 生成汇总excel
-                Log.info(f"Starting create summary excel for {case_name}...")
+                logging.info(f"Starting create summary excel for {case_name}...")
                 if create_summary_excel(os.path.join(reports_path, time_str)):
-                    Log.info(f"Successfully  create summary excel for {case_name}")
+                    logging.info(f"Successfully  create summary excel for {case_name}")
                 else:
-                    Log.error(f"Failed to  create summary excel for {case_name}")
+                    logging.error(f"Failed to  create summary excel for {case_name}")
 
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")
