@@ -5,9 +5,6 @@ from typing import List, Dict, Any
 import argparse
 from pathlib import Path
 
-from exceptiongroup import catch
-
-
 def merge_summary_info(directory: str) -> List[Dict[str, Any]]:
     """合并指定目录下所有summary_info.json文件中的数据"""
     merged_data = []

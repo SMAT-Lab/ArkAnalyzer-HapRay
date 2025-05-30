@@ -13,7 +13,7 @@
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="card-desc">应用程序渲染的总帧数，反映了整体运行情况</div>
             </div>
-            <div class="stat-card">
+            <!-- <div class="stat-card">
                 <div class="card-title">
                     <i>📉</i> 丢帧数
                 </div>
@@ -26,7 +26,7 @@
                 </div>
                 <div class="card-value">{{ (performanceData.statistics.stutter_rate * 100).toFixed(2) }}%</div>
                 <div class="card-desc">丢帧数占总帧数的比例，越低表示渲染越流畅</div>
-            </div>
+            </div> -->
             <div class="stat-card">
                 <div class="card-title">
                     <i>⚠️</i> 卡顿帧数
@@ -405,12 +405,12 @@ const filteredStutters = computed(() => {
 });
 
 // 初始化图表
-const initCharts = () => {
+const initCharts = (aggregatedData) => {
     // FPS折线图
     const fpsChartInstance = echarts.init(fpsChart.value);
-    const fpsData = performanceData.value.fps_stats.fps_windows;
-    const fpsValues = fpsData.map(item => item.fps);
-    const timeLabels = fpsData.map((_, index) => `窗口${index + 1}`);
+    const timeLabels = aggregatedData.map(item => item.x);
+    const fpsValues = aggregatedData.map(item => item.y);
+    const stutterMarkers = aggregatedData.map(item => item.hasStutter);
 
     const fpsOption = {
         backgroundColor: 'transparent',
@@ -425,19 +425,7 @@ const initCharts = () => {
             top: '10%',
             containLabel: true
         },
-        xAxis: {
-            type: 'category',
-            data: timeLabels,
-            axisLine: {
-                lineStyle: {
-                    color: '#94a3b8'
-                }
-            },
-            axisLabel: {
-                interval: Math.floor(timeLabels.length / 5),
-                rotate: 45
-            }
-        },
+        xAxis: { data: timeLabels },
         yAxis: {
             type: 'value',
             name: 'FPS',
@@ -479,7 +467,12 @@ const initCharts = () => {
             {
                 name: 'FPS',
                 type: 'line',
-                data: fpsValues,
+                data: fpsValues.map((y, i) => ({
+                    value: y,
+                    symbol: stutterMarkers[i] ? 'circle' : 'circle',
+                    symbolSize: 8,
+                    itemStyle: { color: stutterMarkers[i] ? '#ff9f1a' : '#38bdf8' } // 黄点（#ff9f1a）替代红点示例
+                })),
                 smooth: true,
                 symbol: 'circle',
                 symbolSize: 6,
@@ -597,8 +590,47 @@ const initCharts = () => {
     });
 };
 
+const aggregateByTimeWindow = (data, windowSize = 1000) => {
+    const grouped = {};
+    data.forEach((item) => {
+        const windowStart = Math.floor(item.timestamp / windowSize) * windowSize;
+        if (!grouped[windowStart]) {
+            grouped[windowStart] = { start: windowStart, fpsValues: [], hasStutter: false };
+        }
+        grouped[windowStart].fpsValues.push(item.fps);
+        grouped[windowStart].hasStutter = grouped[windowStart].hasStutter || (item.fps < 30);
+    });
+    
+    // 格式化时间戳为完整的日期时间字符串
+    return Object.values(grouped).map(group => ({
+        x: formatTimestamp(group.start), // 使用自定义格式化函数
+        y: group.fpsValues.length ? group.fpsValues.reduce((a, b) => a + b, 0) / group.fpsValues.length : 0,
+        hasStutter: group.hasStutter
+    }));
+};
+
+// 新增：自定义时间戳格式化函数
+const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false // 使用24小时制
+    }).replace(/\//g, '-'); // 将斜杠替换为连字符，使格式更统一
+};
 onMounted(() => {
-    initCharts();
+    const rawFrames = performanceData.value.fps_stats.fps_windows.flatMap(window =>
+        Array(window.frame_count).fill({
+            timestamp: window.start_time,
+            fps: window.fps
+        })
+    );
+    const aggregatedData = aggregateByTimeWindow(rawFrames, 2000); // 2秒窗口
+    initCharts(aggregatedData);
 });
 
 
