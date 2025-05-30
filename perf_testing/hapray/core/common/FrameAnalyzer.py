@@ -4,10 +4,6 @@ import subprocess
 import json
 import sqlite3
 from typing import List, Dict, Any
-from datetime import datetime
-from pathlib import Path
-import glob
-import pandas as pd
 import sys
 import codecs
 from xdevice import platform_logger
@@ -225,6 +221,28 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
 
+def get_frame_type(frame: dict, cursor) -> str:
+    """
+    判断帧的类型：UI帧 / 渲染帧
+
+    参数:
+        frame: 帧数据字典
+        cursor: 数据库游标
+
+    返回:
+        str: 'UI' 或 'Render'
+    """
+    ipid = frame.get("ipid")
+    if ipid is None:
+        return "UI"
+
+    cursor.execute("SELECT name FROM process WHERE ipid = ?", (ipid,))
+    result = cursor.fetchone()
+    
+    if result and result[0] == "render_service":
+        return "Render"
+    return "UI"
+
 def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
     """
     分析卡顿帧数据并计算FPS
@@ -234,13 +252,18 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
         output_path: 输出JSON文件路径
     """
     try:
+        # 连接数据库
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
         data = parse_frame_slice_db(db_path)
 
         FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
-        STUTTER_LEVEL_1_FRAMES = 2
-        STUTTER_LEVEL_2_FRAMES = 6
+        STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧
+        STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧
         NS_TO_MS = 1_000_000
         WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
+        LOW_FPS_THRESHOLD = 45  # 低FPS阈值
 
         stats = {
             "total_frames": 0,
@@ -261,6 +284,7 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                 "min_fps": 0,
                 "max_fps": 0,
                 "low_fps_window_count": 0,
+                "low_fps_threshold": LOW_FPS_THRESHOLD,
                 "fps_windows": []
             }
         }
@@ -292,7 +316,7 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                 while frame_time >= current_window["end_time"]:
                     window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS, 1)
                     window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
-                    if window_fps < 45:
+                    if window_fps < LOW_FPS_THRESHOLD:
                         stats["fps_stats"]["low_fps_window_count"] += 1
 
                     fps_windows.append({
@@ -327,11 +351,11 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                         # 0-2帧：1级卡顿
                         # 2-6帧：2级卡顿
                         # 6帧及以上：3级严重卡顿
-                        if frame.get("flag") == 3 or exceed_frames < 2:
+                        if frame.get("flag") == 3 or exceed_frames < STUTTER_LEVEL_1_FRAMES:
                             stutter_level = 1
                             level_desc = "轻微卡顿"
                             stats["stutter_levels"]["level_1"] += 1
-                        elif exceed_frames < 6:
+                        elif exceed_frames < STUTTER_LEVEL_2_FRAMES:
                             stutter_level = 2
                             level_desc = "中度卡顿"
                             stats["stutter_levels"]["level_2"] += 1
@@ -340,13 +364,14 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                             level_desc = "严重卡顿"
                             stats["stutter_levels"]["level_3"] += 1
 
-                        # 区分 UI 线程 vs Render 线程
-                        if frame.get("dst") and not frame.get("src"):
-                            stutter_type = "ui_stutter"
-                            stats["ui_stutter_frames"] += 1
-                        else:
+                        # 区分 UI 帧 vs 渲染帧
+                        frame_type = get_frame_type(frame, cursor)
+                        if frame_type == "Render":
                             stutter_type = "render_stutter"
                             stats["render_stutter_frames"] += 1
+                        else:
+                            stutter_type = "ui_stutter"
+                            stats["ui_stutter_frames"] += 1
 
                         stats["stutter_details"][stutter_type].append({
                             "vsync": vsync_key,
@@ -361,6 +386,9 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
                             "dst": frame.get("dst")
                         })
 
+        # 关闭数据库连接
+        conn.close()
+
         # 处理最后一个窗口
         if current_window["frame_count"] > 0:
             actual_end_time = current_window["frames"][-1]["ts"]
@@ -371,7 +399,7 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
             if window_duration_ms >= MIN_VALID_WINDOW_MS:
                 window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
 
-                if window_fps < 45:
+                if window_fps < LOW_FPS_THRESHOLD:
                     stats["fps_stats"]["low_fps_window_count"] += 1
 
                 fps_windows.append({
@@ -391,6 +419,9 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
             stats["fps_stats"]["average_fps"] = sum(fps_values) / len(fps_values)
             stats["fps_stats"]["min_fps"] = min(fps_values)
             stats["fps_stats"]["max_fps"] = max(fps_values)
+            stats["fps_stats"][f"low_fps_window_count ({LOW_FPS_THRESHOLD})"] = stats["fps_stats"]["low_fps_window_count"]
+            del stats["fps_stats"]["low_fps_window_count"]
+            del stats["fps_stats"]["low_fps_threshold"]
 
         stats["total_stutter_frames"] = stats["ui_stutter_frames"] + stats["render_stutter_frames"]
         stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"] * 100, 2)
@@ -422,7 +453,7 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
         print(f"平均FPS: {stats['fps_stats']['average_fps']:.2f}")
         print(f"最低FPS: {stats['fps_stats']['min_fps']:.2f}")
         print(f"最高FPS: {stats['fps_stats']['max_fps']:.2f}")
-        print(f"低FPS窗口数 (<45fps): {stats['fps_stats']['low_fps_window_count']}")
+        print(f"低FPS窗口数 (<{LOW_FPS_THRESHOLD}fps): {stats['fps_stats'][f'low_fps_window_count ({LOW_FPS_THRESHOLD})']}")
         print(f"结果已保存到: {output_path}")
 
     except Exception as e:
@@ -433,7 +464,7 @@ def analyze_stuttered_frames(db_path: str, output_path: str) -> None:
 def main():
     """测试卡顿帧分析功能的主函数"""
     # 设置要分析的报告目录路径
-    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250528154741\ResourceUsage_PerformanceDynamic_jingdong_0020'
+    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250527155445\ResourceUsage_PerformanceDynamic_jingdong_0010'
 
     # 检查路径是否存在
     if not os.path.exists(path):

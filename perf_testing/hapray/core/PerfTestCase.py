@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -268,15 +269,17 @@ CONFIG"""
 
     @staticmethod
     def generate_hapray_report(scene_dirs: list[str], scene_dir: str, so_dir: str) -> bool:
-        if not scene_dirs:
-            Log.error("Error: scene_dirs length is 0!")
-            return False
-
         """
         执行 hapray 命令生成性能分析报告
         :param scene_dir: 场景目录路径，例如 perf_output/wechat002 或完整路径
         :return: bool 表示是否成功生成报告
+        Log日志和具体case相关，生成报告时已与case无关，导致Log无法落盘，此处使用logging记录日志
         """
+
+        if not scene_dirs:
+            logging.error("Error: scene_dirs length is 0!")
+            return False
+
         # 获取 perf_testing 目录
         perf_testing_dir = CommonUtils.get_project_root()
 
@@ -296,14 +299,14 @@ CONFIG"""
 
         # 检查 hapray-cmd.js 是否存在
         if not os.path.exists(hapray_cmd_path):
-            Log.error(f"Error: hapray-cmd.js not found at {hapray_cmd_path}")
+            logging.error(f"Error: hapray-cmd.js not found at {hapray_cmd_path}")
             return False
 
         # 打印调试信息
-        Log.info(f"Project root: {project_root}")
-        Log.info(f"Scene directory: {full_scene_dir}")
-        Log.info(f"Hapray command path: {hapray_cmd_path}")
-        Log.info(f"Current working directory: {os.getcwd()}")
+        logging.info(f"Project root: {project_root}")
+        logging.info(f"Scene directory: {full_scene_dir}")
+        logging.info(f"Hapray command path: {hapray_cmd_path}")
+        logging.info(f"Current working directory: {os.getcwd()}")
 
         # 确保路径使用双反斜杠
         full_scene_dir_escaped = full_scene_dir.replace('\\', '\\\\')
@@ -325,7 +328,7 @@ CONFIG"""
             ]
 
         # 打印完整命令
-        Log.info(f"Executing command: {' '.join(cmd)}")
+        logging.info(f"Executing command: {' '.join(cmd)}")
 
         try:
             # 设置工作目录为项目根目录，并指定编码为 utf-8
@@ -338,19 +341,19 @@ CONFIG"""
                 encoding='utf-8',
                 errors='replace'  # 使用 replace 策略处理无法解码的字符
             )
-            Log.info(f"Command output: {result.stdout}")
+            logging.info(f"Command output: {result.stdout}")
             if result.stderr:
-                Log.error(f"Command stderr: {result.stderr}")
+                logging.error(f"Command stderr: {result.stderr}")
             return True
         except subprocess.CalledProcessError as e:
-            Log.error(f"Failed to generate HapRay report: {str(e)}")
+            logging.error(f"Failed to generate HapRay report: {str(e)}")
             if e.stdout:
-                Log.error(f"Command stdout: {e.stdout}")
+                logging.error(f"Command stdout: {e.stdout}")
             if e.stderr:
-                Log.error(f"Command stderr: {e.stderr}")
+                logging.error(f"Command stderr: {e.stderr}")
             return False
         except FileNotFoundError:
-            Log.error(
+            logging.error(
                 "Error: Node.js command not found. Please make sure Node.js is installed and in your PATH.")
             return False
 
@@ -645,7 +648,7 @@ CONFIG"""
         # 使用 ps -ef | grep 命令获取所有相关进程
         cmd = f"ps -ef | grep {self.app_package}"
         result = self.driver.shell(cmd)
-        
+
         # 解析输出，提取PID和进程名
         pids = []
         process_names = []
@@ -653,7 +656,7 @@ CONFIG"""
             # 跳过grep进程本身
             if 'grep' in line:
                 continue
-                
+
             # 尝试从每行提取PID和进程名
             try:
                 # ps -ef 输出格式: UID PID PPID ... CMD
@@ -666,7 +669,7 @@ CONFIG"""
                     process_names.append(process_name)
             except (ValueError, IndexError):
                 continue
-                
+
         return pids, process_names
 
     def _get_app_pid(self) -> int:
