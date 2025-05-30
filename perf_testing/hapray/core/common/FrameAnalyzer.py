@@ -459,7 +459,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             stats["fps_stats"]["average_fps"] = sum(fps_values) / len(fps_values)
             stats["fps_stats"]["min_fps"] = min(fps_values)
             stats["fps_stats"]["max_fps"] = max(fps_values)
-            stats["fps_stats"][f"low_fps_window_count ({LOW_FPS_THRESHOLD})"] = stats["fps_stats"]["low_fps_window_count"]
+            stats["fps_stats"]["low_fps_window_count"] = stats["fps_stats"]["low_fps_window_count"]
             del stats["fps_stats"]["low_fps_window_count"]
             del stats["fps_stats"]["low_fps_threshold"]
 
