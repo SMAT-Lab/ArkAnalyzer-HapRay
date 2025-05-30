@@ -49,11 +49,7 @@ jobs:
     - name: Copy package-lock.json
       run: |
         echo "Copying ${{ matrix.item.package_lock_path }} to package-lock.json"
-        if [[ "${{ matrix.item.platform }}" == "win32" ]]; then
-          copy /y "${{ matrix.item.package_lock_path }}" package-lock.json
-        else
-          cp "${{ matrix.item.package_lock_path }}" package-lock.json
-        fi
+        cp "${{ matrix.item.package_lock_path }}" package-lock.json
         echo "File copied successfully"
       shell: bash
 
