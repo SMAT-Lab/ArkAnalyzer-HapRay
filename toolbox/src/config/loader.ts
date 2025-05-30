@@ -63,7 +63,8 @@ const ConfigSchema = z.object({
     input: z.string().default(''),
     output: z.string().default('output'),
     extToolsPath: z.string(),
-    soDir: z.string()
+    soDir: z.string(),
+    choose: z.boolean().default(false)
 });
 
 function getExtToolsRoot(): string {

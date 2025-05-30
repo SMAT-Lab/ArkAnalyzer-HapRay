@@ -86,6 +86,7 @@ def main():
     configure_logging(os.path.join(reports_path, 'HapRay.log'))
 
     time_str = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+    #time_str = '20250530180317'
 
     all_testcases = CommonUtils.load_all_testcases()
     config_path = os.path.join(root_path, 'config.yaml')
@@ -152,11 +153,11 @@ def main():
                         logging.error(f"Failed to analyze frame drops for {case_name}")
 
                 # 生成汇总excel
-                logging.info(f"Starting create summary excel for {case_name}...")
+                logging.info(f"Starting create summary excel ...")
                 if create_summary_excel(os.path.join(reports_path, time_str)):
-                    logging.info(f"Successfully  create summary excel for {case_name}")
+                    logging.info(f"Successfully  create summary excel")
                 else:
-                    logging.error(f"Failed to  create summary excel for {case_name}")
+                    logging.error(f"Failed to  create summary excel ")
 
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")

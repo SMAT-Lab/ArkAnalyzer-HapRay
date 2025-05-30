@@ -2,12 +2,10 @@
   <div class="container">
     <!-- 标签页导航 -->
     <div class="tab-nav">
-      <button class="tab-button"  :class="{ active: currentTab === 'tab1' }"
-        @click="currentTab = 'tab1'">
+      <button class="tab-button" :class="{ active: currentTab === 'tab1' }" @click="currentTab = 'tab1'">
         <i class="fa"></i>负载分析
       </button>
-      <button class="tab-button" :class="{ active: currentTab === 'tab2' }"
-      @click="currentTab = 'tab2'">
+      <button class="tab-button" :class="{ active: currentTab === 'tab2' }" @click="currentTab = 'tab2'">
         <i class="fa"></i>卡顿帧分析
       </button>
     </div>
@@ -151,13 +149,37 @@
       </el-col>
     </el-row>
   </div>
-   <div v-if="currentTab === 'tab2'">
-    <FrameAnalysis />
-   </div>
+  <div v-if="currentTab === 'tab2'">
+    <!-- 测试步骤导航 -->
+    <div class="step-nav" style="margin-bottom: 0%;margin-top: 10px;margin: 0 auto;">
+      <div v-for="(step, index) in testSteps" :key="index" :class="[
+        'step-item',
+        {
+          active: currentStepIndex === step.id,
+        },
+      ]" @click="handleStepClick(step.id)">
+        <div class="step-header">
+          <span class="step-order">STEP {{ step.id }}</span>
+
+        </div>
+        <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
+        <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
+        <button class="beautiful-btn primary-btn"
+          @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
+          下载perf
+        </button>
+        <button class="beautiful-btn primary-btn"
+          @click="handleDownloadAndRedirect('trace.htrace', step.id, step.step_name)">
+          下载trace
+        </button>
+      </div>
+    </div>
+    <FrameAnalysis :step="currentStepIndex" :data="htraceJson" />
+  </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
+import { ref, computed, toRaw } from 'vue';
 import PerfProcessTable from './PerfProcessTable.vue';
 import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
@@ -178,6 +200,8 @@ const currentTab = ref('tab1');
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
 const json = jsonDataStore.jsonData;
+
+const htraceJson = toRaw(jsonDataStore.htraceJsonData);
 console.log('从元素获取到的 JSON 数据:');
 
 const testSteps = ref(

@@ -11,6 +11,7 @@ from xdevice import platform_logger
 from hypium import UiDriver
 
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.FrameAnalyzer import FrameAnalyzer
 from hapray.core.config.config import Config
 
 Log = platform_logger("PerfTestCase")
@@ -313,6 +314,24 @@ CONFIG"""
         hapray_cmd_path_escaped = hapray_cmd_path.replace('\\', '\\\\')
 
         # 构建并执行命令 - 使用绝对路径
+        cmd = [
+            'node', hapray_cmd_path_escaped,
+            'hapray', 'dbtools',
+            '--choose', 'true',
+            '-i', full_scene_dir_escaped,
+            '-s', so_dir
+        ]
+
+        # 打印完整命令
+        logging.info(f"Executing command: {' '.join(cmd)}")
+
+        # 轮次选择 信息记录在report目录下的summary_info.json中。
+        if PerfTestCase.exe_hapray_cmd(cmd, project_root):
+            logging.info("轮次选择成功！信息记录在report目录下的summary_info.json中。")
+        else:
+            logging.info("轮次选择失败！")
+            return False
+        # hiperf分析，生成hiperf/hiperf_info.json
         if so_dir == None:
             cmd = [
                 'node', hapray_cmd_path_escaped,
@@ -326,10 +345,90 @@ CONFIG"""
                 '-i', full_scene_dir_escaped,
                 '-s', so_dir
             ]
-
         # 打印完整命令
         logging.info(f"Executing command: {' '.join(cmd)}")
+        if PerfTestCase.exe_hapray_cmd(cmd, project_root):
+            logging.info("hiperf分析成功！信息记录在hiperf目录下的hiperf_info.json中。")
+        else:
+            logging.info("hiperf分析失败失败！")
+            return False
+        # 在所有报告生成完成后进行卡顿帧分析
+        logging.info(f"Starting frame drops analysis for {scene_dir}...")
+        if FrameAnalyzer.analyze_frame_drops(scene_dir):
+            logging.info(f"Successfully analyzed frame drops for {scene_dir}")
+        else:
+            logging.error(f"Failed to analyze frame drops for {scene_dir}")
+        perf_json_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
+        trace_json_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
+        html_path = os.path.join(perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html')
+        output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
+        PerfTestCase.create_html(perf_json_path, trace_json_path, html_path, output_path)
+        return True
 
+    @staticmethod
+    def create_html(perf_json_path: str, trace_json_path: str, html_path: str, output_path: str):
+        # 注入perf信息
+        PerfTestCase.replace_html_with_json(perf_json_path, 'JSON_DATA_PLACEHOLDER', html_path, output_path)
+        # 注入trace信息
+        PerfTestCase.replace_html_with_json(trace_json_path, 'FRAME_JSON_PLACEHOLDER', output_path, output_path)
+        return
+
+    @staticmethod
+    def replace_html_with_json(json_path: str, replace_str: str, html_path: str, output_path: str) -> None:
+        """
+        读取JSON数组文件，用第一个元素替换HTML中的占位符
+
+        Args:
+            json_path: JSON文件路径
+            html_path: HTML模板文件路径
+            output_path: 输出文件路径
+        """
+        try:
+            # 验证输入文件是否存在
+            for file_path in [json_path, html_path]:
+                if not os.path.exists(file_path):
+                    raise FileNotFoundError(f"文件不存在: {file_path}")
+
+            # 读取并解析JSON文件
+            with open(json_path, 'r', encoding='utf-8') as f:
+                try:
+                    json_data = json.load(f)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"JSON解析错误: {e}")
+
+            # 验证JSON结构
+            if not isinstance(json_data, list) or len(json_data) == 0:
+                raise ValueError("JSON文件必须包含非空数组")
+
+            # 转换为格式化的JSON字符串（保留中文）
+            if replace_str == 'JSON_DATA_PLACEHOLDER':
+                first_obj = json.dumps(json_data[0], indent=2, ensure_ascii=False)
+            else:
+                first_obj = json.dumps(json_data, indent=2, ensure_ascii=False)
+            # 读取HTML文件
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+
+            new_html = html_content.replace(replace_str, first_obj)
+
+            # 写入输出文件（自动创建目录）
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(new_html)
+
+            logging.error(f"替换完成，结果已保存至 {output_path}")
+
+        except FileNotFoundError as e:
+            logging.error(f"错误: {e}")
+        except ValueError as e:
+            logging.error(f"错误: {e}")
+        except PermissionError:
+            logging.error(f"错误: 没有权限访问文件或目录")
+        except Exception as e:
+            logging.error(f"意外错误: {e}")
+
+    @staticmethod
+    def exe_hapray_cmd(cmd, project_root):
         try:
             # 设置工作目录为项目根目录，并指定编码为 utf-8
             result = subprocess.run(

@@ -43,7 +43,7 @@ export function getSceneRoundsFolders(sceneDir: string): string[] {
   return sceneRoundsFolders
 }
 
-function checkPerfData(dir: string) {
+export function checkPerfData(dir: string) {
   let hasPerfData = true;
   const hiperfDir = path.join(dir, 'hiperf');
   const stepDirs = getFirstLevelFolders(hiperfDir);
@@ -153,5 +153,34 @@ export async function copyFile(
   if (preserveTimestamps) {
     const stat = await fs.promises.stat(sourcePath);
     await fs.promises.utimes(targetPath, stat.atime, stat.mtime);
+  }
+}
+
+
+export async function checkPerfAndHtraceFiles(dirPath: string, summaryCount: number): Promise<boolean> {
+  let hiperfDataCount = 0;
+  const hiperfDir = path.join(dirPath, 'hiperf');
+  const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
+  hiperfStepDirs.forEach((hiperfStepDir) => {
+    const perfDataPath = path.join(hiperfStepDir, 'perf.data');
+    if (fs.existsSync(perfDataPath)) {
+      hiperfDataCount++;
+    }
+  });
+
+  let htracefDataCount = 0;
+  const htraceDir = path.join(dirPath, 'htrace');
+  const htraceStepDirs = getFirstLevelFolders(htraceDir);
+  htraceStepDirs.forEach((htraceStepDir) => {
+    const htracePath = path.join(htraceStepDir, 'trace.htrace');
+    if (fs.existsSync(htracePath)) {
+      htracefDataCount++;
+    }
+  });
+
+  if (hiperfDataCount === htracefDataCount && hiperfDataCount === summaryCount) {
+    return true;
+  } else {
+    return false;
   }
 }

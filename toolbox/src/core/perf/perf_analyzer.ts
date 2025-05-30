@@ -407,7 +407,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     }
 
     async analyze(dbPath: string, testInfo: TestSceneInfo, output: string, stepIdx: number): Promise<PerfSum> {
-        output = path.dirname(output);
         const fileBuffer = fs.readFileSync(dbPath);
         const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
 

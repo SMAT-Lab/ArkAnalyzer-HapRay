@@ -59,4 +59,5 @@ export interface GlobalConfig {
     output: string;
     extToolsPath: string;
     soDir: string;
+    choose: boolean;
 }

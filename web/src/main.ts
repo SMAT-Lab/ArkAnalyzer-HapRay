@@ -9,7 +9,7 @@ import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 import i18n from './i18n/index';
 import { vscode } from './utils/vscode';
-import { useJsonDataStore, type JSONData } from './stores/jsonDataStore.ts';
+import { useJsonDataStore, type HtraceJSONData, type JSONData } from './stores/jsonDataStore.ts';
 
 const app = createApp(App);
 app.config.globalProperties.$vscode = vscode;
@@ -24,11 +24,12 @@ declare global {
     interface Window {
         initialPage: string;
         jsonData: JSONData;
+        htraceJsonData: HtraceJSONData[];
         compareJsonData: JSONData;
     }
 }
 
 if (window.jsonData) {
-    jsonDataStore.setJsonData(window.jsonData,window.compareJsonData);
+    jsonDataStore.setJsonData(window.jsonData, window.htraceJsonData, window.compareJsonData);
 }
 app.mount('#app');

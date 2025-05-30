@@ -161,30 +161,335 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="footer">
+                <p>性能监控仪表盘 © 2023 | 基于 Vue3 + TypeScript + ECharts | 数据更新时间: {{ new Date().toLocaleString() }}</p>
+            </div>
         </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import * as echarts from 'echarts';
 
 const props = defineProps({
-    data: {
-        type: Array,
-        required: true,
-    },
-    step: {
-        type: Number,
-        required: true,
-    }
+  data: {
+    type: Array,
+    required: true,
+  },
+  hideColumn: {
+    type: Boolean,
+    required: true,
+  }
 });
 
 // 性能数据
-const performanceData = computed(() => {
-    if(props.step===0){
-        return props.data[0];
-    }else{
-        return props.data[props.step-1]
+const performanceData = ref({
+    "runtime": "2025-05-30 19:05:3",
+    "statistics": {
+        "total_frames": 3049,
+        "ui_stutter_frames": 4,
+        "render_stutter_frames": 0,
+        "total_stutter_frames": 4,
+        "stutter_rate": 0.13,
+        "stutter_levels": {
+            "level_1": 4,
+            "level_2": 0,
+            "level_3": 0
+        }
+    },
+    "stutter_details": {
+        "ui_stutter": [
+            {
+                "vsync": 238043,
+                "timestamp": 166441508002025,
+                "actual_duration": 5166666,
+                "expected_duration": 8359114,
+                "exceed_time": -3.192448,
+                "exceed_frames": -0.19150857828434312,
+                "stutter_level": 1,
+                "level_description": "轻微卡顿",
+                "src": "",
+                "dst": 3050
+            },
+            {
+                "vsync": 238486,
+                "timestamp": 166445214378587,
+                "actual_duration": 4370833,
+                "expected_duration": 8359765,
+                "exceed_time": -3.988932,
+                "exceed_frames": -0.23928806238752248,
+                "stutter_level": 1,
+                "level_description": "轻微卡顿",
+                "src": "",
+                "dst": 6630
+            },
+            {
+                "vsync": 240368,
+                "timestamp": 166460939655667,
+                "actual_duration": 17349480,
+                "expected_duration": 8336588,
+                "exceed_time": 9.012892,
+                "exceed_frames": 0.5406653869226155,
+                "stutter_level": 1,
+                "level_description": "轻微卡顿",
+                "src": "",
+                "dst": 20686
+            },
+            {
+                "vsync": 240369,
+                "timestamp": 166460959777021,
+                "actual_duration": 1351042,
+                "expected_duration": 8336588,
+                "exceed_time": -6.985546,
+                "exceed_frames": -0.41904895020995797,
+                "stutter_level": 1,
+                "level_description": "轻微卡顿",
+                "src": "",
+                "dst": 20686
+            }
+        ],
+        "render_stutter": []
+    },
+    "fps_stats": {
+        "average_fps": 73.82758620689656,
+        "min_fps": 29.0,
+        "max_fps": 118.0,
+        "fps_windows": [
+            {
+                "start_time": 0.0,
+                "end_time": 1.0,
+                "start_time_ts": 166438361085358,
+                "end_time_ts": 166439361085358,
+                "frame_count": 85,
+                "fps": 85.0
+            },
+            {
+                "start_time": 1.0,
+                "end_time": 2.0,
+                "start_time_ts": 166439361085358,
+                "end_time_ts": 166440361085358,
+                "frame_count": 95,
+                "fps": 95.0
+            },
+            {
+                "start_time": 2.0,
+                "end_time": 3.0,
+                "start_time_ts": 166440361085358,
+                "end_time_ts": 166441361085358,
+                "frame_count": 87,
+                "fps": 87.0
+            },
+            {
+                "start_time": 3.0,
+                "end_time": 4.0,
+                "start_time_ts": 166441361085358,
+                "end_time_ts": 166442361085358,
+                "frame_count": 118,
+                "fps": 118.0
+            },
+            {
+                "start_time": 4.0,
+                "end_time": 5.0,
+                "start_time_ts": 166442361085358,
+                "end_time_ts": 166443361085358,
+                "frame_count": 77,
+                "fps": 77.0
+            },
+            {
+                "start_time": 5.0,
+                "end_time": 6.0,
+                "start_time_ts": 166443361085358,
+                "end_time_ts": 166444361085358,
+                "frame_count": 90,
+                "fps": 90.0
+            },
+            {
+                "start_time": 6.0,
+                "end_time": 7.0,
+                "start_time_ts": 166444361085358,
+                "end_time_ts": 166445361085358,
+                "frame_count": 98,
+                "fps": 98.0
+            },
+            {
+                "start_time": 7.0,
+                "end_time": 8.0,
+                "start_time_ts": 166445361085358,
+                "end_time_ts": 166446361085358,
+                "frame_count": 62,
+                "fps": 62.0
+            },
+            {
+                "start_time": 8.0,
+                "end_time": 9.0,
+                "start_time_ts": 166446361085358,
+                "end_time_ts": 166447361085358,
+                "frame_count": 112,
+                "fps": 112.0
+            },
+            {
+                "start_time": 9.0,
+                "end_time": 10.0,
+                "start_time_ts": 166447361085358,
+                "end_time_ts": 166448361085358,
+                "frame_count": 42,
+                "fps": 42.0
+            },
+            {
+                "start_time": 10.0,
+                "end_time": 11.0,
+                "start_time_ts": 166448361085358,
+                "end_time_ts": 166449361085358,
+                "frame_count": 70,
+                "fps": 70.0
+            },
+            {
+                "start_time": 11.0,
+                "end_time": 12.0,
+                "start_time_ts": 166449361085358,
+                "end_time_ts": 166450361085358,
+                "frame_count": 91,
+                "fps": 91.0
+            },
+            {
+                "start_time": 12.0,
+                "end_time": 13.0,
+                "start_time_ts": 166450361085358,
+                "end_time_ts": 166451361085358,
+                "frame_count": 35,
+                "fps": 35.0
+            },
+            {
+                "start_time": 13.0,
+                "end_time": 14.0,
+                "start_time_ts": 166451361085358,
+                "end_time_ts": 166452361085358,
+                "frame_count": 103,
+                "fps": 103.0
+            },
+            {
+                "start_time": 14.0,
+                "end_time": 15.0,
+                "start_time_ts": 166452361085358,
+                "end_time_ts": 166453361085358,
+                "frame_count": 53,
+                "fps": 53.0
+            },
+            {
+                "start_time": 15.0,
+                "end_time": 16.0,
+                "start_time_ts": 166453361085358,
+                "end_time_ts": 166454361085358,
+                "frame_count": 69,
+                "fps": 69.0
+            },
+            {
+                "start_time": 16.0,
+                "end_time": 17.0,
+                "start_time_ts": 166454361085358,
+                "end_time_ts": 166455361085358,
+                "frame_count": 89,
+                "fps": 89.0
+            },
+            {
+                "start_time": 17.0,
+                "end_time": 18.0,
+                "start_time_ts": 166455361085358,
+                "end_time_ts": 166456361085358,
+                "frame_count": 36,
+                "fps": 36.0
+            },
+            {
+                "start_time": 18.0,
+                "end_time": 19.0,
+                "start_time_ts": 166456361085358,
+                "end_time_ts": 166457361085358,
+                "frame_count": 118,
+                "fps": 118.0
+            },
+            {
+                "start_time": 19.0,
+                "end_time": 20.0,
+                "start_time_ts": 166457361085358,
+                "end_time_ts": 166458361085358,
+                "frame_count": 91,
+                "fps": 91.0
+            },
+            {
+                "start_time": 20.0,
+                "end_time": 21.0,
+                "start_time_ts": 166458361085358,
+                "end_time_ts": 166459361085358,
+                "frame_count": 84,
+                "fps": 84.0
+            },
+            {
+                "start_time": 21.0,
+                "end_time": 22.0,
+                "start_time_ts": 166459361085358,
+                "end_time_ts": 166460361085358,
+                "frame_count": 104,
+                "fps": 104.0
+            },
+            {
+                "start_time": 22.0,
+                "end_time": 23.0,
+                "start_time_ts": 166460361085358,
+                "end_time_ts": 166461361085358,
+                "frame_count": 65,
+                "fps": 65.0
+            },
+            {
+                "start_time": 23.0,
+                "end_time": 24.0,
+                "start_time_ts": 166461361085358,
+                "end_time_ts": 166462361085358,
+                "frame_count": 49,
+                "fps": 49.0
+            },
+            {
+                "start_time": 24.0,
+                "end_time": 25.0,
+                "start_time_ts": 166462361085358,
+                "end_time_ts": 166463361085358,
+                "frame_count": 45,
+                "fps": 45.0
+            },
+            {
+                "start_time": 25.0,
+                "end_time": 26.0,
+                "start_time_ts": 166463361085358,
+                "end_time_ts": 166464361085358,
+                "frame_count": 54,
+                "fps": 54.0
+            },
+            {
+                "start_time": 26.0,
+                "end_time": 27.0,
+                "start_time_ts": 166464361085358,
+                "end_time_ts": 166465361085358,
+                "frame_count": 32,
+                "fps": 32.0
+            },
+            {
+                "start_time": 27.0,
+                "end_time": 28.0,
+                "start_time_ts": 166465361085358,
+                "end_time_ts": 166466361085358,
+                "frame_count": 29,
+                "fps": 29.0
+            },
+            {
+                "start_time": 28.0,
+                "end_time": 29.0,
+                "start_time_ts": 166466361085358,
+                "end_time_ts": 166467361085358,
+                "frame_count": 58,
+                "fps": 58.0
+            }
+        ],
+        "low_fps_window_count": 45
     }
 });
 
@@ -699,15 +1004,16 @@ const initCharts = () => {
     });
 };
 
+// 格式化时间戳
+const formatTimestamp = (ts) => {
+    if (!ts) return 'N/A';
+    // 简化为只显示时间部分
+    const date = new Date(ts / 1000000);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 onMounted(() => {
     initCharts();
 });
-
-watch(performanceData, (newVal, oldVal) => {
-    if (newVal !== oldVal) {
-        initCharts();
-    }
-}, { deep: true });
 
 </script>
 

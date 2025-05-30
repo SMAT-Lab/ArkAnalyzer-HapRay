@@ -40,6 +40,62 @@ export interface JSONData {
   }[];
 }
 
+export interface HtraceJSONData {
+  runtime: string;
+  statistics: {
+    total_frames: number;
+    ui_stutter_frames: number;
+    render_stutter_frames: number;
+    total_stutter_frames: number;
+    stutter_rate: number;
+    stutter_levels: {
+      level_1: number;
+      level_2: number;
+      level_3: number;
+    };
+  };
+  stutter_details: {
+    ui_stutter:{
+      vsync: number;
+      timestamp: number;
+      actual_duration: number;
+      expected_duration: number;
+      exceed_time: number;
+      exceed_frames: number;
+      stutter_level: number;
+      level_description: string;
+      src: string;
+      dst: number;
+    }[];
+    render_stutter: {
+      vsync: number;
+      timestamp: number;
+      actual_duration: number;
+      expected_duration: number;
+      exceed_time: number;
+      exceed_frames: number;
+      stutter_level: number;
+      level_description: string;
+      src: string;
+      dst: number;
+    }[];
+  };
+  fps_stats: {
+    average_fps: number;
+    min_fps: number;
+    max_fps: number;
+    fps_windows: {
+      start_time: number;
+      end_time: number;
+      start_time_ts: number;
+      end_time_ts: number;
+      frame_count: number;
+      fps: number;
+    }[];
+    low_fps_window_count: number;
+  };
+}
+
 export interface MergeJSONData {
   app_id: string;
   app_name: string;
@@ -88,12 +144,14 @@ export interface MergeJSONData {
 export const useJsonDataStore = defineStore('config', {
   state: () => ({
     jsonData: null as JSONData | null,
+    htraceJsonData: null as HtraceJSONData[] | null,
     compareJsonData: null as JSONData | null
   }),
   actions: {
-    setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
+    setJsonData(jsonData: JSONData, htraceJsonData: HtraceJSONData[], compareJsonData: JSONData) {
       if (JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\"") {
         this.jsonData = jsonData;
+        this.htraceJsonData = htraceJsonData;
         window.initialPage = 'perf';
       } else {
         this.jsonData = jsonData;
