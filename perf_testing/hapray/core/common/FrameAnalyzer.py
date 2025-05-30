@@ -330,7 +330,10 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     continue
 
                 frame_time = frame["ts"]
-                stats["total_frames"] += 1
+                # 先判断帧类型，只有UI线程的帧才计入总数
+                frame_type = get_frame_type(frame, cursor)
+                if frame_type == "UI":
+                    stats["total_frames"] += 1
 
                 # 初始化窗口
                 if current_window["start_time"] is None:
@@ -399,8 +402,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                             level_desc = "严重卡顿"
                             stats["stutter_levels"]["level_3"] += 1
 
-                        # 区分 UI 帧 vs 渲染帧
-                        frame_type = get_frame_type(frame, cursor)
+                        # 使用之前判断的帧类型
                         if frame_type == "Render":
                             stutter_type = "render_stutter"
                             stats["render_stutter_frames"] += 1
