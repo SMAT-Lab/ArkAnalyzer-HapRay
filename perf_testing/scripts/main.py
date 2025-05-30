@@ -104,7 +104,6 @@ def main():
                         run_testcases = args.run_testcases + run_testcases
                     else:
                         run_testcases = args.run_testcases
-                merge_folder_paths = []
                 for case_name in run_testcases:
                     if case_name not in all_testcases:
                         continue
@@ -130,7 +129,6 @@ def main():
                                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
 
                     merge_folder_path = os.path.join(reports_path, time_str, case_name)
-                    merge_folder_paths.append(merge_folder_path)
                     # 生成 HapRay 报告
                     future = executor.submit(
                         PerfTestCase.generate_hapray_report,
@@ -143,14 +141,6 @@ def main():
                 # 等待所有报告生成任务完成
                 for future in futures:
                     future.result()
-
-                # 在所有报告生成完成后进行卡顿帧分析
-                for merge_folder_path, case_name in zip(merge_folder_paths, run_testcases):
-                    logging.info(f"Starting frame drops analysis for {case_name}...")
-                    if FrameAnalyzer.analyze_frame_drops(merge_folder_path):
-                        logging.info(f"Successfully analyzed frame drops for {case_name}")
-                    else:
-                        logging.error(f"Failed to analyze frame drops for {case_name}")
 
                 # 生成汇总excel
                 logging.info(f"Starting create summary excel ...")

@@ -13,6 +13,7 @@ from hypium import UiDriver
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FrameAnalyzer import FrameAnalyzer
 from hapray.core.config.config import Config
+from hapray.core.common.FrameAnalyzer import FrameAnalyzer
 
 Log = platform_logger("PerfTestCase")
 
@@ -443,6 +444,14 @@ CONFIG"""
             logging.info(f"Command output: {result.stdout}")
             if result.stderr:
                 logging.error(f"Command stderr: {result.stderr}")
+
+            # 在所有报告生成完成后进行卡顿帧分析
+            logging.info(f"Starting frame drops analysis for {scene_dir}...")
+            if FrameAnalyzer.analyze_frame_drops(scene_dir):
+                logging.info(f"Successfully analyzed frame drops for {scene_dir}")
+            else:
+                logging.error(f"Failed to analyze frame drops for {scene_dir}")
+
             return True
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to generate HapRay report: {str(e)}")

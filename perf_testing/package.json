@@ -11,7 +11,7 @@
     "setup:unix": "python3 setup_env.py",
     "build": "",
     "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
-    "prepack": "npm run build:python"
+    "prepack": "npm run build:python && node zip.js ArkAnalyzer-HapRay"
   },
   "author": "",
   "license": "ISC",

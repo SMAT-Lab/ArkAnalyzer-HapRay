@@ -330,7 +330,10 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     continue
 
                 frame_time = frame["ts"]
-                stats["total_frames"] += 1
+                # 先判断帧类型，只有UI线程的帧才计入总数
+                frame_type = get_frame_type(frame, cursor)
+                if frame_type == "UI":
+                    stats["total_frames"] += 1
 
                 # 初始化窗口
                 if current_window["start_time"] is None:
@@ -399,8 +402,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                             level_desc = "严重卡顿"
                             stats["stutter_levels"]["level_3"] += 1
 
-                        # 区分 UI 帧 vs 渲染帧
-                        frame_type = get_frame_type(frame, cursor)
+                        # 使用之前判断的帧类型
                         if frame_type == "Render":
                             stutter_type = "render_stutter"
                             stats["render_stutter_frames"] += 1
@@ -457,12 +459,13 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             stats["fps_stats"]["average_fps"] = sum(fps_values) / len(fps_values)
             stats["fps_stats"]["min_fps"] = min(fps_values)
             stats["fps_stats"]["max_fps"] = max(fps_values)
-            stats["fps_stats"][f"low_fps_window_count ({LOW_FPS_THRESHOLD})"] = stats["fps_stats"]["low_fps_window_count"]
+            stats["fps_stats"]["low_fps_window_count"] = stats["fps_stats"]["low_fps_window_count"]
             del stats["fps_stats"]["low_fps_window_count"]
             del stats["fps_stats"]["low_fps_threshold"]
 
         stats["total_stutter_frames"] = stats["ui_stutter_frames"] + stats["render_stutter_frames"]
-        stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"] * 100, 2)
+        # 计算卡顿率，直接使用小数形式，不乘以100
+        stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"], 4)
 
         result = {
             "runtime": runtime,
