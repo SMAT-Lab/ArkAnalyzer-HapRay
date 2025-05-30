@@ -14,18 +14,17 @@
   },
   "dependencies": {
     "@types/sql.js": "^1.4.9",
+    "@xmldom/xmldom": "^0.9.8",
     "arkanalyzer": "^1.0.7",
     "commander": "^12.1.0",
     "jszip": "^3.10.1",
     "read-excel-file": "^5.8.7",
     "sql.js": "^1.13.0",
     "write-excel-file": "^2.3.2",
-    "zod": "^3.24.2",
-    "xmldom": "^0.6.0"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "@types/xmldom": "^0.1.34",
     "adm-zip": "^0.5.16",
     "axios": "^1.7.7",
     "axios-https-proxy-fix": "^0.17.1",

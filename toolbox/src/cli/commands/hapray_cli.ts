@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
-import { DOMParser } from 'xmldom';
+import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { getComponentCategories } from '../../core/component';
 import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';

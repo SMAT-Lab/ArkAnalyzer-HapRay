@@ -8,11 +8,11 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build on ${{ matrix.item.os }}
+    runs-on: ${{ matrix.item.os }}
     strategy:
       matrix:
-        include:
+        item:
           # Linux
           - os: ubuntu-latest
             arch: x64
@@ -38,7 +38,9 @@ jobs:
             platform: darwin
             pyinstaller_arch: x86_64
             package_lock_path: .github/workflows/package-lock.json
-        node-version: [18.x]
+        # 将 node-version 移到每个 item 中
+        include:
+          - node-version: 18.x
     
     steps:
     - name: Checkout code
@@ -46,8 +48,8 @@ jobs:
     
     - name: Copy package-lock.json
       run: |
-        echo "Copying ${{ matrix.package_lock_path }} to root directory"
-        cp "${{ matrix.package_lock_path }}" package-lock.json
+        echo "Copying ${{ matrix.item.package_lock_path }} to root directory"
+        cp "${{ matrix.item.package_lock_path }}" package-lock.json
         
         if [ ! -f "package-lock.json" ]; then
           echo "::error::Failed to copy package-lock.json"
@@ -58,7 +60,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'  # 指定你的Python版本
+        python-version: '3.12'
     
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
@@ -77,5 +79,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ArkAnalyzer-HapRay-${{ matrix.platform }}-${{ matrix.arch }}
+        name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
         path: ArkAnalyzer-HapRay-*.tgz
