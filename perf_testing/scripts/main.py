@@ -1,23 +1,54 @@
 import argparse
 import os
 import re
+import sys
 import time
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+import logging
+from logging.handlers import RotatingFileHandler
 
 import yaml
 from xdevice.__main__ import main_process
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.PerfTestCase import PerfTestCase
 from hapray.core.config.config import Config, ConfigError
 from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.FolderUtils import merge_folders, scan_folders, delete_folder
+from hapray.core.common.FolderUtils import scan_folders, delete_folder
 from hapray.core.common.FrameAnalyzer import FrameAnalyzer
+
+
+def configure_logging(log_file='HapRay.log'):
+    """配置日志系统，同时输出到控制台和文件"""
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    # 清除现有的处理器
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # 创建格式化器
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    # 控制台处理器
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # 文件处理器（如果指定了日志文件）
+    file_handler = RotatingFileHandler(
+        log_file, mode="a", maxBytes=10 * 1024 * 1024, backupCount=10,
+        encoding="UTF-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
 
 def check_env() -> bool:
     if shutil.which('hdc') and shutil.which('node'):
         return True
     return False
+
 
 ENV_ERR_STR = """
 The hdc or node command is not in PATH. 
@@ -28,9 +59,10 @@ then add the following directories to PATH.
     $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
 """
 
+
 def main():
     if not check_env():
-        Log.error(ENV_ERR_STR)
+        logging.error(ENV_ERR_STR)
         return
 
     parser = argparse.ArgumentParser(description='处理命令行参数')
@@ -41,6 +73,10 @@ def main():
     _ = Config()
     root_path = os.getcwd()
     reports_path = os.path.join(root_path, 'reports')
+    if not os.path.exists(reports_path):
+        os.makedirs(reports_path)
+    configure_logging(os.path.join(reports_path, 'HapRay.log'))
+
     time_str = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
 
     all_testcases = CommonUtils.load_all_testcases()
@@ -52,6 +88,8 @@ def main():
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = []
                 run_testcases = raw_data['run_testcases']
+                if run_testcases is None:
+                    run_testcases = []
                 if args.run_testcases is not None:
                     if run_testcases is not None:
                         run_testcases = args.run_testcases + run_testcases
@@ -78,7 +116,7 @@ def main():
                                 break
                             else:
                                 if delete_folder(output):
-                                    print('perf.data文件不全重试第' + str(i) + '次' + output)
+                                    logging.info('perf.data文件不全重试第' + str(i) + '次' + output)
                                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
 
                     merge_folder_path = os.path.join(reports_path, time_str, case_name)
@@ -95,11 +133,11 @@ def main():
                     future.result()
 
                 # 在所有操作完成后进行卡顿帧分析
-                Log.info(f"Starting frame drops analysis for {case_name}...")
+                logging.info(f"Starting frame drops analysis for {case_name}...")
                 if FrameAnalyzer.analyze_frame_drops(merge_folder_path):
-                    Log.info(f"Successfully analyzed frame drops for {case_name}")
+                    logging.info(f"Successfully analyzed frame drops for {case_name}")
                 else:
-                    Log.error(f"Failed to analyze frame drops for {case_name}")
+                    logging.error(f"Failed to analyze frame drops for {case_name}")
 
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")
