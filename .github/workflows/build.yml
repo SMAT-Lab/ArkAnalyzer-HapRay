@@ -46,13 +46,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Copy package-lock.json
-      run: |
-        echo "Copying ${{ matrix.item.package_lock_path }} to package-lock.json"
-        cp "${{ matrix.item.package_lock_path }}" package-lock.json
-        echo "File copied successfully"
-      shell: bash
-
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
