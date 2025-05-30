@@ -12,6 +12,29 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            arch: x64
+            platform: linux
+            
+          # Windows
+          - os: windows-latest
+            arch: x64
+            platform: win32
+            
+          # macOS - ARM (Apple Silicon)
+          - os: macos-14
+            arch: arm64
+            platform: darwin
+            pyinstaller_arch: arm64
+            
+          # macOS - x86 (Intel)
+          - os: macos-13
+            arch: x86_64
+            platform: darwin
+            pyinstaller_arch: x86_64
+
         os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [18.x]
     
@@ -41,5 +64,5 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: hapray-${{ matrix.os }}
+        name: hapray-${{ matrix.platform }}-${{ matrix.arch }}
         path: hapray-*.tgz
