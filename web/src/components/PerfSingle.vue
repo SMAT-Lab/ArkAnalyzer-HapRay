@@ -152,7 +152,7 @@
     </el-row>
   </div>
    <div v-if="currentTab === 'tab2'">
-    <StutterAnalysis />
+    <FrameAnalysis />
    </div>
 </template>
 
@@ -167,7 +167,7 @@ import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
-import StutterAnalysis from './StutterAnalysis.vue';
+import FrameAnalysis from './FrameAnalysis.vue';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
