@@ -17,25 +17,28 @@ jobs:
           - os: ubuntu-latest
             arch: x64
             platform: linux
+            package_lock_path: .github/workflows/package-lock.json
             
           # Windows
           - os: windows-latest
             arch: x64
             platform: win32
+            package_lock_path: .github/workflows/package-lock.json
             
           # macOS - ARM (Apple Silicon)
           - os: macos-14
             arch: arm64
             platform: darwin
             pyinstaller_arch: arm64
+            package_lock_path: .github/workflows/package-lock.json
             
           # macOS - x86 (Intel)
           - os: macos-13
             arch: x86_64
             platform: darwin
             pyinstaller_arch: x86_64
+            package_lock_path: .github/workflows/package-lock.json
         node-version: [18.x]
-        package_lock_path: .github/workflows/package-lock.json
     
     steps:
     - name: Checkout code
