@@ -128,16 +128,19 @@ def main():
                         so_dir  # debug包中的so文件存放地址
                     )
                     futures.append(future)
+
+                    # 在所有操作完成后进行卡顿帧分析
+                    logging.info(f"Starting frame drops analysis for {case_name}...")
+                    if FrameAnalyzer.analyze_frame_drops(merge_folder_path):
+                        logging.info(f"Successfully analyzed frame drops for {case_name}")
+                    else:
+                        logging.error(f"Failed to analyze frame drops for {case_name}")
+
                 # 等待所有报告生成任务完成
                 for future in futures:
                     future.result()
 
-                # 在所有操作完成后进行卡顿帧分析
-                logging.info(f"Starting frame drops analysis for {case_name}...")
-                if FrameAnalyzer.analyze_frame_drops(merge_folder_path):
-                    logging.info(f"Successfully analyzed frame drops for {case_name}")
-                else:
-                    logging.error(f"Failed to analyze frame drops for {case_name}")
+
 
     except FileNotFoundError:
         raise ConfigError(f"not found file: {config_path}")
