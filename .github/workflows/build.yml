@@ -13,17 +13,19 @@ jobs:
     strategy:
       matrix:
         item:
-          # Linux
+          # Linux - 使用静态 Python
           - os: ubuntu-22.04
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
+            use_static_python: true  # 添加此标志
             
           # Windows
           - os: windows-latest
             arch: x64
             platform: win32
             package_lock_path: .github/workflows/package-lock.json
+            use_static_python: false
             
           # macOS - ARM (Apple Silicon)
           - os: macos-14
@@ -31,6 +33,7 @@ jobs:
             platform: darwin
             pyinstaller_arch: arm64
             package_lock_path: .github/workflows/package-lock.json
+            use_static_python: false
             
           # macOS - x86 (Intel)
           - os: macos-13
@@ -38,6 +41,7 @@ jobs:
             platform: darwin
             pyinstaller_arch: x86_64
             package_lock_path: .github/workflows/package-lock.json
+            use_static_python: false
         # 将 node-version 移到每个 item 中
         include:
           - node-version: 18.x
@@ -53,7 +57,31 @@ jobs:
         echo "File copied successfully"
       shell: bash
 
+    # 设置静态 Python 环境（仅适用于 Ubuntu）
+    - name: Set up static Python (Ubuntu only)
+      if: ${{ matrix.item.use_static_python }}
+      run: |
+        # 下载预编译的静态Python
+        PYTHON_VERSION=3.10.13
+        BUILD_TAG=20240101
+        wget https://github.com/indygreg/python-build-standalone/releases/download/${BUILD_TAG}/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz
+        
+        # 解压到 /opt/python-static
+        sudo mkdir -p /opt/python-static
+        sudo tar -xzf cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C /opt/python-static --strip-components=1
+        
+        # 设置环境变量
+        echo "/opt/python-static/bin" >> $GITHUB_PATH
+        echo "PYTHON_STATIC=/opt/python-static" >> $GITHUB_ENV
+        
+        # 验证安装
+        /opt/python-static/bin/python3 --version
+        /opt/python-static/bin/python3 -c "import sys; print(sys.executable)"
+        python3 --version
+
+    # 设置标准 Python 环境（非 Ubuntu 平台）
     - name: Set up Python
+      if: ${{ !matrix.item.use_static_python }}
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
