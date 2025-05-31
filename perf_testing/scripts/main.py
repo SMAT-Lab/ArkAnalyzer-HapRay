@@ -80,13 +80,10 @@ def main():
 
     _ = Config()
     root_path = os.getcwd()
-    reports_path = os.path.join(root_path, 'reports')
+    reports_path = os.path.join(root_path, 'reports', time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
     if not os.path.exists(reports_path):
         os.makedirs(reports_path)
     configure_logging(os.path.join(reports_path, 'HapRay.log'))
-
-    time_str = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-    #time_str = '20250530180317'
 
     all_testcases = CommonUtils.load_all_testcases()
     config_path = os.path.join(root_path, 'config.yaml')
@@ -117,7 +114,7 @@ def main():
                     scene_round_dirs = []
                     for round in range(5):
                         case_dir = all_testcases[case_name]
-                        output = os.path.join(reports_path, time_str, f'{case_name}_round{round}')
+                        output = os.path.join(reports_path, f'{case_name}_round{round}')
                         main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
                         for i in range(5):
                             if scan_folders(output):
@@ -128,7 +125,7 @@ def main():
                                     logging.info('perf.data文件不全重试第' + str(i) + '次' + output)
                                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
 
-                    merge_folder_path = os.path.join(reports_path, time_str, case_name)
+                    merge_folder_path = os.path.join(reports_path, case_name)
                     # 生成 HapRay 报告
                     future = executor.submit(
                         PerfTestCase.generate_hapray_report,
@@ -144,7 +141,7 @@ def main():
 
                 # 生成汇总excel
                 logging.info(f"Starting create summary excel ...")
-                if create_summary_excel(os.path.join(reports_path, time_str)):
+                if create_summary_excel(reports_path):
                     logging.info(f"Successfully  create summary excel")
                 else:
                     logging.error(f"Failed to  create summary excel ")

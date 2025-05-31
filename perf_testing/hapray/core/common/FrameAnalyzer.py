@@ -6,14 +6,13 @@ import sqlite3
 from typing import List, Dict, Any
 import sys
 import codecs
-from xdevice import platform_logger
+import logging
+from hapray.core.common.CommonUtils import CommonUtils
 
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
 sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
-
-Log = platform_logger("FrameAnalyzer")
 
 class FrameAnalyzer:
     """卡顿帧分析器
@@ -31,8 +30,9 @@ class FrameAnalyzer:
         Returns:
             str: trace_streamer工具的完整路径
         """
-        # 获取项目根目录
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+
+        # 获取 perf_testing 目录
+        perf_testing_dir = CommonUtils.get_project_root()
         
         # 根据系统类型选择对应的工具
         system = platform.system().lower()
@@ -46,11 +46,14 @@ class FrameAnalyzer:
             raise OSError(f"Unsupported operating system: {system}")
 
         # 构建工具完整路径
-        tool_path = os.path.join(project_root, 'third-party', 'trace_streamer_binary', tool_name)
+        tool_path = os.path.join(perf_testing_dir, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', tool_name)
         
         # 检查工具是否存在
         if not os.path.exists(tool_path):
             raise FileNotFoundError(f"Trace streamer tool not found at: {tool_path}")
+
+        if system == 'darwin' or system == 'linux':
+            os.chmod(tool_path, 0o755)
         
         return tool_path
 
@@ -78,7 +81,7 @@ class FrameAnalyzer:
 
             # 构建并执行转换命令
             cmd = f'"{trace_streamer_path}" "{htrace_file}" -e "{output_db}"'
-            Log.info(f"Converting htrace to db: {cmd}")
+            logging.info(f"Converting htrace to db: {cmd}")
             
             # 使用subprocess执行命令
             result = subprocess.run(
@@ -91,19 +94,19 @@ class FrameAnalyzer:
 
             # 检查命令执行结果
             if result.returncode != 0:
-                Log.error(f"Failed to convert htrace to db: {result.stderr}")
+                logging.error(f"Failed to convert htrace to db: {result.stderr}")
                 return False
 
             # 验证输出文件是否存在
             if not os.path.exists(output_db):
-                Log.error(f"Output db file not found: {output_db}")
+                logging.error(f"Output db file not found: {output_db}")
                 return False
 
-            Log.info(f"Successfully converted {htrace_file} to {output_db}")
+            logging.info(f"Successfully converted {htrace_file} to {output_db}")
             return True
 
         except Exception as e:
-            Log.error(f"Error converting htrace to db: {str(e)}")
+            logging.error(f"Error converting htrace to db: {str(e)}")
             return False
 
     @staticmethod
@@ -119,7 +122,7 @@ class FrameAnalyzer:
         try:
             htrace_dir = os.path.join(merge_folder_path, 'htrace')
             if not os.path.exists(htrace_dir):
-                Log.error(f"Error: htrace directory not found at {htrace_dir}")
+                logging.error(f"Error: htrace directory not found at {htrace_dir}")
                 return False
 
             # 用于存储所有步骤的分析结果
@@ -134,25 +137,25 @@ class FrameAnalyzer:
                 # 查找htrace文件
                 htrace_file = os.path.join(step_path, 'trace.htrace')
                 if not os.path.exists(htrace_file):
-                    Log.warning(f"No htrace file found in {step_path}")
+                    logging.warning(f"No htrace file found in {step_path}")
                     continue
 
                 # 设置db文件输出路径（与htrace文件在同一目录）
                 db_file = os.path.join(step_path, 'trace.db')
                 
                 # 转换htrace为db
-                Log.info(f"Converting htrace to db for {step_dir}...")
+                logging.info(f"Converting htrace to db for {step_dir}...")
                 if not FrameAnalyzer.convert_htrace_to_db(htrace_file, db_file):
-                    Log.error(f"Failed to convert htrace to db for {step_dir}")
+                    logging.error(f"Failed to convert htrace to db for {step_dir}")
                     continue
 
                 # 分析卡顿帧数据
-                Log.info(f"Analyzing frame drops for {step_dir}...")
+                logging.info(f"Analyzing frame drops for {step_dir}...")
                 try:
                     result = analyze_stuttered_frames(db_file)
                     all_results.append(result)
                 except Exception as e:
-                    Log.error(f"Error analyzing frames for {step_dir}: {str(e)}")
+                    logging.error(f"Error analyzing frames for {step_dir}: {str(e)}")
                     continue
 
             # 保存汇总结果
@@ -160,14 +163,14 @@ class FrameAnalyzer:
                 summary_path = os.path.join(htrace_dir, 'frame_analysis_summary.json')
                 with open(summary_path, 'w', encoding='utf-8') as f:
                     json.dump(all_results, f, indent=2, ensure_ascii=False)
-                Log.info(f"Summary results saved to: {summary_path}")
+                logging.info(f"Summary results saved to: {summary_path}")
             else:
-                Log.warning("No valid analysis results to summarize")
+                logging.warning("No valid analysis results to summarize")
 
             return True
 
         except Exception as e:
-            Log.error(f"Error analyzing frame drops: {str(e)}")
+            logging.error(f"Error analyzing frame drops: {str(e)}")
             return False
 
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
@@ -494,15 +497,15 @@ def main():
 
     # 检查路径是否存在
     if not os.path.exists(path):
-        Log.error(f"Error: Directory not found at {path}")
+        logging.error(f"Error: Directory not found at {path}")
         return
 
     # 开始分析
-    Log.info(f"Starting frame drops analysis for directory: {path}")
+    logging.info(f"Starting frame drops analysis for directory: {path}")
     if FrameAnalyzer.analyze_frame_drops(path):
-        Log.info("Frame drops analysis completed successfully")
+        logging.info("Frame drops analysis completed successfully")
     else:
-        Log.error("Frame drops analysis failed")
+        logging.error("Frame drops analysis failed")
 
 if __name__ == "__main__":
     main()
