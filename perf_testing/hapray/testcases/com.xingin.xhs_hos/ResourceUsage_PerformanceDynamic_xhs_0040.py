@@ -39,7 +39,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260

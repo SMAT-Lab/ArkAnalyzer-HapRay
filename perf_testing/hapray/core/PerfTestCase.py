@@ -319,8 +319,7 @@ CONFIG"""
             'node', hapray_cmd_path_escaped,
             'hapray', 'dbtools',
             '--choose', 'true',
-            '-i', full_scene_dir_escaped,
-            '-s', so_dir
+            '-i', full_scene_dir_escaped
         ]
 
         # 打印完整命令
@@ -444,14 +443,6 @@ CONFIG"""
             logging.info(f"Command output: {result.stdout}")
             if result.stderr:
                 logging.error(f"Command stderr: {result.stderr}")
-
-            # 在所有报告生成完成后进行卡顿帧分析
-            logging.info(f"Starting frame drops analysis for {scene_dir}...")
-            if FrameAnalyzer.analyze_frame_drops(scene_dir):
-                logging.info(f"Successfully analyzed frame drops for {scene_dir}")
-            else:
-                logging.error(f"Failed to analyze frame drops for {scene_dir}")
-
             return True
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to generate HapRay report: {str(e)}")

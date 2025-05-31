@@ -54,7 +54,6 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def find_component_safely(self, driver, by_type: str, text: str, timeout: int = 5) -> Optional[object]:

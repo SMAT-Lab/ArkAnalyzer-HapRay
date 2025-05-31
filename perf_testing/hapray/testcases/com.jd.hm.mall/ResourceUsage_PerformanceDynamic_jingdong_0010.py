@@ -43,7 +43,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
         # 创建所有必要的目录
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
 
     def process(self):
         self.driver.swipe_to_home()

@@ -56,7 +56,6 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
     def setup(self):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'report'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
