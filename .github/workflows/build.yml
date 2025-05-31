@@ -76,6 +76,8 @@ jobs:
         # 验证安装
         /opt/python-static/bin/python3 --version
         /opt/python-static/bin/python3 -c "import sys; print(sys.executable)"
+        export PATH=/opt/python-static/bin/:$PATH
+        python3 --version
 
     # 设置标准 Python 环境（非 Ubuntu 平台）
     - name: Set up Python
@@ -91,14 +93,7 @@ jobs:
         cache: 'npm'
 
     - name: Install dependencies
-      run: |
-        # 对于静态Python环境，确保使用正确的Python
-        if ${{ matrix.item.use_static_python }}; then
-          # 明确使用静态Python
-          export PATH=/opt/python-static/bin/:$PATH
-          python3 --version
-        fi
-        
+      run: |        
         npm install --no-package-lock
 
     - name: PyInstaller build
