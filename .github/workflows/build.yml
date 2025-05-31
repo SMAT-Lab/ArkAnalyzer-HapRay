@@ -95,7 +95,7 @@ jobs:
         # 对于静态Python环境，确保使用正确的Python
         if ${{ matrix.item.use_static_python }}; then
           # 明确使用静态Python
-          export PATH = /opt/python-static/bin/:$PATH
+          export PATH=/opt/python-static/bin/:$PATH
           python3 --version
         fi
         
