@@ -42,8 +42,7 @@ const getChartOption = () => ({
     text: props.title,
     left: 'left',
     textStyle: { 
-      fontSize: 16,
-      fontWeight: 'normal'
+      fontSize: 16
     }
   },
   tooltip: {

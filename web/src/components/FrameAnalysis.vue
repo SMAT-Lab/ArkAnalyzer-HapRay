@@ -1,12 +1,12 @@
 <template>
     <div class="app-container">
-        <div class="header">
+        <div class="header data-panel">
             <h1>卡顿帧数据分析</h1>
             <p>场景性能指标，分析卡顿问题，优化用户体验</p>
         </div>
 
         <div class="stats-cards">
-            <div class="stat-card">
+            <div class="stat-card data-panel">">
                 <div class="card-title">
                     <i>📊</i> 总帧数
                 </div>
@@ -19,7 +19,7 @@
                 <div class="card-badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8;">基准指标</div>
             </div>
 
-            <div class="stat-card">
+            <div class="stat-card data-panel">
                 <div class="card-title">
                     <i>⚠️</i> 卡顿帧数
                 </div>
@@ -39,7 +39,7 @@
                 </div>
             </div>
 
-            <div class="stat-card">
+            <div class="stat-card data-panel">
                 <div class="card-title">
                     <i>📉</i> 卡顿率
                 </div>
@@ -55,7 +55,7 @@
                     {{ performanceData.statistics.stutter_rate < 0.2 ? '良好' : '警告' }} </div>
                 </div>
 
-                <div class="stat-card">
+                <div class="stat-card data-panel">
                     <div class="card-title">
                         <i>⚡</i> 平均FPS
                     </div>
@@ -77,14 +77,14 @@
             </div>
 
             <div class="chart-grid">
-                <div class="chart-container">
+                <div class="chart-container data-panel">
                     <div class="chart-title">
                         <i>📈</i> FPS变化趋势
                     </div>
                     <div class="chart" ref="fpsChart"></div>
                 </div>
 
-                <div class="chart-container">
+                <div class="chart-container data-panel">
                     <div class="chart-title">
                         <i>🍰</i> 卡顿级别分布
                     </div>
@@ -93,14 +93,14 @@
             </div>
 
             <div class="chart-grid">
-                <div class="chart-container">
+                <div class="chart-container data-panel">
                     <div class="chart-title">
                         <i>⏱️</i> 帧耗时分析
                     </div>
                     <div class="chart" ref="durationChart"></div>
                 </div>
 
-                <div class="chart-container">
+                <div class="chart-container data-panel">
                     <div class="chart-title">
                         <i>📊</i> FPS分布统计
                     </div>
@@ -108,7 +108,7 @@
                 </div>
             </div>
 
-            <div class="table-container">
+            <div class="table-container data-panel">
                 <div class="table-title">
                     <i>📋</i> 卡顿详情
                 </div>
@@ -720,22 +720,18 @@ watch(performanceData, (newVal, oldVal) => {
 }
 
 body {
-    /* color: #e2e8f0; */
+
     min-height: 100vh;
     padding: 20px;
 }
 
-.app-container {
-    margin: 0 auto;
-    padding: 20px;
-}
 
 .header {
     text-align: center;
-    margin-bottom: 30px;
+    /* margin-bottom: 30px; */
     padding: 25px;
     border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     position: relative;
     overflow: hidden;
 }
@@ -751,7 +747,7 @@ body {
 
 .header h1 {
     font-size: 2.5rem;
-    margin-bottom: 10px;
+    /* margin-bottom: 10px; */
     background: linear-gradient(90deg, #38bdf8, #818cf8);
     -webkit-background-clip: text;
     background-clip: text;
@@ -761,7 +757,7 @@ body {
 
 .header p {
     font-size: 1.1rem;
-    color: #94a3b8;
+    /* color: #94a3b8; */
     max-width: 800px;
     margin: 0 auto;
     line-height: 1.6;
@@ -780,13 +776,13 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 20px;
-    margin-bottom: 30px;
+    /* margin-bottom: 30px; */
 }
 
 .stat-card {
     border-radius: 16px;
     padding: 25px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
     overflow: hidden;
@@ -794,13 +790,13 @@ body {
 
 .stat-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .card-title {
     font-size: 1rem;
-    color: #94a3b8;
-    margin-bottom: 15px;
+    /* color: #94a3b8; */
+    /* margin-bottom: 15px; */
     display: flex;
     align-items: center;
 }
@@ -819,12 +815,12 @@ body {
 .card-value {
     font-size: 2.2rem;
     font-weight: 700;
-    margin-bottom: 10px;
+    /* margin-bottom: 10px; */
 }
 
 .card-desc {
     font-size: 0.9rem;
-    color: #94a3b8;
+    /* color: #94a3b8; */
     line-height: 1.5;
 }
 
@@ -842,13 +838,13 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
     gap: 20px;
-    margin-bottom: 30px;
+    /* margin-bottom: 30px; */
 }
 
 .chart-container {
     border-radius: 16px;
     padding: 25px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     height: 400px;
     position: relative;
     overflow: hidden;
@@ -856,7 +852,7 @@ body {
 
 .chart-title {
     font-size: 1.2rem;
-    margin-bottom: 20px;
+    /* margin-bottom: 20px; */
     display: flex;
     align-items: center;
     color: #38bdf8;
@@ -882,13 +878,13 @@ body {
 .table-container {
     border-radius: 16px;
     padding: 25px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    margin-bottom: 30px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    /* margin-bottom: 30px; */
 }
 
 .table-title {
     font-size: 1.2rem;
-    margin-bottom: 20px;
+    /* margin-bottom: 20px; */
     display: flex;
     align-items: center;
     color: #38bdf8;
@@ -948,14 +944,14 @@ body {
 .footer {
     text-align: center;
     padding: 20px;
-    color: #94a3b8;
+    /* color: #94a3b8; */
     font-size: 0.9rem;
 }
 
 .filters {
     display: flex;
     gap: 15px;
-    margin-bottom: 20px;
+    /* margin-bottom: 20px; */
     flex-wrap: wrap;
 }
 
@@ -1025,5 +1021,15 @@ body {
     .header h1 {
         font-size: 2rem;
     }
+}
+.app-container{
+    background: #f5f7fa;
+}
+.data-panel {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
 }
 </style>

@@ -215,6 +215,7 @@ async function main(input: string): Promise<void> {
                 }
                 dbPaths.push(dbPath);
                 tracePaths.push(tracePath);
+                result.push(await perfAnalyzer.calcPerfDbTotalInstruction(dbPath));
             }
 
             logger.info(dbPaths[choose] + ' : setp' + i + ' select round' + choose + ' .');
