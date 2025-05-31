@@ -151,7 +151,7 @@
   </div>
   <div v-if="currentTab === 'tab2'">
     <!-- 测试步骤导航 -->
-    <div class="step-nav" style="margin-bottom: 0%;margin-top: 10px;margin: 0 auto;">
+    <div class="step-nav" style="margin-bottom: 20px;margin-top: 20px;">
       <div v-for="(step, index) in testSteps" :key="index" :class="[
         'step-item',
         {
@@ -163,15 +163,6 @@
 
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-        <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
-        <button class="beautiful-btn primary-btn"
-          @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
-          下载perf
-        </button>
-        <button class="beautiful-btn primary-btn"
-          @click="handleDownloadAndRedirect('trace.htrace', step.id, step.step_name)">
-          下载trace
-        </button>
       </div>
     </div>
     <FrameAnalysis :step="currentStepIndex" :data="htraceJson" />
@@ -752,5 +743,11 @@ const handleDownloadAndRedirect = (file: string, stepId: number, name: string) =
     padding: 0.75rem;
     font-size: 0.9rem;
   }
+}
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 </style>
