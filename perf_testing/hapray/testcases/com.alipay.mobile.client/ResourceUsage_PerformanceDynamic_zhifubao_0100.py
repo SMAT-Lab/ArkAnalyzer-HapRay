@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
@@ -20,13 +21,16 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1. 支付宝-饿了么 页面浏览 上滑10次，间隔2s"
+                "description": "1. 支付宝-饿了么 页面浏览 上滑5次，间隔2s"
             },
             {
                 "name": "step2",
                 "description": "2. 支付宝-饿了么 店铺浏览 上滑10次，间隔2s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -54,21 +58,38 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
         component = self.driver.find_component(BY.type('Text').text('饿了么'))
         self.driver.touch(component)
         time.sleep(5)
+        self.driver.touch(BY.text('超市便利'))
+        time.sleep(5)
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=631,  # 原始x坐标
+            y=185,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
+        self.driver.touch(BY.text('西安半导体产业园 0102'))
+        time.sleep(2)
 
         def step1(driver):
-            Step('1. 支付宝-饿了么 页面浏览 上滑10次，间隔2s')
-            for i in range(10):
+            Step('1. 支付宝-饿了么 页面浏览 上滑5次，间隔2s')
+            for i in range(5):
                 CommonUtils.swipes_up_load(driver, 1, 2, 300)
 
         def step2(driver):
-            Step('2. 支付宝-饿了么 任意店铺浏览 上滑10次，间隔2s')
-            driver.touch((263, 1255))
-            time.sleep(2)
+            Step('2. 支付宝-饿了么 店铺浏览 上滑10次，间隔2s')
             for i in range(10):
                 CommonUtils.swipes_up_load(driver, 1, 2, 300)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_step_with_perf_and_trace(1, step1, 20)
         time.sleep(10)
+        self.driver.swipe_to_back()
+        time.sleep(2)
+        self.driver.touch(BY.text('我的')) # 点不到
+        time.sleep(2)
+        self.driver.touch(BY.text('店铺关注'))
+        time.sleep(2)
+        self.driver.touch(BY.text('每一天便利店(西滩社区店)'))
+        time.sleep(2)
         self.execute_step_with_perf_and_trace(2, step2, 35)
 
     def teardown(self):
