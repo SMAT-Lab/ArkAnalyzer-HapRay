@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
@@ -35,6 +36,9 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
                 "description": "4. 支付宝-点击收转账"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -63,29 +67,12 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
         def step1(driver):
             Step('1. 支付宝-首页上下滑5次，间隔2s')
             for i in range(5):
-                CommonUtils.swipe(driver.device_sn, 625, 2000, 625, 1000, 300)
-                time.sleep(2)
+                CommonUtils.swipes_up_load(driver, swip_num=1, sleep=2, timeout=300)
             for i in range(5):
-                CommonUtils.swipe(driver.device_sn, 625, 1100, 625, 2100, 300)
-                time.sleep(2)
+                CommonUtils.swipes_down_load(driver, swip_num=1, sleep=2, timeout=300)
             time.sleep(3)
 
         def without_perf_after_step1(driver):
-            driver.touch(BY.type('Text').text('出行'))
-            time.sleep(2)
-            # 点击地铁，切换到地铁页
-            driver.touch((327, 348))
-            time.sleep(2)
-            # 侧滑返回上一页
-            driver.swipe_to_back()
-            time.sleep(2)
-            # 点击卡包
-            # driver.touch((1157, 401))
-            driver.touch(BY.type('Text').text('卡包'))
-            time.sleep(2)
-            # 返回上一页
-            driver.touch((88, 208))
-            time.sleep(2)
             # 点击“我的”
             # driver.touch((1180, 2631))
             driver.touch(BY.type('Text').text('我的'))
@@ -107,14 +94,24 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
             Step('4. 支付宝-点击收转账')
             # component = driver.find_component(BY.type('Text').text('转账'))
             # driver.touch(component)
-            # driver.touch((662, 2330))  # TODO Mate60
-            driver.touch((662, 2520))  # TODO Mate70
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=662,   # 原始x坐标
+                y=2350,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(5)
 
         def finish(driver):
             # 点击右上角关闭
-            # driver.touch((1131, 181))  # TODO Mate60
-            driver.touch((1224, 216))  # TODO Mate70
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=1175,  # 原始x坐标
+                y=197,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             # 侧滑返回
             driver.swipe_to_back()

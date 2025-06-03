@@ -5,6 +5,7 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
+from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.PerfTestCase import PerfTestCase, Log
 
 
@@ -56,19 +57,21 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
             driver.touch(component)
             time.sleep(2)
             for _ in range(5):
-                driver.slide((604, 2020), (604, 930), slide_time=0.3)  # 从上往下滑   ## TODO swipe_OH()
+                # driver.slide((604, 2020), (604, 930), slide_time=0.3)  # 从上往下滑   ## TODO swipe_OH()
+                CommonUtils.swipes_up_load(driver, swip_num=1, sleep=10, timeout=300)
                 # driver.wait(1)  # TODO driver.wait 和 sleep 有什么区别
                 # driver.drag((604, 2020), (604, 930), drag_time=0.5) # TODO drag 和 slide 区别？
                 time.sleep(10)
             time.sleep(3)
             time_end = time.time()
-            if time_end - time_start < 60:
-                time.sleep(60 - (time_end - time_start))
+            if time_end - time_start < 65:
+                time.sleep(65 - (time_end - time_start))
 
         def finish(driver):
-            time.sleep(10)
-
-        self.execute_step_with_perf_and_trace(1, step1, 60)
+            # 上滑返回桌面
+            driver.swipe_to_home()
+            time.sleep(1)
+        self.execute_step_with_perf_and_trace(1, step1, 65)
         finish(self.driver)
 
     def teardown(self):

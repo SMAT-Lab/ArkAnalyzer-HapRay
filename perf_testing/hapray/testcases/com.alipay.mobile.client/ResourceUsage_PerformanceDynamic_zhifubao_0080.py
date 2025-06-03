@@ -7,6 +7,7 @@ from hypium import BY
 
 from hapray.core.PerfTestCase import PerfTestCase, Log
 from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.CoordinateAdapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
@@ -35,6 +36,9 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
                 "description": "4. 跳转至蚂蚁森林，点击奖励，上下拖滑3次，间隔2s"
             }
         ]
+        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
+        self.source_screen_width = 1260
+        self.source_screen_height = 2720
 
     @property
     def steps(self) -> []:
@@ -60,21 +64,53 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
         # 搜索 蚂蚁庄园 ，进入该小程序
-        self.driver.touch((599, 245))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=599,  # 原始x坐标
+            y=245,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(3)
         self.driver.input_text((BY.type('SearchField')), '蚂蚁庄园')
         time.sleep(3)
         self.driver.touch(BY.type('Button').text('搜索'))
         time.sleep(5)
-        self.driver.touch((387, 628))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=387,  # 原始x坐标
+            y=628,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(5)
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=392,  # 原始x坐标
+            y=2288,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
+        time.sleep(2)
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=658,  # 原始x坐标
+            y=2114,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
+        time.sleep(2)
 
         def step1(driver):
             Step('1. 领饲料，上下拖滑3次，间隔2s')
             # 领饲料
-            # self.driver.touch(BY.text('领饲料')) 点不到
-            # self.driver.touch((337, 2619))
-            self.driver.touch((337, 2500))  # Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=337,  # 原始x坐标
+                y=2500,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             for i in range(3):
                 CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 2100, 300)
@@ -87,8 +123,13 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         def step2(driver):
             Step('2. 去捐蛋，上下拖滑1次，间隔2s')
             # self.driver.touch(BY.text('去捐蛋'))
-            # self.driver.touch((780, 2619))
-            self.driver.touch((780, 2500)) # Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=780,  # 原始x坐标
+                y=2500,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(2)
             CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 1550, 300)
             time.sleep(2)
@@ -99,11 +140,22 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         def step3(driver):
             Step('3. 芭芭农场，领肥料，上下拖滑3次，间隔2s')
             # 点左边树苗
-            self.driver.touch((56, 1515))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=56,  # 原始x坐标
+                y=1515,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(5)
             # self.driver.touch(BY.text('领肥料'))
-            # self.driver.touch((1125, 2369))
-            self.driver.touch((1125, 2200))  # Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=1125,  # 原始x坐标
+                y=2200,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(5)
             for i in range(3):
                 CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 2100, 300)
@@ -115,11 +167,23 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         def step4(driver):
             Step('4. 跳转至蚂蚁森林，点击奖励，上下拖滑3次，间隔2s')
             # 点击右侧树苗
-            driver.touch((910, 1198))
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=910,  # 原始x坐标
+                y=1198,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
             time.sleep(3)
             # self.driver.touch(BY.text('奖励'))
-            # driver.touch((502, 1898))
-            driver.touch((520, 1820)) # Mate60Pro
+            driver.touch(CoordinateAdapter.convert_coordinate(
+                driver,
+                x=520,  # 原始x坐标
+                y=1820,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            ))
+
             time.sleep(3)
             for i in range(3):
                 CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 2100, 300)
@@ -128,29 +192,51 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
                 CommonUtils.swipe(driver.device_sn, 625, 2100, 625, 2500, 300)
                 time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_step_with_perf_and_trace(1, step1, 25)
         time.sleep(10)
         # 点击 x 图标返回上一页
-        self.driver.touch((1198, 903))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1198,  # 原始x坐标
+            y=903,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(2, step2, 10)
+        self.execute_step_with_perf_and_trace(2, step2, 15)
         # 点击 x 图标返回上一页
-        self.driver.touch((1198, 903))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1198,  # 原始x坐标
+            y=903,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(3, step3, 30)
+        self.execute_step_with_perf_and_trace(3, step3, 25)
         time.sleep(10)
         # 点击右上角
-        # self.driver.touch((1184, 213))
-        self.driver.touch((1175, 197)) # Mate60Pro
-        # self.driver.touch((1131, 184))  # Mate70
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=1175,  # 原始x坐标
+            y=197,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
         # 点击左上角返回蚂蚁庄园
-        self.driver.touch((387, 628))
+        self.driver.touch(CoordinateAdapter.convert_coordinate(
+            self.driver,
+            x=387,  # 原始x坐标
+            y=628,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        ))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(4, step4, 30)
+        self.execute_step_with_perf_and_trace(4, step4, 25)
         # 上滑返回桌面
         self.driver.swipe_to_home()
 
