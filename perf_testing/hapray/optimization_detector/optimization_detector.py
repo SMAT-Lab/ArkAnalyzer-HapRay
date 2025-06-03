@@ -19,7 +19,6 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from elftools.elf.elffile import ELFFile
 
-
 # File analysis status mapping
 FILE_STATUS_MAPPING = {
     'analyzed': 'Successfully Analyzed',
@@ -85,9 +84,8 @@ class OptimizationDetector:
                             segment.header.p_flags & 0x1):
                         return "OK (Executable segment)"
         except Exception as e:
-            logging.error('_check_binary_integrity file %s error %s', file_info.logical_path, str(e))
+            logging.error('Binary integrity check failed for %s: %s', file_info.logical_path, str(e))
         return "No executable code found"
-
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> Dict[str, dict]:
@@ -146,6 +144,8 @@ class OptimizationDetector:
         for temp_dir in self.temp_dirs:
             shutil.rmtree(temp_dir, ignore_errors=True)
         self.temp_dirs = []
+        self.model = None
+        self.predict_function = None
 
     def _extract_hap_file(self, hap_path: str) -> List[FileInfo]:
         """Extract SO files from HAP/HSP archives and return FileInfo objects"""
@@ -153,18 +153,21 @@ class OptimizationDetector:
         temp_dir = tempfile.mkdtemp()
         self.temp_dirs.append(temp_dir)
 
-        with zipfile.ZipFile(hap_path, 'r') as zip_ref:
-            for file in zip_ref.namelist():
-                if file.startswith('libs/arm64') and file.endswith('.so'):
-                    output_path = os.path.join(temp_dir, file[5:])
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                    with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
-                        dest.write(src.read())
-                    file_info = FileInfo(
-                        absolute_path=output_path,
-                        logical_path=f"{hap_path}/{file}"
-                    )
-                    extracted_files.append(file_info)
+        try:
+            with zipfile.ZipFile(hap_path, 'r') as zip_ref:
+                for file in zip_ref.namelist():
+                    if file.startswith('libs/arm64') and file.endswith('.so'):
+                        output_path = os.path.join(temp_dir, file[5:])
+                        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                        with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
+                            dest.write(src.read())
+                        file_info = FileInfo(
+                            absolute_path=output_path,
+                            logical_path=f"{hap_path}/{file}"
+                        )
+                        extracted_files.append(file_info)
+        except Exception as e:
+            logging.error("Failed to extract HAP file %s: %s", hap_path, e)
         return extracted_files
 
     def _collect_binary_files(self, input_path: str) -> List[FileInfo]:
@@ -188,11 +191,14 @@ class OptimizationDetector:
 
     def _extract_dot_text(self, file_path: str) -> List[int]:
         """Extract .text segment data"""
-        with open(file_path, 'rb') as f:
-            elf = ELFFile(f)
-            section = elf.get_section_by_name(self.TEXT_SECTION)
-            if section:
-                return list(section.data())
+        try:
+            with open(file_path, 'rb') as f:
+                elf = ELFFile(f)
+                section = elf.get_section_by_name(self.TEXT_SECTION)
+                if section:
+                    return list(section.data())
+        except Exception as e:
+            logging.error("Failed to extract .text section from %s: %s", file_path, e)
         return []
 
     def _extract_features(self, binary_path: str, features: int = 2048) -> Optional[np.ndarray]:
@@ -209,13 +215,12 @@ class OptimizationDetector:
             data = data[features:]
         return np.array(sequences, dtype=np.uint8)
 
-    def _run_inference(self, file_path: str, model, batch_size: int = 256,
-                       features: int = 2048) -> List[Tuple[int, float]]:
+    def _run_inference(self, file_path: str, model, features: int = 2048) -> List[Tuple[int, float]]:
         features_array = self._extract_features(file_path, features)
         if features_array is None or not features_array.size:
             return []
 
-        y_predict = model.predict(features_array, batch_size=batch_size)
+        y_predict = model.predict(features_array, batch_size=256)
         results = []
         for _predict in y_predict:
             prediction = np.argmax(_predict)
@@ -241,11 +246,13 @@ class OptimizationDetector:
                         checkpoint_file: str) -> Tuple[FileInfo, Optional[List[Tuple[int, float]]]]:
         result = self._run_analysis(file_info)
 
+        checkpoint = {'analyzed_files': {}}
         if os.path.exists(checkpoint_file):
-            with open(checkpoint_file, 'r') as f:
-                checkpoint = json.load(f)
-        else:
-            checkpoint = {'analyzed_files': {}}
+            try:
+                with open(checkpoint_file, 'r') as f:
+                    checkpoint = json.load(f)
+            except json.JSONDecodeError:
+                pass
 
         checkpoint['analyzed_files'][file_info.file_id] = file_info.file_hash
         with open(checkpoint_file, 'w') as f:
@@ -263,13 +270,13 @@ class OptimizationDetector:
                     analyzed_files = checkpoint.get('analyzed_files', {})
                     logging.info("Resuming analysis. %d files already analyzed.", len(analyzed_files))
             except json.JSONDecodeError:
-                logging.error("Error reading checkpoint file. Creating new one.")
-                analyzed_files = {}
+                logging.warning("Invalid checkpoint file. Starting fresh analysis.")
 
         # Filter out analyzed files
         remaining_files = []
         for file_info in file_infos:
-            if file_info.file_id in analyzed_files:
+            flags_path = os.path.join(self.MATCHED_FILES_DIR, f"flags_{file_info.file_id}.csv")
+            if file_info.file_id in analyzed_files and os.path.exists(flags_path):
                 if analyzed_files[file_info.file_id] == file_info.file_hash:
                     logging.debug("Skipping already analyzed file: %s", file_info.absolute_path)
                     continue
