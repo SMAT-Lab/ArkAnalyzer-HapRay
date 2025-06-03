@@ -99,6 +99,8 @@ cd perf_testing
 python -m scripts.main
 # Examples of optional parameters
 python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0010 ResourceUsage_PerformanceDynamic_jingdong_0020
+# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so files.
+python -m scripts.main -i Directory/File [-jN]
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
@@ -142,19 +144,7 @@ run_testcases:
 ### 2.After setting the so_dir parameter, the import with the symbol so can be supported. This address is the storage path of the.so files in the debug package or the release package
 ```yaml
 so_dir:
-  ResourceUsage_PerformanceDynamic_xxx:
-    - xxx
-```
-
-### Some functions show up as libtaskpool.z.so@0x5b19124734 when the so_dir path is filled in, and when imported, they show the normal function name
-The filling format is as follows, and multiple lines are supported：
-
-```yaml
-so_dir:
-  ResourceUsage_PerformanceDynamic_xhs:
-    - d:/xhs
-  ResourceUsage_PerformanceDynamic_bilibili:
-    - d:/bilibili
+  - xxx
 ```
 
 ### 3.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:

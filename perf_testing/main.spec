@@ -12,7 +12,10 @@ venv_packages.append('telnetlib')
 venv_packages.append('xml.dom')
 venv_packages.append('xml.etree.ElementTree')
 
-datas = [('hapray', 'hapray'), ('hapray-toolbox', 'hapray-toolbox')]
+datas = [
+    ('hapray', 'hapray'), 
+    ('hapray-toolbox', 'hapray-toolbox'),
+    ]
 site_packages_dir = sys.path[-1]
 for item in os.listdir(site_packages_dir):
     item_path = os.path.join(site_packages_dir, item)
