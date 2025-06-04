@@ -82,6 +82,11 @@ cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
+# Examples of optional parameters
+python -m scripts.main --so_dir dir --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0010 ResourceUsage_PerformanceDynamic_jingdong_0020
+
+# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
+python -m scripts.main -i Directory/File -o output [-jN]
 ```
 
 ### Windows Installation
@@ -99,8 +104,9 @@ cd perf_testing
 python -m scripts.main
 # Examples of optional parameters
 python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0010 ResourceUsage_PerformanceDynamic_jingdong_0020
-# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so files.
-python -m scripts.main -i Directory/File [-jN]
+
+# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
+python -m scripts.main -i Directory/File -o output [-jN]
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
