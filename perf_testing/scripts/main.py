@@ -5,6 +5,7 @@ import sys
 import time
 import shutil
 from concurrent.futures import ThreadPoolExecutor
+from typing import List
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -73,9 +74,32 @@ class HapRayCmd:
                             nargs='?',
                             default="perf",
                             help="Action to perform (perf: performance testing, opt: so optimization detection)")
-        args = parser.parse_args(sys.argv[1:2])
+        action_args = []
+        if len(sys.argv[1:2]) > 0 and sys.argv[1:2][0] not in actions:
+            action_args.append('perf')
+            sub_args = sys.argv[1:]
+        else:
+            action_args = sys.argv[1:2]
+            sub_args = sys.argv[2:]
+        args = parser.parse_args(action_args)
         # dispatch function with same name of the action
-        getattr(self, args.action)(sys.argv[2:])
+        getattr(self, args.action)(sub_args)
+
+    @staticmethod
+    def get_matched_cases(run_testcases: List[str], all_testcases: dict) -> List[str]:
+        matched_cases = []
+        for pattern in run_testcases:
+            try:
+                regex = re.compile(pattern)
+                for case_name in all_testcases.keys():
+                    if regex.match(case_name):
+                        matched_cases.append(case_name)
+            except re.error as e:
+                logging.error(f"Invalid regex pattern: {pattern}, error: {e}")
+                # 如果正则表达式无效，尝试作为普通字符串匹配
+                if pattern in all_testcases:
+                    matched_cases.append(pattern)
+        return matched_cases
     
     @staticmethod
     def perf(args):
@@ -97,6 +121,10 @@ class HapRayCmd:
         args = parser.parse_args(args)
 
         root_path = os.getcwd()
+        config_path = os.path.join(root_path, 'config.yaml')
+        if os.path.exists(config_path):
+            _ = Config(config_path)
+
         reports_path = os.path.join(root_path, 'reports', time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
         if not os.path.exists(reports_path):
             os.makedirs(reports_path)
@@ -106,9 +134,6 @@ class HapRayCmd:
             Config.set('run_testcases', args.run_testcases)
 
         all_testcases = CommonUtils.load_all_testcases()
-        config_path = os.path.join(root_path, 'config.yaml')
-        if os.path.exists(config_path):
-            _ = Config(config_path)
 
         if args.run_testcases is not None:
             Config.set('run_testcases', args.run_testcases)
@@ -121,15 +146,21 @@ class HapRayCmd:
             run_testcases = Config.get('run_testcases', [])
             if len(run_testcases) == 0:
                 logging.error('no run_testcases')
+                return
 
-            for case_name in run_testcases:
-                if case_name not in all_testcases:
-                    continue
+            matched_cases = HapRayCmd.get_matched_cases(run_testcases, all_testcases)
+            if not matched_cases:
+                logging.error('No test cases matched the inputs.')
+                return
+            else:
+                logging.info('Fond %s test cases to run', len(matched_cases))
+
+            for case_name in matched_cases:
                 so_dir = Config.get('so_dir', None)
                 scene_round_dirs = []
-                for round in range(5):
+                for _round in range(5):
                     case_dir = all_testcases[case_name]
-                    output = os.path.join(reports_path, f'{case_name}_round{round}')
+                    output = os.path.join(reports_path, f'{case_name}_round{_round}')
                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
                     for i in range(5):
                         if scan_folders(output):
