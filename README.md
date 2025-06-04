@@ -83,7 +83,7 @@ source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
 # Examples of optional parameters
-python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases .*_xhs_.* .*_jingdong_0010
+python -m scripts.main --run_testcases .*_xhs_.* .*_jingdong_0010 [--so_dir dir]
 
 # Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
 python -m scripts.main -i Directory/File -o output [-jN]
@@ -103,7 +103,7 @@ cd perf_testing
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
 # Examples of optional parameters
-python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases .*_xhs_.* .*_jingdong_0010
+python -m scripts.main --run_testcases .*_xhs_.* .*_jingdong_0010 [--so_dir D:\jd\libs\arm64-v8a ]
 
 # Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
 python -m scripts.main -i Directory/File -o output [-jN]
@@ -119,8 +119,7 @@ run_testcases:
 
 ### 2.After setting the so_dir parameter, the import with the symbol so can be supported. This address is the storage path of the.so files in the debug package or the release package
 ```yaml
-so_dir:
-  - xxx
+so_dir: xxx
 ```
 
 ### 3.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:
