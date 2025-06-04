@@ -4,19 +4,16 @@ import re
 import sys
 import time
 import shutil
-import functools
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from logging.handlers import RotatingFileHandler
 
-import yaml
 from xdevice.__main__ import main_process
 from hapray.core.PerfTestCase import PerfTestCase
 from hapray.core.common.ExcelUtils import create_summary_excel
-from hapray.core.config.config import Config, ConfigError
+from hapray.core.config.config import Config
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import scan_folders, delete_folder
-from hapray.core.common.FrameAnalyzer import FrameAnalyzer
 from hapray.optimization_detector.optimization_detector import OptimizationDetector
 
 ENV_ERR_STR = """
@@ -172,14 +169,12 @@ class HapRayCmd:
         parser.add_argument("--input", "-i", help="Directory containing binary files to analyze")
         parser.add_argument("--output", "-o", default="binary_analysis_report.xlsx",
                             help="Output Excel file path(default: binary_analysis_report.xlsx)")
-        parser.add_argument("--checkpoint", default="analysis_checkpoint.json",
-                            help="Checkpoint file for resumable analysis (default: analysis_checkpoint.json)")
         parser.add_argument("--jobs", "-j", type=int, default=1,
                             help="Number of parallel jobs (default: 1)")
         args = parser.parse_args(args)
 
         detector = OptimizationDetector(args.jobs)
-        detector.detect_optimization(args.input, args.output, args.checkpoint)
+        detector.detect_optimization(args.input, args.output)
 
 
 if __name__ == "__main__":
