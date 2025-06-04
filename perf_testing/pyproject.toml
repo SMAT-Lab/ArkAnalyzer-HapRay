@@ -10,7 +10,7 @@ authors = [
     { name = "Your Name", email = "your@email.com" }
 ]
 
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -39,7 +39,8 @@ exclude = ["tests*"]
 hapray = [
     "core/config/*.yaml",
     "testcases/**/*.json",
-    "testcases/**/*.py"
+    "testcases/**/*.py",
+    "optimization_detector/models/*.h5"
 ]
 
 [tool.setuptools.data-files]

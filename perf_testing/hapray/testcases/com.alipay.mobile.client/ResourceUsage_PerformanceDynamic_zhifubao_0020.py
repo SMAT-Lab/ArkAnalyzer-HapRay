@@ -64,24 +64,14 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
             time.sleep(5)
 
         def finish(driver):
-            # 点击当前页面的第一个图片
-            # driver.touch(BY.key('Selector_0')) // TODO
-            time.sleep(3)
-            component = driver.find_component(BY.type('Text').text('完成'))
-            driver.touch(component)
-            time.sleep(2)
-            # 侧滑返回
-            driver.swipe_to_back()
-            time.sleep(2)
             # 上滑返回桌面
             driver.swipe_to_home()
+            time.sleep(2)
 
         self.execute_step_with_perf_and_trace(1, step1, 10)
         time.sleep(10)
         self.execute_step_with_perf_and_trace(2, step2, 10)
-        time.sleep(10)
         finish(self.driver)
-        time.sleep(10)
 
     def teardown(self):
         Log.info('teardown')
