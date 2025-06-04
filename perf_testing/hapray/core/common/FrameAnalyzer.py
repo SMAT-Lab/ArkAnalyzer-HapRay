@@ -241,25 +241,31 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
 
 def get_frame_type(frame: dict, cursor) -> str:
     """
-    判断帧的类型：UI帧 / 渲染帧
+    获取帧的类型（进程名）
 
     参数:
         frame: 帧数据字典
         cursor: 数据库游标
 
     返回:
-        str: 'UI' 或 'Render'
+        str: 'ui'/'render'/'sceneboard'
     """
     ipid = frame.get("ipid")
     if ipid is None:
-        return "UI"
+        return "ui"
 
     cursor.execute("SELECT name FROM process WHERE ipid = ?", (ipid,))
     result = cursor.fetchone()
     
-    if result and result[0] == "render_service":
-        return "Render"
-    return "UI"
+    if not result:
+        return "ui"
+        
+    process_name = result[0]
+    if process_name == "render_service":
+        return "render"
+    elif process_name == "ohos.sceneboard":
+        return "sceneboard"
+    return "ui"
 
 def analyze_stuttered_frames(db_path: str) -> dict:
     """
@@ -295,9 +301,20 @@ def analyze_stuttered_frames(db_path: str) -> dict:
 
         stats = {
             "total_frames": 0,
-            "ui_stutter_frames": 0,
-            "render_stutter_frames": 0,
-            "total_stutter_frames": 0,
+            "frame_stats": {
+                "ui": {
+                    "total": 0,
+                    "stutter": 0
+                },
+                "render": {
+                    "total": 0,
+                    "stutter": 0
+                },
+                "sceneboard": {
+                    "total": 0,
+                    "stutter": 0
+                }
+            },
             "stutter_levels": {
                 "level_1": 0,
                 "level_2": 0,
@@ -305,7 +322,8 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             },
             "stutter_details": {
                 "ui_stutter": [],
-                "render_stutter": []
+                "render_stutter": [],
+                "sceneboard_stutter": []
             },
             "fps_stats": {
                 "average_fps": 0,
@@ -333,10 +351,10 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     continue
 
                 frame_time = frame["ts"]
-                # 先判断帧类型，只有UI线程的帧才计入总数
+                # 获取帧类型并统计总帧数
                 frame_type = get_frame_type(frame, cursor)
-                if frame_type == "UI":
-                    stats["total_frames"] += 1
+                stats["frame_stats"][frame_type]["total"] += 1
+                stats["total_frames"] += 1
 
                 # 初始化窗口
                 if current_window["start_time"] is None:
@@ -405,14 +423,11 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                             level_desc = "严重卡顿"
                             stats["stutter_levels"]["level_3"] += 1
 
-                        # 使用之前判断的帧类型
-                        if frame_type == "Render":
-                            stutter_type = "render_stutter"
-                            stats["render_stutter_frames"] += 1
-                        else:
-                            stutter_type = "ui_stutter"
-                            stats["ui_stutter_frames"] += 1
+                        # 统计卡顿帧数
+                        stats["frame_stats"][frame_type]["stutter"] += 1
 
+                        # 根据进程类型分类卡顿详情
+                        stutter_type = f"{frame_type}_stutter"
                         stats["stutter_details"][stutter_type].append({
                             "vsync": vsync_key,
                             "timestamp": frame["ts"],
@@ -466,16 +481,25 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             del stats["fps_stats"]["low_fps_window_count"]
             del stats["fps_stats"]["low_fps_threshold"]
 
-        stats["total_stutter_frames"] = stats["ui_stutter_frames"] + stats["render_stutter_frames"]
-        # 计算卡顿率，直接使用小数形式，不乘以100
-        stats["stutter_rate"] = round(stats["total_stutter_frames"] / stats["total_frames"], 4)
+        # 计算各进程的卡顿率
+        for process_type in stats["frame_stats"]:
+            total = stats["frame_stats"][process_type]["total"]
+            stutter = stats["frame_stats"][process_type]["stutter"]
+            if total > 0:
+                stats["frame_stats"][process_type]["stutter_rate"] = round(stutter / total, 4)
+            else:
+                stats["frame_stats"][process_type]["stutter_rate"] = 0
+
+        # 计算总卡顿率
+        total_stutter = sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"])
+        stats["total_stutter_frames"] = total_stutter
+        stats["stutter_rate"] = round(total_stutter / stats["total_frames"], 4)
 
         result = {
             "runtime": runtime,
             "statistics": {
                 "total_frames": stats["total_frames"],
-                "ui_stutter_frames": stats["ui_stutter_frames"],
-                "render_stutter_frames": stats["render_stutter_frames"],
+                "frame_stats": stats["frame_stats"],
                 "total_stutter_frames": stats["total_stutter_frames"],
                 "stutter_rate": stats["stutter_rate"],
                 "stutter_levels": stats["stutter_levels"]
@@ -493,7 +517,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
 def main():
     """测试卡顿帧分析功能的主函数"""
     # 设置要分析的报告目录路径
-    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250528154741\ResourceUsage_PerformanceDynamic_jingdong_0020'
+    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250602111937\ResourceUsage_PerformanceDynamic_jingdong_0020'
 
     # 检查路径是否存在
     if not os.path.exists(path):

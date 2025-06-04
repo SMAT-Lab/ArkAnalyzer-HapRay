@@ -6,7 +6,7 @@
         </div>
 
         <div class="stats-cards">
-            <div class="stat-card data-panel">">
+            <div class="stat-card data-panel">
                 <div class="card-title">
                     <i>📊</i> 总帧数
                 </div>
@@ -29,14 +29,8 @@
                         :style="{ width: (performanceData.statistics.stutter_rate * 100) + '%', background: '#f97316' }">
                     </div>
                 </div>
-                <div class="card-desc">UI卡顿: {{ performanceData.statistics.ui_stutter_frames }} | 渲染卡顿: {{
-                    performanceData.statistics.render_stutter_frames }}</div>
-                <div class="stat-trend"
-                    :class="performanceData.statistics.stutter_rate < 0.2 ? 'trend-down' : 'trend-up'">
-                    <span v-if="performanceData.statistics.stutter_rate < 0.2">↓ 低于阈值</span>
-                    <span v-else>↑ 高于阈值</span>
-                    (阈值: 20%)
-                </div>
+                <div class="card-desc">UI卡顿: {{ performanceData.statistics.frame_stats.ui.stutter }} | 渲染卡顿: {{
+                    performanceData.statistics.frame_stats.render.stutter }}</div>
             </div>
 
             <div class="stat-card data-panel">
@@ -67,12 +61,6 @@
                     </div>
                     <div class="card-desc">最低: {{ performanceData.fps_stats.min_fps.toFixed(2) }} | 最高: {{
                         performanceData.fps_stats.max_fps.toFixed(2) }}</div>
-                    <div class="stat-trend"
-                        :class="performanceData.fps_stats.average_fps > 60 ? 'trend-down' : 'trend-up'">
-                        <span v-if="performanceData.fps_stats.average_fps > 60">✓ 流畅体验</span>
-                        <span v-else>⚠ 需优化</span>
-                        (目标: 60 FPS)
-                    </div>
                 </div>
             </div>
 
@@ -101,7 +89,7 @@
                 </div>
 
                 <div class="chart-container data-panel">
-                    <div class="chart-title">
+                    <div class="chart-title" style="margin-bottom: 20px;">
                         <i>📊</i> FPS分布统计
                     </div>
                     <div class="chart" ref="fpsHistogram"></div>
@@ -134,12 +122,11 @@
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>VSync</th>
+                            <th>垂直同步(VSync)</th>
                             <th>卡顿级别</th>
                             <th>实际耗时(ms)</th>
                             <th>预期耗时(ms)</th>
                             <th>超出时间</th>
-                            <th>超出帧数</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -153,9 +140,6 @@
                             <td>{{ (stutter.expected_duration / 1000000).toFixed(2) }}</td>
                             <td :class="stutter.exceed_time >= 0 ? 'negative' : 'positive'">
                                 {{ stutter.exceed_time >= 0 ? '+' : '' }}{{ stutter.exceed_time.toFixed(2) }}ms
-                            </td>
-                            <td :class="stutter.exceed_frames >= 0 ? 'negative' : 'positive'">
-                                {{ stutter.exceed_frames >= 0 ? '+' : '' }}{{ stutter.exceed_frames.toFixed(2) }}
                             </td>
                         </tr>
                     </tbody>
@@ -273,8 +257,8 @@ const initCharts = () => {
                     const index = data.dataIndex;
                     const windowData = fpsData[index];
                     let tooltip = `窗口: ${index + 1}<br/>
-                                开始时间: ${windowData.start_time}<br/>
-                                结束时间: ${windowData.end_time}<br/>
+                                开始时间: ${windowData.start_time} s<br/>
+                                结束时间: ${windowData.end_time} s<br/>
                                 FPS: ${data.value}`;
 
                     // 检查是否有卡顿点
@@ -382,10 +366,37 @@ const initCharts = () => {
                         },
                         data: [
                             {
-                                yAxis: 60,
-                                name: '目标FPS',
+                                yAxis: 30,
+                                name: '30FPS',
                                 label: {
-                                    formatter: '目标FPS: 60',
+                                    formatter: 'FPS: 30',
+                                    position: 'end',
+                                    color: '#94a3b8'
+                                }
+                            },
+                            {
+                                yAxis: 60,
+                                name: '60FPS',
+                                label: {
+                                    formatter: 'FPS: 60',
+                                    position: 'end',
+                                    color: '#94a3b8'
+                                }
+                            },
+                            {
+                                yAxis: 90,
+                                name: '90FPS',
+                                label: {
+                                    formatter: 'FPS: 90',
+                                    position: 'end',
+                                    color: '#94a3b8'
+                                }
+                            },
+                            {
+                                yAxis: 120,
+                                name: '120FPS',
+                                label: {
+                                    formatter: 'FPS: 120',
                                     position: 'end',
                                     color: '#94a3b8'
                                 }
@@ -568,12 +579,7 @@ const initCharts = () => {
                     emphasis: {
                         focus: 'series'
                     },
-                    data: stutters.map(s => s.actual_duration / 1000000),
-                    itemStyle: {
-                        color: function (params) {
-                            return getStutterColor(stutters[params.dataIndex].stutter_level);
-                        }
-                    }
+                    data: stutters.map(s => s.actual_duration / 1000000)
                 },
                 {
                     name: '预期耗时',
@@ -666,23 +672,6 @@ const initCharts = () => {
                             { offset: 0, color: '#38bdf8' },
                             { offset: 1, color: '#818cf8' }
                         ])
-                    },
-                    markLine: {
-                        silent: true,
-                        lineStyle: {
-                            color: '#10b981'
-                        },
-                        data: [
-                            {
-                                xAxis: '60-70',
-                                name: '目标FPS区间',
-                                label: {
-                                    formatter: '目标FPS: 60+',
-                                    position: 'end',
-                                    color: '#94a3b8'
-                                }
-                            }
-                        ]
                     }
                 }
             ]
