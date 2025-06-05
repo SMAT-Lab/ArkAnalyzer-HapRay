@@ -123,9 +123,7 @@ class Config:
                 return default
             return value
         except AttributeError:
-            if default is not None:
-                return default
-            raise ConfigError(f"配置项不存在: {key_path}")
+            return default
 
     @classmethod
     def set(cls, key_path: str, value: Any):
@@ -138,7 +136,7 @@ class Config:
         """
         keys = key_path.split('.')
         # 更新配置对象
-        obj = cls._data
+        obj = cls._instance._data
         for key in keys[:-1]:
             obj = getattr(obj, key)
         setattr(obj, keys[-1], value)

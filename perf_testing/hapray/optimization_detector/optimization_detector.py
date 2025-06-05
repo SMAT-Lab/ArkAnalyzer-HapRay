@@ -1,20 +1,22 @@
 import hashlib
 import os
-import json
 import zipfile
 import tempfile
 import shutil
 import logging
 import multiprocessing
+from enum import Enum
 from functools import partial
 from importlib.resources import files
 from typing import List, Dict, Tuple, Optional
 from collections import Counter
+
+import arpy
 from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
-from tensorflow.python.keras.models import load_model
+import tensorflow as tf
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 from elftools.elf.elffile import ELFFile
@@ -27,8 +29,15 @@ FILE_STATUS_MAPPING = {
 }
 
 
+class FileType(Enum):
+    SO = 1
+    AR = 2
+    NOT_SUPPORT = 0xff
+
+
 class FileInfo:
     """Represents information about a binary file"""
+    TEXT_SECTION = '.text'
 
     def __init__(self, absolute_path: str, logical_path: Optional[str] = None):
         self.absolute_path = absolute_path
@@ -36,6 +45,12 @@ class FileInfo:
         self.file_size = self._get_file_size()
         self.file_hash = self._calculate_file_hash()
         self.file_id = self._generate_file_id()
+        if absolute_path.endswith('.a'):
+            self.file_type = FileType.AR
+        elif absolute_path.endswith('.so'):
+            self.file_type = FileType.SO
+        else:
+            self.file_type = FileType.NOT_SUPPORT
 
     def __repr__(self) -> str:
         return f"FileInfo({self.logical_path}, size={self.file_size}, hash={self.file_hash[:8]}...)"
@@ -48,6 +63,38 @@ class FileInfo:
             'file_hash': self.file_hash,
             'file_id': self.file_id
         }
+
+    def extract_dot_text(self) -> List[int]:
+        """Extract .text segment data"""
+        if self.file_type == FileType.SO:
+            return self._extract_so_dot_text(self.absolute_path)
+        elif self.file_type == FileType.AR:
+            return self._extract_archive_dot_text()
+        return []
+
+    def _extract_so_dot_text(self, file_path) -> List[int]:
+        try:
+            with open(file_path, 'rb') as f:
+                elf = ELFFile(f)
+                section = elf.get_section_by_name(self.TEXT_SECTION)
+                if section:
+                    return list(section.data())
+        except Exception as e:
+            logging.error("Failed to extract .text section from %s: %s", file_path, e)
+        return []
+
+    def _extract_archive_dot_text(self) -> List[int]:
+        text_data = []
+        try:
+            ar = arpy.Archive(self.absolute_path)
+            for name in ar.namelist():
+                elf = ELFFile(ar.open(name))
+                section = elf.get_section_by_name(self.TEXT_SECTION)
+                if section:
+                    text_data.extend(list(section.data()))
+        except Exception as e:
+            logging.error("Failed to extract archive file %s: %s", self.absolute_path, e)
+        return text_data
 
     def _get_file_size(self) -> int:
         return os.path.getsize(self.absolute_path)
@@ -63,7 +110,6 @@ class FileInfo:
 
 
 class OptimizationDetector:
-    TEXT_SECTION = '.text'
     MATCHED_FILES_DIR = 'matched_files_results'
 
     def __init__(self, workers: int = 1):
@@ -71,21 +117,6 @@ class OptimizationDetector:
         self.workers = min(workers, multiprocessing.cpu_count() - 1)
         self.model = None
         self.temp_dirs = []
-
-    @staticmethod
-    def _check_binary_integrity(file_info: FileInfo) -> str:
-        try:
-            with open(file_info.absolute_path, 'rb') as f:
-                elf = ELFFile(f)
-                if elf.get_section_by_name('.text'):
-                    return "OK"
-                for segment in elf.iter_segments():
-                    if (segment.header.p_type == 'PT_LOAD' and
-                            segment.header.p_flags & 0x1):
-                        return "OK (Executable segment)"
-        except Exception as e:
-            logging.error('Binary integrity check failed for %s: %s', file_info.logical_path, str(e))
-        return "No executable code found"
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> Dict[str, dict]:
@@ -130,13 +161,12 @@ class OptimizationDetector:
 
         return results
 
-    def detect_optimization(self, input_path: str, output: str = "binary_analysis_report.xlsx",
-                            checkpoint: str = "analysis_checkpoint.json"):
+    def detect_optimization(self, input_path: str, output: str = "binary_analysis_report.xlsx"):
         file_infos = self._collect_binary_files(input_path)
         if not file_infos:
             logging.warning("No valid binary files found")
             return
-        success, failures = self._analyze_files(file_infos, output, checkpoint)
+        success, failures = self._analyze_files(file_infos, output)
         self.cleanup()
         logging.info("Analysis complete: %s files analyzed, %s files failed", success, failures)
 
@@ -145,7 +175,6 @@ class OptimizationDetector:
             shutil.rmtree(temp_dir, ignore_errors=True)
         self.temp_dirs = []
         self.model = None
-        self.predict_function = None
 
     def _extract_hap_file(self, hap_path: str) -> List[FileInfo]:
         """Extract SO files from HAP/HSP archives and return FileInfo objects"""
@@ -174,7 +203,7 @@ class OptimizationDetector:
         """Collect binary files for analysis"""
         file_infos = []
         if os.path.isfile(input_path):
-            if input_path.endswith(('.so')):
+            if input_path.endswith(('.so', '.a')):
                 file_infos.append(FileInfo(input_path))
             elif input_path.endswith(('.hap', '.hsp')):
                 file_infos.extend(self._extract_hap_file(input_path))
@@ -182,28 +211,17 @@ class OptimizationDetector:
             for root, _, _files in os.walk(input_path):
                 for file in _files:
                     file_path = os.path.join(root, file)
-                    if file.endswith(('.so')):
+                    if file.endswith(('.so', '.a')):
                         logical_path = os.path.relpath(file_path, input_path)
                         file_infos.append(FileInfo(file_path, logical_path))
                     elif file.endswith(('.hap', '.hsp')):
                         file_infos.extend(self._extract_hap_file(file_path))
         return file_infos
 
-    def _extract_dot_text(self, file_path: str) -> List[int]:
-        """Extract .text segment data"""
-        try:
-            with open(file_path, 'rb') as f:
-                elf = ELFFile(f)
-                section = elf.get_section_by_name(self.TEXT_SECTION)
-                if section:
-                    return list(section.data())
-        except Exception as e:
-            logging.error("Failed to extract .text section from %s: %s", file_path, e)
-        return []
-
-    def _extract_features(self, binary_path: str, features: int = 2048) -> Optional[np.ndarray]:
-        data = self._extract_dot_text(binary_path)
-        if not data:
+    @staticmethod
+    def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[np.ndarray]:
+        data = file_info.extract_dot_text()
+        if not data or len(data) == 0:
             return None
 
         sequences = []
@@ -215,8 +233,8 @@ class OptimizationDetector:
             data = data[features:]
         return np.array(sequences, dtype=np.uint8)
 
-    def _run_inference(self, file_path: str, model, features: int = 2048) -> List[Tuple[int, float]]:
-        features_array = self._extract_features(file_path, features)
+    def _run_inference(self, file_info: FileInfo, model, features: int = 2048) -> List[Tuple[int, float]]:
+        features_array = self._extract_features(file_info, features)
         if features_array is None or not features_array.size:
             return []
 
@@ -228,60 +246,23 @@ class OptimizationDetector:
             results.append((prediction, confidence))
         return results
 
-    def _run_analysis(self, file_info: FileInfo) -> Optional[List[Tuple[int, float]]]:
+    def _run_analysis(self, file_info: FileInfo) -> Tuple[FileInfo, Optional[List[Tuple[int, float]]]]:
         """Run optimization flag detection on a single file"""
-        # Check binary integrity
-        integrity_check = self._check_binary_integrity(file_info)
-        if "No executable code found" in integrity_check:
-            return None
-
         # Lazy load model
         if self.model is None:
             flags_model = files('hapray.optimization_detector').joinpath("models/aarch64-flag-lstm.h5")
-            self.model = load_model(str(flags_model))
+            self.model = tf.keras.models.load_model(str(flags_model))
 
-        return self._run_inference(file_info.absolute_path, self.model)
+        return file_info, self._run_inference(file_info, self.model)
 
-    def _process_binary(self, file_info: FileInfo,
-                        checkpoint_file: str) -> Tuple[FileInfo, Optional[List[Tuple[int, float]]]]:
-        result = self._run_analysis(file_info)
-
-        checkpoint = {'analyzed_files': {}}
-        if os.path.exists(checkpoint_file):
-            try:
-                with open(checkpoint_file, 'r') as f:
-                    checkpoint = json.load(f)
-            except json.JSONDecodeError:
-                pass
-
-        checkpoint['analyzed_files'][file_info.file_id] = file_info.file_hash
-        with open(checkpoint_file, 'w') as f:
-            json.dump(checkpoint, f, indent=2)
-
-        return file_info, result
-
-    def _analyze_files(self, file_infos: List[FileInfo], output_file: str,
-                       checkpoint_file: str = "analysis_checkpoint.json") -> Tuple[int, int]:
-        analyzed_files = {}
-        if os.path.exists(checkpoint_file):
-            try:
-                with open(checkpoint_file, 'r') as f:
-                    checkpoint = json.load(f)
-                    analyzed_files = checkpoint.get('analyzed_files', {})
-                    logging.info("Resuming analysis. %d files already analyzed.", len(analyzed_files))
-            except json.JSONDecodeError:
-                logging.warning("Invalid checkpoint file. Starting fresh analysis.")
-
+    def _analyze_files(self, file_infos: List[FileInfo], output_file: str) -> Tuple[int, int]:
         # Filter out analyzed files
         remaining_files = []
         for file_info in file_infos:
             flags_path = os.path.join(self.MATCHED_FILES_DIR, f"flags_{file_info.file_id}.csv")
-            if file_info.file_id in analyzed_files and os.path.exists(flags_path):
-                if analyzed_files[file_info.file_id] == file_info.file_hash:
-                    logging.debug("Skipping already analyzed file: %s", file_info.absolute_path)
-                    continue
-                else:
-                    logging.info("File changed: %s", file_info.absolute_path)
+            if os.path.exists(flags_path):
+                logging.debug("Skipping already analyzed file: %s", file_info.absolute_path)
+                continue
             remaining_files.append(file_info)
 
         logging.info("Files to analyze: %d", len(remaining_files))
@@ -290,7 +271,7 @@ class OptimizationDetector:
         os.makedirs(self.MATCHED_FILES_DIR, exist_ok=True)
 
         if remaining_files:
-            process_func = partial(self._process_binary, checkpoint_file=checkpoint_file)
+            process_func = partial(self._run_analysis)
             if self.parallel and len(remaining_files) > 1:
                 logging.info("Using %d parallel workers", self.workers)
                 with multiprocessing.Pool(self.workers) as pool:
@@ -365,8 +346,6 @@ class OptimizationDetector:
                 os_ratio = os_chunks / total_chunks if total_chunks > 0 else 0
                 size_optimized = f"{'Yes' if os_ratio >= 0.5 else 'No'} ({os_ratio:.1%})"
 
-            integrity_note = self._check_binary_integrity(file_info)
-
             summary_sheet.cell(row=row, column=1, value=file_info.logical_path)
             summary_sheet.cell(row=row, column=2, value=status)
             summary_sheet.cell(row=row, column=3, value=opt_category or "N/A")
@@ -380,7 +359,6 @@ class OptimizationDetector:
             summary_sheet.cell(row=row, column=10, value=total_chunks)
             summary_sheet.cell(row=row, column=11, value=file_info.file_size)
             summary_sheet.cell(row=row, column=12, value=size_optimized)
-            summary_sheet.cell(row=row, column=13, value=integrity_note)
 
             # Color-code size optimization status
             if size_optimized.startswith("Yes"):

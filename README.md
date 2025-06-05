@@ -82,6 +82,11 @@ cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
+# Examples of optional parameters
+python -m scripts.main --run_testcases .*_xhs_.* .*_jingdong_0010 [--so_dir dir]
+
+# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
+python -m scripts.main -i Directory/File -o output [-jN]
 ```
 
 ### Windows Installation
@@ -98,9 +103,10 @@ cd perf_testing
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main
 # Examples of optional parameters
-python -m scripts.main --so_dir D:\jd\libs\arm64-v8a --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0010 ResourceUsage_PerformanceDynamic_jingdong_0020
-# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so files.
-python -m scripts.main -i Directory/File [-jN]
+python -m scripts.main --run_testcases .*_xhs_.* .*_jingdong_0010 [--so_dir D:\jd\libs\arm64-v8a ]
+
+# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
+python -m scripts.main -i Directory/File -o output [-jN]
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
@@ -108,43 +114,12 @@ python -m scripts.main -i Directory/File [-jN]
 ### 1.Preset testcases
 ```yaml
 run_testcases:
- - PerformanceDynamic_com_example_wsywechat_0010
- - ResourceUsage_PerformanceDynamic_xhs_0010
- - ResourceUsage_PerformanceDynamic_xhs_0020
- - ResourceUsage_PerformanceDynamic_xhs_0030
- - ResourceUsage_PerformanceDynamic_xhs_0040
- - ResourceUsage_PerformanceDynamic_xhs_0050
- - ResourceUsage_PerformanceDynamic_xhs_0060
- - ResourceUsage_PerformanceDynamic_xhs_0070
- - ResourceUsage_PerformanceDynamic_bilibili_0010
- - ResourceUsage_PerformanceDynamic_bilibili_0020
- - ResourceUsage_PerformanceDynamic_bilibili_0030
- - ResourceUsage_PerformanceDynamic_bilibili_0040
- - ResourceUsage_PerformanceDynamic_bilibili_0050
- - ResourceUsage_PerformanceDynamic_jingdong_0010
- - ResourceUsage_PerformanceDynamic_jingdong_0020
- - ResourceUsage_PerformanceDynamic_jingdong_0030
- - ResourceUsage_PerformanceDynamic_jingdong_0040
- - ResourceUsage_PerformanceDynamic_jingdong_0050
- - ResourceUsage_PerformanceDynamic_jingdong_0080
- - ResourceUsage_PerformanceDynamic_jingdong_0090
- - ResourceUsage_PerformanceDynamic_jingdong_1000
- - ResourceUsage_PerformanceDynamic_jingdong_0110
- - ResourceUsage_PerformanceDynamic_jingdong_0120
- - ResourceUsage_PerformanceDynamic_zhifubao_0010
- - ResourceUsage_PerformanceDynamic_zhifubao_0020
- - ResourceUsage_PerformanceDynamic_zhifubao_0060
- - ResourceUsage_PerformanceDynamic_zhifubao_0070
- - ResourceUsage_PerformanceDynamic_zhifubao_0080
- - ResourceUsage_PerformanceDynamic_zhifubao_0100
- - ResourceUsage_PerformanceDynamic_Douyin_0010
- - ResourceUsage_PerformanceDynamic_taobao_9999
+ - .*_xhs_.* # Run all test cases of xhs
 ```
 
 ### 2.After setting the so_dir parameter, the import with the symbol so can be supported. This address is the storage path of the.so files in the debug package or the release package
 ```yaml
-so_dir:
-  - xxx
+so_dir: xxx
 ```
 
 ### 3.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:
