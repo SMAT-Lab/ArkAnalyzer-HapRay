@@ -21,7 +21,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1.京东观看直播场景，上滑3次，下滑3次"
+                "description": "1.京东-首页静置场景"
             }
         ]
         
@@ -55,18 +55,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
 
         def step1(driver):
             # 点击直播
-            self.driver.touch(CoordinateAdapter.convert_coordinate(
-                self.driver,
-                x=698,  # 原始x坐标
-                y=1534,  # 原始y坐标
-                source_width=self.source_screen_width,
-                source_height=self.source_screen_height
-            ))
-            time.sleep(3)
-            CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
-            CommonUtils.swipes_down_load(self.driver, swip_num=3, sleep=2)
+            time.sleep(30)
 
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
