@@ -62,10 +62,10 @@ python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
 
 ### Dependencies
 - pip > 23.0.1
-- Python 3.9 ~ 3.12, 
+- Python 3.9 ~ 3.11, 
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
-> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.12 range.
+> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.11 range.
 > You can verify this by running:
 > ```bash
 > python --version
@@ -99,7 +99,7 @@ export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/defa
 ```
 ### MacOS Dependencies
 ```bash
-brew install git git-lfs python@3.12
+brew install git git-lfs python@3.11
 
 # Add Command Line Tools for HarmonyOS to PATH
 # export command_line_tools=[Command Line Tools for HarmonyOS] directory
