@@ -114,6 +114,8 @@ class Config:
     @classmethod
     def get(cls, key_path: str, default: Any = None) -> Any:
         """通过路径字符串获取配置（如 'database.host'）"""
+        if cls._instance is None:
+            Config()
         keys = key_path.split('.')
         value = cls._instance._data
         try:
@@ -134,6 +136,9 @@ class Config:
         :param value: 要设置的值
 
         """
+        if cls._instance is None:
+            Config()
+
         keys = key_path.split('.')
         # 更新配置对象
         obj = cls._instance._data
