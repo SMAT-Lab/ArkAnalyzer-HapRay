@@ -86,9 +86,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             self.driver.wait(2)
 
             # Step('粮油调味页上滑操作')
-            CommonUtils.swipes_up_load(self.driver, swip_num=2, sleep=2)
+            CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
             # Step('粮油调味页下滑操作')
-            CommonUtils.swipes_down_load(self.driver, swip_num=6, sleep=2)
+            CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
             # 加入第一个商品到购物车
             self.driver.touch(CoordinateAdapter.convert_coordinate(

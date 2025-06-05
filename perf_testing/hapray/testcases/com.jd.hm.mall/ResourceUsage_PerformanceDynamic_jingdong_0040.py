@@ -20,7 +20,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1.京东超市购物-点击3次，滑动8次"
+                "description": "1.京东购物车结算场景"
             }
         ]
 
