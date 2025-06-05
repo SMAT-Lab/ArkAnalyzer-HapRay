@@ -15,6 +15,7 @@ from hapray.core.common.ExcelUtils import create_summary_excel
 from hapray.core.config.config import Config
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import scan_folders, delete_folder
+from hapray.core.report import Report
 from hapray.optimization_detector.optimization_detector import OptimizationDetector
 
 ENV_ERR_STR = """
@@ -118,12 +119,12 @@ class HapRayCmd:
         )
         parser.add_argument('--so_dir', default=None, help='Directory to load symbolicated .so files')
         parser.add_argument('--run_testcases', nargs='+', default=None, help='Specify test cases to run')
+        parser.add_argument('--circles', action="store_true", help="Enable sample cpu circles")
         args = parser.parse_args(args)
 
         root_path = os.getcwd()
         config_path = os.path.join(root_path, 'config.yaml')
-        if os.path.exists(config_path):
-            _ = Config(config_path)
+        Config(config_path)
 
         reports_path = os.path.join(root_path, 'reports', time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
         if not os.path.exists(reports_path):
@@ -132,6 +133,9 @@ class HapRayCmd:
 
         if args.run_testcases is not None:
             Config.set('run_testcases', args.run_testcases)
+
+        if args.circles:
+            Config.set('hiperf.event', 'raw-cpu-cycles')
 
         all_testcases = CommonUtils.load_all_testcases()
 
@@ -174,7 +178,7 @@ class HapRayCmd:
                 merge_folder_path = os.path.join(reports_path, case_name)
                 # 生成 HapRay 报告
                 future = executor.submit(
-                    PerfTestCase.generate_hapray_report,
+                    Report.generate_hapray_report,
                     list(scene_round_dirs),  # 避免共享变量被修改
                     merge_folder_path,
                     so_dir  # debug包中的so文件存放地址
