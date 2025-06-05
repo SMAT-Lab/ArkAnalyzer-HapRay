@@ -96,7 +96,7 @@ FROM
     perf_report
     INNER JOIN perf_sample ON perf_report.id = perf_sample.event_type_id
 WHERE
-    perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired')
+    perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
     AND perf_sample.thread_id IN (
         SELECT
             child.thread_id
@@ -120,7 +120,7 @@ WHERE
             perf_report
             INNER JOIN perf_sample ON perf_report.id = perf_sample.event_type_id
         WHERE
-            perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired')
+            perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
             AND perf_sample.thread_id IN (
                 SELECT
             child.thread_id
@@ -157,7 +157,7 @@ FROM
     perf_sample
     INNER JOIN perf_report ON perf_report.id = perf_sample.event_type_id
 WHERE
-    perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired')
+    perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
 `;
 
 class PerfStepSample {

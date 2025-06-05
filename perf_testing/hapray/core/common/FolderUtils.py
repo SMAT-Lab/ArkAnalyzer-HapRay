@@ -1,18 +1,19 @@
 import os
 import json
 import shutil
-import argparse
 from xdevice import platform_logger
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from pathlib import Path
 
 Log = platform_logger("FolderUtils")
 
 """
-扫描ResourceUsage_PerformanceDynamic_jingdong_0020_round0\hiperf
+扫描ResourceUsage_PerformanceDynamic_jingdong_0020_round0/hiperf
 文件夹下是否每个step文件夹下都有perf.data
 
 """
+
+
 def scan_folders(root_dir):
     root_dir = Path(root_dir) / 'hiperf'
     steps_json = read_json_arrays_from_dir(str(root_dir))

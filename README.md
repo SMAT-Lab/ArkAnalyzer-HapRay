@@ -24,6 +24,42 @@ npm run release
 
 ## Usage Guide
 
+### Command Line Usage
+The tool provides two main commands: `perf` for performance testing and `opt` for optimization detection.
+
+#### Performance Testing (`perf`)
+```bash
+python -m scripts.main perf [options]
+```
+Options:
+- `--run_testcases <regex_patterns...>`: Run test cases matching specified regex patterns
+- `--so_dir <directory>`: Directory containing symbolicated .so files
+- `--circles`: Sample CPU cycles instead of default events
+
+Example:
+```bash
+# Run specific test cases with symbol files
+python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir debug_symbols
+
+# Run specific test cases sample CPU cycles
+python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
+```
+
+#### Optimization Detection (`opt`)
+```bash
+python -m scripts.main opt -i <input> -o <output> [options]
+```
+Options:
+- `-i/--input <path>`: Directory/file containing binaries (.hap/.hsp/.so/.a)
+- `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
+- `-j/--jobs <N>`: Number of parallel jobs (default: 1)
+
+Example:
+```bash
+# Analyze binaries with 4 parallel jobs
+python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
+```
+
 ### Dependencies
 - pip > 23.0.1
 - Python 3.9 ~ 3.12, 
@@ -81,12 +117,7 @@ npm run build
 cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
-python -m scripts.main
-# Examples of optional parameters
-python -m scripts.main --run_testcases .*_xhs_.* .*_jingdong_0010 [--so_dir dir]
-
-# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
-python -m scripts.main -i Directory/File -o output [-jN]
+python -m scripts.main perf/opt [options]
 ```
 
 ### Windows Installation
@@ -101,12 +132,7 @@ cd perf_testing
 # Command-Line(CMD) Alternative the python virtual environment
 .venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
-python -m scripts.main
-# Examples of optional parameters
-python -m scripts.main --run_testcases .*_xhs_.* .*_jingdong_0010 [--so_dir D:\jd\libs\arm64-v8a ]
-
-# Analyze binary files for optimization flags, supports detection of .hap/.hsp/.so/.a files.
-python -m scripts.main -i Directory/File -o output [-jN]
+python -m scripts.main perf/opt [options]
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
