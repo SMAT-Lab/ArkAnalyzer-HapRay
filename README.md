@@ -25,7 +25,7 @@ npm run release
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides two main commands: `perf` for performance testing and `opt` for optimization detection.
+The tool provides three main commands: `perf` for performance testing, `opt` for optimization detection, and `update` for updating existing reports.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -58,6 +58,23 @@ Example:
 ```bash
 # Analyze binaries with 4 parallel jobs
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
+```
+
+#### Update Reports (`update`)
+```bash
+python -m scripts.main update --report_dir <report_directory> [--so_dir <so_directory>]
+```
+Options:
+- `--report_dir <path>`: Directory containing existing reports to update (required)
+- `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
+
+Example:
+```bash
+# Update existing reports with new symbol files
+python -m scripts.main update --report_dir reports/20240605120000 --so_dir updated_symbols
+
+# Update reports without changing symbol files
+python -m scripts.main update --report_dir reports/20240605120000
 ```
 
 ### Dependencies

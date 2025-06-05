@@ -142,12 +142,12 @@ class FrameAnalyzer:
 
                 # 设置db文件输出路径（与htrace文件在同一目录）
                 db_file = os.path.join(step_path, 'trace.db')
-                
-                # 转换htrace为db
-                logging.info(f"Converting htrace to db for {step_dir}...")
-                if not FrameAnalyzer.convert_htrace_to_db(htrace_file, db_file):
-                    logging.error(f"Failed to convert htrace to db for {step_dir}")
-                    continue
+                if not os.path.exists(db_file):
+                    # 转换htrace为db
+                    logging.info(f"Converting htrace to db for {step_dir}...")
+                    if not FrameAnalyzer.convert_htrace_to_db(htrace_file, db_file):
+                        logging.error(f"Failed to convert htrace to db for {step_dir}")
+                        continue
 
                 # 分析卡顿帧数据
                 logging.info(f"Analyzing frame drops for {step_dir}...")
