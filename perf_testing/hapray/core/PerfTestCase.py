@@ -375,7 +375,7 @@ class PerfTestCase(TestCase):
             for pid, name in zip(pids, process_names):
                 Log.info(f"Found process: {name} (PID: {pid})")
             pid_args = ','.join(map(str, pids))
-            cmd = PerfTestCase._get_trace_and_perf_cmd(pid_args, output_file, duration)
+            cmd = PerfTestCase._get_trace_and_perf_cmd(f'-p {pid_args}', output_file, duration)
 
         perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
         perf_trace_thread.start()
