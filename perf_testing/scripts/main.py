@@ -10,12 +10,11 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 from xdevice.__main__ import main_process
-from hapray.core.PerfTestCase import PerfTestCase
 from hapray.core.common.ExcelUtils import create_summary_excel
 from hapray.core.config.config import Config
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FolderUtils import scan_folders, delete_folder
-from hapray.core.report import Report
+from hapray.core.report import ReportGenerator
 from hapray.optimization_detector.optimization_detector import OptimizationDetector
 
 ENV_ERR_STR = """
@@ -63,7 +62,7 @@ def check_env() -> bool:
 
 class HapRayCmd:
     def __init__(self):
-        actions = ["perf", "opt"]
+        actions = ["perf", "opt", "update"]
         actions_desc = " | ".join(actions)
         parser = argparse.ArgumentParser(
             description="Code-oriented Performance Analysis for OpenHarmony Apps",
@@ -101,7 +100,7 @@ class HapRayCmd:
                 if pattern in all_testcases:
                     matched_cases.append(pattern)
         return matched_cases
-    
+
     @staticmethod
     def perf(args):
         if not check_env():
@@ -144,9 +143,10 @@ class HapRayCmd:
 
         if args.so_dir is not None:
             Config.set('so_dir', args.so_dir)
-   
+
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
+            report_generator = ReportGenerator()
             run_testcases = Config.get('run_testcases', [])
             if len(run_testcases) == 0:
                 logging.error('no run_testcases')
@@ -159,12 +159,15 @@ class HapRayCmd:
             else:
                 logging.info('Fond %s test cases to run', len(matched_cases))
 
+            so_dir = Config.get('so_dir', None)
+            if so_dir is not None:
+                so_dir = os.path.abspath(args.so_dir)
+
             for case_name in matched_cases:
-                so_dir = Config.get('so_dir', None)
                 scene_round_dirs = []
                 for _round in range(5):
                     case_dir = all_testcases[case_name]
-                    output = os.path.join(reports_path, f'{case_name}_round{_round}')
+                    output = os.path.abspath(os.path.join(reports_path, f'{case_name}_round{_round}'))
                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
                     for i in range(5):
                         if scan_folders(output):
@@ -175,14 +178,13 @@ class HapRayCmd:
                                 logging.info('perf.data文件不全重试第' + str(i) + '次' + output)
                                 main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
 
-                merge_folder_path = os.path.join(reports_path, case_name)
+                merge_folder_path = os.path.abspath(os.path.join(reports_path, case_name))
                 # 生成 HapRay 报告
                 future = executor.submit(
-                    Report.generate_hapray_report,
-                    list(scene_round_dirs),  # 避免共享变量被修改
+                    report_generator.generate_report,
+                    list(scene_round_dirs),
                     merge_folder_path,
-                    so_dir  # debug包中的so文件存放地址
-                )
+                    so_dir)
                 futures.append(future)
 
             # 等待所有报告生成任务完成
@@ -210,6 +212,75 @@ class HapRayCmd:
 
         detector = OptimizationDetector(args.jobs)
         detector.detect_optimization(args.input, args.output)
+
+    @staticmethod
+    def update(args):
+        parser = argparse.ArgumentParser(
+            description='%(prog)s: Update existing performance report',
+            prog='ArkAnalyzer-HapRay update')
+        parser.add_argument('--report_dir', '-i', required=True, help='Directory containing the reports to update')
+        parser.add_argument('--so_dir', default=None, help='Directory to load symbolicated .so files')
+        args = parser.parse_args(args)
+
+        report_dir = os.path.abspath(args.report_dir)
+        so_dir = None if args.so_dir is None else os.path.abspath(args.so_dir)
+
+        # 验证报告目录是否存在
+        if not os.path.exists(report_dir):
+            logging.error(f"Report directory not found: {report_dir}")
+            return
+
+        # 配置日志
+        logging.info(f"Updating reports in: {report_dir}")
+        logging.info(f"Using SO directory: {so_dir if so_dir else 'None'}")
+
+        # 扫描报告目录中的所有测试用例目录
+        testcase_dirs = []
+        regex = re.compile(r'.*_round\d$')
+        for entry in os.listdir(report_dir):
+            if regex.match(entry):
+                continue
+            full_path = os.path.join(report_dir, entry)
+            if os.path.isdir(full_path):
+                # 检查是否包含报告目录结构
+                if os.path.exists(os.path.join(full_path, 'hiperf')) and \
+                        os.path.exists(os.path.join(full_path, 'htrace')):
+                    testcase_dirs.append(full_path)
+
+        if not testcase_dirs:
+            logging.error("No valid test case reports found in the directory")
+            return
+
+        logging.info(f"Found {len(testcase_dirs)} test case reports to update")
+
+        # 使用线程池并行处理报告更新
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = []
+            report_generator = ReportGenerator()
+            for case_dir in testcase_dirs:
+                # 获取场景名称（目录名）
+                scene_name = os.path.basename(case_dir)
+                logging.info(f"Updating report for {scene_name}")
+
+                future = executor.submit(lambda: report_generator.update_report(case_dir, so_dir))
+                futures.append(future)
+
+            # 等待所有报告更新完成
+            for future in futures:
+                try:
+                    if future.result():
+                        logging.info("Report updated successfully")
+                    else:
+                        logging.error("Failed to update report")
+                except Exception as e:
+                    logging.error(f"Error updating report: {str(e)}")
+
+        # 重新生成汇总Excel
+        logging.info("Creating summary excel...")
+        if create_summary_excel(report_dir):
+            logging.info("Summary excel created successfully")
+        else:
+            logging.error("Failed to create summary excel")
 
 
 if __name__ == "__main__":
