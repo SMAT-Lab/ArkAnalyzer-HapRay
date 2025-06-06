@@ -412,6 +412,7 @@ class PerfTestCase(TestCase):
             "app_name": self.app_name,
             "app_version": app_version,
             "scene": self.TAG,
+            "device": self.devices[0].device_description,
             "timestamp": int(time.time() * 1000)  # 毫秒级时间戳
         }
 
