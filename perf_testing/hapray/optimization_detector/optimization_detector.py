@@ -250,7 +250,7 @@ class OptimizationDetector:
         """Run optimization flag detection on a single file"""
         # Lazy load model
         if self.model is None:
-            flags_model = files('hapray.optimization_detector').joinpath("models/aarch64-flag-lstm.h5")
+            flags_model = files('hapray.optimization_detector').joinpath("models/aarch64-flag-lstm-converted.h5")
             self.model = tf.keras.models.load_model(str(flags_model))
 
         return file_info, self._run_inference(file_info, self.model)

@@ -79,10 +79,10 @@ python -m scripts.main update --report_dir reports/20240605120000
 
 ### Dependencies
 - pip > 23.0.1
-- Python 3.9 ~ 3.11, 
+- Python 3.9 ~ 3.12, 
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
-> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.11 range.
+> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.12 range.
 > You can verify this by running:
 > ```bash
 > python --version
