@@ -58,7 +58,7 @@ def process_to_dataframe(data: List[Dict[str, Any]]) -> pd.DataFrame:
         columns='version',
         values='count',
         aggfunc='sum',  # 如果有重复值，使用求和聚合
-        fill_value=0  # 空值填充为0
+        fill_value=None,
     )
 
     return pivot_table
