@@ -246,6 +246,11 @@ class HapRayCmd:
                 if os.path.exists(os.path.join(full_path, 'hiperf')) and \
                         os.path.exists(os.path.join(full_path, 'htrace')):
                     testcase_dirs.append(full_path)
+        
+        if not testcase_dirs:
+            if os.path.exists(os.path.join(report_dir, 'hiperf')) and \
+                     os.path.exists(os.path.join(report_dir, 'htrace')):
+                testcase_dirs.append(report_dir)
 
         if not testcase_dirs:
             logging.error("No valid test case reports found in the directory")
