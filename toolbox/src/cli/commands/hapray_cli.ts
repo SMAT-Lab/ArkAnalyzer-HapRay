@@ -21,7 +21,7 @@ import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { getComponentCategories } from '../../core/component';
 import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
-import { getConfig, initConfig } from '../../config';
+import { getConfig, initConfig, updateKindConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfAndHtraceFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
@@ -36,11 +36,15 @@ const DbtoolsCli = new Command('dbtools')
     .option('--choose', 'choose one from rounds', false)
     .option('--disable-dbtools', 'disable dbtools', false)
     .option('-s, --soDir <string>', '--So_dir soDir', '')
+    .option('-k, --kind-config <string>', 'custom kind configuration in JSON format')
     .action(async (...args: any[]) => {
         let cliArgs: Partial<GlobalConfig> = { ...args[0] };
         initConfig(cliArgs, (config) => {
             config.choose = args[0].choose;
             config.inDbtools = !args[0].disableDbtools;
+            if (args[0].kindConfig) {
+                updateKindConfig(config, args[0].kindConfig);
+            }
         });
 
         await main(args[0].input);

@@ -42,7 +42,6 @@ def configure_logging(log_file='HapRay.log'):
 
     # 控制台处理器
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
@@ -62,6 +61,9 @@ def check_env() -> bool:
 
 class HapRayCmd:
     def __init__(self):
+        self._load_config()
+        configure_logging('HapRay.log')
+        
         actions = ["perf", "opt", "update"]
         actions_desc = " | ".join(actions)
         parser = argparse.ArgumentParser(
@@ -84,6 +86,11 @@ class HapRayCmd:
         args = parser.parse_args(action_args)
         # dispatch function with same name of the action
         getattr(self, args.action)(sub_args)
+
+    def _load_config(self):
+        root_path = os.getcwd()
+        config_path = os.path.join(root_path, 'config.yaml')
+        Config(config_path)
 
     @staticmethod
     def get_matched_cases(run_testcases: List[str], all_testcases: dict) -> List[str]:
@@ -120,10 +127,6 @@ class HapRayCmd:
         parser.add_argument('--run_testcases', nargs='+', default=None, help='Specify test cases to run')
         parser.add_argument('--circles', action="store_true", help="Enable sample cpu circles")
         args = parser.parse_args(args)
-
-        root_path = os.getcwd()
-        config_path = os.path.join(root_path, 'config.yaml')
-        Config(config_path)
 
         reports_path = os.path.join(root_path, 'reports', time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
         if not os.path.exists(reports_path):
@@ -289,5 +292,4 @@ class HapRayCmd:
 
 
 if __name__ == "__main__":
-    configure_logging('HapRay.log')
     HapRayCmd()
