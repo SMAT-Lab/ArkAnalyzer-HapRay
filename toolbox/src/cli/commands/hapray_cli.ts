@@ -60,17 +60,26 @@ export interface ResultInfo {
     device_sn: string;
 }
 
+export interface SummaryInfo {
+    rom_version: string,
+    app_version: string,
+    scene: string,
+    step_name: string,
+    step_id: number,
+    count: number,
+}
+
 // 定义整个 steps 数组的结构
 export type Steps = Step[];
 
 // 主函数逻辑
 async function main(input: string): Promise<void> {
     const config = getConfig();
-    
+
     if (config.choose) {
         logger.info(`输入目录: ${input}`);
         const roundFolders = getSceneRoundsFolders(input);
-        
+
         if (roundFolders.length === 0) {
             logger.error(`${input} 没有可用的测试轮次数据，无法生成报告！`);
             return;
@@ -84,25 +93,34 @@ async function main(input: string): Promise<void> {
 
         const stepsJsonPath = path.join(roundFolders[0], 'hiperf', 'steps.json');
         const steps: Steps = await loadJsonFile(stepsJsonPath);
-        await processRoundSelection(roundFolders, steps, input);
+        const counts = await processRoundSelection(roundFolders, steps, input);
+
+        const resultXmlPath = path.join(roundFolders[0], 'result', path.basename(input) + '.xml');
+        const resultInfo = fs.existsSync(resultXmlPath)
+            ? parseResultXml(resultXmlPath)
+            : { rom_version: '', device_sn: '' };
+
+        const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
+        const testInfo: TestInfo = await loadJsonFile(testInfoPath);
+        await generateSummaryInfoJson(input, testInfo, resultInfo, steps, counts);
+
     } else {
-        logger.info(`输入目录: ${input}`);        
+        logger.info(`输入目录: ${input}`);
         const resultXmlPath = path.join(input, 'result', path.basename(input) + '.xml');
-        const resultInfo = fs.existsSync(resultXmlPath) 
-            ? parseResultXml(resultXmlPath) 
+        const resultInfo = fs.existsSync(resultXmlPath)
+            ? parseResultXml(resultXmlPath)
             : { rom_version: '', device_sn: '' };
 
         const testInfoPath = path.join(input, 'testInfo.json');
         const testInfo: TestInfo = await loadJsonFile(testInfoPath);
-        
+
         const stepsJsonPath = path.join(input, 'hiperf', 'steps.json');
         const steps: Steps = await loadJsonFile(stepsJsonPath);
-        
+
         if (!(await checkPerfAndHtraceFiles(input, steps.length))) {
             logger.error('hiperf 或 htrace 数据不全，需要先执行数据收集步骤！');
             return;
         }
-
         await generatePerfJson(input, testInfo, resultInfo, steps);
     }
 }
@@ -114,7 +132,8 @@ async function loadJsonFile<T>(filePath: string): Promise<T> {
 }
 
 // 处理轮次选择逻辑
-async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<void> {
+async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<number[]> {
+    let counts: number[] = [];
     const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
     await copyFile(testInfoPath, path.join(inputPath, 'testInfo.json'));
 
@@ -124,8 +143,10 @@ async function processRoundSelection(roundFolders: string[], steps: Steps, input
     for (let i = 0; i < steps.length; i++) {
         const roundResults = await calculateRoundResults(roundFolders, steps[i]);
         const selectedRound = selectOptimalRound(roundResults);
+        counts.push(roundResults[selectedRound]);
         await copySelectedRoundData(roundFolders[selectedRound], inputPath, steps[i]);
     }
+    return counts;
 }
 
 // 计算每轮的结果
@@ -136,7 +157,7 @@ async function calculateRoundResults(roundFolders: string[], step: Step): Promis
     for (let index = 0; index < roundFolders.length; index++) {
         const perfDataPath = path.join(roundFolders[index], 'hiperf', `step${step.stepIdx}`, 'perf.data');
         const dbPath = path.join(roundFolders[index], 'hiperf', `step${step.stepIdx}`, 'perf.db');
-        
+
         if (!fs.existsSync(dbPath)) {
             traceStreamerCmd(perfDataPath, dbPath);
         }
@@ -162,7 +183,7 @@ function selectOptimalRound(results: number[]): number {
 
     results.forEach((value, index) => {
         if (value === max || value === min) return;
-        
+
         const diff = Math.abs(value - avg);
         if (diff < minDiff) {
             minDiff = diff;
@@ -179,11 +200,11 @@ async function copySelectedRoundData(sourceRound: string, destPath: string, step
     const srcPerfDir = path.join(sourceRound, 'hiperf', `step${stepIdx}`);
     const srcHtraceDir = path.join(sourceRound, 'htrace', `step${stepIdx}`);
     const srcResultDir = path.join(sourceRound, 'result');
-    
+
     const destPerfDir = path.join(destPath, 'hiperf', `step${stepIdx}`);
     const destHtraceDir = path.join(destPath, 'htrace', `step${stepIdx}`);
     const destResultDir = path.join(destPath, 'result');
-    
+
     await Promise.all([
         copyDirectory(srcPerfDir, destPerfDir),
         copyDirectory(srcHtraceDir, destHtraceDir),
@@ -194,7 +215,7 @@ async function copySelectedRoundData(sourceRound: string, destPath: string, step
 // 解析结果 XML 文件
 function parseResultXml(xmlPath: string): ResultInfo {
     const result: ResultInfo = { rom_version: '', device_sn: '' };
-    
+
     try {
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(fs.readFileSync(xmlPath, 'utf-8'), 'text/xml');
@@ -218,6 +239,24 @@ function parseResultXml(xmlPath: string): ResultInfo {
     return result;
 }
 
+// 生成summaryinfo
+async function generateSummaryInfoJson(input: string, testInfo: TestInfo, resultInfo: ResultInfo, steps: Steps, counts: number[]): Promise<void> {
+    const outputDir = path.join(input, 'report');
+    let summaryJsonObject: SummaryInfo[] = []
+    steps.forEach(step => {
+        const summaryObject: SummaryInfo = {
+            rom_version: resultInfo.rom_version,
+            app_version: testInfo.app_version,
+            scene: testInfo.scene,
+            step_name: step.description,
+            step_id: step.stepIdx,
+            count: counts[step.stepIdx-1]
+        }
+        summaryJsonObject.push(summaryObject);
+    })
+    await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
+}
+
 // 生成perfjson
 async function generatePerfJson(inputPath: string, testInfo: TestInfo, resultInfo: ResultInfo, steps: Steps): Promise<void> {
     const outputDir = path.join(inputPath, 'report');
@@ -229,16 +268,16 @@ async function generatePerfJson(inputPath: string, testInfo: TestInfo, resultInf
     for (let i = 0; i < steps.length; i++) {
         const perfAnalyzer = new PerfAnalyzer('');
         const stepData = await perfAnalyzer.analyze2(perfDbPaths[i], testInfo.app_id, steps[i]);
-        
+
         const testSceneInfo: TestSceneInfo = {
             packageName: testInfo.app_id,
             scene: testInfo.scene,
             osVersion: resultInfo.rom_version,
             timestamp: testInfo.timestamp
         };
-        
+
         await perfAnalyzer.analyze(perfDbPaths[i], testSceneInfo, outputDir, steps[i].stepIdx);
-        
+
         stepData.round = 0;
         stepData.perf_data_path = perfDbPaths[i];
         stepsCollect.push(stepData);
