@@ -21,7 +21,6 @@ import { PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
 import { PerfDataTransformer, StepJsonData } from './perf_data_transformer';
 
-
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 /**
@@ -191,20 +190,16 @@ class PerfStepSample {
         };
 
         this.samples = samples;
-        for (const threadEvent of samples) {
-            let event = PerfEvent.CYCLES_EVENT;
-            if (CYCLES_EVENT.has(threadEvent.event_name)) {
-                event = PerfEvent.CYCLES_EVENT;
-            } else if (INSTRUCTION_EVENT.has(threadEvent.event_name)) {
-                event = PerfEvent.INSTRUCTION_EVENT;
-            } else {
+        for (const sample of samples) {
+            let event = this.getEventType(sample.event_name);
+            if (!event) {
                 continue;
             }
 
-            this.threadsEventMap.set(`${threadEvent.thread_id}-${event}`, threadEvent.event_count);
-            let thread = this.commonData.threadsMap.get(threadEvent.thread_id)!;
+            this.threadsEventMap.set(`${sample.thread_id}-${event}`, sample.event_count);
+            let thread = this.commonData.threadsMap.get(sample.thread_id)!;
             let count = this.processEventMap.get(`${thread.process_id}-${event}`) || 0;
-            count += threadEvent.event_count;
+            count += sample.event_count;
             this.processEventMap.set(`${thread.process_id}-${event}`, count);
         }
     }
@@ -218,12 +213,8 @@ class PerfStepSample {
         let fileEventMaps: Map<string, number> = new Map();
 
         for (const sample of this.samples) {
-            let event = PerfEvent.CYCLES_EVENT;
-            if (CYCLES_EVENT.has(sample.event_name)) {
-                event = PerfEvent.CYCLES_EVENT;
-            } else if (INSTRUCTION_EVENT.has(sample.event_name)) {
-                event = PerfEvent.INSTRUCTION_EVENT;
-            } else {
+            let event = this.getEventType(sample.event_name);
+            if (!event) {
                 continue;
             }
 
@@ -338,6 +329,16 @@ class PerfStepSample {
 
         this.statistics.components = Array.from(pkgPerfMap.values());
     }
+
+    private getEventType(eventName: string): PerfEvent | null {
+        if (CYCLES_EVENT.has(eventName)) {
+            return PerfEvent.CYCLES_EVENT;
+        }
+        if (INSTRUCTION_EVENT.has(eventName)) {
+            return PerfEvent.INSTRUCTION_EVENT;
+        }
+        return null;
+    }
 }
 
 // 不同场景共享的数据
@@ -449,19 +450,19 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             count: 0,
             round: -1,
             perf_data_path: '',
-            data: []
+            data: [],
         };
 
         // 读取数据并统计
         await this.loadDbAndStatistics(dbPath, app_id);
         let perfDataTransformer = new PerfDataTransformer(
             this.stepsSample[0].details,
-            step.description,//stepName
-            step.stepIdx,//stepid
+            step.description, //stepName
+            step.stepIdx, //stepid
             -1,
             ''
-        )
-        stepInfo = perfDataTransformer.transform()
+        );
+        stepInfo = perfDataTransformer.transform();
         return stepInfo;
     }
 
@@ -483,8 +484,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * 另存为dbtools 导入Excel
-     * @param perf 
-     * @param outputFileName 
+     * @param perf
+     * @param outputFileName
      */
     public async saveDbtoolsXlsx(perf: PerfSum, outputFileName: string): Promise<void> {
         let symbolPerfData: { type?: any; value: any }[][] = [];
@@ -776,8 +777,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * read all thread from perf_thread table, save into threadsMap
-     * @param db 
-     * @returns 
+     * @param db
+     * @returns
      */
     private queryThreads(db: Database): void {
         const results = db.exec('SELECT thread_id, process_id, thread_name FROM perf_thread');
@@ -797,8 +798,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * read all files from perf_files table, then use FileClassifier to classify the files.
-     * @param db 
-     * @returns 
+     * @param db
+     * @returns
      */
     private async queryFiles(db: Database): Promise<void> {
         const results = db.exec('SELECT file_id, path FROM perf_files GROUP BY path ORDER BY file_id');
@@ -825,8 +826,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * read all symbol from data_dict table
-     * @param db 
-     * @returns 
+     * @param db
+     * @returns
      */
     private async querySymbols(db: Database): Promise<void> {
         const results = db.exec('SELECT id, data FROM data_dict');
@@ -840,9 +841,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * read all callchain from perf_callchain, then use file and symbol info to classify
-     * @param db 
-     * @param processName 
-     * @returns 
+     * @param db
+     * @param processName
+     * @returns
      */
     private async queryCallchain(db: Database, processName: string): Promise<void> {
         const results = db.exec(PERF_PROCESS_CALLCHAIN_SQL, [processName]);
@@ -963,8 +964,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * query app process samples by appBundleName
-     * @param db 
-     * @param appBundleName 
+     * @param db
+     * @param appBundleName
      */
     private async queryProcessSample(db: Database, appBundleName: string): Promise<void> {
         for (const testStep of this.testSteps) {
@@ -1072,14 +1073,17 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
          * ets symbol
          * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
          */
-        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|(\d+(?:\.\d+){2})\|([^\|\]]*)\]/;
+        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|(\d+(?:\.\d+){2})\|([^\|\]]*):(\d+):(\d+)\]$/;
         let matches = symbol.match(regex);
         if (matches) {
+            const [_, functionName, _entry, packageName, version, filePath, _line, _column] = matches;
+            this.commonData.symbolsMap.set(symbolId, functionName);
+
             let symbolClassification: FileClassification = {
-                file: fileClassification.file,
+                file: `${packageName}/${version}/${filePath}`,
                 originKind: fileClassification.originKind,
                 category: fileClassification.category,
-                subCategory: matches[3],
+                subCategory: packageName,
             };
 
             if (this.hapComponents.has(matches[3])) {
