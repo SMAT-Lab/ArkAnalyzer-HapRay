@@ -6,26 +6,34 @@
         <el-radio-button value="string">字符串模式</el-radio-button>
         <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
-      <el-input v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable @input="handleFilterChange"
-        class="search-input">
+      <el-input v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable
+        @input="handleFilterChange" class="search-input">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-input v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable @input="handleFilterChange"
-        class="search-input">
+      <el-input v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable
+        @input="handleFilterChange" class="search-input">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-select v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable
-        @change="handleFilterChange" class="category-select">
+      <el-select v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类"
+        clearable @change="handleFilterChange" class="category-select">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
+      <el-input v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
+        @input="handleFilterChange" class="search-input">
+        <template #prefix>
+          <el-icon>
+            <search />
+          </el-icon>
+        </template>
+      </el-input>
     </div>
 
     <!-- 过滤后占比 -->
@@ -56,19 +64,24 @@
     <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
       :default-sort="{ prop: 'instructions', order: 'descending' }" @sort-change="handleSortChange" stripe
       highlight-current-row>
-      <el-table-column prop="category" label="线程">
+      <el-table-column v-if="!hasCategory" prop="category" label="线程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.thread }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="所属进程">
+      <el-table-column v-if="!hasCategory" prop="category" label="所属进程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.process }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="分类">
+      <el-table-column v-if="hasCategory" prop="category" label="大分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.category }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="hasCategory" prop="category" label="小分类">
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.componentName }}</div>
         </template>
       </el-table-column>
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
@@ -121,19 +134,20 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore } from '../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../stores/jsonDataStore.ts';
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
 export interface ThreadDataItem {
   stepId: number
+  process: string
   category: string
+  componentName: string
+  thread: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
   increasePercentage: number
-  thread: string
-  process: string
 }
 
 const props = defineProps({
@@ -144,10 +158,16 @@ const props = defineProps({
   hideColumn: {
     type: Boolean,
     required: true,
+  },
+  hasCategory: {
+    type: Boolean,
+    required: true,
   }
 });
 
 const isHidden = !props.hideColumn;
+
+const hasCategory = props.hasCategory;
 
 const formatScientific = (num: number) => {
   if (typeof num !== 'number') {
@@ -165,6 +185,7 @@ const filterModel = useFilterModeStore();// 'string' 或 'regex'
 const processNameQuery = useProcessNameQueryStore();
 const threadNameQuery = useThreadNameQueryStore();
 const category = useCategoryStore();
+const componentNameQuery = useComponentNameStore();
 
 
 // 分页状态
@@ -195,16 +216,23 @@ const filteredData = computed<ThreadDataItem[]>(() => {
     beforeFilterCompareInstructions = beforeFilterCompareInstructions + dataItem.compareInstructions;
   });
 
-
   // 应用进程过滤
-  result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+  if (!hasCategory) {
+    result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+  }
 
   // 应用线程过滤
-  result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
+  if (!hasCategory) {
+    result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
+  }
 
+  // 应用小分类过滤
+  if (hasCategory) {
+    result = filterQueryCondition('componentName', componentNameQuery.componentNameQuery, result);
+  }
 
   // 应用分类过滤
-  if (category.categoriesQuery) {
+  if (category.categoriesQuery && hasCategory) {
     if (category.categoriesQuery.length > 0) {
       result = result.filter((item: ThreadDataItem) =>
         category.categoriesQuery.includes(item.category))
@@ -278,6 +306,8 @@ function getDataItemProperty(queryName: string, dataItem: ThreadDataItem): strin
     return dataItem.process;
   } else if (queryName === 'thread') {
     return dataItem.thread;
+  } else if (queryName === 'componentName') {
+    return dataItem.componentName;
   } else {
     return ''
   }
@@ -324,7 +354,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'thread', 'process'];
+  const validKeys: SortKey[] = ['category', 'componentName', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'thread', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {

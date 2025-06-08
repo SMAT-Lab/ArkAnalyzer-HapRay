@@ -23,12 +23,12 @@
         Flutter => 三方框架Flutter |
         WEB => 三方框架ArkWeb</p>
     </div>
-    <el-descriptions :title="mergedFilePerformanceData.name" :column="1" class="beautified-descriptions">
-      <el-descriptions-item label="系统版本：">{{ mergedFilePerformanceData.rom_version }}</el-descriptions-item>
-      <el-descriptions-item label="应用版本：">{{ mergedFilePerformanceData.version }}</el-descriptions-item>
+    <el-descriptions :title="performanceData.app_name" :column="1" class="beautified-descriptions">
+      <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
+      <el-descriptions-item label="应用版本：">{{ performanceData.app_version }}</el-descriptions-item>
       <el-descriptions-item>
         <div class="description-item-content">
-          场景名称：{{ mergedFilePerformanceData.scene }}
+          场景名称：{{ performanceData.scene }}
           <UploadHtml />
         </div>
       </el-descriptions-item>
@@ -99,13 +99,7 @@
     <!-- 性能对比区域 -->
 
     <el-row :gutter="20">
-      <el-col :span="8">
-        <!-- 步骤饼图 -->
-        <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
-        </div>
-      </el-col>
-      <el-col :span="16">
+      <el-col :span="12">
         <!-- 基准版本 -->
 
         <!-- 进程负载 -->
@@ -113,7 +107,13 @@
           <h3 class="panel-title">
             <span class="version-tag">进程负载</span>
           </h3>
-          <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessPerformanceData" :hideColumn="isHidden" />
+          <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
+        </div>
+      </el-col>
+      <el-col :span="12">
+        <!-- 步骤饼图 -->
+        <div class="data-panel">
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
         </div>
       </el-col>
     </el-row>
@@ -124,7 +124,27 @@
           <h3 class="panel-title">
             <span class="version-tag">线程负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadPerformanceData" :hideColumn="isHidden" />
+          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
+        </div>
+      </el-col>
+      <el-col :span="12">
+        <!-- 线程负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">小分类负载</span>
+          </h3>
+          <PerfThreadTable :stepId="currentStepIndex" :data="filteredComponentNamePerformanceData" :hideColumn="isHidden" :hasCategory="true" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="12">
+        <!-- 文件负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">文件负载</span>
+          </h3>
+          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData" :hideColumn="isHidden" :hasCategory="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -133,18 +153,27 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData" :hideColumn="isHidden" />
+          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData1" :hideColumn="isHidden" :hasCategory="true" />
         </div>
       </el-col>
     </el-row>
     <el-row :gutter="20">
-      <el-col :span="24">
+      <el-col :span="12">
         <!-- 函数负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden" />
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
+        </div>
+      </el-col>
+      <el-col :span="12">
+        <!-- 函数负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">函数负载</span>
+          </h3>
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData1" :hideColumn="isHidden" :hasCategory="true" />
         </div>
       </el-col>
     </el-row>
@@ -178,9 +207,10 @@ import PerfSymbolTable from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
-import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
+import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -215,117 +245,42 @@ const getTotalTestStepsCount = (testSteps: any[]) => {
   return total;
 };
 
-const mergedProcessPerformanceData = ref({
-  rom_version: json!.rom_version,
-  id: json!.app_id,
-  name: json!.app_name,
-  version: json!.app_version,
-  scene: json!.scene,
-  instructions: json!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.processes.flatMap((process) =>
-      ({
-        stepId: step.step_id,
-        instructions: process.count,
-        compareInstructions: 0,
-        increaseInstructions: 0,
-        increasePercentage: 0,
-        process: process.process,
-        category: json!.categories[item.category],
-      })
-      )
-    )
-  ),
-});
+const performanceData = ref(
+  {
+    app_name: json!.app_name,
+    rom_version: json!.rom_version,
+    app_version: json!.app_version,
+    scene: json!.scene,
+  }
+);
 
-const mergedThreadPerformanceData = ref({
-  rom_version: json!.rom_version,
-  id: json!.app_id,
-  name: json!.app_name,
-  version: json!.app_version,
-  scene: json!.scene,
-  instructions: json!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.processes.flatMap((process) =>
-        process.threads.flatMap((thread) =>
-        ({
-          stepId: step.step_id,
-          instructions: thread.count,
-          compareInstructions: 0,
-          increaseInstructions: 0,
-          increasePercentage: 0,
-          thread: thread.thread,
-          process: process.process,
-          category: json!.categories[item.category],
-        })
-        )
-      )
-    )
-  ),
-});
+const mergedProcessPerformanceData = ref(
+  calculateProcessData(json!, null)
+);
 
-const mergedFilePerformanceData = ref({
-  rom_version: json!.rom_version,
-  id: json!.app_id,
-  name: json!.app_name,
-  version: json!.app_version,
-  scene: json!.scene,
-  instructions: json!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.processes.flatMap((process) =>
-        process.threads.flatMap((thread) =>
-          thread.files.flatMap((file) =>
-          ({
-            stepId: step.step_id,
-            instructions: file.count,
-            compareInstructions: 0,
-            increaseInstructions: 0,
-            increasePercentage: 0,
-            file: file.file,
-            thread: thread.thread,
-            process: process.process,
-            category: json!.categories[item.category],
-          })
+const mergedThreadPerformanceData = ref(
+  calculateThreadData(json!, null)
+);
 
-          )
-        )
-      )
+const mergedComponentNamePerformanceData = ref(
+  calculateComponentNameData(json!, null)
+);
 
-    )
-  ),
-});
+const mergedFilePerformanceData = ref(
+  calculateFileData(json!, null)
+);
 
-const mergedSymbolsPerformanceData = ref({
-  id: json!.app_id,
-  name: json!.app_name,
-  version: json!.app_version,
-  scene: json!.scene,
-  instructions: json!.steps.flatMap((step) =>
-    step.data.flatMap((item) =>
-      item.processes.flatMap((process) =>
-        process.threads.flatMap((thread) =>
-          thread.files.flatMap((file) =>
-            file.symbols.map((symbol) => ({
-              stepId: step.step_id,
-              instructions: symbol.count,
-              compareInstructions: 0,
-              increaseInstructions: 0,
-              increasePercentage: 0,
-              symbol: symbol.symbol,
-              file: file.file,
-              thread: thread.thread,
-              process: process.process,
-              category: json!.categories[item.category],
-            })
-            )
-          )
-        )
-      )
-    )
-  ),
-});
+const mergedFilePerformanceData1 = ref(
+  calculateFileData1(json!, null)
+);
 
+const mergedSymbolsPerformanceData = ref(
+  calculateSymbolData(json!, null)
+);
 
+const mergedSymbolsPerformanceData1 = ref(
+  calculateSymbolData1(json!, null)
+);
 
 const currentStepIndex = ref(0);
 
@@ -350,96 +305,78 @@ const stepPieData = ref({
   ]
 });
 
-totalPieData.value = processJSONData(json);
-stepPieData.value = processJSONData(json);
+totalPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
+stepPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
-  stepPieData.value = processJSONData(json);
+  stepPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
 const filteredProcessPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedProcessPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedProcessPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
   }
-  return mergedProcessPerformanceData.value.instructions
+  return mergedProcessPerformanceData.value
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
 
 const filteredThreadPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedThreadPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedThreadPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
   }
-  return mergedThreadPerformanceData.value.instructions
+  return mergedThreadPerformanceData.value
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
 
+const filteredComponentNamePerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return mergedComponentNamePerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+  }
+  return mergedComponentNamePerformanceData.value
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+
+
 const filteredFilePerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedFilePerformanceData.value.sort((a, b) => b.instructions - a.instructions);
   }
-  return mergedFilePerformanceData.value.instructions
+  return mergedFilePerformanceData.value
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
+
+const filteredFilePerformanceData1 = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return mergedFilePerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+  }
+  return mergedFilePerformanceData1.value
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
 
 const filteredSymbolPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData.value.instructions.sort((a, b) => b.instructions - a.instructions);
+    return mergedSymbolsPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
   }
-  return mergedSymbolsPerformanceData.value.instructions
+  return mergedSymbolsPerformanceData.value
     .filter((item) => item.stepId === currentStepIndex.value)
     .sort((a, b) => b.instructions - a.instructions);
 });
 
-// 处理 JSON 数据生成steps饼状图所需数据
-function processJSONData(data: JSONData | null) {
-  if (data === null) {
-    return { legendData: [], seriesData: [] };
+const filteredSymbolPerformanceData1 = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return mergedSymbolsPerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
   }
-  const { categories, steps } = data;
-  const categoryCountMap = new Map<string, number>();
-
-  // 初始化每个分类的计数为 0
-  categories.forEach((category) => {
-    categoryCountMap.set(category, 0);
-  });
-
-  // 遍历所有步骤中的数据，累加每个分类的计数
-  steps.forEach((step) => {
-    if (currentStepIndex.value === 0) {
-      step.data.forEach((item) => {
-        const categoryName = categories[item.category];
-        const currentCount = categoryCountMap.get(categoryName) || 0;
-        categoryCountMap.set(categoryName, currentCount + item.count);
-      });
-    } else {
-      if (step.step_id === currentStepIndex.value) {
-        step.data.forEach((item) => {
-          const categoryName = categories[item.category];
-          const currentCount = categoryCountMap.get(categoryName) || 0;
-          categoryCountMap.set(categoryName, currentCount + item.count);
-        });
-      }
-    }
-  });
-
-  const legendData: string[] = [];
-  const seriesData: { name: string; value: number }[] = [];
-
-  // 将分类名称和对应的计数转换为饼状图所需的数据格式
-  categoryCountMap.forEach((count, category) => {
-    legendData.push(category);
-    if (count != 0) {
-      seriesData.push({ name: category, value: count });
-    }
-  });
-
-  return { legendData: legendData, seriesData: seriesData };
-}
+  return mergedSymbolsPerformanceData1.value
+    .filter((item) => item.stepId === currentStepIndex.value)
+    .sort((a, b) => b.instructions - a.instructions);
+});
 
 const handleDownloadAndRedirect = (file: string, stepId: number, name: string) => {
   const link = document.createElement('a');
@@ -744,10 +681,11 @@ const handleDownloadAndRedirect = (file: string, stepId: number, name: string) =
     font-size: 0.9rem;
   }
 }
+
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 </style>
