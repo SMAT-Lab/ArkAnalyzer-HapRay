@@ -13,8 +13,10 @@
  * limitations under the License.
  */
 
+import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
 import { loadConfig } from './loader';
 import { GlobalConfig } from './types';
+const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 let _config: GlobalConfig | null = null;
 
@@ -30,4 +32,13 @@ export function getConfig(): GlobalConfig {
     }
 
     return _config;
+}
+
+export function updateKindConfig(config: GlobalConfig, kindsJson: string): void {
+    try {
+        const kinds = JSON.parse(kindsJson);
+        config.perf.kinds.push(...kinds);
+    } catch (error: any) {
+        logger.error(`Invalid kind configuration: ${error.message} ${kindsJson}`);
+    }
 }

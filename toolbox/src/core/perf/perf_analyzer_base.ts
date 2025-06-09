@@ -124,7 +124,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 if (sub.threads) {
                     for (const thread of sub.threads) {
                         this.threadClassifyCfg.set(new RegExp(thread), {
-                            name: componentConfig.name,
+                            name: sub.name || componentConfig.name,
                             category: componentConfig.kind,
                         });
                     }
@@ -134,12 +134,12 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     if (this.hasRegexChart(file)) {
                         if (file.indexOf('*') >= 0) {
                             this.cfgRegexComponent.set(new RegExp(file), {
-                                name: componentConfig.name,
+                                name: sub.name || componentConfig.name,
                                 category: componentConfig.kind,
                             });
                         } else {
                             this.cfgFileComponent.set(file, {
-                                name: componentConfig.name,
+                                name: sub.name || componentConfig.name,
                                 category: componentConfig.kind,
                             });
                         }
