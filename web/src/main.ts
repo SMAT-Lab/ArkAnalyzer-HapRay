@@ -23,9 +23,9 @@ const jsonDataStore = useJsonDataStore();
 declare global {
     interface Window {
         initialPage: string;
-        jsonData: JSONData;
+        jsonData: JSONData[];
         htraceJsonData: HtraceJSONData[];
-        compareJsonData: JSONData;
+        compareJsonData: JSONData[];
     }
 }
 

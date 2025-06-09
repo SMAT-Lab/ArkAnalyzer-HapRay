@@ -36,7 +36,7 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="totalPieData" />
+          <PieChart :chart-data="scenePieData" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -289,23 +289,11 @@ const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
 };
 
-const totalPieData = ref({
-  legendData: ['类别A', '类别B'],
-  seriesData: [
-    { name: '类别A', value: 335 },
-    { name: '类别B', value: 310 }
-  ]
-});
+const scenePieData = ref();
 
-const stepPieData = ref({
-  legendData: ['类别A', '类别B'],
-  seriesData: [
-    { name: '类别A', value: 335 },
-    { name: '类别B', value: 310 }
-  ]
-});
+const stepPieData = ref();
 
-totalPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
+scenePieData.value = processJson2PieChartData(json!,currentStepIndex.value);
 stepPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
