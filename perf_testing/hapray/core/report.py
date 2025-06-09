@@ -235,28 +235,7 @@ class ReportGenerator:
         logging.debug(f"Injected {json_path} into {output_path}")
 
     @staticmethod
-    def compress_json_to_base64(data, level=9):
-        """
-        将JSON数组压缩并转换为Base64编码
-
-        参数:
-        data (list/dict): 要压缩的JSON数据
-        level (int): 压缩级别，1-9，默认为9(最高压缩率)
-
-        返回:
-        str: 压缩后的Base64字符串
-        """
-        # 将JSON对象转换为UTF-8字节串
-        json_bytes = json.dumps(data).encode('utf-8')
-
-        compressed_bytes = zlib.compress(json_bytes, level=level)
-
-        # 转换为Base64编码
-        base64_bytes = base64.b64encode(compressed_bytes)
-
-        # 转换为字符串
-        return base64_bytes.decode('ascii')
-    def convert_kind_to_json(self) -> str:
+    def convert_kind_to_json() -> str:
         kind = Config.get('kind', None)
         if kind is None:
             return ''

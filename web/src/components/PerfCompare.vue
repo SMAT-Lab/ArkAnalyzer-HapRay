@@ -51,7 +51,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 16px; font-weight: bold;">{{ item.category }}</span>
                   <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
-                    {{ item.total_percentage }}
+                    负载占比：{{ item.total_percentage }}
                   </span>
                 </div>
               </template>
@@ -174,7 +174,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <span style="font-size: 16px; font-weight: bold;">{{ item.category }}</span>
                   <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
-                    {{ item.total_percentage }}
+                    负载占比：{{ item.total_percentage }}
                   </span>
                 </div>
               </template>
