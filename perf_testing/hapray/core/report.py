@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FrameAnalyzer import FrameAnalyzer
-
+from hapray.core.config.config import Config
 
 class ReportGenerator:
     """Generates and updates performance analysis reports"""
@@ -99,6 +99,10 @@ class ReportGenerator:
 
         if so_dir:
             cmd.extend(['-s', so_dir])
+
+        kind = self.convert_kind_to_json()
+        if len(kind) > 0:
+            cmd.extend(['-k', kind])
 
         logging.debug(f"Running perf analysis with command: {' '.join(cmd)}")
         return self._execute_hapray_command(cmd, "Performance analysis")
@@ -222,3 +226,28 @@ class ReportGenerator:
             f.write(updated_html)
 
         logging.debug(f"Injected {json_path} into {output_path}")
+
+    @staticmethod
+    def convert_kind_to_json() -> str:
+        kind = Config.get('kind', None)
+        if kind is None:
+            return ''
+    
+        kind_entry = {
+            "name": 'APP_SO',
+            "kind": 1,
+            "components": []
+        }
+
+        for category in Config.get('kind', None):
+            component = {
+                "name": category['name'],
+                "files": category['files']
+            }
+            
+            if 'thread' in category:
+                component["threads"] = category['thread']
+                
+            kind_entry["components"].append(component)
+
+        return json.dumps([kind_entry])

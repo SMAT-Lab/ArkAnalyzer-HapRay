@@ -165,7 +165,37 @@ run_testcases:
 so_dir: xxx
 ```
 
-### 3.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:
+### 3. Custom Performance Load Source Identification (kind configuration)
+
+```yaml
+kind:
+  - 
+    name: '' # Category name Category name (e.g., Lynx)
+    files:
+      - xx # File classification regular expressions
+    threads:
+      - xx # Thread classification regular expressions
+```
+Explanation:
+
+The `kind` configuration allows you to define custom categories for performance load sources. Each entry in the `kind` list should have:
+- `name`: A descriptive name for the category (e.g., KMP, Lynx)
+- `files`: A list of regular expressions to match file paths associated with this category
+- `threads`: Additionally, you can optionally specify `threads` to match thread names.
+
+Example:
+```yaml
+kind:
+  - 
+    name: RN
+    files: 
+      - /proc/.*librncore\.so$
+    threads:
+      - "RN.*Worker"
+      - "ReactNative.*"
+```
+
+### 4.If both config.yaml is configured and parameters are passed in the command line, with the parameters passed in the command line being the main one, the two parameters can be merged:
 ```
   Use case 1 is passed through the command line, and use case 2 is configured in the configuration file. Eventually, both use cases will be executed.
 ```
