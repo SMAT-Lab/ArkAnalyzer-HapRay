@@ -95,22 +95,23 @@ function compareJsonDataByLevel<T>(
         const keyParts = key.split('|');
 
         // 获取基准值
-        const instructions = baseMap.get(key) ?? 0;
+        const instructions = baseMap.get(key) ?? -1;
 
         // 获取对比值
         const compareInstructions = compareMap.get(key) ?? -1;
 
         // 计算增量
-        let increaseInstructions = -1;
-        if (compareInstructions !== -1) {
-            increaseInstructions = compareInstructions - instructions;
-        }
-
+        let increaseInstructions = (compareInstructions===-1?0:compareInstructions) - (instructions===-1?0:instructions);
+        
         // 计算增量百分比
-        let increasePercentage = -1;
-        if (increaseInstructions !== -1 && instructions > 0) {
+        let increasePercentage = NaN;
+        if (instructions !== 0) {
             increasePercentage = parseFloat(
                 ((increaseInstructions / instructions) * 100).toFixed(2)
+            );
+        }else{
+            increasePercentage = parseFloat(
+                ((increaseInstructions / 1) * 100).toFixed(2)
             );
         }
 

@@ -282,10 +282,10 @@ const filteredData = computed<SymbolDataItem[]>(() => {
 
 
   let basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
-  filterAllBaseInstructionsCompareTotal.value = Number.parseFloat(basePercent.toFixed(2)) + '%';
+  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
 
   let comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions) * 100;
-  filterAllCompareInstructionsCompareTotal.value = Number.parseFloat(comparePercent.toFixed(2)) + '%';
+  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
 
   // 应用排序（添加类型安全）
   if (sortState.value.order) {
