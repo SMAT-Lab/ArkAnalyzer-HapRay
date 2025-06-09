@@ -51,6 +51,46 @@ export function processJson2PieChartData(jsonData: JSONData, currentStepIndex: n
     return { legendData, seriesData };
 }
 
+// 处理 JSON 数据生成进程负载饼状图所需数据
+export function processJson2ProcessPieChartData(jsonData: JSONData, currentStepIndex: number) {
+    if (!jsonData) {
+        return { legendData: [], seriesData: [] };
+    }
+
+    // 使用进程名作为键，累加该进程下所有线程的 symbolEvents
+    const processMap = new Map<string, number>();
+
+    // 处理数据并累加进程负载
+    jsonData.steps.forEach(step => {
+        if (currentStepIndex === 0 || step.step_id === currentStepIndex) {
+            step.data.forEach(item => {
+                const processName = item.processName || "Unknown Process";
+                const currentTotal = processMap.get(processName) || 0;
+                // 累加该进程下所有线程的 symbolEvents
+                processMap.set(processName, currentTotal + item.symbolEvents);
+            });
+        }
+    });
+
+    // 转换为数组并过滤零值
+    const processEntries = Array.from(processMap.entries())
+        .filter(([_, value]) => value > 0); // 过滤掉负载为零的进程
+
+    // 按负载值降序排序（展示负载最高的进程在前）
+    processEntries.sort((a, b) => b[1] - a[1]);
+
+    // 提取图例数据（进程名）
+    const legendData = processEntries.map(([processName]) => processName);
+
+    // 提取系列数据（进程名和负载值）
+    const seriesData = processEntries.map(([processName, totalEvents]) => ({
+        name: processName,
+        value: totalEvents
+    }));
+
+    return { legendData, seriesData };
+}
+
 // 定义键生成策略
 type KeyGenerator = (item: any, stepId: number) => string;
 

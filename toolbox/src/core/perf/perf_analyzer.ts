@@ -444,8 +444,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return perf;
     }
     async analyze2(dbPath: string, app_id: string, step: Step): Promise<StepJsonData> {
-        
-        const sum = await this.calcPerfDbTotalInstruction(dbPath);
+        let sum = 0;
+        this.stepsSample[0].details.forEach(detail => sum += detail.symbolEvents);
         // 读取数据并统计
         await this.loadDbAndStatistics(dbPath, app_id);
         let stepInfo: StepJsonData = {

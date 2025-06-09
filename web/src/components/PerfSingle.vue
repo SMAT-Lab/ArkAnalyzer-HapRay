@@ -83,7 +83,7 @@
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-        <div class="step-name">测试轮次：{{ step.round }}</div>
+        <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
         <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
         <button class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
@@ -100,15 +100,17 @@
 
     <el-row :gutter="20">
       <el-col :span="12">
-        <!-- 基准版本 -->
-
-        <!-- 进程负载 -->
+        <!-- 步骤饼图 -->
         <div class="data-panel">
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" />
+        </div>
+        <!-- 进程负载 -->
+        <!-- <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">进程负载</span>
           </h3>
           <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
-        </div>
+        </div> -->
       </el-col>
       <el-col :span="12">
         <!-- 步骤饼图 -->
@@ -124,7 +126,8 @@
           <h3 class="panel-title">
             <span class="version-tag">线程负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
+          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadPerformanceData" :hideColumn="isHidden"
+            :hasCategory="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -133,7 +136,8 @@
           <h3 class="panel-title">
             <span class="version-tag">小分类负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredComponentNamePerformanceData" :hideColumn="isHidden" :hasCategory="true" />
+          <PerfThreadTable :stepId="currentStepIndex" :data="filteredComponentNamePerformanceData"
+            :hideColumn="isHidden" :hasCategory="true" />
         </div>
       </el-col>
     </el-row>
@@ -144,7 +148,8 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData" :hideColumn="isHidden" :hasCategory="false" />
+          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData" :hideColumn="isHidden"
+            :hasCategory="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -153,7 +158,8 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData1" :hideColumn="isHidden" :hasCategory="true" />
+          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData1" :hideColumn="isHidden"
+            :hasCategory="true" />
         </div>
       </el-col>
     </el-row>
@@ -164,7 +170,8 @@
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden"
+            :hasCategory="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -173,7 +180,8 @@
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData1" :hideColumn="isHidden" :hasCategory="true" />
+          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData1" :hideColumn="isHidden"
+            :hasCategory="true" />
         </div>
       </el-col>
     </el-row>
@@ -210,7 +218,7 @@ import LineChart from './LineChart.vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
-import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
+import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData } from '@/utils/jsonUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -293,12 +301,15 @@ const scenePieData = ref();
 
 const stepPieData = ref();
 
-scenePieData.value = processJson2PieChartData(json!,currentStepIndex.value);
-stepPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
+const processPieData = ref();
+
+scenePieData.value = processJson2PieChartData(json!, currentStepIndex.value);
+stepPieData.value = processJson2PieChartData(json!, currentStepIndex.value);
+processPieData.value = processJson2ProcessPieChartData(json!, currentStepIndex.value);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
-  stepPieData.value = processJson2PieChartData(json!,currentStepIndex.value);
+  stepPieData.value = processJson2PieChartData(json!, currentStepIndex.value);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
