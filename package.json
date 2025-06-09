@@ -20,5 +20,11 @@
   "bugs": {
     "url": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/issues"
   },
-  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme"
+  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme",
+  "dependencies": {
+    "pako": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/pako": "^2.0.3"
+  }
 }

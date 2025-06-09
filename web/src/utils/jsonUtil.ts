@@ -3,6 +3,7 @@ import type { ProcessDataItem } from "@/components/PerfProcessTable.vue";
 import type { SymbolDataItem } from "@/components/PerfSymbolTable.vue";
 import type { ThreadDataItem } from "@/components/PerfThreadTable.vue";
 import { ComponentCategory, type JSONData } from "@/stores/jsonDataStore";
+import pako from 'pako';
 
 
 // 处理 JSON 数据生成steps饼状图所需数据
@@ -38,7 +39,7 @@ export function processJson2PieChartData(jsonData: JSONData, currentStepIndex: n
     const sortedCategories = sortedEntries.map(([category]) => category);
 
     // 创建图例数据（按排序后的顺序）
-    const legendData = sortedCategories.map(category => 
+    const legendData = sortedCategories.map(category =>
         ComponentCategory[category] || "UNKNOWN"
     );
 
@@ -141,15 +142,15 @@ function compareJsonDataByLevel<T>(
         const compareInstructions = compareMap.get(key) ?? -1;
 
         // 计算增量
-        let increaseInstructions = (compareInstructions===-1?0:compareInstructions) - (instructions===-1?0:instructions);
-        
+        let increaseInstructions = (compareInstructions === -1 ? 0 : compareInstructions) - (instructions === -1 ? 0 : instructions);
+
         // 计算增量百分比
         let increasePercentage = NaN;
         if (instructions !== 0) {
             increasePercentage = parseFloat(
                 ((increaseInstructions / instructions) * 100).toFixed(2)
             );
-        }else{
+        } else {
             increasePercentage = parseFloat(
                 ((increaseInstructions / 1) * 100).toFixed(2)
             );
@@ -355,8 +356,20 @@ export function calculateSymbolData1(
             instructions,
             compareInstructions,
             increaseInstructions,
-            increasePercentage,    
+            increasePercentage,
         });
 
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+}
+
+
+export function changeBase64Str2Json(base64String:string) {
+    if(base64String=='/tempCompareJsonData/'){
+        return '/tempCompareJsonData/';
+    }
+    const compressed = atob(base64String);
+    const uint8Array = new Uint8Array([...compressed].map(c => c.charCodeAt(0)));
+    const jsonString = pako.inflate(uint8Array, { to: 'string' });
+    const jsonData = JSON.parse(jsonString);
+    return jsonData;
 }

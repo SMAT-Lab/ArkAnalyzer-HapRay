@@ -1,7 +1,9 @@
+import base64
 import json
 import logging
 import os
 import subprocess
+import zlib
 from typing import List, Optional
 
 from hapray.core.common.CommonUtils import CommonUtils
@@ -208,11 +210,16 @@ class ReportGenerator:
         with open(html_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
 
-        # Prepare JSON string (use first element for perf data, full array for frames)
-        if placeholder == 'JSON_DATA_PLACEHOLDER':
-            json_str = json.dumps(json_data[0], indent=2, ensure_ascii=False)
-        else:
-            json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
+        # 将JSON对象转换为UTF-8字节串
+        json_bytes = json.dumps(json_data).encode('utf-8')
+
+        compressed_bytes = zlib.compress(json_bytes, level=9)
+
+        # 转换为Base64编码
+        base64_bytes = base64.b64encode(compressed_bytes)
+
+        # 转换为字符串
+        json_str = base64_bytes.decode('ascii')
 
         # Inject JSON into HTML
         updated_html = html_content.replace(placeholder, json_str)
@@ -222,3 +229,26 @@ class ReportGenerator:
             f.write(updated_html)
 
         logging.debug(f"Injected {json_path} into {output_path}")
+
+    @staticmethod
+    def compress_json_to_base64(data, level=9):
+        """
+        将JSON数组压缩并转换为Base64编码
+
+        参数:
+        data (list/dict): 要压缩的JSON数据
+        level (int): 压缩级别，1-9，默认为9(最高压缩率)
+
+        返回:
+        str: 压缩后的Base64字符串
+        """
+        # 将JSON对象转换为UTF-8字节串
+        json_bytes = json.dumps(data).encode('utf-8')
+
+        compressed_bytes = zlib.compress(json_bytes, level=level)
+
+        # 转换为Base64编码
+        base64_bytes = base64.b64encode(compressed_bytes)
+
+        # 转换为字符串
+        return base64_bytes.decode('ascii')
