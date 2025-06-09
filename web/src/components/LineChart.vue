@@ -6,7 +6,7 @@
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import type { PropType } from 'vue';
 import * as echarts from 'echarts';
-import type { JSONData } from '../stores/jsonDataStore.ts';
+import { ComponentCategory, type JSONData } from '../stores/jsonDataStore.ts';
 
 const props = defineProps({
   chartData: {
@@ -32,48 +32,64 @@ const processData = (data: JSONData | null, seriesType: string) => {
     };
   }
 
-  const { steps, categories } = data;
+  const { steps } = data;
   const xData = steps.map((step) => step.step_name);
-  
-  // 记录每个category是否有数据
-  const categoryHasData = new Set<number>();
-  // 初始化seriesData，使用Map存储有数据的category
-  const seriesDataMap = new Map<number, number[]>();
+  const categoryMap = new Map<ComponentCategory, number[]>();
 
-  steps.forEach((step, stepIndex) => {
-    step.data.forEach((item) => {
-      const { category, count } = item;
-      categoryHasData.add(category);
-      
-      // 如果该category还没有对应的数组，则初始化
-      if (!seriesDataMap.has(category)) {
-        seriesDataMap.set(category, Array(steps.length).fill(0));
+  // 初始化categoryMap，为每个x轴位置创建一个数组
+  xData.forEach(() => {
+    Object.values(ComponentCategory).forEach((category) => {
+      if (typeof category === 'number') {
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, Array(xData.length).fill(0));
+        }
       }
-      
-      // 设置对应位置的数据
-      seriesDataMap.get(category)![stepIndex] = count;
     });
   });
 
-  // 生成最终的series和legendData，只包含有数据的category
-  const series = Array.from(categoryHasData).sort((a, b) => a - b).map((categoryIndex) => ({
-    name: categories[categoryIndex],
-    type: seriesType,
-    data: seriesDataMap.get(categoryIndex)!,
-  }));
+  // 遍历所有步骤中的数据条目
+  steps.forEach((step, stepIndex) => {
+    step.data.forEach(item => {
+      const category = item.componentCategory;
+      const events = item.symbolEvents;
+      const values = categoryMap.get(category) || Array(xData.length).fill(0);
+      values[stepIndex] = (values[stepIndex] || 0) + events;
+      categoryMap.set(category, values);
+    });
+  });
 
-  const legendData = series.map((item) => item.name);
+  // 构建series数据
+  const legendData: string[] = [];
+  const series:{}[] = [];
+
+  categoryMap.forEach((values, category) => {
+    // 检查该类别在所有步骤中是否都为0
+    if (values.every(value => value === 0)) return;
+
+    const categoryName = ComponentCategory[category];
+    legendData.push(categoryName);
+    
+    // 确保seriesType有效
+    const validTypes = ['bar', 'line'];
+    const type = validTypes.includes(seriesType) ? seriesType : 'bar';
+    
+    series.push({
+      name: categoryName,
+      type: type,
+      data: values,
+    });
+  });
 
   return {
     xData,
     legendData,
     series,
   };
-};  
+};
 
 // 更新图表函数
 const updateChart = () => {
-  if (!myChart) return;
+  if (!myChart || !chartRef.value) return;
 
   const { xData, legendData, series } = processData(props.chartData, props.seriesType);
 
@@ -105,7 +121,7 @@ const updateChart = () => {
     yAxis: {
       type: 'value',
     },
-    series,
+    series: series,
   };
 
   myChart.setOption(option);
@@ -118,9 +134,14 @@ onMounted(() => {
     updateChart();
 
     // 响应窗口变化
-    window.addEventListener('resize', () => {
+    const resizeHandler = () => {
       myChart?.resize();
-    });
+    };
+    
+    window.addEventListener('resize', resizeHandler);
+    
+    // 保存引用以便正确移除监听器
+    (myChart as any).__resizeHandler = resizeHandler;
   }
 });
 
@@ -129,17 +150,19 @@ watch(
   () => props.chartData,
   () => {
     updateChart();
-  }
+  },
+  { deep: true } // 深度监听对象变化
 );
 
 // 清理资源
 onBeforeUnmount(() => {
   if (myChart) {
+    // 获取并移除resize监听器
+    const resizeHandler = (myChart as any).__resizeHandler;
+    window.removeEventListener('resize', resizeHandler);
+    
     myChart.dispose();
     myChart = null;
   }
-  window.removeEventListener('resize', () => {
-    myChart?.resize();
-  });
 });
 </script>

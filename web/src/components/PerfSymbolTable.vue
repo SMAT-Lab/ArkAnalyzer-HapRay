@@ -23,26 +23,34 @@
           </el-icon>
         </template>
       </el-input>
-      <el-input v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable @input="handleFilterChange"
-        class="search-input">
+      <el-input v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable
+        @input="handleFilterChange" class="search-input">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-input v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable @input="handleFilterChange"
-        class="search-input">
+      <el-input v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable
+        @input="handleFilterChange" class="search-input">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-select v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable
-        @change="handleFilterChange" class="category-select">
+      <el-select v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类"
+        clearable @change="handleFilterChange" class="category-select">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
+      <el-input v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
+        @input="handleFilterChange" class="search-input">
+        <template #prefix>
+          <el-icon>
+            <search />
+          </el-icon>
+        </template>
+      </el-input>
     </div>
 
     <!-- 过滤后占比 -->
@@ -83,19 +91,24 @@
           <div class="name-cell">{{ row.file }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="所属线程">
+      <el-table-column v-if="!hasCategory" prop="category" label="所属线程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.thread }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="所属进程">
+      <el-table-column v-if="!hasCategory" prop="category" label="所属进程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.process }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="分类">
+      <el-table-column v-if="hasCategory" prop="category" label="大分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.category }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="hasCategory" prop="componentName" label="小分类">
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.componentName }}</div>
         </template>
       </el-table-column>
       <el-table-column label="指令数" width="160" prop="instructions" sortable>
@@ -148,21 +161,22 @@
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useFileNameQueryStore, useSymbolNameQueryStore, useCategoryStore, useFilterModeStore } from '../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useFileNameQueryStore, useSymbolNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../stores/jsonDataStore.ts';
 const emit = defineEmits(['custom-event']);
 
 // 定义数据类型接口
 export interface SymbolDataItem {
   stepId: number
-  symbol: string
+  process: string
   category: string
+  componentName: string
+  thread: string
+  file: string
+  symbol: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
   increasePercentage: number
-  file: string
-  thread: string
-  process: string
 }
 
 const props = defineProps({
@@ -173,9 +187,16 @@ const props = defineProps({
   hideColumn: {
     type: Boolean,
     required: true,
+  },
+  hasCategory: {
+    type: Boolean,
+    required: true,
   }
 });
 const isHidden = !props.hideColumn;
+
+const hasCategory = props.hasCategory;
+
 const formatScientific = (num: number) => {
   if (typeof num !== 'number') {
     num = Number(num);
@@ -194,6 +215,7 @@ const threadNameQuery = useThreadNameQueryStore();
 const symbolNameQuery = useSymbolNameQueryStore();
 const fileNameQuery = useFileNameQueryStore();
 const category = useCategoryStore();
+const componentNameQuery = useComponentNameStore();
 
 // 分页状态
 const currentPage = ref(1);
@@ -223,10 +245,14 @@ const filteredData = computed<SymbolDataItem[]>(() => {
   });
 
   // 应用进程过滤
-  result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+  if (!hasCategory) {
+    result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+  }
 
   // 应用线程过滤
-  result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
+  if (!hasCategory) {
+    result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
+  }
 
   // 函数搜索过滤
   result = filterQueryCondition('symbol', symbolNameQuery.symbolNameQuery, result);
@@ -234,8 +260,13 @@ const filteredData = computed<SymbolDataItem[]>(() => {
   // 文件搜索过滤
   result = filterQueryCondition('file', fileNameQuery.fileNameQuery, result);
 
+  // 应用小分类过滤
+  if (hasCategory) {
+    result = filterQueryCondition('componentName', componentNameQuery.componentNameQuery, result);
+  }
+
   // 应用分类过滤
-  if (category.categoriesQuery) {
+  if (category.categoriesQuery && hasCategory) {
     if (category.categoriesQuery.length > 0) {
       result = result.filter((item: SymbolDataItem) =>
         category.categoriesQuery.includes(item.category))
@@ -251,10 +282,10 @@ const filteredData = computed<SymbolDataItem[]>(() => {
 
 
   let basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
-  filterAllBaseInstructionsCompareTotal.value = Number.parseFloat(basePercent.toFixed(2)) + '%';
+  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
 
   let comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions) * 100;
-  filterAllCompareInstructionsCompareTotal.value = Number.parseFloat(comparePercent.toFixed(2)) + '%';
+  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
 
   // 应用排序（添加类型安全）
   if (sortState.value.order) {
@@ -309,6 +340,8 @@ function getDataItemProperty(queryName: string, dataItem: SymbolDataItem): strin
     return dataItem.process;
   } else if (queryName === 'thread') {
     return dataItem.thread;
+  } else if (queryName === 'componentName') {
+    return dataItem.componentName;
   } else if (queryName === 'file') {
     return dataItem.file;
   } else if (queryName === 'symbol') {
@@ -358,7 +391,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['symbol', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
+  const validKeys: SortKey[] = ['symbol', 'componentName', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {

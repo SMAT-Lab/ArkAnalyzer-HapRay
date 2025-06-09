@@ -18,15 +18,14 @@ import path from 'path';
 import { Command } from 'commander';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { getComponentCategories } from '../../core/component';
+import { ComponentCategory, getComponentCategories, OriginKind } from '../../core/component';
 import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { getConfig, initConfig, updateKindConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfAndHtraceFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
-import { TestSceneInfo } from '../../core/perf/perf_analyzer_base';
-import { StepJsonData } from '../../core/perf/perf_data_transformer';
+import { PerfEvent, TestSceneInfo } from '../../core/perf/perf_analyzer_base';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -71,6 +70,32 @@ export interface SummaryInfo {
     step_name: string,
     step_id: number,
     count: number,
+}
+
+export interface StepJsonData {
+    step_name: string;
+    step_id: number;
+    count: number;
+    round: number;
+    perf_data_path: string;
+    data: {
+        stepIdx: number;
+        eventType: PerfEvent;
+        pid: number;
+        processName: string;
+        processEvents: number;
+        tid: number;
+        threadName: string;
+        threadEvents: number;
+        file: string;
+        fileEvents: number;
+        symbol: string;
+        symbolEvents: number;
+        symbolTotalEvents: number;
+        componentName?: string;
+        componentCategory: ComponentCategory;
+        originKind?: OriginKind;
+    }[];
 }
 
 // 定义整个 steps 数组的结构
@@ -254,7 +279,7 @@ async function generateSummaryInfoJson(input: string, testInfo: TestInfo, result
             scene: testInfo.scene,
             step_name: step.description,
             step_id: step.stepIdx,
-            count: counts[step.stepIdx-1]
+            count: counts[step.stepIdx - 1]
         }
         summaryJsonObject.push(summaryObject);
     })

@@ -19,7 +19,7 @@ import {
 import { PerfDatabase } from './perf_database';
 import { PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
-import { PerfDataTransformer, StepJsonData } from './perf_data_transformer';
+import { StepJsonData } from '../../cli/commands/hapray_cli';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -444,25 +444,19 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return perf;
     }
     async analyze2(dbPath: string, app_id: string, step: Step): Promise<StepJsonData> {
+        let sum = 0;
+        // 读取数据并统计
+        await this.loadDbAndStatistics(dbPath, app_id);
+        this.stepsSample[0].details.forEach(detail => sum += detail.symbolEvents);
         let stepInfo: StepJsonData = {
             step_id: step.stepIdx,
             step_name: step.description,
-            count: 0,
-            round: -1,
+            count: sum,
+            round: 0,
             perf_data_path: '',
-            data: [],
+            data: this.stepsSample[0].details,
         };
 
-        // 读取数据并统计
-        await this.loadDbAndStatistics(dbPath, app_id);
-        let perfDataTransformer = new PerfDataTransformer(
-            this.stepsSample[0].details,
-            step.description, //stepName
-            step.stepIdx, //stepid
-            -1,
-            ''
-        );
-        stepInfo = perfDataTransformer.transform();
         return stepInfo;
     }
 

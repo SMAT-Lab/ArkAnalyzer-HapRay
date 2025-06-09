@@ -6,7 +6,7 @@
         <el-radio-button value="string">字符串模式</el-radio-button>
         <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
-      <el-input v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable @input="handleFilterChange"
+      <el-input v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable @input="handleFilterChange"
         class="search-input">
         <template #prefix>
           <el-icon>
@@ -14,7 +14,7 @@
           </el-icon>
         </template>
       </el-input>
-      <el-select v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable
+      <el-select v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable
         @change="handleFilterChange" class="category-select">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
@@ -48,12 +48,12 @@
     <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
       :default-sort="{ prop: 'instructions', order: 'descending' }" @sort-change="handleSortChange" stripe
       highlight-current-row>
-      <el-table-column prop="category" label="进程">
+      <el-table-column v-if="!hasCategory" prop="process" label="进程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.process }}</div>
         </template>
       </el-table-column>
-      <el-table-column prop="category" label="分类">
+      <el-table-column v-if="hasCategory" prop="category" label="分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.category }}</div>
         </template>
@@ -114,12 +114,13 @@ const emit = defineEmits(['custom-event']);
 // 定义数据类型接口
 export interface ProcessDataItem {
   stepId: number
+  process: string
   category: string
+  componentName: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
   increasePercentage: number
-  process: string
 }
 
 const props = defineProps({
@@ -130,10 +131,16 @@ const props = defineProps({
   hideColumn: {
     type: Boolean,
     required: true,
+  },
+  hasCategory: {
+    type: Boolean,
+    required: true,
   }
 });
 
 const isHidden = !props.hideColumn;
+
+const hasCategory = props.hasCategory;
 
 const formatScientific = (num: number) => {
   if (typeof num !== 'number') {
@@ -182,11 +189,12 @@ const filteredData = computed<ProcessDataItem[]>(() => {
 
 
   // 应用进程过滤
-  result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
-
-
+  if(!hasCategory){
+    result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+  }
+  
   // 应用分类过滤
-  if (category.categoriesQuery) {
+  if (category.categoriesQuery&&hasCategory) {
     if (category.categoriesQuery.length > 0) {
       result = result.filter((item: ProcessDataItem) =>
         category.categoriesQuery.includes(item.category))
