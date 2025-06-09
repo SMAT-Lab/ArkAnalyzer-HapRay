@@ -844,7 +844,7 @@ function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
   difference.push({
     category: '总值',
     diff: total2 - total1,
-    total_percentage: calculatePercentageWithFixed(total2 - total1, total1) + '%',
+    total_percentage: 100 + '%',
     percentage: calculatePercentageWithFixed(total2 - total1, total1) + '%'
   });
 
@@ -864,7 +864,7 @@ function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
     difference.push({
       category: categoryName,
       diff: count2 - count1,
-      total_percentage: calculatePercentageWithFixed(count2 - count1, total1) + '%',
+      total_percentage: calculatePercentageWithFixed(count1, total1) + '%',
       percentage: calculatePercentageWithFixed(count2 - count1, count1) + '%'
     });
   });

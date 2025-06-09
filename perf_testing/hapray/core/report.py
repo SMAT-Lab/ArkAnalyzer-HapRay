@@ -256,7 +256,7 @@ class ReportGenerator:
 
         # 转换为字符串
         return base64_bytes.decode('ascii')
-    def convert_kind_to_json() -> str:
+    def convert_kind_to_json(self) -> str:
         kind = Config.get('kind', None)
         if kind is None:
             return ''
