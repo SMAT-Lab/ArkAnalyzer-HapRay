@@ -128,6 +128,7 @@ class HapRayCmd:
         parser.add_argument('--circles', action="store_true", help="Enable sample cpu circles")
         args = parser.parse_args(args)
 
+        root_path = os.getcwd()
         reports_path = os.path.join(root_path, 'reports', time.strftime('%Y%m%d%H%M%S', time.localtime(time.time())))
         if not os.path.exists(reports_path):
             os.makedirs(reports_path)
