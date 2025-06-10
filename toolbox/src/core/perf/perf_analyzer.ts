@@ -265,11 +265,12 @@ class PerfStepSample {
 
                 logger.debug(data);
 
-                let key = `${event}_${data.tid}_${call.symbolId}`;
+                let key = `${event}_${data.tid}_${data.file}_${data.symbol}`;
                 if (resultMaps.has(key)) {
                     let value = resultMaps.get(key)!;
                     value.symbolEvents += data.symbolEvents;
                     value.symbolTotalEvents += data.symbolTotalEvents;
+                    resultMaps.set(key, value);
                 } else {
                     resultMaps.set(key, data);
                 }
@@ -290,7 +291,25 @@ class PerfStepSample {
             data.fileEvents = fileEventMaps.get(fileKey)!;
         }
 
-        this.details = Array.from(resultMaps.values());
+        this.details = Array.from(resultMaps.values())
+            .sort((a, b) => {
+                if (a.pid < b.pid) {
+                    return -1;
+                } else if (a.pid > b.pid) {
+                    return 1;
+                }
+
+                if (a.tid < b.tid) {
+                    return -1;
+                } else if (a.tid > b.tid) {
+                    return 1;
+                }
+
+                if (a.file !== b.file) {
+                    return a.file.localeCompare(b.file)
+                }
+                return a.symbol.localeCompare(b.symbol);
+            });
     }
 
     public calcComponentsData(): void {
@@ -608,6 +627,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         }
 
         for (const [_, data] of symbolDetailsMap) {
+            if (data[0].symbolEvents + data[0].symbolTotalEvents + data[1].symbolEvents + data[1].symbolTotalEvents === 0) {
+                continue;
+            }
             let row = [
                 { value: perf.osVersion, type: String },
                 { value: 'Hapray', type: String },

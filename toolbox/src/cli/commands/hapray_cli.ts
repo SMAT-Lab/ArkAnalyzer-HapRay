@@ -64,12 +64,12 @@ export interface ResultInfo {
 }
 
 export interface SummaryInfo {
-    rom_version: string,
-    app_version: string,
-    scene: string,
-    step_name: string,
-    step_id: number,
-    count: number,
+    rom_version: string;
+    app_version: string;
+    scene: string;
+    step_name: string;
+    step_id: number;
+    count: number;
 }
 
 export interface StepJsonData {
@@ -132,7 +132,6 @@ async function main(input: string): Promise<void> {
         const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
         const testInfo: TestInfo = await loadJsonFile(testInfoPath);
         await generateSummaryInfoJson(input, testInfo, resultInfo, steps, counts);
-
     } else {
         logger.info(`输入目录: ${input}`);
         const resultXmlPath = path.join(input, 'result', path.basename(input) + '.xml');
@@ -237,7 +236,7 @@ async function copySelectedRoundData(sourceRound: string, destPath: string, step
     await Promise.all([
         copyDirectory(srcPerfDir, destPerfDir),
         copyDirectory(srcHtraceDir, destHtraceDir),
-        copyDirectory(srcResultDir, destResultDir)
+        copyDirectory(srcResultDir, destResultDir),
     ]);
 }
 
@@ -269,25 +268,36 @@ function parseResultXml(xmlPath: string): ResultInfo {
 }
 
 // 生成summaryinfo
-async function generateSummaryInfoJson(input: string, testInfo: TestInfo, resultInfo: ResultInfo, steps: Steps, counts: number[]): Promise<void> {
+async function generateSummaryInfoJson(
+    input: string,
+    testInfo: TestInfo,
+    resultInfo: ResultInfo,
+    steps: Steps,
+    counts: number[]
+): Promise<void> {
     const outputDir = path.join(input, 'report');
-    let summaryJsonObject: SummaryInfo[] = []
-    steps.forEach(step => {
+    let summaryJsonObject: SummaryInfo[] = [];
+    steps.forEach((step) => {
         const summaryObject: SummaryInfo = {
             rom_version: resultInfo.rom_version,
             app_version: testInfo.app_version,
             scene: testInfo.scene,
             step_name: step.description,
             step_id: step.stepIdx,
-            count: counts[step.stepIdx - 1]
-        }
+            count: counts[step.stepIdx - 1],
+        };
         summaryJsonObject.push(summaryObject);
-    })
+    });
     await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
 }
 
 // 生成perfjson
-async function generatePerfJson(inputPath: string, testInfo: TestInfo, resultInfo: ResultInfo, steps: Steps): Promise<void> {
+async function generatePerfJson(
+    inputPath: string,
+    testInfo: TestInfo,
+    resultInfo: ResultInfo,
+    steps: Steps
+): Promise<void> {
     const outputDir = path.join(inputPath, 'report');
     const perfDataPaths = getPerfDataPaths(inputPath, steps);
     const perfDbPaths = getPerfDbPaths(inputPath, steps);
@@ -302,7 +312,7 @@ async function generatePerfJson(inputPath: string, testInfo: TestInfo, resultInf
             packageName: testInfo.app_id,
             scene: testInfo.scene,
             osVersion: resultInfo.rom_version,
-            timestamp: testInfo.timestamp
+            timestamp: testInfo.timestamp,
         };
 
         await perfAnalyzer.analyze(perfDbPaths[i], testSceneInfo, outputDir, steps[i].stepIdx);
@@ -327,7 +337,15 @@ function getHtracePaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => path.join(inputPath, 'htrace', `step${step.stepIdx.toString()}`, 'trace.htrace'));
 }
 
-async function saveHiperfJson(output: string, resultInfo: ResultInfo, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepJsonData[]): Promise<void> {
+async function saveHiperfJson(
+    output: string,
+    resultInfo: ResultInfo,
+    testInfo: TestInfo,
+    perfDataPaths: string[],
+    perfDbPaths: string[],
+    htracePaths: string[],
+    steps: StepJsonData[]
+): Promise<void> {
     output = path.join(output, '../', 'hiperf');
     const jsonObject = {
         rom_version: resultInfo.rom_version,
@@ -343,8 +361,30 @@ async function saveHiperfJson(output: string, resultInfo: ResultInfo, testInfo: 
             .filter((category) => category.id >= 0)
             .map((category) => category.name),
         steps: steps,
+        har: calcHarPerf(steps),
     };
     await saveJsonArray([jsonObject], path.join(output, 'hiperf_info.json'));
+}
+
+function calcHarPerf(steps: StepJsonData[]): { name: string; count: number }[] {
+    let harMap = new Map<string, { name: string; count: number }>();
+    for (const step of steps) {
+        for (const data of step.data) {
+            if (
+                data.componentCategory === ComponentCategory.APP_ABC ||
+                data.componentCategory === ComponentCategory.APP_LIB
+            ) {
+                if (harMap.has(data.componentName!)) {
+                    let value = harMap.get(data.componentName!)!;
+                    value.count += data.symbolEvents;
+                } else {
+                    harMap.set(data.componentName!, { name: data.componentName!, count: data.symbolEvents });
+                }
+            }
+        }
+    }
+
+    return Array.from(harMap.values());
 }
 
 export const HaprayCli = new Command('hapray').version(VERSION).addCommand(DbtoolsCli);
