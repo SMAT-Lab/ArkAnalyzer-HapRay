@@ -1,9 +1,24 @@
+/*
+ * Copyright (c) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { Ohpm } from '../../config/types';
 import { getConfig } from '../../config';
-import { spawnSync } from 'child_process';
 import { Component } from '../component';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -31,7 +46,7 @@ export class PkgIdentify {
             this.npmm.set(pkg.name, pkg);
         });
 
-        this.invalidNpmPkg = new Set();
+        this.invalidNpmPkg = new Set(getConfig().analysis.invalidNpm);
     }
 
     public static getInstance(): PkgIdentify {
@@ -158,7 +173,7 @@ export class PkgIdentify {
                 matchCount++;
             }
         }
-        return matchCount / module.files!.size > 0.5;
+        return matchCount / module.files!.size >= 0.45;
     }
 
     private static instance: PkgIdentify;

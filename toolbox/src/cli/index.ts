@@ -13,24 +13,26 @@
  * limitations under the License.
  */
 
-import { program } from 'commander';
+import { Command, program } from 'commander';
 import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { HapPerfCli } from './commands/hap_analyzer_cli';
-import { HaprayCli } from './commands/hapray_cli';
+import { HapAnalyzerCli } from './commands/hap_analyzer_cli';
+import { DbtoolsCli } from './commands/hapray_cli';
 
 Logger.configure('arkanalyzer-hapray.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
+const VERSION = '1.1.0';
+
+const HaprayCli = new Command('hapray').version(VERSION);
+HaprayCli.addCommand(HapAnalyzerCli);
+HaprayCli.addCommand(DbtoolsCli);
 
 try {
     program
-    .name('arkanalyzer-hapray')
-    .description('CLI to arkanalyzer hapray')
-    .version('1.0.0')
-    .addCommand(HapPerfCli)
-    .addCommand(HaprayCli)
-    .parse();
-
+        .name('arkanalyzer-hapray')
+        .description('CLI to arkanalyzer hapray')
+        .version(VERSION)
+        .addCommand(HaprayCli)
+        .parse();
 } catch (error) {
     logger.error('error', error);
 }
-

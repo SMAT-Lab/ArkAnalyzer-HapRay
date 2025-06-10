@@ -28,6 +28,7 @@ const ConfigSchema = z.object({
                 name: z.string(),
                 version: z.string(),
                 versions: z.array(z.string()),
+                files: z.array(z.string()).optional(),
             })
         ),
         npm: z.array(
@@ -35,8 +36,10 @@ const ConfigSchema = z.object({
                 name: z.string(),
                 version: z.string(),
                 versions: z.array(z.string()),
+                files: z.array(z.string()).optional(),
             })
         ),
+        invalidNpm: z.array(z.string()).default([]),
     }),
     perf: z.object({
         kinds: z
@@ -54,6 +57,51 @@ const ConfigSchema = z.object({
                 })
             )
             .default([]),
+        soOrigins: z
+            .map(
+                z.string(),
+                z.object({
+                    specific_origin: z.string(),
+                    broad_category: z.string(),
+                    sdk_category: z.string(),
+                })
+            )
+            .default(new Map()),
+        classify: z.object({
+            dfx_symbols: z.array(z.string()).default([]),
+            compute_files: z.array(z.string()).default([]),
+            process: z.record(
+                z.string(),
+                z.record(
+                    z.string(),
+                    z.record(
+                        z.string(),
+                        z.object({
+                            Android_Process: z.array(z.string()),
+                            Harmony_Process: z.array(z.string()),
+                            IOS_Process: z.array(z.string()),
+                        })
+                    )
+                )
+            ),
+            process_special: z
+                .record(
+                    z.string(),
+                    z.record(
+                        z.string(),
+                        z.record(
+                            z.string(),
+                            z.object({
+                                scene: z.string(),
+                                Android_Process: z.array(z.string()),
+                                Harmony_Process: z.array(z.string()),
+                                IOS_Process: z.array(z.string()),
+                            })
+                        )
+                    )
+                )
+                .default({}),
+        }),
     }),
     save: z.object({
         callchain: z.boolean().default(false),
@@ -61,10 +109,13 @@ const ConfigSchema = z.object({
     inDbtools: z.boolean().default(false),
     jobs: z.number().default(4),
     input: z.string().default(''),
+    fuzzy: z.array(z.string()).default([]),
     output: z.string().default('output'),
     extToolsPath: z.string(),
-    soDir: z.string(),
-    choose: z.boolean().default(false)
+    osPlatform: z.number().default(0),
+    soDir: z.string().default(''),
+    choose: z.boolean().default(false),
+    checkTraceDb: z.boolean().default(false),
 });
 
 function getExtToolsRoot(): string {
@@ -86,17 +137,37 @@ function loadResCfg(): Partial<GlobalConfig> {
 
     const config: Record<string, any> = {
         analysis: { reSo: false, reAbc: false },
-        perf: {},
+        perf: { classify: { process: {} } },
         save: {},
     };
     let perfKind = path.join(res, 'perf/kind.json');
     config['perf']['kinds'] = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' }));
+    let soOriginCfg = path.join(res, 'so/standardized_origins.json');
+    if (fs.existsSync(soOriginCfg)) {
+        config['perf']['osOrigins'] = new Map(
+            Object.entries(JSON.parse(fs.readFileSync(soOriginCfg, { encoding: 'utf-8' })))
+        );
+    }
+
+    let classifyCfg = path.join(res, 'perf/classify.json');
+    if (fs.existsSync(classifyCfg)) {
+        config.perf.classify = JSON.parse(fs.readFileSync(classifyCfg, { encoding: 'utf-8' }));
+    }
+
     let ohpmCfg = path.join(res, 'ohpm/ohpm.json');
     let npmCfg = path.join(res, 'ohpm/npm.json');
+    let invalidNpmCfg = path.join(res, 'ohpm/invalid_npm.json');
 
     if (fs.existsSync(ohpmCfg)) {
         config['analysis']['ohpm'] = JSON.parse(fs.readFileSync(ohpmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
+    }
+
+    if (fs.existsSync(npmCfg)) {
         config['analysis']['npm'] = JSON.parse(fs.readFileSync(npmCfg, { encoding: 'utf-8' })) as Array<Ohpm>;
+    }
+
+    if (fs.existsSync(invalidNpmCfg)) {
+        config['analysis']['invalidNpm'] = JSON.parse(fs.readFileSync(invalidNpmCfg, { encoding: 'utf-8' }));
     }
 
     config['extToolsPath'] = getExtToolsRoot();

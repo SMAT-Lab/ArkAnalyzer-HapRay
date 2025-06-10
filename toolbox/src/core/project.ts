@@ -15,6 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 
 export interface Project {
     bundleName: string;
@@ -63,5 +64,11 @@ export class AnalyzerProjectBase {
         if (fs.existsSync(projectFile)) {
             this.project = JSON.parse(fs.readFileSync(projectFile, { encoding: 'utf-8' }));
         }
+    }
+
+    public setProjectInfo(bundleName: string, version: string): void {
+        this.project.bundleName = bundleName;
+        this.project.versionName = version;
+        this.project.versionId = createHash('sha256').update(`${bundleName}${version}`).digest('hex');
     }
 }

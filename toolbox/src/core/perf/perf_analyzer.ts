@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import path from 'path';
 import fs from 'fs';
 import initSqlJs, { Database } from 'sql.js';
@@ -6,20 +21,19 @@ import { createHash } from 'crypto';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { ComponentCategory, OriginKind, getComponentCategories } from '../component';
 import {
+    ClassifyCategory,
     CYCLES_EVENT,
+    FileClassification,
     INSTRUCTION_EVENT,
     PerfAnalyzerBase,
-    PerfComponent,
     PerfEvent,
-    PerfStepSum,
     PerfSum,
     PerfSymbolDetailData,
     TestSceneInfo,
+    TestStep,
+    UNKNOWN_STR,
 } from './perf_analyzer_base';
-import { PerfDatabase } from './perf_database';
-import { PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
-import { StepJsonData } from '../../cli/commands/hapray_cli';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -40,16 +54,10 @@ interface PerfSample {
  * perf_thread 表
  */
 interface PerfThread {
-    thread_id: number;
-    process_id: number;
-    thread_name: string;
-}
-
-interface FileClassification {
-    file: string;
-    category: ComponentCategory; // 组件大类
-    subCategory: string; // 小类
-    originKind: OriginKind; // 来源，开源
+    name: string;
+    processId: number;
+    threadId: number;
+    classification: ClassifyCategory;
 }
 
 interface PerfCall {
@@ -66,13 +74,6 @@ interface PerfCallchain {
     stack: PerfCall[]; // 调用栈
 }
 
-export interface TestStep {
-    id: number;
-    name: string;
-    start: number;
-    end: number;
-}
-
 // 定义单个 step 的结构
 export interface Step {
     name: string;
@@ -82,7 +83,7 @@ export interface Step {
 
 export const DEFAULT_PERF_DB = 'perf.db';
 // 应用相关进程存在5种场景 :appBundleName, :appBundleName|| ':ui', :appBundleName || ':render', :appBundleName || ':background', :appBundleName|| 'service:ui'
-const PERF_PROCESS_STEP_SAMPLE_SQL = `
+const PERF_PROCESS_SAMPLE_SQL = `
 SELECT
     perf_sample.id,
     perf_sample.callchain_id,
@@ -105,8 +106,6 @@ WHERE
         WHERE
             parent.thread_id = parent.process_id
             AND parent.thread_name IN (:appBundleName, :appBundleName|| ':ui', :appBundleName || ':render', :appBundleName || ':background', :appBundleName|| 'service:ui'))
-    AND perf_sample.timestamp_trace >= :stepStart
-    AND perf_sample.timestamp_trace <= :stepEnd
 `;
 const PERF_PROCESS_CALLCHAIN_SQL = `
 SELECT
@@ -133,7 +132,6 @@ WHERE
 ORDER BY callchain_id, depth desc
 `;
 
-// TODO: check why set process.pid = 66666 ?
 // Test Step timestamp
 const TEST_STEP_TIMESTAMPS = `
 SELECT
@@ -159,239 +157,28 @@ WHERE
     perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
 `;
 
-class PerfStepSample {
-    testStep: TestStep;
-    commonData: PerfCommonData;
-    threadsEventMap: Map<string, number>; // 线程统计事件数 key = `${thread_id}-${PerfEvent}`
-    processEventMap: Map<string, number>; // 进程统计事件数 key = `${thread_id}-${PerfEvent}`
-    samples: PerfSample[]; // 原始采样
-    details: PerfSymbolDetailData[]; // 计算symbol负载
-    statistics: PerfStepSum;
-
-    constructor(testStep: TestStep, samples: PerfSample[], commonData: PerfCommonData) {
-        this.testStep = testStep;
-        this.commonData = commonData;
-        this.threadsEventMap = new Map();
-        this.processEventMap = new Map();
-        this.samples = [];
-        this.details = [];
-        this.statistics = {
-            stepIdx: testStep.id,
-            components: [],
-            categoriesSum: [
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            ],
-            categoriesTotal: [
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            ],
-            total: [0, 0],
-        };
-
-        this.samples = samples;
-        for (const sample of samples) {
-            let event = this.getEventType(sample.event_name);
-            if (!event) {
-                continue;
-            }
-
-            this.threadsEventMap.set(`${sample.thread_id}-${event}`, sample.event_count);
-            let thread = this.commonData.threadsMap.get(sample.thread_id)!;
-            let count = this.processEventMap.get(`${thread.process_id}-${event}`) || 0;
-            count += sample.event_count;
-            this.processEventMap.set(`${thread.process_id}-${event}`, count);
-        }
-    }
-
-    /**
-     * 计算符号负载
-     * @param classifyThread
-     */
-    public calcSymbolData(classifyThread: (threadName: string) => FileClassification | undefined): void {
-        let resultMaps: Map<string, PerfSymbolDetailData> = new Map();
-        let fileEventMaps: Map<string, number> = new Map();
-
-        for (const sample of this.samples) {
-            let event = this.getEventType(sample.event_name);
-            if (!event) {
-                continue;
-            }
-
-            let thread = this.commonData.threadsMap.get(sample.thread_id)!;
-            let process = this.commonData.threadsMap.get(thread.process_id)!;
-            let threadComponent = classifyThread(thread?.thread_name);
-            let callchain = this.commonData.callchainsMap.get(sample.callchain_id)!;
-
-            // 忽略找不到符号的负载
-            if (callchain.stack[callchain.selfEvent].classification.category === ComponentCategory.UNKNOWN) {
-                continue;
-            }
-
-            let totalSet = new Set(callchain.totalEvents);
-            for (let i = callchain.selfEvent; i < callchain.stack.length; i++) {
-                let call = callchain.stack[i];
-
-                let data: PerfSymbolDetailData = {
-                    stepIdx: this.testStep.id,
-                    eventType: event,
-                    pid: process.process_id,
-                    processName: process.thread_name,
-                    processEvents: this.processEventMap.get(`${process.process_id}-${event}`) || 0,
-                    tid: thread.thread_id,
-                    threadEvents: this.threadsEventMap.get(`${thread.thread_id}-${event}`) || 0,
-                    threadName: thread.thread_name,
-                    file: call.classification.file,
-                    fileEvents: 0,
-                    symbol: this.commonData.symbolsMap.get(call.symbolId) || '',
-                    symbolEvents: i === callchain.selfEvent ? sample.event_count : 0,
-                    symbolTotalEvents: totalSet.has(i) ? sample.event_count : 0,
-                    originKind: call.classification.originKind,
-                    componentCategory: call.classification.category,
-                    componentName: call.classification.subCategory,
-                };
-
-                // 忽略找不到符号的负载
-                if (call.classification.category === ComponentCategory.UNKNOWN) {
-                    continue;
-                }
-
-                // 根据线程名直接分类
-                if (threadComponent !== undefined) {
-                    data.componentName = threadComponent.subCategory;
-                    data.componentCategory = threadComponent.category;
-                    data.originKind = threadComponent.originKind;
-                }
-
-                logger.debug(data);
-
-                let key = `${event}_${data.tid}_${data.file}_${data.symbol}`;
-                if (resultMaps.has(key)) {
-                    let value = resultMaps.get(key)!;
-                    value.symbolEvents += data.symbolEvents;
-                    value.symbolTotalEvents += data.symbolTotalEvents;
-                    resultMaps.set(key, value);
-                } else {
-                    resultMaps.set(key, data);
-                }
-
-                // files
-                let fileKey = `${data.eventType}_${data.tid}_${data.file}`;
-                if (fileEventMaps.has(fileKey)) {
-                    let value = fileEventMaps.get(fileKey)!;
-                    fileEventMaps.set(fileKey, value + data.symbolEvents);
-                } else {
-                    fileEventMaps.set(fileKey, data.symbolEvents);
-                }
-            }
-        }
-
-        for (const [_, data] of resultMaps) {
-            let fileKey = `${data.eventType}_${data.tid}_${data.file}`;
-            data.fileEvents = fileEventMaps.get(fileKey)!;
-        }
-
-        this.details = Array.from(resultMaps.values())
-            .sort((a, b) => {
-                if (a.pid < b.pid) {
-                    return -1;
-                } else if (a.pid > b.pid) {
-                    return 1;
-                }
-
-                if (a.tid < b.tid) {
-                    return -1;
-                } else if (a.tid > b.tid) {
-                    return 1;
-                }
-
-                if (a.file !== b.file) {
-                    return a.file.localeCompare(b.file)
-                }
-                return a.symbol.localeCompare(b.symbol);
-            });
-    }
-
-    public calcComponentsData(): void {
-        let pkgPerfMap: Map<string, PerfComponent> = new Map();
-
-        for (const data of this.details) {
-            if (data.componentCategory === ComponentCategory.UNKNOWN) {
-                continue;
-            }
-
-            this.statistics.categoriesSum[data.eventType][data.componentCategory] += data.symbolEvents;
-            this.statistics.categoriesTotal[data.eventType][data.componentCategory] += data.symbolTotalEvents;
-            this.statistics.total[data.eventType] += data.symbolEvents;
-            let key = `${data.componentCategory}-${data.componentName}-${data.originKind}`;
-            if (!pkgPerfMap.has(key)) {
-                pkgPerfMap.set(key, {
-                    name: data.componentName || '',
-                    cycles: data.eventType === PerfEvent.CYCLES_EVENT ? data.symbolEvents : 0,
-                    totalCycles: data.eventType === PerfEvent.CYCLES_EVENT ? data.symbolTotalEvents : 0,
-                    instructions: data.eventType === PerfEvent.INSTRUCTION_EVENT ? data.symbolEvents : 0,
-                    totalInstructions: data.eventType === PerfEvent.INSTRUCTION_EVENT ? data.symbolTotalEvents : 0,
-                    category: data.componentCategory!,
-                    originKind: data.originKind,
-                });
-            } else {
-                let existComponent = pkgPerfMap.get(key)!;
-                if (data.eventType === PerfEvent.CYCLES_EVENT) {
-                    existComponent.cycles += data.symbolEvents;
-                    existComponent.totalCycles += data.symbolTotalEvents;
-                } else if (data.eventType === PerfEvent.INSTRUCTION_EVENT) {
-                    existComponent.instructions += data.symbolEvents;
-                    existComponent.totalInstructions += data.symbolTotalEvents;
-                }
-            }
-        }
-
-        this.statistics.components = Array.from(pkgPerfMap.values());
-    }
-
-    private getEventType(eventName: string): PerfEvent | null {
-        if (CYCLES_EVENT.has(eventName)) {
-            return PerfEvent.CYCLES_EVENT;
-        }
-        if (INSTRUCTION_EVENT.has(eventName)) {
-            return PerfEvent.INSTRUCTION_EVENT;
-        }
-        return null;
-    }
-}
-
-// 不同场景共享的数据
-interface PerfCommonData {
-    threadsMap: Map<number, PerfThread>; // 线程表
-    filesClassificationMap: Map<number, FileClassification>; // 文件分类表
-    symbolsMap: Map<number, string>; // 符号表
-    symbolsClassificationMap: Map<number, FileClassification>; // ets 需要按照符号进一步分类
-    callchainsMap: Map<number, PerfCallchain>; // 调用链表
-}
-
 export class PerfAnalyzer extends PerfAnalyzerBase {
-    protected commonData: PerfCommonData;
+    protected threadsMap: Map<number, PerfThread>; // 线程表
+    protected callchainsMap: Map<number, PerfCallchain>; // 调用链表
     protected callchainIds: Set<number>;
     protected testSteps: TestStep[];
-    protected stepsSample: PerfStepSample[];
+    protected samples: PerfSample[];
 
     constructor(workspace: string) {
         super(workspace);
-        this.commonData = {
-            threadsMap: new Map(),
-            filesClassificationMap: new Map(),
-            symbolsMap: new Map(),
-            symbolsClassificationMap: new Map(),
-            callchainsMap: new Map(),
-        };
 
+        this.threadsMap = new Map();
+        this.callchainsMap = new Map();
         this.callchainIds = new Set<number>();
         this.testSteps = [];
-        this.stepsSample = [];
+        this.samples = [];
     }
 
     public async calcPerfDbTotalInstruction(dbfile: string): Promise<number> {
         let total = 0;
+        if (dbfile === '') {
+            return 0;
+        }
 
         let SQL = await initSqlJs();
 
@@ -401,8 +188,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             db = new SQL.Database(fs.readFileSync(dbfile!));
             // 读取样本数据
             total = await this.queryProcessTotal(db);
-        } catch (error) {
-            logger.error(`${error} ${dbfile}`);
+        } catch (err) {
+            logger.error(`${err} ${dbfile}`);
         } finally {
             if (db) {
                 db.close();
@@ -413,351 +200,109 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return total;
     }
 
-    private async queryProcessTotal(db: Database): Promise<number> {
-        let total = 0;
-        const results = await db.exec(PERF_PROCESS_TOTAL_SQL);
-        if (results.length === 0) {
-            return total;
+    async analyze(testInfo: TestSceneInfo, output: string): Promise<PerfSum> {
+        let hash = createHash('sha256');
+        testInfo.rounds[testInfo.chooseRound].steps.map((value) => {
+            if (value.dbfile) {
+                const fileBuffer = fs.readFileSync(value.dbfile);
+                hash.update(fileBuffer);
+            }
+        });
+        const fileHash = hash.digest('hex');
+
+        if (this.project.versionId.length === 0) {
+            this.setProjectInfo(testInfo.packageName, testInfo.appVersion);
         }
 
-        results[0].values.map((row) => {
-            total += row[0] as number;
-        });
-        return total;
-    }
-
-    async analyze(dbPath: string, testInfo: TestSceneInfo, output: string, stepIdx: number): Promise<PerfSum> {
-        const fileBuffer = fs.readFileSync(dbPath);
-        const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
-
         // 读取数据并统计
-        // await this.loadDbAndStatistics(dbPath, testInfo.packageName);
+        await this.loadDbAndStatistics(testInfo, output, testInfo.packageName);
+        let perfPath = '';
+        let isFirstPerfPath = true;
+        for (const step of testInfo.rounds[testInfo.chooseRound].steps!) {
+            if (isFirstPerfPath) {
+                perfPath = path.resolve(step.dbfile!);
+                isFirstPerfPath = false;
+            } else {
+                perfPath = perfPath + ',' + step.dbfile!.replace(path.dirname(step.reportRoot), '');
+            }
+        }
 
         let perf: PerfSum = {
             scene: testInfo.scene,
             osVersion: testInfo.osVersion,
-            perfPath: path.resolve(dbPath),
+            perfPath: perfPath,
             perfId: fileHash,
             timestamp: testInfo.timestamp,
-            steps: this.stepsSample.map((value) => value.statistics),
+            steps: Array.from(this.stepSumMap.values()),
             categories: getComponentCategories(),
         };
 
         let now = new Date().getTime();
         if (getConfig().inDbtools) {
             await this.saveDbtoolsXlsx(
+                testInfo,
                 perf,
-                path.join(output, `ecol_load_perf_${testInfo.packageName}_step${stepIdx}_${now}.xlsx`)
+                path.join(output, `ecol_load_perf_${testInfo.packageName}_${testInfo.scene}_${now}.xlsx`)
             );
         } else {
-            await this.saveSqlite(perf, path.join(this.getProjectRoot(), path.basename(dbPath)));
-        }
-
-        // for debug
-        if (getConfig().save.callchain) {
-            await this.saveCallchainXlsx(
-                path.join(output, `callchain_${testInfo.packageName}_step${stepIdx}_${now}.xlsx`)
+            await this.saveSqlite(
+                perf,
+                path.join(this.getProjectRoot(), path.basename(testInfo.rounds[testInfo.chooseRound].steps[0].dbfile!))
             );
         }
 
         return perf;
     }
-    async analyze2(dbPath: string, app_id: string, step: Step): Promise<StepJsonData> {
-        let sum = 0;
-        // 读取数据并统计
-        await this.loadDbAndStatistics(dbPath, app_id);
-        this.stepsSample[0].details.forEach(detail => sum += detail.symbolEvents);
-        let stepInfo: StepJsonData = {
-            step_id: step.stepIdx,
-            step_name: step.description,
-            count: sum,
-            round: 0,
-            perf_data_path: '',
-            data: this.stepsSample[0].details,
-        };
 
-        return stepInfo;
-    }
-
-    private async saveSqlite(perf: PerfSum, outputFileName: string): Promise<void> {
-        const db = new PerfDatabase(outputFileName);
-        let database = await db.initialize();
-
-        for (const step of this.stepsSample) {
-            await db.insertRecords(database, perf.osVersion, perf.scene, step.details);
-        }
-        db.insertTestSteps(database, this.testSteps);
-        db.close(database);
-        let name = path.basename(outputFileName).replace(path.extname(outputFileName), '');
-        fs.writeFileSync(
-            path.join(this.getWorkspace(), `${name}_负载拆解.hpr`),
-            JSON.stringify({ id: 'perf', path: path.join(PROJECT_ROOT, path.basename(outputFileName)) })
-        );
-    }
-
-    /**
-     * 另存为dbtools 导入Excel
-     * @param perf
-     * @param outputFileName
-     */
-    public async saveDbtoolsXlsx(perf: PerfSum, outputFileName: string): Promise<void> {
-        let symbolPerfData: { type?: any; value: any }[][] = [];
-        symbolPerfData.push([
-            { value: '版本' },
-            { value: '测试模型' },
-            { value: '测试时间' },
-            { value: '测试设备SN' },
-            { value: 'trace文件路径' },
-            { value: '测试场景' },
-            { value: '场景执行id' },
-            { value: '场景步骤id' },
-            { value: '应用版本唯一标识' },
-            { value: 'htrace文件唯一标识' },
-            { value: '进程id' },
-            { value: '进程名' },
-            { value: '进程cycle数' },
-            { value: '进程指令数' },
-            { value: '线程id' },
-            { value: '线程名' },
-            { value: '线程cycle数' },
-            { value: '线程指令数' },
-            { value: '文件' },
-            { value: '文件cycle数' },
-            { value: '文件指令数' },
-            { value: '符号Symbol' },
-            { value: 'cycle数' },
-            { value: 'Total cycle数' },
-            { value: '指令数' },
-            { value: 'Total指令数' },
-            { value: '组件大类' },
-            { value: '组件小类' },
-            { value: '组件来源' },
-        ]);
-
-        symbolPerfData.push([
-            { value: 'test_version' },
-            { value: 'test_model' },
-            { value: 'test_date' },
-            { value: 'test_sn' },
-            { value: 'trace_path' },
-            { value: 'test_scene_name' },
-            { value: 'test_scene_trial_id' },
-            { value: 'step_id' },
-            { value: 'app_version_id' },
-            { value: 'hiperf_id' },
-            { value: 'process_id' },
-            { value: 'process_name' },
-            { value: 'process_cycles' },
-            { value: 'process_instructions' },
-            { value: 'thread_id' },
-            { value: 'thread_name' },
-            { value: 'thread_cycles' },
-            { value: 'thread_instructions' },
-            { value: 'file' },
-            { value: 'file_cycles' },
-            { value: 'file_instructions' },
-            { value: 'symbol' },
-            { value: 'cpu_cycles' },
-            { value: 'cpu_cycles_tree' },
-            { value: 'cpu_instructions' },
-            { value: 'cpu_instructions_tree' },
-            { value: 'component_type' },
-            { value: 'component_name' },
-            { value: 'origin_kind' },
-        ]);
-
-        let symbolDetailsMap = new Map<string, PerfSymbolDetailData[]>();
-        for (const step of this.stepsSample) {
-            for (const data of step.details) {
-                if (data.componentCategory === ComponentCategory.UNKNOWN) {
-                    continue;
-                }
-
-                let row: PerfSymbolDetailData[] = [
-                    {
-                        stepIdx: step.testStep.id,
-                        eventType: PerfEvent.CYCLES_EVENT,
-                        pid: data.pid,
-                        processName: data.processName,
-                        processEvents: step.processEventMap.get(`${data.pid}-${PerfEvent.CYCLES_EVENT}`) || 0,
-                        tid: data.tid,
-                        threadEvents: step.threadsEventMap.get(`${data.tid}-${PerfEvent.CYCLES_EVENT}`) || 0,
-                        threadName: data.threadName,
-                        file: data.file,
-                        fileEvents: 0,
-                        symbol: data.symbol,
-                        symbolEvents: 0,
-                        symbolTotalEvents: 0,
-                        componentName: data.componentName,
-                        componentCategory: data.componentCategory,
-                        originKind: data.originKind,
-                    },
-                    {
-                        stepIdx: step.testStep.id,
-                        eventType: PerfEvent.INSTRUCTION_EVENT,
-                        pid: data.pid,
-                        processName: data.processName,
-                        processEvents: step.processEventMap.get(`${data.pid}-${PerfEvent.INSTRUCTION_EVENT}`) || 0,
-                        tid: data.tid,
-                        threadEvents: step.threadsEventMap.get(`${data.tid}-${PerfEvent.INSTRUCTION_EVENT}`) || 0,
-                        threadName: data.threadName,
-                        file: data.file,
-                        fileEvents: 0,
-                        symbol: data.symbol,
-                        symbolEvents: 0,
-                        symbolTotalEvents: 0,
-                        componentName: data.componentName,
-                        componentCategory: data.componentCategory,
-                        originKind: data.originKind,
-                    },
-                ];
-
-                let key = `${step.testStep.id}_${data.pid}_${data.tid}_${data.file}_${data.symbol}`;
-                if (!symbolDetailsMap.has(key)) {
-                    symbolDetailsMap.set(key, row);
-                }
-
-                row = symbolDetailsMap.get(key)!;
-                row[data.eventType].processEvents = data.processEvents;
-                row[data.eventType].threadEvents = data.threadEvents;
-                row[data.eventType].fileEvents = data.fileEvents;
-                row[data.eventType].symbolEvents = data.symbolEvents;
-                row[data.eventType].symbolTotalEvents = data.symbolTotalEvents;
-            }
-        }
-
-        for (const [_, data] of symbolDetailsMap) {
-            if (data[0].symbolEvents + data[0].symbolTotalEvents + data[1].symbolEvents + data[1].symbolTotalEvents === 0) {
-                continue;
-            }
-            let row = [
-                { value: perf.osVersion, type: String },
-                { value: 'Hapray', type: String },
-                { value: this.dateCustomFormatting(perf.timestamp), type: String },
-                { value: 'Hapray', type: String },
-                { value: perf.perfPath, type: String },
-                { value: perf.scene, type: String },
-                { value: 'Hapray', type: String },
-                { value: data[0].stepIdx, type: Number }, // step
-
-                { value: this.project.versionId, type: String },
-                { value: perf.perfId, type: String },
-
-                { value: data[0].pid, type: Number },
-                { value: data[0].processName, type: String },
-                { value: data[0].processEvents, type: Number },
-                { value: data[1].processEvents, type: Number },
-
-                { value: data[0].tid, type: Number },
-                { value: data[0].threadName, type: String },
-                { value: data[0].threadEvents, type: Number },
-                { value: data[1].threadEvents, type: Number },
-
-                { value: data[0].file, type: String },
-                { value: data[0].fileEvents, type: Number },
-                { value: data[1].fileEvents, type: Number },
-
-                { value: data[0].symbol.substring(0, 2048), type: String },
-                { value: data[0].symbolEvents, type: Number },
-                { value: data[0].symbolTotalEvents, type: Number },
-                { value: data[1].symbolEvents, type: Number },
-                { value: data[1].symbolTotalEvents, type: Number },
-
-                { value: data[0].componentCategory, type: Number },
-                { value: data[0].componentName, type: String },
-                { value: data[0].originKind, type: Number },
-            ];
-
-            symbolPerfData.push(row);
-        }
-
-        let sceneStepData: { type?: any; value: any }[][] = [];
-        sceneStepData.push([
-            { value: '版本' },
-            { value: '测试模型' },
-            { value: '测试时间' },
-            { value: '测试设备SN' },
-            { value: 'trace文件路径' },
-            { value: '测试场景' },
-            { value: '场景执行id' },
-            { value: '场景步骤id' },
-
-            { value: 'htrace文件唯一标识' },
-            { value: '步骤名称' },
-        ]);
-
-        sceneStepData.push([
-            { value: 'test_version' },
-            { value: 'test_model' },
-            { value: 'test_date' },
-            { value: 'test_sn' },
-            { value: 'trace_path' },
-            { value: 'test_scene_name' },
-            { value: 'test_scene_trial_id' },
-            { value: 'step_id' },
-
-            { value: 'hiperf_id' },
-            { value: 'step_name' },
-        ]);
-
-        for (const step of this.testSteps) {
-            let row = [
-                { value: perf.osVersion, type: String },
-                { value: 'Hapray', type: String },
-                { value: this.dateCustomFormatting(perf.timestamp), type: String },
-                { value: 'Hapray', type: String },
-                { value: perf.perfPath, type: String },
-                { value: perf.scene, type: String },
-                { value: 'Hapray', type: String },
-                { value: step.id, type: Number }, // step
-
-                { value: perf.perfId, type: String },
-                { value: step.name, type: String },
-            ];
-
-            sceneStepData.push(row);
-        }
-
-        await writeXlsxFile([symbolPerfData, sceneStepData], {
-            sheets: ['ecol_load_hiperf_detail', 'ecol_load_step'],
-            filePath: outputFileName,
-        });
-    }
-
-    private dateCustomFormatting(timestamp: number): string {
-        let date = new Date(timestamp);
-        const padStart = (value: number): string => value.toString().padStart(2, '0');
-        return `${date.getFullYear()}-${padStart(date.getMonth() + 1)}-${padStart(date.getDate())} ${padStart(
-            date.getHours()
-        )}:${padStart(date.getMinutes())}:${padStart(date.getSeconds())}`;
-    }
-
-    private async loadDbAndStatistics(dbPath: string, processName: string): Promise<void> {
+    private async loadDbAndStatistics(testInfo: TestSceneInfo, output: string, packageName: string): Promise<void> {
         let SQL = await initSqlJs();
-        const db = new SQL.Database(fs.readFileSync(dbPath));
+        for (const stepGroup of testInfo.rounds[testInfo.chooseRound].steps) {
+            logger.info(`loadDbAndStatistics groupId=${stepGroup.groupId} parse dbfile ${stepGroup.dbfile}`);
+            const db = new SQL.Database(fs.readFileSync(stepGroup.dbfile!));
 
-        try {
-            // 读取所有线程信息
-            await this.queryThreads(db);
-            // 读取所有文件信息
-            await this.queryFiles(db);
-            // 读取所有符号信息
-            await this.querySymbols(db);
-            // 预处理调用链信息
-            await this.queryCallchain(db, processName);
-            this.disassembleCallchainLoad();
-            // 读取测试步骤时间戳
-            await this.queryTestStepTimestamps(db);
-            // 读取样本数据
-            await this.queryProcessSample(db, processName);
-        } catch (error) {
-            logger.error(`loadDbAndStatistics ${error}`);
-        } finally {
-            await db.close();
+            try {
+                // 统计信息
+                this.loadStatistics(db, packageName, testInfo.scene, stepGroup.groupId);
+                // for debug
+                if (getConfig().save.callchain) {
+                    await this.saveCallchainXlsx(
+                        path.join(output, `callchain_${testInfo.packageName}_${testInfo.scene}`)
+                    );
+                }
+            } catch (error) {
+                let err = error as Error;
+                logger.error(`loadDbAndStatistics ${err}, ${err.stack} ${stepGroup.dbfile}`);
+            } finally {
+                // 清空过程缓存map
+                this.callchainIds.clear();
+                this.filesClassifyMap.clear();
+                this.symbolsMap.clear();
+                this.symbolsClassifyMap.clear();
+                this.callchainsMap.clear();
+                this.threadsMap.clear();
+                this.samples = [];
+                db.close();
+            }
         }
     }
 
-    private async queryTestStepTimestamps(db: Database): Promise<void> {
+    private loadStatistics(db: Database, packageName: string, scene: string, groupId: number): number {
+        // 读取所有线程信息
+        this.queryThreads(db, packageName, scene);
+        // 读取所有文件信息
+        this.queryFiles(db);
+        // 读取所有符号信息
+        this.querySymbols(db);
+        // 预处理调用链信息
+        this.queryCallchain(db, packageName);
+        this.disassembleCallchainLoad();
+        // 读取测试步骤时间戳
+        this.queryTestStepTimestamps(db, groupId);
+        // 读取样本数据
+        return this.queryProcessSample(db, packageName, groupId);
+    }
+
+    private queryTestStepTimestamps(db: Database, groupId: number): void {
         const results = db.exec(TEST_STEP_TIMESTAMPS);
         let steps: { name: string; ts: number; dur: number }[] = [];
         if (results.length > 0) {
@@ -768,12 +313,17 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         if (steps.length > 1) {
             for (let i = 0; i < steps.length - 1; i += 2) {
-                const lastIndex = steps[i].name.lastIndexOf('&');
+                let lastIndex = steps[i].name.lastIndexOf('&');
+                if (lastIndex === -1) {
+                    lastIndex = steps[i].name.lastIndexOf('#');
+                }
+
                 let step: TestStep = {
-                    id: Math.floor(i / 2),
+                    id: this.testSteps.length,
+                    groupId: groupId,
                     start: steps[i].ts + steps[i].dur,
                     end: steps[i + 1].ts,
-                    name: lastIndex !== -1 ? steps[i].name.substring(lastIndex + 1) : '',
+                    name: lastIndex !== -1 ? steps[i].name.substring(lastIndex + 1) : steps[i].name,
                 };
                 this.testSteps.push(step);
             }
@@ -783,10 +333,22 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             );
             if (results.length > 0) {
                 results[0].values.map((row) => {
-                    this.testSteps.push({ id: 0, name: '', start: row[1] as number, end: row[0] as number });
+                    this.testSteps.push({
+                        id: this.testSteps.length,
+                        groupId: groupId,
+                        name: '',
+                        start: row[1] as number,
+                        end: row[0] as number,
+                    });
                 });
             } else {
-                this.testSteps.push({ id: 0, name: '', start: 0, end: Number.MAX_SAFE_INTEGER });
+                this.testSteps.push({
+                    id: this.testSteps.length,
+                    groupId: groupId,
+                    name: '',
+                    start: 0,
+                    end: Number.MAX_SAFE_INTEGER,
+                });
             }
         }
     }
@@ -796,19 +358,25 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @returns
      */
-    private queryThreads(db: Database): void {
+    private queryThreads(db: Database, packageName: string, scene: string): void {
         const results = db.exec('SELECT thread_id, process_id, thread_name FROM perf_thread');
         if (results.length === 0) {
             return;
         }
 
         results[0].values.map((row) => {
+            let threadClassify = this.classifyThread(row[2] as string);
+            let name = row[2] as string;
+            if (!name || name.length === 0) {
+                name = UNKNOWN_STR;
+            }
             let thread: PerfThread = {
-                thread_id: row[0] as number,
-                process_id: row[1] as number,
-                thread_name: row[2] as string,
+                threadId: row[0] as number,
+                processId: row[1] as number,
+                name: name,
+                classification: threadClassify,
             };
-            this.commonData.threadsMap.set(thread.thread_id, thread);
+            this.threadsMap.set(thread.threadId, thread);
         });
     }
 
@@ -817,16 +385,17 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @returns
      */
-    private async queryFiles(db: Database): Promise<void> {
+    private queryFiles(db: Database): void {
         const results = db.exec('SELECT file_id, path FROM perf_files GROUP BY path ORDER BY file_id');
         if (results.length === 0) {
             return;
         }
 
-        this.commonData.filesClassificationMap.set(-1, {
-            file: 'UNKNOWN',
+        this.filesClassifyMap.set(-1, {
+            file: UNKNOWN_STR,
             category: ComponentCategory.UNKNOWN,
-            subCategory: '',
+            categoryName: UNKNOWN_STR,
+            subCategoryName: '',
             originKind: OriginKind.UNKNOWN,
         });
         results[0].values.map((row) => {
@@ -836,7 +405,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             if (pidMatch) {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
-            this.commonData.filesClassificationMap.set(row[0] as number, this.classifyFile(file));
+            let fileClassify = this.classifyFile(file);
+            this.filesClassifyMap.set(row[0] as number, fileClassify);
         });
     }
 
@@ -845,13 +415,13 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @returns
      */
-    private async querySymbols(db: Database): Promise<void> {
+    private querySymbols(db: Database): void {
         const results = db.exec('SELECT id, data FROM data_dict');
         if (results.length === 0) {
             return;
         }
         results[0].values.map((row) => {
-            this.commonData.symbolsMap.set(row[0] as number, row[1] as string);
+            this.symbolsMap.set(row[0] as number, row[1] as string);
         });
     }
 
@@ -861,7 +431,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param processName
      * @returns
      */
-    private async queryCallchain(db: Database, processName: string): Promise<void> {
+    private queryCallchain(db: Database, processName: string): void {
         const results = db.exec(PERF_PROCESS_CALLCHAIN_SQL, [processName]);
         if (results.length === 0) {
             return;
@@ -871,7 +441,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 depth: row[1] as number,
                 fileId: row[2] as number,
                 symbolId: row[3] as number,
-                classification: this.commonData.filesClassificationMap.get(row[2] as number)!,
+                classification: this.filesClassifyMap.get(row[2] as number)!,
             };
 
             // ets 需要基于symbol 进一步分类
@@ -879,14 +449,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 call.classification = this.classifySymbol(call.symbolId, call.classification);
             }
 
-            let callchain = this.commonData.callchainsMap.get(row[0] as number) || {
+            let callchain = this.callchainsMap.get(row[0] as number) || {
                 callchainId: row[0] as number,
                 selfEvent: 0,
                 totalEvents: [],
                 stack: [],
             };
             callchain.stack.push(call);
-            this.commonData.callchainsMap.set(callchain.callchainId, callchain);
+            this.callchainsMap.set(callchain.callchainId, callchain);
         });
     }
 
@@ -894,8 +464,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * 拆解callchain负载
      */
     private disassembleCallchainLoad(): void {
-        for (const [_, callchain] of this.commonData.callchainsMap) {
-            // 从栈顶往下找到第一个不是计算的符号，标记为selfEvent, 如果整个栈都是计算则栈顶0标记为selfEvent
+        for (const [_, callchain] of this.callchainsMap) {
+            // 从栈顶往下找到第一个不是计算的符号，标记为selfEvent, 如果整个栈都是计算则栈标记为selfEvent
             callchain.selfEvent = 0;
             for (let i = 0; i < callchain.stack.length; i++) {
                 if (!this.isPureCompute(callchain.stack[i])) {
@@ -937,8 +507,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     }
 
     private async saveCallchainXlsx(outputFileName: string): Promise<void> {
-        let callchainData: { type?: any; value: any }[][] = [];
-        callchainData.push([
+        const MAX_SIZE = 500000;
+        const header = [
             { value: 'callchain_id' },
             { value: 'depth' },
             { value: 'file' },
@@ -947,9 +517,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             { value: '组件小类' },
             { value: '库来源' },
             { value: '负载划分' },
-        ]);
+        ];
+        const now = new Date().getTime();
+        let order = 1;
 
-        for (const [id, chain] of this.commonData.callchainsMap) {
+        let callchainData: { type?: any; value: any }[][] = [];
+        callchainData.push(header);
+
+        for (const [id, chain] of this.callchainsMap) {
             if (!this.callchainIds.has(id)) {
                 continue;
             }
@@ -965,17 +540,30 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 callchainData.push([
                     { value: chain.callchainId, type: Number },
                     { value: call.depth, type: Number },
-                    { value: call.classification.file, type: String },
-                    { value: this.commonData.symbolsMap.get(call.symbolId), type: String },
+                    { value: call.classification.file || '', type: String },
+                    { value: this.symbolsMap.get(call.symbolId) || '', type: String },
                     { value: ComponentCategory[call.classification.category!], type: String },
-                    { value: call.classification.subCategory, type: String },
+                    { value: call.classification.subCategoryName || '', type: String },
                     { value: OriginKind[call.classification.originKind!], type: String },
                     { value: event, type: String },
                 ]);
             }
+
+            if (callchainData.length > MAX_SIZE) {
+                await writeXlsxFile([callchainData], {
+                    sheets: ['callchain'],
+                    filePath: `${outputFileName}_${order}_${now}.xlsx`,
+                });
+                callchainData = [];
+                callchainData.push(header);
+                order++;
+            }
         }
 
-        await writeXlsxFile([callchainData], { sheets: ['callchain'], filePath: outputFileName });
+        await writeXlsxFile([callchainData], {
+            sheets: ['callchain'],
+            filePath: `${outputFileName}_${order}_${now}.xlsx`,
+        });
     }
 
     /**
@@ -983,152 +571,190 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @param appBundleName
      */
-    private async queryProcessSample(db: Database, appBundleName: string): Promise<void> {
-        for (const testStep of this.testSteps) {
-            const results = db.exec(PERF_PROCESS_STEP_SAMPLE_SQL, [appBundleName, testStep.start, testStep.end]);
-            if (results.length === 0) {
-                this.createStepSample(testStep, []);
+    private queryProcessSample(db: Database, appBundleName: string, groupId: number): number {
+        const results = db.exec(PERF_PROCESS_SAMPLE_SQL, [appBundleName]);
+        if (results.length === 0) {
+            return 0;
+        }
+
+        results[0].values.map((row) => {
+            this.callchainIds.add(row[1] as number);
+            if ((row[2] as number) === 0) {
+                return;
+            }
+
+            this.samples.push({
+                id: row[0] as number,
+                callchain_id: row[1] as number,
+                thread_id: row[2] as number,
+                event_count: row[3] as number,
+                cpu_id: row[4] as number,
+                event_name: row[5] as string,
+                timestamp: row[6] as number,
+            });
+        });
+
+        return this.calcSymbolData(groupId);
+    }
+
+    private async queryProcessTotal(db: Database): Promise<number> {
+        let total = 0;
+        const results = await db.exec(PERF_PROCESS_TOTAL_SQL);
+        if (results.length === 0) {
+            return total;
+        }
+
+        results[0].values.map((row) => {
+            total += row[0] as number;
+        });
+        return total;
+    }
+
+    /**
+     * 计算符号负载
+     * @param classifyThread
+     */
+    public calcSymbolData(groupId: number): number {
+        let resultMaps: Map<string, PerfSymbolDetailData> = new Map();
+        let fileEventMaps: Map<string, number> = new Map();
+        let threadsEventMap: Map<string, number> = new Map(); // 线程统计事件数
+        let processEventMap: Map<string, number> = new Map(); // 进程统计事件数
+
+        for (const sample of this.samples) {
+            let event = this.getEventType(sample.event_name);
+            if (!event) {
                 continue;
             }
-            let samples: PerfSample[] = [];
-            results[0].values.map((row) => {
-                this.callchainIds.add(row[1] as number);
-                samples.push({
-                    id: row[0] as number,
-                    callchain_id: row[1] as number,
-                    thread_id: row[2] as number,
-                    event_count: row[3] as number,
-                    cpu_id: row[4] as number,
-                    event_name: row[5] as string,
-                    timestamp: row[6] as number,
-                });
-            });
-            this.createStepSample(testStep, samples);
-        }
-    }
 
-    private createStepSample(testStep: TestStep, samples: PerfSample[]): void {
-        let step = new PerfStepSample(testStep, samples, this.commonData);
-        step.calcSymbolData((threadName) => this.classifyThread(threadName));
-        step.calcComponentsData();
-        this.stepsSample.push(step);
-    }
-
-    private classifyFile(file: string): FileClassification {
-        let fileClassify: FileClassification = {
-            file: file,
-            category: ComponentCategory.SYS_SDK,
-            subCategory: path.basename(file),
-            originKind: OriginKind.UNKNOWN,
-        };
-
-        if (this.cfgFileComponent.has(file)) {
-            let component = this.cfgFileComponent.get(file)!;
-            fileClassify.category = component.category;
-            fileClassify.subCategory = component.name;
-
-            return fileClassify;
-        }
-
-        for (const [key, component] of this.cfgRegexComponent) {
-            let matched = file.match(key);
-            if (matched) {
-                fileClassify.category = component.category;
-                fileClassify.subCategory = component.name;
-                return fileClassify;
+            let thread = this.threadsMap.get(sample.thread_id);
+            if (!thread) {
+                thread = {
+                    name: UNKNOWN_STR,
+                    processId: sample.thread_id,
+                    threadId: sample.thread_id,
+                    classification: {
+                        category: ComponentCategory.UNKNOWN,
+                        categoryName: UNKNOWN_STR,
+                        subCategoryName: UNKNOWN_STR,
+                    },
+                };
+                this.threadsMap.set(sample.thread_id, thread);
             }
-        }
-
-        /**
-         * bundle so file
-         * /proc/8836/root/data/storage/el1/bundle/libs/arm64/libalog.so
-         */
-        let regex = new RegExp('/proc/.*/data/storage/.*/bundle/.*');
-        if (file.match(regex)) {
-            let name = path.basename(file);
-            if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
-                fileClassify.category = ComponentCategory.APP_SO;
-                // if (this.soOrigins.has(path.basename(file))) {
-                //     let origin = this.soOrigins.get(name)!.broad_category;
-                //     if (origin === 'THIRD_PARTY') {
-                //         fileClassify.originKind = OriginKind.THIRD_PARTY;
-                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
-                //     } else if (origin === 'OPENSOURCE') {
-                //         fileClassify.originKind = OriginKind.OPEN_SOURCE;
-                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
-                //     } else if (origin === 'FIRST_PARTY') {
-                //         fileClassify.originKind = OriginKind.FIRST_PARTY;
-                //     }
-                // }
-
-                return fileClassify;
+            let process = this.threadsMap.get(thread.processId)!;
+            if (!process) {
+                logger.error(`calcSymbolData process ${thread.processId} not found`);
+                continue;
             }
 
-            fileClassify.category = ComponentCategory.APP_ABC;
-            return fileClassify;
-        }
-
-        if (this.cfgFileComponent.has(path.basename(file))) {
-            let component = this.cfgFileComponent.get(path.basename(file))!;
-            fileClassify.category = component.category;
-            fileClassify.subCategory = component.name;
-
-            return fileClassify;
-        }
-
-        return fileClassify;
-    }
-
-    private classifySymbol(symbolId: number, fileClassification: FileClassification): FileClassification {
-        if (this.commonData.symbolsClassificationMap.has(symbolId)) {
-            return this.commonData.symbolsClassificationMap.get(symbolId)!;
-        }
-
-        const symbol = this.commonData.symbolsMap.get(symbolId) || '';
-        /**
-         * ets symbol
-         * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
-         */
-        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|(\d+(?:\.\d+){2})\|([^\|\]]*):(\d+):(\d+)\]$/;
-        let matches = symbol.match(regex);
-        if (matches) {
-            const [_, functionName, _entry, packageName, version, filePath, _line, _column] = matches;
-            this.commonData.symbolsMap.set(symbolId, functionName);
-
-            let symbolClassification: FileClassification = {
-                file: `${packageName}/${version}/${filePath}`,
-                originKind: fileClassification.originKind,
-                category: fileClassification.category,
-                subCategory: packageName,
+            let callchain = this.callchainsMap.get(sample.callchain_id)!;
+            let call = callchain.stack[callchain.selfEvent];
+            let data: PerfSymbolDetailData = {
+                stepIdx: groupId,
+                eventType: event,
+                pid: process.processId,
+                processName: process.name,
+                processEvents: 0,
+                tid: thread.threadId,
+                threadEvents: 0,
+                threadName: thread.name,
+                file: call.classification.file,
+                fileEvents: 0,
+                symbol: this.symbolsMap.get(call.symbolId) || '',
+                symbolEvents: sample.event_count,
+                symbolTotalEvents: 0,
+                originKind: call.classification.originKind,
+                componentCategory: call.classification.category,
+                componentName: call.classification.subCategoryName,
             };
 
-            if (this.hapComponents.has(matches[3])) {
-                symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
+            let threadEventCount = threadsEventMap.get(this.getThreadKey(data)) || 0;
+            threadsEventMap.set(this.getThreadKey(data), threadEventCount + sample.event_count);
+
+            let processEventCount = processEventMap.get(this.getProcessKey(data)) || 0;
+            processEventMap.set(this.getProcessKey(data), processEventCount + sample.event_count);
+
+            // 根据线程名直接分类
+            if (thread.classification.category !== ComponentCategory.UNKNOWN) {
+                if (thread.classification.subCategoryName) {
+                    data.componentName = thread.classification.subCategoryName;
+                } else {
+                    data.componentName = path.basename(call.classification.file);
+                }
+
+                data.componentCategory = thread.classification.category;
             }
 
-            this.commonData.symbolsClassificationMap.set(symbolId, symbolClassification);
-            return symbolClassification;
+            let key = this.getSymbolKey(data);
+            if (resultMaps.has(key)) {
+                let value = resultMaps.get(key)!;
+                value.symbolEvents += data.symbolEvents;
+                value.symbolTotalEvents += data.symbolTotalEvents;
+            } else {
+                resultMaps.set(key, data);
+            }
+
+            // files
+            let fileKey = this.getFileKey(data);
+            if (fileEventMaps.has(fileKey)) {
+                let value = fileEventMaps.get(fileKey)!;
+                fileEventMaps.set(fileKey, value + data.symbolEvents);
+            } else {
+                fileEventMaps.set(fileKey, data.symbolEvents);
+            }
         }
 
-        return fileClassification;
+        for (const [_, data] of resultMaps) {
+            data.fileEvents = fileEventMaps.get(this.getFileKey(data))!;
+            data.threadEvents = threadsEventMap.get(this.getThreadKey(data))!;
+            data.processEvents = processEventMap.get(this.getProcessKey(data))!;
+        }
+
+        let groupData = Array.from(resultMaps.values()).sort((a, b) => {
+            if (a.pid < b.pid) {
+                return -1;
+            } else if (a.pid > b.pid) {
+                return 1;
+            }
+
+            if (a.tid < b.tid) {
+                return -1;
+            } else if (a.tid > b.tid) {
+                return 1;
+            }
+
+            if (a.file !== b.file) {
+                return a.file.localeCompare(b.file);
+            }
+            return a.symbol.localeCompare(b.symbol);
+        });
+
+        this.details.push(...groupData);
+        return 0;
     }
 
-    private classifyThread(threadName: string): FileClassification | undefined {
-        if (threadName === null) {
-            return undefined;
+    private getEventType(eventName: string): PerfEvent | null {
+        if (CYCLES_EVENT.has(eventName)) {
+            return PerfEvent.CYCLES_EVENT;
         }
-
-        for (const [reg, component] of this.threadClassifyCfg) {
-            if (threadName?.match(reg)) {
-                return {
-                    file: '',
-                    originKind: OriginKind.UNKNOWN,
-                    category: component.category,
-                    subCategory: component.name,
-                };
-            }
+        if (INSTRUCTION_EVENT.has(eventName)) {
+            return PerfEvent.INSTRUCTION_EVENT;
         }
+        return null;
+    }
 
-        return undefined;
+    private getSymbolKey(data: PerfSymbolDetailData): string {
+        return `${data.eventType}_${data.stepIdx}_${data.tid}_${data.file}_${data.symbol}`;
+    }
+
+    private getFileKey(data: PerfSymbolDetailData): string {
+        return `${data.eventType}_${data.stepIdx}_${data.tid}_${data.file}`;
+    }
+
+    private getThreadKey(data: PerfSymbolDetailData): string {
+        return `${data.eventType}_${data.stepIdx}_${data.tid}`;
+    }
+
+    private getProcessKey(data: PerfSymbolDetailData): string {
+        return `${data.eventType}_${data.stepIdx}_${data.pid}`;
     }
 }

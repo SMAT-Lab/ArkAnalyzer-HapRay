@@ -77,11 +77,11 @@ enum ResType {
     PROF = 20,
     SVG = 21,
     PATTERN = 22,
-    INVALID_RES_TYPE = -1
+    INVALID_RES_TYPE = -1,
 }
 
 export class ResourceIndexParser {
-    bufferHelper: BufferHelper
+    bufferHelper: BufferHelper;
     stringValueMap: Map<string, string>[];
     constructor(buffer: Buffer) {
         this.bufferHelper = new BufferHelper(buffer);

@@ -1,7 +1,21 @@
+/*
+ * Copyright (c) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import fs from 'fs';
 import sqlJs from 'sql.js';
-import { TestStep } from './perf_analyzer';
-import { PerfEvent, PerfSymbolDetailData } from './perf_analyzer_base';
+import { PerfEvent, PerfSymbolDetailData, TestStep } from './perf_analyzer_base';
 import { Readable } from 'stream';
 import { ComponentCategory } from '../component';
 
@@ -9,6 +23,7 @@ export interface Instruction {
     name: string;
     count: number;
     category?: number;
+    stepId?: number;
 }
 
 export class PerfDatabase {
@@ -171,8 +186,8 @@ export class PerfDatabase {
 
     async queryOverview(): Promise<Instruction[]> {
         const db = await this.initialize();
-        const results = db.exec(`SELECT component_category, SUM(perf_symbol_details.symbol_events) as instructions
-            FROM perf_symbol_details GROUP BY perf_symbol_details.component_category`);
+        const results = db.exec(`SELECT component_category, SUM(symbol_events) as count, step_id
+            FROM perf_symbol_details GROUP BY component_category, step_id`);
         if (results.length === 0) {
             return [];
         }
@@ -183,6 +198,31 @@ export class PerfDatabase {
                 category: row[0] as number,
                 name: ComponentCategory[row[0] as number],
                 count: row[1] as number,
+                stepId: row[2] as number,
+            });
+        });
+        db.close();
+        return overView;
+    }
+
+    async queryStepsInstruction(): Promise<Instruction[]> {
+        const db = await this.initialize();
+        const results =
+            db.exec(`SELECT perf_test_step.id, perf_test_step.name, SUM(perf_symbol_details.symbol_events) as count
+            FROM perf_symbol_details 
+                INNER JOIN perf_test_step
+                ON perf_symbol_details.step_id = perf_test_step.id
+            GROUP BY perf_test_step.id, perf_test_step.name order by count DESC`);
+        if (results.length === 0) {
+            return [];
+        }
+
+        let overView: Instruction[] = [];
+        results[0].values.map((row: any) => {
+            overView.push({
+                stepId: row[0] as number,
+                name: row[1] as string,
+                count: row[2] as number,
             });
         });
         db.close();
@@ -190,15 +230,15 @@ export class PerfDatabase {
     }
 
     async queryFilesByStep(stepId: number): Promise<Instruction[]> {
-        const SQL = `SELECT file, SUM(file_events) as instrucions
+        const SQL = `SELECT file, SUM(file_events) as count, component_category
             from perf_symbol_details
             where step_id = :stepId
-            GROUP BY file
-            ORDER BY instructions DESC`;
-        const SQLAll = `SELECT file, SUM(file_events) as instrucions
+            GROUP BY file, component_category
+            ORDER BY count DESC`;
+        const SQLAll = `SELECT file, SUM(file_events) as count, component_category
             from perf_symbol_details
-            GROUP BY file
-            ORDER BY instructions DESC`;
+            GROUP BY file, component_category
+            ORDER BY count DESC`;
         const db = await this.initialize();
         const results = stepId === -1 ? db.exec(SQLAll) : db.exec(SQL, [stepId]);
         if (results.length === 0) {
@@ -210,6 +250,7 @@ export class PerfDatabase {
             filelist.push({
                 name: row[0] as string,
                 count: row[1] as number,
+                category: row[2] as number,
             });
         });
         db.close();
@@ -217,16 +258,16 @@ export class PerfDatabase {
     }
 
     async queryFileSymbolsByStep(stepId: number, file: string): Promise<Instruction[]> {
-        const SQL = `SELECT symbol, SUM(symbol_events) as instructions
+        const SQL = `SELECT symbol, SUM(symbol_events) as count
             from perf_symbol_details
             where step_id = :stepId and file = :file
             GROUP BY symbol
-            ORDER BY instructions DESC`;
-        const SQLAll = `SELECT symbol, SUM(symbol_events) as instructions
+            ORDER BY count DESC`;
+        const SQLAll = `SELECT symbol, SUM(symbol_events) as count
             from perf_symbol_details
             where file = :file
             GROUP BY symbol
-            ORDER BY instructions DESC`;
+            ORDER BY count DESC`;
         const db = await this.initialize();
         const results = stepId === -1 ? db.exec(SQLAll, [file]) : db.exec(SQL, [stepId, file]);
         if (results.length === 0) {
@@ -280,6 +321,7 @@ export class PerfDatabase {
         results[0].values.map((row: any) => {
             steps.push({
                 id: row[0] as number,
+                groupId: 1,
                 name: row[1] as string,
                 start: row[2] as number,
                 end: row[3] as number,
