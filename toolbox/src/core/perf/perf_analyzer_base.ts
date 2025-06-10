@@ -318,7 +318,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
          * ets symbol
          * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
          */
-        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|(\d+(?:\.\d+){2})\|([^\|\]]*):(\d+):(\d+)\]$/;
+        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|([^:\|]+)\|([^\|\]]*):(\d+):(\d+)\]$/;
         let matches = symbol.match(regex);
         if (matches) {
             const [_, functionName, _entry, packageName, version, filePath, _line, _column] = matches;

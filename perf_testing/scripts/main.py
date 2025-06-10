@@ -271,7 +271,7 @@ class HapRayCmd:
                 scene_name = os.path.basename(case_dir)
                 logging.info(f"Updating report for {scene_name}")
 
-                future = executor.submit(lambda: report_generator.update_report(case_dir, so_dir))
+                future = executor.submit(report_generator.update_report, case_dir, so_dir)
                 futures.append(future)
 
             # 等待所有报告更新完成
