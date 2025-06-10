@@ -13,19 +13,49 @@
  * limitations under the License.
  */
 
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
-export function runCommandSync(command: string, args: string[], allowNonZeroExit: boolean = true, env?: NodeJS.ProcessEnv): string {
-    let result = spawnSync(command, args, {encoding: 'utf-8', shell: true, env: env});
+export function runCommandSync(
+    command: string,
+    args: string[],
+    allowNonZeroExit: boolean = true,
+    env?: NodeJS.ProcessEnv
+): string {
+    let result = spawnSync(command, args, { encoding: 'utf-8', shell: true, env: env });
+    logger.info(`runCommandSync ${command} ${args.join(' ')}`);
     if (result.stderr.trim()) {
         logger.error(`runCommandSync: ${command} ${args.join(' ')} ${result.stderr}`);
         if (!allowNonZeroExit) {
             throw new Error(`${result.stderr}`);
         }
     }
-
+    logger.info(`runCommandSync ${result.stdout}`);
     return result.stdout;
+}
+
+export async function runCommand(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
+    return new Promise((resolve) => {
+        let output: string[] = [];
+        let cmdProcess = spawn(command, args, { shell: true, env: env });
+        logger.info(`runCommand ${command} ${args.join(' ')}`);
+        cmdProcess.stdout.on('data', (data) => {
+            logger.info(`runCommand ${data.toString()}`);
+            output.push(data.toString());
+        });
+
+        cmdProcess.stderr.on('data', (data) => {
+            logger.debug(`runCommand stderr: ${data.toString()}`);
+            output.push(data.toString());
+        });
+
+        cmdProcess.on('close', (code) => {
+            if (code !== 0) {
+                logger.debug(`runCommand process exited with code ${code}`);
+            }
+            resolve(output.join('\n'));
+        });
+    });
 }

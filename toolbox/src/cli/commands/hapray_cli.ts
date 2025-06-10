@@ -18,19 +18,17 @@ import path from 'path';
 import { Command } from 'commander';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { ComponentCategory, getComponentCategories, OriginKind } from '../../core/component';
 import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { getConfig, initConfig, updateKindConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfAndHtraceFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
-import { PerfEvent, TestSceneInfo } from '../../core/perf/perf_analyzer_base';
+import { Round, TestSceneInfo, TestStepGroup } from '../../core/perf/perf_analyzer_base';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
-const VERSION = '1.0.0';
 
-const DbtoolsCli = new Command('dbtools')
+export const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
     .option('--choose', 'choose one from rounds', false)
     .option('--disable-dbtools', 'disable dbtools', false)
@@ -70,32 +68,6 @@ export interface SummaryInfo {
     step_name: string;
     step_id: number;
     count: number;
-}
-
-export interface StepJsonData {
-    step_name: string;
-    step_id: number;
-    count: number;
-    round: number;
-    perf_data_path: string;
-    data: {
-        stepIdx: number;
-        eventType: PerfEvent;
-        pid: number;
-        processName: string;
-        processEvents: number;
-        tid: number;
-        threadName: string;
-        threadEvents: number;
-        file: string;
-        fileEvents: number;
-        symbol: string;
-        symbolEvents: number;
-        symbolTotalEvents: number;
-        componentName?: string;
-        componentCategory: ComponentCategory;
-        originKind?: OriginKind;
-    }[];
 }
 
 // 定义整个 steps 数组的结构
@@ -187,7 +159,7 @@ async function calculateRoundResults(roundFolders: string[], step: Step): Promis
         const dbPath = path.join(roundFolders[index], 'hiperf', `step${step.stepIdx}`, 'perf.db');
 
         if (!fs.existsSync(dbPath)) {
-            traceStreamerCmd(perfDataPath, dbPath);
+            await traceStreamerCmd(perfDataPath, dbPath);
         }
 
         const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
@@ -302,27 +274,33 @@ async function generatePerfJson(
     const perfDataPaths = getPerfDataPaths(inputPath, steps);
     const perfDbPaths = getPerfDbPaths(inputPath, steps);
     const htracePaths = getHtracePaths(inputPath, steps);
-    const stepsCollect: StepJsonData[] = [];
 
+    const perfAnalyzer = new PerfAnalyzer('');
+    const testSceneInfo: TestSceneInfo = {
+        packageName: testInfo.app_id,
+        appName: testInfo.app_name,
+        scene: testInfo.scene,
+        osVersion: resultInfo.rom_version,
+        timestamp: testInfo.timestamp,
+        appVersion: testInfo.app_version,
+        rounds: [],
+        chooseRound: 0,
+    };
+    let round: Round = { steps: [] };
     for (let i = 0; i < steps.length; i++) {
-        const perfAnalyzer = new PerfAnalyzer('');
-        const stepData = await perfAnalyzer.analyze2(perfDbPaths[i], testInfo.app_id, steps[i]);
-
-        const testSceneInfo: TestSceneInfo = {
-            packageName: testInfo.app_id,
-            scene: testInfo.scene,
-            osVersion: resultInfo.rom_version,
-            timestamp: testInfo.timestamp,
+        let group: TestStepGroup = {
+            reportRoot: inputPath,
+            groupId: steps[i].stepIdx,
+            groupName: steps[i].description,
+            dbfile: perfDbPaths[i],
+            perfFile: perfDataPaths[i],
+            traceFile: htracePaths[i],
         };
-
-        await perfAnalyzer.analyze(perfDbPaths[i], testSceneInfo, outputDir, steps[i].stepIdx);
-
-        stepData.round = 0;
-        stepData.perf_data_path = perfDbPaths[i];
-        stepsCollect.push(stepData);
+        round.steps.push(group);
     }
-
-    await saveHiperfJson(outputDir, resultInfo, testInfo, perfDataPaths, perfDbPaths, htracePaths, stepsCollect);
+    testSceneInfo.rounds.push(round);
+    await perfAnalyzer.analyze(testSceneInfo, outputDir);
+    perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
 }
 
 function getPerfDataPaths(inputPath: string, steps: Steps): string[] {
@@ -336,55 +314,3 @@ function getPerfDbPaths(inputPath: string, steps: Steps): string[] {
 function getHtracePaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => path.join(inputPath, 'htrace', `step${step.stepIdx.toString()}`, 'trace.htrace'));
 }
-
-async function saveHiperfJson(
-    output: string,
-    resultInfo: ResultInfo,
-    testInfo: TestInfo,
-    perfDataPaths: string[],
-    perfDbPaths: string[],
-    htracePaths: string[],
-    steps: StepJsonData[]
-): Promise<void> {
-    output = path.join(output, '../', 'hiperf');
-    const jsonObject = {
-        rom_version: resultInfo.rom_version,
-        app_id: testInfo.app_id,
-        app_name: testInfo.app_name,
-        app_version: testInfo.app_version,
-        scene: testInfo.scene,
-        timestamp: testInfo.timestamp,
-        perfDataPath: perfDataPaths,
-        perfDbPath: perfDbPaths,
-        htracePath: htracePaths,
-        categories: getComponentCategories()
-            .filter((category) => category.id >= 0)
-            .map((category) => category.name),
-        steps: steps,
-        har: calcHarPerf(steps),
-    };
-    await saveJsonArray([jsonObject], path.join(output, 'hiperf_info.json'));
-}
-
-function calcHarPerf(steps: StepJsonData[]): { name: string; count: number }[] {
-    let harMap = new Map<string, { name: string; count: number }>();
-    for (const step of steps) {
-        for (const data of step.data) {
-            if (
-                data.componentCategory === ComponentCategory.APP_ABC ||
-                data.componentCategory === ComponentCategory.APP_LIB
-            ) {
-                if (harMap.has(data.componentName!)) {
-                    let value = harMap.get(data.componentName!)!;
-                    value.count += data.symbolEvents;
-                } else {
-                    harMap.set(data.componentName!, { name: data.componentName!, count: data.symbolEvents });
-                }
-            }
-        }
-    }
-
-    return Array.from(harMap.values());
-}
-
-export const HaprayCli = new Command('hapray').version(VERSION).addCommand(DbtoolsCli);

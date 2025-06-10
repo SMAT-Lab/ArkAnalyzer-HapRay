@@ -13,6 +13,18 @@
  * limitations under the License.
  */
 
+export enum OSPlatform {
+    HarmonyOS = 0,
+    Android = 1,
+    IOS = 2,
+}
+
+export const OSPlatformMap: Map<string, OSPlatform> = new Map([
+    ['HarmonyOS', OSPlatform.HarmonyOS],
+    ['Android', OSPlatform.Android],
+    ['IOS', OSPlatform.IOS],
+]);
+
 export interface Ohpm {
     name: string;
     version: string;
@@ -37,6 +49,16 @@ export interface ComponentConfig {
     components: SubComponentConfig[];
 }
 
+export interface SoOriginal {
+    specific_origin: string;
+    broad_category: string;
+    sdk_category: string;
+    confidence?: number;
+    original?: string;
+    feature?: string;
+    reasoning?: string;
+}
+
 export interface GlobalConfig {
     analysis: {
         onlineIdentifyThirdPart: boolean;
@@ -44,10 +66,45 @@ export interface GlobalConfig {
         reAbc: boolean;
         ohpm: Ohpm[];
         npm: Ohpm[];
+        invalidNpm: string[];
     };
 
     perf: {
         kinds: ComponentConfig[];
+        soOrigins: Map<string, SoOriginal>;
+        classify: {
+            dfx_symbols: string[];
+            compute_files: string[];
+            process: Record<
+                string, // domain
+                Record<
+                    string, // subSystem
+                    Record<
+                        string, // component
+                        {
+                            Android_Process: string[];
+                            Harmony_Process: string[];
+                            IOS_Process: string[];
+                        }
+                    >
+                >
+            >;
+            process_special: Record<
+                string, // domain
+                Record<
+                    string, // subSystem
+                    Record<
+                        string, // component
+                        {
+                            scene: string;
+                            Android_Process: string[];
+                            Harmony_Process: string[];
+                            IOS_Process: string[];
+                        }
+                    >
+                >
+            >;
+        };
     };
 
     save: {
@@ -56,8 +113,11 @@ export interface GlobalConfig {
     inDbtools: boolean;
     jobs: number;
     input: string;
+    fuzzy: string[];
     output: string;
     extToolsPath: string;
     soDir: string;
+    osPlatform: OSPlatform;
     choose: boolean;
+    checkTraceDb: boolean;
 }

@@ -15,15 +15,60 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
-import { AnalyzerProjectBase } from '../project';
+import { Component, ComponentCategory, ComponentCategoryType, getComponentCategories, OriginKind } from '../component';
+import { AnalyzerProjectBase, PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
+import writeXlsxFile from 'write-excel-file/node';
+import { PerfDatabase } from './perf_database';
+import { saveJsonArray } from '../../utils/json_utils';
+
+export const UNKNOWN_STR = 'unknown';
+
+export interface StepJsonData {
+    step_name: string;
+    step_id: number;
+    count: number;
+    round: number;
+    perf_data_path: string;
+    data: PerfSymbolDetailData[];
+}
+
+export interface TestStepGroup {
+    reportRoot: string;
+    groupId: number;
+    groupName: string;
+    dbfile?: string;
+    perfReport?: string;
+    traceFile?: string;
+    perfFile?: string;
+}
+
+export interface Round {
+    steps: TestStepGroup[];
+}
 
 export interface TestSceneInfo {
     packageName: string; // 应用包名
     scene: string; // 测试场景名
     osVersion: string; // 操作系统版本
     timestamp: number; // 测试开始时间戳
+    appName: string;
+    appVersion: string;
+    model?: string;
+    sn?: string;
+    rounds: Round[];
+    chooseRound: number;
+}
+
+export interface ClassifyCategory {
+    category: number; // 组件大类
+    categoryName: string; // 组件名
+    subCategoryName?: string; // 小类
+}
+
+export interface FileClassification extends ClassifyCategory {
+    file: string;
+    originKind: OriginKind; // 来源，开源
 }
 
 export interface PerfComponent {
@@ -82,19 +127,45 @@ export interface PerfSum {
     categories: ComponentCategoryType[];
 }
 
+export interface TestStep {
+    id: number;
+    groupId: number;
+    name: string;
+    start: number;
+    end: number;
+}
+
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
+    // classify rule
+    protected threadClassifyCfg: Map<RegExp, ClassifyCategory>;
+    protected fileClassifyCfg: Map<string, ClassifyCategory>;
+    protected fileRegexClassifyCfg: Map<RegExp, ClassifyCategory>;
     protected hapComponents: Map<string, Component>;
-    protected threadClassifyCfg: Map<RegExp, { name: string; category: ComponentCategory }>;
-    protected cfgFileComponent: Map<string, { name: string; category: ComponentCategory }>;
-    protected cfgRegexComponent: Map<RegExp, { name: string; category: ComponentCategory }>;
+
+    // classify result
+    protected filesClassifyMap: Map<number, FileClassification>;
+    protected symbolsClassifyMap: Map<number, FileClassification>;
+    protected symbolsMap: Map<number, string>;
+
+    protected testSteps: TestStep[];
+    protected stepSumMap: Map<number, PerfStepSum>;
+    protected details: PerfSymbolDetailData[];
 
     constructor(workspace: string) {
         super(workspace);
 
         this.hapComponents = new Map();
         this.threadClassifyCfg = new Map();
-        this.cfgFileComponent = new Map();
-        this.cfgRegexComponent = new Map();
+        this.fileClassifyCfg = new Map();
+        this.fileRegexClassifyCfg = new Map();
+
+        this.filesClassifyMap = new Map();
+        this.symbolsClassifyMap = new Map();
+        this.symbolsMap = new Map();
+
+        this.testSteps = [];
+        this.stepSumMap = new Map();
+        this.details = [];
 
         this.loadHapComponents();
         this.loadPerfKindCfg();
@@ -124,25 +195,26 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 if (sub.threads) {
                     for (const thread of sub.threads) {
                         this.threadClassifyCfg.set(new RegExp(thread), {
-                            name: sub.name || componentConfig.name,
                             category: componentConfig.kind,
+                            categoryName: componentConfig.name,
+                            subCategoryName: sub.name,
                         });
                     }
                 }
 
                 for (const file of sub.files) {
                     if (this.hasRegexChart(file)) {
-                        if (file.indexOf('*') >= 0) {
-                            this.cfgRegexComponent.set(new RegExp(file), {
-                                name: sub.name || componentConfig.name,
-                                category: componentConfig.kind,
-                            });
-                        } else {
-                            this.cfgFileComponent.set(file, {
-                                name: sub.name || componentConfig.name,
-                                category: componentConfig.kind,
-                            });
-                        }
+                        this.fileRegexClassifyCfg.set(new RegExp(file), {
+                            category: componentConfig.kind,
+                            categoryName: componentConfig.name,
+                            subCategoryName: sub.name,
+                        });
+                    } else {
+                        this.fileClassifyCfg.set(file, {
+                            category: componentConfig.kind,
+                            categoryName: componentConfig.name,
+                            subCategoryName: sub.name,
+                        });
                     }
                 }
             }
@@ -159,5 +231,443 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             return true;
         }
         return false;
+    }
+
+    public classifyFile(file: string): FileClassification {
+        let fileClassify: FileClassification = {
+            file: file,
+            category: ComponentCategory.SYS_SDK,
+            categoryName: 'SYS_SDK',
+            subCategoryName: path.basename(file),
+            originKind: OriginKind.UNKNOWN,
+        };
+
+        if (this.fileClassifyCfg.has(file)) {
+            let component = this.fileClassifyCfg.get(file)!;
+            fileClassify.category = component.category;
+            fileClassify.categoryName = component.categoryName;
+            if (component.subCategoryName) {
+                fileClassify.subCategoryName = component.subCategoryName;
+            }
+
+            return fileClassify;
+        }
+
+        for (const [key, component] of this.fileRegexClassifyCfg) {
+            let matched = file.match(key);
+            if (matched) {
+                fileClassify.category = component.category;
+                fileClassify.categoryName = component.categoryName;
+                if (component.subCategoryName) {
+                    fileClassify.subCategoryName = component.subCategoryName;
+                }
+                return fileClassify;
+            }
+        }
+
+        /**
+         * bundle so file
+         * /proc/8836/root/data/storage/el1/bundle/libs/arm64/libalog.so
+         */
+        let regex = new RegExp('/proc/.*/data/storage/.*/bundle/.*');
+        if (file.match(regex)) {
+            let name = path.basename(file);
+            if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
+                fileClassify.category = ComponentCategory.APP_SO;
+                // if (this.soOrigins.has(path.basename(file))) {
+                //     let origin = this.soOrigins.get(name)!.broad_category;
+                //     if (origin === 'THIRD_PARTY') {
+                //         fileClassify.originKind = OriginKind.THIRD_PARTY;
+                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
+                //     } else if (origin === 'OPENSOURCE') {
+                //         fileClassify.originKind = OriginKind.OPEN_SOURCE;
+                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
+                //     } else if (origin === 'FIRST_PARTY') {
+                //         fileClassify.originKind = OriginKind.FIRST_PARTY;
+                //     }
+                // }
+
+                return fileClassify;
+            }
+
+            fileClassify.category = ComponentCategory.APP_ABC;
+            return fileClassify;
+        }
+
+        if (this.fileClassifyCfg.has(path.basename(file))) {
+            let component = this.fileClassifyCfg.get(path.basename(file))!;
+            fileClassify.category = component.category;
+            fileClassify.categoryName = component.categoryName;
+            if (component.subCategoryName) {
+                fileClassify.subCategoryName = component.subCategoryName;
+            }
+
+            return fileClassify;
+        }
+
+        return fileClassify;
+    }
+
+    public classifySymbol(symbolId: number, fileClassification: FileClassification): FileClassification {
+        if (this.symbolsClassifyMap.has(symbolId)) {
+            return this.symbolsClassifyMap.get(symbolId)!;
+        }
+
+        const symbol = this.symbolsMap.get(symbolId) || '';
+        /**
+         * ets symbol
+         * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
+         */
+        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|(\d+(?:\.\d+){2})\|([^\|\]]*):(\d+):(\d+)\]$/;
+        let matches = symbol.match(regex);
+        if (matches) {
+            const [_, functionName, _entry, packageName, version, filePath, _line, _column] = matches;
+            this.symbolsMap.set(symbolId, functionName);
+
+            let symbolClassification: FileClassification = {
+                file: `${packageName}/${version}/${filePath}`,
+                originKind: fileClassification.originKind,
+                category: fileClassification.category,
+                categoryName: fileClassification.categoryName,
+                subCategoryName: packageName,
+            };
+
+            if (this.hapComponents.has(matches[3])) {
+                symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
+            }
+
+            this.symbolsClassifyMap.set(symbolId, symbolClassification);
+            return symbolClassification;
+        }
+
+        return fileClassification;
+    }
+
+    public classifyThread(threadName: string): ClassifyCategory {
+        const unknown = {
+            category: ComponentCategory.UNKNOWN,
+            categoryName: UNKNOWN_STR,
+            subCategoryName: UNKNOWN_STR,
+        };
+        if (threadName === null) {
+            return unknown;
+        }
+
+        for (const [reg, component] of this.threadClassifyCfg) {
+            if (threadName.match(reg)) {
+                return {
+                    category: component.category,
+                    categoryName: component.categoryName,
+                    subCategoryName: component.subCategoryName,
+                };
+            }
+        }
+
+        return unknown;
+    }
+
+    protected async saveSqlite(perf: PerfSum, outputFileName: string): Promise<void> {
+        const db = new PerfDatabase(outputFileName);
+        let database = await db.initialize();
+
+        await db.insertRecords(database, perf.osVersion, perf.scene, this.details);
+
+        db.insertTestSteps(database, this.testSteps);
+        db.close(database);
+        let name = path.basename(outputFileName).replace(path.extname(outputFileName), '');
+        fs.writeFileSync(
+            path.join(this.getWorkspace(), `${name}_负载拆解.hpr`),
+            JSON.stringify({ id: 'perf', path: path.join(PROJECT_ROOT, path.basename(outputFileName)) })
+        );
+    }
+
+    /**
+     * 另存为dbtools 导入Excel
+     * @param perf
+     * @param outputFileName
+     */
+    protected async saveDbtoolsXlsx(testInfo: TestSceneInfo, perf: PerfSum, outputFileName: string): Promise<void> {
+        let symbolPerfData: { type?: any; value: any }[][] = [];
+        symbolPerfData.push([
+            { value: '版本' },
+            { value: '测试模型' },
+            { value: '测试时间' },
+            { value: '测试设备SN' },
+            { value: 'trace文件路径' },
+            { value: '测试场景' },
+            { value: '场景执行id' },
+            { value: '场景步骤id' },
+            { value: '应用版本唯一标识' },
+            { value: 'htrace文件唯一标识' },
+            { value: '进程id' },
+            { value: '进程名' },
+            { value: '进程cycle数' },
+            { value: '进程指令数' },
+            { value: '线程id' },
+            { value: '线程名' },
+            { value: '线程cycle数' },
+            { value: '线程指令数' },
+            { value: '文件' },
+            { value: '文件cycle数' },
+            { value: '文件指令数' },
+            { value: '符号Symbol' },
+            { value: 'cycle数' },
+            { value: 'Total cycle数' },
+            { value: '指令数' },
+            { value: 'Total指令数' },
+            { value: '组件大类' },
+            { value: '组件小类' },
+            { value: '组件来源' },
+        ]);
+
+        symbolPerfData.push([
+            { value: 'test_version' },
+            { value: 'test_model' },
+            { value: 'test_date' },
+            { value: 'test_sn' },
+            { value: 'trace_path' },
+            { value: 'test_scene_name' },
+            { value: 'test_scene_trial_id' },
+            { value: 'step_id' },
+            { value: 'app_version_id' },
+            { value: 'hiperf_id' },
+            { value: 'process_id' },
+            { value: 'process_name' },
+            { value: 'process_cycles' },
+            { value: 'process_instructions' },
+            { value: 'thread_id' },
+            { value: 'thread_name' },
+            { value: 'thread_cycles' },
+            { value: 'thread_instructions' },
+            { value: 'file' },
+            { value: 'file_cycles' },
+            { value: 'file_instructions' },
+            { value: 'symbol' },
+            { value: 'cpu_cycles' },
+            { value: 'cpu_cycles_tree' },
+            { value: 'cpu_instructions' },
+            { value: 'cpu_instructions_tree' },
+            { value: 'component_type' },
+            { value: 'component_name' },
+            { value: 'origin_kind' },
+        ]);
+
+        let symbolDetailsMap = new Map<string, PerfSymbolDetailData[]>();
+
+        for (const data of this.details) {
+            let row: PerfSymbolDetailData[] = [
+                {
+                    stepIdx: data.stepIdx,
+                    eventType: PerfEvent.CYCLES_EVENT,
+                    pid: data.pid,
+                    processName: data.processName,
+                    processEvents: data.processEvents,
+                    tid: data.tid,
+                    threadEvents: data.threadEvents,
+                    threadName: data.threadName,
+                    file: data.file,
+                    fileEvents: data.fileEvents,
+                    symbol: data.symbol,
+                    symbolEvents: 0,
+                    symbolTotalEvents: 0,
+                    componentName: data.componentName,
+                    componentCategory: data.componentCategory,
+                    originKind: data.originKind,
+                },
+                {
+                    stepIdx: data.stepIdx,
+                    eventType: PerfEvent.INSTRUCTION_EVENT,
+                    pid: data.pid,
+                    processName: data.processName,
+                    processEvents: data.processEvents,
+                    tid: data.tid,
+                    threadEvents: data.threadEvents,
+                    threadName: data.threadName,
+                    file: data.file,
+                    fileEvents: data.fileEvents,
+                    symbol: data.symbol,
+                    symbolEvents: 0,
+                    symbolTotalEvents: 0,
+                    componentName: data.componentName,
+                    componentCategory: data.componentCategory,
+                    originKind: data.originKind,
+                },
+            ];
+
+            let key = `${data.stepIdx}_${data.pid}_${data.tid}_${data.file}_${data.symbol}`;
+            if (!symbolDetailsMap.has(key)) {
+                symbolDetailsMap.set(key, row);
+            }
+
+            row = symbolDetailsMap.get(key)!;
+            row[data.eventType].processEvents = data.processEvents;
+            row[data.eventType].threadEvents = data.threadEvents;
+            row[data.eventType].fileEvents = data.fileEvents;
+            row[data.eventType].symbolEvents = data.symbolEvents;
+            row[data.eventType].symbolTotalEvents = data.symbolTotalEvents;
+        }
+
+        for (const [_, data] of symbolDetailsMap) {
+            if (data[0].symbolEvents + data[1].symbolEvents === 0) {
+                continue;
+            }
+            let row = [
+                { value: perf.osVersion, type: String },
+                { value: testInfo.model, type: String },
+                { value: this.dateCustomFormatting(perf.timestamp), type: String },
+                { value: testInfo.sn, type: String },
+                { value: perf.perfPath, type: String },
+                { value: perf.scene, type: String },
+                { value: 'Hapray', type: String },
+                { value: data[0].stepIdx, type: Number }, // step
+
+                { value: this.project.versionId, type: String },
+                { value: perf.perfId, type: String },
+
+                { value: data[0].pid, type: Number },
+                { value: data[0].processName, type: String },
+                { value: data[0].processEvents, type: Number },
+                { value: data[1].processEvents, type: Number },
+
+                { value: data[0].tid, type: Number },
+                { value: data[0].threadName, type: String },
+                { value: data[0].threadEvents, type: Number },
+                { value: data[1].threadEvents, type: Number },
+
+                { value: data[0].file, type: String },
+                { value: data[0].fileEvents, type: Number },
+                { value: data[1].fileEvents, type: Number },
+
+                { value: data[0].symbol.substring(0, 2048), type: String },
+                { value: data[0].symbolEvents, type: Number },
+                { value: data[0].symbolTotalEvents, type: Number },
+                { value: data[1].symbolEvents, type: Number },
+                { value: data[1].symbolTotalEvents, type: Number },
+
+                { value: data[0].componentCategory, type: Number },
+                { value: data[0].componentName, type: String },
+                { value: data[0].originKind, type: Number },
+            ];
+
+            symbolPerfData.push(row);
+        }
+
+        let sceneStepData: { type?: any; value: any }[][] = [];
+        sceneStepData.push([
+            { value: '版本' },
+            { value: '测试模型' },
+            { value: '测试时间' },
+            { value: '测试设备SN' },
+            { value: 'trace文件路径' },
+            { value: '测试场景' },
+            { value: '场景执行id' },
+            { value: '场景步骤id' },
+
+            { value: 'htrace文件唯一标识' },
+            { value: '步骤名称' },
+        ]);
+
+        sceneStepData.push([
+            { value: 'test_version' },
+            { value: 'test_model' },
+            { value: 'test_date' },
+            { value: 'test_sn' },
+            { value: 'trace_path' },
+            { value: 'test_scene_name' },
+            { value: 'test_scene_trial_id' },
+            { value: 'step_id' },
+
+            { value: 'hiperf_id' },
+            { value: 'step_name' },
+        ]);
+
+        for (const step of this.testSteps) {
+            let row = [
+                { value: perf.osVersion, type: String },
+                { value: testInfo.model, type: String },
+                { value: this.dateCustomFormatting(perf.timestamp), type: String },
+                { value: testInfo.sn, type: String },
+                { value: perf.perfPath, type: String },
+                { value: perf.scene, type: String },
+                { value: 'Hapray', type: String },
+                { value: step.id, type: Number }, // step
+
+                { value: perf.perfId, type: String },
+                { value: step.name, type: String },
+            ];
+
+            sceneStepData.push(row);
+        }
+
+        await writeXlsxFile([symbolPerfData, sceneStepData], {
+            sheets: ['ecol_load_hiperf_detail', 'ecol_load_step'],
+            filePath: outputFileName,
+        });
+    }
+
+    private dateCustomFormatting(timestamp: number): string {
+        let date = new Date(timestamp);
+        const padStart = (value: number): string => value.toString().padStart(2, '0');
+        return `${date.getFullYear()}-${padStart(date.getMonth() + 1)}-${padStart(date.getDate())} ${padStart(
+            date.getHours()
+        )}:${padStart(date.getMinutes())}:${padStart(date.getSeconds())}`;
+    }
+
+    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void> {
+        let harMap = new Map<string, { name: string; count: number }>();
+        let stepMap = new Map<number, StepJsonData>();
+
+        for (const data of this.details) {
+            if (
+                data.componentCategory === ComponentCategory.APP_ABC ||
+                data.componentCategory === ComponentCategory.APP_LIB
+            ) {
+                if (harMap.has(data.componentName!)) {
+                    let value = harMap.get(data.componentName!)!;
+                    value.count += data.symbolEvents;
+                } else {
+                    harMap.set(data.componentName!, { name: data.componentName!, count: data.symbolEvents });
+                }
+            }
+
+            if (stepMap.has(data.stepIdx)) {
+                let value = stepMap.get(data.stepIdx)!;
+                value.data.push(data);
+                value.count += data.symbolEvents;
+            } else {
+                let step = this.getStepByGroupId(testInfo, data.stepIdx);
+                let value: StepJsonData = {
+                    step_name: step.groupName,
+                    step_id: data.stepIdx,
+                    count: data.symbolEvents,
+                    round: testInfo.chooseRound,
+                    perf_data_path: step.dbfile || '',
+                    data: [data],
+                };
+                stepMap.set(data.stepIdx, value);
+            }
+        }
+
+        let jsonObject = {
+            rom_version: testInfo.osVersion,
+            app_id: testInfo.packageName,
+            app_name: testInfo.appName,
+            app_version: testInfo.appVersion,
+            scene: testInfo.scene,
+            timestamp: testInfo.timestamp,
+            perfDataPath: testInfo.rounds[testInfo.chooseRound].steps.map((step) => step.perfFile),
+            perfDbPath: testInfo.rounds[testInfo.chooseRound].steps.map((step) => step.dbfile),
+            htracePath: testInfo.rounds[testInfo.chooseRound].steps.map((step) => step.traceFile),
+            categories: getComponentCategories()
+                .filter((category) => category.id >= 0)
+                .map((category) => category.name),
+            steps: Array.from(stepMap.values()),
+            har: Array.from(harMap.values()),
+        };
+        await saveJsonArray([jsonObject], outputFileName);
+    }
+
+    private getStepByGroupId(testInfo: TestSceneInfo, groupId: number): TestStepGroup {
+        return testInfo.rounds[testInfo.chooseRound].steps.filter((step) => step.groupId === groupId)[0];
     }
 }

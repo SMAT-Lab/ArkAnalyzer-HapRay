@@ -49,7 +49,7 @@
                 ]
             },
             {
-                "name": "UI",
+                "name": "ArkUI",
                 "files": [
                     "/system/etc/abc/framework/stateMgmt.abc",
                     "/system/lib64/libace_ndk.z.so",

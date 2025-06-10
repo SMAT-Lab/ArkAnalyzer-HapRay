@@ -18,10 +18,9 @@ import { Command } from 'commander';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
-const VERSION = '1.0.0';
 
-const HapAnalyzerCli = new Command('analyzer')
-    .requiredOption('-p, --hapPkgPath <string>', 'Hap file path')
+export const HapAnalyzerCli = new Command('analyzer')
+    .requiredOption('-i, --input <string>', 'Hap file path')
     .option('-o, --output <string>', 'output path', './')
     .action(async (...args: any[]) => {
         await main(args[0].hapPkgPath, args[0].output);
@@ -36,7 +35,4 @@ async function main(hapPkgPath: string, output: string): Promise<void> {
     if (!fs.existsSync(output)) {
         fs.mkdirSync(output, { recursive: true });
     }
-
 }
-
-export const HapPerfCli = new Command('happerf').version(VERSION).addCommand(HapAnalyzerCli);

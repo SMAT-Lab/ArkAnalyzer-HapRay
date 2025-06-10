@@ -16,14 +16,12 @@
 import fs from 'fs';
 import path from 'path';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { runCommandSync } from '../../utils/exe_utils';
+import { runCommand, runCommandSync } from '../../utils/exe_utils';
 import { getConfig } from '../../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
-let _traceStreamer: string | null = null;
-
-function initTools() {
+function initTools(): string {
     let toolName = '';
     if (process.platform === 'win32') {
         toolName = 'trace_streamer_window.exe';
@@ -38,17 +36,15 @@ function initTools() {
 
     let toolCmd = path.join(getConfig().extToolsPath, 'trace_streamer_binary', toolName);
     if (fs.existsSync(toolCmd)) {
-        _traceStreamer = toolCmd;
         if (process.platform === 'linux' || process.platform === 'darwin') {
             runCommandSync('chmod', ['+x', toolCmd]);
         }
     }
+    return toolCmd;
 }
 
-export function traceStreamerCmd(htraceFile: string, outDbFile: string): string {
-    if (!_traceStreamer) {
-        initTools();
-    }
+export async function traceStreamerCmd(htraceFile: string, outDbFile: string): Promise<string> {
+    let _traceStreamer = initTools();
 
     if (!fs.existsSync(_traceStreamer!)) {
         logger.error('not found trace_streamer_binary');
@@ -56,8 +52,8 @@ export function traceStreamerCmd(htraceFile: string, outDbFile: string): string 
     }
 
     if (getConfig().soDir !== '') {
-        return runCommandSync(_traceStreamer!, [htraceFile, '-e', outDbFile, '--So_dir', getConfig().soDir]);
+        return await runCommand(_traceStreamer!, [htraceFile, '-e', outDbFile, '--So_dir', getConfig().soDir]);
     } else {
-        return runCommandSync(_traceStreamer!, [htraceFile, '-e', outDbFile]);
+        return await runCommand(_traceStreamer!, [htraceFile, '-e', outDbFile]);
     }
 }
