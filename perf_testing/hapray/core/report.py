@@ -1,12 +1,14 @@
+import base64
 import json
 import logging
 import os
 import subprocess
+import zlib
 from typing import List, Optional
 
 from hapray.core.common.CommonUtils import CommonUtils
 from hapray.core.common.FrameAnalyzer import FrameAnalyzer
-
+from hapray.core.config.config import Config
 
 class ReportGenerator:
     """Generates and updates performance analysis reports"""
@@ -99,6 +101,10 @@ class ReportGenerator:
 
         if so_dir:
             cmd.extend(['-s', so_dir])
+
+        kind = self.convert_kind_to_json()
+        if len(kind) > 0:
+            cmd.extend(['-k', kind])
 
         logging.debug(f"Running perf analysis with command: {' '.join(cmd)}")
         return self._execute_hapray_command(cmd, "Performance analysis")
@@ -208,11 +214,16 @@ class ReportGenerator:
         with open(html_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
 
-        # Prepare JSON string (use first element for perf data, full array for frames)
-        if placeholder == 'JSON_DATA_PLACEHOLDER':
-            json_str = json.dumps(json_data[0], indent=2, ensure_ascii=False)
-        else:
-            json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
+        # 将JSON对象转换为UTF-8字节串
+        json_bytes = json.dumps(json_data).encode('utf-8')
+
+        compressed_bytes = zlib.compress(json_bytes, level=9)
+
+        # 转换为Base64编码
+        base64_bytes = base64.b64encode(compressed_bytes)
+
+        # 转换为字符串
+        json_str = base64_bytes.decode('ascii')
 
         # Inject JSON into HTML
         updated_html = html_content.replace(placeholder, json_str)
@@ -222,3 +233,28 @@ class ReportGenerator:
             f.write(updated_html)
 
         logging.debug(f"Injected {json_path} into {output_path}")
+
+    @staticmethod
+    def convert_kind_to_json() -> str:
+        kind = Config.get('kind', None)
+        if kind is None:
+            return ''
+    
+        kind_entry = {
+            "name": 'APP_SO',
+            "kind": 1,
+            "components": []
+        }
+
+        for category in Config.get('kind', None):
+            component = {
+                "name": category['name'],
+                "files": category['files']
+            }
+            
+            if 'thread' in category:
+                component["threads"] = category['thread']
+                
+            kind_entry["components"].append(component)
+
+        return json.dumps([kind_entry])

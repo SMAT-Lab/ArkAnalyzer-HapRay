@@ -18,15 +18,14 @@ import path from 'path';
 import { Command } from 'commander';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { getComponentCategories } from '../../core/component';
+import { ComponentCategory, getComponentCategories, OriginKind } from '../../core/component';
 import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
-import { getConfig, initConfig } from '../../config';
+import { getConfig, initConfig, updateKindConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfAndHtraceFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
-import { TestSceneInfo } from '../../core/perf/perf_analyzer_base';
-import { StepJsonData } from '../../core/perf/perf_data_transformer';
+import { PerfEvent, TestSceneInfo } from '../../core/perf/perf_analyzer_base';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.0.0';
@@ -36,11 +35,15 @@ const DbtoolsCli = new Command('dbtools')
     .option('--choose', 'choose one from rounds', false)
     .option('--disable-dbtools', 'disable dbtools', false)
     .option('-s, --soDir <string>', '--So_dir soDir', '')
+    .option('-k, --kind-config <string>', 'custom kind configuration in JSON format')
     .action(async (...args: any[]) => {
         let cliArgs: Partial<GlobalConfig> = { ...args[0] };
         initConfig(cliArgs, (config) => {
             config.choose = args[0].choose;
             config.inDbtools = !args[0].disableDbtools;
+            if (args[0].kindConfig) {
+                updateKindConfig(config, args[0].kindConfig);
+            }
         });
 
         await main(args[0].input);
@@ -55,23 +58,262 @@ export interface TestInfo {
     timestamp: number;
 }
 
+export interface ResultInfo {
+    rom_version: string;
+    device_sn: string;
+}
+
 export interface SummaryInfo {
     rom_version: string,
     app_version: string,
     scene: string,
     step_name: string,
     step_id: number,
-    round: number,
     count: number,
 }
 
-export interface ResultInfo {
-    rom_version: string;
-    device_sn: string;
+export interface StepJsonData {
+    step_name: string;
+    step_id: number;
+    count: number;
+    round: number;
+    perf_data_path: string;
+    data: {
+        stepIdx: number;
+        eventType: PerfEvent;
+        pid: number;
+        processName: string;
+        processEvents: number;
+        tid: number;
+        threadName: string;
+        threadEvents: number;
+        file: string;
+        fileEvents: number;
+        symbol: string;
+        symbolEvents: number;
+        symbolTotalEvents: number;
+        componentName?: string;
+        componentCategory: ComponentCategory;
+        originKind?: OriginKind;
+    }[];
 }
 
 // 定义整个 steps 数组的结构
 export type Steps = Step[];
+
+// 主函数逻辑
+async function main(input: string): Promise<void> {
+    const config = getConfig();
+
+    if (config.choose) {
+        logger.info(`输入目录: ${input}`);
+        const roundFolders = getSceneRoundsFolders(input);
+
+        if (roundFolders.length === 0) {
+            logger.error(`${input} 没有可用的测试轮次数据，无法生成报告！`);
+            return;
+        }
+
+        const output = path.join(input, 'report');
+        if (!fs.existsSync(output)) {
+            logger.info(`创建输出目录: ${output}`);
+            fs.mkdirSync(output, { recursive: true });
+        }
+
+        const stepsJsonPath = path.join(roundFolders[0], 'hiperf', 'steps.json');
+        const steps: Steps = await loadJsonFile(stepsJsonPath);
+        const counts = await processRoundSelection(roundFolders, steps, input);
+
+        const resultXmlPath = path.join(roundFolders[0], 'result', path.basename(input) + '.xml');
+        const resultInfo = fs.existsSync(resultXmlPath)
+            ? parseResultXml(resultXmlPath)
+            : { rom_version: '', device_sn: '' };
+
+        const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
+        const testInfo: TestInfo = await loadJsonFile(testInfoPath);
+        await generateSummaryInfoJson(input, testInfo, resultInfo, steps, counts);
+
+    } else {
+        logger.info(`输入目录: ${input}`);
+        const resultXmlPath = path.join(input, 'result', path.basename(input) + '.xml');
+        const resultInfo = fs.existsSync(resultXmlPath)
+            ? parseResultXml(resultXmlPath)
+            : { rom_version: '', device_sn: '' };
+
+        const testInfoPath = path.join(input, 'testInfo.json');
+        const testInfo: TestInfo = await loadJsonFile(testInfoPath);
+
+        const stepsJsonPath = path.join(input, 'hiperf', 'steps.json');
+        const steps: Steps = await loadJsonFile(stepsJsonPath);
+
+        if (!(await checkPerfAndHtraceFiles(input, steps.length))) {
+            logger.error('hiperf 或 htrace 数据不全，需要先执行数据收集步骤！');
+            return;
+        }
+        await generatePerfJson(input, testInfo, resultInfo, steps);
+    }
+}
+
+// 加载 JSON 文件
+async function loadJsonFile<T>(filePath: string): Promise<T> {
+    const rawData = await fs.promises.readFile(filePath, 'utf8');
+    return JSON.parse(rawData);
+}
+
+// 处理轮次选择逻辑
+async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<number[]> {
+    let counts: number[] = [];
+    const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
+    await copyFile(testInfoPath, path.join(inputPath, 'testInfo.json'));
+
+    const stepsJsonPath = path.join(roundFolders[0], 'hiperf', 'steps.json');
+    await copyFile(stepsJsonPath, path.join(inputPath, 'hiperf', 'steps.json'));
+
+    for (let i = 0; i < steps.length; i++) {
+        const roundResults = await calculateRoundResults(roundFolders, steps[i]);
+        const selectedRound = selectOptimalRound(roundResults);
+        counts.push(roundResults[selectedRound]);
+        await copySelectedRoundData(roundFolders[selectedRound], inputPath, steps[i]);
+    }
+    return counts;
+}
+
+// 计算每轮的结果
+async function calculateRoundResults(roundFolders: string[], step: Step): Promise<number[]> {
+    const results: number[] = [];
+    const perfAnalyzer = new PerfAnalyzer('');
+
+    for (let index = 0; index < roundFolders.length; index++) {
+        const perfDataPath = path.join(roundFolders[index], 'hiperf', `step${step.stepIdx}`, 'perf.data');
+        const dbPath = path.join(roundFolders[index], 'hiperf', `step${step.stepIdx}`, 'perf.db');
+
+        if (!fs.existsSync(dbPath)) {
+            traceStreamerCmd(perfDataPath, dbPath);
+        }
+
+        const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
+        results[index] = sum;
+        logger.info(`${roundFolders[index]} 步骤：${step.stepIdx} 轮次：${index} 负载总数: ${sum}`);
+    }
+    return results;
+}
+
+// 选择最佳轮次
+function selectOptimalRound(results: number[]): number {
+    if (results.length < 3) return 0;
+
+    const max = Math.max(...results);
+    const min = Math.min(...results);
+    const total = results.reduce((sum, val) => sum + val, 0);
+    const avg = (total - max - min) / (results.length - 2);
+
+    let optimalIndex = 0;
+    let minDiff = Number.MAX_SAFE_INTEGER;
+
+    results.forEach((value, index) => {
+        if (value === max || value === min) return;
+
+        const diff = Math.abs(value - avg);
+        if (diff < minDiff) {
+            minDiff = diff;
+            optimalIndex = index;
+        }
+    });
+
+    return optimalIndex;
+}
+
+// 复制选中的轮次数据
+async function copySelectedRoundData(sourceRound: string, destPath: string, step: Step): Promise<void> {
+    const stepIdx = step.stepIdx;
+    const srcPerfDir = path.join(sourceRound, 'hiperf', `step${stepIdx}`);
+    const srcHtraceDir = path.join(sourceRound, 'htrace', `step${stepIdx}`);
+    const srcResultDir = path.join(sourceRound, 'result');
+
+    const destPerfDir = path.join(destPath, 'hiperf', `step${stepIdx}`);
+    const destHtraceDir = path.join(destPath, 'htrace', `step${stepIdx}`);
+    const destResultDir = path.join(destPath, 'result');
+
+    await Promise.all([
+        copyDirectory(srcPerfDir, destPerfDir),
+        copyDirectory(srcHtraceDir, destHtraceDir),
+        copyDirectory(srcResultDir, destResultDir)
+    ]);
+}
+
+// 解析结果 XML 文件
+function parseResultXml(xmlPath: string): ResultInfo {
+    const result: ResultInfo = { rom_version: '', device_sn: '' };
+
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(fs.readFileSync(xmlPath, 'utf-8'), 'text/xml');
+        const testsuitesElement = xmlDoc.getElementsByTagName('testsuites')[0];
+        const devicesAttr = testsuitesElement.getAttribute('devices');
+
+        if (devicesAttr) {
+            const devices = JSON.parse(
+                devicesAttr
+                    .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
+                    .replace(/^\[+|]+$/g, '')
+                    .replace(/\\"/g, '"')
+                    .replace(/'/g, '"')
+            );
+            result.rom_version = devices.version;
+            result.device_sn = devices.sn;
+        }
+    } catch (error) {
+        logger.error(`解析 ${xmlPath} 失败: ${error}`);
+    }
+    return result;
+}
+
+// 生成summaryinfo
+async function generateSummaryInfoJson(input: string, testInfo: TestInfo, resultInfo: ResultInfo, steps: Steps, counts: number[]): Promise<void> {
+    const outputDir = path.join(input, 'report');
+    let summaryJsonObject: SummaryInfo[] = []
+    steps.forEach(step => {
+        const summaryObject: SummaryInfo = {
+            rom_version: resultInfo.rom_version,
+            app_version: testInfo.app_version,
+            scene: testInfo.scene,
+            step_name: step.description,
+            step_id: step.stepIdx,
+            count: counts[step.stepIdx - 1]
+        }
+        summaryJsonObject.push(summaryObject);
+    })
+    await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
+}
+
+// 生成perfjson
+async function generatePerfJson(inputPath: string, testInfo: TestInfo, resultInfo: ResultInfo, steps: Steps): Promise<void> {
+    const outputDir = path.join(inputPath, 'report');
+    const perfDataPaths = getPerfDataPaths(inputPath, steps);
+    const perfDbPaths = getPerfDbPaths(inputPath, steps);
+    const htracePaths = getHtracePaths(inputPath, steps);
+    const stepsCollect: StepJsonData[] = [];
+
+    for (let i = 0; i < steps.length; i++) {
+        const perfAnalyzer = new PerfAnalyzer('');
+        const stepData = await perfAnalyzer.analyze2(perfDbPaths[i], testInfo.app_id, steps[i]);
+
+        const testSceneInfo: TestSceneInfo = {
+            packageName: testInfo.app_id,
+            scene: testInfo.scene,
+            osVersion: resultInfo.rom_version,
+            timestamp: testInfo.timestamp
+        };
+
+        await perfAnalyzer.analyze(perfDbPaths[i], testSceneInfo, outputDir, steps[i].stepIdx);
+
+        stepData.round = 0;
+        stepData.perf_data_path = perfDbPaths[i];
+        stepsCollect.push(stepData);
+    }
+
+    await saveHiperfJson(outputDir, resultInfo, testInfo, perfDataPaths, perfDbPaths, htracePaths, stepsCollect);
+}
 
 function getPerfDataPaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`, 'perf.data'));
@@ -85,224 +327,10 @@ function getHtracePaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => path.join(inputPath, 'htrace', `step${step.stepIdx.toString()}`, 'trace.htrace'));
 }
 
-// async function main(config: GlobalConfig): Promise<void> {
-async function main(input: string): Promise<void> {
-    if (getConfig().choose) {//选择轮次并输出json
-        logger.info(`Input dir is: ${input}`);
-        const roundFolders = getSceneRoundsFolders(input);
-        if (roundFolders.length === 0) {
-            logger.error(input + '一轮测试信息都没有,无法生成报告！');
-            return;
-        }
-        let output = path.join(input, 'report');
-        if (!fs.existsSync(output)) {
-            logger.info(`Creating output dir: ${output}`);
-            fs.mkdirSync(output, { recursive: true });
-        }
-
-        let resultInfo: ResultInfo = { rom_version: '', device_sn: '' };
-
-        //load result.xml
-        let resultXml = path.join(roundFolders[0], 'result', path.basename(input) + '.xml');
-        if (!fs.existsSync(resultXml)) {
-            logger.error('load' + resultXml + ':失败！');
-        } else {
-            try {
-                // 使用 DOMParser 解析 XML字符串
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(fs.readFileSync(resultXml, 'utf-8'), 'text/xml');
-
-                // 获取 testsuites 元素
-                const testsuitesElement = xmlDoc.getElementsByTagName('testsuites')[0];
-
-                // 提取starttime 属性
-                let devicesAttr = testsuitesElement.getAttribute('devices');
-
-                if (!devicesAttr) {
-                    logger.error('parse' + resultXml + ':失败！');
-                } else {
-                    const devices = JSON.parse(
-                        devicesAttr
-                            .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
-                            .replace(/^\[+/, '')
-                            .replace(/]+$/, '')
-                            .replace(/\\"/g, '"')
-                            .replace(/'/g, '"'));
-                    resultInfo.rom_version = devices.version;
-                    resultInfo.device_sn = devices.sn;
-                }
-            } catch (error) {
-                logger.error('parse' + resultXml + ':失败！');
-            }
-        }
-
-        // load testinfo.json
-        let testInfoPath = path.join(roundFolders[0], 'testInfo.json')
-        await copyFile(testInfoPath, path.join(input, 'testInfo.json'));
-        let rawData = fs.readFileSync(testInfoPath, 'utf8');
-        const testInfo: TestInfo = JSON.parse(rawData);
-
-        // load steps.json
-        let stepsJsonPath = path.join(roundFolders[0], 'hiperf', 'steps.json')
-        await copyFile(stepsJsonPath, path.join(input, 'hiperf', 'steps.json'));
-        rawData = fs.readFileSync(stepsJsonPath, 'utf8');
-        const steps: Steps = JSON.parse(rawData);
-        let stepsCollect: StepJsonData[] = [];
-        for (let i = 0; i < steps.length; i++) {
-            let stepItem: StepJsonData = {
-                step_name: steps[i].description,
-                step_id: steps[i].stepIdx,
-                count: 0,
-                round: 0,
-                perf_data_path: '',
-                data: []
-            };
-            let result: number[] = [];
-            let perfAnalyzer = new PerfAnalyzer('');
-            let dbPaths: string[] = [];
-            let tracePaths: string[] = [];
-            let choose = 0;
-            let tracePath = '';
-            let dbPath = '';
-            if (roundFolders.length >= 3) {
-                for (let index = 0; index < roundFolders.length; index++) {
-                    const roundFolder = roundFolders[index];
-
-                    tracePath = path.join(roundFolders[index], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
-                    dbPath = path.join(roundFolders[index], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
-                    if (!fs.existsSync(dbPath)) {
-                        traceStreamerCmd(tracePath, dbPath);
-                    }
-                    dbPaths.push(dbPath);
-                    tracePaths.push(tracePath);
-
-                    const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
-                    result[index] = sum;
-                    logger.info(roundFolder + '步骤：' + i + '轮次：' + index + '负载总数:' + sum);
-                }
-                let total = 0;
-                let max = Math.max(...result);
-                let min = Math.min(...result);
-                result.map((v) => (total += v));
-                let avg = (total - max - min) / (result.length - 2);
-
-
-                let skipMax = false;
-                let skipMin = false;
-                let diffMin = max;
-
-                for (let idx = 0; idx < result.length; idx++) {
-                    const v = result[idx];
-                    if (v === max && !skipMax) {
-                        skipMax = true;
-                        continue;
-                    }
-                    if (v === min && !skipMin) {
-                        skipMin = true;
-                        continue;
-                    }
-                    let diff = Math.abs(v - avg);
-                    if (diff < diffMin) {
-                        diffMin = diff;
-                        choose = idx;
-                    }
-                }
-            } else {
-                tracePath = path.join(roundFolders[0], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.data');
-                dbPath = path.join(roundFolders[0], 'hiperf', `step${steps[i].stepIdx.toString()}`, 'perf.db');
-                if (!fs.existsSync(dbPath)) {
-                    traceStreamerCmd(tracePath, dbPath);
-                }
-                dbPaths.push(dbPath);
-                tracePaths.push(tracePath);
-                result.push(await perfAnalyzer.calcPerfDbTotalInstruction(dbPath));
-            }
-
-            logger.info(dbPaths[choose] + ' : setp' + i + ' select round' + choose + ' .');
-            //将hiperf和htrace文件复制到最终目录
-            const choosePerfDir = path.join(roundFolders[choose], 'hiperf', `step${steps[i].stepIdx.toString()}`);
-            const chooseHtraceDir = path.join(roundFolders[choose], 'htrace', `step${steps[i].stepIdx.toString()}`);
-            const chooseResultDir = path.join(roundFolders[choose], 'result');
-            const scenePerfDir = path.join(input, 'hiperf', `step${steps[i].stepIdx.toString()}`);
-            const sceneHtraceDir = path.join(input, 'htrace', `step${steps[i].stepIdx.toString()}`);
-            const ResultDir = path.join(input, 'result');
-            await copyDirectory(choosePerfDir, scenePerfDir);
-            await copyDirectory(chooseHtraceDir, sceneHtraceDir);
-            await copyDirectory(chooseResultDir, ResultDir);
-            stepItem.count = result[choose];
-            stepItem.round = choose;
-            stepItem.perf_data_path = tracePaths[choose];
-            stepsCollect.push(stepItem);
-        }
-
-        await saveJsonFile(output, resultInfo, testInfo, stepsCollect);
-    } else {//输出hiperfjson
-        logger.info(`Input dir is: ${input}`);
-
-        let output = path.join(input, 'report');
-        let summaryJsonPath = path.join(output, 'summary_info.json');
-        if (!fs.existsSync(summaryJsonPath)) {
-            logger.error(`${summaryJsonPath}: 文件不存在，说明轮次选择步骤失败，需要重试上一步！`);
-            return;
-        }
-        //load summary_info.json
-        let summaryJson = fs.readFileSync(summaryJsonPath, 'utf8');
-        const summaryJsons: SummaryInfo[] = JSON.parse(summaryJson);
-        let checkResult = await checkPerfAndHtraceFiles(input,summaryJsons.length);
-        if(!checkResult){
-            logger.error('hiperf数据或者htrace数据不全，需要执行上一步补充！');
-            return;
-        }
-        // load testinfo.json
-        let testInfoPath = path.join(input, 'testInfo.json')
-        let rawData = fs.readFileSync(testInfoPath, 'utf8');
-        const testInfo: TestInfo = JSON.parse(rawData);
-
-        // load steps.json
-        let stepsJsonPath = path.join(input, 'hiperf', 'steps.json')
-        rawData = fs.readFileSync(stepsJsonPath, 'utf8');
-        const steps: Steps = JSON.parse(rawData);
-        let perfDataPaths = getPerfDataPaths(input, steps);
-        let perfDbPaths = getPerfDbPaths(input, steps);
-        let htracePaths = getHtracePaths(input, steps);
-        let stepsCollect: StepJsonData[] = [];
-
-        for (let i = 0; i < steps.length; i++) {
-            let stepItem: StepJsonData;
-            let perfAnalyzer = new PerfAnalyzer('');
-            stepItem = await perfAnalyzer.analyze2(perfDbPaths[i], testInfo.app_id, steps[i]);
-            let testSceneInfo: TestSceneInfo = { packageName: testInfo.app_id, scene: testInfo.scene, osVersion: summaryJsons[i].rom_version, timestamp: testInfo.timestamp };
-            await perfAnalyzer.analyze(perfDbPaths[i], testSceneInfo, output, steps[i].stepIdx);
-            stepItem.round = summaryJsons[i].round;
-            stepItem.perf_data_path = perfDbPaths[i];
-            stepsCollect.push(stepItem);
-        }
-        await saveHiperfJson(output, summaryJsons[0], testInfo, perfDataPaths, perfDbPaths, htracePaths, stepsCollect);
-    }
-
-}
-
-async function saveJsonFile(output: string, resultInfo: ResultInfo, testInfo: TestInfo, steps: StepJsonData[]): Promise<void> {
-    let summaryJsonObject: SummaryInfo[] = []
-    steps.forEach(step => {
-        const summaryObject: SummaryInfo = {
-            rom_version: resultInfo.rom_version,
-            app_version: testInfo.app_version,
-            scene: testInfo.scene,
-            step_name: step.step_name,
-            step_id: step.step_id,
-            round: step.round,
-            count: step.count
-        }
-        summaryJsonObject.push(summaryObject);
-    })
-    await saveJsonArray(summaryJsonObject, path.join(output, 'summary_info.json'));
-}
-
-async function saveHiperfJson(output: string, summaryInfo: SummaryInfo, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepJsonData[]): Promise<void> {
-    output = path.join(output,'../','hiperf');
+async function saveHiperfJson(output: string, resultInfo: ResultInfo, testInfo: TestInfo, perfDataPaths: string[], perfDbPaths: string[], htracePaths: string[], steps: StepJsonData[]): Promise<void> {
+    output = path.join(output, '../', 'hiperf');
     const jsonObject = {
-        rom_version: summaryInfo.rom_version,
+        rom_version: resultInfo.rom_version,
         app_id: testInfo.app_id,
         app_name: testInfo.app_name,
         app_version: testInfo.app_version,

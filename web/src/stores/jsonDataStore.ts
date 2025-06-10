@@ -1,5 +1,29 @@
 import { defineStore } from 'pinia';
 
+export enum PerfEvent {
+  CYCLES_EVENT = 0,
+  INSTRUCTION_EVENT = 1,
+}
+
+export enum ComponentCategory {
+  APP_ABC = 0,
+  APP_SO = 1,
+  APP_LIB = 2,
+  OS_Runtime = 3,
+  SYS_SDK = 4,
+  RN = 5,
+  Flutter = 6,
+  WEB = 7,
+  UNKNOWN = -1,
+}
+
+export enum OriginKind {
+  UNKNOWN = 0,
+  FIRST_PARTY = 1,
+  OPEN_SOURCE = 2,
+  THIRD_PARTY = 3,
+}
+
 export interface JSONData {
   rom_version: string;
   app_id: string;
@@ -18,28 +42,25 @@ export interface JSONData {
     round: number;
     perf_data_path: string;
     data: {
-      category: number;
-      count: number;
-      processes: {
-        process: string;
-        count: number;
-        threads: {
-          thread: string;
-          count: number;
-          files: {
-            file: string;
-            count: number;
-            symbols: {
-              symbol: string;
-              count: number;
-            }[];
-          }[];
-        }[];
-      }[];
+      stepIdx: number;
+      eventType: PerfEvent;
+      pid: number;
+      processName: string;
+      processEvents: number;
+      tid: number;
+      threadName: string;
+      threadEvents: number;
+      file: string;
+      fileEvents: number;
+      symbol: string;
+      symbolEvents: number;
+      symbolTotalEvents: number;
+      componentName?: string;
+      componentCategory: ComponentCategory;
+      originKind?: OriginKind;
     }[];
   }[];
 }
-
 export interface HtraceJSONData {
   runtime: string;
   statistics: {
@@ -55,7 +76,7 @@ export interface HtraceJSONData {
     };
   };
   stutter_details: {
-    ui_stutter:{
+    ui_stutter: {
       vsync: number;
       timestamp: number;
       actual_duration: number;
@@ -148,14 +169,14 @@ export const useJsonDataStore = defineStore('config', {
     compareJsonData: null as JSONData | null
   }),
   actions: {
-    setJsonData(jsonData: JSONData, htraceJsonData: HtraceJSONData[], compareJsonData: JSONData) {
+    setJsonData(jsonData: JSONData[], htraceJsonData: HtraceJSONData[], compareJsonData: JSONData[]) {
       if (JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\"") {
-        this.jsonData = jsonData;
+        this.jsonData = jsonData[0];
         this.htraceJsonData = htraceJsonData;
         window.initialPage = 'perf';
       } else {
-        this.jsonData = jsonData;
-        this.compareJsonData = compareJsonData;
+        this.jsonData = jsonData[0];
+        this.compareJsonData = compareJsonData[0];
         window.initialPage = 'perf_compare';
       }
 
@@ -197,5 +218,11 @@ export const useSymbolNameQueryStore = defineStore('symbolNameQuery', {
 export const useCategoryStore = defineStore('categoryNameQuery', {
   state: () => ({
     categoriesQuery: '' as string,
+  })
+});
+
+export const useComponentNameStore = defineStore('componentNameQuery', {
+  state: () => ({
+    componentNameQuery: '' as string,
   })
 });
