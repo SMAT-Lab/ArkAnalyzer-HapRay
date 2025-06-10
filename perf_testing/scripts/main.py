@@ -25,7 +25,7 @@ then add the following directories to PATH.
     $command_line_tools/tool/node/bin (for Mac/Linux)
     $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
 """
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 
 
 def configure_logging(log_file='HapRay.log'):
