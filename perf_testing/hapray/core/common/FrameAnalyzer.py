@@ -8,7 +8,9 @@ import sys
 import codecs
 import logging
 from hapray.core.common.CommonUtils import CommonUtils
-
+import sqlite3
+import pandas as pd
+from datetime import datetime
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
@@ -173,11 +175,209 @@ class FrameAnalyzer:
             logging.error(f"Error analyzing frame drops: {str(e)}")
             return False
 
+    @staticmethod
+    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list) -> dict:
+        """
+        分析空帧（flag=2, type=0）的负载情况
+
+        参数:
+        - trace_db_path: str，trace数据库文件路径
+        - perf_db_path: str，perf数据库文件路径
+        - app_pids: list，应用进程ID列表
+
+        返回:
+        - dict，包含分析结果
+        """
+        # 连接trace数据库
+        trace_conn = sqlite3.connect(trace_db_path)
+        perf_conn = sqlite3.connect(perf_db_path)
+        
+        try:
+            # 检查SQLite版本是否支持WITH子句
+            cursor = trace_conn.cursor()
+            cursor.execute("SELECT sqlite_version()")
+            version = cursor.fetchone()[0]
+            version_parts = [int(x) for x in version.split('.')]
+            if version_parts[0] < 3 or (version_parts[0] == 3 and version_parts[1] < 8):
+                raise ValueError(f"SQLite版本 {version} 不支持WITH子句，需要3.8.3或更高版本")
+
+            # 确保所需表存在
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            required_tables = ['frame_slice', 'process', 'thread', 'callstack']
+            if not all(table in tables for table in required_tables):
+                raise ValueError(f"数据库中缺少必要的表，需要: {required_tables}")
+
+            # 执行查询获取帧信息
+            query = """
+            WITH filtered_frames AS (
+                -- 首先获取符合条件的帧
+                SELECT fs.ts, fs.dur, fs.ipid, fs.itid, fs.callstack_id
+                FROM frame_slice fs
+                WHERE fs.flag = 2 
+                AND fs.type = 0
+            ),
+            process_filtered AS (
+                -- 通过process表过滤出app_pids中的帧
+                SELECT ff.*, p.pid
+                FROM filtered_frames ff
+                JOIN process p ON ff.ipid = p.ipid
+                WHERE p.pid IN ({})
+            ),
+            thread_info AS (
+                -- 获取线程信息
+                SELECT pf.*, t.tid
+                FROM process_filtered pf
+                JOIN thread t ON pf.itid = t.itid
+            )
+            -- 最后获取调用栈信息
+            SELECT ti.*, cs.name
+            FROM thread_info ti
+            JOIN callstack cs ON ti.callstack_id = cs.id
+            """.format(','.join('?' * len(app_pids)))
+
+            # 获取帧信息
+            trace_df = pd.read_sql_query(query, trace_conn, params=app_pids)
+            
+            if trace_df.empty:
+                return {
+                    "status": "no_frames",
+                    "message": "未找到符合条件的帧"
+                }
+
+            # 获取总负载
+            total_load_query = "SELECT SUM(event_count) as total_load FROM perf_sample"
+            total_load = pd.read_sql_query(total_load_query, perf_conn)['total_load'].iloc[0]
+            
+            # 获取所有perf样本
+            perf_query = "SELECT timestamp_trace, thread_id, event_count FROM perf_sample"
+            perf_df = pd.read_sql_query(perf_query, perf_conn)
+            
+            # 为每个帧创建时间区间
+            trace_df['start_time'] = trace_df['ts']
+            trace_df['end_time'] = trace_df['ts'] + trace_df['dur']
+            
+            # 初始化结果列表
+            frame_loads = []
+            total_empty_frame_load = 0
+            
+            # 对每个帧进行分析
+            for _, frame in trace_df.iterrows():
+                # 找出时间戳在帧区间内且线程ID匹配的样本
+                mask = (
+                    (perf_df['timestamp_trace'] >= frame['start_time']) & 
+                    (perf_df['timestamp_trace'] <= frame['end_time']) & 
+                    (perf_df['thread_id'].isin([frame['tid']]))
+                )
+                frame_samples = perf_df[mask]
+                
+                if not frame_samples.empty:
+                    # 计算该帧的总负载
+                    frame_load = frame_samples['event_count'].sum()
+                    total_empty_frame_load += frame_load
+                    
+                    frame_loads.append({
+                        'ts': frame['ts'],
+                        'dur': frame['dur'],
+                        'ipid': frame['ipid'],
+                        'itid': frame['itid'],
+                        'pid': frame['pid'],
+                        'tid': frame['tid'],
+                        'callstack_id': frame['callstack_id'],
+                        'name': frame['name'],
+                        'frame_load': frame_load
+                    })
+            
+            # 转换为DataFrame并按负载排序
+            result_df = pd.DataFrame(frame_loads)
+            if not result_df.empty:
+                result_df = result_df.sort_values('frame_load', ascending=False).head(10)
+                
+                # 计算总空帧负载占比
+                total_empty_frame_percentage = (total_empty_frame_load / total_load) * 100
+                
+                # 构建结果字典
+                return {
+                    "status": "success",
+                    "summary": {
+                        "total_load": int(total_load),
+                        "total_empty_frame_load": int(total_empty_frame_load),
+                        "empty_frame_load_percentage": float(total_empty_frame_percentage),
+                        "total_empty_frames": len(trace_df),
+                        "empty_frames_with_load": len(frame_loads)
+                    },
+                    "top_frames": result_df.to_dict('records')
+                }
+            else:
+                return {
+                    "status": "no_load",
+                    "message": "未找到任何帧负载数据"
+                }
+            
+        finally:
+            trace_conn.close()
+            perf_conn.close()
+
+    @staticmethod
+    def collect_empty_frame_loads(root_dir: str) -> list:
+        """
+        递归收集目录下所有empty_frame_analysis.json文件中的空帧负载数据
+
+        参数:
+        - root_dir: str，要搜索的根目录
+
+        返回:
+        - list，包含所有场景的空帧负载数据，格式为：
+          [
+              {
+                  "scene": "场景名称",
+                  "load_percentage": float,
+                  "file_path": str
+              },
+              ...
+          ]
+        """
+        results = []
+        
+        # 遍历目录
+        for root, dirs, files in os.walk(root_dir):
+            for file in files:
+                if file == 'empty_frames_analysis.json':
+                    file_path = os.path.join(root, file)
+                    try:
+                        # 读取JSON文件
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            
+                        # 获取场景名称（目录名）
+                        scene_name = os.path.basename(os.path.dirname(file_path))
+                        
+                        # 遍历每个步骤的数据
+                        for step_id, step_data in data.items():
+                            if step_data.get("status") == "success":
+                                summary = step_data.get("summary", {})
+                                load_percentage = summary.get("empty_frame_load_percentage", 0)
+                                
+                                results.append({
+                                    "scene": scene_name,
+                                    "step": step_id,
+                                    "load_percentage": load_percentage,
+                                    "file_path": file_path
+                                })
+                                
+                    except Exception as e:
+                        logging.error(f"Error processing {file_path}: {str(e)}")
+                        continue
+        
+        # 按负载百分比排序
+        results.sort(key=lambda x: x["load_percentage"], reverse=True)
+        return results
+
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
     """
     解析数据库文件，按vsync值分组数据
     结果按vsync值（key）从小到大排序
-    过滤掉flag=2的帧（未绘制的帧）
+    只保留flag=0和flag=1的帧（实际渲染的帧）
 
     Args:
         db_path: 数据库文件路径
@@ -190,8 +390,18 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # 获取所有数据
-        cursor.execute("SELECT * FROM frame_slice")
+        # 获取所有数据，直接过滤type=0和flag in (0,1)的帧
+        cursor.execute("""
+            WITH RankedFrames AS (
+                SELECT *,
+                    ROW_NUMBER() OVER (PARTITION BY vsync ORDER BY ts) as rn
+                FROM frame_slice 
+                WHERE type = 0 AND flag IN (0, 1, 3)
+            )
+            SELECT * FROM RankedFrames 
+            WHERE rn = 1
+            ORDER BY vsync, ts
+        """)
         
         # 获取列名
         columns = [description[0] for description in cursor.description]
@@ -201,6 +411,7 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         
         # 按vsync值分组
         vsync_groups: Dict[int, List[Dict[str, Any]]] = {}
+        total_frames = 0
         
         # 遍历所有行，将数据转换为字典并按vsync分组
         for row in rows:
@@ -216,15 +427,12 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
                 vsync_value = int(vsync_value)
             except (ValueError, TypeError):
                 continue
-            
-            # 跳过flag=2的帧（未绘制的帧）
-            if row_dict.get('flag') == 2:
-                continue
                 
             if vsync_value not in vsync_groups:
                 vsync_groups[vsync_value] = []
             
             vsync_groups[vsync_value].append(row_dict)
+            total_frames += 1
         
         # 关闭数据库连接
         conn.close()
@@ -283,9 +491,13 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         cursor = conn.cursor()
         
         # 获取runtime时间
-        cursor.execute("SELECT value FROM meta WHERE name = 'runtime'")
-        runtime_result = cursor.fetchone()
-        runtime = runtime_result[0] if runtime_result else None
+        try:
+            cursor.execute("SELECT value FROM meta WHERE name = 'runtime'")
+            runtime_result = cursor.fetchone()
+            runtime = runtime_result[0] if runtime_result else None
+        except sqlite3.DatabaseError:
+            logging.warning("Failed to get runtime from database, setting to None")
+            runtime = None
         
         data = parse_frame_slice_db(db_path)
 
@@ -340,17 +552,16 @@ def analyze_stuttered_frames(db_path: str) -> dict:
             "start_time": None,
             "end_time": None,
             "frame_count": 0,
-            "frames": []
+            "frames": set()  # 使用集合来跟踪已处理的帧
         }
 
         vsync_keys = sorted(data.keys())
 
         for vsync_key in vsync_keys:
             for frame in data[vsync_key]:
-                if frame["type"] != 0:
-                    continue
-
                 frame_time = frame["ts"]
+                frame_id = f"{vsync_key}_{frame_time}"  # 创建唯一帧标识符
+
                 # 获取帧类型并统计总帧数
                 frame_type = get_frame_type(frame, cursor)
                 stats["frame_stats"][frame_type]["total"] += 1
@@ -360,9 +571,11 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                 if current_window["start_time"] is None:
                     current_window["start_time"] = frame_time
                     current_window["end_time"] = frame_time + WINDOW_SIZE_MS * NS_TO_MS
+                    first_frame_time = frame_time
 
                 # 处理跨多个窗口的情况
                 while frame_time >= current_window["end_time"]:
+                    # 计算当前窗口的fps
                     window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS, 1)
                     window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
                     if window_fps < LOW_FPS_THRESHOLD:
@@ -372,6 +585,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
                     end_offset = (current_window["end_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
 
+                    # 保存当前窗口的fps数据
                     fps_windows.append({
                         "start_time": start_offset,
                         "end_time": end_offset,
@@ -381,19 +595,16 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                         "fps": window_fps
                     })
 
-                    # 新窗口推进
+                    # 新窗口推进 - 使用固定窗口大小
                     current_window["start_time"] = current_window["end_time"]
-                    current_window["end_time"] += WINDOW_SIZE_MS * NS_TO_MS
+                    current_window["end_time"] = current_window["start_time"] + WINDOW_SIZE_MS * NS_TO_MS
                     current_window["frame_count"] = 0
-                    current_window["frames"] = []
+                    current_window["frames"] = set()
 
-                # 当前窗口更新
-                current_window["frame_count"] += 1
-                current_window["frames"].append(frame)
-
-                # 记录第一帧的时间戳
-                if first_frame_time is None:
-                    first_frame_time = frame_time
+                # 当前窗口更新 - 只计算时间戳在窗口范围内的帧
+                if current_window["start_time"] <= frame_time < current_window["end_time"] and frame_id not in current_window["frames"]:
+                    current_window["frame_count"] += 1
+                    current_window["frames"].add(frame_id)
 
                 # 卡顿判断
                 if frame.get("flag") == 1:  # 表示这一帧比预期帧慢
@@ -441,34 +652,25 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                             "dst": frame.get("dst")
                         })
 
-        # 关闭数据库连接
-        conn.close()
-
         # 处理最后一个窗口
         if current_window["frame_count"] > 0:
-            actual_end_time = current_window["frames"][-1]["ts"]
-            window_duration_ms = (actual_end_time - current_window["start_time"]) / NS_TO_MS
+            window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS, 1)
+            window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
+            if window_fps < LOW_FPS_THRESHOLD:
+                stats["fps_stats"]["low_fps_window_count"] += 1
 
-            if window_duration_ms >= WINDOW_SIZE_MS:
-                window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
-                if window_fps < LOW_FPS_THRESHOLD:
-                    stats["fps_stats"]["low_fps_window_count"] += 1
+            # 计算最后一个窗口的偏移时间
+            start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000
+            end_offset = (current_window["end_time"] - first_frame_time) / NS_TO_MS / 1000
 
-                # 计算最后一个窗口的偏移时间
-                start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000
-                end_offset = (actual_end_time - first_frame_time) / NS_TO_MS / 1000
-
-                fps_windows.append({
-                    "start_time": start_offset,
-                    "end_time": end_offset,
-                    "start_time_ts": current_window["start_time"],
-                    "end_time_ts": actual_end_time,
-                    "frame_count": current_window["frame_count"],
-                    "fps": window_fps
-                })
-            else:
-                print(f"[跳过短窗口FPS计算] 帧数: {current_window['frame_count']}, "
-                      f"窗口时长: {window_duration_ms:.2f}ms，不参与FPS统计。")
+            fps_windows.append({
+                "start_time": start_offset,
+                "end_time": end_offset,
+                "start_time_ts": current_window["start_time"],
+                "end_time_ts": current_window["end_time"],
+                "frame_count": current_window["frame_count"],
+                "fps": window_fps
+            })
 
         # 计算 FPS 概览
         if fps_windows:
@@ -514,10 +716,60 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
 
+def test_analyze_empty_frames():
+    """
+    测试 analyze_empty_frames 函数的基本功能
+    """
+    # 测试数据库路径
+    trace_db_path = r"D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250605173357\ResourceUsage_PerformanceDynamic_jingdong_0110\htrace\step1\trace.db"
+    perf_db_path = r"D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250605173357\ResourceUsage_PerformanceDynamic_jingdong_0110\hiperf\step1\perf.db"
+    app_pids = [6309, 7563, 8967, 7944]  # 示例app_pids
+    
+    try:
+        print("\n=== 开始测试空帧分析 ===")
+        result = FrameAnalyzer.analyze_empty_frames(trace_db_path, perf_db_path, app_pids)
+        print(f"分析结果已保存到: {result}")
+        print("\n=== 测试完成 ===")
+        
+    except Exception as e:
+        print(f"\n测试失败: {str(e)}")
+        raise
+
+def test_collect_empty_frame_loads():
+    """
+    测试收集空帧负载数据
+    """
+    # 测试目录路径
+    root_dir = r"D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250610180706"
+    
+    try:
+        print("\n=== 开始收集空帧负载数据 ===")
+        results = FrameAnalyzer.collect_empty_frame_loads(root_dir)
+        
+        # 构建输出JSON
+        output = {
+            "total_scenes": len(results),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data": results
+        }
+        
+        # 将结果保存到JSON文件
+        output_file = os.path.join(root_dir, "empty_frame_loads_summary.json")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
+            
+        print(f"\n=== 收集完成 ===")
+        print(f"总共收集到 {len(results)} 个场景的数据")
+        print(f"结果已保存到: {output_file}")
+        
+    except Exception as e:
+        print(f"\n收集失败: {str(e)}")
+        raise
+
 def main():
     """测试卡顿帧分析功能的主函数"""
     # 设置要分析的报告目录路径
-    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250602111937\ResourceUsage_PerformanceDynamic_jingdong_0020'
+    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\ResourceUsage_PerformanceDynamic_Douyin_0010\ResourceUsage_PerformanceDynamic_Douyin_0010'
 
     # 检查路径是否存在
     if not os.path.exists(path):
@@ -531,5 +783,8 @@ def main():
     else:
         logging.error("Frame drops analysis failed")
 
+
 if __name__ == "__main__":
     main()
+    # test_analyze_empty_frames()
+    # test_collect_empty_frame_loads()
