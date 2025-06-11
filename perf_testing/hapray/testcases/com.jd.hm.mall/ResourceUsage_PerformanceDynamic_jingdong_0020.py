@@ -67,7 +67,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             # Step('京东新品页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30, is_multi_pid=True)
+        self.execute_step_with_perf_and_trace(1, step1, 30)
 
         # 返回首页
         # self.driver.swipe_to_back()
