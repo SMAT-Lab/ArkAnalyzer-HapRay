@@ -538,7 +538,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 { value: data[0].fileEvents, type: Number },
                 { value: data[1].fileEvents, type: Number },
 
-                { value: data[0].symbol.substring(0, 2048), type: String },
+                { value: this.excelSpecialTranscode(data[0].symbol), type: String },
                 { value: data[0].symbolEvents, type: Number },
                 { value: data[0].symbolTotalEvents, type: Number },
                 { value: data[1].symbolEvents, type: Number },
@@ -603,6 +603,13 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             sheets: ['ecol_load_hiperf_detail', 'ecol_load_step'],
             filePath: outputFileName,
         });
+    }
+
+    private excelSpecialTranscode(content: string): string {
+        if (content === 'toString') {
+            return 'toString()'
+        }
+        return content.substring(0, 2048);
     }
 
     private dateCustomFormatting(timestamp: number): string {
