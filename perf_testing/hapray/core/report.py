@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import zlib
+import sqlite3
 from typing import List, Optional
 
 from hapray.core.common.CommonUtils import CommonUtils
@@ -73,7 +74,10 @@ class ReportGenerator:
         # Step 3: Analyze frame drops
         self._analyze_frame_drops(scene_dir)
 
-        # Step 4: Generate HTML report
+        # Step 4: Analyze empty frames
+        self._analyze_empty_frames(scene_dir)
+
+        # Step 5: Generate HTML report
         self._create_html_report(scene_dir)
 
         logging.info(f"Report successfully {'updated' if skip_round_selection else 'generated'} for {scene_dir}")
@@ -120,6 +124,69 @@ class ReportGenerator:
                 logging.warning(f"Frame drop analysis completed with warnings for {scene_dir}")
         except Exception as e:
             logging.error(f"Frame drop analysis failed for {scene_dir}: {str(e)}")
+
+    def _analyze_empty_frames(self, scene_dir: str) -> None:
+        """分析空帧数据"""
+        try:
+            # 获取所有步骤的进程信息
+            app_pids = self._get_app_pids(scene_dir)
+            if not app_pids:
+                logging.warning(f"No app PIDs found for scene {scene_dir}")
+                return
+
+            # 用于存储所有步骤的分析结果
+            all_results = {}
+
+            # 遍历所有步骤目录
+            for step_dir in os.listdir(os.path.join(scene_dir, 'htrace')):
+                step_path = os.path.join(scene_dir, 'htrace', step_dir)
+                if not os.path.isdir(step_path):
+                    continue
+
+                # 从step_dir中提取步骤编号（例如从'step1'提取'1'）
+                current_step_id = int(step_dir.replace('step', ''))
+                
+                # 过滤出当前步骤的进程信息
+                current_step_pids = [(name, pid) for step_id, name, pid in app_pids if int(step_id) == current_step_id]
+                
+                if not current_step_pids:
+                    logging.warning(f"No process info found for step {step_dir}")
+                    continue
+
+                # 提取PID列表
+                pids = [pid for _, pid in current_step_pids]
+                
+                # 记录当前步骤的进程信息
+                for name, pid in current_step_pids:
+                    logging.info(f"Step {step_dir} - Process: {name} (PID: {pid})")
+
+                # 获取trace和perf数据库路径
+                trace_db = os.path.join(step_path, 'trace.db')
+                perf_db = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.db')
+
+                if not os.path.exists(trace_db) or not os.path.exists(perf_db):
+                    logging.warning(f"Missing database files for step {step_dir}")
+                    continue
+
+                # 执行空帧分析
+                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, pids)
+                if result["status"] == "success":
+                    logging.info(f"Successfully analyzed empty frames for step {step_dir}")
+                    all_results[step_dir] = result
+                else:
+                    logging.warning(f"Empty frame analysis failed for step {step_dir}: {result.get('message', 'Unknown error')}")
+
+            # 保存所有步骤的分析结果到htrace子目录
+            if all_results:
+                output_json = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
+                with open(output_json, 'w', encoding='utf-8') as f:
+                    json.dump(all_results, f, ensure_ascii=False, indent=2)
+                logging.info(f"All empty frames analysis results saved to {output_json}")
+            else:
+                logging.warning("No valid analysis results to save")
+
+        except Exception as e:
+            logging.error(f"Empty frame analysis failed for {scene_dir}: {str(e)}")
 
     def _create_html_report(self, scene_dir: str) -> None:
         """Create the final HTML report"""
@@ -258,3 +325,71 @@ class ReportGenerator:
             kind_entry["components"].append(component)
 
         return json.dumps([kind_entry])
+
+    def _get_app_pids(self, scene_dir: str) -> list:
+        """获取应用进程ID列表
+        
+        从hiperf_info.json文件中读取进程信息，格式为：
+        [
+            {
+                "steps": [
+                    {
+                        "step_id": "step1",
+                        "data": [
+                            {
+                                "processName": "com.example.app",
+                                "pid": 1234
+                            },
+                            ...
+                        ]
+                    },
+                    ...
+                ]
+            }
+        ]
+        
+        Returns:
+            list: 进程ID列表
+        """
+        try:
+            # 获取hiperf_info.json文件路径
+            perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
+            
+            if not os.path.exists(perf_data_path):
+                logging.warning(f"No hiperf_info.json found at {perf_data_path}")
+                return []
+
+            # 读取JSON文件
+            with open(perf_data_path, 'r', encoding='utf-8') as f:
+                perf_data = json.load(f)
+                
+            if not perf_data or not isinstance(perf_data, list) or len(perf_data) == 0:
+                logging.warning("Invalid hiperf_info.json format")
+                return []
+
+            # 获取第一个item的steps
+            steps = perf_data[0].get('steps', [])
+            if not steps:
+                logging.warning("No steps found in hiperf_info.json")
+                return []
+
+            # 收集所有进程信息
+            process_info = set()  # 使用set去重
+            for step in steps:
+                step_id = step.get('step_id')
+                if not step_id:
+                    continue
+
+                # 遍历data数组
+                for item in step.get('data', []):
+                    process_name = item.get('processName')
+                    pid = item.get('pid')
+                    if process_name and pid:
+                        process_info.add((step_id, process_name, pid))
+
+            # 转换为列表并返回
+            return list(process_info)
+
+        except Exception as e:
+            logging.error(f"Failed to get app PIDs: {str(e)}")
+            return []
