@@ -11,6 +11,8 @@ from hapray.core.common.CommonUtils import CommonUtils
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import matplotlib.pyplot as plt
+import numpy as np
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
@@ -219,19 +221,19 @@ class FrameAnalyzer:
             ),
             process_filtered AS (
                 -- 通过process表过滤出app_pids中的帧
-                SELECT ff.*, p.pid
+                SELECT ff.*, p.pid, p.name as process_name
                 FROM filtered_frames ff
                 JOIN process p ON ff.ipid = p.ipid
                 WHERE p.pid IN ({})
             ),
             thread_info AS (
                 -- 获取线程信息
-                SELECT pf.*, t.tid
+                SELECT pf.*, t.tid, t.name as thread_name
                 FROM process_filtered pf
                 JOIN thread t ON pf.itid = t.itid
             )
             -- 最后获取调用栈信息
-            SELECT ti.*, cs.name
+            SELECT ti.*, cs.name as callstack_name
             FROM thread_info ti
             JOIN callstack cs ON ti.callstack_id = cs.id
             """.format(','.join('?' * len(app_pids)))
@@ -267,7 +269,7 @@ class FrameAnalyzer:
                 mask = (
                     (perf_df['timestamp_trace'] >= frame['start_time']) & 
                     (perf_df['timestamp_trace'] <= frame['end_time']) & 
-                    (perf_df['thread_id'].isin([frame['tid']]))
+                    (perf_df['thread_id'] == frame['tid'])
                 )
                 frame_samples = perf_df[mask]
                 
@@ -284,7 +286,9 @@ class FrameAnalyzer:
                         'pid': frame['pid'],
                         'tid': frame['tid'],
                         'callstack_id': frame['callstack_id'],
-                        'name': frame['name'],
+                        'process_name': frame['process_name'],
+                        'thread_name': frame['thread_name'],
+                        'callstack_name': frame['callstack_name'],
                         'frame_load': frame_load
                     })
             
@@ -318,8 +322,7 @@ class FrameAnalyzer:
             trace_conn.close()
             perf_conn.close()
 
-    @staticmethod
-    def collect_empty_frame_loads(root_dir: str) -> list:
+    def collect_empty_frame_loads(self, root_dir: str) -> list:
         """
         递归收集目录下所有empty_frame_analysis.json文件中的空帧负载数据
 
@@ -349,8 +352,19 @@ class FrameAnalyzer:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             data = json.load(f)
                             
-                        # 获取场景名称（目录名）
-                        scene_name = os.path.basename(os.path.dirname(file_path))
+                        # 获取场景名称（最近的包含ResourceUsage_PerformanceDynamic的目录）
+                        current_dir = os.path.dirname(file_path)
+                        scene_name = None
+                        while current_dir != root_dir:
+                            if 'ResourceUsage_PerformanceDynamic' in os.path.basename(current_dir):
+                                scene_name = os.path.basename(current_dir)
+                                break
+                            current_dir = os.path.dirname(current_dir)
+                        
+                        # 如果没找到，使用默认值
+                        if not scene_name:
+                            scene_name = f"Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}"
+                            logging.warning(f"Using default scene name for {file_path}: {scene_name}")
                         
                         # 遍历每个步骤的数据
                         for step_id, step_data in data.items():
@@ -716,35 +730,126 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
 
-def test_analyze_empty_frames():
+def visualize_empty_frame_loads(results: list, output_dir: str):
     """
-    测试 analyze_empty_frames 函数的基本功能
+    可视化空帧负载数据
+
+    Args:
+        results: 空帧负载数据列表
+        output_dir: 输出目录
     """
-    # 测试数据库路径
-    trace_db_path = r"D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250605173357\ResourceUsage_PerformanceDynamic_jingdong_0110\htrace\step1\trace.db"
-    perf_db_path = r"D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250605173357\ResourceUsage_PerformanceDynamic_jingdong_0110\hiperf\step1\perf.db"
-    app_pids = [6309, 7563, 8967, 7944]  # 示例app_pids
-    
     try:
-        print("\n=== 开始测试空帧分析 ===")
-        result = FrameAnalyzer.analyze_empty_frames(trace_db_path, perf_db_path, app_pids)
-        print(f"分析结果已保存到: {result}")
-        print("\n=== 测试完成 ===")
+        # 创建输出目录
+        os.makedirs(output_dir, exist_ok=True)
+
+        if not results:
+            logging.warning("No data to visualize")
+            return None
+
+        # 简化场景名称
+        def simplify_scene_name(scene_name: str) -> str:
+            # 移除 "ResourceUsage_PerformanceDynamic_" 前缀
+            if scene_name.startswith("ResourceUsage_PerformanceDynamic_"):
+                return scene_name[len("ResourceUsage_PerformanceDynamic_"):]
+            return scene_name
+
+        # 1. 按场景分组的空帧负载柱状图
+        plt.figure(figsize=(15, 8))
         
+        # 设置负载阈值（只显示高于此值的数据）
+        LOAD_THRESHOLD = 3.0  # 3%的负载阈值
+        
+        # 准备数据并过滤
+        filtered_data = [(simplify_scene_name(r['scene']), r['step'], r['load_percentage']) 
+                        for r in results 
+                        if r['load_percentage'] >= LOAD_THRESHOLD]
+        
+        # 按负载百分比排序
+        filtered_data.sort(key=lambda x: x[2], reverse=True)
+        
+        # 如果过滤后没有数据，降低阈值
+        if not filtered_data:
+            LOAD_THRESHOLD = 0.0
+            filtered_data = [(simplify_scene_name(r['scene']), r['step'], r['load_percentage']) 
+                           for r in results]
+            filtered_data.sort(key=lambda x: x[2], reverse=True)
+        
+        # 修改横坐标标签格式为 "场景_步骤"
+        scenes = [f"{scene}_{step}" for scene, step, _ in filtered_data]
+        loads = [load for _, _, load in filtered_data]
+
+        # 创建柱状图
+        bars = plt.bar(range(len(scenes)), loads)
+        plt.title(f'Empty Frame Load by Scene and Step (Threshold: {LOAD_THRESHOLD}%)')
+        plt.xlabel('Scene_Step')
+        plt.ylabel('Empty Frame Load (%)')
+        plt.xticks(range(len(scenes)), scenes, rotation=45, ha='right')
+        
+        # 添加数值标签
+        for bar in bars:
+            height = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.1f}%',
+                    ha='center', va='bottom')
+
+        plt.tight_layout()
+        
+        # 保存柱状图
+        bar_plot_path = os.path.join(output_dir, 'empty_frame_loads_by_scene.png')
+        plt.savefig(bar_plot_path)
+        plt.close()
+
+        # 2. 空帧负载箱线图
+        plt.figure(figsize=(12, 6))
+        
+        # 按步骤分组数据
+        step_data = {}
+        for result in results:
+            step_key = f"{simplify_scene_name(result['scene'])}_{result['step']}"
+            if step_key not in step_data:
+                step_data[step_key] = []
+            step_data[step_key].append(result['load_percentage'])
+
+        # 计算每个步骤的平均负载，并按平均值排序
+        step_means = {step: np.mean(loads) for step, loads in step_data.items()}
+        sorted_steps = sorted(step_means.keys(), key=lambda x: step_means[x], reverse=True)
+
+        # 创建箱线图
+        plt.boxplot([step_data[step] for step in sorted_steps],
+                   labels=sorted_steps,
+                   vert=True)
+        plt.title('Empty Frame Load Distribution by Step')
+        plt.xlabel('Scene_Step')
+        plt.ylabel('Empty Frame Load (%)')
+        plt.xticks(rotation=45, ha='right')
+        
+        plt.tight_layout()
+        
+        # 保存箱线图
+        boxplot_path = os.path.join(output_dir, 'empty_frame_loads_boxplot.png')
+        plt.savefig(boxplot_path)
+        plt.close()
+
+        return {
+            "bar_plot": bar_plot_path,
+            "boxplot": boxplot_path
+        }
+
     except Exception as e:
-        print(f"\n测试失败: {str(e)}")
-        raise
+        logging.error(f"Error generating empty frame load visualizations: {str(e)}")
+        return None
 
 def test_collect_empty_frame_loads():
     """
     测试收集空帧负载数据
     """
     # 测试目录路径
-    root_dir = r"D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250610180706"
+    root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250611101243\ResourceUsage_PerformanceDynamic_zhifubao_1000'
     
     try:
         print("\n=== 开始收集空帧负载数据 ===")
-        results = FrameAnalyzer.collect_empty_frame_loads(root_dir)
+        analyzer = FrameAnalyzer()
+        results = analyzer.collect_empty_frame_loads(root_dir)
         
         # 构建输出JSON
         output = {
@@ -758,9 +863,14 @@ def test_collect_empty_frame_loads():
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
             
+        # 生成可视化图表
+        output_dir = os.path.join(root_dir, "empty_frame_loads_plots")
+        visualize_empty_frame_loads(results, output_dir)
+            
         print(f"\n=== 收集完成 ===")
         print(f"总共收集到 {len(results)} 个场景的数据")
         print(f"结果已保存到: {output_file}")
+        print(f"可视化图表已保存到: {output_dir}")
         
     except Exception as e:
         print(f"\n收集失败: {str(e)}")
@@ -769,7 +879,7 @@ def test_collect_empty_frame_loads():
 def main():
     """测试卡顿帧分析功能的主函数"""
     # 设置要分析的报告目录路径
-    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\ResourceUsage_PerformanceDynamic_Douyin_0010\ResourceUsage_PerformanceDynamic_Douyin_0010'
+    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250611101243\ResourceUsage_PerformanceDynamic_zhifubao_1000'
 
     # 检查路径是否存在
     if not os.path.exists(path):
@@ -785,6 +895,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    # test_analyze_empty_frames()
+    # main()
     # test_collect_empty_frame_loads()
+    test_collect_empty_frame_loads()
