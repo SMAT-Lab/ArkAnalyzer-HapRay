@@ -187,7 +187,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         try {
             db = new SQL.Database(fs.readFileSync(dbfile!));
             // 读取样本数据
-            total = await this.queryProcessTotal(db);
+            total = this.queryProcessTotal(db);
         } catch (err) {
             logger.error(`${err} ${dbfile}`);
         } finally {
@@ -597,9 +597,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return this.calcSymbolData(groupId);
     }
 
-    private async queryProcessTotal(db: Database): Promise<number> {
+    private queryProcessTotal(db: Database): number {
         let total = 0;
-        const results = await db.exec(PERF_PROCESS_TOTAL_SQL);
+        const results = db.exec(PERF_PROCESS_TOTAL_SQL);
         if (results.length === 0) {
             return total;
         }

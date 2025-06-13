@@ -144,7 +144,7 @@ function loadResCfg(): Partial<GlobalConfig> {
     config['perf']['kinds'] = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' }));
     let soOriginCfg = path.join(res, 'so/standardized_origins.json');
     if (fs.existsSync(soOriginCfg)) {
-        config['perf']['osOrigins'] = new Map(
+        config['perf']['soOrigins'] = new Map(
             Object.entries(JSON.parse(fs.readFileSync(soOriginCfg, { encoding: 'utf-8' })))
         );
     }

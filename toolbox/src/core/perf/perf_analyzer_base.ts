@@ -461,12 +461,12 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     eventType: PerfEvent.CYCLES_EVENT,
                     pid: data.pid,
                     processName: data.processName,
-                    processEvents: data.processEvents,
+                    processEvents: 0,
                     tid: data.tid,
-                    threadEvents: data.threadEvents,
+                    threadEvents: 0,
                     threadName: data.threadName,
                     file: data.file,
-                    fileEvents: data.fileEvents,
+                    fileEvents: 0,
                     symbol: data.symbol,
                     symbolEvents: 0,
                     symbolTotalEvents: 0,
@@ -479,12 +479,12 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     eventType: PerfEvent.INSTRUCTION_EVENT,
                     pid: data.pid,
                     processName: data.processName,
-                    processEvents: data.processEvents,
+                    processEvents: 0,
                     tid: data.tid,
-                    threadEvents: data.threadEvents,
+                    threadEvents: 0,
                     threadName: data.threadName,
                     file: data.file,
-                    fileEvents: data.fileEvents,
+                    fileEvents: 0,
                     symbol: data.symbol,
                     symbolEvents: 0,
                     symbolTotalEvents: 0,
@@ -607,7 +607,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
     private excelSpecialTranscode(content: string): string {
         if (content === 'toString') {
-            return 'toString()'
+            return 'toString()';
         }
         return content.substring(0, 2048);
     }
