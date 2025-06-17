@@ -1,5 +1,5 @@
 {
-  "description": "Config for MeeTimeTest",
+  "description": "",
   "environment": [
     {
       "type": "device",
@@ -9,7 +9,7 @@
   "driver": {
     "type": "DeviceTest",
     "py_file": [
-      "PerformanceDynamic_com_example_wsywechat_0010.py"
+      "PerformanceDynamic_ComponentReusable_new.py"
     ]
   }
 }

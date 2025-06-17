@@ -1,0 +1,1 @@
+export { ComponentReusableTest, ComponentNoReusableTest } from './src/main/ets/testcases/reusable/ComponentReusableTest'
