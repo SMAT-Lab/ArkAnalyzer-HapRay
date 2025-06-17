@@ -13,10 +13,12 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
 sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 
 class FrameAnalyzer:
     """卡顿帧分析器
@@ -37,7 +39,7 @@ class FrameAnalyzer:
 
         # 获取 perf_testing 目录
         perf_testing_dir = CommonUtils.get_project_root()
-        
+
         # 根据系统类型选择对应的工具
         system = platform.system().lower()
         if system == 'windows':
@@ -51,14 +53,14 @@ class FrameAnalyzer:
 
         # 构建工具完整路径
         tool_path = os.path.join(perf_testing_dir, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', tool_name)
-        
+
         # 检查工具是否存在
         if not os.path.exists(tool_path):
             raise FileNotFoundError(f"Trace streamer tool not found at: {tool_path}")
 
         if system == 'darwin' or system == 'linux':
             os.chmod(tool_path, 0o755)
-        
+
         return tool_path
 
     @staticmethod
@@ -86,7 +88,7 @@ class FrameAnalyzer:
             # 构建并执行转换命令
             cmd = f'"{trace_streamer_path}" "{htrace_file}" -e "{output_db}"'
             logging.info(f"Converting htrace to db: {cmd}")
-            
+
             # 使用subprocess执行命令
             result = subprocess.run(
                 cmd,
@@ -178,6 +180,139 @@ class FrameAnalyzer:
             return False
 
     @staticmethod
+    def _get_app_pids(scene_dir: str, step_id: str) -> list:
+        """获取应用进程ID列表
+        
+        Args:
+            scene_dir: 场景目录路径
+            step_id: 步骤ID，如'step1'或'1'
+            
+        Returns:
+            list: 进程ID列表
+        """
+        try:
+            # 获取hiperf_info.json文件路径
+            perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
+            
+            if not os.path.exists(perf_data_path):
+                logging.warning(f"No hiperf_info.json found at {perf_data_path}")
+                return []
+
+            # 读取JSON文件
+            with open(perf_data_path, 'r', encoding='utf-8') as f:
+                perf_data = json.load(f)
+                
+            if not perf_data or not isinstance(perf_data, list) or len(perf_data) == 0:
+                logging.warning("Invalid hiperf_info.json format")
+                return []
+
+            # 获取第一个item的steps
+            steps = perf_data[0].get('steps', [])
+            if not steps:
+                logging.warning("No steps found in hiperf_info.json")
+                return []
+
+            # 处理step_id，去掉'step'前缀
+            step_number = int(step_id.replace('step', ''))
+            
+            # 找到对应step_id的数据
+            for step in steps:
+                if step.get('step_id') == step_number:
+                    # 收集该步骤的所有进程ID
+                    pids = set()  # 使用set存储，自动去重
+                    for item in step.get('data', []):
+                        pid = item.get('pid')
+                        if pid:
+                            pids.add(pid)
+                    return list(pids)  # 转换为list返回
+
+            logging.warning(f"No data found for step {step_id} in hiperf_info.json")
+            return []
+
+        except Exception as e:
+            logging.error(f"Failed to get app PIDs: {str(e)}")
+            return []
+
+    @staticmethod
+    def _analyze_perf_callchain(perf_conn, callchain_id: int, callchain_cache: pd.DataFrame = None, files_cache: pd.DataFrame = None) -> list:
+        """
+        分析perf样本的调用链信息
+        
+        Args:
+            perf_conn: perf数据库连接
+            callchain_id: 调用链ID
+            callchain_cache: 缓存的callchain数据
+            files_cache: 缓存的文件数据
+            
+        Returns:
+            list: 调用链信息列表，每个元素包含symbol和path信息
+        """
+        try:
+            if callchain_cache is not None and files_cache is not None:
+                # 从缓存中获取callchain数据
+                callchain_records = callchain_cache[callchain_cache['callchain_id'] == callchain_id]
+                
+                if callchain_records.empty:
+                    logging.warning(f"未找到callchain_id={callchain_id}的记录")
+                    return []
+                
+                # 构建调用链信息
+                callchain_info = []
+                for _, record in callchain_records.iterrows():
+                    # 从缓存中获取文件信息
+                    file_info = files_cache[(files_cache['file_id'] == record['file_id']) & (files_cache['serial_id'] == record['symbol_id'])]
+                    symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
+                    path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
+                    
+                    callchain_info.append({
+                        'depth': int(record['depth']),
+                        'file_id': int(record['file_id']),
+                        'path': path,
+                        'symbol_id': int(record['symbol_id']),
+                        'symbol': symbol
+                    })
+                        
+                return callchain_info
+            else:
+                # 使用原始SQL查询
+                callchain_sql = f"""
+                SELECT 
+                    pc.depth,
+                    pc.file_id,
+                    COALESCE(pf.path, 'unknown') as path,
+                    pc.symbol_id,
+                    COALESCE(pf.symbol, 'unknown') as symbol
+                FROM perf_callchain pc
+                LEFT JOIN perf_files pf ON pc.file_id = pf.file_id AND pc.symbol_id = pf.serial_id
+                WHERE pc.callchain_id = {callchain_id}
+                ORDER BY pc.depth
+                """
+                
+                # 执行SQL查询
+                callchain_records = pd.read_sql_query(callchain_sql, perf_conn)
+                
+                if callchain_records.empty:
+                    logging.warning(f"未找到callchain_id={callchain_id}的记录")
+                    return []
+                
+                # 直接使用查询结果构建调用链信息
+                callchain_info = []
+                for _, record in callchain_records.iterrows():
+                    callchain_info.append({
+                        'depth': record['depth'],
+                        'file_id': record['file_id'],
+                        'path': record['path'],
+                        'symbol_id': record['symbol_id'],
+                        'symbol': record['symbol']
+                    })
+                        
+                return callchain_info
+            
+        except Exception as e:
+            logging.error(f"分析调用链失败: {str(e)}")
+            return []
+
+    @staticmethod
     def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list) -> dict:
         """
         分析空帧（flag=2, type=0）的负载情况
@@ -193,7 +328,7 @@ class FrameAnalyzer:
         # 连接trace数据库
         trace_conn = sqlite3.connect(trace_db_path)
         perf_conn = sqlite3.connect(perf_db_path)
-        
+
         try:
             # 检查SQLite版本是否支持WITH子句
             cursor = trace_conn.cursor()
@@ -221,26 +356,21 @@ class FrameAnalyzer:
             ),
             process_filtered AS (
                 -- 通过process表过滤出app_pids中的帧
-                SELECT ff.*, p.pid, p.name as process_name
+                SELECT ff.*, p.pid, p.name as process_name, t.tid, t.name as thread_name, t.is_main_thread
                 FROM filtered_frames ff
                 JOIN process p ON ff.ipid = p.ipid
+                JOIN thread t ON ff.itid = t.itid
                 WHERE p.pid IN ({})
-            ),
-            thread_info AS (
-                -- 获取线程信息
-                SELECT pf.*, t.tid, t.name as thread_name
-                FROM process_filtered pf
-                JOIN thread t ON pf.itid = t.itid
             )
             -- 最后获取调用栈信息
-            SELECT ti.*, cs.name as callstack_name
-            FROM thread_info ti
-            JOIN callstack cs ON ti.callstack_id = cs.id
+            SELECT pf.*, cs.name as callstack_name
+            FROM process_filtered pf
+            JOIN callstack cs ON pf.callstack_id = cs.id
             """.format(','.join('?' * len(app_pids)))
 
             # 获取帧信息
             trace_df = pd.read_sql_query(query, trace_conn, params=app_pids)
-            
+
             if trace_df.empty:
                 return {
                     "status": "no_frames",
@@ -250,18 +380,39 @@ class FrameAnalyzer:
             # 获取总负载
             total_load_query = "SELECT SUM(event_count) as total_load FROM perf_sample"
             total_load = pd.read_sql_query(total_load_query, perf_conn)['total_load'].iloc[0]
-            
+
             # 获取所有perf样本
-            perf_query = "SELECT timestamp_trace, thread_id, event_count FROM perf_sample"
+            perf_query = "SELECT callchain_id, timestamp_trace, thread_id, event_count FROM perf_sample"
             perf_df = pd.read_sql_query(perf_query, perf_conn)
+
+            # 提前查询并缓存perf_callchain和perf_files表的数据
+            callchain_cache = pd.read_sql_query("""
+                SELECT 
+                    id,
+                    callchain_id,
+                    depth,
+                    file_id,
+                    symbol_id
+                FROM perf_callchain
+            """, perf_conn)
             
+            files_cache = pd.read_sql_query("""
+                SELECT 
+                    file_id,
+                    serial_id,
+                    symbol,
+                    path
+                FROM perf_files
+            """, perf_conn)
+
             # 为每个帧创建时间区间
             trace_df['start_time'] = trace_df['ts']
             trace_df['end_time'] = trace_df['ts'] + trace_df['dur']
-            
+
             # 初始化结果列表
             frame_loads = []
-            total_empty_frame_load = 0
+            empty_frame_load = 0  # 主线程空帧总负载（即空刷主线程负载）
+            background_thread_load = 0  # 后台线程空帧总负载
             
             # 对每个帧进行分析
             for _, frame in trace_df.iterrows():
@@ -273,10 +424,37 @@ class FrameAnalyzer:
                 )
                 frame_samples = perf_df[mask]
                 
+                # if len(frame_samples) >= 2:
+                #     logging.info(f"发现多样本帧，perf db路径: {perf_db_path}")
+                
                 if not frame_samples.empty:
                     # 计算该帧的总负载
                     frame_load = frame_samples['event_count'].sum()
-                    total_empty_frame_load += frame_load
+                    
+                    # 分析每个样本的调用链
+                    sample_callchains = []
+                    for _, sample in frame_samples.iterrows():
+                        if pd.notna(sample['callchain_id']):
+                            callchain_info = FrameAnalyzer._analyze_perf_callchain(
+                                perf_conn, 
+                                int(sample['callchain_id']),
+                                callchain_cache,
+                                files_cache
+                            )
+                            if callchain_info:
+                                sample_load_percentage = (sample['event_count'] / frame_load) * 100
+                                sample_callchains.append({
+                                    'timestamp': int(sample['timestamp_trace']),
+                                    'event_count': int(sample['event_count']),
+                                    'load_percentage': float(sample_load_percentage),
+                                    'callchain': callchain_info
+                                })
+                    
+                    # 根据is_main_thread分类统计负载
+                    if frame['is_main_thread'] == 1:
+                        empty_frame_load += frame_load
+                    else:
+                        background_thread_load += frame_load
                     
                     frame_loads.append({
                         'ts': frame['ts'],
@@ -289,103 +467,143 @@ class FrameAnalyzer:
                         'process_name': frame['process_name'],
                         'thread_name': frame['thread_name'],
                         'callstack_name': frame['callstack_name'],
-                        'frame_load': frame_load
+                        'frame_load': frame_load,
+                        'is_main_thread': frame['is_main_thread'],
+                        'sample_callchains': sample_callchains  # 添加调用链信息
                     })
             
             # 转换为DataFrame并按负载排序
             result_df = pd.DataFrame(frame_loads)
             if not result_df.empty:
-                result_df = result_df.sort_values('frame_load', ascending=False).head(10)
+                # 分别获取主线程和后台线程的top5帧
+                main_thread_frames = result_df[result_df['is_main_thread'] == 1].sort_values('frame_load', ascending=False).head(5)
+                background_thread_frames = result_df[result_df['is_main_thread'] == 0].sort_values('frame_load', ascending=False).head(5)
                 
-                # 计算总空帧负载占比
-                total_empty_frame_percentage = (total_empty_frame_load / total_load) * 100
+                # 只统计主线程空帧负载和后台线程负载
+                empty_frame_percentage = (empty_frame_load / total_load) * 100
+                background_thread_percentage = (background_thread_load / total_load) * 100
                 
                 # 构建结果字典
                 return {
                     "status": "success",
                     "summary": {
                         "total_load": int(total_load),
-                        "total_empty_frame_load": int(total_empty_frame_load),
-                        "empty_frame_load_percentage": float(total_empty_frame_percentage),
-                        "total_empty_frames": len(trace_df),
-                        "empty_frames_with_load": len(frame_loads)
+                        "empty_frame_load": int(empty_frame_load),
+                        "empty_frame_percentage": float(empty_frame_percentage),
+                        "background_thread_load": int(background_thread_load),
+                        "background_thread_percentage": float(background_thread_percentage),
+                        "total_empty_frames": int(len(trace_df[trace_df['is_main_thread'] == 1])),
+                        "empty_frames_with_load": int(len([f for f in frame_loads if f['is_main_thread'] == 1]))
                     },
-                    "top_frames": result_df.to_dict('records')
+                    "top_frames": {
+                        "main_thread_empty_frames": main_thread_frames.to_dict('records'),
+                        "background_thread": background_thread_frames.to_dict('records')
+                    }
                 }
             else:
                 return {
                     "status": "no_load",
                     "message": "未找到任何帧负载数据"
                 }
-            
+
         finally:
             trace_conn.close()
             perf_conn.close()
 
-    def collect_empty_frame_loads(self, root_dir: str) -> list:
+    @staticmethod
+    def update_empty_frame_results(report_dir: str) -> bool:
         """
-        递归收集目录下所有empty_frame_analysis.json文件中的空帧负载数据
+        更新指定目录下的空帧分析数据
 
-        参数:
-        - root_dir: str，要搜索的根目录
+        目录结构要求：
+        report_dir/
+        ├── htrace/
+        │   ├── step1/
+        │   │   └── trace.db
+        │   └── step2/
+        │       └── trace.db
+        └── hiperf/
+            ├── step1/
+            │   └── perf.db
+            └── step2/
+                └── perf.db
 
-        返回:
-        - list，包含所有场景的空帧负载数据，格式为：
-          [
-              {
-                  "scene": "场景名称",
-                  "load_percentage": float,
-                  "file_path": str
-              },
-              ...
-          ]
+        分析结果将保存在：
+        report_dir/
+        └── htrace/
+            └── empty_frames_analysis.json
+
+        Args:
+            report_dir: 报告目录路径，该目录下应包含htrace和hiperf两个子目录
+
+        Returns:
+            bool: 更新是否成功
         """
-        results = []
-        
-        # 遍历目录
-        for root, dirs, files in os.walk(root_dir):
-            for file in files:
-                if file == 'empty_frames_analysis.json':
-                    file_path = os.path.join(root, file)
-                    try:
-                        # 读取JSON文件
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            
-                        # 获取场景名称（最近的包含ResourceUsage_PerformanceDynamic的目录）
-                        current_dir = os.path.dirname(file_path)
-                        scene_name = None
-                        while current_dir != root_dir:
-                            if 'ResourceUsage_PerformanceDynamic' in os.path.basename(current_dir):
-                                scene_name = os.path.basename(current_dir)
-                                break
-                            current_dir = os.path.dirname(current_dir)
-                        
-                        # 如果没找到，使用默认值
-                        if not scene_name:
-                            scene_name = f"Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}"
-                            logging.warning(f"Using default scene name for {file_path}: {scene_name}")
-                        
-                        # 遍历每个步骤的数据
-                        for step_id, step_data in data.items():
-                            if step_data.get("status") == "success":
-                                summary = step_data.get("summary", {})
-                                load_percentage = summary.get("empty_frame_load_percentage", 0)
-                                
-                                results.append({
-                                    "scene": scene_name,
-                                    "step": step_id,
-                                    "load_percentage": load_percentage,
-                                    "file_path": file_path
-                                })
-                                
-                    except Exception as e:
-                        logging.error(f"Error processing {file_path}: {str(e)}")
-                        continue
-        
-        # 按负载百分比排序
-        results.sort(key=lambda x: x["load_percentage"], reverse=True)
-        return results
+        try:
+            # 检查目录是否存在
+            if not os.path.exists(report_dir):
+                logging.error(f"Error: Directory not found at {report_dir}")
+                return False
+
+            # 获取htrace和hiperf目录
+            htrace_dir = os.path.join(report_dir, 'htrace')
+            hiperf_dir = os.path.join(report_dir, 'hiperf')
+            
+            if not os.path.exists(htrace_dir) or not os.path.exists(hiperf_dir):
+                logging.error(f"Error: Required directories not found at {report_dir}")
+                return False
+
+            # 用于存储所有步骤的分析结果
+            all_results = {}
+
+            # 遍历所有步骤目录
+            for step_dir in os.listdir(htrace_dir):
+                step_path = os.path.join(htrace_dir, step_dir)
+                if not os.path.isdir(step_path):
+                    continue
+
+                # 查找trace.db文件
+                trace_db = os.path.join(step_path, 'trace.db')
+                if not os.path.exists(trace_db):
+                    logging.warning(f"Missing trace.db in {step_path}")
+                    continue
+
+                # 查找对应的perf.db文件
+                perf_db = os.path.join(hiperf_dir, step_dir, 'perf.db')
+                if not os.path.exists(perf_db):
+                    logging.warning(f"Missing perf.db in {os.path.join(hiperf_dir, step_dir)}")
+                    continue
+
+                # 获取进程ID列表
+                app_pids = FrameAnalyzer._get_app_pids(report_dir, step_dir)
+                if not app_pids:
+                    logging.warning(f"No app PIDs found for step {step_dir}")
+                    continue
+
+                # 分析空帧数据
+                try:
+                    result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, app_pids)
+                    # 将结果添加到总结果字典中
+                    all_results[step_dir] = result
+                    logging.info(f"Successfully analyzed empty frames for {step_dir}")
+                except Exception as e:
+                    logging.error(f"Error analyzing empty frames for {step_dir}: {str(e)}")
+                    return False
+
+            # 保存所有步骤的分析结果
+            if all_results:
+                output_file = os.path.join(htrace_dir, 'empty_frames_analysis.json')
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(all_results, f, indent=2, ensure_ascii=False)
+                print(f"✓ 分析结果已保存到: {output_file}")
+            else:
+                logging.warning("No valid analysis results to save")
+
+            return True
+
+        except Exception as e:
+            logging.error(f"Error updating empty frame analysis: {str(e)}")
+            return False
 
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
     """
@@ -403,7 +621,7 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         # 连接数据库
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         # 获取所有数据，直接过滤type=0和flag in (0,1)的帧
         cursor.execute("""
             WITH RankedFrames AS (
@@ -416,50 +634,51 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
             WHERE rn = 1
             ORDER BY vsync, ts
         """)
-        
+
         # 获取列名
         columns = [description[0] for description in cursor.description]
-        
+
         # 获取所有行数据
         rows = cursor.fetchall()
-        
+
         # 按vsync值分组
         vsync_groups: Dict[int, List[Dict[str, Any]]] = {}
         total_frames = 0
-        
+
         # 遍历所有行，将数据转换为字典并按vsync分组
         for row in rows:
             row_dict = dict(zip(columns, row))
             vsync_value = row_dict['vsync']
-            
+
             # 跳过vsync为None的数据
             if vsync_value is None:
                 continue
-                
+
             try:
                 # 确保vsync_value是整数
                 vsync_value = int(vsync_value)
             except (ValueError, TypeError):
                 continue
-                
+
             if vsync_value not in vsync_groups:
                 vsync_groups[vsync_value] = []
-            
+
             vsync_groups[vsync_value].append(row_dict)
             total_frames += 1
-        
+
         # 关闭数据库连接
         conn.close()
-        
+
         # 创建有序字典，按key值排序
         return dict(sorted(vsync_groups.items()))
-        
+
     except sqlite3.Error as e:
         import traceback
         raise Exception(f"数据库操作错误: {str(e)}\n{traceback.format_exc()}")
     except Exception as e:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
+
 
 def get_frame_type(frame: dict, cursor) -> str:
     """
@@ -478,16 +697,17 @@ def get_frame_type(frame: dict, cursor) -> str:
 
     cursor.execute("SELECT name FROM process WHERE ipid = ?", (ipid,))
     result = cursor.fetchone()
-    
+
     if not result:
         return "ui"
-        
+
     process_name = result[0]
     if process_name == "render_service":
         return "render"
     elif process_name == "ohos.sceneboard":
         return "sceneboard"
     return "ui"
+
 
 def analyze_stuttered_frames(db_path: str) -> dict:
     """
@@ -503,7 +723,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         # 连接数据库
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         # 获取runtime时间
         try:
             cursor.execute("SELECT value FROM meta WHERE name = 'runtime'")
@@ -512,7 +732,7 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         except sqlite3.DatabaseError:
             logging.warning("Failed to get runtime from database, setting to None")
             runtime = None
-        
+
         data = parse_frame_slice_db(db_path)
 
         FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
@@ -616,7 +836,8 @@ def analyze_stuttered_frames(db_path: str) -> dict:
                     current_window["frames"] = set()
 
                 # 当前窗口更新 - 只计算时间戳在窗口范围内的帧
-                if current_window["start_time"] <= frame_time < current_window["end_time"] and frame_id not in current_window["frames"]:
+                if current_window["start_time"] <= frame_time < current_window["end_time"] and frame_id not in \
+                        current_window["frames"]:
                     current_window["frame_count"] += 1
                     current_window["frames"].add(frame_id)
 
@@ -730,171 +951,3 @@ def analyze_stuttered_frames(db_path: str) -> dict:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
 
-def visualize_empty_frame_loads(results: list, output_dir: str):
-    """
-    可视化空帧负载数据
-
-    Args:
-        results: 空帧负载数据列表
-        output_dir: 输出目录
-    """
-    try:
-        # 创建输出目录
-        os.makedirs(output_dir, exist_ok=True)
-
-        if not results:
-            logging.warning("No data to visualize")
-            return None
-
-        # 简化场景名称
-        def simplify_scene_name(scene_name: str) -> str:
-            # 移除 "ResourceUsage_PerformanceDynamic_" 前缀
-            if scene_name.startswith("ResourceUsage_PerformanceDynamic_"):
-                return scene_name[len("ResourceUsage_PerformanceDynamic_"):]
-            return scene_name
-
-        # 1. 按场景分组的空帧负载柱状图
-        plt.figure(figsize=(15, 8))
-        
-        # 设置负载阈值（只显示高于此值的数据）
-        LOAD_THRESHOLD = 3.0  # 3%的负载阈值
-        
-        # 准备数据并过滤
-        filtered_data = [(simplify_scene_name(r['scene']), r['step'], r['load_percentage']) 
-                        for r in results 
-                        if r['load_percentage'] >= LOAD_THRESHOLD]
-        
-        # 按负载百分比排序
-        filtered_data.sort(key=lambda x: x[2], reverse=True)
-        
-        # 如果过滤后没有数据，降低阈值
-        if not filtered_data:
-            LOAD_THRESHOLD = 0.0
-            filtered_data = [(simplify_scene_name(r['scene']), r['step'], r['load_percentage']) 
-                           for r in results]
-            filtered_data.sort(key=lambda x: x[2], reverse=True)
-        
-        # 修改横坐标标签格式为 "场景_步骤"
-        scenes = [f"{scene}_{step}" for scene, step, _ in filtered_data]
-        loads = [load for _, _, load in filtered_data]
-
-        # 创建柱状图
-        bars = plt.bar(range(len(scenes)), loads)
-        plt.title(f'Empty Frame Load by Scene and Step (Threshold: {LOAD_THRESHOLD}%)')
-        plt.xlabel('Scene_Step')
-        plt.ylabel('Empty Frame Load (%)')
-        plt.xticks(range(len(scenes)), scenes, rotation=45, ha='right')
-        
-        # 添加数值标签
-        for bar in bars:
-            height = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}%',
-                    ha='center', va='bottom')
-
-        plt.tight_layout()
-        
-        # 保存柱状图
-        bar_plot_path = os.path.join(output_dir, 'empty_frame_loads_by_scene.png')
-        plt.savefig(bar_plot_path)
-        plt.close()
-
-        # 2. 空帧负载箱线图
-        plt.figure(figsize=(12, 6))
-        
-        # 按步骤分组数据
-        step_data = {}
-        for result in results:
-            step_key = f"{simplify_scene_name(result['scene'])}_{result['step']}"
-            if step_key not in step_data:
-                step_data[step_key] = []
-            step_data[step_key].append(result['load_percentage'])
-
-        # 计算每个步骤的平均负载，并按平均值排序
-        step_means = {step: np.mean(loads) for step, loads in step_data.items()}
-        sorted_steps = sorted(step_means.keys(), key=lambda x: step_means[x], reverse=True)
-
-        # 创建箱线图
-        plt.boxplot([step_data[step] for step in sorted_steps],
-                   labels=sorted_steps,
-                   vert=True)
-        plt.title('Empty Frame Load Distribution by Step')
-        plt.xlabel('Scene_Step')
-        plt.ylabel('Empty Frame Load (%)')
-        plt.xticks(rotation=45, ha='right')
-        
-        plt.tight_layout()
-        
-        # 保存箱线图
-        boxplot_path = os.path.join(output_dir, 'empty_frame_loads_boxplot.png')
-        plt.savefig(boxplot_path)
-        plt.close()
-
-        return {
-            "bar_plot": bar_plot_path,
-            "boxplot": boxplot_path
-        }
-
-    except Exception as e:
-        logging.error(f"Error generating empty frame load visualizations: {str(e)}")
-        return None
-
-def test_collect_empty_frame_loads():
-    """
-    测试收集空帧负载数据
-    """
-    # 测试目录路径
-    root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250611101243\ResourceUsage_PerformanceDynamic_zhifubao_1000'
-    
-    try:
-        print("\n=== 开始收集空帧负载数据 ===")
-        analyzer = FrameAnalyzer()
-        results = analyzer.collect_empty_frame_loads(root_dir)
-        
-        # 构建输出JSON
-        output = {
-            "total_scenes": len(results),
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "data": results
-        }
-        
-        # 将结果保存到JSON文件
-        output_file = os.path.join(root_dir, "empty_frame_loads_summary.json")
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
-            
-        # 生成可视化图表
-        output_dir = os.path.join(root_dir, "empty_frame_loads_plots")
-        visualize_empty_frame_loads(results, output_dir)
-            
-        print(f"\n=== 收集完成 ===")
-        print(f"总共收集到 {len(results)} 个场景的数据")
-        print(f"结果已保存到: {output_file}")
-        print(f"可视化图表已保存到: {output_dir}")
-        
-    except Exception as e:
-        print(f"\n收集失败: {str(e)}")
-        raise
-
-def main():
-    """测试卡顿帧分析功能的主函数"""
-    # 设置要分析的报告目录路径
-    path = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250611101243\ResourceUsage_PerformanceDynamic_zhifubao_1000'
-
-    # 检查路径是否存在
-    if not os.path.exists(path):
-        logging.error(f"Error: Directory not found at {path}")
-        return
-
-    # 开始分析
-    logging.info(f"Starting frame drops analysis for directory: {path}")
-    if FrameAnalyzer.analyze_frame_drops(path):
-        logging.info("Frame drops analysis completed successfully")
-    else:
-        logging.error("Frame drops analysis failed")
-
-
-if __name__ == "__main__":
-    # main()
-    # test_collect_empty_frame_loads()
-    test_collect_empty_frame_loads()
