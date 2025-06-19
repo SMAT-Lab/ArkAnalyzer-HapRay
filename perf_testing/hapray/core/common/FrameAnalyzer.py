@@ -428,29 +428,58 @@ class FrameAnalyzer:
                 #     logging.info(f"发现多样本帧，perf db路径: {perf_db_path}")
                 
                 if not frame_samples.empty:
-                    # 计算该帧的总负载
-                    frame_load = frame_samples['event_count'].sum()
+                    # 初始化帧负载
+                    frame_load = 0
                     
                     # 分析每个样本的调用链
                     sample_callchains = []
                     for _, sample in frame_samples.iterrows():
                         if pd.notna(sample['callchain_id']):
-                            callchain_info = FrameAnalyzer._analyze_perf_callchain(
-                                perf_conn, 
-                                int(sample['callchain_id']),
-                                callchain_cache,
-                                files_cache
-                            )
-                            if callchain_info:
-                                sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                                sample_callchains.append({
-                                    'timestamp': int(sample['timestamp_trace']),
-                                    'event_count': int(sample['event_count']),
-                                    'load_percentage': float(sample_load_percentage),
-                                    'callchain': callchain_info
-                                })
+                            try:
+                                callchain_info = FrameAnalyzer._analyze_perf_callchain(
+                                    perf_conn, 
+                                    int(sample['callchain_id']),
+                                    callchain_cache,
+                                    files_cache
+                                )
+                                if callchain_info:
+                                    # 检查是否是VSyncCallBackListener相关的调用链
+                                    is_vsync_chain = False
+                                    if len(callchain_info) >= 2:
+                                        for i in range(len(callchain_info) - 1):
+                                            current_symbol = callchain_info[i]['symbol']
+                                            next_symbol = callchain_info[i+1]['symbol']
+                                            event_count = sample['event_count']
+                                            
+                                            # 如果任一symbol为空，跳过检查
+                                            if not current_symbol or not next_symbol:
+                                                continue
+                                                
+                                            if ('OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol and
+                                                'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol and
+                                                event_count < 2000000):
+                                                is_vsync_chain = True
+                                                break
+                                        
+                                        if not is_vsync_chain:
+                                            # 累加非VSync调用链的负载
+                                            frame_load += sample['event_count']
+                                            try:
+                                                sample_load_percentage = (sample['event_count'] / frame_load) * 100
+                                                sample_callchains.append({
+                                                    'timestamp': int(sample['timestamp_trace']),
+                                                    'event_count': int(sample['event_count']),
+                                                    'load_percentage': float(sample_load_percentage),
+                                                    'callchain': callchain_info
+                                                })
+                                            except Exception as e:
+                                                logging.error(f"处理样本时出错: {str(e)}, sample: {sample.to_dict()}, frame_load: {frame_load}")
+                                                continue
+                            except Exception as e:
+                                logging.error(f"分析调用链时出错: {str(e)}")
+                                continue
                     
-                    # 根据is_main_thread分类统计负载
+                    # 更新负载统计
                     if frame['is_main_thread'] == 1:
                         empty_frame_load += frame_load
                     else:
@@ -609,7 +638,7 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
     """
     解析数据库文件，按vsync值分组数据
     结果按vsync值（key）从小到大排序
-    只保留flag=0和flag=1的帧（实际渲染的帧）
+    只保留flag=0和flag=0, 1, 3的帧（实际渲染的帧）
 
     Args:
         db_path: 数据库文件路径
@@ -622,38 +651,23 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # 获取所有数据，直接过滤type=0和flag in (0,1)的帧
-        cursor.execute("""
-            WITH RankedFrames AS (
-                SELECT *,
-                    ROW_NUMBER() OVER (PARTITION BY vsync ORDER BY ts) as rn
-                FROM frame_slice 
-                WHERE type = 0 AND flag IN (0, 1, 3)
-            )
-            SELECT * FROM RankedFrames 
-            WHERE rn = 1
-            ORDER BY vsync, ts
-        """)
+        # 直接获取所有数据，不排序
+        cursor.execute("SELECT * FROM frame_slice")
 
         # 获取列名
         columns = [description[0] for description in cursor.description]
-
-        # 获取所有行数据
-        rows = cursor.fetchall()
 
         # 按vsync值分组
         vsync_groups: Dict[int, List[Dict[str, Any]]] = {}
         total_frames = 0
 
         # 遍历所有行，将数据转换为字典并按vsync分组
-        for row in rows:
+        for row in cursor.fetchall():
             row_dict = dict(zip(columns, row))
             vsync_value = row_dict['vsync']
-
             # 跳过vsync为None的数据
             if vsync_value is None:
                 continue
-
             try:
                 # 确保vsync_value是整数
                 vsync_value = int(vsync_value)
@@ -793,6 +807,8 @@ def analyze_stuttered_frames(db_path: str) -> dict:
 
         for vsync_key in vsync_keys:
             for frame in data[vsync_key]:
+                if frame["type"] == 1 or frame["flag"] == 2:
+                    continue
                 frame_time = frame["ts"]
                 frame_id = f"{vsync_key}_{frame_time}"  # 创建唯一帧标识符
 
