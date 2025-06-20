@@ -1,20 +1,16 @@
+import os
 import logging
 import multiprocessing
-import os
-import shutil
-import tempfile
-import zipfile
-from collections import Counter
 from functools import partial
 from importlib.resources import files
 from typing import List, Dict, Tuple, Optional
+from collections import Counter
+
+from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill
-from tqdm import tqdm
 
 from hapray.optimization_detector.file_info import FileInfo, FILE_STATUS_MAPPING
 
@@ -25,7 +21,6 @@ class OptimizationDetector:
         self.parallel = workers > 1
         self.workers = min(workers, multiprocessing.cpu_count() - 1)
         self.model = None
-        self.temp_dirs = []
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> Dict[str, dict]:
@@ -70,62 +65,10 @@ class OptimizationDetector:
 
         return results
 
-    def detect_optimization(self, input_path: str, output: str = "binary_analysis_report.xlsx"):
-        file_infos = self._collect_binary_files(input_path)
-        if not file_infos:
-            logging.warning("No valid binary files found")
-            return
-        success, failures = self._analyze_files(file_infos, output)
-        self.cleanup()
+    def detect_optimization(self, file_infos: List[FileInfo]) -> List[Tuple[str, pd.DataFrame]]:
+        success, failures, flags = self._analyze_files(file_infos)
         logging.info("Analysis complete: %s files analyzed, %s files failed", success, failures)
-
-    def cleanup(self):
-        for temp_dir in self.temp_dirs:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        self.temp_dirs = []
-        self.model = None
-
-    def _extract_hap_file(self, hap_path: str) -> List[FileInfo]:
-        """Extract SO files from HAP/HSP archives and return FileInfo objects"""
-        extracted_files = []
-        temp_dir = tempfile.mkdtemp()
-        self.temp_dirs.append(temp_dir)
-
-        try:
-            with zipfile.ZipFile(hap_path, 'r') as zip_ref:
-                for file in zip_ref.namelist():
-                    if file.startswith('libs/arm64') and file.endswith('.so'):
-                        output_path = os.path.join(temp_dir, file[5:])
-                        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                        with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
-                            dest.write(src.read())
-                        file_info = FileInfo(
-                            absolute_path=output_path,
-                            logical_path=f"{hap_path}/{file}"
-                        )
-                        extracted_files.append(file_info)
-        except Exception as e:
-            logging.error("Failed to extract HAP file %s: %s", hap_path, e)
-        return extracted_files
-
-    def _collect_binary_files(self, input_path: str) -> List[FileInfo]:
-        """Collect binary files for analysis"""
-        file_infos = []
-        if os.path.isfile(input_path):
-            if input_path.endswith(('.so', '.a')):
-                file_infos.append(FileInfo(input_path))
-            elif input_path.endswith(('.hap', '.hsp')):
-                file_infos.extend(self._extract_hap_file(input_path))
-        elif os.path.isdir(input_path):
-            for root, _, _files in os.walk(input_path):
-                for file in _files:
-                    file_path = os.path.join(root, file)
-                    if file.endswith(('.so', '.a')):
-                        logical_path = os.path.relpath(file_path, input_path)
-                        file_infos.append(FileInfo(file_path, logical_path))
-                    elif file.endswith(('.hap', '.hsp')):
-                        file_infos.extend(self._extract_hap_file(file_path))
-        return file_infos
+        return [('optimization', self._collect_results(flags, file_infos))]
 
     @staticmethod
     def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[np.ndarray]:
@@ -164,7 +107,7 @@ class OptimizationDetector:
 
         return file_info, self._run_inference(file_info, self.model)
 
-    def _analyze_files(self, file_infos: List[FileInfo], output_file: str) -> Tuple[int, int]:
+    def _analyze_files(self, file_infos: List[FileInfo]) -> Tuple[int, int, Dict]:
         # Filter out analyzed files
         remaining_files = []
         for file_info in file_infos:
@@ -215,30 +158,13 @@ class OptimizationDetector:
                 except Exception as e:
                     logging.error("Error loading results for %s: %s", file_info.absolute_path, e)
 
-        if file_infos:
-            self._generate_excel_report(flags_results, file_infos, output_file)
-        return files_with_results, len(file_infos) - files_with_results
+        return files_with_results, len(file_infos) - files_with_results, flags_results
 
-    def _generate_excel_report(self, flags_results: dict, file_infos: List[FileInfo],
-                               output_file: str) -> None:
-        wb = Workbook()
-        summary_sheet = wb.active
-        summary_sheet.title = "Summary"
-
-        headers = [
-            "Binary File", "Status", "Optimization Category",
-            "Optimization Score", "O0 Chunks", "O1 Chunks", "O2 Chunks",
-            "O3 Chunks", "Os Chunks", "Total Chunks", "File Size (bytes)",
-            "Size Optimized", "Notes"
-        ]
-
-        for col, header in enumerate(headers, 1):
-            summary_sheet.cell(row=1, column=col, value=header)
-
-        row = 2
+    def _collect_results(self, flags_results: dict, file_infos: List[FileInfo]) -> pd.DataFrame:
+        report_data = []
         for file_info in sorted(file_infos, key=lambda x: x.logical_path):
-            flags_result = flags_results.get(file_info.file_id)
-            if flags_result is None:
+            result = flags_results.get(file_info.file_id)
+            if result is None:
                 status = FILE_STATUS_MAPPING['failed']
                 opt_category = 'N/A'
                 opt_score = 'N/A'
@@ -247,34 +173,27 @@ class OptimizationDetector:
                 size_optimized = 'N/A'
             else:
                 status = FILE_STATUS_MAPPING['analyzed']
-                opt_category = flags_result['opt_category']
-                opt_score = flags_result['opt_score']
-                distribution = flags_result['distribution']
-                total_chunks = flags_result['total_chunks']
+                opt_category = result['opt_category']
+                opt_score = result['opt_score']
+                distribution = result['distribution']
+                total_chunks = result['total_chunks']
                 os_chunks = distribution.get(4, 0)
                 os_ratio = os_chunks / total_chunks if total_chunks > 0 else 0
                 size_optimized = f"{'Yes' if os_ratio >= 0.5 else 'No'} ({os_ratio:.1%})"
 
-            summary_sheet.cell(row=row, column=1, value=file_info.logical_path)
-            summary_sheet.cell(row=row, column=2, value=status)
-            summary_sheet.cell(row=row, column=3, value=opt_category or "N/A")
-            summary_sheet.cell(row=row, column=4,
-                               value=f"{opt_score:.2%}" if isinstance(opt_score, float) else opt_score)
-            summary_sheet.cell(row=row, column=5, value=distribution.get(0, 0))
-            summary_sheet.cell(row=row, column=6, value=distribution.get(1, 0))
-            summary_sheet.cell(row=row, column=7, value=distribution.get(2, 0))
-            summary_sheet.cell(row=row, column=8, value=distribution.get(3, 0))
-            summary_sheet.cell(row=row, column=9, value=distribution.get(4, 0))
-            summary_sheet.cell(row=row, column=10, value=total_chunks)
-            summary_sheet.cell(row=row, column=11, value=file_info.file_size)
-            summary_sheet.cell(row=row, column=12, value=size_optimized)
-
-            # Color-code size optimization status
-            if size_optimized.startswith("Yes"):
-                summary_sheet.cell(row=row, column=12).fill = PatternFill(
-                    start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
-
-            row += 1
-
-        wb.save(output_file)
-        logging.info("Report saved to %s", output_file)
+            row = {
+                "File": file_info.logical_path,
+                "Status": status,
+                "Optimization Category": opt_category or "N/A",
+                "Optimization Score": f"{opt_score:.2%}" if isinstance(opt_score, float) else opt_score,
+                "O0 Chunks": distribution.get(0, 0),
+                "O1 Chunks": distribution.get(1, 0),
+                "O2 Chunks": distribution.get(2, 0),
+                "O3 Chunks": distribution.get(3, 0),
+                "Os Chunks": distribution.get(4, 0),
+                "Total Chunks": total_chunks,
+                "File Size (bytes)": file_info.file_size,
+                "Size Optimized": size_optimized,
+            }
+            report_data.append(row)
+        return pd.DataFrame(report_data)

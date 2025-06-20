@@ -27,7 +27,7 @@ class ExcelReportSaver:
 
         :param output_path: Path to save the Excel file
         """
-        self.output_path = output_path
+        self.output_path = os.path.relpath(output_path)
         self.sheets = {}
 
     def add_sheet(self, df: pd.DataFrame, sheet_name: str):

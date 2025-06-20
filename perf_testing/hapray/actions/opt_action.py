@@ -15,8 +15,15 @@ limitations under the License.
 
 import argparse
 import logging
+from concurrent.futures import ProcessPoolExecutor
+from typing import Tuple, List
+
+import pandas as pd
 
 from hapray import VERSION
+from hapray.core.common.excel_utils import ExcelReportSaver
+from hapray.optimization_detector.file_info import FileCollector
+from hapray.optimization_detector.invoke_symbols import InvokeSymbols
 from hapray.optimization_detector.optimization_detector import OptimizationDetector
 
 
@@ -39,9 +46,53 @@ class OptAction:
                             help="Output Excel file path (default: binary_analysis_report.xlsx)")
         parser.add_argument("--jobs", "-j", type=int, default=1,
                             help="Number of parallel jobs (default: 1)")
+        parser.add_argument('--report_dir', '-r',
+                            help='Directory containing reports to update')
         parsed_args = parser.parse_args(args)
 
-        logging.info(f"Starting binary optimization analysis on: {parsed_args.input}")
-        detector = OptimizationDetector(parsed_args.jobs)
-        detector.detect_optimization(parsed_args.input, parsed_args.output)
-        logging.info(f"Analysis report saved to: {parsed_args.output}")
+        action = OptAction()
+        file_collector = FileCollector()
+        try:
+            logging.info(f"Collecting binary files from: {parsed_args.input}")
+            file_infos = file_collector.collect_binary_files(parsed_args.input)
+
+            if not file_infos:
+                logging.warning("No valid binary files found")
+                return
+
+            logging.info(f"Starting optimization detection on {len(file_infos)} files")
+
+            with ProcessPoolExecutor(max_workers=2) as executor:
+                futures = []
+                future = executor.submit(action._run_detection, parsed_args.jobs, file_infos)
+                futures.append(future)
+                if parsed_args.report_dir:
+                    future = executor.submit(action._run_invoke_analysis, file_infos, parsed_args.report_dir)
+                    futures.append(future)
+
+            data = []
+            # Wait for all report generation tasks
+            for future in futures:
+                data.extend(future.result())
+            action._generate_excel_report(data, parsed_args.output)
+            logging.info(f"Analysis report saved to: {parsed_args.output}")
+        finally:
+            file_collector.cleanup()
+
+    def _run_detection(self, jobs, file_infos):
+        """Run optimization detection in a separate process"""
+        detector = OptimizationDetector(jobs)
+        return detector.detect_optimization(file_infos)
+
+    def _run_invoke_analysis(self, file_infos, report_dir):
+        """Run invoke symbols analysis in a separate process"""
+        invoke_symbols = InvokeSymbols()
+        return invoke_symbols.analyze(file_infos, report_dir)
+
+    def _generate_excel_report(self, data: List[Tuple[str, pd.DataFrame]], output_file: str) -> None:
+        """Generate Excel report using pandas"""
+        report_saver = ExcelReportSaver(output_file)
+        for row in data:
+            report_saver.add_sheet(row[1], row[0])
+        report_saver.save()
+        logging.info("Report saved to %s", output_file)
