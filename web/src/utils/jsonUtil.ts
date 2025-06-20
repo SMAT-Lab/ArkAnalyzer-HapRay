@@ -366,6 +366,8 @@ export function calculateSymbolData1(
 export function changeBase64Str2Json(base64String:string) {
     if(base64String=='/tempCompareJsonData/'){
         return '/tempCompareJsonData/';
+    }else if(base64String=='EMPTY_FRAME_PLACEHOLDER'){
+        return 'EMPTY_FRAME_PLACEHOLDER';
     }
     const compressed = atob(base64String);
     const uint8Array = new Uint8Array([...compressed].map(c => c.charCodeAt(0)));

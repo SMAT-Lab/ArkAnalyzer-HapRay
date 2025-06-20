@@ -193,6 +193,7 @@ class ReportGenerator:
         try:
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
             frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
+            empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
             )
@@ -213,6 +214,14 @@ class ReportGenerator:
             self._inject_json_to_html(
                 json_path=frame_data_path,
                 placeholder='FRAME_JSON_PLACEHOLDER',
+                html_path=output_path,
+                output_path=output_path
+            )
+
+            # Inject empty frames analysis data
+            self._inject_json_to_html(
+                json_path=empty_frames_analysis_path,
+                placeholder='EMPTY_FRAME_JSON_PLACEHOLDER',
                 html_path=output_path,
                 output_path=output_path
             )
@@ -262,6 +271,8 @@ class ReportGenerator:
             html_path: str,
             output_path: str
     ) -> None:
+        if placeholder == 'EMPTY_FRAME_JSON_PLACEHOLDER' and not os.path.exists(json_path):
+            return
         """Inject JSON data into an HTML template"""
         # Validate paths
         if not os.path.exists(json_path):

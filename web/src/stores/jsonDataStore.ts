@@ -162,17 +162,156 @@ export interface MergeJSONData {
   }[];
 }
 
+export interface EmptyFrameJsonData {
+  [stepName: string]: {
+    status: string;
+    summary: {
+      total_load: number;
+      empty_frame_load: number;
+      empty_frame_percentage: number;
+      background_thread_load: number;
+      background_thread_percentage: number;
+      total_empty_frames: number;
+      empty_frames_with_load: number;
+    };
+    top_frames: {
+      main_thread_empty_frames: EmptyFrame[];
+      background_thread: EmptyFrame[];
+    };
+  };
+}
+
+interface EmptyFrame {
+  ts: number;
+  dur: number;
+  ipid: number;
+  itid: number;
+  pid: number;
+  tid: number;
+  callstack_id: number;
+  process_name: string;
+  thread_name: string;
+  callstack_name: string;
+  frame_load: number;
+  is_main_thread: number;
+  sample_callchains: SampleCallchain[];
+}
+
+interface SampleCallchain {
+  timestamp: number;
+  event_count: number;
+  load_percentage: number;
+  callchain: CallstackFrame[];
+}
+
+interface CallstackFrame {
+  depth: number;
+  file_id: number;
+  path: string;
+  symbol_id: number;
+  symbol: string;
+}
+
+
+export const defaultEmptyJson = {
+  "step1": {
+    "status": "unknow",
+    "summary": {
+      "total_load": 0,
+      "empty_frame_load": 0,
+      "empty_frame_percentage": 0,
+      "background_thread_load": 0,
+      "background_thread_percentage": 0,
+      "total_empty_frames": 0,
+      "empty_frames_with_load": 0
+    },
+    "top_frames": {
+      "main_thread_empty_frames": [
+        {
+          "ts": 0,
+          "dur": 0,
+          "ipid": 0,
+          "itid": 0,
+          "pid": 0,
+          "tid": 0,
+          "callstack_id": 0,
+          "process_name": "",
+          "thread_name": "",
+          "callstack_name": "",
+          "frame_load": 0,
+          "is_main_thread": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 0,
+              "event_count": 0,
+              "load_percentage": 0,
+              "callchain": [
+                {
+                  "depth": 0,
+                  "file_id": 0,
+                  "path": "",
+                  "symbol_id": 0,
+                  "symbol": ""
+                }
+              ]
+            }
+          ]
+        },
+      ],
+      "background_thread": [
+        {
+          "ts": 0,
+          "dur": 0,
+          "ipid": 0,
+          "itid": 0,
+          "pid": 0,
+          "tid": 0,
+          "callstack_id": 0,
+          "process_name": "",
+          "thread_name": "",
+          "callstack_name": "",
+          "frame_load": 0,
+          "is_main_thread": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 0,
+              "event_count": 0,
+              "load_percentage": 0,
+              "callchain": [
+                {
+                  "depth": 0,
+                  "file_id": 0,
+                  "path": "",
+                  "symbol_id": 0,
+                  "symbol": ""
+                }
+              ]
+            }
+          ]
+        },]
+    }
+  }
+
+};
+
 export const useJsonDataStore = defineStore('config', {
   state: () => ({
     jsonData: null as JSONData | null,
     htraceJsonData: null as HtraceJSONData[] | null,
+    emptyFrameJsonData: null as EmptyFrameJsonData | null,
     compareJsonData: null as JSONData | null
+
   }),
   actions: {
-    setJsonData(jsonData: JSONData[], htraceJsonData: HtraceJSONData[], compareJsonData: JSONData[]) {
+    setJsonData(jsonData: JSONData[], htraceJsonData: HtraceJSONData[], emptyFrameJsonData: EmptyFrameJsonData, compareJsonData: JSONData[]) {
       if (JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\"") {
         this.jsonData = jsonData[0];
         this.htraceJsonData = htraceJsonData;
+        if (JSON.stringify(emptyFrameJsonData) == "\"EMPTY_FRAME_PLACEHOLDER\"") {
+          this.emptyFrameJsonData = defaultEmptyJson;
+        } else {
+          this.emptyFrameJsonData = emptyFrameJsonData;
+        }
         window.initialPage = 'perf';
       } else {
         this.jsonData = jsonData[0];
