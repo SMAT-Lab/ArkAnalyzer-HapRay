@@ -1,116 +1,25 @@
-import hashlib
-import os
-import zipfile
-import tempfile
-import shutil
 import logging
 import multiprocessing
-from enum import Enum
+import os
+import shutil
+import tempfile
+import zipfile
+from collections import Counter
 from functools import partial
 from importlib.resources import files
 from typing import List, Dict, Tuple, Optional
-from collections import Counter
-
-import arpy
-from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
-from elftools.elf.elffile import ELFFile
+from tqdm import tqdm
 
-# File analysis status mapping
-FILE_STATUS_MAPPING = {
-    'analyzed': 'Successfully Analyzed',
-    'skipped': 'Skipped (System Library)',
-    'failed': 'Analysis Failed',
-}
-
-
-class FileType(Enum):
-    SO = 1
-    AR = 2
-    NOT_SUPPORT = 0xff
-
-
-class FileInfo:
-    """Represents information about a binary file"""
-    TEXT_SECTION = '.text'
-
-    def __init__(self, absolute_path: str, logical_path: Optional[str] = None):
-        self.absolute_path = absolute_path
-        self.logical_path = logical_path or absolute_path
-        self.file_size = self._get_file_size()
-        self.file_hash = self._calculate_file_hash()
-        self.file_id = self._generate_file_id()
-        if absolute_path.endswith('.a'):
-            self.file_type = FileType.AR
-        elif absolute_path.endswith('.so'):
-            self.file_type = FileType.SO
-        else:
-            self.file_type = FileType.NOT_SUPPORT
-
-    def __repr__(self) -> str:
-        return f"FileInfo({self.logical_path}, size={self.file_size}, hash={self.file_hash[:8]}...)"
-
-    def to_dict(self) -> dict:
-        return {
-            'absolute_path': self.absolute_path,
-            'logical_path': self.logical_path,
-            'file_size': self.file_size,
-            'file_hash': self.file_hash,
-            'file_id': self.file_id
-        }
-
-    def extract_dot_text(self) -> List[int]:
-        """Extract .text segment data"""
-        if self.file_type == FileType.SO:
-            return self._extract_so_dot_text(self.absolute_path)
-        elif self.file_type == FileType.AR:
-            return self._extract_archive_dot_text()
-        return []
-
-    def _extract_so_dot_text(self, file_path) -> List[int]:
-        try:
-            with open(file_path, 'rb') as f:
-                elf = ELFFile(f)
-                section = elf.get_section_by_name(self.TEXT_SECTION)
-                if section:
-                    return list(section.data())
-        except Exception as e:
-            logging.error("Failed to extract .text section from %s: %s", file_path, e)
-        return []
-
-    def _extract_archive_dot_text(self) -> List[int]:
-        text_data = []
-        try:
-            ar = arpy.Archive(self.absolute_path)
-            for name in ar.namelist():
-                elf = ELFFile(ar.open(name))
-                section = elf.get_section_by_name(self.TEXT_SECTION)
-                if section:
-                    text_data.extend(list(section.data()))
-        except Exception as e:
-            logging.error("Failed to extract archive file %s: %s", self.absolute_path, e)
-        return text_data
-
-    def _get_file_size(self) -> int:
-        return os.path.getsize(self.absolute_path)
-
-    def _calculate_file_hash(self) -> str:
-        with open(self.absolute_path, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()
-
-    def _generate_file_id(self) -> str:
-        base_name = os.path.basename(self.absolute_path).replace(' ', '_')
-        unique_id = f"{base_name}_{self.file_hash}"
-        return self.file_hash if len(unique_id) > 200 else unique_id
+from hapray.optimization_detector.file_info import FileInfo, FILE_STATUS_MAPPING
 
 
 class OptimizationDetector:
-    MATCHED_FILES_DIR = 'matched_files_results'
 
     def __init__(self, workers: int = 1):
         self.parallel = workers > 1
@@ -259,7 +168,7 @@ class OptimizationDetector:
         # Filter out analyzed files
         remaining_files = []
         for file_info in file_infos:
-            flags_path = os.path.join(self.MATCHED_FILES_DIR, f"flags_{file_info.file_id}.csv")
+            flags_path = os.path.join(FileInfo.CACHE_DIR, f"flags_{file_info.file_id}.csv")
             if os.path.exists(flags_path):
                 logging.debug("Skipping already analyzed file: %s", file_info.absolute_path)
                 continue
@@ -268,7 +177,7 @@ class OptimizationDetector:
         logging.info("Files to analyze: %d", len(remaining_files))
 
         # Create directory for intermediate results
-        os.makedirs(self.MATCHED_FILES_DIR, exist_ok=True)
+        os.makedirs(FileInfo.CACHE_DIR, exist_ok=True)
 
         if remaining_files:
             process_func = partial(self._run_analysis)
@@ -278,15 +187,15 @@ class OptimizationDetector:
                     results = list(tqdm(
                         pool.imap(process_func, remaining_files),
                         total=len(remaining_files),
-                        desc="Analyzing binaries"
+                        desc="Analyzing binaries optimization"
                     ))
             else:
-                results = [process_func(fi) for fi in tqdm(remaining_files, desc="Analyzing binaries")]
+                results = [process_func(fi) for fi in tqdm(remaining_files, desc="Analyzing binaries optimization")]
 
             # Save intermediate results
             for file_info, flags in results:
                 if flags:
-                    flags_path = os.path.join(self.MATCHED_FILES_DIR, f"flags_{file_info.file_id}.csv")
+                    flags_path = os.path.join(FileInfo.CACHE_DIR, f"flags_{file_info.file_id}.csv")
                     with open(flags_path, "w", encoding='UTF-8') as f:
                         f.write("file,prediction,confidence\n")
                         for pred, conf in flags:
@@ -295,7 +204,7 @@ class OptimizationDetector:
         flags_results = {}
         files_with_results = 0
         for file_info in file_infos:
-            flags_path = os.path.join(self.MATCHED_FILES_DIR, f"flags_{file_info.file_id}.csv")
+            flags_path = os.path.join(FileInfo.CACHE_DIR, f"flags_{file_info.file_id}.csv")
             if os.path.exists(flags_path):
                 try:
                     flags_df = pd.read_csv(flags_path)

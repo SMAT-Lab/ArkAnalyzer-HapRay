@@ -6,8 +6,8 @@ from typing import Optional
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.common.common_utils import CommonUtils
 
 
 class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):

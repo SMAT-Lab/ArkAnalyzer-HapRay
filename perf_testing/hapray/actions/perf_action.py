@@ -25,11 +25,10 @@ from typing import List
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
-from hapray.core.common.ExcelUtils import create_summary_excel
 from hapray.core.config.config import Config
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.FolderUtils import scan_folders, delete_folder
-from hapray.core.report import ReportGenerator
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.folder_utils import scan_folders, delete_folder
+from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 ENV_ERR_STR = """
 The hdc or node command is not in PATH. 
@@ -158,7 +157,7 @@ class PerfAction:
 
             # Generate summary Excel
             logging.info("Creating summary Excel report...")
-            if create_summary_excel(reports_path):
+            if create_perf_summary_excel(reports_path):
                 logging.info("Summary Excel created successfully")
             else:
                 logging.error("Failed to create summary Excel")

@@ -1,33 +1,40 @@
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import base64
 import json
 import logging
 import os
-import subprocess
 import zlib
-import sqlite3
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Dict, Any
 
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.FrameAnalyzer import FrameAnalyzer
+import pandas as pd
+
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.excel_utils import ExcelReportSaver
+from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.frame_analyzer import FrameAnalyzer
 from hapray.core.config.config import Config
+
 
 class ReportGenerator:
     """Generates and updates performance analysis reports"""
 
     def __init__(self):
         self.perf_testing_dir = CommonUtils.get_project_root()
-        self.hapray_cmd_path = self._get_hapray_cmd_path()
-
-    def _get_hapray_cmd_path(self) -> str:
-        """Get the absolute path to hapray-cmd.js"""
-        cmd_path = os.path.abspath(os.path.join(
-            self.perf_testing_dir, 'hapray-toolbox', 'hapray-cmd.js'
-        ))
-
-        if not os.path.exists(cmd_path):
-            raise FileNotFoundError(f'HapRay command not found at {cmd_path}')
-
-        return cmd_path
 
     def update_report(self, scene_dir: str, so_dir: Optional[str] = None) -> bool:
         """Update an existing performance report"""
@@ -89,29 +96,27 @@ class ReportGenerator:
             logging.error("No scene directories provided for round selection")
             return False
 
-        cmd = [
-            'node', self.hapray_cmd_path,
-            'hapray', 'dbtools',
-            '--choose',
-            '-i', scene_dir
-        ]
+        args = ['dbtools',
+                '--choose',
+                '-i', scene_dir
+                ]
 
-        logging.debug(f"Selecting round with command: {' '.join(cmd)}")
-        return self._execute_hapray_command(cmd, "Round selection")
+        logging.debug(f"Selecting round with command: {' '.join(args)}")
+        return ExeUtils.execute_hapray_cmd(args)
 
     def _run_perf_analysis(self, scene_dir: str, so_dir: Optional[str]) -> bool:
         """Run performance analysis"""
-        cmd = ['node', self.hapray_cmd_path, 'hapray', 'dbtools', '-i', scene_dir]
+        args = ['dbtools', '-i', scene_dir]
 
         if so_dir:
-            cmd.extend(['-s', so_dir])
+            args.extend(['-s', so_dir])
 
         kind = self.convert_kind_to_json()
         if len(kind) > 0:
-            cmd.extend(['-k', kind])
+            args.extend(['-k', kind])
 
-        logging.debug(f"Running perf analysis with command: {' '.join(cmd)}")
-        return self._execute_hapray_command(cmd, "Performance analysis")
+        logging.debug(f"Running perf analysis with command: {' '.join(args)}")
+        return ExeUtils.execute_hapray_cmd(args)
 
     def _analyze_frame_drops(self, scene_dir: str) -> None:
         """Analyze frame drops and log results"""
@@ -145,17 +150,17 @@ class ReportGenerator:
 
                 # 从step_dir中提取步骤编号（例如从'step1'提取'1'）
                 current_step_id = int(step_dir.replace('step', ''))
-                
+
                 # 过滤出当前步骤的进程信息
                 current_step_pids = [(name, pid) for step_id, name, pid in app_pids if int(step_id) == current_step_id]
-                
+
                 if not current_step_pids:
                     logging.warning(f"No process info found for step {step_dir}")
                     continue
 
                 # 提取PID列表
                 pids = [pid for _, pid in current_step_pids]
-                
+
                 # 记录当前步骤的进程信息
                 for name, pid in current_step_pids:
                     logging.info(f"Step {step_dir} - Process: {name} (PID: {pid})")
@@ -174,7 +179,8 @@ class ReportGenerator:
                     logging.info(f"Successfully analyzed empty frames for step {step_dir}")
                     all_results[step_dir] = result
                 else:
-                    logging.warning(f"Empty frame analysis failed for step {step_dir}: {result.get('message', 'Unknown error')}")
+                    logging.warning(
+                        f"Empty frame analysis failed for step {step_dir}: {result.get('message', 'Unknown error')}")
 
             # 保存所有步骤的分析结果到htrace子目录
             if all_results:
@@ -220,40 +226,6 @@ class ReportGenerator:
             logging.info(f"HTML report created at {output_path}")
         except Exception as e:
             logging.error(f"Failed to create HTML report: {str(e)}")
-
-    def _execute_hapray_command(self, cmd: List[str], action_name: str) -> bool:
-        """Execute a hapray command with proper error handling"""
-        try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-
-            if result.stdout:
-                logging.debug(f"{action_name} output: {result.stdout}")
-
-            if result.stderr:
-                logging.warning(f"{action_name} warnings: {result.stderr}")
-
-            logging.info(f"{action_name} completed successfully")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            error_msg = f"{action_name} failed with code {e.returncode}"
-            if e.stdout:
-                logging.error(f"{action_name} stdout: {e.stdout}")
-            if e.stderr:
-                logging.error(f"{action_name} stderr: {e.stderr}")
-            logging.error(error_msg)
-            return False
-
-        except FileNotFoundError:
-            logging.error("Node.js command not found. Please ensure Node.js is installed and in PATH.")
-            return False
 
     @staticmethod
     def _inject_json_to_html(
@@ -306,7 +278,7 @@ class ReportGenerator:
         kind = Config.get('kind', None)
         if kind is None:
             return ''
-    
+
         kind_entry = {
             "name": 'APP_SO',
             "kind": 1,
@@ -318,10 +290,10 @@ class ReportGenerator:
                 "name": category['name'],
                 "files": category['files']
             }
-            
+
             if 'thread' in category:
                 component["threads"] = category['thread']
-                
+
             kind_entry["components"].append(component)
 
         return json.dumps([kind_entry])
@@ -354,7 +326,7 @@ class ReportGenerator:
         try:
             # 获取hiperf_info.json文件路径
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
-            
+
             if not os.path.exists(perf_data_path):
                 logging.warning(f"No hiperf_info.json found at {perf_data_path}")
                 return []
@@ -362,7 +334,7 @@ class ReportGenerator:
             # 读取JSON文件
             with open(perf_data_path, 'r', encoding='utf-8') as f:
                 perf_data = json.load(f)
-                
+
             if not perf_data or not isinstance(perf_data, list) or len(perf_data) == 0:
                 logging.warning("Invalid hiperf_info.json format")
                 return []
@@ -393,3 +365,129 @@ class ReportGenerator:
         except Exception as e:
             logging.error(f"Failed to get app PIDs: {str(e)}")
             return []
+
+
+def merge_summary_info(directory: str) -> List[Dict[str, Any]]:
+    """合并指定目录下所有summary_info.json文件中的数据"""
+    merged_data = []
+
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file == "summary_info.json":
+                file_path = os.path.join(root, file)
+
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+
+                        if isinstance(data, dict):
+                            merged_data.append(data)
+                        elif isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    merged_data.append(item)
+                                else:
+                                    logging.warning(f"警告: 文件 {file_path} 包含非字典项，已跳过")
+                        else:
+                            logging.warning(f"警告: 文件 {file_path} 格式不符合预期，已跳过")
+                except Exception as e:
+                    logging.error(f"错误: 无法读取文件 {file_path}: {str(e)}")
+
+    return merged_data
+
+
+def process_to_dataframe(data: List[Dict[str, Any]]) -> pd.DataFrame:
+    """将合并后的数据转换为DataFrame并处理为透视表"""
+    if not data:
+        logging.warning("警告: 没有数据可处理")
+        return pd.DataFrame()
+
+    # 转换为DataFrame
+    df = pd.DataFrame(data)
+
+    # 组合rom_version和app_version作为列名
+    df['version'] = df['rom_version'] + '+' + df['app_version']
+
+    # 使用apply逐行处理step_id
+    df['scene_name'] = df['scene'] + '步骤' + df['step_id'].astype(str) + ': ' + df['step_name']
+
+    # 创建透视表，行=scene_name，列=version，值=count
+    pivot_table = df.pivot_table(
+        index='scene_name',
+        columns='version',
+        values='count',
+        aggfunc='sum',  # 如果有重复值，使用求和聚合
+        fill_value=0,
+    )
+
+    return pivot_table
+
+
+def add_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    添加百分比列，将第一列作为基线与后续每列进行比较
+
+    Args:
+        df: 原始透视表DataFrame
+
+    Returns:
+        添加了百分比列的DataFrame
+    """
+    if df.empty or len(df.columns) < 2:
+        logging.warning("警告: 数据不足，无法计算百分比")
+        return df
+
+    # 获取基线列（第一列）
+    baseline_col = df.columns[0]
+
+    # 为除基线列外的每一列计算百分比
+    for col in df.columns[1:]:
+        # 计算百分比 (新值-基线值)/基线值*100%
+        percentage_col = f"{col}_百分比"
+        df[percentage_col] = ((df[col] - df[baseline_col]) / df[baseline_col])
+
+        # 将百分比列放在对应数据列之后
+        df = df[[c for c in df.columns if c != percentage_col] + [percentage_col]]
+
+    return df
+
+
+def create_perf_summary_excel(input_path: str) -> bool:
+    try:
+        if not os.path.isdir(input_path):
+            logging.error(f"错误: 目录 {input_path} 不存在")
+            return False
+
+        # 合并JSON数据
+        merged_data = merge_summary_info(input_path)
+
+        if not merged_data:
+            logging.error("错误: 没有找到任何summary_info.json文件或文件内容为空")
+            return False
+
+        # 处理为透视表
+        pivot_df = process_to_dataframe(merged_data)
+
+        # 确保有足够的列来计算百分比
+        if len(pivot_df.columns) > 1:
+            # 添加百分比列（以第一列为基线）
+            pivot_df = add_percentage_columns(pivot_df)
+            logging.info(f"已计算相对于 {pivot_df.columns[0]} 的百分比增长")
+        else:
+            logging.warning("警告: 数据列不足，无法计算百分比增长")
+
+        # 确定输出路径
+        output_path = Path(input_path) / 'summary_pivot.xlsx'
+
+        # 确保输出目录存在
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 保存到Excel
+        report_saver = ExcelReportSaver(str(output_path))
+        report_saver.add_sheet(pivot_df, 'Summary')
+        report_saver.save()
+
+        return True
+    except  Exception as e:
+        logging.error("未知错误：没有生成汇总excel" + str(e))
+        return False

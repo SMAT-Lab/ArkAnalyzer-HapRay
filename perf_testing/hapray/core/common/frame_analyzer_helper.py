@@ -1,10 +1,28 @@
-import os
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import json
-from datetime import datetime
 import logging
+import os
+from datetime import datetime
+
 import matplotlib.pyplot as plt
 import numpy as np
-from hapray.core.common.FrameAnalyzer import FrameAnalyzer
+
+from hapray.core.common.frame_analyzer import FrameAnalyzer
+
 
 def test_collect_empty_frame_loads():
     """
@@ -51,27 +69,28 @@ def update_empty_frame_results():
     """
     # 测试目录路径
     root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250611161807'
-    
+
     try:
         print("\n=== 开始批量更新空帧分析数据 ===")
-        
+
         # 遍历目录
         for root, dirs, files in os.walk(root_dir):
             # 过滤出符合条件的目录
-            target_dirs = [d for d in dirs if d.startswith('ResourceUsage_PerformanceDynamic_') and 'round' not in d.lower()]
-            
+            target_dirs = [d for d in dirs if
+                           d.startswith('ResourceUsage_PerformanceDynamic_') and 'round' not in d.lower()]
+
             for target_dir in target_dirs:
                 report_dir = os.path.join(root, target_dir)
                 print(f"\n处理目录: {report_dir}")
-                
+
                 # 调用update_empty_frame_results函数
                 if FrameAnalyzer.update_empty_frame_results(report_dir):
                     print(f"✓ 成功更新 {target_dir} 的空帧分析数据")
                 else:
                     print(f"✗ 更新 {target_dir} 的空帧分析数据失败")
-        
+
         print("\n=== 批量更新完成 ===")
-        
+
     except Exception as e:
         print(f"\n更新失败: {str(e)}")
         raise
@@ -280,4 +299,4 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
 if __name__ == "__main__":
     update_empty_frame_results()
     # root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports'
-    # collect_empty_frame_analysis_results(root_dir) 
+    # collect_empty_frame_analysis_results(root_dir)
