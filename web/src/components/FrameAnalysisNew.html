@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPS与卡顿分析可视化面板</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+  <script src="https://unpkg.com/element-plus"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    
+    body {
+      background: #f5f7fa;
+      color: #333;
+      min-height: 100vh;
+      padding: 20px;
+      background: linear-gradient(135deg, #f0f7ff, #e6f7ff);
+    }
+    
+    #app {
+      max-width: 1600px;
+      margin: 0 auto;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+    
+    #app.loading {
+      opacity: 0.7;
+    }
+    
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      gap: 25px;
+    }
+    
+    .data-panel {
+      background: white;
+      border-radius: 16px;
+      padding: 25px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(52, 152, 219, 0.1);
+    }
+    
+    .header {
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, #f0f7ff, #e6f7ff);
+      border-left: 5px solid #38bdf8;
+    }
+    
+    .header h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(90deg, #3498db, #2ecc71);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    
+    .header p {
+      font-size: 1.1rem;
+      color: #5a6c85;
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    
+    .stats-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-bottom: 10px;
+    }
+    
+    .stat-card {
+      border-radius: 16px;
+      padding: 25px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      background: white;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eaeaea;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
+    }
+    
+    .card-title {
+      font-size: 1.1rem;
+      color: #5a6c85;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      font-weight: 600;
+    }
+    
+    .card-title i {
+      margin-right: 12px;
+      font-size: 1.3rem;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+    }
+    
+    .card-value {
+      font-size: 2.4rem;
+      font-weight: 700;
+      margin: 10px 0 15px;
+      color: #1e293b;
+    }
+    
+    .card-desc {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+    
+    .card-badge {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 6px 15px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: #f1f5f9;
+      border-radius: 4px;
+      margin-top: 15px;
+      overflow: hidden;
+    }
+    
+    .progress-value {
+      height: 100%;
+      border-radius: 4px;
+    }
+    
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+      gap: 20px;
+      margin-bottom: 10px;
+    }
+    
+    .chart-container {
+      border-radius: 16px;
+      padding: 25px;
+      height: 500px;
+      position: relative;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eaeaea;
+    }
+    
+    .chart-title {
+      font-size: 1.3rem;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      color: #1e293b;
+      font-weight: 600;
+    }
+    
+    .chart-title i {
+      margin-right: 15px;
+      font-size: 1.5rem;
+      width: 45px;
+      height: 45px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+    }
+    
+    .chart {
+      width: 100%;
+      height: calc(100% - 50px);
+    }
+    
+    .table-container {
+      border-radius: 16px;
+      padding: 25px;
+      background: white;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eaeaea;
+    }
+    
+    .table-title {
+      font-size: 1.3rem;
+      margin-bottom: 25px;
+      display: flex;
+      align-items: center;
+      color: #1e293b;
+      font-weight: 600;
+    }
+    
+    .table-title i {
+      margin-right: 15px;
+      font-size: 1.5rem;
+      width: 45px;
+      height: 45px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+    }
+    
+    .filters {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .filter-item {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+    
+    .filter-item:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    
+    .filter-item.active {
+      background: #dbeafe;
+      border-color: #3b82f6;
+      color: #3b82f6;
+    }
+    
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    
+    .data-table th {
+      background: #f1f5f9;
+      text-align: left;
+      padding: 16px;
+      font-weight: 600;
+      color: #475569;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    
+    .data-table td {
+      padding: 16px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #475569;
+    }
+    
+    .data-table tr:hover td {
+      background: #f8fafc;
+    }
+    
+    .level-1 {
+      color: #f59e0b;
+    }
+    
+    .level-2 {
+      color: #f97316;
+    }
+    
+    .level-3 {
+      color: #ef4444;
+    }
+    
+    .positive {
+      color: #10b981;
+      font-weight: 600;
+    }
+    
+    .negative {
+      color: #ef4444;
+      font-weight: 600;
+    }
+    
+    .level-badge {
+      padding: 6px 15px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    
+    .level-1 .level-badge {
+      background: rgba(245, 158, 11, 0.1);
+    }
+    
+    .level-2 .level-badge {
+      background: rgba(249, 115, 22, 0.1);
+    }
+    
+    .level-3 .level-badge {
+      background: rgba(239, 68, 68, 0.1);
+    }
+    
+    .loading-indicator {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 14px 28px;
+      border-radius: 25px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      transition: opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      font-weight: 600;
+      font-size: 1rem;
+    }
+    
+    .loading-indicator.active {
+      opacity: 1;
+    }
+    
+    .loading-indicator i {
+      color: #38bdf8;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .detail-panel {
+      background: white;
+      border-radius: 16px;
+      padding: 25px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+      margin-top: 10px;
+      transition: all 0.3s ease;
+      border: 1px solid rgba(52, 152, 219, 0.1);
+    }
+    
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .detail-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #2ecc71;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .detail-title i {
+      color: #2ecc71;
+    }
+    
+    .detail-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 25px;
+    }
+    
+    .stutter-info, .callstack-info {
+      background: #f8fafc;
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .info-title {
+      font-size: 1.3rem;
+      color: #3498db;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+    }
+    
+    .info-title i {
+      color: #3498db;
+    }
+    
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    
+    .info-item {
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      transition: all 0.2s ease;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+    
+    .info-item:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+    }
+    
+    .info-label {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+    }
+    
+    .info-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    
+    .callstack-list {
+      max-height: 350px;
+      overflow-y: auto;
+      padding-right: 10px;
+    }
+    
+    .callstack-list::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .callstack-list::-webkit-scrollbar-track {
+      background: rgba(226, 232, 240, 0.3);
+      border-radius: 4px;
+    }
+    
+    .callstack-list::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    
+    .callstack-item {
+      padding: 20px;
+      margin-bottom: 15px;
+      background: white;
+      border-radius: 12px;
+      border-left: 4px solid #38bdf8;
+      transition: all 0.2s ease;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+    
+    .callstack-item:hover {
+      transform: translateX(5px);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+    }
+    
+    .callstack-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+    
+    .callstack-timestamp {
+      color: #38bdf8;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+    
+    .callstack-load {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+      padding: 6px 15px;
+      border-radius: 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+    
+    .callstack-chain {
+      margin-top: 15px;
+      padding-left: 15px;
+    }
+    
+    .callstack-frame {
+      margin: 12px 0;
+      font-family: 'Courier New', monospace;
+      color: #475569;
+      font-size: 0.95rem;
+      word-break: break-all;
+      display: flex;
+      align-items: flex-start;
+    }
+    
+    .callstack-frame i {
+      color: #f59e0b;
+      margin-right: 12px;
+      margin-top: 4px;
+    }
+    
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      color: #94a3b8;
+      text-align: center;
+      padding: 40px;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 2px dashed #cbd5e1;
+    }
+    
+    .placeholder i {
+      font-size: 3.5rem;
+      margin-bottom: 25px;
+      color: #cbd5e1;
+    }
+    
+    .placeholder h3 {
+      font-size: 1.6rem;
+      margin-bottom: 15px;
+      color: #475569;
+      font-weight: 600;
+    }
+    
+    .placeholder p {
+      max-width: 500px;
+      line-height: 1.6;
+      color: #94a3b8;
+      font-size: 1.05rem;
+    }
+    
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 25px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 18px;
+      background: #f1f5f9;
+      border-radius: 25px;
+      font-size: 0.95rem;
+      color: #475569;
+      font-weight: 500;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+    }
+    
+    .fps-legend { background-color: #5470c6; }
+    .trend-legend { background-color: #91cc75; }
+    .stutter-legend { background-color: #ee6666; }
+    .emptyframe-legend { background-color: #9a60b4; }
+    
+    .refresh-btn {
+      position: absolute;
+      top: 25px;
+      right: 25px;
+      background: linear-gradient(90deg, #3498db, #2ecc71);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 600;
+      box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+    }
+    
+    .refresh-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+    }
+    
+    .refresh-btn:active {
+      transform: translateY(0);
+    }
+    
+    .refresh-btn i {
+      color: white;
+    }
+    
+    @media (max-width: 1200px) {
+      .chart-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .detail-content {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 2rem;
+      }
+      
+      .header p {
+        font-size: 1rem;
+      }
+      
+      .chart-container {
+        height: 400px;
+        padding: 20px;
+      }
+      
+      .stat-card {
+        padding: 20px;
+      }
+      
+      .card-value {
+        font-size: 2rem;
+      }
+      
+      .detail-panel {
+        padding: 20px;
+      }
+      
+      .refresh-btn {
+        position: relative;
+        top: 0;
+        right: 0;
+        margin: 15px auto;
+        width: 200px;
+        justify-content: center;
+      }
+    }
+    
+    /* 新增样式 */
+    .emptyframe-panel {
+      background: linear-gradient(135deg, #f9f7ff, #f0e7ff);
+      border-left: 4px solid #9a60b4;
+    }
+    
+    .emptyframe-header {
+      color: #9a60b4;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="loading-indicator" :class="{ active: isLoading }">
+      <i class="fas fa-spinner"></i>
+      <span>正在加载数据...</span>
+    </div>
+    
+    <div class="app-container">
+    
+
+      <div class="stats-cards">
+        <div class="stat-card data-panel">
+          <div class="card-title">
+            <i class="fas fa-film"></i> 总帧数
+          </div>
+          <div class="card-value">{{ totalFrames.toLocaleString() }}</div>
+          <div class="progress-bar">
+            <div class="progress-value"
+              :style="{ width: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)' }"></div>
+          </div>
+          <div class="card-desc">应用渲染的总帧数，反映整体运行情况</div>
+          <div class="card-badge" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8;">基准指标</div>
+        </div>
+
+        <div class="stat-card data-panel">
+          <div class="card-title">
+            <i class="fas fa-exclamation-triangle"></i> 卡顿帧数
+          </div>
+          <div class="card-value">{{ stutterFrames }}</div>
+          <div class="progress-bar">
+            <div class="progress-value"
+              :style="{ width: (stutterRate/100 * 100) + '%', background: '#f97316' }">
+            </div>
+          </div>
+          <div class="card-desc">UI卡顿: {{ uiStutterFrames }} | 渲染卡顿: {{ renderStutterFrames }}</div>
+        </div>
+
+        <div class="stat-card data-panel">
+          <div class="card-title">
+            <i class="fas fa-percentage"></i> 卡顿率
+          </div>
+          <div class="card-value">{{ stutterRate.toFixed(2) }}%</div>
+          <div class="progress-bar">
+            <div class="progress-value"
+              :style="{ width: Math.min(100, stutterRate) + '%', background: '#ef4444' }">
+            </div>
+          </div>
+          <div class="card-desc">卡顿帧数占总帧数的比例，越低越好</div>
+          <div class="card-badge"
+            :style="stutterRate < 0.2 ? 'background: rgba(16, 185, 129, 0.1); color: #10b981;' : 'background: rgba(239, 68, 68, 0.1); color: #ef4444;'">
+            {{ stutterRate < 0.2 ? '良好' : '警告' }}
+          </div>
+        </div>
+
+        <div class="stat-card data-panel">
+          <div class="card-title">
+            <i class="fas fa-tachometer-alt"></i> 平均FPS
+          </div>
+          <div class="card-value">{{ avgFPS.toFixed(1) }}</div>
+          <div class="progress-bar">
+            <div class="progress-value"
+              :style="{ width: Math.min(100, (avgFPS / 120) * 100) + '%', background: 'linear-gradient(90deg, #10b981, #38bdf8)' }">
+            </div>
+          </div>
+          <div class="card-desc">最低: {{ minFPS.toFixed(1) }} | 最高: {{ maxFPS.toFixed(1) }}</div>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="chart-container data-panel">
+          <div class="chart-title">
+            <i class="fas fa-chart-line"></i> FPS与卡顿趋势分析
+          </div>
+          <div class="chart" ref="fpsChart"></div>
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-color fps-legend"></div>
+              <span>FPS值</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color trend-legend"></div>
+              <span>FPS趋势线</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color stutter-legend"></div>
+              <span>卡顿点</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-color emptyframe-legend"></div>
+              <span>空刷帧</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-container data-panel">
+          <div class="chart-title">
+            <i class="fas fa-chart-pie"></i> 卡顿级别分布
+          </div>
+          <div class="chart" ref="stutterPieChart"></div>
+        </div>
+      </div>
+      
+      <!-- 空刷帧详情面板 -->
+      <div class="detail-panel emptyframe-panel" v-if="selectedEmptyFrame">
+        <div class="detail-header">
+          <div class="detail-title emptyframe-header">
+            <i class="fas fa-ghost"></i>
+            空刷帧详情 - VSync: {{ selectedEmptyFrame.vsync }} ({{ selectedEmptyFrame.thread_name }})
+          </div>
+          <el-button type="info" @click="selectedEmptyFrame = null">
+            <i class="fas fa-times"></i> 关闭详情
+          </el-button>
+        </div>
+        <div class="detail-content">
+          <div class="stutter-info">
+            <div class="info-title">
+              <i class="fas fa-info-circle"></i>
+              帧信息
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">时间戳</div>
+                <div class="info-value">{{ (selectedEmptyFrame.ts / 1000000).toFixed(2) }} ms</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">持续时间</div>
+                <div class="info-value">{{ (selectedEmptyFrame.dur / 1000000).toFixed(2) }} ms</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">帧负载</div>
+                <div class="info-value">{{ selectedEmptyFrame.frame_load }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">线程类型</div>
+                <div class="info-value">{{ selectedEmptyFrame.is_main_thread ? '主线程' : '后台线程' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">进程名称</div>
+                <div class="info-value">{{ selectedEmptyFrame.process_name }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">线程名称</div>
+                <div class="info-value">{{ selectedEmptyFrame.thread_name }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">调用栈数量</div>
+                <div class="info-value">{{ selectedEmptyFrame.sample_callchains?.length || 0 }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">调用栈ID</div>
+                <div class="info-value">{{ selectedEmptyFrame.callstack_id }}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="callstack-info">
+            <div class="info-title">
+              <i class="fas fa-code-branch"></i>
+              调用栈信息
+            </div>
+            <div class="callstack-list" v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0">
+              <div v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx" class="callstack-item">
+                <div class="callstack-header">
+                  <div class="callstack-timestamp">
+                    采样点 {{ idx + 1 }}
+                  </div>
+                  <div class="callstack-load">
+                    负载: {{ chain.load_percentage.toFixed(2) }}%
+                  </div>
+                </div>
+                <div class="callstack-chain">
+                  <div v-for="(call, cidx) in chain.callchain" :key="cidx" class="callstack-frame">
+                    <i class="fas fa-level-down-alt"></i>
+                    <div>[{{ call.depth }}] {{ call.path }} - {{ call.symbol }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="placeholder" v-else>
+              <i class="fas fa-exclamation-circle"></i>
+              <h3>未找到调用栈信息</h3>
+              <p>当前空刷帧没有记录调用栈信息</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 卡顿详情面板 -->
+      <div class="detail-panel" v-if="selectedStutter">
+        <div class="detail-header">
+          <div class="detail-title">
+            <i class="fas fa-bug"></i>
+            卡顿详情 - VSync: {{ selectedStutter.vsync }} ({{ selectedStutter.level_description }})
+          </div>
+          <el-button type="info" @click="selectedStutter = null">
+            <i class="fas fa-times"></i> 关闭详情
+          </el-button>
+        </div>
+        <div class="detail-content">
+          <div class="stutter-info">
+            <div class="info-title">
+              <i class="fas fa-info-circle"></i>
+              卡顿信息
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">时间戳</div>
+                <div class="info-value">{{ (selectedStutter.timestamp / 1000000).toFixed(2) }} ms</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">实际时长</div>
+                <div class="info-value">{{ (selectedStutter.actual_duration / 1000000).toFixed(2) }} ms</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">预期时长</div>
+                <div class="info-value">{{ (selectedStutter.expected_duration / 1000000).toFixed(2) }} ms</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">超出时间</div>
+                <div class="info-value">{{ selectedStutter.exceed_time.toFixed(2) }} ms</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">超出帧数</div>
+                <div class="info-value">{{ selectedStutter.exceed_frames.toFixed(2) }} 帧</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">卡顿等级</div>
+                <div class="info-value">Level {{ selectedStutter.stutter_level }} ({{ selectedStutter.level_description }})</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">线程</div>
+                <div class="info-value">{{ callstackThread || '主线程' }}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">调用栈数量</div>
+                <div class="info-value">{{ callstackData.length }}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="callstack-info">
+            <div class="info-title">
+              <i class="fas fa-code-branch"></i>
+              调用栈信息
+            </div>
+            <div class="callstack-list" v-if="callstackData.length > 0">
+              <div v-for="(chain, idx) in callstackData" :key="idx" class="callstack-item">
+                <div class="callstack-header">
+                  <div class="callstack-timestamp">
+                    采样点 {{ idx + 1 }}
+                  </div>
+                  <div class="callstack-load">
+                    负载: {{ chain.load_percentage.toFixed(2) }}%
+                  </div>
+                </div>
+                <div class="callstack-chain">
+                  <div v-for="(call, cidx) in chain.callchain" :key="cidx" class="callstack-frame">
+                    <i class="fas fa-level-down-alt"></i>
+                    <div>[{{ call.depth }}] {{ call.path }} - {{ call.symbol }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="placeholder" v-else>
+              <i class="fas fa-exclamation-circle"></i>
+              <h3>未找到调用栈信息</h3>
+              <p>当前卡顿点没有记录调用栈信息，可能是系统级调用或未捕获的线程</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 空状态面板 -->
+      <div class="detail-panel" v-else-if="!selectedEmptyFrame">
+        <div class="placeholder">
+          <i class="fas fa-mouse-pointer"></i>
+          <h3>选择卡顿点或空刷帧查看详情</h3>
+          <p>点击上方图表中的红色卡顿点或紫色空刷帧标记，可以查看该时间点的详细调用栈信息</p>
+        </div>
+      </div>
+	  
+	   <div class="chart-grid">
+        <div class="chart-container data-panel">
+          <div class="chart-title">
+            <i class="fas fa-stopwatch"></i> 帧耗时分析
+          </div>
+          <div class="chart" ref="durationChart"></div>
+        </div>
+
+        <div class="chart-container data-panel">
+          <div class="chart-title">
+            <i class="fas fa-chart-bar"></i> FPS分布统计
+          </div>
+          <div class="chart" ref="fpsHistogram"></div>
+        </div>
+      </div>
+
+      <div class="table-container data-panel">
+        <div class="table-title">
+          <i class="fas fa-table"></i> 卡顿详情
+        </div>
+
+        <div class="filters">
+          <div class="filter-item" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">
+            全部卡顿 ({{ totalStutterFrames }})
+          </div>
+          <div class="filter-item" :class="{ active: activeFilter === 'level_1' }"
+            @click="activeFilter = 'level_1'">
+            轻微卡顿 ({{ stutterLevels.level_1 }})
+          </div>
+          <div class="filter-item" :class="{ active: activeFilter === 'level_2' }"
+            @click="activeFilter = 'level_2'">
+            中度卡顿 ({{ stutterLevels.level_2 }})
+          </div>
+          <div class="filter-item" :class="{ active: activeFilter === 'level_3' }"
+            @click="activeFilter = 'level_3'">
+            严重卡顿 ({{ stutterLevels.level_3 }})
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>垂直同步(VSync)</th>
+              <th>卡顿级别</th>
+              <th>实际耗时(ms)</th>
+              <th>预期耗时(ms)</th>
+              <th>超出时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(stutter, index) in filteredStutters" :key="index">
+              <td>{{ stutter.vsync }}</td>
+              <td :class="'level-' + stutter.stutter_level">
+                <span class="level-badge">{{ stutter.stutter_level }} - {{ stutter.level_description }}</span>
+              </td>
+              <td>{{ (stutter.actual_duration / 1000000).toFixed(2) }}</td>
+              <td>{{ (stutter.expected_duration / 1000000).toFixed(2) }}</td>
+              <td :class="stutter.exceed_time >= 0 ? 'negative' : 'positive'">
+                {{ stutter.exceed_time >= 0 ? '+' : '' }}{{ stutter.exceed_time.toFixed(2) }}ms
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, computed, nextTick } = Vue;
+    const { ElButton } = ElementPlus;
+    
+    // 模拟数据
+    const step1Data = {
+      "step1": {
+        "status": "success",
+        "summary": {
+          "total_load": 4150746434,
+          "empty_frame_load": 122512144,
+          "empty_frame_percentage": 2.9515689755574215,
+          "background_thread_load": 21280673,
+          "background_thread_percentage": 0.5126950860135341,
+          "total_empty_frames": 671,
+          "empty_frames_with_load": 256
+        },
+        "top_frames": {
+          "main_thread_empty_frames": [
+            {
+              "ts": 360342941586125 - 1000000,
+              "dur": 2000000,
+              "ipid": 7,
+              "itid": 20,
+              "pid": 62761,
+              "tid": 62761,
+              "callstack_id": 50637,
+              "process_name": ".xingin.xhs_hos",
+              "thread_name": ".xingin.xhs_hos",
+              "callstack_name": "H:ReceiveVsync name:WM_62761 dataCount: 24bytes now: 1040367245073340 expectedEnd: 1040367278583235 vsyncId: 4572815, fd:142",
+              "frame_load": 825691,
+              "is_main_thread": 1,
+              "sample_callchains": [
+                {
+                  "timestamp": 360342941586125,
+                  "event_count": 561580,
+                  "load_percentage": 68.01333670828433,
+                  "callchain": [
+                    {
+                      "depth": 0,
+                      "file_id": 1,
+                      "path": "/system/bin/appspawn",
+                      "symbol_id": 0,
+                      "symbol": "_start_c"
+                    },
+                    {
+                      "depth": 1,
+                      "file_id": 2,
+                      "path": "/system/lib/ld-musl-aarch64.so.1",
+                      "symbol_id": 2,
+                      "symbol": "libc_start_main_stage2"
+                    },
+                    {
+                      "depth": 2,
+                      "file_id": 3,
+                      "path": "/system/lib64/libutils.so",
+                      "symbol_id": 5,
+                      "symbol": "android::Looper::pollInner(int)"
+                    },
+                    {
+                      "depth": 3,
+                      "file_id": 4,
+                      "path": "/system/lib64/libgui.so",
+                      "symbol_id": 8,
+                      "symbol": "android::Surface::hook_dequeueBuffer(ANativeWindowBuffer**, int*)"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "ts": 360342966809562 - 1000000,
+              "dur": 2000000,
+              "ipid": 7,
+              "itid": 20,
+              "pid": 62761,
+              "tid": 62761,
+              "callstack_id": 58164,
+              "process_name": ".xingin.xhs_hos",
+              "thread_name": ".xingin.xhs_hos",
+              "callstack_name": "H:ReceiveVsync name:WM_62761 dataCount: 24bytes now: 1040367848250046 expectedEnd: 1040367881759941 vsyncId: 4572833, fd:142",
+              "frame_load": 798037,
+              "is_main_thread": 1,
+              "sample_callchains": [
+                {
+                  "timestamp": 360342966809562,
+                  "event_count": 798037,
+                  "load_percentage": 100.0,
+                  "callchain": [
+                    {
+                      "depth": 0,
+                      "file_id": 1,
+                      "path": "/system/bin/appspawn",
+                      "symbol_id": 0,
+                      "symbol": "_start_c"
+                    },
+                    {
+                      "depth": 1,
+                      "file_id": 2,
+                      "path": "/system/lib/ld-musl-aarch64.so.1",
+                      "symbol_id": 2,
+                      "symbol": "libc_start_main_stage2"
+                    },
+                    {
+                      "depth": 2,
+                      "file_id": 5,
+                      "path": "/system/lib64/libbinder.so",
+                      "symbol_id": 10,
+                      "symbol": "android::IPCThreadState::executeCommand(int)"
+                    },
+                    {
+                      "depth": 3,
+                      "file_id": 6,
+                      "path": "/system/lib64/libui.so",
+                      "symbol_id": 15,
+                      "symbol": "android::FrameTimelineInfo::FrameTimelineInfo()"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "background_thread": [
+            {
+              "ts": 2534181022688559,
+              "dur": 12742709,
+              "ipid": 7,
+              "itid": 404,
+              "pid": 62761,
+              "tid": 63548,
+              "callstack_id": 194666,
+              "process_name": ".xingin.xhs_hos",
+              "thread_name": "WorkerThread",
+              "callstack_name": "H:UV_TRACE",
+              "frame_load": 3702058,
+              "is_main_thread": 0,
+              "sample_callchains": [
+                {
+                  "timestamp": 2534181024186997,
+                  "event_count": 161994,
+                  "load_percentage": 4.375782335122788,
+                  "callchain": [
+                    {
+                      "depth": 0,
+                      "file_id": 2,
+                      "path": "unknown",
+                      "symbol_id": -1,
+                      "symbol": "unknown"
+                    }
+                  ]
+                },
+                {
+                  "timestamp": 2534175354876580,
+                  "event_count": 329926,
+                  "load_percentage": 24.462573876860407,
+                  "callchain": [
+                    {
+                      "depth": 0,
+                      "file_id": 2,
+                      "path": "unknown",
+                      "symbol_id": -1,
+                      "symbol": "unknown"
+                    },
+                    {
+                      "depth": 1,
+                      "file_id": 2,
+                      "path": "/system/lib/ld-musl-aarch64.so.1",
+                      "symbol_id": 148,
+                      "symbol": "start"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    };
+
+    const runtimeData = [
+      {
+        "runtime": "2025-06-09 20:07:5",
+        "statistics": {
+          "total_frames": 2623,
+          "frame_stats": {
+            "ui": {
+              "total": 773,
+              "stutter": 4,
+              "stutter_rate": 0.0052
+            },
+            "render": {
+              "total": 1834,
+              "stutter": 0,
+              "stutter_rate": 0.0
+            },
+            "sceneboard": {
+              "total": 16,
+              "stutter": 0,
+              "stutter_rate": 0.0
+            }
+          },
+          "total_stutter_frames": 4,
+          "stutter_rate": 0.0015,
+          "stutter_levels": {
+            "level_1": 4,
+            "level_2": 0,
+            "level_3": 0
+          }
+        },
+        "stutter_details": {
+          "ui_stutter": [
+            {
+              "vsync": 347225,
+              "timestamp": 360342941586125,
+              "actual_duration": 22530730,
+              "expected_duration": 11103776,
+              "exceed_time": 11.426954,
+              "exceed_frames": 0.6854801439712057,
+              "stutter_level": 1,
+              "level_description": "轻微卡顿",
+              "src": "",
+              "dst": 16531
+            },
+            {
+              "vsync": 347226,
+              "timestamp": 360342966809562,
+              "actual_duration": 2473959,
+              "expected_duration": 11103776,
+              "exceed_time": -8.629817,
+              "exceed_frames": -0.5176854829034192,
+              "stutter_level": 1,
+              "level_description": "轻微卡顿",
+              "src": "",
+              "dst": 16544
+            },
+            {
+              "vsync": 347227,
+              "timestamp": 360342968809562,
+              "actual_duration": 2473959,
+              "expected_duration": 11103776,
+              "exceed_time": -8.629817,
+              "exceed_frames": -0.5176854829034192,
+              "stutter_level": 1,
+              "level_description": "轻微卡顿",
+              "src": "",
+              "dst": 16544
+            },
+            {
+              "vsync": 347228,
+              "timestamp": 360342969809562,
+              "actual_duration": 2473959,
+              "expected_duration": 11103776,
+              "exceed_time": -8.629817,
+              "exceed_frames": -0.5176854829034192,
+              "stutter_level": 1,
+              "level_description": "轻微卡顿",
+              "src": "",
+              "dst": 16544
+            }
+          ],
+          "render_stutter": [
+            {
+              "vsync": 347230,
+              "timestamp": 360342989809562,
+              "actual_duration": 18473959,
+              "expected_duration": 11103776,
+              "exceed_time": 7.370183,
+              "exceed_frames": 0.4422109829034192,
+              "stutter_level": 2,
+              "level_description": "中度卡顿",
+              "src": "",
+              "dst": 16544
+            }
+          ],
+          "sceneboard_stutter": []
+        },
+        "fps_stats": {
+          "average_fps": 64.21428571428571,
+          "min_fps": 33.0,
+          "max_fps": 88.0,
+          "fps_windows": [
+            {
+              "start_time_ts": 360320344881962,
+              "end_time_ts": 360321344881962,
+              "frame_count": 88,
+              "fps": 88.0
+            },
+            {
+              "start_time_ts": 360321344881962,
+              "end_time_ts": 360322344881962,
+              "frame_count": 71,
+              "fps": 71.0
+            },
+            {
+              "start_time_ts": 360323344881962,
+              "end_time_ts": 360324344881962,
+              "frame_count": 79,
+              "fps": 79.0
+            },
+            {
+              "start_time_ts": 360324344881962,
+              "end_time_ts": 360325344881962,
+              "frame_count": 71,
+              "fps": 71.0
+            },
+            {
+              "start_time_ts": 360325344881962,
+              "end_time_ts": 360326344881962,
+              "frame_count": 75,
+              "fps": 75.0
+            },
+            {
+              "start_time_ts": 360326344881962,
+              "end_time_ts": 360327344881962,
+              "frame_count": 82,
+              "fps": 82.0
+            },
+            {
+              "start_time_ts": 360327344881962,
+              "end_time_ts": 360328344881962,
+              "frame_count": 68,
+              "fps": 68.0
+            },
+            {
+              "start_time_ts": 360328344881962,
+              "end_time_ts": 360329344881962,
+              "frame_count": 73,
+              "fps": 73.0
+            },
+            {
+              "start_time_ts": 360329344881962,
+              "end_time_ts": 360330344881962,
+              "frame_count": 80,
+              "fps": 80.0
+            }
+          ]
+        }
+      }
+    ];
+
+    const app = createApp({
+      setup() {
+        const fpsChart = ref(null);
+        const stutterPieChart = ref(null);
+        const durationChart = ref(null);
+        const fpsHistogram = ref(null);
+        
+        const selectedStutter = ref(null);
+        const selectedEmptyFrame = ref(null);
+        const callstackData = ref([]);
+        const callstackThread = ref('');
+        
+        const activeFilter = ref('all');
+        const isLoading = ref(false);
+        
+        // 性能数据
+        const performanceData = ref(runtimeData[0]);
+        
+        // 统计数据计算
+        const totalFrames = computed(() => performanceData.value.statistics.total_frames);
+        const stutterFrames = computed(() => performanceData.value.statistics.total_stutter_frames);
+        const stutterRate = computed(() => performanceData.value.statistics.stutter_rate * 100);
+        const avgFPS = computed(() => performanceData.value.fps_stats.average_fps);
+        const minFPS = computed(() => performanceData.value.fps_stats.min_fps);
+        const maxFPS = computed(() => performanceData.value.fps_stats.max_fps);
+        const uiStutterFrames = computed(() => performanceData.value.statistics.frame_stats.ui.stutter);
+        const renderStutterFrames = computed(() => performanceData.value.statistics.frame_stats.render.stutter);
+        const stutterLevels = computed(() => performanceData.value.statistics.stutter_levels);
+        const totalStutterFrames = computed(() => stutterFrames.value);
+        
+        // 筛选卡顿数据
+        const filteredStutters = computed(() => {
+          const allStutters = [
+            ...performanceData.value.stutter_details.ui_stutter,
+            ...performanceData.value.stutter_details.render_stutter
+          ];
+
+          if (activeFilter.value === 'all') return allStutters;
+
+          const level = parseInt(activeFilter.value.split('_')[1]);
+          return allStutters.filter(stutter => stutter.stutter_level === level);
+        });
+        
+        // 卡顿级别颜色
+        const getStutterColor = (level) => {
+          const colors = {
+            1: '#fbbf24', // 轻微卡顿 - 黄色
+            2: '#f97316', // 中度卡顿 - 橙色
+            3: '#ef4444'  // 严重卡顿 - 红色
+          };
+          return colors[level] || '#999';
+        };
+        
+        // 初始化图表
+        const initCharts = () => {
+          // FPS与卡顿趋势分析图表
+          if (fpsChart.value) {
+            const fpsChartInstance = echarts.init(fpsChart.value);
+            
+            // 收集所有时间戳
+            const allTimestamps = [];
+            
+            // 收集FPS数据点
+            const fpsData = [];
+            performanceData.value.fps_stats.fps_windows.forEach(window => {
+              // 使用窗口开始时间作为时间点
+              const timeMs = window.start_time_ts / 1000000; // 转换为毫秒
+              allTimestamps.push(timeMs);
+              fpsData.push({
+                time: timeMs,
+                fps: window.fps,
+                window: window
+              });
+            });
+            
+            // 收集卡顿点
+            const stutterPoints = [];
+            [
+              ...performanceData.value.stutter_details.ui_stutter,
+              ...performanceData.value.stutter_details.render_stutter
+            ].forEach(stutter => {
+              const timeMs = stutter.timestamp / 1000000; // 转换为毫秒
+              allTimestamps.push(timeMs);
+              stutterPoints.push({
+                time: timeMs,
+                stutter: stutter
+              });
+            });
+            
+            // 收集空刷帧点
+            const emptyFramePoints = [];
+            // 主线程空刷帧
+            step1Data.step1.top_frames.main_thread_empty_frames.forEach(frame => {
+              const timeMs = frame.ts / 1000000; // 转换为毫秒
+              allTimestamps.push(timeMs);
+              emptyFramePoints.push({
+                time: timeMs,
+                frame: frame,
+                type: 'main_thread'
+              });
+            });
+            // 后台线程空刷帧
+            step1Data.step1.top_frames.background_thread.forEach(frame => {
+              const timeMs = frame.ts / 1000000; // 转换为毫秒
+              allTimestamps.push(timeMs);
+              emptyFramePoints.push({
+                time: timeMs,
+                frame: frame,
+                type: 'background_thread'
+              });
+            });
+            
+            // 找到最小时间戳作为起点
+            const minTimestamp = allTimestamps.length > 0 ? Math.min(...allTimestamps) : 0;
+            
+            // 对FPS数据按时间排序
+            fpsData.sort((a, b) => a.time - b.time);
+            
+            // 生成趋势数据（移动平均）
+            const trendData = [];
+            fpsData.forEach((point, index) => {
+              if (index > 0) {
+                const prev = trendData[index - 1];
+                trendData.push(prev * 0.7 + point.fps * 0.3);
+              } else {
+                trendData.push(point.fps);
+              }
+            });
+            
+            // 配置图表选项
+            const option = {
+              backgroundColor: 'transparent',
+              tooltip: {
+                trigger: 'axis',
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                borderColor: '#e2e8f0',
+                borderWidth: 1,
+                textStyle: {
+                  color: '#334155'
+                },
+                formatter: function(params) {
+                  const fpsParam = params.find(p => p.seriesName === 'FPS');
+                  const trendParam = params.find(p => p.seriesName === '趋势线');
+                  const stutterParam = params.find(p => p.seriesName === '卡顿点');
+                  const emptyframeParam = params.find(p => p.seriesName === '空刷帧');
+                  
+                  let html = `<div style="font-weight:bold;margin-bottom:8px;color:#1e40af;">性能数据详情</div>`;
+                  
+                  if (fpsParam) {
+                    const relativeTime = Math.max(0, fpsParam.value[0] - minTimestamp);
+                    html += `<div>时间: <span style="color:#3b82f6;font-weight:500">${relativeTime.toFixed(2)} ms</span></div>`;
+                    html += `<div>FPS: <span style="color:#5470c6;font-weight:bold">${fpsParam.value[1]}</span></div>`;
+                  }
+                  if (trendParam) {
+                    html += `<div>趋势: <span style="color:#91cc75;font-weight:bold">${trendParam.value[1].toFixed(1)}</span></div>`;
+                  }
+                  if (stutterParam) {
+                    html += `<div style="color:#ef4444;margin-top:10px;font-weight:bold">卡顿等级: ${stutterParam.data.stutter.level_description}</div>`;
+                    html += `<div>VSync: ${stutterParam.data.stutter.vsync}</div>`;
+                    html += `<div>超出时间: ${stutterParam.data.stutter.exceed_time.toFixed(2)} ms</div>`;
+                  }
+                  if (emptyframeParam) {
+                    const frame = emptyframeParam.data.frame;
+                    html += `<div style="color:#9a60b4;margin-top:10px;font-weight:bold">空刷帧 (${frame.is_main_thread ? '主线程' : '后台线程'})</div>`;
+                    html += `<div>VSync: ${frame.vsync || 'N/A'}</div>`;
+                    html += `<div>帧负载: ${frame.frame_load}</div>`;
+                    html += `<div>线程: ${frame.thread_name}</div>`;
+                  }
+                  
+                  return html;
+                }
+              },
+              legend: {
+                data: ['FPS', '趋势线', '卡顿点', '空刷帧'],
+                bottom: 10,
+                textStyle: {
+                  color: '#475569'
+                }
+              },
+              grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '15%',
+                top: '10%',
+                containLabel: true
+              },
+              xAxis: {
+                type: 'value',
+                name: '时间 (ms)',
+                nameLocation: 'middle',
+                nameGap: 30,
+                nameTextStyle: {
+                  color: '#64748b'
+                },
+                axisLine: {
+                  lineStyle: {
+                    color: '#cbd5e1'
+                  }
+                },
+                axisLabel: {
+                  color: '#64748b',
+                  formatter: function(value) {
+                    // 确保x轴显示非负值
+                    const relativeTime = Math.max(0, value - minTimestamp);
+                    return parseInt(relativeTime).toLocaleString();
+                  }
+                },
+                min: minTimestamp
+              },
+              yAxis: {
+                type: 'value',
+                name: 'FPS',
+                min: 0,
+                max: 110,
+                nameTextStyle: {
+                  color: '#64748b'
+                },
+                axisLine: {
+                  lineStyle: {
+                    color: '#cbd5e1'
+                  }
+                },
+                axisLabel: {
+                  color: '#64748b'
+                },
+                splitLine: {
+                  lineStyle: {
+                    color: 'rgba(203, 213, 225, 0.3)'
+                  }
+                }
+              },
+              dataZoom: [
+                {
+                  type: 'inside',
+                  start: 0,
+                  end: 100
+                },
+                {
+                  type: 'slider',
+                  start: 0,
+                  end: 100,
+                  backgroundColor: 'rgba(248, 250, 252, 0.7)',
+                  fillerColor: 'rgba(56, 189, 248, 0.2)',
+                  borderColor: 'rgba(203, 213, 225, 0.5)',
+                  textStyle: {
+                    color: '#64748b'
+                  },
+                  height: 20,
+                  bottom: 5
+                }
+              ],
+              series: [
+                {
+                  name: 'FPS',
+                  type: 'bar',
+                  barWidth: 8,
+                  data: fpsData.map(item => [item.time, item.fps]),
+                  itemStyle: {
+                    color: function(params) {
+                      const fps = params.value[1];
+                      if (fps >= 60) return '#5470c6';
+                      if (fps >= 30) return '#91cd77';
+                      return '#ee6666';
+                    }
+                  }
+                },
+                {
+                  name: '趋势线',
+                  type: 'line',
+                  smooth: true,
+                  symbol: 'none',
+                  data: fpsData.map((item, index) => [item.time, trendData[index]]),
+                  lineStyle: {
+                    color: '#91cc75',
+                    width: 3
+                  }
+                },
+                {
+                  name: '卡顿点',
+                  type: 'scatter',
+                  symbol: 'circle',
+                  symbolSize: 16,
+                  data: stutterPoints.map(p => {
+                    return {
+                      value: [p.time, 95],
+                      stutter: p.stutter
+                    };
+                  }),
+                  itemStyle: {
+                    color: '#ee6666'
+                  },
+                  tooltip: {
+                    formatter: function(params) {
+                      const stutter = params.data.stutter;
+                      // 确保时间显示非负
+                      const relativeTime = Math.max(0, stutter.timestamp / 1000000 - minTimestamp);
+                      return `
+                        <div style="font-weight:bold;margin-bottom:8px;color:#1e40af;">卡顿点详情</div>
+                        <div>
+                          <div>VSync: ${stutter.vsync}</div>
+                          <div>等级: ${stutter.level_description}</div>
+                          <div>时间: ${relativeTime.toFixed(2)} ms</div>
+                          <div>超出时间: ${stutter.exceed_time.toFixed(2)} ms</div>
+                        </div>
+                      `;
+                    }
+                  }
+                },
+                {
+                  name: '空刷帧',
+                  type: 'scatter',
+                  symbol: 'triangle',
+                  symbolSize: 16,
+                  data: emptyFramePoints.map(p => {
+                    return {
+                      value: [p.time, 105],
+                      frame: p.frame,
+                      type: p.type
+                    };
+                  }),
+                  itemStyle: {
+                    color: '#9a60b4'
+                  },
+                  tooltip: {
+                    formatter: function(params) {
+                      const frame = params.data.frame;
+                      const relativeTime = Math.max(0, params.data.value[0] - minTimestamp);
+                      return `
+                        <div style="font-weight:bold;margin-bottom:8px;color:#9a60b4;">空刷帧详情</div>
+                        <div>
+                          <div>时间: ${relativeTime.toFixed(2)} ms</div>
+                          <div>线程: ${frame.thread_name}</div>
+                          <div>帧负载: ${frame.frame_load}</div>
+                          <div>类型: ${params.data.type === 'main_thread' ? '主线程' : '后台线程'}</div>
+                        </div>
+                      `;
+                    }
+                  }
+                }
+              ]
+            };
+            
+            fpsChartInstance.setOption(option);
+            
+            // 添加点击事件
+            fpsChartInstance.on('click', { seriesName: '卡顿点' }, (params) => {
+              selectedStutter.value = params.data.stutter;
+              selectedEmptyFrame.value = null;
+              findCallstackInfo(params.data.stutter.timestamp);
+            });
+            
+            // 添加空刷帧点击事件
+            fpsChartInstance.on('click', { seriesName: '空刷帧' }, (params) => {
+              selectedEmptyFrame.value = params.data.frame;
+              selectedStutter.value = null;
+            });
+          }
+          
+          // 卡顿级别饼图
+          if (stutterPieChart.value) {
+            const stutterPieChartInstance = echarts.init(stutterPieChart.value);
+            const stutterLevels = performanceData.value.statistics.stutter_levels;
+
+            const pieOption = {
+              backgroundColor: 'transparent',
+              tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: {c} 帧 ({d}%)'
+              },
+              legend: {
+                orient: 'vertical',
+                right: 10,
+                top: 'center',
+                textStyle: {
+                  color: '#64748b'
+                }
+              },
+              series: [
+                {
+                  name: '卡顿级别',
+                  type: 'pie',
+                  radius: ['40%', '70%'],
+                  center: ['40%', '50%'],
+                  avoidLabelOverlap: false,
+                  itemStyle: {
+                    borderRadius: 10,
+                    borderColor: '#fff',
+                    borderWidth: 2
+                  },
+                  label: {
+                    show: false,
+                    position: 'center'
+                  },
+                  emphasis: {
+                    label: {
+                      show: true,
+                      fontSize: '18',
+                      fontWeight: 'bold',
+                    }
+                  },
+                  labelLine: {
+                    show: false
+                  },
+                  data: [
+                    {
+                      value: stutterLevels.level_1,
+                      name: '轻微卡顿',
+                      itemStyle: {
+                        color: '#fbbf24'
+                      }
+                    },
+                    {
+                      value: stutterLevels.level_2,
+                      name: '中度卡顿',
+                      itemStyle: {
+                        color: '#f97316'
+                      }
+                    },
+                    {
+                      value: stutterLevels.level_3,
+                      name: '严重卡顿',
+                      itemStyle: {
+                        color: '#ef4444'
+                      }
+                    }
+                  ]
+                }
+              ]
+            };
+            stutterPieChartInstance.setOption(pieOption);
+          }
+          
+          // 帧耗时分析图
+          if (durationChart.value) {
+            const durationChartInstance = echarts.init(durationChart.value);
+            // 合并所有卡顿数据
+            const stutters = [
+              ...performanceData.value.stutter_details.ui_stutter,
+              ...performanceData.value.stutter_details.render_stutter
+            ];
+
+            // 按VSync排序
+            stutters.sort((a, b) => a.vsync - b.vsync);
+
+            const durationOption = {
+              backgroundColor: 'transparent',
+              tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                  type: 'shadow'
+                },
+                formatter: function (params) {
+                  const data = params[0];
+                  const stutter = stutters[data.dataIndex];
+                  return `VSync: ${stutter.vsync}<br/>
+                        实际耗时: ${(stutter.actual_duration / 1000000).toFixed(2)}ms<br/>
+                        预期耗时: ${(stutter.expected_duration / 1000000).toFixed(2)}ms<br/>
+                        级别: <span style="color:${getStutterColor(stutter.stutter_level)}">${stutter.level_description}</span>`;
+                }
+              },
+              legend: {
+                data: ['实际耗时', '预期耗时'],
+                textStyle: {
+                  color: '#64748b'
+                },
+                right: 10,
+                top: 10
+              },
+              grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                top: '15%',
+                containLabel: true
+              },
+              xAxis: {
+                type: 'category',
+                data: stutters.map(s => s.vsync),
+                name: 'VSync',
+                axisLine: {
+                  lineStyle: {
+                    color: '#cbd5e1'
+                  }
+                },
+                axisLabel: {
+                  color: '#64748b'
+                }
+              },
+              yAxis: {
+                type: 'value',
+                name: '耗时 (ms)',
+                nameTextStyle: {
+                  color: '#64748b'
+                },
+                axisLine: {
+                  lineStyle: {
+                    color: '#cbd5e1'
+                  }
+                },
+                splitLine: {
+                  lineStyle: {
+                    color: 'rgba(203, 213, 225, 0.3)'
+                  }
+                }
+              },
+              series: [
+                {
+                  name: '实际耗时',
+                  type: 'bar',
+                  emphasis: {
+                    focus: 'series'
+                  },
+                  data: stutters.map(s => s.actual_duration / 1000000)
+                },
+                {
+                  name: '预期耗时',
+                  type: 'bar',
+                  emphasis: {
+                    focus: 'series'
+                  },
+                  data: stutters.map(s => s.expected_duration / 1000000),
+                  itemStyle: {
+                    color: '#10b981'
+                  }
+                }
+              ]
+            };
+            durationChartInstance.setOption(durationOption);
+          }
+          
+          // FPS分布直方图
+          if (fpsHistogram.value) {
+            const fpsHistogramInstance = echarts.init(fpsHistogram.value);
+            const fpsData = performanceData.value.fps_stats.fps_windows.map(w => w.fps);
+
+            // 计算FPS分布区间
+            const bins = [0, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120];
+            const counts = new Array(bins.length - 1).fill(0);
+
+            fpsData.forEach(fps => {
+              for (let i = 0; i < bins.length - 1; i++) {
+                if (fps >= bins[i] && fps < bins[i + 1]) {
+                  counts[i]++;
+                  break;
+                }
+              }
+            });
+
+            const histogramOption = {
+              backgroundColor: 'transparent',
+              tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                  type: 'shadow'
+                },
+                formatter: '{b0}<br/>计数: {c0}'
+              },
+              grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                top: '10%',
+                containLabel: true
+              },
+              xAxis: {
+                type: 'category',
+                data: bins.slice(0, -1).map((_, i) => `${bins[i]}-${bins[i + 1]}`),
+                axisLine: {
+                  lineStyle: {
+                    color: '#cbd5e1'
+                  }
+                },
+                axisLabel: {
+                  interval: 0,
+                  rotate: 45,
+                  color: '#64748b'
+                }
+              },
+              yAxis: {
+                type: 'value',
+                name: '计数',
+                nameTextStyle: {
+                  color: '#64748b'
+                },
+                axisLine: {
+                  lineStyle: {
+                    color: '#cbd5e1'
+                  }
+                },
+                splitLine: {
+                  lineStyle: {
+                    color: 'rgba(203, 213, 225, 0.3)'
+                  }
+                }
+              },
+              series: [
+                {
+                  name: 'FPS分布',
+                  type: 'bar',
+                  barWidth: '60%',
+                  data: counts,
+                  itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                      { offset: 0, color: '#38bdf8' },
+                      { offset: 1, color: '#818cf8' }
+                    ])
+                  }
+                }
+              ]
+            };
+            fpsHistogramInstance.setOption(histogramOption);
+          }
+        };
+        
+        // 查找调用栈信息
+        const findCallstackInfo = (timestamp) => {
+          callstackData.value = [];
+          callstackThread.value = '';
+          
+          // 在主线程空帧中查找
+          const mainFrames = step1Data.step1.top_frames.main_thread_empty_frames;
+          for (const frame of mainFrames) {
+            if (timestamp >= frame.ts && timestamp <= frame.ts + frame.dur) {
+              if (frame.sample_callchains) {
+                callstackData.value = frame.sample_callchains;
+                callstackThread.value = frame.thread_name;
+                return;
+              }
+            }
+          }
+          
+          // 在后台线程中查找
+          const bgThreads = step1Data.step1.top_frames.background_thread;
+          for (const thread of bgThreads) {
+            if (timestamp >= thread.ts && timestamp <= thread.ts + thread.dur) {
+              if (thread.sample_callchains) {
+                callstackData.value = thread.sample_callchains;
+                callstackThread.value = thread.thread_name;
+                return;
+              }
+            }
+          }
+        };
+        
+        // 刷新数据
+        const refreshData = () => {
+          isLoading.value = true;
+          
+          // 模拟数据加载延迟
+          setTimeout(() => {
+            initCharts();
+            isLoading.value = false;
+          }, 1200);
+        };
+        
+        onMounted(() => {
+          nextTick(() => {
+            initCharts();
+          });
+          
+          // 响应窗口大小变化
+          window.addEventListener('resize', () => {
+            if (fpsChart.value) echarts.getInstanceByDom(fpsChart.value)?.resize();
+            if (stutterPieChart.value) echarts.getInstanceByDom(stutterPieChart.value)?.resize();
+            if (durationChart.value) echarts.getInstanceByDom(durationChart.value)?.resize();
+            if (fpsHistogram.value) echarts.getInstanceByDom(fpsHistogram.value)?.resize();
+          });
+        });
+        
+        return {
+          fpsChart,
+          stutterPieChart,
+          durationChart,
+          fpsHistogram,
+          selectedStutter,
+          selectedEmptyFrame,
+          callstackData,
+          callstackThread,
+          totalFrames,
+          stutterFrames,
+          stutterRate,
+          avgFPS,
+          minFPS,
+          maxFPS,
+          uiStutterFrames,
+          renderStutterFrames,
+          stutterLevels,
+          totalStutterFrames,
+          activeFilter,
+          filteredStutters,
+          refreshData,
+          isLoading
+        };
+      },
+      components: {
+        ElButton
+      }
+    });
+    
+    app.use(ElementPlus);
+    app.mount('#app');
+  </script>
+</body>
+</html>
