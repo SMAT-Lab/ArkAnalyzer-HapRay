@@ -14,7 +14,7 @@ jobs:
       matrix:
         item:
           # Linux - 使用静态 Python
-          - os: ubuntu-22.04
+          - os: ubuntu-18.04
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
