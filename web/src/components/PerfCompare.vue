@@ -83,12 +83,12 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart :chart-data="perfData" />
+          <BarChart :chart-data="json" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart :chart-data="comparePerfData" />
+          <BarChart :chart-data="compareJson" />
         </div>
       </el-col>
     </el-row>
@@ -96,12 +96,12 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="perfData" :seriesType="LeftLineChartSeriesType" />
+          <LineChart :chartData="json" :seriesType="LeftLineChartSeriesType" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="comparePerfData" :seriesType="LeftLineChartSeriesType" />
+          <LineChart :chartData="compareJson" :seriesType="LeftLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
@@ -109,12 +109,12 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="perfData" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chartData="json" :seriesType="RightLineChartSeriesType" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="comparePerfData" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chartData="compareJson" :seriesType="RightLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
@@ -389,7 +389,7 @@ import PerfSymbolTable from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
-import { ComponentCategory, useJsonDataStore, type PerfData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, type JSONData } from '../stores/jsonDataStore.ts';
 import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
 
 interface SceneLoadDiff {
@@ -408,41 +408,49 @@ const currentStepIndex = ref(0);
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
-const basicInfo = jsonDataStore.basicInfo;
-const compareBasicInfo = jsonDataStore.compareBasicInfo;
-const perfData = jsonDataStore.perfData!;
-const comparePerfData = jsonDataStore.comparePerfData!;
+const json = jsonDataStore.jsonData!;
+const compareJson = jsonDataStore.compareJsonData!;
 
 //thread可能是null，需要处理下。
 const performanceData = ref(
   {
-    app_name: basicInfo!.app_name,
-    rom_version: basicInfo!.rom_version,
-    app_version: basicInfo!.app_version,
-    scene: basicInfo!.scene,
+    app_name: json!.app_name,
+    rom_version: json!.rom_version,
+    app_version: json!.app_version,
+    scene: json!.scene,
   }
 );
 
 const comparePerformanceData = ref(
   {
-    app_name: compareBasicInfo!.app_name,
-    rom_version: compareBasicInfo!.rom_version,
-    app_version: compareBasicInfo!.app_version,
-    scene: compareBasicInfo!.scene,
+    app_name: compareJson!.app_name,
+    rom_version: compareJson!.rom_version,
+    app_version: compareJson!.app_version,
+    scene: compareJson!.scene,
   }
 
 );
 
 // 场景负载迭代折线图
 const compareSceneLineChartData = ref();
-compareSceneLineChartData.value = mergeJSONData(perfData!, comparePerfData!, 0);
+compareSceneLineChartData.value = mergeJSONDatakkk(json!, compareJson!, 0);
 
-function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_id: number): PerfData {
+function mergeJSONDatakkk(baselineData: JSONData, compareData: JSONData, cur_step_id: number): JSONData {
   if (!baselineData || !compareData) {
     throw new Error('两个JSONData对象均为必需');
   }
 
-  const mergedData: PerfData = {
+  const mergedData: JSONData = {
+    rom_version: baselineData.rom_version,
+    app_id: baselineData.app_id,
+    app_name: baselineData.app_name,
+    app_version: baselineData.app_version,
+    scene: baselineData.scene,
+    timestamp: Math.max(baselineData.timestamp, compareData.timestamp),
+    perfDataPath: [...new Set([...baselineData.perfDataPath, ...compareData.perfDataPath])],
+    perfDbPath: [...new Set([...baselineData.perfDbPath, ...compareData.perfDbPath])],
+    htracePath: [...new Set([...baselineData.htracePath, ...compareData.htracePath])],
+    categories: [...new Set([...baselineData.categories, ...compareData.categories])],
     steps: []
   };
 
@@ -503,8 +511,8 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
 // 场景负载饼状图
 const scenePieData = ref();
 const compareScenePieData = ref();
-scenePieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
-compareScenePieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
+scenePieData.value = processJson2PieChartData(json!, currentStepIndex.value);
+compareScenePieData.value = processJson2PieChartData(compareJson!, currentStepIndex.value);
 // 场景负载增长卡片
 const sceneDiff = ref();
 sceneDiff.value = calculateCategoryCountDifference(compareSceneLineChartData.value);
@@ -513,7 +521,7 @@ sceneDiff.value = calculateCategoryCountDifference(compareSceneLineChartData.val
 
 //测试步骤导航卡片
 const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
+  json!.steps.map((step, index) => ({
     //从1开始
     id: index + 1,
     step_name: step.step_name,
@@ -541,69 +549,69 @@ const formatDuration = (milliseconds: any) => {
 // 处理步骤点击事件的方法，切换步骤，更新数据
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
-  stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
-  compareStepPieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
-  compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value);
+  stepPieData.value = processJson2PieChartData(json!, currentStepIndex.value);
+  compareStepPieData.value = processJson2PieChartData(compareJson!, currentStepIndex.value);
+  compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONDatakkk(json!, compareJson!, currentStepIndex.value);
   stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 };
 
 // 性能迭代区域
 // 基线步骤饼图
 const stepPieData = ref();
-stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
+stepPieData.value = processJson2PieChartData(json!, currentStepIndex.value);
 // 迭代步骤饼图
 const compareStepPieData = ref();
-compareStepPieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
+compareStepPieData.value = processJson2PieChartData(compareJson!, currentStepIndex.value);
 // 步骤负载迭代折线图
 const compareLineChartData = ref();
-compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value);
+compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONDatakkk(json!, compareJson!, currentStepIndex.value);
 //步骤负载增长卡片
 const stepDiff = ref();
 stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 const mergedProcessPerformanceData = ref(
-  calculateProcessData(perfData!, comparePerfData!)
+  calculateProcessData(json!, compareJson!)
 );
 
 const mergedThreadPerformanceData = ref(
-  calculateThreadData(perfData!, comparePerfData!)
+  calculateThreadData(json!, compareJson!)
 );
 
 const mergedCategorysPerformanceData = ref(
-  calculateCategorysData(perfData!, comparePerfData!)
+  calculateCategorysData(json!, compareJson!)
 );
 
 const mergedComponentNamePerformanceData = ref(
-  calculateComponentNameData(perfData!, comparePerfData!)
+  calculateComponentNameData(json!, compareJson!)
 );
 
 const mergedFilePerformanceData = ref(
-  calculateFileData(perfData!, comparePerfData!)
+  calculateFileData(json!, compareJson!)
 );
 
 const mergedFilePerformanceData1 = ref(
-  calculateFileData1(perfData!, comparePerfData!)
+  calculateFileData1(json!, compareJson!)
 );
 
 const mergedSymbolsPerformanceData = ref(
-  calculateSymbolData(perfData!, comparePerfData!)
+  calculateSymbolData(json!, compareJson!)
 );
 
 const mergedSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(perfData!, comparePerfData!)
+  calculateSymbolData1(json!, compareJson!)
 );
 
 const baseSymbolsPerformanceData = ref(
-  calculateSymbolData(perfData!, null)
+  calculateSymbolData(json!, null)
 );
 const baseSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(perfData!, null)
+  calculateSymbolData1(json!, null)
 );
 
 const compareSymbolsPerformanceData = ref(
-  calculateSymbolData(comparePerfData!, null)
+  calculateSymbolData(compareJson!, null)
 );
 const compareSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(comparePerfData!, null)
+  calculateSymbolData1(compareJson!, null)
 );
 
 // 进程负载表格
@@ -801,7 +809,7 @@ const filteredCompareSymbolsPerformanceData1 = computed(() => {
 
 
 
-function calculateCategoryCountDifference(data: PerfData): SceneLoadDiff[] {
+function calculateCategoryCountDifference(data: JSONData): SceneLoadDiff[] {
   if (!data) return [];
 
   if (data.steps.length < 2) {
@@ -851,7 +859,7 @@ function calculateCategoryCountDifference(data: PerfData): SceneLoadDiff[] {
     const count2 = categoryMap2.get(category) || 0;
 
     // 确保类别索引有效
-    const categoryName = ComponentCategory[category] || `未知类别(${category})`;
+    const categoryName = data.categories[category] || `未知类别(${category})`;
 
     difference.push({
       category: categoryName,

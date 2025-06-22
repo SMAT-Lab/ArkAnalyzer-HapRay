@@ -2,12 +2,12 @@ import type { FileDataItem } from "@/components/PerfFileTable.vue";
 import type { ProcessDataItem } from "@/components/PerfProcessTable.vue";
 import type { SymbolDataItem } from "@/components/PerfSymbolTable.vue";
 import type { ThreadDataItem } from "@/components/PerfThreadTable.vue";
-import { ComponentCategory, type PerfData } from "@/stores/jsonDataStore";
+import { ComponentCategory, type JSONData } from "@/stores/jsonDataStore";
 import pako from 'pako';
 
 
 // 处理 JSON 数据生成steps饼状图所需数据
-export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: number) {
+export function processJson2PieChartData(jsonData: JSONData, currentStepIndex: number) {
     if (!jsonData) {
         return { legendData: [], seriesData: [] };
     }
@@ -53,7 +53,7 @@ export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: n
 }
 
 // 处理 JSON 数据生成进程负载饼状图所需数据
-export function processJson2ProcessPieChartData(jsonData: PerfData, currentStepIndex: number) {
+export function processJson2ProcessPieChartData(jsonData: JSONData, currentStepIndex: number) {
     if (!jsonData) {
         return { legendData: [], seriesData: [] };
     }
@@ -101,13 +101,13 @@ type ResultCreator<T> = (keyParts: string[], instructions: number, compareInstru
 
 // 通用比较函数
 function compareJsonDataByLevel<T>(
-    baseData: PerfData,
-    compareData: PerfData | null,
+    baseData: JSONData,
+    compareData: JSONData | null,
     keyGenerator: KeyGenerator,
     resultCreator: ResultCreator<T>
 ): T[] {
     // 处理单个JSON数据
-    const processData = (data: PerfData): Map<string, number> => {
+    const processData = (data: JSONData): Map<string, number> => {
         const map = new Map<string, number>();
 
         for (const step of data.steps) {
@@ -167,8 +167,8 @@ function compareJsonDataByLevel<T>(
 //process-thread-file-symbol
 // 进程级别比较
 export function calculateProcessData(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): ProcessDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${item.processName}`;
@@ -190,8 +190,8 @@ export function calculateProcessData(
 
 // 线程级别比较
 export function calculateThreadData(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${item.processName}|${item.threadName}`;
@@ -214,8 +214,8 @@ export function calculateThreadData(
 
 // 文件级别比较
 export function calculateFileData(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${item.processName}|${item.threadName}|${item.file}`;
@@ -239,8 +239,8 @@ export function calculateFileData(
 
 // 符号级别比较
 export function calculateSymbolData(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${item.processName}|${item.threadName}|${item.file}|${item.symbol}`;
@@ -266,8 +266,8 @@ export function calculateSymbolData(
 //category-componentName-file-symbol
 // 大分类级别比较
 export function calculateCategorysData(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): ProcessDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${ComponentCategory[item.componentCategory]}`;
@@ -289,8 +289,8 @@ export function calculateCategorysData(
 
 // 小分类级别比较
 export function calculateComponentNameData(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}`;
@@ -313,8 +313,8 @@ export function calculateComponentNameData(
 
 // 文件级别比较
 export function calculateFileData1(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}`;
@@ -338,8 +338,8 @@ export function calculateFileData1(
 
 // 符号级别比较
 export function calculateSymbolData1(
-    baseData: PerfData,
-    compareData: PerfData | null
+    baseData: JSONData,
+    compareData: JSONData | null
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
         `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}|${item.symbol}`;
@@ -366,6 +366,8 @@ export function calculateSymbolData1(
 export function changeBase64Str2Json(base64String:string) {
     if(base64String=='/tempCompareJsonData/'){
         return '/tempCompareJsonData/';
+    }else if(base64String=='EMPTY_FRAME_PLACEHOLDER'){
+        return 'EMPTY_FRAME_PLACEHOLDER';
     }
     const compressed = atob(base64String);
     const uint8Array = new Uint8Array([...compressed].map(c => c.charCodeAt(0)));
