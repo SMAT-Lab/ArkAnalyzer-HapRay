@@ -84,6 +84,10 @@ module.exports = {
                     from: '../web/dist/index.html',
                     to: 'res/report_template.html',
                 },
+                {
+                    from: 'src/core/elf/demangle-wasm.wasm',
+                    to: 'demangle-wasm.wasm'
+                }
             ],
         }),
 

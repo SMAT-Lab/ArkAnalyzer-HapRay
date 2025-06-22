@@ -28,7 +28,7 @@ from hapray.core.config.config import Config
 def configure_logging(log_file='HapRay.log'):
     """配置日志系统，同时输出到控制台和文件"""
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     # 清除现有的处理器
     for handler in logger.handlers[:]:

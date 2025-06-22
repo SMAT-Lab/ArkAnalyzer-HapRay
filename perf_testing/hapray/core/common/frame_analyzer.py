@@ -1,18 +1,31 @@
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import codecs
+import json
+import logging
 import os
 import platform
+import sqlite3
 import subprocess
-import json
-import sqlite3
-from typing import List, Dict, Any
 import sys
-import codecs
-import logging
-from hapray.core.common.CommonUtils import CommonUtils
-import sqlite3
+from typing import List, Dict, Any
+
 import pandas as pd
-from datetime import datetime
-import matplotlib.pyplot as plt
-import numpy as np
+
+from hapray.core.common.common_utils import CommonUtils
 
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -193,7 +206,7 @@ class FrameAnalyzer:
         try:
             # 获取hiperf_info.json文件路径
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
-            
+
             if not os.path.exists(perf_data_path):
                 logging.warning(f"No hiperf_info.json found at {perf_data_path}")
                 return []
@@ -201,7 +214,7 @@ class FrameAnalyzer:
             # 读取JSON文件
             with open(perf_data_path, 'r', encoding='utf-8') as f:
                 perf_data = json.load(f)
-                
+
             if not perf_data or not isinstance(perf_data, list) or len(perf_data) == 0:
                 logging.warning("Invalid hiperf_info.json format")
                 return []
@@ -214,7 +227,7 @@ class FrameAnalyzer:
 
             # 处理step_id，去掉'step'前缀
             step_number = int(step_id.replace('step', ''))
-            
+
             # 找到对应step_id的数据
             for step in steps:
                 if step.get('step_id') == step_number:
@@ -234,7 +247,8 @@ class FrameAnalyzer:
             return []
 
     @staticmethod
-    def _analyze_perf_callchain(perf_conn, callchain_id: int, callchain_cache: pd.DataFrame = None, files_cache: pd.DataFrame = None) -> list:
+    def _analyze_perf_callchain(perf_conn, callchain_id: int, callchain_cache: pd.DataFrame = None,
+                                files_cache: pd.DataFrame = None) -> list:
         """
         分析perf样本的调用链信息
         
@@ -251,19 +265,20 @@ class FrameAnalyzer:
             if callchain_cache is not None and files_cache is not None:
                 # 从缓存中获取callchain数据
                 callchain_records = callchain_cache[callchain_cache['callchain_id'] == callchain_id]
-                
+
                 if callchain_records.empty:
                     logging.warning(f"未找到callchain_id={callchain_id}的记录")
                     return []
-                
+
                 # 构建调用链信息
                 callchain_info = []
                 for _, record in callchain_records.iterrows():
                     # 从缓存中获取文件信息
-                    file_info = files_cache[(files_cache['file_id'] == record['file_id']) & (files_cache['serial_id'] == record['symbol_id'])]
+                    file_info = files_cache[(files_cache['file_id'] == record['file_id']) & (
+                                files_cache['serial_id'] == record['symbol_id'])]
                     symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                     path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
-                    
+
                     callchain_info.append({
                         'depth': int(record['depth']),
                         'file_id': int(record['file_id']),
@@ -271,7 +286,7 @@ class FrameAnalyzer:
                         'symbol_id': int(record['symbol_id']),
                         'symbol': symbol
                     })
-                        
+
                 return callchain_info
             else:
                 # 使用原始SQL查询
@@ -287,14 +302,14 @@ class FrameAnalyzer:
                 WHERE pc.callchain_id = {callchain_id}
                 ORDER BY pc.depth
                 """
-                
+
                 # 执行SQL查询
                 callchain_records = pd.read_sql_query(callchain_sql, perf_conn)
-                
+
                 if callchain_records.empty:
                     logging.warning(f"未找到callchain_id={callchain_id}的记录")
                     return []
-                
+
                 # 直接使用查询结果构建调用链信息
                 callchain_info = []
                 for _, record in callchain_records.iterrows():
@@ -305,9 +320,9 @@ class FrameAnalyzer:
                         'symbol_id': record['symbol_id'],
                         'symbol': record['symbol']
                     })
-                        
+
                 return callchain_info
-            
+
         except Exception as e:
             logging.error(f"分析调用链失败: {str(e)}")
             return []
@@ -395,7 +410,7 @@ class FrameAnalyzer:
                     symbol_id
                 FROM perf_callchain
             """, perf_conn)
-            
+
             files_cache = pd.read_sql_query("""
                 SELECT 
                     file_id,
@@ -413,31 +428,31 @@ class FrameAnalyzer:
             frame_loads = []
             empty_frame_load = 0  # 主线程空帧总负载（即空刷主线程负载）
             background_thread_load = 0  # 后台线程空帧总负载
-            
+
             # 对每个帧进行分析
             for _, frame in trace_df.iterrows():
                 # 找出时间戳在帧区间内且线程ID匹配的样本
                 mask = (
-                    (perf_df['timestamp_trace'] >= frame['start_time']) & 
-                    (perf_df['timestamp_trace'] <= frame['end_time']) & 
-                    (perf_df['thread_id'] == frame['tid'])
+                        (perf_df['timestamp_trace'] >= frame['start_time']) &
+                        (perf_df['timestamp_trace'] <= frame['end_time']) &
+                        (perf_df['thread_id'] == frame['tid'])
                 )
                 frame_samples = perf_df[mask]
-                
+
                 # if len(frame_samples) >= 2:
                 #     logging.info(f"发现多样本帧，perf db路径: {perf_db_path}")
-                
+
                 if not frame_samples.empty:
                     # 初始化帧负载
                     frame_load = 0
-                    
+
                     # 分析每个样本的调用链
                     sample_callchains = []
                     for _, sample in frame_samples.iterrows():
                         if pd.notna(sample['callchain_id']):
                             try:
                                 callchain_info = FrameAnalyzer._analyze_perf_callchain(
-                                    perf_conn, 
+                                    perf_conn,
                                     int(sample['callchain_id']),
                                     callchain_cache,
                                     files_cache
@@ -448,19 +463,19 @@ class FrameAnalyzer:
                                     if len(callchain_info) >= 2:
                                         for i in range(len(callchain_info) - 1):
                                             current_symbol = callchain_info[i]['symbol']
-                                            next_symbol = callchain_info[i+1]['symbol']
+                                            next_symbol = callchain_info[i + 1]['symbol']
                                             event_count = sample['event_count']
-                                            
+
                                             # 如果任一symbol为空，跳过检查
                                             if not current_symbol or not next_symbol:
                                                 continue
-                                                
+
                                             if ('OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol and
-                                                'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol and
-                                                event_count < 2000000):
+                                                    'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol and
+                                                    event_count < 2000000):
                                                 is_vsync_chain = True
                                                 break
-                                        
+
                                         if not is_vsync_chain:
                                             # 累加非VSync调用链的负载
                                             frame_load += sample['event_count']
@@ -473,18 +488,19 @@ class FrameAnalyzer:
                                                     'callchain': callchain_info
                                                 })
                                             except Exception as e:
-                                                logging.error(f"处理样本时出错: {str(e)}, sample: {sample.to_dict()}, frame_load: {frame_load}")
+                                                logging.error(
+                                                    f"处理样本时出错: {str(e)}, sample: {sample.to_dict()}, frame_load: {frame_load}")
                                                 continue
                             except Exception as e:
                                 logging.error(f"分析调用链时出错: {str(e)}")
                                 continue
-                    
+
                     # 更新负载统计
                     if frame['is_main_thread'] == 1:
                         empty_frame_load += frame_load
                     else:
                         background_thread_load += frame_load
-                    
+
                     frame_loads.append({
                         'ts': frame['ts'],
                         'dur': frame['dur'],
@@ -500,18 +516,21 @@ class FrameAnalyzer:
                         'is_main_thread': frame['is_main_thread'],
                         'sample_callchains': sample_callchains  # 添加调用链信息
                     })
-            
+
             # 转换为DataFrame并按负载排序
             result_df = pd.DataFrame(frame_loads)
             if not result_df.empty:
                 # 分别获取主线程和后台线程的top5帧
-                main_thread_frames = result_df[result_df['is_main_thread'] == 1].sort_values('frame_load', ascending=False).head(5)
-                background_thread_frames = result_df[result_df['is_main_thread'] == 0].sort_values('frame_load', ascending=False).head(5)
-                
+                main_thread_frames = result_df[result_df['is_main_thread'] == 1].sort_values('frame_load',
+                                                                                             ascending=False).head(5)
+                background_thread_frames = result_df[result_df['is_main_thread'] == 0].sort_values('frame_load',
+                                                                                                   ascending=False).head(
+                    5)
+
                 # 只统计主线程空帧负载和后台线程负载
                 empty_frame_percentage = (empty_frame_load / total_load) * 100
                 background_thread_percentage = (background_thread_load / total_load) * 100
-                
+
                 # 构建结果字典
                 return {
                     "status": "success",
@@ -577,7 +596,7 @@ class FrameAnalyzer:
             # 获取htrace和hiperf目录
             htrace_dir = os.path.join(report_dir, 'htrace')
             hiperf_dir = os.path.join(report_dir, 'hiperf')
-            
+
             if not os.path.exists(htrace_dir) or not os.path.exists(hiperf_dir):
                 logging.error(f"Error: Required directories not found at {report_dir}")
                 return False
@@ -633,6 +652,7 @@ class FrameAnalyzer:
         except Exception as e:
             logging.error(f"Error updating empty frame analysis: {str(e)}")
             return False
+
 
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
     """
@@ -966,4 +986,3 @@ def analyze_stuttered_frames(db_path: str) -> dict:
     except Exception as e:
         import traceback
         raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
-
