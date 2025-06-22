@@ -1239,7 +1239,7 @@ body {
 }
 
 .callstack-list {
-    max-height: 350px;
+    max-height: 500px;
     overflow-y: auto;
     padding-right: 10px;
 }
