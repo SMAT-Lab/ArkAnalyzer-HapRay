@@ -3,8 +3,8 @@
 
 import os
 from devicetest.core.test_case import Step
-from hapray.core.PerfTestCase import PerfTestCase
-from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase
+from hapray.core.common.common_utils import CommonUtils
 
 
 class PerformanceDynamic_ComponentReusable_new(PerfTestCase):

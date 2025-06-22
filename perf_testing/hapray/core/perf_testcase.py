@@ -1,3 +1,18 @@
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import json
 import os
 import threading
@@ -5,8 +20,8 @@ import time
 from abc import abstractmethod
 
 from devicetest.core.test_case import TestCase
-from xdevice import platform_logger
 from hypium import UiDriver
+from xdevice import platform_logger
 
 from hapray.core.config.config import Config
 
@@ -150,9 +165,11 @@ class PerfTestCase(TestCase):
             str: 完整的 hiperf 命令
         """
         if sample_all:
-            return PerfTestCase._build_perf_cmd(cmd='hiperf record', pids='-a', duration=duration, output_path=f'-o {output_path}')
+            return PerfTestCase._build_perf_cmd(cmd='hiperf record', pids='-a', duration=duration,
+                                                output_path=f'-o {output_path}')
         else:
-            return PerfTestCase._build_perf_cmd(cmd='hiperf record', pids=f'-p {pid}', duration=duration,  output_path=f'-o {output_path}')
+            return PerfTestCase._build_perf_cmd(cmd='hiperf record', pids=f'-p {pid}', duration=duration,
+                                                output_path=f'-o {output_path}')
 
     @staticmethod
     def _get_trace_and_perf_cmd(pids: str, output_path: str, duration: int) -> str:

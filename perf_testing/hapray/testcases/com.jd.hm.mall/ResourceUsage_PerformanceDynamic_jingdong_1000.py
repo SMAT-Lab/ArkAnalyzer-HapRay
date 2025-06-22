@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 
 from hypium import BY
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.common.common_utils import CommonUtils
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):

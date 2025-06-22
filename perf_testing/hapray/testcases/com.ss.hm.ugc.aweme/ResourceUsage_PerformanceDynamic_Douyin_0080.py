@@ -6,8 +6,8 @@ from devicetest.core.test_case import Step
 from hypium import BY
 from hypium.model import UiParam
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.common.common_utils import CommonUtils
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
