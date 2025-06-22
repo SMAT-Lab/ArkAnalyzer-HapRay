@@ -20,7 +20,8 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
-from hapray.core.report import ReportGenerator, create_perf_summary_excel
+from hapray.core.common.ExcelUtils import create_summary_excel
+from hapray.core.report import ReportGenerator
 
 
 class UpdateAction:
@@ -115,7 +116,7 @@ class UpdateAction:
 
         # Generate summary report
         logging.info("Generating summary Excel report")
-        if create_perf_summary_excel(report_dir):
+        if create_summary_excel(report_dir):
             logging.info("Summary Excel created successfully")
         else:
             logging.error("Failed to create summary Excel")
