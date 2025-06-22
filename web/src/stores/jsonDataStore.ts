@@ -1,6 +1,31 @@
 import { defineStore } from 'pinia';
 
-export enum PerfEvent {
+
+export interface JSONData {
+  type: number, // 0 json string, 1 base64 gzip json string, 2 base64 gzip sqlite db。对于web层只能是1
+  versionCode: number, // 保留版本号，用于跨版本数据兼容支持
+  basicInfo: BasicInfo, // 基本信息, ROM版本，系统版本，步骤等基本信息
+  perf: PerfData, // 必选字段，负载分析
+  trace?: TraceData, // 可选字段，trace帧分析， trace 无数据时，不用显示帧分析
+}
+
+interface BasicInfo {
+  rom_version: string;
+  app_id: string;
+  app_name: string;
+  app_version: string;
+  scene: string;
+  timestamp: number;
+}
+
+// trace 分析数据
+interface TraceData {
+  frames: FrameData[], // 帧数据，包含卡顿帧
+  emptyFrame?: EmptyFrameData, // 空刷帧
+  componentReuse: boolean // 组件复用
+}
+
+enum PerfEvent {
   CYCLES_EVENT = 0,
   INSTRUCTION_EVENT = 1,
 }
@@ -17,24 +42,14 @@ export enum ComponentCategory {
   UNKNOWN = -1,
 }
 
-export enum OriginKind {
+enum OriginKind {
   UNKNOWN = 0,
   FIRST_PARTY = 1,
   OPEN_SOURCE = 2,
   THIRD_PARTY = 3,
 }
 
-export interface JSONData {
-  rom_version: string;
-  app_id: string;
-  app_name: string;
-  app_version: string;
-  scene: string;
-  timestamp: number;
-  perfDataPath: string[],
-  perfDbPath: string[],
-  htracePath: string[],
-  categories: string[];
+export interface PerfData {
   steps: {
     step_name: string;
     step_id: number;
@@ -61,12 +76,22 @@ export interface JSONData {
     }[];
   }[];
 }
-export interface HtraceJSONData {
+
+interface FrameTypeStats {
+  total: number;
+  stutter: number;
+  stutter_rate: number;
+}
+
+interface FrameData {
   runtime: string;
   statistics: {
     total_frames: number;
-    ui_stutter_frames: number;
-    render_stutter_frames: number;
+    frame_stats: {
+      ui: FrameTypeStats;
+      render: FrameTypeStats;
+      sceneboard: FrameTypeStats;
+    };
     total_stutter_frames: number;
     stutter_rate: number;
     stutter_levels: {
@@ -117,52 +142,7 @@ export interface HtraceJSONData {
   };
 }
 
-export interface MergeJSONData {
-  app_id: string;
-  app_name: string;
-  app_version: string;
-  scene: string;
-  timestamp: number;
-  perfDataPath: string[],
-  perfDbPath: string[],
-  htracePath: string[],
-  categories: string[];
-  steps: {
-    step_name: string;
-    step_id: number;
-    count: number;
-    compareCount: number;
-    round: number;
-    perf_data_path: string;
-    data: {
-      category: number;
-      count: number;
-      compareCount: number;
-      processes: {
-        process: string;
-        count: number;
-        compareCount: number;
-        threads: {
-          thread: string;
-          count: number;
-          compareCount: number;
-          files: {
-            file: string;
-            count: number;
-            compareCount: number;
-            symbols: {
-              symbol: string;
-              count: number;
-              compareCount: number;
-            }[];
-          }[];
-        }[];
-      }[];
-    }[];
-  }[];
-}
-
-export interface EmptyFrameJsonData {
+interface EmptyFrameData {
   [stepName: string]: {
     status: string;
     summary: {
@@ -212,7 +192,84 @@ interface CallstackFrame {
   symbol: string;
 }
 
-
+export const defaultFrameDataJson = [
+  {
+    "runtime": "",
+    "statistics": {
+      "total_frames": 0,
+      "frame_stats": {
+        "ui": {
+          "total": 0,
+          "stutter": 0,
+          "stutter_rate": 0
+        },
+        "render": {
+          "total": 0,
+          "stutter": 0,
+          "stutter_rate": 0
+        },
+        "sceneboard": {
+          "total": 0,
+          "stutter": 0,
+          "stutter_rate": 0
+        }
+      },
+      "total_stutter_frames": 0,
+      "stutter_rate": 0,
+      "stutter_levels": {
+        "level_1": 0,
+        "level_2": 0,
+        "level_3": 0
+      }
+    },
+    "stutter_details": {
+      "ui_stutter": [
+        {
+          "vsync": 0,
+          "timestamp": 0,
+          "actual_duration": 0,
+          "expected_duration": 0,
+          "exceed_time": 0,
+          "exceed_frames": 0,
+          "stutter_level": 0,
+          "level_description": "",
+          "src": "",
+          "dst": 0
+        }
+      ],
+      "render_stutter": [
+        {
+          "vsync": 0,
+          "timestamp": 0,
+          "actual_duration": 0,
+          "expected_duration": 0,
+          "exceed_time": 0,
+          "exceed_frames": 0,
+          "stutter_level": 0,
+          "level_description": "",
+          "src": "",
+          "dst": 0
+        }
+      ]
+    },
+    "fps_stats": {
+      "average_fps": 0,
+      "min_fps": 0,
+      "max_fps": 0,
+      "fps_windows": [
+        {
+          "start_time": 0,
+          "end_time": 0,
+          "start_time_ts": 0,
+          "end_time_ts": 0,
+          "frame_count": 0,
+          "fps": 0
+        }
+      ],
+      "low_fps_window_count": 0
+    }
+  }
+];
 export const defaultEmptyJson = {
   "step1": {
     "status": "unknow",
@@ -296,26 +353,37 @@ export const defaultEmptyJson = {
 
 export const useJsonDataStore = defineStore('config', {
   state: () => ({
-    jsonData: null as JSONData | null,
-    htraceJsonData: null as HtraceJSONData[] | null,
-    emptyFrameJsonData: null as EmptyFrameJsonData | null,
-    compareJsonData: null as JSONData | null
+    basicInfo: null as BasicInfo | null,
+    compareBasicInfo: null as BasicInfo | null,
+    perfData: null as PerfData | null,
+    frameData: null as FrameData[] | null,
+    emptyFrameData: null as EmptyFrameData | null,
+    comparePerfData: null as PerfData | null
 
   }),
   actions: {
-    setJsonData(jsonData: JSONData[], htraceJsonData: HtraceJSONData[], emptyFrameJsonData: EmptyFrameJsonData, compareJsonData: JSONData[]) {
+    setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
+      this.basicInfo = jsonData.basicInfo;
       if (JSON.stringify(compareJsonData) == "\"\/tempCompareJsonData\/\"") {
-        this.jsonData = jsonData[0];
-        this.htraceJsonData = htraceJsonData;
-        if (JSON.stringify(emptyFrameJsonData) == "\"EMPTY_FRAME_PLACEHOLDER\"") {
-          this.emptyFrameJsonData = defaultEmptyJson;
-        } else {
-          this.emptyFrameJsonData = emptyFrameJsonData;
+        this.perfData = jsonData.perf;
+        if (jsonData.trace) {
+          if (jsonData.trace.frames) {
+            this.frameData = jsonData.trace.frames;
+          } else {
+            this.frameData = defaultFrameDataJson;
+          }
+
+          if (jsonData.trace.emptyFrame) {
+            this.emptyFrameData = jsonData.trace.emptyFrame;
+          } else {
+            this.emptyFrameData = defaultEmptyJson;
+          }
         }
         window.initialPage = 'perf';
       } else {
-        this.jsonData = jsonData[0];
-        this.compareJsonData = compareJsonData[0];
+        this.compareBasicInfo = compareJsonData.basicInfo;
+        this.perfData = jsonData.perf;
+        this.comparePerfData = compareJsonData.perf;
         window.initialPage = 'perf_compare';
       }
 

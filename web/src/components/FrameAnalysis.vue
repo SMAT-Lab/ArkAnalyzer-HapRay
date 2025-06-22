@@ -329,12 +329,12 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore ,defaultEmptyJson} from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, defaultEmptyJson } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 空刷JSON 数据
-const emptyFrameJsonData = jsonDataStore.emptyFrameJsonData??defaultEmptyJson;
+const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? defaultEmptyJson;
 
 const props = defineProps({
     data: {
@@ -349,7 +349,7 @@ const props = defineProps({
 
 // 性能数据
 const performanceData = computed(() => {
-    if (props.step === 0) {
+    if (props.step === 0 || props.data[1] == undefined) {
         return props.data[0];
     } else {
         return props.data[props.step - 1]
@@ -359,7 +359,7 @@ const performanceData = computed(() => {
 
 // 当前步骤空刷信息
 const emptyFrameData = computed(() => {
-    if (props.step === 0 && emptyFrameJsonData.length == 1) {
+    if (props.step === 0 || emptyFrameJsonData['step' + 2] == undefined) {
         return emptyFrameJsonData['step' + 1];
     } else {
         return emptyFrameJsonData['step' + props.step];
@@ -816,7 +816,6 @@ const findCallstackInfo = (timestamp) => {
 onMounted(() => {
 
     initCharts();
-
 
     // 响应窗口大小变化
     window.addEventListener('resize', () => {

@@ -9,7 +9,7 @@ import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 import i18n from './i18n/index';
 import { vscode } from './utils/vscode';
-import { useJsonDataStore, type EmptyFrameJsonData } from './stores/jsonDataStore.ts';
+import { useJsonDataStore } from './stores/jsonDataStore.ts';
 import { changeBase64Str2Json } from './utils/jsonUtil.ts';
 
 const app = createApp(App);
@@ -25,13 +25,13 @@ declare global {
     interface Window {
         initialPage: string;
         jsonData: string;
-        htraceJsonData: string;
+        frameJsonData: string;
         emptyFrameJson: string;
         compareJsonData: string;
     }
 }
 
 if (window.jsonData) {
-    jsonDataStore.setJsonData(changeBase64Str2Json(window.jsonData), changeBase64Str2Json(window.htraceJsonData), changeBase64Str2Json(window.emptyFrameJson) ,changeBase64Str2Json(window.compareJsonData));
+    jsonDataStore.setJsonData(changeBase64Str2Json(window.jsonData),changeBase64Str2Json(window.compareJsonData));
 }
 app.mount('#app');

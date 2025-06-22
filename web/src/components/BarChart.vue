@@ -6,17 +6,17 @@
 import { ref, onMounted } from 'vue';
 import * as echarts from 'echarts';
 import type { PropType } from 'vue';
-import { type JSONData } from '../stores/jsonDataStore.ts';
+import { type PerfData } from '../stores/jsonDataStore.ts';
 
 const props = defineProps({
   chartData: {
-    type: Object as PropType<JSONData | null>,
+    type: Object as PropType<PerfData | null>,
     required: true,
   },
 });
 
 // 处理 JSON 数据，统计每个步骤的 count 值并降序排序
-function processData(data: JSONData|null) {
+function processData(data: PerfData|null) {
   if(data === null){
     return {}
   }

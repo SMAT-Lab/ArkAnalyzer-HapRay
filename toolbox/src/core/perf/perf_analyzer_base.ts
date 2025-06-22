@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Component, ComponentCategory, ComponentCategoryType, getComponentCategories, OriginKind } from '../component';
+import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
 import { AnalyzerProjectBase, PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
 import writeXlsxFile from 'write-excel-file/node';
@@ -665,9 +665,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             perfDataPath: testInfo.rounds[testInfo.chooseRound].steps.map((step) => step.perfFile),
             perfDbPath: testInfo.rounds[testInfo.chooseRound].steps.map((step) => step.dbfile),
             htracePath: testInfo.rounds[testInfo.chooseRound].steps.map((step) => step.traceFile),
-            categories: getComponentCategories()
-                .filter((category) => category.id >= 0)
-                .map((category) => category.name),
             steps: Array.from(stepMap.values()),
             har: Array.from(harMap.values()),
         };
