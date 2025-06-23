@@ -71,11 +71,11 @@ class ReportGenerator:
         # Step 2: Analyze data
         analyze_data(scene_dir)
 
-        # Step 3: Analyze frame drops
-        self._analyze_frame_drops(scene_dir)
-
-        # Step 4: Analyze empty frames
+        # Step 3: Analyze empty frames
         self._analyze_empty_frames(scene_dir)
+
+        # Step 4: Analyze frame drops
+        self._analyze_frame_drops(scene_dir)
 
         # Step 5: Generate HTML report
         self._create_html_report(scene_dir)
