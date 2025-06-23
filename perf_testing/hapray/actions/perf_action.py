@@ -86,6 +86,7 @@ class PerfAction:
         parser.add_argument('--so_dir', default=None, help='Directory for symbolicated .so files')
         parser.add_argument('--run_testcases', nargs='+', default=None, help='Test cases to execute')
         parser.add_argument('--circles', action="store_true", help="Enable CPU cycle sampling")
+        parser.add_argument('--round', type=int, default=5, help="Specify test round")
         parsed_args = parser.parse_args(args)
 
         root_path = os.getcwd()
@@ -123,7 +124,7 @@ class PerfAction:
 
             for case_name in matched_cases:
                 scene_round_dirs = []
-                for round_num in range(5):
+                for round_num in range(parsed_args.round):
                     case_dir = all_testcases[case_name]
                     output = os.path.join(reports_path, f'{case_name}_round{round_num}')
                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')

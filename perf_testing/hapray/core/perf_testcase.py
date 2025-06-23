@@ -204,7 +204,8 @@ class PerfTestCase(TestCase):
             steps_info.append({
                 "name": step['name'],
                 "description": step['description'],
-                "stepIdx": i
+                "stepIdx": i,
+                "pid": step['pid']
             })
 
         # 保存步骤信息到steps.json
@@ -335,6 +336,7 @@ class PerfTestCase(TestCase):
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf thread start run {duration}s')
+        self.steps[step_id - 1]['pid'] = self.pid
         # 创建并启动 hiperf 线程
         hiperf_cmd = PerfTestCase._get_hiperf_cmd(self.pid, output_file, duration)
         hiperf_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, hiperf_cmd))
@@ -377,7 +379,7 @@ class PerfTestCase(TestCase):
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
-
+        self.steps[step_id - 1]['pid'] = self.pid
         # 启动采集线程
         if sample_all:
             # 如果是root权限，直接使用sample_all模式
