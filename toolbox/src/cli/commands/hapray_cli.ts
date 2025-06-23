@@ -68,6 +68,13 @@ export interface SummaryInfo {
     step_name: string;
     step_id: number;
     count: number;
+    round: number;
+}
+
+export interface RoundInfo {
+    step_id: number;
+    round: number;
+    count: number;
 }
 
 // 定义整个 steps 数组的结构
@@ -94,7 +101,7 @@ async function main(input: string): Promise<void> {
 
         const stepsJsonPath = path.join(roundFolders[0], 'hiperf', 'steps.json');
         const steps: Steps = await loadJsonFile(stepsJsonPath);
-        const counts = await processRoundSelection(roundFolders, steps, input);
+        const roundInfos = await processRoundSelection(roundFolders, steps, input);
 
         const resultXmlPath = path.join(roundFolders[0], 'result', path.basename(input) + '.xml');
         const resultInfo = fs.existsSync(resultXmlPath)
@@ -103,7 +110,7 @@ async function main(input: string): Promise<void> {
 
         const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
         const testInfo: TestInfo = await loadJsonFile(testInfoPath);
-        await generateSummaryInfoJson(input, testInfo, resultInfo, steps, counts);
+        await generateSummaryInfoJson(input, testInfo, resultInfo, steps, roundInfos);
     } else {
         logger.info(`输入目录: ${input}`);
         const resultXmlPath = path.join(input, 'result', path.basename(input) + '.xml');
@@ -132,8 +139,8 @@ async function loadJsonFile<T>(filePath: string): Promise<T> {
 }
 
 // 处理轮次选择逻辑
-async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<number[]> {
-    let counts: number[] = [];
+async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<RoundInfo[]> {
+    let roundInfos: RoundInfo[] = [];
     const testInfoPath = path.join(roundFolders[0], 'testInfo.json');
     await copyFile(testInfoPath, path.join(inputPath, 'testInfo.json'));
 
@@ -143,10 +150,11 @@ async function processRoundSelection(roundFolders: string[], steps: Steps, input
     for (let i = 0; i < steps.length; i++) {
         const roundResults = await calculateRoundResults(roundFolders, steps[i]);
         const selectedRound = selectOptimalRound(roundResults);
-        counts.push(roundResults[selectedRound]);
+        const roundInfo: RoundInfo = { step_id: steps[i].stepIdx, round: selectedRound, count: roundResults[selectedRound] }
+        roundInfos.push(roundInfo);
         await copySelectedRoundData(roundFolders[selectedRound], inputPath, steps[i]);
     }
-    return counts;
+    return roundInfos;
 }
 
 // 计算每轮的结果
@@ -245,7 +253,7 @@ async function generateSummaryInfoJson(
     testInfo: TestInfo,
     resultInfo: ResultInfo,
     steps: Steps,
-    counts: number[]
+    roundInfos: RoundInfo[]
 ): Promise<void> {
     const outputDir = path.join(input, 'report');
     let summaryJsonObject: SummaryInfo[] = [];
@@ -256,7 +264,8 @@ async function generateSummaryInfoJson(
             scene: testInfo.scene,
             step_name: step.description,
             step_id: step.stepIdx,
-            count: counts[step.stepIdx - 1],
+            count: roundInfos.filter(round=>round.step_id==step.stepIdx)[0].count,
+            round: roundInfos.filter(round=>round.step_id==step.stepIdx)[0].round,
         };
         summaryJsonObject.push(summaryObject);
     });

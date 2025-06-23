@@ -199,6 +199,10 @@ class ReportGenerator:
         try:
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
             frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
+            empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
+
+            json_data_str = self._get_json_data(perf_data_path, frame_data_path, empty_frames_analysis_path)
+
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
             )
@@ -209,17 +213,9 @@ class ReportGenerator:
 
             # Inject performance data
             self._inject_json_to_html(
-                json_path=perf_data_path,
+                json_data_str=json_data_str,
                 placeholder='JSON_DATA_PLACEHOLDER',
                 html_path=template_path,
-                output_path=output_path
-            )
-
-            # Inject frame analysis data
-            self._inject_json_to_html(
-                json_path=frame_data_path,
-                placeholder='FRAME_JSON_PLACEHOLDER',
-                html_path=output_path,
                 output_path=output_path
             )
 
@@ -227,51 +223,198 @@ class ReportGenerator:
         except Exception as e:
             logging.error(f"Failed to create HTML report: {str(e)}")
 
+    def _get_json_data(
+            self,
+            perf_data_path: str,
+            frame_data_path: str,
+            empty_frames_analysis_path: str,
+    ) -> str:
+        """Inject JSON data into an HTML template"""
+        # Validate paths
+        if not os.path.exists(perf_data_path):
+            raise FileNotFoundError(f"JSON file not found: {perf_data_path}")
+
+        # Load JSON data
+        with open(perf_data_path, 'r', encoding='utf-8') as f:
+            perf_data = json.load(f)
+        frame_data = None
+        if os.path.exists(frame_data_path):
+            with open(frame_data_path, 'r', encoding='utf-8') as f:
+                frame_data = json.load(f)
+        else:
+            logging.info(f"JSON file not found: {empty_frames_analysis_path}")
+        empty_frame_data = None
+        if os.path.exists(empty_frames_analysis_path):
+            with open(empty_frames_analysis_path, 'r', encoding='utf-8') as f:
+                empty_frame_data = json.load(f)
+        else:
+            logging.info(f"JSON file not found: {empty_frames_analysis_path}")
+
+        # Validate JSON structure
+        if not perf_data or not isinstance(perf_data, list):
+            raise ValueError(f"Invalid JSON format in {perf_data_path}: expected non-empty array")
+        if not frame_data or not isinstance(frame_data, list):
+            raise ValueError(f"Invalid JSON format in {frame_data_path}: expected non-empty array")
+        if not empty_frame_data or not isinstance(empty_frame_data, dict):
+            raise ValueError(f"Invalid JSON format in {empty_frames_analysis_path}: expected non-empty array")
+
+        json_data_str = self._merge_json_data(1, perf_data, frame_data, empty_frame_data)
+
+        logging.debug(f"merged succeed!+{perf_data_path}+{frame_data_path}+{empty_frames_analysis_path}")
+        return json_data_str
+
+    @staticmethod
+    def _merge_json_data(
+            type: int,  # 0 json string, 1 base64 gzip json string, 2 base64 gzip sqlite db
+            perf_data: list,
+            frame_data: list,
+            empty_frame_data: dict,
+    ) -> str:
+        """Inject JSON data into an HTML template"""
+        json_data = ReportGenerator.create_merged_json(perf_data, frame_data, empty_frame_data)
+        logging.debug(f"merged json data succeed!")
+        if type == 0:
+            return str(json_data)
+        elif type == 1:
+            # 将JSON对象转换为UTF-8字节串
+            json_bytes = json.dumps(json_data).encode('utf-8')
+
+            compressed_bytes = zlib.compress(json_bytes, level=9)
+
+            # 转换为Base64编码
+            base64_bytes = base64.b64encode(compressed_bytes)
+
+            # 转换为字符串
+            json_data_str = base64_bytes.decode('ascii')
+            return json_data_str
+        elif type == 2:
+            return str(json_data)
+        else:
+            return "未知"
+
+    @staticmethod
+    def create_merged_json(perf_data, frame_data, empty_frame_data):
+        """创建合并后的JSON对象"""
+        merged_data = {
+            "type": 0,  # 0表示JSON字符串
+            "versionCode": 1,  # 初始版本号
+            "basicInfo": ReportGenerator.create_basic_info(perf_data),
+            "perf": ReportGenerator.create_perf_data(perf_data)
+        }
+
+        # 只有当frame_analysis有数据时才添加trace字段
+        if frame_data is not None:
+            merged_data["trace"] = ReportGenerator.create_trace_data(frame_data, empty_frame_data)
+
+        return merged_data
+
+    @staticmethod
+    def create_basic_info(perf_data):
+        """从hiperf_info数据中提取并创建BasicInfo对象"""
+        if perf_data is None:
+            return None
+
+        first_entry = perf_data[0]
+        return {
+            "rom_version": first_entry.get("rom_version", ""),
+            "app_id": first_entry.get("app_id", ""),
+            "app_name": first_entry.get("app_name", ""),
+            "app_version": first_entry.get("app_version", ""),
+            "scene": first_entry.get("scene", ""),
+            "timestamp": first_entry.get("timestamp", 0)
+        }
+
+    @staticmethod
+    def create_perf_data(perf_data):
+        """创建PerfData对象"""
+        result_perf_data = {
+            "steps": []
+        }
+
+        if perf_data is None:
+            return None
+
+        first_entry = perf_data[0]
+        steps = first_entry.get("steps", [])
+        result_perf_data["steps"] = steps
+        return result_perf_data
+
+    @staticmethod
+    def create_trace_data(frame_analysis, empty_frames_analysis):
+        """创建TraceData对象"""
+        trace_data = {
+            "frames": [],
+            "componentReuse": False  # 默认设置为False，根据实际情况可能需要调整
+        }
+
+        # 处理帧分析数据
+        if frame_analysis and len(frame_analysis) > 0:
+            trace_data["frames"] = frame_analysis
+
+        # 添加空刷帧数据
+        if empty_frames_analysis:
+            trace_data["emptyFrame"] = empty_frames_analysis
+
+        return trace_data
+
+    def _execute_hapray_command(self, cmd: List[str], action_name: str) -> bool:
+        """Execute a hapray command with proper error handling"""
+        try:
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+
+            if result.stdout:
+                logging.debug(f"{action_name} output: {result.stdout}")
+
+            if result.stderr:
+                logging.warning(f"{action_name} warnings: {result.stderr}")
+
+            logging.info(f"{action_name} completed successfully")
+            return True
+
+        except subprocess.CalledProcessError as e:
+            error_msg = f"{action_name} failed with code {e.returncode}"
+            if e.stdout:
+                logging.error(f"{action_name} stdout: {e.stdout}")
+            if e.stderr:
+                logging.error(f"{action_name} stderr: {e.stderr}")
+            logging.error(error_msg)
+            return False
+
+        except FileNotFoundError:
+            logging.error("Node.js command not found. Please ensure Node.js is installed and in PATH.")
+            return False
+
     @staticmethod
     def _inject_json_to_html(
-            json_path: str,
+            json_data_str: str,
             placeholder: str,
             html_path: str,
             output_path: str
     ) -> None:
         """Inject JSON data into an HTML template"""
-        # Validate paths
-        if not os.path.exists(json_path):
-            raise FileNotFoundError(f"JSON file not found: {json_path}")
+        # Validate path
         if not os.path.exists(html_path):
             raise FileNotFoundError(f"HTML template not found: {html_path}")
-
-        # Load JSON data
-        with open(json_path, 'r', encoding='utf-8') as f:
-            json_data = json.load(f)
-
-        # Validate JSON structure
-        if not isinstance(json_data, list) or not json_data:
-            raise ValueError(f"Invalid JSON format in {json_path}: expected non-empty array")
 
         # Load HTML template
         with open(html_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
 
-        # 将JSON对象转换为UTF-8字节串
-        json_bytes = json.dumps(json_data).encode('utf-8')
-
-        compressed_bytes = zlib.compress(json_bytes, level=9)
-
-        # 转换为Base64编码
-        base64_bytes = base64.b64encode(compressed_bytes)
-
-        # 转换为字符串
-        json_str = base64_bytes.decode('ascii')
-
         # Inject JSON into HTML
-        updated_html = html_content.replace(placeholder, json_str)
+        updated_html = html_content.replace(placeholder, json_data_str)
 
         # Save the updated HTML
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(updated_html)
 
-        logging.debug(f"Injected {json_path} into {output_path}")
+        logging.debug(f"Injected {json_data_str} into {output_path}")
 
     @staticmethod
     def convert_kind_to_json() -> str:

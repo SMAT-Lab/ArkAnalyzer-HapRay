@@ -6,11 +6,11 @@
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import type { PropType } from 'vue';
 import * as echarts from 'echarts';
-import { ComponentCategory, type JSONData } from '../stores/jsonDataStore.ts';
+import { ComponentCategory, type PerfData } from '../stores/jsonDataStore.ts';
 
 const props = defineProps({
   chartData: {
-    type: Object as PropType<JSONData | null>,
+    type: Object as PropType<PerfData | null>,
     required: true,
   },
   seriesType: {
@@ -23,7 +23,7 @@ const chartRef = ref<HTMLElement | null>(null);
 let myChart: echarts.ECharts | null = null;
 
 // 处理数据函数
-const processData = (data: JSONData | null, seriesType: string) => {
+const processData = (data: PerfData | null, seriesType: string) => {
   if (!data) {
     return {
       xData: [],

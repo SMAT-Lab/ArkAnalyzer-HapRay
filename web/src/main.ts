@@ -25,12 +25,13 @@ declare global {
     interface Window {
         initialPage: string;
         jsonData: string;
-        htraceJsonData: string;
+        frameJsonData: string;
+        emptyFrameJson: string;
         compareJsonData: string;
     }
 }
 
 if (window.jsonData) {
-    jsonDataStore.setJsonData(changeBase64Str2Json(window.jsonData), changeBase64Str2Json(window.htraceJsonData), changeBase64Str2Json(window.compareJsonData));
+    jsonDataStore.setJsonData(changeBase64Str2Json(window.jsonData),changeBase64Str2Json(window.compareJsonData));
 }
 app.mount('#app');
