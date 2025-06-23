@@ -12,12 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import re
 
 """
 Analyzer for component reusability metrics.
 """
-
+import re
 import sqlite3
 from typing import Dict, Any
 
