@@ -19,16 +19,15 @@ import logging
 import os
 import zlib
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 
 import pandas as pd
 
-from hapray.analyze import data_analyze
+from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.common.frame_analyzer import FrameAnalyzer
-from hapray.core.config.config import Config
 
 
 class ReportGenerator:
@@ -37,26 +36,23 @@ class ReportGenerator:
     def __init__(self):
         self.perf_testing_dir = CommonUtils.get_project_root()
 
-    def update_report(self, scene_dir: str, so_dir: Optional[str] = None) -> bool:
+    def update_report(self, scene_dir: str) -> bool:
         """Update an existing performance report"""
         return self._generate_report(
             scene_dirs=[scene_dir],
             scene_dir=scene_dir,
-            so_dir=so_dir,
             skip_round_selection=True
         )
 
     def generate_report(
             self,
             scene_dirs: List[str],
-            scene_dir: str,
-            so_dir: Optional[str] = None
+            scene_dir: str
     ) -> bool:
         """Generate a new performance analysis report"""
         return self._generate_report(
             scene_dirs,
             scene_dir,
-            so_dir,
             skip_round_selection=False
         )
 
@@ -64,7 +60,6 @@ class ReportGenerator:
             self,
             scene_dirs: List[str],
             scene_dir: str,
-            so_dir: Optional[str],
             skip_round_selection: bool
     ) -> bool:
         """Core method for report generation and updating"""
@@ -73,19 +68,14 @@ class ReportGenerator:
             if not self._select_round(scene_dirs, scene_dir):
                 logging.error("Round selection failed, aborting report generation")
                 return False
-
-        # Step 2: Perform perf analysis
-        if not self._run_perf_analysis(scene_dir, so_dir):
-            logging.error("Performance analysis failed, aborting report generation")
-            return False
+        # Step 2: Analyze data
+        analyze_data(scene_dir)
 
         # Step 3: Analyze frame drops
         self._analyze_frame_drops(scene_dir)
 
         # Step 4: Analyze empty frames
         self._analyze_empty_frames(scene_dir)
-
-        data_analyze(scene_dir)
 
         # Step 5: Generate HTML report
         self._create_html_report(scene_dir)
@@ -105,20 +95,6 @@ class ReportGenerator:
                 ]
 
         logging.debug(f"Selecting round with command: {' '.join(args)}")
-        return ExeUtils.execute_hapray_cmd(args)
-
-    def _run_perf_analysis(self, scene_dir: str, so_dir: Optional[str]) -> bool:
-        """Run performance analysis"""
-        args = ['dbtools', '-i', scene_dir]
-
-        if so_dir:
-            args.extend(['-s', so_dir])
-
-        kind = self.convert_kind_to_json()
-        if len(kind) > 0:
-            args.extend(['-k', kind])
-
-        logging.debug(f"Running perf analysis with command: {' '.join(args)}")
         return ExeUtils.execute_hapray_cmd(args)
 
     def _analyze_frame_drops(self, scene_dir: str) -> None:
@@ -360,40 +336,6 @@ class ReportGenerator:
 
         return trace_data
 
-    def _execute_hapray_command(self, cmd: List[str], action_name: str) -> bool:
-        """Execute a hapray command with proper error handling"""
-        try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-
-            if result.stdout:
-                logging.debug(f"{action_name} output: {result.stdout}")
-
-            if result.stderr:
-                logging.warning(f"{action_name} warnings: {result.stderr}")
-
-            logging.info(f"{action_name} completed successfully")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            error_msg = f"{action_name} failed with code {e.returncode}"
-            if e.stdout:
-                logging.error(f"{action_name} stdout: {e.stdout}")
-            if e.stderr:
-                logging.error(f"{action_name} stderr: {e.stderr}")
-            logging.error(error_msg)
-            return False
-
-        except FileNotFoundError:
-            logging.error("Node.js command not found. Please ensure Node.js is installed and in PATH.")
-            return False
-
     @staticmethod
     def _inject_json_to_html(
             json_data_str: str,
@@ -418,31 +360,6 @@ class ReportGenerator:
             f.write(updated_html)
 
         logging.debug(f"Injected {json_data_str} into {output_path}")
-
-    @staticmethod
-    def convert_kind_to_json() -> str:
-        kind = Config.get('kind', None)
-        if kind is None:
-            return ''
-
-        kind_entry = {
-            "name": 'APP_SO',
-            "kind": 1,
-            "components": []
-        }
-
-        for category in Config.get('kind', None):
-            component = {
-                "name": category['name'],
-                "files": category['files']
-            }
-
-            if 'thread' in category:
-                component["threads"] = category['thread']
-
-            kind_entry["components"].append(component)
-
-        return json.dumps([kind_entry])
 
     def _get_app_pids(self, scene_dir: str) -> list:
         """获取应用进程ID列表

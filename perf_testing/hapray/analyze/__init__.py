@@ -26,6 +26,7 @@ from hapray.analyze.base_analyzer import BaseAnalyzer
 MAX_WORKERS = 4  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
+    'PerfAnalyzer',
     # Add more analyzers here
 ]
 
@@ -42,7 +43,7 @@ def camel_to_snake(name: str) -> str:
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-def data_analyze(scene_dir: str):
+def analyze_data(scene_dir: str):
     """Main entry point for data analysis pipeline.
 
     Args:

@@ -146,8 +146,7 @@ class PerfAction:
                 future = executor.submit(
                     report_generator.generate_report,
                     scene_round_dirs,
-                    merge_folder_path,
-                    so_dir
+                    merge_folder_path
                 )
                 futures.append(future)
 

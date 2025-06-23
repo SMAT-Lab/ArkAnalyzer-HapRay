@@ -20,6 +20,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
+from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 
@@ -54,6 +55,7 @@ class UpdateAction:
         logging.info(f"Updating reports in: {report_dir}")
         if so_dir:
             logging.info(f"Using symbolicated .so files from: {so_dir}")
+            Config.set('so_dir', so_dir)
 
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
         if not testcase_dirs:
@@ -61,7 +63,7 @@ class UpdateAction:
             return
 
         logging.info(f"Found {len(testcase_dirs)} test case reports for updating")
-        UpdateAction.process_reports(testcase_dirs, so_dir, report_dir)
+        UpdateAction.process_reports(testcase_dirs, report_dir)
 
     @staticmethod
     def find_testcase_dirs(report_dir):
@@ -87,7 +89,7 @@ class UpdateAction:
         return testcase_dirs
 
     @staticmethod
-    def process_reports(testcase_dirs, so_dir, report_dir):
+    def process_reports(testcase_dirs, report_dir):
         """Processes reports using parallel execution."""
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
@@ -98,8 +100,7 @@ class UpdateAction:
                 logging.info(f"Updating report: {scene_name}")
                 future = executor.submit(
                     report_generator.update_report,
-                    case_dir,
-                    so_dir
+                    case_dir
                 )
                 futures.append(future)
 
