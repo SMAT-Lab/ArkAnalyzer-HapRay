@@ -364,7 +364,6 @@ export function calculateSymbolData1(
 
 
 export function changeBase64Str2Json(base64String: string) {
-
     if (base64String == '/tempCompareJsonData/') {
         return '/tempCompareJsonData/';
     }

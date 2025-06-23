@@ -88,6 +88,23 @@
                     </div>
                 </div>
             </div>
+
+            <div class="stat-card data-panel">
+                <div class="card-title">
+                    <i>ℹ️</i> 其他
+                </div>
+                <div class="card-value"></div>
+                <div class="progress-bar">
+                </div>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
+                        <div class="metric-label">复用组件数/总组件数/复用组件占比</div>
+                        <div class="metric-value">{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div class="chart-grid">
@@ -339,6 +356,7 @@ import { useJsonDataStore, defaultEmptyJson } from '../stores/jsonDataStore.ts';
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 空刷JSON 数据
 const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? defaultEmptyJson;
+const componentResuJsonData = jsonDataStore.componentResuData;
 
 const props = defineProps({
     data: {
@@ -353,13 +371,12 @@ const props = defineProps({
 
 // 性能数据
 const performanceData = computed(() => {
-    if (props.step === 0 || props.data[1] == undefined) {
-        return props.data[0];
+     if (props.step === 0 || props.data['step' + 2] == undefined) {
+        return props.data['step' + 1];
     } else {
-        return props.data[props.step - 1]
+        return props.data['step' + props.step];
     }
 });
-
 
 // 当前步骤空刷信息
 const emptyFrameData = computed(() => {
@@ -367,6 +384,15 @@ const emptyFrameData = computed(() => {
         return emptyFrameJsonData['step' + 1];
     } else {
         return emptyFrameJsonData['step' + props.step];
+    }
+});
+
+// 当前步骤组件复用信息
+const componentResuData = computed(() => {
+    if (props.step === 0 || componentResuJsonData['step' + 2] == undefined) {
+        return componentResuJsonData['step' + 1];
+    } else {
+        return componentResuJsonData['step' + props.step];
     }
 });
 
@@ -841,6 +867,38 @@ const findCallstackInfo = (timestamp) => {
             }
         }
     }
+
+    // 在卡顿帧ui_stutter里面找
+    const uiStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    for (const uiStutterCallChain of uiStutterCallChains) {
+        if (timestamp >= uiStutterCallChain.timestamp && timestamp <= uiStutterCallChain.timestamp + uiStutterCallChain.actual_duration) {
+            if (uiStutterCallChain.sample_callchains) {
+                callstackData.value = uiStutterCallChain.sample_callchains;
+                return;
+            }
+        }
+    }
+    // 在卡顿帧render_stutter里面找
+    const renderStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    for (const renderStutterCallChain of renderStutterCallChains) {
+        if (timestamp >= renderStutterCallChain.timestamp && timestamp <= renderStutterCallChain.timestamp + renderStutterCallChain.actual_duration) {
+            if (renderStutterCallChain.sample_callchains) {
+                callstackData.value = renderStutterCallChain.sample_callchains;
+                return;
+            }
+        }
+    }
+    // 在卡顿帧sceneboard_stutter里面找
+    const sceneboardStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    for (const sceneboardStutterCallChain of sceneboardStutterCallChains) {
+        if (timestamp >= sceneboardStutterCallChain.timestamp && timestamp <= sceneboardStutterCallChain.timestamp + sceneboardStutterCallChain.actual_duration) {
+            if (sceneboardStutterCallChain.sample_callchains) {
+                callstackData.value = sceneboardStutterCallChain.sample_callchains;
+                return;
+            }
+        }
+    }
+  
 };
 
 onMounted(() => {
@@ -858,6 +916,13 @@ watch(performanceData, (newVal, oldVal) => {
         initCharts();
     }
 }, { deep: true });
+
+// 监听步骤变化
+watch(() => props.step, (newStep, oldStep) => {
+  // 当步骤变化时关闭所有详情面板
+  selectedStutter.value = null;
+  selectedEmptyFrame.value = null;
+});
 
 </script>
 

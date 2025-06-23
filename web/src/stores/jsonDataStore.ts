@@ -20,9 +20,9 @@ interface BasicInfo {
 
 // trace 分析数据
 interface TraceData {
-  frames: FrameData[], // 帧数据，包含卡顿帧
+  frames: FrameData, // 帧数据，包含卡顿帧
   emptyFrame?: EmptyFrameData, // 空刷帧
-  componentReuse: boolean // 组件复用
+  componentReuse: ComponentResuData // 组件复用
 }
 
 enum PerfEvent {
@@ -84,62 +84,64 @@ interface FrameTypeStats {
 }
 
 interface FrameData {
-  runtime: string;
-  statistics: {
-    total_frames: number;
-    frame_stats: {
-      ui: FrameTypeStats;
-      render: FrameTypeStats;
-      sceneboard: FrameTypeStats;
+  [stepName: string]: {
+    runtime: string;
+    statistics: {
+      total_frames: number;
+      frame_stats: {
+        ui: FrameTypeStats;
+        render: FrameTypeStats;
+        sceneboard: FrameTypeStats;
+      };
+      total_stutter_frames: number;
+      stutter_rate: number;
+      stutter_levels: {
+        level_1: number;
+        level_2: number;
+        level_3: number;
+      };
     };
-    total_stutter_frames: number;
-    stutter_rate: number;
-    stutter_levels: {
-      level_1: number;
-      level_2: number;
-      level_3: number;
+    stutter_details: {
+      ui_stutter: {
+        vsync: number;
+        timestamp: number;
+        actual_duration: number;
+        expected_duration: number;
+        exceed_time: number;
+        exceed_frames: number;
+        stutter_level: number;
+        level_description: string;
+        src: string;
+        dst: number;
+      }[];
+      render_stutter: {
+        vsync: number;
+        timestamp: number;
+        actual_duration: number;
+        expected_duration: number;
+        exceed_time: number;
+        exceed_frames: number;
+        stutter_level: number;
+        level_description: string;
+        src: string;
+        dst: number;
+      }[];
     };
-  };
-  stutter_details: {
-    ui_stutter: {
-      vsync: number;
-      timestamp: number;
-      actual_duration: number;
-      expected_duration: number;
-      exceed_time: number;
-      exceed_frames: number;
-      stutter_level: number;
-      level_description: string;
-      src: string;
-      dst: number;
-    }[];
-    render_stutter: {
-      vsync: number;
-      timestamp: number;
-      actual_duration: number;
-      expected_duration: number;
-      exceed_time: number;
-      exceed_frames: number;
-      stutter_level: number;
-      level_description: string;
-      src: string;
-      dst: number;
-    }[];
-  };
-  fps_stats: {
-    average_fps: number;
-    min_fps: number;
-    max_fps: number;
-    fps_windows: {
-      start_time: number;
-      end_time: number;
-      start_time_ts: number;
-      end_time_ts: number;
-      frame_count: number;
-      fps: number;
-    }[];
-    low_fps_window_count: number;
-  };
+    fps_stats: {
+      average_fps: number;
+      min_fps: number;
+      max_fps: number;
+      fps_windows: {
+        start_time: number;
+        end_time: number;
+        start_time_ts: number;
+        end_time_ts: number;
+        frame_count: number;
+        fps: number;
+      }[];
+      low_fps_window_count: number;
+    };
+  }
 }
 
 interface EmptyFrameData {
@@ -192,8 +194,17 @@ interface CallstackFrame {
   symbol: string;
 }
 
-export const defaultFrameDataJson = [
-  {
+
+interface ComponentResuData {
+  [stepName: string]: {
+    total_builds: number;
+    recycled_builds: number;
+    reusability_ratio: number;
+  };
+}
+
+export const defaultFrameDataJson = {
+  "step1": {
     "runtime": "",
     "statistics": {
       "total_frames": 0,
@@ -269,7 +280,9 @@ export const defaultFrameDataJson = [
       "low_fps_window_count": 0
     }
   }
-];
+};
+
+
 export const defaultEmptyJson = {
   "step1": {
     "status": "unknow",
@@ -356,9 +369,10 @@ export const useJsonDataStore = defineStore('config', {
     basicInfo: null as BasicInfo | null,
     compareBasicInfo: null as BasicInfo | null,
     perfData: null as PerfData | null,
-    frameData: null as FrameData[] | null,
+    frameData: null as FrameData | null,
     emptyFrameData: null as EmptyFrameData | null,
-    comparePerfData: null as PerfData | null
+    comparePerfData: null as PerfData | null,
+    componentResuData: null as ComponentResuData | null,
 
   }),
   actions: {
@@ -378,6 +392,7 @@ export const useJsonDataStore = defineStore('config', {
           } else {
             this.emptyFrameData = defaultEmptyJson;
           }
+          this.componentResuData = jsonData.trace.componentReuse;
         }
         window.initialPage = 'perf';
       } else {
