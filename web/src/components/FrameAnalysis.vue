@@ -51,6 +51,10 @@
                         <div class="metric-label"> 渲染卡顿</div>
                         <div class="metric-value"> {{ performanceData.statistics.frame_stats.render.stutter }}</div>
                     </div>
+                    <div class="metric-item">
+                        <div class="metric-label"> 大桌面卡顿</div>
+                        <div class="metric-value"> {{ performanceData.statistics.frame_stats.sceneboard.stutter }}</div>
+                    </div>
                 </div>
             </div>
 
@@ -462,9 +466,22 @@ const initCharts = () => {
         ].forEach(stutter => {
             const timeMs = stutter.timestamp / 1000000; // 转换为毫秒
             allTimestamps.push(timeMs);
+            
+            // 查找对应时间点的FPS值
+            let closestFps = 0;
+            let minDiff = Infinity;
+            fpsData.forEach(fpsItem => {
+                const diff = Math.abs(fpsItem.time - timeMs);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestFps = fpsItem.fps;
+                }
+            });
+            
             stutterPoints.push({
                 time: timeMs,
-                stutter: stutter
+                stutter: stutter,
+                fps: closestFps  // 添加对应的FPS值
             });
         });
 
@@ -514,16 +531,16 @@ const initCharts = () => {
         });
 
         // 后台线程空刷帧
-        emptyFrameData.value.top_frames.background_thread.forEach(frame => {
-            const timeMs = frame.ts / 1000000; // 转换为毫秒
-            frameLoadData.push({
-                time: timeMs,
-                load: frame.frame_load,
-                frame: frame,  // 添加完整的帧对象
-                type: 'background_thread'
-            });
-            loadData.push(frame.frame_load);
-        });
+        //emptyFrameData.value.top_frames.background_thread.forEach(frame => {
+        //    const timeMs = frame.ts / 1000000; // 转换为毫秒
+        //    frameLoadData.push({
+        //        time: timeMs,
+        //        load: frame.frame_load,
+        //        frame: frame,  // 添加完整的帧对象
+        //        type: 'background_thread'
+        //    });
+        //    loadData.push(frame.frame_load);
+        //});
 
         const maxBarNum = loadData.length > 0 ? Math.max(...loadData) : 0;
 
@@ -735,7 +752,7 @@ const initCharts = () => {
                     symbolSize: 16,
                     data: stutterPoints.map(p => {
                         return {
-                            value: [p.time, 95],
+                            value: [p.time, p.fps],  // 使用对应时间点的FPS值作为y坐标
                             time: p.time, // 保存绝对时间用于对齐
                             stutter: p.stutter
                         };
@@ -744,6 +761,19 @@ const initCharts = () => {
                         color: function (params) {
                             const stutter = params.data.stutter;
                             return getStutterColor(stutter.stutter_level);
+                        }
+                    },
+                    tooltip: {
+                        formatter: function (params) {
+                            const stutter = params.data.stutter;
+                            return `
+                                <div style="font-weight:bold;color:${getStutterColor(stutter.stutter_level)};">
+                                    ${stutter.level_description}
+                                </div>
+                                <div>VSync: ${stutter.vsync}</div>
+                                <div>FPS: ${params.value[1].toFixed(2)}</div>
+                                <div>超出时间: ${stutter.exceed_time.toFixed(2)} ms</div>
+                            `;
                         }
                     }
                 }
