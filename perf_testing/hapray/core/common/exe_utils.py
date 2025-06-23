@@ -177,13 +177,13 @@ class ExeUtils:
                 output_db
             ]
 
-            logger.info("Converting htrace to DB: %s -> %s", htrace_file, output_db)
+            logger.info("Converting htrace to DB: %s -> %s", data_file, output_db)
 
             # Execute conversion
             success, stdout, stderr = ExeUtils.execute_command(cmd)
 
             if not success:
-                logger.error("Conversion failed for %s: %s", htrace_file, stderr)
+                logger.error("Conversion failed for %s: %s", data_file, stderr)
                 return False
 
             # Verify output file was created
@@ -191,7 +191,7 @@ class ExeUtils:
                 logger.error("Output DB file not created: %s", output_db)
                 return False
 
-            logger.info("Successfully converted %s to %s", htrace_file, output_db)
+            logger.info("Successfully converted %s to %s", data_file, output_db)
             return True
 
         except Exception as e:
