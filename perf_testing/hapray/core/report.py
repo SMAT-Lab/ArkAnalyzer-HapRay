@@ -240,7 +240,7 @@ class ReportGenerator:
         # Validate JSON structure
         if not perf_data or not isinstance(perf_data, list):
             raise ValueError(f"Invalid JSON format in {perf_data_path}: expected non-empty array")
-        if not frame_data or not isinstance(frame_data, list):
+        if not frame_data or not isinstance(frame_data, dict):
             raise ValueError(f"Invalid JSON format in {frame_data_path}: expected non-empty array")
         if not empty_frame_data or not isinstance(empty_frame_data, dict):
             raise ValueError(f"Invalid JSON format in {empty_frames_analysis_path}: expected non-empty array")
@@ -333,7 +333,6 @@ class ReportGenerator:
     def create_trace_data(frame_analysis, empty_frames_analysis, component_reusability_data):
         """创建TraceData对象"""
         trace_data = {
-            "frames": [],
             "componentReuse": component_reusability_data
         }
 

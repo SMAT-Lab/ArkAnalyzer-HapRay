@@ -231,7 +231,7 @@ const basicInfo = jsonDataStore.basicInfo;
 
 const perfData = jsonDataStore.perfData;
 
-const frameData = toRaw(jsonDataStore.frameData);
+const frameData = jsonDataStore.frameData;
 console.log('从元素获取到的 JSON 数据:');
 
 const testSteps = ref(

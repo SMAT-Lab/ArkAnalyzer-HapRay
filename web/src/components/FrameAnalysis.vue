@@ -371,10 +371,10 @@ const props = defineProps({
 
 // 性能数据
 const performanceData = computed(() => {
-    if (props.step === 0 || props.data[1] == undefined) {
-        return props.data[0];
+     if (props.step === 0 || props.data['step' + 2] == undefined) {
+        return props.data['step' + 1];
     } else {
-        return props.data[props.step - 1]
+        return props.data['step' + props.step];
     }
 });
 
@@ -867,6 +867,38 @@ const findCallstackInfo = (timestamp) => {
             }
         }
     }
+
+    // 在卡顿帧ui_stutter里面找
+    const uiStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    for (const uiStutterCallChain of uiStutterCallChains) {
+        if (timestamp >= uiStutterCallChain.timestamp && timestamp <= uiStutterCallChain.timestamp + uiStutterCallChain.actual_duration) {
+            if (uiStutterCallChain.sample_callchains) {
+                callstackData.value = uiStutterCallChain.sample_callchains;
+                return;
+            }
+        }
+    }
+    // 在卡顿帧render_stutter里面找
+    const renderStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    for (const renderStutterCallChain of renderStutterCallChains) {
+        if (timestamp >= renderStutterCallChain.timestamp && timestamp <= renderStutterCallChain.timestamp + renderStutterCallChain.actual_duration) {
+            if (renderStutterCallChain.sample_callchains) {
+                callstackData.value = renderStutterCallChain.sample_callchains;
+                return;
+            }
+        }
+    }
+    // 在卡顿帧sceneboard_stutter里面找
+    const sceneboardStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    for (const sceneboardStutterCallChain of sceneboardStutterCallChains) {
+        if (timestamp >= sceneboardStutterCallChain.timestamp && timestamp <= sceneboardStutterCallChain.timestamp + sceneboardStutterCallChain.actual_duration) {
+            if (sceneboardStutterCallChain.sample_callchains) {
+                callstackData.value = sceneboardStutterCallChain.sample_callchains;
+                return;
+            }
+        }
+    }
+  
 };
 
 onMounted(() => {
@@ -884,6 +916,13 @@ watch(performanceData, (newVal, oldVal) => {
         initCharts();
     }
 }, { deep: true });
+
+// 监听步骤变化
+watch(() => props.step, (newStep, oldStep) => {
+  // 当步骤变化时关闭所有详情面板
+  selectedStutter.value = null;
+  selectedEmptyFrame.value = null;
+});
 
 </script>
 
