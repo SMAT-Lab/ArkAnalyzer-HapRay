@@ -34,7 +34,7 @@ class BaseAnalyzer(ABC):
         """
         self.results: Dict[str, Any] = {}
         self.scene_dir = scene_dir
-        self.report_name = report_name
+        self.report_path = os.path.join(self.scene_dir, 'htrace', report_name)
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def analyze(self, step_dir: str, trace_db_path: str, perf_db_path: str):
@@ -72,11 +72,10 @@ class BaseAnalyzer(ABC):
             self.logger.warning("No results to write. Skipping report generation.")
             return
 
-        report_path = os.path.join(self.scene_dir, 'htrace', self.report_name)
         try:
-            os.makedirs(os.path.dirname(report_path), exist_ok=True)
-            with open(report_path, 'w', encoding='utf-8') as f:
+            os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
+            with open(self.report_path, 'w', encoding='utf-8') as f:
                 json.dump(self.results, f, ensure_ascii=False, indent=2)
-            self.logger.info(f"Report successfully written to {report_path}")
+            self.logger.info(f"Report successfully written to {self.report_path}")
         except Exception as e:
             self.logger.exception(f"Failed to write report: {str(e)}")
