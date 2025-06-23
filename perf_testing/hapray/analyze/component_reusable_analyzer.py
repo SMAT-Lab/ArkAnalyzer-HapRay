@@ -45,6 +45,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
             Dictionary containing reusability metrics
         """
         metrics = {
+            "max_component": '',
             "total_builds": 0,
             "recycled_builds": 0,
             "reusability_ratio": 0.0
@@ -69,14 +70,16 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                         result[component][1] = result[component][1] + 1
 
                 # choose max component as build result
-                max_component = [0, 0]
-                for value in result.values():
+                max_component = [0, 0, '']
+                for key, value in result.items():
                     if value[0] > max_component[0]:
                         max_component[0] = value[0]
                         max_component[1] = value[1]
+                        max_component[2] = key
 
                 metrics["total_builds"] = max_component[0]
                 metrics["recycled_builds"] = max_component[1]
+                metrics["max_component"] = max_component[2]
 
                 # Calculate reusability ratio
                 if metrics["total_builds"] > 0:

@@ -336,7 +336,8 @@ class PerfTestCase(TestCase):
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf thread start run {duration}s')
-        self.steps[step_id - 1]['pid'] = self.pid
+        pids, process_names = self._get_app_pids()
+        self.steps[step_id - 1]['pid'] = [pids]
         # 创建并启动 hiperf 线程
         hiperf_cmd = PerfTestCase._get_hiperf_cmd(self.pid, output_file, duration)
         hiperf_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, hiperf_cmd))
@@ -379,14 +380,14 @@ class PerfTestCase(TestCase):
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
-        self.steps[step_id - 1]['pid'] = self.pid
+        pids, process_names = self._get_app_pids()
+        self.steps[step_id - 1]['pid'] = [pids]
         # 启动采集线程
         if sample_all:
             # 如果是root权限，直接使用sample_all模式
             cmd = PerfTestCase._get_trace_and_perf_cmd('-a', output_file, duration)
         else:
             # 如果不是root权限，且需要采集多个进程
-            pids, process_names = self._get_app_pids()
             if not pids:
                 Log.error("No process found for multi-pid collection")
                 return
