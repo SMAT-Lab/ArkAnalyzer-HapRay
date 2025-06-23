@@ -23,6 +23,7 @@ from typing import List, Optional, Dict, Any
 
 import pandas as pd
 
+from hapray.analyze import data_analyze
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
@@ -83,6 +84,8 @@ class ReportGenerator:
 
         # Step 4: Analyze empty frames
         self._analyze_empty_frames(scene_dir)
+
+        data_analyze(scene_dir)
 
         # Step 5: Generate HTML report
         self._create_html_report(scene_dir)
