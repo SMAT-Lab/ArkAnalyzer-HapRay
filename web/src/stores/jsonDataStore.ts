@@ -200,6 +200,7 @@ interface ComponentResuData {
     total_builds: number;
     recycled_builds: number;
     reusability_ratio: number;
+    max_component: string;
   };
 }
 
