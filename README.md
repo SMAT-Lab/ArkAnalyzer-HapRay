@@ -35,7 +35,11 @@ Options:
 - `--run_testcases <regex_patterns...>`: Run test cases matching specified regex patterns
 - `--so_dir <directory>`: Directory containing symbolicated .so files
 - `--circles`: Sample CPU cycles instead of default events
+- `--round <N>`: Number of test rounds to execute (default: 5)
 
+Requirements:
+- hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
+  
 Example:
 ```bash
 # Run specific test cases with symbol files
@@ -53,11 +57,14 @@ Options:
 - `-i/--input <path>`: Directory/file containing binaries (.hap/.hsp/.so/.a)
 - `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
 - `-j/--jobs <N>`: Number of parallel jobs (default: 1)
+- `-r/--report_dir <path>`: Directory containing reports to analye invoked symbols (optional)
 
 Example:
 ```bash
 # Analyze binaries with 4 parallel jobs
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
+# Analyze binaries and analye invoked symbols
+python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
 ```
 
 #### Update Reports (`update`)
@@ -134,7 +141,7 @@ npm run build
 cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
-python -m scripts.main perf/opt [options]
+python -m scripts.main perf/opt/update [options]
 ```
 
 ### Windows Installation
@@ -149,7 +156,7 @@ cd perf_testing
 # Command-Line(CMD) Alternative the python virtual environment
 .venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
-python -m scripts.main perf/opt [options]
+python -m scripts.main perf/opt/update [options]
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
