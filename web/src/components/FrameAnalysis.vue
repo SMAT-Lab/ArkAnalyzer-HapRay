@@ -99,8 +99,8 @@
                 <div class="metric-grid">
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
-                        <div class="metric-label">复用组件数/总组件数/复用组件占比</div>
-                        <div class="metric-value">{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
+                        <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
+                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
                     </div>
                 </div>
             </div>
@@ -254,8 +254,8 @@
                                 selectedStutter.level_description }})</div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">线程</div>
-                            <div class="info-value">{{ callstackThread || '主线程' }}</div>
+                            <div class="info-label">卡顿负载</div>
+                            <div class="info-value">{{ selectedStutter.frame_load }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">调用栈数量</div>
