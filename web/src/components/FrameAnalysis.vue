@@ -88,6 +88,23 @@
                     </div>
                 </div>
             </div>
+
+            <div class="stat-card data-panel">
+                <div class="card-title">
+                    <i>ℹ️</i> 其他
+                </div>
+                <div class="card-value"></div>
+                <div class="progress-bar">
+                </div>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
+                        <div class="metric-label">复用组件数/总组件数/复用组件占比</div>
+                        <div class="metric-value">{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div class="chart-grid">
@@ -339,6 +356,7 @@ import { useJsonDataStore, defaultEmptyJson } from '../stores/jsonDataStore.ts';
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 空刷JSON 数据
 const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? defaultEmptyJson;
+const componentResuJsonData = jsonDataStore.componentResuData;
 
 const props = defineProps({
     data: {
@@ -360,13 +378,21 @@ const performanceData = computed(() => {
     }
 });
 
-
 // 当前步骤空刷信息
 const emptyFrameData = computed(() => {
     if (props.step === 0 || emptyFrameJsonData['step' + 2] == undefined) {
         return emptyFrameJsonData['step' + 1];
     } else {
         return emptyFrameJsonData['step' + props.step];
+    }
+});
+
+// 当前步骤组件复用信息
+const componentResuData = computed(() => {
+    if (props.step === 0 || componentResuJsonData['step' + 2] == undefined) {
+        return componentResuJsonData['step' + 1];
+    } else {
+        return componentResuJsonData['step' + props.step];
     }
 });
 

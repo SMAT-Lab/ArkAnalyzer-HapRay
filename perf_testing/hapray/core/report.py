@@ -203,8 +203,9 @@ class ReportGenerator:
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
             frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
             empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
+            component_reusability_report_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
 
-            json_data_str = self._get_json_data(perf_data_path, frame_data_path, empty_frames_analysis_path)
+            json_data_str = self._get_json_data(perf_data_path, frame_data_path, empty_frames_analysis_path,component_reusability_report_path)
 
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
@@ -231,6 +232,7 @@ class ReportGenerator:
             perf_data_path: str,
             frame_data_path: str,
             empty_frames_analysis_path: str,
+            component_reusability_report_path: str,
     ) -> str:
         """Inject JSON data into an HTML template"""
         # Validate paths
@@ -240,18 +242,24 @@ class ReportGenerator:
         # Load JSON data
         with open(perf_data_path, 'r', encoding='utf-8') as f:
             perf_data = json.load(f)
-        frame_data = None
+
         if os.path.exists(frame_data_path):
             with open(frame_data_path, 'r', encoding='utf-8') as f:
                 frame_data = json.load(f)
         else:
             logging.info(f"JSON file not found: {empty_frames_analysis_path}")
-        empty_frame_data = None
+
         if os.path.exists(empty_frames_analysis_path):
             with open(empty_frames_analysis_path, 'r', encoding='utf-8') as f:
                 empty_frame_data = json.load(f)
         else:
             logging.info(f"JSON file not found: {empty_frames_analysis_path}")
+
+        if os.path.exists(component_reusability_report_path):
+            with open(component_reusability_report_path, 'r', encoding='utf-8') as f:
+                component_reusability_data = json.load(f)
+        else:
+            logging.info(f"JSON file not found: {component_reusability_report_path}")
 
         # Validate JSON structure
         if not perf_data or not isinstance(perf_data, list):
@@ -260,8 +268,10 @@ class ReportGenerator:
             raise ValueError(f"Invalid JSON format in {frame_data_path}: expected non-empty array")
         if not empty_frame_data or not isinstance(empty_frame_data, dict):
             raise ValueError(f"Invalid JSON format in {empty_frames_analysis_path}: expected non-empty array")
+        if not component_reusability_data or not isinstance(component_reusability_data, dict):
+            raise ValueError(f"Invalid JSON format in {component_reusability_report_path}: expected non-empty array")
 
-        json_data_str = self._merge_json_data(1, perf_data, frame_data, empty_frame_data)
+        json_data_str = self._merge_json_data(1, perf_data, frame_data, empty_frame_data, component_reusability_data)
 
         logging.debug(f"merged succeed!+{perf_data_path}+{frame_data_path}+{empty_frames_analysis_path}")
         return json_data_str
@@ -269,12 +279,13 @@ class ReportGenerator:
     @staticmethod
     def _merge_json_data(
             type: int,  # 0 json string, 1 base64 gzip json string, 2 base64 gzip sqlite db
-            perf_data: list,
-            frame_data: list,
+            perf_data: list|dict,
+            frame_data: list|dict,
             empty_frame_data: dict,
+            component_reusability_data:dict,
     ) -> str:
         """Inject JSON data into an HTML template"""
-        json_data = ReportGenerator.create_merged_json(perf_data, frame_data, empty_frame_data)
+        json_data = ReportGenerator.create_merged_json(perf_data, frame_data, empty_frame_data,component_reusability_data)
         logging.debug(f"merged json data succeed!")
         if type == 0:
             return str(json_data)
@@ -296,7 +307,7 @@ class ReportGenerator:
             return "未知"
 
     @staticmethod
-    def create_merged_json(perf_data, frame_data, empty_frame_data):
+    def create_merged_json(perf_data, frame_data, empty_frame_data, component_reusability_data):
         """创建合并后的JSON对象"""
         merged_data = {
             "type": 0,  # 0表示JSON字符串
@@ -307,7 +318,7 @@ class ReportGenerator:
 
         # 只有当frame_analysis有数据时才添加trace字段
         if frame_data is not None:
-            merged_data["trace"] = ReportGenerator.create_trace_data(frame_data, empty_frame_data)
+            merged_data["trace"] = ReportGenerator.create_trace_data(frame_data, empty_frame_data, component_reusability_data)
 
         return merged_data
 
@@ -343,11 +354,11 @@ class ReportGenerator:
         return result_perf_data
 
     @staticmethod
-    def create_trace_data(frame_analysis, empty_frames_analysis):
+    def create_trace_data(frame_analysis, empty_frames_analysis, component_reusability_data):
         """创建TraceData对象"""
         trace_data = {
             "frames": [],
-            "componentReuse": False  # 默认设置为False，根据实际情况可能需要调整
+            "componentReuse": component_reusability_data
         }
 
         # 处理帧分析数据

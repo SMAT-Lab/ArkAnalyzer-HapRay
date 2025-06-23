@@ -22,7 +22,7 @@ interface BasicInfo {
 interface TraceData {
   frames: FrameData[], // 帧数据，包含卡顿帧
   emptyFrame?: EmptyFrameData, // 空刷帧
-  componentReuse: boolean // 组件复用
+  componentReuse: ComponentResuData // 组件复用
 }
 
 enum PerfEvent {
@@ -192,6 +192,15 @@ interface CallstackFrame {
   symbol: string;
 }
 
+
+interface ComponentResuData {
+  [stepName: string]: {
+    total_builds: number;
+    recycled_builds: number;
+    reusability_ratio: number;
+  };
+}
+
 export const defaultFrameDataJson = [
   {
     "runtime": "",
@@ -358,7 +367,8 @@ export const useJsonDataStore = defineStore('config', {
     perfData: null as PerfData | null,
     frameData: null as FrameData[] | null,
     emptyFrameData: null as EmptyFrameData | null,
-    comparePerfData: null as PerfData | null
+    comparePerfData: null as PerfData | null,
+    componentResuData: null as ComponentResuData | null,
 
   }),
   actions: {
@@ -378,6 +388,7 @@ export const useJsonDataStore = defineStore('config', {
           } else {
             this.emptyFrameData = defaultEmptyJson;
           }
+          this.componentResuData = jsonData.trace.componentReuse;
         }
         window.initialPage = 'perf';
       } else {
