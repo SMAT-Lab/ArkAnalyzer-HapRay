@@ -121,10 +121,6 @@ class PerfAction:
 
             logging.info(f"Found {len(matched_cases)} test cases for execution")
 
-            so_dir = Config.get('so_dir', None)
-            if so_dir is not None:
-                so_dir = os.path.abspath(parsed_args.so_dir)
-
             for case_name in matched_cases:
                 scene_round_dirs = []
                 for round_num in range(5):

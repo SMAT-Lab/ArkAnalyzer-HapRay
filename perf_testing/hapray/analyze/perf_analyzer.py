@@ -15,6 +15,7 @@ limitations under the License.
 
 import json
 import logging
+import os
 from typing import Dict, Any
 
 from hapray.analyze import BaseAnalyzer
@@ -32,7 +33,7 @@ class PerfAnalyzer(BaseAnalyzer):
 
         so_dir = Config.get('so_dir', None)
         if so_dir:
-            args.extend(['-s', so_dir])
+            args.extend(['-s', os.path.abspath(so_dir)])
 
         kind = self.convert_kind_to_json()
         if len(kind) > 0:
