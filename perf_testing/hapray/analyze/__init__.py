@@ -21,11 +21,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
+from hapray.core.common.exe_utils import ExeUtils
 
 # Configuration constants
 MAX_WORKERS = 4  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
+    'PerfAnalyzer',
     # Add more analyzers here
 ]
 
@@ -42,7 +44,7 @@ def camel_to_snake(name: str) -> str:
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-def data_analyze(scene_dir: str):
+def analyze_data(scene_dir: str):
     """Main entry point for data analysis pipeline.
 
     Args:
@@ -159,11 +161,15 @@ def _process_single_step(
         analyzers: List of analyzer instances
     """
     step_path = os.path.join(htrace_path, step_dir)
+    htrace_file = os.path.join(step_path, 'trace.htrace')
     trace_db = os.path.join(step_path, 'trace.db')
     perf_db = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.db')
 
-    if not all(os.path.exists(db) for db in [trace_db, perf_db]):
-        raise FileNotFoundError(f"Missing DB files for step {step_dir}")
+    if not os.path.exists(trace_db):
+        logging.info(f"Converting htrace to db for {step_dir}...")
+        if not ExeUtils.convert_data_to_db(htrace_file, trace_db):
+            logging.error(f"Failed to convert htrace to db for {step_dir}")
+            return
 
     _run_analyzers(analyzers, step_dir, trace_db, perf_db)
 
