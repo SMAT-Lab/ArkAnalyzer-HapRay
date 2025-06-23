@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import re
 
 """
 Analyzer for component reusability metrics.
@@ -24,6 +25,8 @@ from hapray.analyze.base_analyzer import BaseAnalyzer
 
 
 class ComponentReusableAnalyzer(BaseAnalyzer):
+    pattern = re.compile(r'^H:CustomNode:BuildItem\s*\[([^\]]*)\]')
+
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'component_reusability_report.json')
 
@@ -53,15 +56,28 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
 
+                result = dict()
                 # Get total component builds
-                cursor.execute("SELECT COUNT(*) AS count FROM callstack WHERE name LIKE '%H:CustomNode:Build%'")
-                total_row = cursor.fetchone()
-                metrics["total_builds"] = total_row["count"] if total_row else 0
+                cursor.execute("SELECT name FROM callstack WHERE name LIKE '%H:CustomNode:Build%'")
+                for row in cursor.fetchall():
+                    # H:CustomNode:BuildItem [ItemView][self:86][parent:-1]
+                    # H:CustomNode:BuildRecycle ItemView
+                    component = self._extract_component_name(row["name"])
+                    if component not in result.keys():
+                        result[component] = [0, 0]
+                    result[component][0] = result[component][0] + 1
+                    if row["name"].startswith('H:CustomNode:BuildRecycle'):
+                        result[component][1] = result[component][1] + 1
 
-                # Get recycled component builds
-                cursor.execute("SELECT COUNT(*) AS count FROM callstack WHERE name LIKE '%H:CustomNode:BuildRecycle%'")
-                recycled_row = cursor.fetchone()
-                metrics["recycled_builds"] = recycled_row["count"] if recycled_row else 0
+                # choose max component as build result
+                max_component = [0, 0]
+                for value in result.values():
+                    if value[0] > max_component[0]:
+                        max_component[0] = value[0]
+                        max_component[1] = value[1]
+
+                metrics["total_builds"] = max_component[0]
+                metrics["recycled_builds"] = max_component[1]
 
                 # Calculate reusability ratio
                 if metrics["total_builds"] > 0:
@@ -74,3 +90,11 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
             return {"error": f"Database operation failed: {str(e)}"}
 
         return metrics
+
+    def _extract_component_name(self, name) -> str:
+        match = self.pattern.search(name)
+        if match:
+            return match.group(1)
+        if name.startswith('H:CustomNode:BuildRecycle'):
+            return name.split(' ')[1]
+        return 'Unknown'
