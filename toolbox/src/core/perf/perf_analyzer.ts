@@ -622,7 +622,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         for (const sample of this.samples) {
             let event = this.getEventType(sample.event_name);
-            if (!event) {
+            if (event === null) {
                 continue;
             }
 
