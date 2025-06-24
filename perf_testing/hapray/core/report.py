@@ -30,6 +30,80 @@ from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.common.frame_analyzer import FrameAnalyzer
 
 
+class ReportData:
+    """封装报告生成所需的所有数据"""
+
+    def __init__(self):
+        self.perf_data = []
+        self.frame_data = {}
+        self.empty_frame_data = {}
+        self.component_reusability_data = {}
+        self.basic_info = {}
+
+    @classmethod
+    def from_paths(cls, perf_path, frame_path, empty_frame_path, component_path):
+        """从文件路径加载数据"""
+        data = cls()
+        data.load_perf_data(perf_path)
+        data.load_frame_data(frame_path)
+        data.load_empty_frame_data(empty_frame_path)
+        data.load_component_reusability_data(component_path)
+        data.extract_basic_info()
+        return data
+
+    def load_perf_data(self, path):
+        self.perf_data = self._load_json_safe(path, default=[])
+        if len(self.perf_data) == 0 :
+            raise FileNotFoundError(f"hiperf_info.json not found: {path}")
+
+    def load_frame_data(self, path):
+        self.frame_data = self._load_json_safe(path, default={})
+
+    def load_empty_frame_data(self, path):
+        self.empty_frame_data = self._load_json_safe(path, default={})
+
+    def load_component_reusability_data(self, path):
+        self.component_reusability_data = self._load_json_safe(path, default={})
+
+    def extract_basic_info(self):
+        if self.perf_data and isinstance(self.perf_data, list):
+            first_entry = self.perf_data[0]
+            self.basic_info = {
+                "rom_version": first_entry.get("rom_version", ""),
+                "app_id": first_entry.get("app_id", ""),
+                "app_name": first_entry.get("app_name", ""),
+                "app_version": first_entry.get("app_version", ""),
+                "scene": first_entry.get("scene", ""),
+                "timestamp": first_entry.get("timestamp", 0)
+            }
+
+    def _load_json_safe(self, path, default):
+        """安全加载JSON文件，处理异常情况"""
+        if not os.path.exists(path):
+            logging.info(f"File not found: {path}")
+            return default
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # 验证数据类型
+            if isinstance(default, list) and not isinstance(data, list):
+                logging.warning(f"Invalid format in {path}, expected list but got {type(data).__name__}")
+                return default
+            elif isinstance(default, dict) and not isinstance(data, dict):
+                logging.warning(f"Invalid format in {path}, expected dict but got {type(data).__name__}")
+                return default
+
+            return data
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON decoding error in {path}: {str(e)}")
+            return default
+        except Exception as e:
+            logging.error(f"Error loading {path}: {str(e)}")
+            return default
+
+
 class ReportGenerator:
     """Generates and updates performance analysis reports"""
 
@@ -181,7 +255,8 @@ class ReportGenerator:
             empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
             component_reusability_report_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
 
-            json_data_str = self._get_json_data(perf_data_path, frame_data_path, empty_frames_analysis_path,component_reusability_report_path)
+            json_data_str = self._get_json_data(perf_data_path, frame_data_path, empty_frames_analysis_path,
+                                                component_reusability_report_path)
 
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
@@ -210,141 +285,69 @@ class ReportGenerator:
             empty_frames_analysis_path: str,
             component_reusability_report_path: str,
     ) -> str:
-        """Inject JSON data into an HTML template"""
-        # Validate paths
-        if not os.path.exists(perf_data_path):
-            raise FileNotFoundError(f"JSON file not found: {perf_data_path}")
+        """加载并处理所有报告数据"""
+        report_data = ReportData.from_paths(
+            perf_data_path,
+            frame_data_path,
+            empty_frames_analysis_path,
+            component_reusability_report_path
+        )
 
-        # Load JSON data
-        with open(perf_data_path, 'r', encoding='utf-8') as f:
-            perf_data = json.load(f)
+        return self._build_merged_data(1, report_data)
 
-        if os.path.exists(frame_data_path):
-            with open(frame_data_path, 'r', encoding='utf-8') as f:
-                frame_data = json.load(f)
-        else:
-            logging.info(f"JSON file not found: {empty_frames_analysis_path}")
+    def _build_merged_data(self, data_type: int, report_data: 'ReportData') -> str:
+        """
+        构建并处理合并后的报告数据
 
-        if os.path.exists(empty_frames_analysis_path):
-            with open(empty_frames_analysis_path, 'r', encoding='utf-8') as f:
-                empty_frame_data = json.load(f)
-        else:
-            logging.info(f"JSON file not found: {empty_frames_analysis_path}")
-
-        if os.path.exists(component_reusability_report_path):
-            with open(component_reusability_report_path, 'r', encoding='utf-8') as f:
-                component_reusability_data = json.load(f)
-        else:
-            logging.info(f"JSON file not found: {component_reusability_report_path}")
-
-        # Validate JSON structure
-        if not perf_data or not isinstance(perf_data, list):
-            raise ValueError(f"Invalid JSON format in {perf_data_path}: expected non-empty array")
-        if not frame_data or not isinstance(frame_data, dict):
-            raise ValueError(f"Invalid JSON format in {frame_data_path}: expected non-empty array")
-        if not empty_frame_data or not isinstance(empty_frame_data, dict):
-            raise ValueError(f"Invalid JSON format in {empty_frames_analysis_path}: expected non-empty array")
-        if not component_reusability_data or not isinstance(component_reusability_data, dict):
-            raise ValueError(f"Invalid JSON format in {component_reusability_report_path}: expected non-empty array")
-
-        json_data_str = self._merge_json_data(1, perf_data, frame_data, empty_frame_data, component_reusability_data)
-
-        logging.debug(f"merged succeed!+{perf_data_path}+{frame_data_path}+{empty_frames_analysis_path}")
-        return json_data_str
-
-    @staticmethod
-    def _merge_json_data(
-            type: int,  # 0 json string, 1 base64 gzip json string, 2 base64 gzip sqlite db
-            perf_data: list|dict,
-            frame_data: list|dict,
-            empty_frame_data: dict,
-            component_reusability_data:dict,
-    ) -> str:
-        """Inject JSON data into an HTML template"""
-        json_data = ReportGenerator.create_merged_json(perf_data, frame_data, empty_frame_data,component_reusability_data)
-        logging.debug(f"merged json data succeed!")
-        if type == 0:
-            return str(json_data)
-        elif type == 1:
-            # 将JSON对象转换为UTF-8字节串
-            json_bytes = json.dumps(json_data).encode('utf-8')
-
-            compressed_bytes = zlib.compress(json_bytes, level=9)
-
-            # 转换为Base64编码
-            base64_bytes = base64.b64encode(compressed_bytes)
-
-            # 转换为字符串
-            json_data_str = base64_bytes.decode('ascii')
-            return json_data_str
-        elif type == 2:
-            return str(json_data)
-        else:
-            return "未知"
-
-    @staticmethod
-    def create_merged_json(perf_data, frame_data, empty_frame_data, component_reusability_data):
-        """创建合并后的JSON对象"""
+        根据指定类型处理数据：
+        - 0: 返回原始JSON字符串
+        - 1: 返回Base64编码的gzip压缩JSON
+        - 2: 返回原始JSON字符串（与类型0相同）
+        """
+        # 构建基础数据结构
         merged_data = {
-            "type": 0,  # 0表示JSON字符串
-            "versionCode": 1,  # 初始版本号
-            "basicInfo": ReportGenerator.create_basic_info(perf_data),
-            "perf": ReportGenerator.create_perf_data(perf_data)
+            "type": data_type,
+            "versionCode": 1,
+            "basicInfo": report_data.basic_info or {},
+            "perf": {"steps": []}  # 默认空步骤
         }
 
-        # 只有当frame_analysis有数据时才添加trace字段
-        if frame_data is not None:
-            merged_data["trace"] = ReportGenerator.create_trace_data(frame_data, empty_frame_data, component_reusability_data)
+        # 处理性能数据
+        if isinstance(report_data.perf_data, list) and len(report_data.perf_data) > 0:
+            first_entry = report_data.perf_data[0]
+            merged_data["perf"]["steps"] = first_entry.get("steps", [])
 
-        return merged_data
+        # 处理跟踪数据（可选）
+        if report_data.frame_data:
+            trace_data = {
+                "componentReuse": report_data.component_reusability_data
+            }
 
-    @staticmethod
-    def create_basic_info(perf_data):
-        """从hiperf_info数据中提取并创建BasicInfo对象"""
-        if perf_data is None:
-            return None
+            # 添加帧分析数据
+            frames = report_data.frame_data
+            if frames is not {}:
+                trace_data["frames"] = frames
 
-        first_entry = perf_data[0]
-        return {
-            "rom_version": first_entry.get("rom_version", ""),
-            "app_id": first_entry.get("app_id", ""),
-            "app_name": first_entry.get("app_name", ""),
-            "app_version": first_entry.get("app_version", ""),
-            "scene": first_entry.get("scene", ""),
-            "timestamp": first_entry.get("timestamp", 0)
-        }
+            # 添加空帧分析数据（可选）
+            if report_data.empty_frame_data is not {}:
+                trace_data["emptyFrame"] = report_data.empty_frame_data
 
-    @staticmethod
-    def create_perf_data(perf_data):
-        """创建PerfData对象"""
-        result_perf_data = {
-            "steps": []
-        }
+            merged_data["trace"] = trace_data
 
-        if perf_data is None:
-            return None
-
-        first_entry = perf_data[0]
-        steps = first_entry.get("steps", [])
-        result_perf_data["steps"] = steps
-        return result_perf_data
-
-    @staticmethod
-    def create_trace_data(frame_analysis, empty_frames_analysis, component_reusability_data):
-        """创建TraceData对象"""
-        trace_data = {
-            "componentReuse": component_reusability_data
-        }
-
-        # 处理帧分析数据
-        if frame_analysis and len(frame_analysis) > 0:
-            trace_data["frames"] = frame_analysis
-
-        # 添加空刷帧数据
-        if empty_frames_analysis:
-            trace_data["emptyFrame"] = empty_frames_analysis
-
-        return trace_data
+        # 根据类型处理输出格式
+        try:
+            if data_type == 1:
+                # 路径1: Base64编码的gzip压缩JSON
+                json_bytes = json.dumps(merged_data).encode('utf-8')
+                compressed_bytes = zlib.compress(json_bytes, level=9)
+                base64_bytes = base64.b64encode(compressed_bytes)
+                return base64_bytes.decode('ascii')
+            else:
+                # 路径2: 原始JSON字符串（类型0和2）
+                return json.dumps(merged_data)
+        except Exception as e:
+            logging.error(f"Failed to process merged data: {str(e)}")
+            return "未知"
 
     @staticmethod
     def _inject_json_to_html(
