@@ -20,6 +20,7 @@ Abstract base class for all data analyzers.
 import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 
@@ -36,6 +37,7 @@ class BaseAnalyzer(ABC):
         self.scene_dir = scene_dir
         self.report_path = os.path.join(self.scene_dir, 'htrace', report_name)
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.report_name = report_name
 
     def analyze(self, step_dir: str, trace_db_path: str, perf_db_path: str):
         """Public method to execute analysis for a single step.
@@ -46,11 +48,12 @@ class BaseAnalyzer(ABC):
             perf_db_path: Path to performance database
         """
         try:
+            start_time = time.time()
             result = self._analyze_impl(trace_db_path, perf_db_path)
             self.results[step_dir] = result
-            self.logger.info(f"Analysis completed for step {step_dir}")
+            self.logger.info(f"Analysis completed for step {step_dir} in {time.time() - start_time:.2f} seconds [{self.report_name}]")
         except Exception as e:
-            self.logger.error(f"Analysis failed for step {step_dir}: {str(e)}")
+            self.logger.error(f"Analysis failed for step {step_dir}: {str(e)} [{self.report_name}]")
             self.results[step_dir] = {"error": str(e)}
 
     @abstractmethod

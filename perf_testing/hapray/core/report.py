@@ -147,16 +147,11 @@ class ReportGenerator:
             if not self._select_round(scene_dirs, scene_dir):
                 logging.error("Round selection failed, aborting report generation")
                 return False
-        # Step 2: Analyze data
+        
+        # Step 2: Analyze data (includes empty frames and frame drops analysis)
         analyze_data(scene_dir)
 
-        # Step 3: Analyze empty frames
-        self._analyze_empty_frames(scene_dir)
-
-        # Step 4: Analyze frame drops
-        self._analyze_frame_drops(scene_dir)
-
-        # Step 5: Generate HTML report
+        # Step 3: Generate HTML report
         self._create_html_report(scene_dir)
 
         logging.info(f"Report successfully {'updated' if skip_round_selection else 'generated'} for {scene_dir}")
@@ -175,82 +170,6 @@ class ReportGenerator:
 
         logging.debug(f"Selecting round with command: {' '.join(args)}")
         return ExeUtils.execute_hapray_cmd(args)
-
-    def _analyze_frame_drops(self, scene_dir: str) -> None:
-        """Analyze frame drops and log results"""
-        logging.info(f"Starting frame drops analysis for {scene_dir}")
-
-        try:
-            if FrameAnalyzer.analyze_frame_drops(scene_dir):
-                logging.info(f"Successfully analyzed frame drops for {scene_dir}")
-            else:
-                logging.warning(f"Frame drop analysis completed with warnings for {scene_dir}")
-        except Exception as e:
-            logging.error(f"Frame drop analysis failed for {scene_dir}: {str(e)}")
-
-    def _analyze_empty_frames(self, scene_dir: str) -> None:
-        """分析空帧数据"""
-        try:
-            # 获取所有步骤的进程信息
-            app_pids = self._get_app_pids(scene_dir)
-            if not app_pids:
-                logging.warning(f"No app PIDs found for scene {scene_dir}")
-                return
-
-            # 用于存储所有步骤的分析结果
-            all_results = {}
-
-            # 遍历所有步骤目录
-            for step_dir in os.listdir(os.path.join(scene_dir, 'htrace')):
-                step_path = os.path.join(scene_dir, 'htrace', step_dir)
-                if not os.path.isdir(step_path):
-                    continue
-
-                # 从step_dir中提取步骤编号（例如从'step1'提取'1'）
-                current_step_id = int(step_dir.replace('step', ''))
-
-                # 过滤出当前步骤的进程信息
-                current_step_pids = [(name, pid) for step_id, name, pid in app_pids if int(step_id) == current_step_id]
-
-                if not current_step_pids:
-                    logging.warning(f"No process info found for step {step_dir}")
-                    continue
-
-                # 提取PID列表
-                pids = [pid for _, pid in current_step_pids]
-
-                # 记录当前步骤的进程信息
-                for name, pid in current_step_pids:
-                    logging.info(f"Step {step_dir} - Process: {name} (PID: {pid})")
-
-                # 获取trace和perf数据库路径
-                trace_db = os.path.join(step_path, 'trace.db')
-                perf_db = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.db')
-
-                if not os.path.exists(trace_db) or not os.path.exists(perf_db):
-                    logging.warning(f"Missing database files for step {step_dir}")
-                    continue
-
-                # 执行空帧分析
-                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, pids)
-                if result["status"] == "success":
-                    logging.info(f"Successfully analyzed empty frames for step {step_dir}")
-                    all_results[step_dir] = result
-                else:
-                    logging.warning(
-                        f"Empty frame analysis failed for step {step_dir}: {result.get('message', 'Unknown error')}")
-
-            # 保存所有步骤的分析结果到htrace子目录
-            if all_results:
-                output_json = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
-                with open(output_json, 'w', encoding='utf-8') as f:
-                    json.dump(all_results, f, ensure_ascii=False, indent=2)
-                logging.info(f"All empty frames analysis results saved to {output_json}")
-            else:
-                logging.warning("No valid analysis results to save")
-
-        except Exception as e:
-            logging.error(f"Empty frame analysis failed for {scene_dir}: {str(e)}")
 
     def _create_html_report(self, scene_dir: str) -> None:
         """Create the final HTML report"""
