@@ -41,13 +41,18 @@ class ReportData:
         self.basic_info = {}
 
     @classmethod
-    def from_paths(cls, perf_path, frame_path, empty_frame_path, component_path):
+    def from_paths(cls, scene_dir):
         """从文件路径加载数据"""
+        perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
+        frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
+        empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
+        component_reusability_report_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
+
         data = cls()
-        data.load_perf_data(perf_path)
-        data.load_frame_data(frame_path)
-        data.load_empty_frame_data(empty_frame_path)
-        data.load_component_reusability_data(component_path)
+        data.load_perf_data(perf_data_path)
+        data.load_frame_data(frame_data_path)
+        data.load_empty_frame_data(empty_frames_analysis_path)
+        data.load_component_reusability_data(component_reusability_report_path)
         data.extract_basic_info()
         return data
 
@@ -250,13 +255,7 @@ class ReportGenerator:
     def _create_html_report(self, scene_dir: str) -> None:
         """Create the final HTML report"""
         try:
-            perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
-            frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
-            empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
-            component_reusability_report_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
-
-            json_data_str = self._get_json_data(perf_data_path, frame_data_path, empty_frames_analysis_path,
-                                                component_reusability_report_path)
+            json_data_str = self._get_json_data(scene_dir)
 
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
@@ -280,17 +279,11 @@ class ReportGenerator:
 
     def _get_json_data(
             self,
-            perf_data_path: str,
-            frame_data_path: str,
-            empty_frames_analysis_path: str,
-            component_reusability_report_path: str,
+            scene_dir: str,
     ) -> str:
         """加载并处理所有报告数据"""
         report_data = ReportData.from_paths(
-            perf_data_path,
-            frame_data_path,
-            empty_frames_analysis_path,
-            component_reusability_report_path
+            scene_dir
         )
 
         return self._build_merged_data(1, report_data)

@@ -31,12 +31,12 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="scenePieData" />
+          <PieChart :chart-data="scenePieData" :title="pieChartTitle"/>
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="compareScenePieData" />
+          <PieChart :chart-data="compareScenePieData" :title="pieChartTitle"/>
         </div>
       </el-col>
     </el-row>
@@ -153,13 +153,13 @@
       <el-col :span="12">
         <!-- 基准步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" :chart-data="stepPieData" />
+          <PieChart :stepId="currentStepIndex" :chart-data="stepPieData" :title="pieChartTitle"/>
         </div>
       </el-col>
       <el-col :span="12">
         <!-- 迭代步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" :chart-data="compareStepPieData" />
+          <PieChart :stepId="currentStepIndex" :chart-data="compareStepPieData" :title="pieChartTitle"/>
         </div>
       </el-col>
     </el-row>
@@ -500,6 +500,7 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
   mergedData.steps.push(baselineStep, comparisonStep);
   return mergedData;
 }
+const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
 // 场景负载饼状图
 const scenePieData = ref();
 const compareScenePieData = ref();
