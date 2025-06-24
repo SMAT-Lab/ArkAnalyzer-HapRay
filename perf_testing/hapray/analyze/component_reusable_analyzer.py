@@ -29,7 +29,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'component_reusability_report.json')
 
-    def _analyze_impl(self, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
         """Analyze component reusability metrics.
 
         Metrics:
@@ -38,6 +38,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
         - Reusability ratio
 
         Args:
+            step_dir: Identifier for the current step
             trace_db_path: Path to trace database
             perf_db_path: Path to performance database (unused in this analyzer)
 

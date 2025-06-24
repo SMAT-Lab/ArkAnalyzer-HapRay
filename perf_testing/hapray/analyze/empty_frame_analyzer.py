@@ -28,10 +28,11 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'empty_frames_analysis.json')
 
-    def _analyze_impl(self, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
         """Analyze empty frames for a single step.
         
         Args:
+            step_dir: Identifier for the current step
             trace_db_path: Path to trace database
             perf_db_path: Path to performance database
             
@@ -39,9 +40,6 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             Dictionary containing empty frame analysis result for this step
         """
         try:
-            # 从路径中提取step_dir
-            step_dir = self._extract_step_dir(trace_db_path)
-            
             # 获取该步骤的进程信息
             pids = self._get_step_pids(step_dir)
             
@@ -67,16 +65,6 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
         except Exception as e:
             logging.error(f"Empty frame analysis failed: {str(e)}")
             return {"error": f"Empty frame analysis failed: {str(e)}"}
-
-    def _extract_step_dir(self, trace_db_path: str) -> str:
-        """从trace数据库路径中提取步骤目录名"""
-        # 路径格式：.../htrace/step1/trace.db
-        # 提取step1部分
-        path_parts = trace_db_path.split(os.sep)
-        for i, part in enumerate(path_parts):
-            if part == 'htrace' and i + 1 < len(path_parts):
-                return path_parts[i + 1]
-        return "unknown"
 
     def _get_step_pids(self, step_dir: str) -> list:
         """获取指定步骤的进程信息"""
