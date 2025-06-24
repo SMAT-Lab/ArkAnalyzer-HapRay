@@ -36,7 +36,7 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="scenePieData" />
+          <PieChart :chart-data="scenePieData" :title="pieChartTitle"/>
         </div>
       </el-col>
       <el-col :span="12">
@@ -102,7 +102,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle"/>
         </div>
         <!-- 进程负载 -->
         <!-- <div class="data-panel">
@@ -115,7 +115,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle"/>
         </div>
       </el-col>
     </el-row>
@@ -303,7 +303,7 @@ const scenePieData = ref();
 const stepPieData = ref();
 
 const processPieData = ref();
-
+const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
 scenePieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 processPieData.value = processJson2ProcessPieChartData(perfData!, currentStepIndex.value);
