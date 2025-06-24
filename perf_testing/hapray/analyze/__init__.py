@@ -19,6 +19,7 @@ import re
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import json
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.exe_utils import ExeUtils
@@ -28,6 +29,8 @@ MAX_WORKERS = 4  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
     'PerfAnalyzer',
+    'EmptyFrameAnalyzer',
+    'FrameDropAnalyzer',
     # Add more analyzers here
 ]
 
