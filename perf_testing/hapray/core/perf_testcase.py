@@ -117,6 +117,7 @@ class PerfTestCase(TestCase):
         self.driver = UiDriver(self.device1)
         self.TAG = tag
         self.pid = -1
+        self._start_app_package = None
 
     @property
     @abstractmethod
@@ -204,8 +205,7 @@ class PerfTestCase(TestCase):
             steps_info.append({
                 "name": step['name'],
                 "description": step['description'],
-                "stepIdx": i,
-                "pid": step['pid']
+                "stepIdx": i
             })
 
         # 保存步骤信息到steps.json
@@ -277,6 +277,8 @@ class PerfTestCase(TestCase):
         os.makedirs(perf_step_dir, exist_ok=True)
         os.makedirs(htrace_step_dir, exist_ok=True)
 
+        self._save_app_pids(perf_step_dir)
+
         # 检查设备上的perf文件是否存在
         try:
             perf_result = self.driver.shell(f"ls -l {device_file}")
@@ -336,8 +338,6 @@ class PerfTestCase(TestCase):
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf thread start run {duration}s')
-        pids, process_names = self._get_app_pids()
-        self.steps[step_id - 1]['pid'] = [pids]
         # 创建并启动 hiperf 线程
         hiperf_cmd = PerfTestCase._get_hiperf_cmd(self.pid, output_file, duration)
         hiperf_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, hiperf_cmd))
@@ -380,14 +380,13 @@ class PerfTestCase(TestCase):
             self.pid = self._get_app_pid()
 
         Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
-        pids, process_names = self._get_app_pids()
-        self.steps[step_id - 1]['pid'] = [pids]
         # 启动采集线程
         if sample_all:
             # 如果是root权限，直接使用sample_all模式
             cmd = PerfTestCase._get_trace_and_perf_cmd('-a', output_file, duration)
         else:
             # 如果不是root权限，且需要采集多个进程
+            pids, process_names = self._get_app_pids()
             if not pids:
                 Log.error("No process found for multi-pid collection")
                 return
@@ -483,7 +482,10 @@ class PerfTestCase(TestCase):
             tuple[list[int], list[str]]: 返回两个列表，第一个是进程ID列表，第二个是进程名列表
         """
         # 使用 ps -ef | grep 命令获取所有相关进程
-        cmd = f"ps -ef | grep {self.app_package}"
+        app_package = self.app_package
+        if self._start_app_package is not None:
+            app_package = self._start_app_package
+        cmd = f"ps -ef | grep {app_package}"
         result = self.driver.shell(cmd)
 
         # 解析输出，提取PID和进程名
@@ -512,3 +514,9 @@ class PerfTestCase(TestCase):
     def _get_app_pid(self) -> int:
         pid_cmd = f"pidof {self.app_package}"
         return int(self.driver.shell(pid_cmd).strip())
+
+    def _save_app_pids(self, perf_step_dir):
+        pids, process_names = self._get_app_pids()
+        result_path = os.path.join(perf_step_dir, 'pids.json')
+        with open(result_path, 'w', encoding='utf-8') as f:
+            json.dump({'pids': pids, 'process_names': process_names}, f, indent=4, ensure_ascii=False)
