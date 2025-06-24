@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import base64
+import enum
 import json
 import logging
 import os
@@ -27,7 +28,11 @@ from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
-from hapray.core.common.frame_analyzer import FrameAnalyzer
+
+
+class DataType(enum.Enum):
+    JSON = 0
+    BASE64_GZIP_JSON = 1
 
 
 class ReportData:
@@ -56,9 +61,46 @@ class ReportData:
         data.extract_basic_info()
         return data
 
+    def __str__(self):
+        # 构建基础数据结构
+        merged_data = {
+            "type": DataType.BASE64_GZIP_JSON.value,
+            "versionCode": 1,
+            "basicInfo": self.basic_info or {},
+            "perf": {"steps": []}  # 默认空步骤
+        }
+
+        # 处理性能数据
+        if isinstance(self.perf_data, list) and len(self.perf_data) > 0:
+            first_entry = self.perf_data[0]
+            merged_data["perf"]["steps"] = first_entry.get("steps", [])
+
+        # 处理跟踪数据（可选）
+        if self.frame_data:
+            trace_data = {
+                "componentReuse": self.component_reusability_data
+            }
+
+            # 添加帧分析数据
+            frames = self.frame_data
+            if frames is not {}:
+                trace_data["frames"] = frames
+
+            # 添加空帧分析数据（可选）
+            if self.empty_frame_data is not {}:
+                trace_data["emptyFrame"] = self.empty_frame_data
+
+            merged_data["trace"] = trace_data
+
+        # 路径1: Base64编码的gzip压缩JSON
+        json_bytes = json.dumps(merged_data).encode('utf-8')
+        compressed_bytes = zlib.compress(json_bytes, level=9)
+        base64_bytes = base64.b64encode(compressed_bytes)
+        return base64_bytes.decode('ascii')
+
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])
-        if len(self.perf_data) == 0 :
+        if len(self.perf_data) == 0:
             raise FileNotFoundError(f"hiperf_info.json not found: {path}")
 
     def load_frame_data(self, path):
@@ -147,7 +189,7 @@ class ReportGenerator:
             if not self._select_round(scene_dirs, scene_dir):
                 logging.error("Round selection failed, aborting report generation")
                 return False
-        
+
         # Step 2: Analyze data (includes empty frames and frame drops analysis)
         analyze_data(scene_dir)
 
@@ -174,7 +216,7 @@ class ReportGenerator:
     def _create_html_report(self, scene_dir: str) -> None:
         """Create the final HTML report"""
         try:
-            json_data_str = self._get_json_data(scene_dir)
+            json_data_str = self._build_json_data(scene_dir)
 
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
@@ -196,70 +238,9 @@ class ReportGenerator:
         except Exception as e:
             logging.error(f"Failed to create HTML report: {str(e)}")
 
-    def _get_json_data(
-            self,
-            scene_dir: str,
-    ) -> str:
-        """加载并处理所有报告数据"""
-        report_data = ReportData.from_paths(
-            scene_dir
-        )
-
-        return self._build_merged_data(1, report_data)
-
-    def _build_merged_data(self, data_type: int, report_data: 'ReportData') -> str:
-        """
-        构建并处理合并后的报告数据
-
-        根据指定类型处理数据：
-        - 0: 返回原始JSON字符串
-        - 1: 返回Base64编码的gzip压缩JSON
-        - 2: 返回原始JSON字符串（与类型0相同）
-        """
-        # 构建基础数据结构
-        merged_data = {
-            "type": data_type,
-            "versionCode": 1,
-            "basicInfo": report_data.basic_info or {},
-            "perf": {"steps": []}  # 默认空步骤
-        }
-
-        # 处理性能数据
-        if isinstance(report_data.perf_data, list) and len(report_data.perf_data) > 0:
-            first_entry = report_data.perf_data[0]
-            merged_data["perf"]["steps"] = first_entry.get("steps", [])
-
-        # 处理跟踪数据（可选）
-        if report_data.frame_data:
-            trace_data = {
-                "componentReuse": report_data.component_reusability_data
-            }
-
-            # 添加帧分析数据
-            frames = report_data.frame_data
-            if frames is not {}:
-                trace_data["frames"] = frames
-
-            # 添加空帧分析数据（可选）
-            if report_data.empty_frame_data is not {}:
-                trace_data["emptyFrame"] = report_data.empty_frame_data
-
-            merged_data["trace"] = trace_data
-
-        # 根据类型处理输出格式
-        try:
-            if data_type == 1:
-                # 路径1: Base64编码的gzip压缩JSON
-                json_bytes = json.dumps(merged_data).encode('utf-8')
-                compressed_bytes = zlib.compress(json_bytes, level=9)
-                base64_bytes = base64.b64encode(compressed_bytes)
-                return base64_bytes.decode('ascii')
-            else:
-                # 路径2: 原始JSON字符串（类型0和2）
-                return json.dumps(merged_data)
-        except Exception as e:
-            logging.error(f"Failed to process merged data: {str(e)}")
-            return "未知"
+    @staticmethod
+    def _build_json_data(scene_dir: str) -> str:
+        return str(ReportData.from_paths(scene_dir))
 
     @staticmethod
     def _inject_json_to_html(
@@ -285,74 +266,6 @@ class ReportGenerator:
             f.write(updated_html)
 
         logging.debug(f"Injected {json_data_str} into {output_path}")
-
-    def _get_app_pids(self, scene_dir: str) -> list:
-        """获取应用进程ID列表
-        
-        从hiperf_info.json文件中读取进程信息，格式为：
-        [
-            {
-                "steps": [
-                    {
-                        "step_id": "step1",
-                        "data": [
-                            {
-                                "processName": "com.example.app",
-                                "pid": 1234
-                            },
-                            ...
-                        ]
-                    },
-                    ...
-                ]
-            }
-        ]
-        
-        Returns:
-            list: 进程ID列表
-        """
-        try:
-            # 获取hiperf_info.json文件路径
-            perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
-
-            if not os.path.exists(perf_data_path):
-                logging.warning(f"No hiperf_info.json found at {perf_data_path}")
-                return []
-
-            # 读取JSON文件
-            with open(perf_data_path, 'r', encoding='utf-8') as f:
-                perf_data = json.load(f)
-
-            if not perf_data or not isinstance(perf_data, list) or len(perf_data) == 0:
-                logging.warning("Invalid hiperf_info.json format")
-                return []
-
-            # 获取第一个item的steps
-            steps = perf_data[0].get('steps', [])
-            if not steps:
-                logging.warning("No steps found in hiperf_info.json")
-                return []
-
-            # 收集所有进程信息
-            process_info = set()  # 使用set去重
-            for step in steps:
-                step_id = step.get('step_id')
-                if not step_id:
-                    continue
-
-                # 遍历data数组
-                for item in step.get('data', []):
-                    process_name = item.get('processName')
-                    pid = item.get('pid')
-                    if process_name and pid:
-                        process_info.add((step_id, process_name, pid))
-
-            # 转换为列表并返回
-            return list(process_info)
-
-        except Exception as e:
-            logging.error(f"Failed to get app PIDs: {str(e)}")
-            return []
 
 
 def merge_summary_info(directory: str) -> List[Dict[str, Any]]:

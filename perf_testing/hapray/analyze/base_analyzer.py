@@ -49,7 +49,7 @@ class BaseAnalyzer(ABC):
         """
         try:
             start_time = time.time()
-            result = self._analyze_impl(trace_db_path, perf_db_path)
+            result = self._analyze_impl(step_dir, trace_db_path, perf_db_path)
             self.results[step_dir] = result
             self.logger.info(f"Analysis completed for step {step_dir} in {time.time() - start_time:.2f} seconds [{self.report_name}]")
         except Exception as e:
@@ -57,10 +57,11 @@ class BaseAnalyzer(ABC):
             self.results[step_dir] = {"error": str(e)}
 
     @abstractmethod
-    def _analyze_impl(self, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
         """Implementation of the analysis logic.
 
         Args:
+            step_dir: Identifier for the current step
             trace_db_path: Path to trace database
             perf_db_path: Path to performance database
 
