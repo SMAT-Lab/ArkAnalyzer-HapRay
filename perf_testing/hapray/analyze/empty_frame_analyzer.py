@@ -48,7 +48,6 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             if not pids:
                 logging.warning(f"No process info found for step {step_dir}")
                 return {
-                    "step_dir": step_dir,
                     "status": "error",
                     "message": "No process info found"
                 }
@@ -63,45 +62,11 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             # 执行空帧分析
             result = FrameAnalyzer.analyze_empty_frames(trace_db_path, perf_db_path, pid_list, self.scene_dir, step_dir)
             
-            return {
-                "step_dir": step_dir,
-                "result": result
-            }
+            return result
             
         except Exception as e:
-            logging.error(f"Empty frame analysis failed for step: {str(e)}")
-            return {
-                "step_dir": step_dir if 'step_dir' in locals() else "unknown",
-                "status": "error",
-                "message": str(e)
-            }
-
-    def write_report(self):
-        """Override to write empty frames analysis report with cross-step summary."""
-        # 直接执行跨步骤汇总
-        self._write_empty_frames_summary()
-
-    def _write_empty_frames_summary(self):
-        """写入空帧分析汇总结果"""
-        # 汇总所有步骤的空帧分析结果
-        all_results = {}
-        
-        for step_dir, step_result in self.results.items():
-            if step_result.get("result", {}).get("status") == "success":
-                all_results[step_dir] = step_result["result"]
-                logging.info(f"Successfully analyzed empty frames for step {step_dir}")
-            else:
-                logging.warning(
-                    f"Empty frame analysis failed for step {step_dir}: {step_result.get('message', 'Unknown error')}")
-        
-        # 保存汇总结果
-        if all_results:
-            output_json = os.path.join(self.scene_dir, 'htrace', 'empty_frames_analysis.json')
-            with open(output_json, 'w', encoding='utf-8') as f:
-                json.dump(all_results, f, ensure_ascii=False, indent=2)
-            logging.info(f"All empty frames analysis results saved to {output_json}")
-        else:
-            logging.warning("No valid analysis results to save")
+            logging.error(f"Empty frame analysis failed: {str(e)}")
+            return {"error": f"Empty frame analysis failed: {str(e)}"}
 
     def _extract_step_dir(self, trace_db_path: str) -> str:
         """从trace数据库路径中提取步骤目录名"""
