@@ -83,11 +83,11 @@ class ReportData:
 
             # 添加帧分析数据
             frames = self.frame_data
-            if frames is not {}:
+            if frames != {}:
                 trace_data["frames"] = frames
 
             # 添加空帧分析数据（可选）
-            if self.empty_frame_data is not {}:
+            if self.empty_frame_data != {}:
                 trace_data["emptyFrame"] = self.empty_frame_data
 
             merged_data["trace"] = trace_data
