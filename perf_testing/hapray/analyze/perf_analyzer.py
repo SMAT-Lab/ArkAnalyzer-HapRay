@@ -19,6 +19,7 @@ import os
 from typing import Dict, Any
 
 from hapray.analyze import BaseAnalyzer
+from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
 
@@ -41,6 +42,7 @@ class PerfAnalyzer(BaseAnalyzer):
 
         logging.debug(f"Running perf analysis with command: {' '.join(args)}")
         ExeUtils.execute_hapray_cmd(args)
+        self.generate_hiperf_report(perf_db_path)
         return {}
 
     def write_report(self):
@@ -71,3 +73,27 @@ class PerfAnalyzer(BaseAnalyzer):
             kind_entry["components"].append(component)
 
         return json.dumps([kind_entry])
+
+    @staticmethod
+    def generate_hiperf_report(perf_path: str):
+        report_file = os.path.join(os.path.dirname(perf_path), 'hiperf_report.html')
+        if os.path.exists(report_file):
+            return
+        template_file = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'res',
+                                     'hiperf_report_template.html')
+        if not os.path.exists(template_file):
+            logging.warning('Not found file %s', template_file)
+            return
+        perf_json_file = os.path.join(os.path.dirname(perf_path), 'perf.json')
+        if not os.path.exists(perf_json_file):
+            logging.warning('Not found file %s', perf_json_file)
+            return
+
+        with open(perf_json_file, 'r', errors='ignore') as json_file:
+            all_json = json_file.read()
+        with open(template_file, 'r', encoding='utf-8') as html_file:
+            html_str = html_file.read()
+        with open(report_file, 'w', encoding='utf-8') as report_html_file:
+            report_html_file.write(html_str + all_json + '</script>'
+                                                         ' </body>'
+                                                         ' </html>')
