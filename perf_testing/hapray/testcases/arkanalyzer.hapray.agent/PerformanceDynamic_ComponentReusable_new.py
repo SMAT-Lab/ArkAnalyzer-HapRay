@@ -25,7 +25,7 @@ class PerformanceDynamic_ComponentReusable_new(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -43,7 +43,7 @@ class PerformanceDynamic_ComponentReusable_new(PerfTestCase):
 
     def teardown(self):
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()
 
     def process(self):
         def step1(driver):
@@ -61,4 +61,4 @@ class PerformanceDynamic_ComponentReusable_new(PerfTestCase):
         self.driver.start_app(package_name=self.app_package)
         self.driver.wait(5)  # 增加启动等待时间
 
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_performance_step(1, step1, 20)

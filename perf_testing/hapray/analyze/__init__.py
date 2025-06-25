@@ -58,14 +58,14 @@ def analyze_data(scene_dir: str):
         logging.error("No analyzers initialized. Aborting analysis.")
         return
 
-    htrace_path = os.path.join(scene_dir, 'htrace')
-    if not os.path.exists(htrace_path):
-        logging.error(f"htrace directory not found: {htrace_path}")
+    hiperf_path = os.path.join(scene_dir, 'hiperf')
+    if not os.path.exists(hiperf_path):
+        logging.error(f"htrace directory not found: {hiperf_path}")
         return
 
     try:
         start_time = time.perf_counter()
-        _process_steps_parallel(htrace_path, scene_dir, analyzers)
+        _process_steps_parallel(hiperf_path, scene_dir, analyzers)
         elapsed = time.perf_counter() - start_time
         logging.info(f"Parallel processing completed in {elapsed:.2f} seconds")
     except Exception as e:
@@ -95,21 +95,21 @@ def _initialize_analyzers(scene_dir: str) -> List[BaseAnalyzer]:
 
 
 def _process_steps_parallel(
-        htrace_path: str,
+        hiperf_path: str,
         scene_dir: str,
         analyzers: List[BaseAnalyzer]
 ):
     """Process all steps in parallel using a thread pool.
 
     Args:
-        htrace_path: Path to htrace directory
+        hiperf_path: Path to hiperf directory
         scene_dir: Root scene directory
         analyzers: List of analyzer instances
     """
     # Collect all valid step directories
     step_dirs = []
-    for step_dir in os.listdir(htrace_path):
-        step_path = os.path.join(htrace_path, step_dir)
+    for step_dir in os.listdir(hiperf_path):
+        step_path = os.path.join(hiperf_path, step_dir)
         if os.path.isdir(step_path):
             step_dirs.append(step_dir)
 
@@ -127,7 +127,6 @@ def _process_steps_parallel(
             future = executor.submit(
                 _process_single_step,
                 step_dir,
-                htrace_path,
                 scene_dir,
                 analyzers
             )
@@ -151,7 +150,6 @@ def _process_steps_parallel(
 
 def _process_single_step(
         step_dir: str,
-        htrace_path: str,
         scene_dir: str,
         analyzers: List[BaseAnalyzer]
 ):
@@ -159,16 +157,14 @@ def _process_single_step(
 
     Args:
         step_dir: Step directory name
-        htrace_path: Path to htrace directory
         scene_dir: Root scene directory
         analyzers: List of analyzer instances
     """
-    step_path = os.path.join(htrace_path, step_dir)
-    htrace_file = os.path.join(step_path, 'trace.htrace')
-    trace_db = os.path.join(step_path, 'trace.db')
+    htrace_file = os.path.join(scene_dir, 'htrace', step_dir, 'trace.htrace')
+    trace_db = os.path.join(scene_dir, 'htrace', step_dir, 'trace.db')
     perf_db = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.db')
 
-    if not os.path.exists(trace_db):
+    if not os.path.exists(trace_db) and os.path.exists(htrace_file):
         logging.info(f"Converting htrace to db for {step_dir}...")
         if not ExeUtils.convert_data_to_db(htrace_file, trace_db):
             logging.error(f"Failed to convert htrace to db for {step_dir}")

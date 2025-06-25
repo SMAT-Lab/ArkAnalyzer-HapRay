@@ -162,7 +162,7 @@ export async function copyFile(
     }
 }
 
-export async function checkPerfAndHtraceFiles(dirPath: string, summaryCount: number): Promise<boolean> {
+export async function checkPerfFiles(dirPath: string, summaryCount: number): Promise<boolean> {
     let hiperfDataCount = 0;
     const hiperfDir = path.join(dirPath, 'hiperf');
     const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
@@ -173,17 +173,7 @@ export async function checkPerfAndHtraceFiles(dirPath: string, summaryCount: num
         }
     });
 
-    let htracefDataCount = 0;
-    const htraceDir = path.join(dirPath, 'htrace');
-    const htraceStepDirs = getFirstLevelFolders(htraceDir);
-    htraceStepDirs.forEach((htraceStepDir) => {
-        const htracePath = path.join(htraceStepDir, 'trace.htrace');
-        if (fs.existsSync(htracePath)) {
-            htracefDataCount++;
-        }
-    });
-
-    if (hiperfDataCount === htracefDataCount && hiperfDataCount === summaryCount) {
+    if (hiperfDataCount === summaryCount) {
         return true;
     } else {
         return false;

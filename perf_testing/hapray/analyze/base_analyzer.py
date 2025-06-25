@@ -50,8 +50,10 @@ class BaseAnalyzer(ABC):
         try:
             start_time = time.time()
             result = self._analyze_impl(step_dir, trace_db_path, perf_db_path)
-            self.results[step_dir] = result
-            self.logger.info(f"Analysis completed for step {step_dir} in {time.time() - start_time:.2f} seconds [{self.report_name}]")
+            if result:
+                self.results[step_dir] = result
+            self.logger.info(
+                f"Analysis completed for step {step_dir} in {time.time() - start_time:.2f} seconds [{self.report_name}]")
         except Exception as e:
             self.logger.error(f"Analysis failed for step {step_dir}: {str(e)} [{self.report_name}]")
             self.results[step_dir] = {"error": str(e)}

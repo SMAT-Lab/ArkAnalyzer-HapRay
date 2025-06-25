@@ -36,6 +36,7 @@ Options:
 - `--so_dir <directory>`: Directory containing symbolicated .so files
 - `--circles`: Sample CPU cycles instead of default events
 - `--round <N>`: Number of test rounds to execute (default: 5)
+- `--no-trace`: Disable trace capturing
 
 Requirements:
 - hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 

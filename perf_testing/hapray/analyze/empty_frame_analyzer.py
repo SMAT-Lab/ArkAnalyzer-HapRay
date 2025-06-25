@@ -39,6 +39,9 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
         Returns:
             Dictionary containing empty frame analysis result for this step
         """
+        if not os.path.exists(trace_db_path):
+            return {}
+
         try:
             # 获取该步骤的进程信息
             pids = self._get_step_pids(step_dir)

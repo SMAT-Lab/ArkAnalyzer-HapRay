@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+import os.path
 
 """
 Analyzer for component reusability metrics.
@@ -52,6 +53,9 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
             "reusability_ratio": 0.0
         }
 
+        if not os.path.exists(trace_db_path):
+            return {}
+
         try:
             with sqlite3.connect(trace_db_path) as conn:
                 conn.row_factory = sqlite3.Row
@@ -81,6 +85,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                 metrics["total_builds"] = max_component[0]
                 metrics["recycled_builds"] = max_component[1]
                 metrics["max_component"] = max_component[2]
+                metrics["details"] = result
 
                 # Calculate reusability ratio
                 if metrics["total_builds"] > 0:

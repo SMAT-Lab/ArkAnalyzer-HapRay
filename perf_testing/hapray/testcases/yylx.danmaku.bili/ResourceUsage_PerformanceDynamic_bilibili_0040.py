@@ -25,7 +25,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -126,7 +126,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
         time.sleep(2)
 
         # 搜索框输入“航拍中国“ （键盘输入15次，每0.5s点击一次，15s），并且点击”航拍中国“（1s），点击搜索（1s）
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_performance_step(1, step1, 20)
 
         Step('搜索结果页上滑3次：')
         CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
@@ -140,4 +140,4 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

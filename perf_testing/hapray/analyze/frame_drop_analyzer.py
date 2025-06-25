@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import logging
+import os
 from typing import Dict, Any
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
@@ -37,6 +38,9 @@ class FrameDropAnalyzer(BaseAnalyzer):
         Returns:
             Dictionary containing frame drop analysis result for this step
         """
+        if not os.path.exists(trace_db_path):
+            return {}
+
         try:
             # 分析卡顿帧数据
             logging.info(f"Analyzing frame drops for {step_dir}...")

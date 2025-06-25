@@ -34,7 +34,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
         self.source_screen_height = 2720
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -67,7 +67,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             # Step('京东新品页下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
 
         # 返回首页
         # self.driver.swipe_to_back()
@@ -96,10 +96,10 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             # Step('京东收藏页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
 
-        self.execute_step_with_perf_and_trace(2, step2, 10)
+        self.execute_performance_step(2, step2, 10)
 
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

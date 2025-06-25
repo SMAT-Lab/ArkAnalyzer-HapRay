@@ -41,7 +41,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         self.source_screen_height = 2720
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -192,7 +192,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
                 CommonUtils.swipe(driver.device_sn, 625, 2100, 625, 2500, 300)
                 time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 25)
+        self.execute_performance_step(1, step1, 25)
         time.sleep(10)
         # 点击 x 图标返回上一页
         self.driver.touch(CoordinateAdapter.convert_coordinate(
@@ -204,7 +204,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         ))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(2, step2, 15)
+        self.execute_performance_step(2, step2, 15)
         # 点击 x 图标返回上一页
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
@@ -215,7 +215,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         ))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(3, step3, 25)
+        self.execute_performance_step(3, step3, 25)
         time.sleep(10)
         # 点击右上角
         self.driver.touch(CoordinateAdapter.convert_coordinate(
@@ -236,11 +236,11 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         ))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(4, step4, 25)
+        self.execute_performance_step(4, step4, 25)
         # 上滑返回桌面
         self.driver.swipe_to_home()
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

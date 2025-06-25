@@ -37,7 +37,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
         self.source_screen_height = 2720
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -163,14 +163,14 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             self.driver.swipe_to_back()
             time.sleep(1)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
         after_step1()
-        self.execute_step_with_perf_and_trace(2, step2, 30)
+        self.execute_performance_step(2, step2, 30)
         after_step2()
-        self.execute_step_with_perf_and_trace(3, step3, 20)
+        self.execute_performance_step(3, step3, 20)
         after_step3()
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

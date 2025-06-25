@@ -17,7 +17,7 @@ import json
 import os
 import threading
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from devicetest.core.test_case import TestCase
 from hypium import UiDriver
@@ -27,7 +27,14 @@ from hapray.core.config.config import Config
 
 Log = platform_logger("PerfTestCase")
 
-_PERF_CMD_TEMPLATE = '{cmd} {pids} --call-stack dwarf --kernel-callchain -f 1000 --cpu-limit 100 -e {event} --enable-debuginfo-symbolic --clockid boottime -m 1024 -d {duration} {output_path}'
+# Template for basic performance collection command
+_PERF_CMD_TEMPLATE = (
+    '{cmd} {pids} --call-stack dwarf --kernel-callchain -f 1000 '
+    '--cpu-limit 100 -e {event} --enable-debuginfo-symbolic '
+    '--clockid boottime -m 1024 -d {duration} {output_path}'
+)
+
+# Template for combined trace and performance collection command
 _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
   -c - \\
   -o {output_path}.htrace \\
@@ -35,7 +42,7 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
   -s \\
   -k \\
 <<CONFIG
-# 会话配置
+# Session configuration
  request_id: 1
  session_config {{
   buffers {{
@@ -43,12 +50,12 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
   }}
  }}
 
-# ftrace插件配置
+# ftrace plugin configuration
  plugin_configs {{
   plugin_name: "ftrace-plugin"
   sample_interval: 1000
   config_data {{
-   # ftrace事件配置
+   # ftrace events
    ftrace_events: "sched/sched_switch"
    ftrace_events: "power/suspend_resume"
    ftrace_events: "sched/sched_wakeup"
@@ -61,7 +68,7 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
    ftrace_events: "power/cpu_frequency"
    ftrace_events: "power/cpu_idle"
 
-   # hitrace类别配置
+   # hitrace categories
    hitrace_categories: "ability"
    hitrace_categories: "ace"
    hitrace_categories: "app"
@@ -88,7 +95,7 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
    hitrace_categories: "zimage"
    hitrace_categories: "zmedia"
 
-   # 缓冲区配置
+   # Buffer configuration
    buffer_size_kb: 204800
    flush_interval_ms: 1000
    flush_threshold_kb: 4096
@@ -99,7 +106,7 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
   }}
  }}
 
-# hiperf插件配置
+# hiperf plugin configuration
  plugin_configs {{
   plugin_name: "hiperf-plugin"
   config_data {{
@@ -111,412 +118,304 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
 CONFIG"""
 
 
-class PerfTestCase(TestCase):
+class PerfTestCase(TestCase, ABC):
+    """Base class for performance test cases with trace collection support"""
+
     def __init__(self, tag: str, configs):
         super().__init__(tag, configs)
         self.driver = UiDriver(self.device1)
         self.TAG = tag
-        self.pid = -1
-        self._start_app_package = None
+        self._start_app_package = None  # Package name for process identification
 
     @property
     @abstractmethod
-    def steps(self) -> []:
+    def steps(self) -> list:
+        """List of test steps with name and description"""
         pass
 
     @property
     @abstractmethod
     def app_package(self) -> str:
+        """Package identifier of the application under test"""
         pass
 
     @property
     @abstractmethod
     def app_name(self) -> str:
+        """Human-readable name of the application under test"""
         pass
 
     @property
     def report_path(self) -> str:
+        """Path where test reports will be stored"""
         return self.get_case_report_path()
 
-    @staticmethod
-    def _build_trace_perf_cmd(output_path, duration, record_args) -> str:
-        """构建trace和perf命令的通用方法"""
+    def execute_performance_step(
+            self,
+            step_id: int,
+            action: callable,
+            duration: int,
+            sample_all_processes: bool = False
+    ):
+        """
+        Execute a test step while collecting performance and trace data
+
+        Args:
+            step_id: Identifier for the current step
+            action: Function to execute for this test step
+            duration: Data collection time in seconds
+            sample_all_processes: Whether to sample all system processes
+        """
+        output_file = self._prepare_output_path(step_id)
+        self._clean_previous_output(output_file)
+
+        cmd = self._build_collection_command(
+            output_file,
+            duration,
+            sample_all_processes
+        )
+
+        collection_thread = threading.Thread(
+            target=self._run_perf_command,
+            args=(cmd, duration)
+        )
+        collection_thread.start()
+
+        # Execute the test action while data collection runs
+        action(self.driver)
+
+        collection_thread.join()
+        self._save_performance_data_async(output_file, step_id)
+
+    def generate_reports(self):
+        """Generate test reports and metadata files"""
+        steps_info = self._collect_step_information()
+        self._save_steps_info(steps_info)
+        self._save_test_metadata()
+
+    def _prepare_output_path(self, step_id: int) -> str:
+        """Generate output file path on device"""
+        return f"/data/local/tmp/hiperf_step{step_id}.data"
+
+    def _clean_previous_output(self, output_path: str):
+        """Remove previous output files from device"""
+        output_dir = os.path.dirname(output_path)
+        self.driver.shell(f"mkdir -p {output_dir}")
+        self.driver.shell(f"rm -f {output_path}")
+        self.driver.shell(f"rm -f {output_path}.htrace")
+
+    def _build_collection_command(
+            self,
+            output_path: str,
+            duration: int,
+            sample_all: bool
+    ) -> str:
+        """Build appropriate command based on collection parameters"""
+        pids_args = self._build_processes_args(sample_all)
+
+        if Config.get('trace.enable'):
+            record_args = self._build_perf_command(pids_args, duration)
+            return self._build_trace_perf_command(output_path, duration, record_args)
+        return self._build_perf_command(
+            pids_args, duration, 'hiperf record', f'-o {output_path}'
+        )
+
+    def _build_processes_args(self, sample_all: bool) -> str:
+        if sample_all:
+            return '-a'
+        process_ids, process_names = self._get_app_pids()
+        if not process_ids:
+            Log.error("No application processes found for collection")
+            return ""
+
+        pid_args = ','.join(map(str, process_ids))
+        return f'-p {pid_args}'
+
+    def _build_perf_command(
+            self,
+            pids: str,
+            duration: int,
+            cmd: str = '',
+            output_arg: str = ''
+    ) -> str:
+        """Construct base performance collection command"""
+        return _PERF_CMD_TEMPLATE.format(
+            cmd=cmd,
+            pids=pids,
+            output_path=output_arg,
+            duration=duration,
+            event=Config.get('hiperf.event')
+        )
+
+    def _build_trace_perf_command(
+            self,
+            output_path: str,
+            duration: int,
+            record_args: str
+    ) -> str:
+        """Construct combined trace and performance command"""
         return _TRACE_PERF_CMD_TEMPLATE.format(
             output_path=output_path,
             duration=duration,
             record_args=record_args
         )
 
-    @staticmethod
-    def _build_perf_cmd(pids: str, duration: int, cmd='', output_path='') -> str:
-        return _PERF_CMD_TEMPLATE.format(cmd=cmd, pids=pids, output_path=output_path, duration=duration,
-                                         event=Config.get('hiperf.event'))
+    def _run_perf_command(self, command: str, duration: int):
+        """Execute performance collection command on device"""
+        Log.info(f'Starting performance collection for {duration}s')
+        self.driver.shell(command, timeout=duration + 30)
+        Log.info('Performance collection completed')
 
-    @staticmethod
-    def _get_hiperf_cmd(pid, output_path, duration, sample_all=False):
-        """生成 hiperf 命令
+    def _save_performance_data_async(self, device_file: str, step_id: int):
+        """Asynchronously save collected performance data"""
+        threading.Thread(
+            target=lambda: self._save_perf_and_trace_data(device_file, step_id)
+        ).start()
 
-        Args:
-            pid: 进程ID
-            output_path: 输出文件路径
-            duration: 采集持续时间（秒）
-            sample_all: 是否采样所有进程（需要root权限）
-
-        Returns:
-            str: 完整的 hiperf 命令
-        """
-        if sample_all:
-            return PerfTestCase._build_perf_cmd(cmd='hiperf record', pids='-a', duration=duration,
-                                                output_path=f'-o {output_path}')
-        else:
-            return PerfTestCase._build_perf_cmd(cmd='hiperf record', pids=f'-p {pid}', duration=duration,
-                                                output_path=f'-o {output_path}')
-
-    @staticmethod
-    def _get_trace_and_perf_cmd(pids: str, output_path: str, duration: int) -> str:
-        """生成同时抓取trace和perf数据的命令
-
-        Args:
-            pid: 进程ID
-            output_path: 输出文件路径
-            duration: 采集持续时间（秒）
-            sample_all: 是否采样所有进程（需要root权限）
-
-        Returns:
-            str: 完整的命令
-        """
-        record_args = PerfTestCase._build_perf_cmd(pids=pids, duration=duration)
-        # 基础命令部分
-        return PerfTestCase._build_trace_perf_cmd(
-            output_path=output_path,
-            duration=duration,
-            record_args=record_args
+    def _save_perf_and_trace_data(self, device_file: str, step_id: int):
+        """Save performance and trace data to report directory"""
+        perf_step_dir = os.path.join(
+            self.report_path,
+            'hiperf',
+            f'step{step_id}'
+        )
+        trace_step_dir = os.path.join(
+            self.report_path,
+            'htrace',
+            f'step{step_id}'
         )
 
-    @staticmethod
-    def _run_hiperf(driver, cmd):
-        """在后台线程中运行 hiperf 命令"""
-        driver.shell(cmd, timeout=120)
+        local_perf_path = os.path.join(
+            perf_step_dir,
+            Config.get('hiperf.data_filename', 'perf.data')
+        )
+        local_trace_path = os.path.join(trace_step_dir, 'trace.htrace')
 
-    def make_reports(self):
-        # 读取配置文件中的步骤信息
-        steps_info = []
-        for i, step in enumerate(self.steps, 1):
-            steps_info.append({
+        self._ensure_directories_exist(perf_step_dir, trace_step_dir)
+        self._save_process_info(perf_step_dir)
+
+        if not self._verify_remote_files_exist(device_file):
+            return
+
+        self._transfer_perf_data(device_file, local_perf_path)
+        if Config.get('trace.enable'):
+            self._transfer_trace_data(device_file, local_trace_path)
+
+    def _collect_step_information(self) -> list:
+        """Collect metadata about test steps"""
+        step_info = []
+        for idx, step in enumerate(self.steps, start=1):
+            step_info.append({
                 "name": step['name'],
                 "description": step['description'],
-                "stepIdx": i
+                "stepIdx": idx
             })
+        return step_info
 
-        # 保存步骤信息到steps.json
-        steps_json_path = os.path.join(self.report_path, 'hiperf/steps.json')
+    def _save_steps_info(self, steps_info: list):
+        """Save step metadata to JSON file"""
+        steps_path = os.path.join(self.report_path, 'hiperf', 'steps.json')
+        with open(steps_path, 'w', encoding='utf-8') as file:
+            json.dump(steps_info, file, ensure_ascii=False, indent=4)
 
-        with open(steps_json_path, 'w', encoding='utf-8') as f:
-            json.dump(steps_info, f, ensure_ascii=False, indent=4)
-
-        # 保存测试信息
-        self._save_test_info()
-
-    def _save_perf_data(self, device_file, step_id):
-        """保存性能数据"""
-
-        # 构建完整的目录结构
-        hiperf_dir = os.path.join(self.report_path, 'hiperf')
-        step_dir = os.path.join(hiperf_dir, f'step{str(step_id)}')
-
-        # 构建文件路径
-        local_output_path = os.path.join(step_dir, Config.get('hiperf.data_filename', 'perf.data'))
-
-        # 确保所有必要的目录都存在
-        os.makedirs(step_dir, exist_ok=True)
-
-        # 检查设备上的文件是否存在
-        try:
-            # 使用 ls 命令检查文件是否存在
-            result = self.driver.shell(f"ls -l {device_file}")
-
-            if "No such file" in result:
-                # 尝试列出目录内容以进行调试
-                dir_path = os.path.dirname(device_file)
-                self.driver.shell(f"ls -l {dir_path}")
-                return
-
-            # 如果文件存在，尝试拉取
-            self.driver.pull_file(device_file, local_output_path)
-
-            # 检查本地文件是否成功拉取
-            if not os.path.exists(local_output_path):
-                return
-
-        except Exception as e:
-            # 尝试获取更多调试信息
-            self.driver.shell("df -h")
-            self.driver.shell("ls -l /data/local/tmp/")
-
-    def _save_perf_and_htrace_data(self, device_file, step_id):
-        """保存性能数据和htrace数据
-
-        Args:
-            device_file: 设备上的perf文件路径
-            step_id: 步骤ID
-        """
-        # 构建perf的目录结构
-        hiperf_dir = os.path.join(self.report_path, 'hiperf')
-        perf_step_dir = os.path.join(hiperf_dir, f'step{str(step_id)}')
-
-        # 构建htrace的目录结构
-        htrace_dir = os.path.join(self.report_path, 'htrace')
-        htrace_step_dir = os.path.join(htrace_dir, f'step{str(step_id)}')
-
-        # 构建文件路径
-        local_perf_path = os.path.join(perf_step_dir, Config.get('hiperf.data_filename', 'perf.data'))
-        local_perf_db_path = os.path.join(perf_step_dir, Config.get('hiperf.db_filename', 'perf.db'))
-        local_htrace_path = os.path.join(htrace_step_dir, 'trace.htrace')
-
-        # 确保所有必要的目录都存在
-        os.makedirs(perf_step_dir, exist_ok=True)
-        os.makedirs(htrace_step_dir, exist_ok=True)
-
-        self._save_app_pids(perf_step_dir)
-
-        # 检查设备上的perf文件是否存在
-        try:
-            perf_result = self.driver.shell(f"ls -l {device_file}")
-            if "No such file" in perf_result:
-                Log.error(f"Perf file not found: {device_file}")
-                return
-
-            # 检查设备上的htrace文件是否存在
-            device_htrace_file = f"{device_file}.htrace"
-            htrace_result = self.driver.shell(f"ls -l {device_htrace_file}")
-            if "No such file" in htrace_result:
-                Log.error(f"Htrace file not found: {device_htrace_file}")
-                return
-
-            # 拉取perf文件
-            self.driver.pull_file(device_file, local_perf_path)
-            if not os.path.exists(local_perf_path):
-                Log.error(f"Failed to pull perf file to: {local_perf_path}")
-                return
-
-            # 拉取htrace文件
-            self.driver.pull_file(device_htrace_file, local_htrace_path)
-            if not os.path.exists(local_htrace_path):
-                Log.error(f"Failed to pull htrace file to: {local_htrace_path}")
-                return
-
-            Log.info(f"Successfully saved perf and htrace data for step {step_id}")
-            Log.info(f"Perf data saved to: {local_perf_path}")
-            Log.info(f"Htrace data saved to: {local_htrace_path}")
-
-        except Exception as e:
-            Log.error(f"Error saving perf and htrace data: {str(e)}")
-            # 尝试获取更多调试信息
-            self.driver.shell("df -h")
-            self.driver.shell("ls -l /data/local/tmp/")
-
-    def execute_step_with_perf(self, step_id, action_func, duration):
-        """
-        执行一个步骤并收集性能数据
-
-        Args:
-            step_id: 步骤ID
-            action_func: 要执行的动作函数
-            duration: 性能数据采集持续时间（秒）
-        """
-        # 设置当前步骤的输出路径
-        output_file = f"/data/local/tmp/hiperf_step{step_id}.data"
-
-        # 确保设备上的目标目录存在
-        output_dir = os.path.dirname(output_file)
-        self.driver.shell(f"mkdir -p {output_dir}")
-
-        # 清理可能存在的旧文件
-        self.driver.shell(f"rm -f {output_file}")
-
-        if self.pid == -1:
-            self.pid = self._get_app_pid()
-
-        Log.info(f'execute_step_with_perf thread start run {duration}s')
-        # 创建并启动 hiperf 线程
-        hiperf_cmd = PerfTestCase._get_hiperf_cmd(self.pid, output_file, duration)
-        hiperf_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, hiperf_cmd))
-        hiperf_thread.start()
-
-        # 执行动作
-        action_func(self.driver)
-
-        # 等待 hiperf 线程完成
-        hiperf_thread.join()
-        Log.info(f'execute_step_with_perf thread end')
-
-        # 保存性能数据和htrace数据
-        self._save_perf_data(output_file, step_id)
-
-    def execute_step_with_perf_and_trace(self, step_id, action_func, duration: int, sample_all=False):
-        """
-        执行一个步骤并同时收集性能数据和trace数据
-
-        Args:
-            step_id: 步骤ID
-            action_func: 要执行的动作函数
-            duration: 数据采集持续时间（秒）
-            sample_all: 是否采样所有进程（需要root权限）
-            is_multi_pid: 是否采集多个进程的数据，默认为True
-        """
-        import threading
-        # 设置当前步骤的输出路径
-        output_file = f"/data/local/tmp/hiperf_step{step_id}.data"
-
-        # 确保设备上的目标目录存在
-        output_dir = os.path.dirname(output_file)
-        self.driver.shell(f"mkdir -p {output_dir}")
-
-        # 清理可能存在的旧文件
-        self.driver.shell(f"rm -f {output_file}")
-        self.driver.shell(f"rm -f {output_file}.htrace")
-
-        if self.pid == -1:
-            self.pid = self._get_app_pid()
-
-        Log.info(f'execute_step_with_perf_and_trace thread start run {duration}s')
-        # 启动采集线程
-        if sample_all:
-            # 如果是root权限，直接使用sample_all模式
-            cmd = PerfTestCase._get_trace_and_perf_cmd('-a', output_file, duration)
-        else:
-            # 如果不是root权限，且需要采集多个进程
-            pids, process_names = self._get_app_pids()
-            if not pids:
-                Log.error("No process found for multi-pid collection")
-                return
-            # 记录进程信息
-            for pid, name in zip(pids, process_names):
-                Log.info(f"Found process: {name} (PID: {pid})")
-            pid_args = ','.join(map(str, pids))
-            cmd = PerfTestCase._get_trace_and_perf_cmd(f'-p {pid_args}', output_file, duration)
-
-        perf_trace_thread = threading.Thread(target=PerfTestCase._run_hiperf, args=(self.driver, cmd))
-        perf_trace_thread.start()
-
-        # 执行动作
-        action_func(self.driver)
-
-        # 等待线程完成
-        perf_trace_thread.join()
-        Log.info(f'execute_step_with_perf_and_trace thread end')
-
-        # 保存性能数据和htrace数据（异步）
-        def save_data_async():
-            self._save_perf_and_htrace_data(output_file, step_id)
-
-        save_thread = threading.Thread(target=save_data_async)
-        save_thread.start()
-        # 不等待 save_thread，主流程直接返回
-
-    def _save_test_info(self):
-        """
-        生成并保存测试信息到testInfo.json
-        :return: 保存的结果字典
-        """
-        # 确保输出目录存在
-        os.makedirs(self.report_path, exist_ok=True)
-
-        # 从配置中获取应用名称，如果没有配置则自动获取
-        app_version = self._get_app_version()
-
-        # 准备结果信息
-        result = {
+    def _save_test_metadata(self):
+        """Save test metadata to JSON file"""
+        metadata = {
             "app_id": self.app_package,
             "app_name": self.app_name,
-            "app_version": app_version,
+            "app_version": self._get_app_version(),
             "scene": self.TAG,
             "device": self.devices[0].device_description,
-            "timestamp": int(time.time() * 1000)  # 毫秒级时间戳
+            "timestamp": int(time.time() * 1000)  # Millisecond precision
         }
 
-        # 保存到文件
-        result_path = os.path.join(self.report_path, 'testInfo.json')
-        with open(result_path, 'w', encoding='utf-8') as f:
-            json.dump(result, f, indent=4, ensure_ascii=False)
-
-        return result
+        metadata_path = os.path.join(self.report_path, 'testInfo.json')
+        with open(metadata_path, 'w', encoding='utf-8') as file:
+            json.dump(metadata, file, indent=4, ensure_ascii=False)
 
     def _get_app_version(self) -> str:
-        """
-        获取应用版本号
-        :return: str: 应用版本号
-        """
-        # 使用 bm dump 命令获取版本号
+        """Retrieve application version from device"""
         cmd = f"bm dump -n {self.app_package}"
         result = self.driver.shell(cmd)
-        Log.debug(f"Debug - bm dump result: {result}")  # 添加调试输出
 
         try:
-            # 解析 JSON 结果
-            # 移除开头的包名和冒号
+            # Extract JSON portion from command output
             json_str = result.split(':', 1)[1].strip()
             data = json.loads(json_str)
-
-            if 'applicationInfo' in data and 'versionName' in data['applicationInfo']:
-                version = data['applicationInfo']['versionName']
-                if version:
-                    Log.debug(f"Debug - Found version: {version}")  # 添加调试输出
-                    return version
-        except json.JSONDecodeError as e:
-            Log.debug(f"Debug - JSON parsing error: {e}")  # 添加调试输出
-
-        Log.debug(f"Debug - No version found for {self.app_package}")  # 添加调试输出
-        return "Unknown Version"  # 如果无法获取版本号，返回未知版本
+            return data.get('applicationInfo', {}).get('versionName', "Unknown")
+        except (json.JSONDecodeError, IndexError, KeyError):
+            return "Unknown"
 
     def _get_app_pids(self) -> tuple[list[int], list[str]]:
-        """获取应用的所有相关进程ID和进程名
-
-        使用 ps -ef | grep 命令获取所有相关进程，并过滤掉grep进程本身。
-        例如对于 com.jd.hm.mall 可能会返回:
-        - PIDs: [1234, 1235]
-        - 进程名: ["com.jd.hm.mall", "com.jd.hm.mall:render"]
-        等所有相关进程的PID和进程名
-
-        Returns:
-            tuple[list[int], list[str]]: 返回两个列表，第一个是进程ID列表，第二个是进程名列表
-        """
-        # 使用 ps -ef | grep 命令获取所有相关进程
-        app_package = self.app_package
-        if self._start_app_package is not None:
-            app_package = self._start_app_package
-        cmd = f"ps -ef | grep {app_package}"
+        """Get all PIDs and process names associated with the application"""
+        target_package = self._start_app_package or self.app_package
+        cmd = f"ps -ef | grep {target_package}"
         result = self.driver.shell(cmd)
 
-        # 解析输出，提取PID和进程名
-        pids = []
+        process_ids = []
         process_names = []
+
         for line in result.splitlines():
-            # 跳过grep进程本身
-            if 'grep' in line:
+            if 'grep' in line:  # Skip the grep process itself
                 continue
 
-            # 尝试从每行提取PID和进程名
+            parts = line.split()
+            if len(parts) < 2:  # Skip invalid lines
+                continue
+
             try:
-                # ps -ef 输出格式: UID PID PPID ... CMD
-                parts = line.split()
-                if len(parts) >= 2:
-                    pid = int(parts[1])
-                    # 获取进程名（通常是最后一个部分）
-                    process_name = parts[-1]
-                    pids.append(pid)
-                    process_names.append(process_name)
+                process_ids.append(int(parts[1]))
+                process_names.append(parts[-1])
             except (ValueError, IndexError):
                 continue
 
-        return pids, process_names
+        return process_ids, process_names
 
-    def _get_app_pid(self) -> int:
-        pid_cmd = f"pidof {self.app_package}"
-        return int(self.driver.shell(pid_cmd).strip())
+    def _save_process_info(self, directory: str):
+        """Save process information to JSON file"""
+        process_ids, process_names = self._get_app_pids()
+        info_path = os.path.join(directory, 'pids.json')
+        with open(info_path, 'w', encoding='utf-8') as file:
+            json.dump(
+                {'pids': process_ids, 'process_names': process_names},
+                file,
+                indent=4,
+                ensure_ascii=False
+            )
 
-    def _save_app_pids(self, perf_step_dir):
-        pids, process_names = self._get_app_pids()
-        result_path = os.path.join(perf_step_dir, 'pids.json')
-        with open(result_path, 'w', encoding='utf-8') as f:
-            json.dump({'pids': pids, 'process_names': process_names}, f, indent=4, ensure_ascii=False)
+    def _ensure_directories_exist(self, *paths):
+        """Ensure required directories exist"""
+        for path in paths:
+            os.makedirs(path, exist_ok=True)
+
+    def _verify_remote_files_exist(self, device_file: str) -> bool:
+        """Verify required files exist on device"""
+        perf_result = self.driver.shell(f"ls -l {device_file}")
+        if "No such file" in perf_result:
+            Log.error(f"Performance data missing: {device_file}")
+            return False
+
+        if Config.get('trace.enable'):
+            trace_file = f"{device_file}.htrace"
+            trace_result = self.driver.shell(f"ls -l {trace_file}")
+            if "No such file" in trace_result:
+                Log.error(f"Trace data missing: {trace_file}")
+                return False
+
+        return True
+
+    def _transfer_perf_data(self, remote_path: str, local_path: str):
+        """Transfer performance data from device to host"""
+        self.driver.pull_file(remote_path, local_path)
+        if os.path.exists(local_path):
+            Log.info(f"Performance data saved: {local_path}")
+        else:
+            Log.error(f"Failed to transfer performance data: {local_path}")
+
+    def _transfer_trace_data(self, remote_path: str, local_path: str):
+        """Transfer trace data from device to host"""
+        self.driver.pull_file(f"{remote_path}.htrace", local_path)
+        if os.path.exists(local_path):
+            Log.info(f"Trace data saved: {local_path}")
+        else:
+            Log.error(f"Failed to transfer trace data: {local_path}")

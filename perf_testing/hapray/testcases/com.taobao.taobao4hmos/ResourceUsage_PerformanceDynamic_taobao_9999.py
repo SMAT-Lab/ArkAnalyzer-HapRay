@@ -40,7 +40,7 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -169,9 +169,9 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                 except Exception as e:
                     Log.error(f'Error in step3: {str(e)}')
 
-            self.execute_step_with_perf_and_trace(1, step1, 30)
-            self.execute_step_with_perf_and_trace(2, step2, 10)
-            self.execute_step_with_perf_and_trace(3, step3, 10)
+            self.execute_performance_step(1, step1, 30)
+            self.execute_performance_step(2, step2, 10)
+            self.execute_performance_step(3, step3, 10)
 
         except Exception as e:
             Log.error(f'Error in process: {str(e)}')
@@ -181,6 +181,6 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
         Log.info('teardown')
         try:
             self.driver.stop_app(self.app_package)
-            self.make_reports()
+            self.generate_reports()
         except Exception as e:
             Log.error(f'Error in teardown: {str(e)}') 
