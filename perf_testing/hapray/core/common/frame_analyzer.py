@@ -19,21 +19,14 @@ import logging
 import os
 import sqlite3
 import sys
-from typing import List, Dict, Any
+from typing import Dict, Any, List
 
 import pandas as pd
-import platform
-import subprocess
-
-from hapray.core.common.common_utils import CommonUtils
 
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
 sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
 sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
-
-# 获取操作系统名称
-system = platform.system()  # 'Windows', 'Linux', 'Darwin' (macOS)
 
 class FrameAnalyzer:
     """卡顿帧分析器
@@ -53,91 +46,6 @@ class FrameAnalyzer:
 
     # 调试开关配置
     _debug_vsync_enabled = False  # VSync调试开关，True时正常判断，False时永远不触发VSync条件
-
-    @staticmethod
-    def _get_trace_streamer_path() -> str:
-        """获取对应系统的trace_streamer工具路径
-
-        Returns:
-            str: trace_streamer工具的完整路径
-        """
-
-        # 获取 perf_testing 目录
-        perf_testing_dir = CommonUtils.get_project_root()
-
-        # 根据系统类型选择对应的工具
-        if system == 'windows':
-            tool_name = 'trace_streamer_window.exe'
-        elif system == 'darwin':  # macOS
-            tool_name = 'trace_streamer_mac'
-        elif system == 'linux':
-            tool_name = 'trace_streamer_linux'
-        else:
-            raise OSError(f"Unsupported operating system: {system}")
-
-        # 构建工具完整路径
-        tool_path = os.path.join(perf_testing_dir, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', tool_name)
-
-        # 检查工具是否存在
-        if not os.path.exists(tool_path):
-            raise FileNotFoundError(f"Trace streamer tool not found at: {tool_path}")
-
-        if system == 'darwin' or system == 'linux':
-            os.chmod(tool_path, 0o755)
-
-        return tool_path
-
-    @staticmethod
-    def convert_htrace_to_db(htrace_file: str, output_db: str) -> bool:
-        """将htrace文件转换为db文件
-
-        使用 trace_streamer 工具将 .htrace 文件转换为 .db 文件
-        命令格式: trace_streamer xxx.htrace -e xxx.db
-
-        Args:
-            htrace_file: htrace文件路径
-            output_db: 输出db文件路径
-
-        Returns:
-            bool: 转换是否成功
-        """
-        try:
-            # 确保输出目录存在
-            output_dir = os.path.dirname(output_db)
-            os.makedirs(output_dir, exist_ok=True)
-
-            # 获取trace_streamer工具路径
-            trace_streamer_path = FrameAnalyzer._get_trace_streamer_path()
-
-            # 构建并执行转换命令
-            cmd = f'"{trace_streamer_path}" "{htrace_file}" -e "{output_db}"'
-            logging.info(f"Converting htrace to db: {cmd}")
-
-            # 使用subprocess执行命令
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8'
-            )
-
-            # 检查命令执行结果
-            if result.returncode != 0:
-                logging.error(f"Failed to convert htrace to db: {result.stderr}")
-                return False
-
-            # 验证输出文件是否存在
-            if not os.path.exists(output_db):
-                logging.error(f"Output db file not found: {output_db}")
-                return False
-
-            logging.info(f"Successfully converted {htrace_file} to {output_db}")
-            return True
-
-        except Exception as e:
-            logging.error(f"Error converting htrace to db: {str(e)}")
-            return False
 
     @staticmethod
     def _get_app_pids(scene_dir: str, step_id: str) -> list:
