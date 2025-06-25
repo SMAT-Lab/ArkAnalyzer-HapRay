@@ -22,7 +22,7 @@ import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
 import { GlobalConfig } from '../../config/types';
 import { getConfig, initConfig, updateKindConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
-import { checkPerfAndHtraceFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
+import { checkPerfFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
 import { Round, TestSceneInfo, TestStepGroup } from '../../core/perf/perf_analyzer_base';
 
@@ -124,8 +124,8 @@ async function main(input: string): Promise<void> {
         const stepsJsonPath = path.join(input, 'hiperf', 'steps.json');
         const steps: Steps = await loadJsonFile(stepsJsonPath);
 
-        if (!(await checkPerfAndHtraceFiles(input, steps.length))) {
-            logger.error('hiperf 或 htrace 数据不全，需要先执行数据收集步骤！');
+        if (!(await checkPerfFiles(input, steps.length))) {
+            logger.error('hiperf 数据不全，需要先执行数据收集步骤！');
             return;
         }
         await generatePerfJson(input, testInfo, resultInfo, steps);

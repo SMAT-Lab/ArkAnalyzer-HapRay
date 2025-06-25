@@ -42,7 +42,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -156,16 +156,16 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         time.sleep(1)
 
         # 视频播放30s
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
         # 点击评论
         self.driver.touch(BY.text('评论'))
         time.sleep(3)
-        self.execute_step_with_perf_and_trace(2, step2, 60)
-        self.execute_step_with_perf_and_trace(3, step3, 40)
-        self.execute_step_with_perf_and_trace(4, step4, 40)
-        self.execute_step_with_perf_and_trace(5, step5, 30)
+        self.execute_performance_step(2, step2, 60)
+        self.execute_performance_step(3, step3, 40)
+        self.execute_performance_step(4, step4, 40)
+        self.execute_performance_step(5, step5, 30)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

@@ -60,7 +60,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
                         )
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -202,13 +202,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
                 CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
                 time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 10)
-        self.execute_step_with_perf_and_trace(2, step2, 30)
-        self.execute_step_with_perf_and_trace(3, step3, 40)
-        self.execute_step_with_perf_and_trace(4, step4, 40)
-        self.execute_step_with_perf_and_trace(5, step5, 40)
+        self.execute_performance_step(1, step1, 10)
+        self.execute_performance_step(2, step2, 30)
+        self.execute_performance_step(3, step3, 40)
+        self.execute_performance_step(4, step4, 40)
+        self.execute_performance_step(5, step5, 40)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()
