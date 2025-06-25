@@ -28,7 +28,7 @@ class PerfAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'hiperf_info.json')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
         """Run performance analysis"""
         args = ['dbtools', '-i', self.scene_dir]
 
