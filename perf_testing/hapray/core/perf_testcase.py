@@ -406,7 +406,9 @@ class PerfTestCase(TestCase, ABC):
 
     def _transfer_perf_data(self, remote_path: str, local_path: str):
         """Transfer performance data from device to host"""
+        self.driver.shell(f"hiperf report -i {remote_path} --json -o {remote_path}.json")
         self.driver.pull_file(remote_path, local_path)
+        self.driver.pull_file(f"{remote_path}.json", os.path.join(os.path.dirname(local_path), 'perf.json'))
         if os.path.exists(local_path):
             Log.info(f"Performance data saved: {local_path}")
         else:
