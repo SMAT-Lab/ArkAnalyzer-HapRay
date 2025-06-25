@@ -28,7 +28,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'empty_frames_analysis.json')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
         """Analyze empty frames for a single step.
         
         Args:
@@ -37,10 +37,11 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             perf_db_path: Path to performance database
             
         Returns:
-            Dictionary containing empty frame analysis result for this step
+            Dictionary containing empty frame analysis result for this step, or None if no data
         """
         if not os.path.exists(trace_db_path):
-            return {}
+            logging.warning(f"Trace database not found: {trace_db_path}")
+            return None
 
         try:
             # 获取该步骤的进程信息
@@ -48,10 +49,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             
             if not pids:
                 logging.warning(f"No process info found for step {step_dir}")
-                return {
-                    "status": "error",
-                    "message": "No process info found"
-                }
+                return None
             
             # 记录当前步骤的进程信息
             for name, pid in pids:
@@ -63,11 +61,16 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             # 执行空帧分析
             result = FrameAnalyzer.analyze_empty_frames(trace_db_path, perf_db_path, pid_list, self.scene_dir, step_dir)
             
+            # 如果没有数据，返回None
+            if result is None:
+                logging.info(f"No empty frame data found for step {step_dir}")
+                return None
+            
             return result
             
         except Exception as e:
             logging.error(f"Empty frame analysis failed: {str(e)}")
-            return {"error": f"Empty frame analysis failed: {str(e)}"}
+            return None
 
     def _get_step_pids(self, step_dir: str) -> list:
         """获取指定步骤的进程信息"""
