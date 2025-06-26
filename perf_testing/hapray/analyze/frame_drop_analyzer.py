@@ -15,7 +15,7 @@ limitations under the License.
 
 import logging
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.frame_analyzer import FrameAnalyzer
@@ -27,7 +27,7 @@ class FrameDropAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'frame_analysis_summary.json')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Analyze frame drops for a single step.
         
         Args:

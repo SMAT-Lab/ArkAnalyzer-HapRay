@@ -16,7 +16,7 @@ limitations under the License.
 import json
 import logging
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.frame_analyzer import FrameAnalyzer
@@ -28,7 +28,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'empty_frames_analysis.json')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Analyze empty frames for a single step.
         
         Args:

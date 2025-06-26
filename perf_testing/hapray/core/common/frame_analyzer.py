@@ -19,7 +19,7 @@ import logging
 import os
 import sqlite3
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
@@ -311,7 +311,7 @@ class FrameAnalyzer:
             return []
 
     @staticmethod
-    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list, scene_dir: str = None, step_id: str = None) -> dict | None:
+    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list, scene_dir: str = None, step_id: str = None) -> Optional[dict]:
         """
         分析空帧（flag=2, type=0）的负载情况
 
@@ -634,7 +634,7 @@ class FrameAnalyzer:
             return False
 
     @staticmethod
-    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None) -> dict | None:
+    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
         """
         分析卡顿帧数据并计算FPS
 
