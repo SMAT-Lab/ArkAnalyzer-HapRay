@@ -156,22 +156,16 @@ async function loadTestReportInfo(input: string, scene: string, config: GlobalCo
  * 加载标准模式的测试报告信息
  */
 async function loadStandardTestReportInfo(input: string, scene: string): Promise<TestReportInfo> {
-    const resultXmlPath = path.join(input, 'result', `${scene}.xml`);
-    const resultInfo = fs.existsSync(resultXmlPath)
-        ? parseResultXml(resultXmlPath)
-        : { rom_version: '', device_sn: '' };
-    
     const testInfoPath = path.join(input, 'testInfo.json');
-    const testInfo = await loadJsonFile<Partial<TestReportInfo>>(testInfoPath);
-    
+    const testInfo = await loadJsonFile<any>(testInfoPath);
     return {
         app_id: testInfo.app_id || '',
         app_name: testInfo.app_name || '',
         app_version: testInfo.app_version || '',
         scene: testInfo.scene || '',
         timestamp: testInfo.timestamp || 0,
-        rom_version: resultInfo.rom_version,
-        device_sn: resultInfo.device_sn,
+        rom_version: testInfo.device?.version || '',
+        device_sn: testInfo.device?.sn || '',
     };
 }
 
@@ -386,36 +380,6 @@ export async function generatePerfJson(
 }
 
 // ---- XML/路径工具 ----
-/**
- * 解析结果 XML 文件
- */
-export function parseResultXml(xmlPath: string): { rom_version: string; device_sn: string } {
-    const result = { rom_version: '', device_sn: '' };
-    
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(fs.readFileSync(xmlPath, 'utf-8'), 'text/xml');
-        const testsuitesElement = xmlDoc.getElementsByTagName('testsuites')[0];
-        const devicesAttr = testsuitesElement.getAttribute('devices');
-        
-        if (devicesAttr) {
-            const devices = JSON.parse(
-                devicesAttr
-                    .replace(/<!\[CDATA\[(.*?)\]\]>/gs, '$1')
-                    .replace(/^\[+|]+$/g, '')
-                    .replace(/\\"/g, '"')
-                    .replace(/'/g, '"')
-            );
-            result.rom_version = devices.version;
-            result.device_sn = devices.sn;
-        }
-    } catch (error) {
-        logger.error(`解析 ${xmlPath} 失败: ${error}`);
-    }
-    
-    return result;
-}
-
 /**
  * 在指定目录中查找匹配指定模式的文件
  * @param dirPath 目录路径
