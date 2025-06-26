@@ -118,7 +118,7 @@ async function handleGeneratePerfReport(input: string, scene: string, config: Gl
  */
 async function loadSteps(basePath: string, scene: string, config: GlobalConfig): Promise<Steps> {
     if (config.compatibility) {
-        return generateCompatibilitySteps(scene);
+        return generateCompatibilitySteps(basePath);
     } else {
         const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
         return await loadJsonFile<Steps>(stepsJsonPath);
@@ -128,10 +128,10 @@ async function loadSteps(basePath: string, scene: string, config: GlobalConfig):
 /**
  * 生成兼容性模式的步骤信息
  */
-function generateCompatibilitySteps(scene: string): Steps {
+function generateCompatibilitySteps(basePath: string): Steps {
     // 兼容性模式下，scene为场景目录绝对路径
     const steps: Steps = [];
-    const hiperfDir = path.join(scene, 'hiperf');
+    const hiperfDir = path.join(basePath, 'hiperf');
     if (!fs.existsSync(hiperfDir)) {
         return steps;
     }
@@ -248,7 +248,7 @@ export async function calculateRoundResults(roundFolders: string[], step: Step, 
             
             // 新格式：hiprofiler_data_step{stepIdx}_*.db
             const dbPattern = new RegExp(`^hiprofiler_data_step${step.stepIdx}_\\d+\\.db$`);
-            dbPath = findFileByPattern(stepDir, dbPattern) || path.join(stepDir, 'perf.db');
+            dbPath = findFileByPattern(stepDir, dbPattern) || perfDataPath.replace('.data','.db');
         } else {
             // 旧格式
             perfDataPath = path.join(stepDir, 'perf.data');
