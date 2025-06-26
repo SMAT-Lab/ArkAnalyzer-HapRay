@@ -129,14 +129,28 @@ async function loadSteps(basePath: string, scene: string, config: GlobalConfig):
  * 生成兼容性模式的步骤信息
  */
 function generateCompatibilitySteps(scene: string): Steps {
+    // 兼容性模式下，scene为场景目录绝对路径
     const steps: Steps = [];
-    for (let index = 0; index < 5; index++) {
-        const step: Step = {
-            name: scene + index,
-            stepIdx: index,
+    const hiperfDir = path.join(scene, 'hiperf');
+    if (!fs.existsSync(hiperfDir)) {
+        return steps;
+    }
+    const entries = fs.readdirSync(hiperfDir, { withFileTypes: true });
+    // 匹配stepX目录，X为数字
+    const stepDirs = entries.filter(e => e.isDirectory() && /^step(\d+)$/.test(e.name));
+    // 按stepX中的X升序排序
+    stepDirs.sort((a, b) => {
+        const aIdx = parseInt(a.name.match(/^step(\d+)$/)?.[1] || '0', 10);
+        const bIdx = parseInt(b.name.match(/^step(\d+)$/)?.[1] || '0', 10);
+        return aIdx - bIdx;
+    });
+    for (const dir of stepDirs) {
+        const idx = parseInt(dir.name.match(/^step(\d+)$/)?.[1] || '0', 10);
+        steps.push({
+            name: dir.name,
+            stepIdx: idx,
             description: ''
-        };
-        steps.push(step);
+        });
     }
     return steps;
 }

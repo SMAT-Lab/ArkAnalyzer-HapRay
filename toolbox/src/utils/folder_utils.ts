@@ -16,6 +16,7 @@
 import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getConfig } from '../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -58,7 +59,8 @@ export function getSceneRoundsFolders(sceneDir: string): string[] {
     return sceneRoundsFolders;
 }
 
-export function checkPerfData(dir: string, config?: { compatibility?: boolean }) {
+export function checkPerfData(dir: string) {
+    const config = getConfig();
     let hasPerfData = true;
     const hiperfDir = path.join(dir, 'hiperf');
     const stepDirs = getFirstLevelFolders(hiperfDir);
@@ -173,7 +175,8 @@ export async function copyFile(
     }
 }
 
-export async function checkPerfFiles(dirPath: string, summaryCount: number, config?: { compatibility?: boolean }): Promise<boolean> {
+export async function checkPerfFiles(dirPath: string, summaryCount: number): Promise<boolean> {
+    const config = getConfig();
     let hiperfDataCount = 0;
     const hiperfDir = path.join(dirPath, 'hiperf');
     const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
