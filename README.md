@@ -75,6 +75,7 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
+- `--mode <mode>`: select mode COMMUNITY COMPATIBILITY SIMPLE
 
 Example:
 ```bash
