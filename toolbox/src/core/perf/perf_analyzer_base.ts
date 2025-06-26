@@ -135,12 +135,19 @@ export interface TestStep {
     end: number;
 }
 
+interface SymbolSplitRule {
+    source: RegExp;
+    dst: string;
+    symbols: RegExp[];
+}
+
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
     // classify rule
     protected threadClassifyCfg: Map<RegExp, ClassifyCategory>;
     protected fileClassifyCfg: Map<string, ClassifyCategory>;
     protected fileRegexClassifyCfg: Map<RegExp, ClassifyCategory>;
     protected hapComponents: Map<string, Component>;
+    protected symbolsSplitRulesCfg: SymbolSplitRule[];
 
     // classify result
     protected filesClassifyMap: Map<number, FileClassification>;
@@ -158,6 +165,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.threadClassifyCfg = new Map();
         this.fileClassifyCfg = new Map();
         this.fileRegexClassifyCfg = new Map();
+        this.symbolsSplitRulesCfg = [];
 
         this.filesClassifyMap = new Map();
         this.symbolsClassifyMap = new Map();
@@ -169,6 +177,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
         this.loadHapComponents();
         this.loadPerfKindCfg();
+        this.loadSymbolSplitCfg();
     }
 
     private loadHapComponents(): void {
@@ -218,6 +227,20 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     }
                 }
             }
+        }
+    }
+
+    private loadSymbolSplitCfg(): void {
+        for (const ruleCfg of getConfig().perf.symbolSplitRules) {
+            let rule: SymbolSplitRule = {
+                source: new RegExp(ruleCfg.source_file),
+                dst: ruleCfg.new_file,
+                symbols: [],
+            };
+            for (const symbol of ruleCfg.filter_symbols) {
+                rule.symbols.push(new RegExp(symbol));
+            }
+            this.symbolsSplitRulesCfg.push(rule);
         }
     }
 
@@ -314,30 +337,51 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         }
 
         const symbol = this.symbolsMap.get(symbolId) || '';
-        /**
-         * ets symbol
-         * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
-         */
-        let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|([^:\|]+)\|([^\|\]]*):(\d+):(\d+)\]$/;
-        let matches = symbol.match(regex);
-        if (matches) {
-            const [_, functionName, _entry, packageName, version, filePath, _line, _column] = matches;
-            this.symbolsMap.set(symbolId, functionName);
+        if (fileClassification.category === ComponentCategory.APP_ABC) {
+            /**
+             * ets symbol
+             * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
+             */
+            let regex = /([^:]+):\[url:([^:\|]+)\|([^|]+)\|([^:\|]+)\|([^\|\]]*):(\d+):(\d+)\]$/;
+            let matches = symbol.match(regex);
+            if (matches) {
+                const [_, functionName, _entry, packageName, version, filePath, _line, _column] = matches;
+                this.symbolsMap.set(symbolId, functionName);
 
-            let symbolClassification: FileClassification = {
-                file: `${packageName}/${version}/${filePath}`,
-                originKind: fileClassification.originKind,
-                category: fileClassification.category,
-                categoryName: fileClassification.categoryName,
-                subCategoryName: packageName,
-            };
+                let symbolClassification: FileClassification = {
+                    file: `${packageName}/${version}/${filePath}`,
+                    originKind: fileClassification.originKind,
+                    category: fileClassification.category,
+                    categoryName: fileClassification.categoryName,
+                    subCategoryName: packageName,
+                };
 
-            if (this.hapComponents.has(matches[3])) {
-                symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
+                if (this.hapComponents.has(matches[3])) {
+                    symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
+                }
+
+                this.symbolsClassifyMap.set(symbolId, symbolClassification);
+                return symbolClassification;
             }
+        }
 
-            this.symbolsClassifyMap.set(symbolId, symbolClassification);
-            return symbolClassification;
+        for (const rule of this.symbolsSplitRulesCfg) {
+            if (!fileClassification.file.match(rule.source)) {
+                continue;
+            }
+            for (const symbolRule of rule.symbols) {
+                if (symbol.match(symbolRule)) {
+                    let newClassification: FileClassification = {
+                        file: rule.dst,
+                        originKind: fileClassification.originKind,
+                        category: fileClassification.category,
+                        categoryName: fileClassification.categoryName,
+                        subCategoryName: fileClassification.subCategoryName,
+                    };
+                    this.symbolsClassifyMap.set(symbolId, newClassification);
+                    return newClassification;
+                }
+            }
         }
 
         return fileClassification;
