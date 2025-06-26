@@ -43,14 +43,25 @@ class UpdateAction:
             version=f'%(prog)s {VERSION}',
             help="Show program's version number and exit"
         )
+        parser.add_argument('--mode', default='COMMUNITY', help="select mode COMMUNITY COMPATIBILITY SIMPLE")
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
         so_dir = os.path.abspath(parsed_args.so_dir) if parsed_args.so_dir else None
 
-        if not os.path.exists(report_dir):
+        if parsed_args.mode:
+            Config.set('mode', parsed_args.mode)
+        if not os.path.exists(report_dir) and Config.get('mode') != 'COMPATIBILITY':
             logging.error(f"Report directory not found: {report_dir}")
             return
+        elif not os.path.exists(report_dir) and Config.get('mode') == 'COMPATIBILITY':
+            report_generator = ReportGenerator()
+            if report_generator._select_round_compatibility([report_dir], report_dir):
+                logging.info(f"{report_dir} compatibility select round success")
+            else:
+                logging.info(f"{report_dir} compatibility select round failed")
+                # 兼容性模式下目录不存在时，直接返回
+                return
 
         logging.info(f"Updating reports in: {report_dir}")
         if so_dir:

@@ -23,6 +23,7 @@ import json
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.config.config import Config
 
 # Configuration constants
 MAX_WORKERS = 4  # Optimal for I/O-bound tasks
@@ -148,21 +149,40 @@ def _process_steps_parallel(
     logging.info(f"Step processing completed: {success_count} successes, {error_count} errors")
 
 
+def find_step_file(base_dir: str, step_dir: str, old_name: str, new_pattern: str) -> str:
+    """
+    根据当前模式查找step文件：
+    - 兼容模式优先用新格式（正则），找不到再用旧格式
+    - 社区模式只用旧格式
+    """
+    step_path = os.path.join(base_dir, step_dir)
+    if Config.get('mode') == 'COMPATIBILITY':
+        # 新格式优先
+        if os.path.exists(step_path):
+            for fname in os.listdir(step_path):
+                if re.match(new_pattern, fname):
+                    return os.path.join(step_path, fname)
+        # 回退旧格式
+        old_path = os.path.join(step_path, old_name)
+        if os.path.exists(old_path):
+            return old_path
+        return old_path  # 返回默认
+    else:
+        # 只用旧格式
+        old_path = os.path.join(step_path, old_name)
+        return old_path
+
+
 def _process_single_step(
         step_dir: str,
         scene_dir: str,
         analyzers: List[BaseAnalyzer]
 ):
-    """Process a single step directory with all analyzers.
-
-    Args:
-        step_dir: Step directory name
-        scene_dir: Root scene directory
-        analyzers: List of analyzer instances
-    """
-    htrace_file = os.path.join(scene_dir, 'htrace', step_dir, 'trace.htrace')
-    trace_db = os.path.join(scene_dir, 'htrace', step_dir, 'trace.db')
-    perf_db = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.db')
+    """Process a single step directory with all analyzers."""
+    # 适配新旧格式
+    htrace_file = find_step_file(os.path.join(scene_dir, 'htrace'), step_dir, 'trace.htrace', r'^hiprofiler_data_step\d+_\d+\.htrace$')
+    trace_db = find_step_file(os.path.join(scene_dir, 'htrace'), step_dir, 'trace.db', r'^hiprofiler_data_step\d+_\d+\.db$')
+    perf_db = find_step_file(os.path.join(scene_dir, 'hiperf'), step_dir, 'perf.db', r'^perf_step\d+_\d+\.data$')
 
     if not os.path.exists(trace_db) and os.path.exists(htrace_file):
         logging.info(f"Converting htrace to db for {step_dir}...")

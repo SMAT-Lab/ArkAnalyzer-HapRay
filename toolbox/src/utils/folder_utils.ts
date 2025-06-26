@@ -58,15 +58,26 @@ export function getSceneRoundsFolders(sceneDir: string): string[] {
     return sceneRoundsFolders;
 }
 
-export function checkPerfData(dir: string) {
+export function checkPerfData(dir: string, config?: { compatibility?: boolean }) {
     let hasPerfData = true;
     const hiperfDir = path.join(dir, 'hiperf');
     const stepDirs = getFirstLevelFolders(hiperfDir);
     if (stepDirs.length !== 0) {
-        stepDirs.forEach((stepDir) => {
-            const perfDataPath = path.join(stepDir, 'perf.data');
-            if (!fs.existsSync(perfDataPath)) {
-                hasPerfData = false;
+        stepDirs.forEach((stepDir, idx) => {
+            if (config && config.compatibility) {
+                // 新格式：perf_step{stepIdx}_*.data
+                const files = fs.readdirSync(stepDir);
+                const pattern = new RegExp(`^perf_step${idx}_\\d+\\.data$`);
+                const found = files.some(f => pattern.test(f));
+                if (!found) {
+                    hasPerfData = false;
+                }
+            } else {
+                // 旧格式
+                const perfDataPath = path.join(stepDir, 'perf.data');
+                if (!fs.existsSync(perfDataPath)) {
+                    hasPerfData = false;
+                }
             }
         });
     } else {
@@ -162,20 +173,25 @@ export async function copyFile(
     }
 }
 
-export async function checkPerfFiles(dirPath: string, summaryCount: number): Promise<boolean> {
+export async function checkPerfFiles(dirPath: string, summaryCount: number, config?: { compatibility?: boolean }): Promise<boolean> {
     let hiperfDataCount = 0;
     const hiperfDir = path.join(dirPath, 'hiperf');
     const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
-    hiperfStepDirs.forEach((hiperfStepDir) => {
-        const perfDataPath = path.join(hiperfStepDir, 'perf.data');
-        if (fs.existsSync(perfDataPath)) {
-            hiperfDataCount++;
+    hiperfStepDirs.forEach((hiperfStepDir, idx) => {
+        if (config && config.compatibility) {
+            // 新格式：perf_step{stepIdx}_*.data
+            const files = fs.readdirSync(hiperfStepDir);
+            const pattern = new RegExp(`^perf_step${idx}_\\d+\\.data$`);
+            if (files.some(f => pattern.test(f))) {
+                hiperfDataCount++;
+            }
+        } else {
+            // 旧格式
+            const perfDataPath = path.join(hiperfStepDir, 'perf.data');
+            if (fs.existsSync(perfDataPath)) {
+                hiperfDataCount++;
+            }
         }
     });
-
-    if (hiperfDataCount === summaryCount) {
-        return true;
-    } else {
-        return false;
-    }
+    return hiperfDataCount === summaryCount;
 }

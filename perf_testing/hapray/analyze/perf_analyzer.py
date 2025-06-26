@@ -31,6 +31,8 @@ class PerfAnalyzer(BaseAnalyzer):
     def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
         """Run performance analysis"""
         args = ['dbtools', '-i', self.scene_dir]
+        if Config.get('mode') == 'COMPATIBILITY':
+            args.extend(['--compatibility', True])
 
         so_dir = Config.get('so_dir', None)
         if so_dir:
