@@ -19,7 +19,7 @@ Analyzer for component reusability metrics.
 """
 import re
 import sqlite3
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 
@@ -30,7 +30,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'component_reusability_report.json')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Analyze component reusability metrics.
 
         Metrics:

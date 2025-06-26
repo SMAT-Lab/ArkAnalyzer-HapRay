@@ -22,7 +22,7 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class BaseAnalyzer(ABC):
@@ -59,7 +59,7 @@ class BaseAnalyzer(ABC):
             self.results[step_dir] = {"error": str(e)}
 
     @abstractmethod
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Implementation of the analysis logic.
 
         Args:
