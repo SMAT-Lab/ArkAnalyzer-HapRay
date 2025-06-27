@@ -16,7 +16,6 @@
 import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getConfig } from '../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -60,26 +59,14 @@ export function getSceneRoundsFolders(sceneDir: string): string[] {
 }
 
 export function checkPerfData(dir: string) {
-    const config = getConfig();
     let hasPerfData = true;
     const hiperfDir = path.join(dir, 'hiperf');
     const stepDirs = getFirstLevelFolders(hiperfDir);
     if (stepDirs.length !== 0) {
         stepDirs.forEach((stepDir, idx) => {
-            if (config && config.compatibility) {
-                // 新格式：perf_step{stepIdx}_*.data
-                const files = fs.readdirSync(stepDir);
-                const pattern = new RegExp(`^perf_step${idx}_\\d+\\.data$`);
-                const found = files.some(f => pattern.test(f));
-                if (!found) {
-                    hasPerfData = false;
-                }
-            } else {
-                // 旧格式
-                const perfDataPath = path.join(stepDir, 'perf.data');
-                if (!fs.existsSync(perfDataPath)) {
-                    hasPerfData = false;
-                }
+            const perfDataPath = path.join(stepDir, 'perf.data');
+            if (!fs.existsSync(perfDataPath)) {
+                hasPerfData = false;
             }
         });
     } else {
@@ -176,24 +163,13 @@ export async function copyFile(
 }
 
 export async function checkPerfFiles(dirPath: string, summaryCount: number): Promise<boolean> {
-    const config = getConfig();
     let hiperfDataCount = 0;
     const hiperfDir = path.join(dirPath, 'hiperf');
     const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
     hiperfStepDirs.forEach((hiperfStepDir, idx) => {
-        if (config && config.compatibility) {
-            // 新格式：perf_step{stepIdx}_*.data
-            const files = fs.readdirSync(hiperfStepDir);
-            const pattern = new RegExp(`^perf_step${idx}_\\d+\\.data$`);
-            if (files.some(f => pattern.test(f))) {
-                hiperfDataCount++;
-            }
-        } else {
-            // 旧格式
-            const perfDataPath = path.join(hiperfStepDir, 'perf.data');
-            if (fs.existsSync(perfDataPath)) {
-                hiperfDataCount++;
-            }
+        const perfDataPath = path.join(hiperfStepDir, 'perf.data');
+        if (fs.existsSync(perfDataPath)) {
+            hiperfDataCount++;
         }
     });
     return hiperfDataCount === summaryCount;

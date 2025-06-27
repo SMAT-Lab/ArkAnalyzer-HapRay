@@ -63,9 +63,9 @@ export type Steps = Step[];
 export async function main(input: string): Promise<void> {
     const config = getConfig();
     const scene = path.basename(input);
-    
+
     logger.info(`输入目录: ${input}`);
-    
+
     if (config.choose) {
         await handleChooseRound(input, scene, config);
     } else {
@@ -90,10 +90,10 @@ async function handleChooseRound(input: string, scene: string, config: GlobalCon
         fs.mkdirSync(output, { recursive: true });
     }
 
-    const steps = await loadSteps(roundFolders[0], scene, config);
-    const roundInfos = await processRoundSelection(roundFolders, steps, input, config);
+    const steps = await loadSteps(roundFolders[0]);
+    const roundInfos = await processRoundSelection(roundFolders, steps, input);
     const testReportInfo = await loadTestReportInfo(input, scene, config);
-    
+
     await generateSummaryInfoJson(input, testReportInfo, steps, roundInfos);
 }
 
@@ -101,58 +101,26 @@ async function handleChooseRound(input: string, scene: string, config: GlobalCon
  * 处理生成报告（Generate PerfReport）
  */
 async function handleGeneratePerfReport(input: string, scene: string, config: GlobalConfig): Promise<void> {
-    const steps = await loadSteps(input, scene, config);
-    
+    const steps = await loadSteps(input);
+
     if (!(await checkPerfFiles(input, steps.length))) {
         logger.error('hiperf 数据不全，需要先执行数据收集步骤！');
         return;
     }
-    
+
     const testReportInfo = await loadTestReportInfo(input, scene, config);
-    await generatePerfJson(input, testReportInfo, steps, config);
+    await generatePerfJson(input, testReportInfo, steps);
 }
 
 // ===================== 数据加载函数 =====================
 /**
  * 加载步骤信息
  */
-async function loadSteps(basePath: string, scene: string, config: GlobalConfig): Promise<Steps> {
-    if (config.compatibility) {
-        return generateCompatibilitySteps(basePath);
-    } else {
-        const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
-        return await loadJsonFile<Steps>(stepsJsonPath);
-    }
-}
+async function loadSteps(basePath: string): Promise<Steps> {
 
-/**
- * 生成兼容性模式的步骤信息
- */
-function generateCompatibilitySteps(basePath: string): Steps {
-    // 兼容性模式下，scene为场景目录绝对路径
-    const steps: Steps = [];
-    const hiperfDir = path.join(basePath, 'hiperf');
-    if (!fs.existsSync(hiperfDir)) {
-        return steps;
-    }
-    const entries = fs.readdirSync(hiperfDir, { withFileTypes: true });
-    // 匹配stepX目录，X为数字
-    const stepDirs = entries.filter(e => e.isDirectory() && /^step(\d+)$/.test(e.name));
-    // 按stepX中的X升序排序
-    stepDirs.sort((a, b) => {
-        const aIdx = parseInt(a.name.match(/^step(\d+)$/)?.[1] || '0', 10);
-        const bIdx = parseInt(b.name.match(/^step(\d+)$/)?.[1] || '0', 10);
-        return aIdx - bIdx;
-    });
-    for (const dir of stepDirs) {
-        const idx = parseInt(dir.name.match(/^step(\d+)$/)?.[1] || '0', 10);
-        steps.push({
-            name: dir.name,
-            stepIdx: idx,
-            description: ''
-        });
-    }
-    return steps;
+    const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
+    return await loadJsonFile<Steps>(stepsJsonPath);
+
 }
 
 /**
@@ -195,20 +163,18 @@ export async function loadJsonFile<T>(filePath: string): Promise<T> {
 /**
  * 处理轮次选择逻辑
  */
-export async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string, config: GlobalConfig): Promise<RoundInfo[]> {
+export async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<RoundInfo[]> {
     let roundInfos: RoundInfo[] = [];
 
-    if (!config.compatibility) {
-        await copyStandardFiles(roundFolders[0], inputPath);
-    }
+    await copyStandardFiles(roundFolders[0], inputPath);
 
     for (let i = 0; i < steps.length; i++) {
-        const roundResults = await calculateRoundResults(roundFolders, steps[i], config);
+        const roundResults = await calculateRoundResults(roundFolders, steps[i]);
         const selectedRound = selectOptimalRound(roundResults);
-        const roundInfo: RoundInfo = { 
-            step_id: steps[i].stepIdx, 
-            round: selectedRound, 
-            count: roundResults[selectedRound] 
+        const roundInfo: RoundInfo = {
+            step_id: steps[i].stepIdx,
+            round: selectedRound,
+            count: roundResults[selectedRound]
         };
         roundInfos.push(roundInfo);
         await copySelectedRoundData(roundFolders[selectedRound], inputPath, steps[i]);
@@ -222,7 +188,7 @@ export async function processRoundSelection(roundFolders: string[], steps: Steps
 async function copyStandardFiles(sourceRound: string, inputPath: string): Promise<void> {
     const testInfoPath = path.join(sourceRound, 'testInfo.json');
     await copyFile(testInfoPath, path.join(inputPath, 'testInfo.json'));
-    
+
     const stepsJsonPath = path.join(sourceRound, 'hiperf', 'steps.json');
     await copyFile(stepsJsonPath, path.join(inputPath, 'hiperf', 'steps.json'));
 }
@@ -230,40 +196,27 @@ async function copyStandardFiles(sourceRound: string, inputPath: string): Promis
 /**
  * 计算每轮的结果
  */
-export async function calculateRoundResults(roundFolders: string[], step: Step, config: GlobalConfig): Promise<number[]> {
+export async function calculateRoundResults(roundFolders: string[], step: Step): Promise<number[]> {
     const results: number[] = [];
     const perfAnalyzer = new PerfAnalyzer('');
-    
+
     for (let index = 0; index < roundFolders.length; index++) {
         const stepDir = path.join(roundFolders[index], 'hiperf', `step${step.stepIdx}`);
-        
-        // 根据兼容性配置选择文件格式
         let perfDataPath: string;
         let dbPath: string;
-        
-        if (config.compatibility) {
-            // 新格式：perf_step{stepIdx}_*.data
-            const perfDataPattern = new RegExp(`^perf_step${step.stepIdx}_\\d+\\.data$`);
-            perfDataPath = findFileByPattern(stepDir, perfDataPattern) || path.join(stepDir, 'perf.data');
-            
-            // 新格式：hiprofiler_data_step{stepIdx}_*.db
-            const dbPattern = new RegExp(`^hiprofiler_data_step${step.stepIdx}_\\d+\\.db$`);
-            dbPath = findFileByPattern(stepDir, dbPattern) || perfDataPath.replace('.data','.db');
-        } else {
-            // 旧格式
-            perfDataPath = path.join(stepDir, 'perf.data');
-            dbPath = path.join(stepDir, 'perf.db');
-        }
-        
+        //格式
+        perfDataPath = path.join(stepDir, 'perf.data');
+        dbPath = path.join(stepDir, 'perf.db');
+
         if (!fs.existsSync(dbPath)) {
             await traceStreamerCmd(perfDataPath, dbPath);
         }
-        
+
         const sum = await perfAnalyzer.calcPerfDbTotalInstruction(dbPath);
         results[index] = sum;
         logger.info(`${roundFolders[index]} 步骤：${step.stepIdx} 轮次：${index} 负载总数: ${sum}`);
     }
-    
+
     return results;
 }
 
@@ -272,25 +225,25 @@ export async function calculateRoundResults(roundFolders: string[], step: Step, 
  */
 export function selectOptimalRound(results: number[]): number {
     if (results.length < 3) return 0;
-    
+
     const max = Math.max(...results);
     const min = Math.min(...results);
     const total = results.reduce((sum, val) => sum + val, 0);
     const avg = (total - max - min) / (results.length - 2);
-    
+
     let optimalIndex = 0;
     let minDiff = Number.MAX_SAFE_INTEGER;
-    
+
     results.forEach((value, index) => {
         if (value === max || value === min) return;
-        
+
         const diff = Math.abs(value - avg);
         if (diff < minDiff) {
             minDiff = diff;
             optimalIndex = index;
         }
     });
-    
+
     return optimalIndex;
 }
 
@@ -302,11 +255,11 @@ export async function copySelectedRoundData(sourceRound: string, destPath: strin
     const srcPerfDir = path.join(sourceRound, 'hiperf', `step${stepIdx}`);
     const srcHtraceDir = path.join(sourceRound, 'htrace', `step${stepIdx}`);
     const srcResultDir = path.join(sourceRound, 'result');
-    
+
     const destPerfDir = path.join(destPath, 'hiperf', `step${stepIdx}`);
     const destHtraceDir = path.join(destPath, 'htrace', `step${stepIdx}`);
     const destResultDir = path.join(destPath, 'result');
-    
+
     await Promise.all([
         copyDirectory(srcPerfDir, destPerfDir),
         copyDirectory(srcHtraceDir, destHtraceDir),
@@ -326,14 +279,14 @@ export async function generateSummaryInfoJson(
 ): Promise<void> {
     const outputDir = path.join(input, 'report');
     let summaryJsonObject: SummaryInfo[] = [];
-    
+
     steps.forEach((step) => {
         const roundInfo = roundInfos.find(round => round.step_id === step.stepIdx);
         if (!roundInfo) {
             logger.warn(`未找到步骤 ${step.stepIdx} 的轮次信息`);
             return;
         }
-        
+
         const summaryObject: SummaryInfo = {
             rom_version: testInfo.rom_version,
             app_version: testInfo.app_version,
@@ -345,7 +298,7 @@ export async function generateSummaryInfoJson(
         };
         summaryJsonObject.push(summaryObject);
     });
-    
+
     await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
 }
 
@@ -356,13 +309,12 @@ export async function generatePerfJson(
     inputPath: string,
     testInfo: TestReportInfo,
     steps: Steps,
-    config: GlobalConfig
 ): Promise<void> {
     const outputDir = path.join(inputPath, 'report');
-    const perfDataPaths = getPerfDataPaths(inputPath, steps, config);
-    const perfDbPaths = getPerfDbPaths(inputPath, steps, config);
-    const htracePaths = getHtracePaths(inputPath, steps, config);
-    
+    const perfDataPaths = getPerfDataPaths(inputPath, steps);
+    const perfDbPaths = getPerfDbPaths(inputPath, steps);
+    const htracePaths = getHtracePaths(inputPath, steps);
+
     const perfAnalyzer = new PerfAnalyzer('');
     const testSceneInfo: PerfTestSceneInfo = {
         packageName: testInfo.app_id,
@@ -374,7 +326,7 @@ export async function generatePerfJson(
         rounds: [],
         chooseRound: 0,
     };
-    
+
     let round: Round = { steps: [] };
     for (let i = 0; i < steps.length; i++) {
         let group: TestStepGroup = {
@@ -387,60 +339,25 @@ export async function generatePerfJson(
         };
         round.steps.push(group);
     }
-    
+
     testSceneInfo.rounds.push(round);
     await perfAnalyzer.analyze(testSceneInfo, outputDir);
     perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
 }
 
-// ---- XML/路径工具 ----
-/**
- * 在指定目录中查找匹配指定模式的文件
- * @param dirPath 目录路径
- * @param pattern 文件名模式（正则表达式）
- * @returns 匹配的文件完整路径，如果未找到则返回null
- */
-function findFileByPattern(dirPath: string, pattern: RegExp): string | null {
-    try {
-        if (!fs.existsSync(dirPath)) {
-            return null;
-        }
-        
-        const files = fs.readdirSync(dirPath);
-        for (const file of files) {
-            if (pattern.test(file)) {
-                return path.join(dirPath, file);
-            }
-        }
-    } catch (error) {
-        logger.error(`查找文件失败 ${dirPath}: ${error}`);
-    }
-    
-    return null;
-}
 
 /**
  * 获取 perf.data 路径数组（根据兼容性配置选择格式）
  */
-export function getPerfDataPaths(inputPath: string, steps: Steps, config: GlobalConfig): string[] {
+export function getPerfDataPaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => {
         const stepDir = path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`);
-        
-        if (config.compatibility) {
-            // 新格式：perf_step{stepIdx}_*.data
-            const newPattern = new RegExp(`^perf_step${step.stepIdx}_\\d+\\.data$`);
-            const newFile = findFileByPattern(stepDir, newPattern);
-            if (newFile) {
-                return newFile;
-            }
-        }
-        
-        // 旧格式：perf.data
+        // 格式：perf.data
         const oldFile = path.join(stepDir, 'perf.data');
         if (fs.existsSync(oldFile)) {
             return oldFile;
         }
-        
+
         // 如果都找不到，返回默认路径
         logger.warn(`未找到步骤 ${step.stepIdx} 的 perf.data 文件`);
         return oldFile;
@@ -450,25 +367,14 @@ export function getPerfDataPaths(inputPath: string, steps: Steps, config: Global
 /**
  * 获取 perf.db 路径数组（根据兼容性配置选择格式）
  */
-export function getPerfDbPaths(inputPath: string, steps: Steps, config: GlobalConfig): string[] {
+export function getPerfDbPaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => {
         const stepDir = path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`);
-        
-        if (config.compatibility) {
-            // 新格式：hiprofiler_data_step{stepIdx}_*.db
-            const newPattern = new RegExp(`^hiprofiler_data_step${step.stepIdx}_\\d+\\.db$`);
-            const newFile = findFileByPattern(stepDir, newPattern);
-            if (newFile) {
-                return newFile;
-            }
-        }
-        
-        // 旧格式：perf.db
+        // 格式：perf.db
         const oldFile = path.join(stepDir, 'perf.db');
         if (fs.existsSync(oldFile)) {
             return oldFile;
         }
-        
         // 如果都找不到，返回默认路径
         logger.warn(`未找到步骤 ${step.stepIdx} 的 perf.db 文件`);
         return oldFile;
@@ -478,25 +384,15 @@ export function getPerfDbPaths(inputPath: string, steps: Steps, config: GlobalCo
 /**
  * 获取 trace.htrace 路径数组（根据兼容性配置选择格式）
  */
-export function getHtracePaths(inputPath: string, steps: Steps, config: GlobalConfig): string[] {
+export function getHtracePaths(inputPath: string, steps: Steps): string[] {
     return steps.map((step) => {
         const stepDir = path.join(inputPath, 'htrace', `step${step.stepIdx.toString()}`);
-        
-        if (config.compatibility) {
-            // 新格式：hiprofiler_data_step{stepIdx}_*.htrace
-            const newPattern = new RegExp(`^hiprofiler_data_step${step.stepIdx}_\\d+\\.htrace$`);
-            const newFile = findFileByPattern(stepDir, newPattern);
-            if (newFile) {
-                return newFile;
-            }
-        }
-        
-        // 旧格式：trace.htrace
+        // 格式：trace.htrace
         const oldFile = path.join(stepDir, 'trace.htrace');
         if (fs.existsSync(oldFile)) {
             return oldFile;
         }
-        
+
         // 如果都找不到，返回默认路径
         logger.warn(`未找到步骤 ${step.stepIdx} 的 trace.htrace 文件`);
         return oldFile;
@@ -509,7 +405,7 @@ export function getHtracePaths(inputPath: string, steps: Steps, config: GlobalCo
  */
 export function loadCompatibilityTestReportInfo(reportRoot: string, scene: string): TestReportInfo {
     logger.info('加载兼容性模式测试报告信息');
-    
+
     let info: TestReportInfo = {
         app_id: '',
         app_name: '',
@@ -529,10 +425,10 @@ export function loadCompatibilityTestReportInfo(reportRoot: string, scene: strin
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(fs.readFileSync(resultXml, 'utf-8'), 'text/xml');
             const testsuitesElement = xmlDoc.getElementsByTagName('testsuites')[0];
-            
+
             let devicesAttr = testsuitesElement.getAttribute('devices');
             const starttimeStr = testsuitesElement.getAttribute('starttime');
-            
+
             if (!starttimeStr || !devicesAttr) {
                 logger.error(`loadTestReportInfo parse file ${resultXml} error.`);
             } else {

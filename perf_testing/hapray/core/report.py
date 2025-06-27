@@ -213,21 +213,6 @@ class ReportGenerator:
         logging.debug(f"Selecting round with command: {' '.join(args)}")
         return ExeUtils.execute_hapray_cmd(args)
 
-    def _select_round_compatibility(self, scene_dirs: List[str], scene_dir: str) -> bool:
-        """Select the best round for report generation"""
-        if not scene_dirs:
-            logging.error("No scene directories provided for round selection")
-            return False
-
-        args = ['dbtools',
-                '--choose',
-                '-i', scene_dir,
-                '--compatibility'
-                ]
-
-        logging.debug(f"Selecting round with command: {' '.join(args)}")
-        return ExeUtils.execute_hapray_cmd(args)
-
     def _create_html_report(self, scene_dir: str) -> None:
         """Create the final HTML report"""
         try:
