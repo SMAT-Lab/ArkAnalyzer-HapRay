@@ -53,7 +53,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
 
             # 记录当前步骤的进程信息
             for name, pid in pids:
-                logging.info("Step %s - Process: %s (PID: %d)", step_dir, name, pid)
+                logging.info(f"Step {step_dir} - Process: {name} (PID: {pid})")
 
             # 提取PID列表
             pid_list = [pid for _, pid in pids]
@@ -97,9 +97,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             # 确保pids和process_names长度一致
             if len(pids) != len(process_names):
                 logging.warning(
-                    "Mismatch between pids (%d) and process_names (%d) in %s",
-                    len(pids), len(process_names), pids_json_path
-                )
+                    f"Mismatch between pids ({len(pids)}) and process_names ({len(process_names)}) in {pids_json_path}")
                 # 取较短的长度
                 min_length = min(len(pids), len(process_names))
                 pids = pids[:min_length]
@@ -108,9 +106,9 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             # 组合成(process_name, pid)的列表
             step_pids = list(zip(process_names, pids))
 
-            logging.debug("Found %d processes for step %s: %s", len(step_pids), step_dir, step_pids)
+            logging.debug(f"Found {len(step_pids)} processes for step {step_dir}: {step_pids}")
             return step_pids
 
         except Exception as e:
-            logging.error("Failed to get step PIDs from %s: %s", step_dir, str(e))
+            logging.error(f"Failed to get step PIDs from {step_dir}: {str(e)}")
             return []

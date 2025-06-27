@@ -206,4 +206,4 @@ def _finalize_analyzers(analyzers: List[BaseAnalyzer]):
             analyzer.write_report()
             logging.info("Report generated for %s", type(analyzer).__name__)
         except Exception as e:
-            logging.error("Failed to generate report for %s: %s", type(analyzer).__name__, str(e))
+            logging.error(f"Failed to generate report for {type(analyzer).__name__}: {str(e)}")

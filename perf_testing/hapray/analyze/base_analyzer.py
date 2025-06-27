@@ -75,11 +75,7 @@ class BaseAnalyzer(ABC):
     def write_report(self):
         """Write analysis results to JSON report."""
         if not self.results:
-<<<<<<< HEAD
-            self.logger.warning("No results to write. Skipping report generation for %s", self.report_name)
-=======
             self.logger.warning(f"No results to write. Skipping report generation for {self.report_name}")
->>>>>>> 64d24ce (增加冷启动分析cold_start_analyzer.py。修改京东1000冷启动测试用例。)
             return
 
         try:
