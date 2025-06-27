@@ -31,6 +31,7 @@ ANALYZER_CLASSES = [
     'PerfAnalyzer',
     'EmptyFrameAnalyzer',
     'FrameDropAnalyzer',
+    'ColdStartAnalyzer',
     # Add more analyzers here
 ]
 
