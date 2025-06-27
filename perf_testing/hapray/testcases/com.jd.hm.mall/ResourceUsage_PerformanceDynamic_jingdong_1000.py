@@ -39,6 +39,42 @@ class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):
         Log.info('setup')
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
+        
+        # 设置hdc参数
+        Log.info('设置hdc参数: persist.ark.properties 0x200105c')
+        os.system('hdc shell param set persist.ark.properties 0x200105c')
+        
+        # 重启手机
+        Log.info('重启手机')
+        os.system('hdc shell reboot')
+        
+        # 检测手机是否重启成功
+        Log.info('检测手机重启状态')
+        max_wait_time = 180  # 最大等待时间180秒
+        wait_interval = 10   # 每10秒检查一次
+        elapsed_time = 0
+        
+        while elapsed_time < max_wait_time:
+            try:
+                # 使用hdc shell命令检测设备是否真正连接
+                result = os.system('hdc shell "echo device_ready"')
+                if result == 0:
+                    Log.info('手机重启成功，设备已连接')
+                    Log.info('等待手机完全启动到大屏幕界面...')
+                    time.sleep(60)  # 额外等待60秒确保系统完全启动到大屏幕
+                    return
+                else:
+                    Log.info(f'设备未连接，返回码: {result}')
+            except Exception as e:
+                Log.info(f'设备检测失败: {e}')
+            
+            Log.info(f'等待设备重启中... ({elapsed_time}/{max_wait_time}秒)')
+            time.sleep(wait_interval)
+            elapsed_time += wait_interval
+            Log.info(f'时间已更新: {elapsed_time}秒')
+        
+        # 如果超时仍未检测到设备
+        raise Exception('手机重启超时，设备未连接')
 
         # 设置hdc参数
         Log.info('设置hdc参数: persist.ark.properties 0x200105c')
@@ -89,14 +125,22 @@ class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):
         bundle_name = self.app_package
         source_path = f'data/app/el2/100/base/{bundle_name}/files/{bundle_name}_redundant_file.txt'
         target_path = os.path.join(self.report_path, 'result', f'{bundle_name}_redundant_file.txt')
+<<<<<<< HEAD
 
         # 确保目标目录存在
         os.makedirs(os.path.dirname(target_path), exist_ok=True)
 
+=======
+        
+        # 确保目标目录存在
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        
+>>>>>>> 64d24ce (增加冷启动分析cold_start_analyzer.py。修改京东1000冷启动测试用例。)
         # 先检查文件是否存在
         Log.info(f'检查设备端文件是否存在: {source_path}')
         check_cmd = f'hdc shell ls {source_path}'
         check_result = os.system(check_cmd)
+<<<<<<< HEAD
 
         if check_result != 0:
             Log.warning(f'文件不存在: {source_path}')
@@ -106,19 +150,40 @@ class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):
         Log.info(f'设备端文件路径: {source_path}')
         Log.info(f'本地保存路径: {target_path}')
 
+=======
+        
+        if check_result != 0:
+            Log.warning(f'文件不存在: {source_path}')
+            return
+        
+        Log.info(f'文件存在，开始获取')
+        Log.info(f'设备端文件路径: {source_path}')
+        Log.info(f'本地保存路径: {target_path}')
+        
+>>>>>>> 64d24ce (增加冷启动分析cold_start_analyzer.py。修改京东1000冷启动测试用例。)
         try:
             # 使用hdc file recv命令获取文件
             cmd = f'hdc file recv {source_path} {target_path}'
             Log.info(f'执行命令: {cmd}')
             result = os.system(cmd)
+<<<<<<< HEAD
 
             if result == 0:
                 Log.info('redundant file获取成功')
+=======
+            
+            if result == 0:
+                Log.info(f'redundant file获取成功')
+>>>>>>> 64d24ce (增加冷启动分析cold_start_analyzer.py。修改京东1000冷启动测试用例。)
                 Log.info(f'设备端路径: {source_path}')
                 Log.info(f'本地保存路径: {target_path}')
             else:
                 Log.warning(f'redundant file获取失败，返回码: {result}')
+<<<<<<< HEAD
 
+=======
+                
+>>>>>>> 64d24ce (增加冷启动分析cold_start_analyzer.py。修改京东1000冷启动测试用例。)
         except Exception as e:
             Log.error(f'获取redundant file时发生异常: {e}')
 
