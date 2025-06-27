@@ -51,13 +51,13 @@ class ReportData:
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
         empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
-        component_reusability_report_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
+        component_reusability_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
 
         data = cls()
         data.load_perf_data(perf_data_path)
         data.load_frame_data(frame_data_path)
         data.load_empty_frame_data(empty_frames_analysis_path)
-        data.load_component_reusability_data(component_reusability_report_path)
+        data.load_component_reusability_data(component_reusability_path)
         data.extract_basic_info()
         return data
 
@@ -138,7 +138,7 @@ class ReportData:
             if isinstance(default, list) and not isinstance(data, list):
                 logging.warning(f"Invalid format in {path}, expected list but got {type(data).__name__}")
                 return default
-            elif isinstance(default, dict) and not isinstance(data, dict):
+            if isinstance(default, dict) and not isinstance(data, dict):
                 logging.warning(f"Invalid format in {path}, expected dict but got {type(data).__name__}")
                 return default
 
@@ -272,7 +272,7 @@ def merge_summary_info(directory: str) -> List[Dict[str, Any]]:
     """合并指定目录下所有summary_info.json文件中的数据"""
     merged_data = []
 
-    for root, dirs, files in os.walk(directory):
+    for root, _, files in os.walk(directory):
         for file in files:
             if file == "summary_info.json":
                 file_path = os.path.join(root, file)
@@ -290,7 +290,7 @@ def merge_summary_info(directory: str) -> List[Dict[str, Any]]:
                                 else:
                                     logging.warning(f"警告: 文件 {file_path} 包含非字典项，已跳过")
                         else:
-                            logging.warning(f"警告: 文件 {file_path} 格式不符合预期，已跳过")
+                            logging.warning("警告: 文件 %s 格式不符合预期，已跳过", file_path)
                 except Exception as e:
                     logging.error(f"错误: 无法读取文件 {file_path}: {str(e)}")
 
@@ -345,7 +345,7 @@ def add_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns[1:]:
         # 计算百分比 (新值-基线值)/基线值*100%
         percentage_col = f"{col}_百分比"
-        df[percentage_col] = ((df[col] - df[baseline_col]) / df[baseline_col])
+        df[percentage_col] = (df[col] - df[baseline_col]) / df[baseline_col]
 
         # 将百分比列放在对应数据列之后
         df = df[[c for c in df.columns if c != percentage_col] + [percentage_col]]
@@ -389,6 +389,6 @@ def create_perf_summary_excel(input_path: str) -> bool:
         report_saver.save()
 
         return True
-    except  Exception as e:
-        logging.error("未知错误：没有生成汇总excel" + str(e))
+    except Exception as e:
+        logging.error("未知错误：没有生成汇总excel %s", str(e))
         return False

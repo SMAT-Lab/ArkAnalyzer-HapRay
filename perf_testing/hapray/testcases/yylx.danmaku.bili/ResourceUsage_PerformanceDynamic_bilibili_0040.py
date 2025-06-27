@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
@@ -115,13 +115,11 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
             self.driver.touch(BY.text('搜索'))
             time.sleep(4)
 
-
-
         Step('启动被测应用')
         self.driver.start_app(self.app_package, self._activityName)
         self.driver.wait(5)
         # 点击搜索框，停留2s
-        self.driver.touch((657, 185)) # Mate60 Pro
+        self.driver.touch((657, 185))  # Mate60 Pro
         self.driver.wait(0.5)
         time.sleep(2)
 
@@ -135,7 +133,6 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
         for i in range(3):
             self.driver.swipe_to_back()
             time.sleep(1)
-
 
     def teardown(self):
         Log.info('teardown')

@@ -13,10 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-"""
-Abstract base class for all data analyzers.
-"""
-
 import json
 import logging
 import os
@@ -26,6 +22,10 @@ from typing import Dict, Any, Optional
 
 
 class BaseAnalyzer(ABC):
+    """
+    Abstract base class for all data analyzers.
+    """
+
     def __init__(self, scene_dir: str, report_name: str):
         """Initialize base analyzer.
 
@@ -53,7 +53,8 @@ class BaseAnalyzer(ABC):
             if result:
                 self.results[step_dir] = result
             self.logger.info(
-                f"Analysis completed for step {step_dir} in {time.time() - start_time:.2f} seconds [{self.report_name}]")
+                "Analysis completed for step %s in %.2f seconds [%s]", step_dir, time.time() - start_time,
+                self.report_name)
         except Exception as e:
             self.logger.error(f"Analysis failed for step {step_dir}: {str(e)} [{self.report_name}]")
             self.results[step_dir] = {"error": str(e)}
@@ -70,7 +71,6 @@ class BaseAnalyzer(ABC):
         Returns:
             Analysis results as a dictionary
         """
-        pass
 
     def write_report(self):
         """Write analysis results to JSON report."""

@@ -15,8 +15,8 @@ limitations under the License.
 
 import logging
 import os
-import subprocess
 import platform
+import subprocess
 from typing import List, Tuple, Optional
 
 from hapray.core.common.common_utils import CommonUtils
@@ -180,7 +180,7 @@ class ExeUtils:
             logger.info("Converting htrace to DB: %s -> %s", data_file, output_db)
 
             # Execute conversion
-            success, stdout, stderr = ExeUtils.execute_command(cmd)
+            success, _, stderr = ExeUtils.execute_command(cmd)
 
             if not success:
                 logger.error("Conversion failed for %s: %s", data_file, stderr)

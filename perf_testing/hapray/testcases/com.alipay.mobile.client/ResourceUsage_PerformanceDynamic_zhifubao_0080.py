@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
@@ -135,7 +135,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
             time.sleep(2)
             CommonUtils.swipe(driver.device_sn, 625, 1550, 625, 2500, 300)
             time.sleep(2)
-
 
         def step3(driver):
             Step('3. 芭芭农场，领肥料，上下拖滑3次，间隔2s')

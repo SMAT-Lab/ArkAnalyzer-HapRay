@@ -31,8 +31,8 @@ from hapray.core.common.folder_utils import scan_folders, delete_folder
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 ENV_ERR_STR = """
-The hdc or node command is not in PATH. 
-Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
+The hdc or node command is not in PATH.
+Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/),
 then add the following directories to PATH.
     $command_line_tools/tool/node/ (for Windows)
     $command_line_tools/tool/node/bin (for Mac/Linux)

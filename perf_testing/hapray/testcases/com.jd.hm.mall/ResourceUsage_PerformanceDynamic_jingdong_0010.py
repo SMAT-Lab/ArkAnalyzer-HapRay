@@ -1,10 +1,8 @@
 # coding: utf-8
 import os
 
-from devicetest.core.test_case import Step
-
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
@@ -21,7 +19,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
                 "description": "1.京东首页-滑动-应用内操作"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
