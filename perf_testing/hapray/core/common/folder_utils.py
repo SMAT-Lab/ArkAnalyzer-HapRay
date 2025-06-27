@@ -45,8 +45,7 @@ def scan_folders(root_dir):
     perf_data_percent = perf_data_num / len(steps_json) * 100
     if perf_data_percent > 50:
         return True
-    else:
-        return False
+    return False
 
 
 def delete_folder(folder_path):
@@ -67,63 +66,6 @@ def delete_folder(folder_path):
     except Exception as e:
         print(f"错误: 删除过程中发生异常: {e}")
         return False
-
-
-def merge_folders(source_folders, target_folder, overwrite=False, dry_run=False):
-    """
-    将多个源文件夹中的内容递归合并到目标文件夹
-
-    参数:
-        source_folders (list): 源文件夹路径列表
-        target_folder (str): 目标文件夹路径
-        overwrite (bool): 是否覆盖已存在的文件
-        dry_run (bool): 是否只进行模拟操作，不实际移动文件
-    """
-    # 创建目标文件夹（如果不存在）
-    if not dry_run:
-        os.makedirs(target_folder, exist_ok=True)
-
-    # 遍历每个源文件夹
-    for source in source_folders:
-        if not os.path.exists(source):
-            Log.info(f"警告: 源文件夹 '{source}' 不存在，跳过")
-            continue
-
-        # 获取源文件夹的基本名称，用于日志
-        source_basename = os.path.basename(os.path.normpath(source))
-
-        # 递归遍历源文件夹中的所有内容
-        for root, dirs, files in os.walk(source):
-            # 计算相对路径，用于构建目标路径
-            relative_path = os.path.relpath(root, source)
-            target_subfolder = os.path.join(target_folder, relative_path)
-
-            # 创建目标子文件夹（如果不存在）
-            if not os.path.exists(target_subfolder):
-                Log.info(f"创建文件夹: {os.path.relpath(target_subfolder, target_folder)}")
-                if not dry_run:
-                    os.makedirs(target_subfolder, exist_ok=True)
-
-            # 处理文件
-            for file in files:
-                source_file_path = os.path.join(root, file)
-                target_file_path = os.path.join(target_subfolder, file)
-
-                # 检查目标文件是否已存在
-                if os.path.exists(target_file_path):
-                    # 文件已存在，检查是否需要覆盖
-                    if overwrite:
-                        Log.info(f"覆盖文件: {os.path.relpath(target_file_path, target_folder)}")
-                        if not dry_run:
-                            shutil.copy2(source_file_path, target_file_path)
-                    else:
-                        Log.info(f"跳过已存在的文件: {os.path.relpath(target_file_path, target_folder)}")
-                else:
-                    # 文件不存在，直接复制
-                    Log.info(
-                        f"复制文件: {os.path.relpath(source_file_path, source)} -> {os.path.relpath(target_file_path, target_folder)}")
-                    if not dry_run:
-                        shutil.copy2(source_file_path, target_file_path)
 
 
 def read_json_arrays_from_dir(

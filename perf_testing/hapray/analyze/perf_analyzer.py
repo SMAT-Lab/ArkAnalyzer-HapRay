@@ -123,7 +123,7 @@ class PerfAnalyzer(BaseAnalyzer):
             filter_str_list = rule['filter_symbols']  # 现在是一个字符串列表
             new_lib_name = rule['new_file']
             source_lib_name_regex = re.compile(rule['source_file'])
-            filter_symbols_regex = map(lambda s: re.compile(s), rule['filter_symbols'])
+            filter_symbols_regex = [re.compile(s) for s in rule['filter_symbols']]
 
             # 获取新库的索引
             new_index = new_lib_indices[new_lib_name]
@@ -162,67 +162,76 @@ class PerfAnalyzer(BaseAnalyzer):
                             break
 
             logging.info(f"从源库中找到 {len(filtered_symbol_ids)} 个匹配 {filter_strs} 的符号")
+            PerfAnalyzer.process_record_sample(data, source_lib_indices, filtered_symbol_ids, new_index)
 
-            # 处理recordSampleInfo - 只遍历源库
-            if 'recordSampleInfo' in data:
-                for event_info in data['recordSampleInfo']:
-                    for process_info in event_info.get('processes', []):
-                        for thread_info in process_info.get('threads', []):
-                            # 为当前线程创建新的lib对象
-                            new_lib_obj = {
-                                "fileId": new_index,
-                                "eventCount": 0,
-                                "functions": []
-                            }
-
-                            # 处理线程中的每个lib
-                            libs = thread_info.get('libs', [])
-
-                            # 只处理源库
-                            for lib in libs:
-                                file_id = lib.get('fileId')
-                                if file_id not in source_lib_indices:
-                                    continue  # 跳过非源库
-
-                                # 分离匹配和不匹配的函数
-                                filtered_functions = []
-                                remaining_functions = []
-                                filtered_event_count = 0
-
-                                for func in lib.get('functions', []):
-                                    if func.get('symbol') in filtered_symbol_ids:
-                                        filtered_functions.append(func)
-                                        # 累加counts[1]的值
-                                        if len(func.get('counts', [])) > 1:
-                                            filtered_event_count += func['counts'][1]
-                                    else:
-                                        remaining_functions.append(func)
-
-                                # 如果有匹配的函数，更新原lib和新lib
-                                if filtered_functions:
-                                    # 更新原lib
-                                    lib['functions'] = remaining_functions
-                                    lib['eventCount'] = max(0, lib.get('eventCount', 0) - filtered_event_count)
-
-                                    # 更新新lib
-                                    new_lib_obj['functions'].extend(filtered_functions)
-                                    new_lib_obj['eventCount'] += filtered_event_count
-
-                            # 如果有匹配的函数，将新lib添加到线程的libs中
-                            if new_lib_obj['functions']:
-                                libs.append(new_lib_obj)
         return data
+
+    @staticmethod
+    def process_record_sample(data, source_lib_indices, filtered_symbol_ids, new_index):
+        # 处理recordSampleInfo - 只遍历源库
+        if 'recordSampleInfo' not in data:
+            return
+        for event_info in data['recordSampleInfo']:
+            for process_info in event_info.get('processes', []):
+                for thread_info in process_info.get('threads', []):
+                    PerfAnalyzer.update_thread_libs(source_lib_indices, filtered_symbol_ids, new_index, thread_info)
+
+    @staticmethod
+    def update_thread_libs(source_lib_indices, filtered_symbol_ids, new_index, thread_info):
+        # 为当前线程创建新的lib对象
+        new_lib_obj = {
+            "fileId": new_index,
+            "eventCount": 0,
+            "functions": []
+        }
+
+        # 处理线程中的每个lib
+        libs = thread_info.get('libs', [])
+
+        # 只处理源库
+        for lib in libs:
+            file_id = lib.get('fileId')
+            if file_id not in source_lib_indices:
+                continue  # 跳过非源库
+
+            # 分离匹配和不匹配的函数
+            filtered_functions = []
+            remaining_functions = []
+            filtered_event_count = 0
+
+            for func in lib.get('functions', []):
+                if func.get('symbol') in filtered_symbol_ids:
+                    filtered_functions.append(func)
+                    # 累加counts[1]的值
+                    if len(func.get('counts', [])) > 1:
+                        filtered_event_count += func['counts'][1]
+                else:
+                    remaining_functions.append(func)
+
+            # 如果有匹配的函数，更新原lib和新lib
+            if filtered_functions:
+                # 更新原lib
+                lib['functions'] = remaining_functions
+                lib['eventCount'] = max(0, lib.get('eventCount', 0) - filtered_event_count)
+
+                # 更新新lib
+                new_lib_obj['functions'].extend(filtered_functions)
+                new_lib_obj['eventCount'] += filtered_event_count
+
+        # 如果有匹配的函数，将新lib添加到线程的libs中
+        if new_lib_obj['functions']:
+            libs.append(new_lib_obj)
 
     @staticmethod
     def apply_symbol_split_rules(perf_json_file: str) -> str:
         """应用符号拆分规则"""
-        with open(perf_json_file, 'r', errors='ignore') as json_file:
+        with open(perf_json_file, 'r', errors='ignore', encoding='UTF-8') as json_file:
             data = json.load(json_file)
         rules = []
         config_file = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'res', 'perf', 'symbol_split.json')
         # 1. 从配置文件加载规则
         if config_file and os.path.exists(config_file):
-            with open(config_file, 'r') as f:
+            with open(config_file, 'r', encoding='UTF-8') as f:
                 rules.extend(json.load(f))
 
         return json.dumps(PerfAnalyzer.filter_and_move_symbols(data, rules))

@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
@@ -103,12 +103,12 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
         def step3(driver):
             Step('3. 双指捏合放大、缩小2次')
             p1 = CoordinateAdapter.convert_coordinate(
-                    driver,
-                    x=820,   # 原始x坐标
-                    y=1040,  # 原始y坐标
-                    source_width=self.source_screen_width,
-                    source_height=self.source_screen_height
-                )
+                driver,
+                x=820,  # 原始x坐标
+                y=1040,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
             p2 = CoordinateAdapter.convert_coordinate(
                 driver,
                 x=480,  # 原始x坐标
@@ -117,19 +117,19 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
                 source_height=self.source_screen_height
             )
             p3 = CoordinateAdapter.convert_coordinate(
-                    driver,
-                    x=1130,   # 原始x坐标
-                    y=720,  # 原始y坐标
-                    source_width=self.source_screen_width,
-                    source_height=self.source_screen_height
-                )
+                driver,
+                x=1130,  # 原始x坐标
+                y=720,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
             p4 = CoordinateAdapter.convert_coordinate(
-                    driver,
-                    x=180,   # 原始x坐标
-                    y=1850,  # 原始y坐标
-                    source_width=self.source_screen_width,
-                    source_height=self.source_screen_height
-                )
+                driver,
+                x=180,  # 原始x坐标
+                y=1850,  # 原始y坐标
+                source_width=self.source_screen_width,
+                source_height=self.source_screen_height
+            )
             for i in range(2):
                 driver._two_finger_swipe(p1, p2, p3, p4)
                 time.sleep(1)
@@ -155,7 +155,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
             # 下滑3次，停留2s
             for i in range(3):
                 CommonUtils.swipes_down_load(driver, 1, 2, 300)
-
 
         self.execute_performance_step(1, step1, 10)
         self.execute_performance_step(2, step2, 10)

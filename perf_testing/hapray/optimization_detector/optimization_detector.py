@@ -1,16 +1,15 @@
-import os
 import logging
 import multiprocessing
+import os
+from collections import Counter
 from functools import partial
 from importlib.resources import files
 from typing import List, Dict, Tuple, Optional
-from collections import Counter
-
-from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tqdm import tqdm
 
 from hapray.optimization_detector.file_info import FileInfo, FILE_STATUS_MAPPING
 
@@ -34,12 +33,12 @@ class OptimizationDetector:
 
             if any(x in distribution for x in [0, 1, 2, 3, 4]):
                 opt_score = (
-                                    distribution.get(0, 0) * 0 +  # O0
-                                    distribution.get(1, 0) * 0.33 +  # O1
-                                    distribution.get(2, 0) * 0.67 +  # O2
-                                    distribution.get(3, 0) * 1.0 +  # O3
-                                    distribution.get(4, 0) * 0.67  # Os
-                            ) / total_chunks
+                    distribution.get(0, 0) * 0          # O0
+                    + distribution.get(1, 0) * 0.33     # O1
+                    + distribution.get(2, 0) * 0.67     # O2
+                    + distribution.get(3, 0) * 1.0      # O3
+                    + distribution.get(4, 0) * 0.67     # Os
+                ) / total_chunks
 
                 # Determine optimization category
                 if opt_score < 0.2:

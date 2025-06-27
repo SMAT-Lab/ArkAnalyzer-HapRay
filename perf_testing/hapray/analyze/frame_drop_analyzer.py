@@ -23,18 +23,18 @@ from hapray.core.common.frame_analyzer import FrameAnalyzer
 
 class FrameDropAnalyzer(BaseAnalyzer):
     """Analyzer for frame drops analysis"""
-    
+
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'frame_analysis_summary.json')
 
     def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Analyze frame drops for a single step.
-        
+
         Args:
             step_dir: Identifier for the current step
             trace_db_path: Path to trace database
             perf_db_path: Path to performance database
-            
+
         Returns:
             Dictionary containing frame drop analysis result for this step, or None if no data
         """
@@ -46,14 +46,14 @@ class FrameDropAnalyzer(BaseAnalyzer):
             # 分析卡顿帧数据
             logging.info(f"Analyzing frame drops for {step_dir}...")
             result = FrameAnalyzer.analyze_stuttered_frames(trace_db_path, perf_db_path, step_dir)
-            
+
             # 如果没有数据，返回None
             if result is None:
                 logging.info(f"No frame drop data found for step {step_dir}")
                 return None
-            
+
             return result
-            
+
         except Exception as e:
             logging.error(f"Frame drop analysis failed: {str(e)}")
             return None

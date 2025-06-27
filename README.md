@@ -143,6 +143,8 @@ cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
+# Run pylint
+tox -e lint
 ```
 
 ### Windows Installation
@@ -158,6 +160,8 @@ cd perf_testing
 .venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
+# Run pylint
+tox -e lint
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:

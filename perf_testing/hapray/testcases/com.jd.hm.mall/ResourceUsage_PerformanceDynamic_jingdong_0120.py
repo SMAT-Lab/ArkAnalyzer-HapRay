@@ -2,11 +2,10 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
-
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
+
 
 class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
 
@@ -68,7 +67,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0120(PerfTestCase):
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
         self.execute_performance_step(1, step1, 30)
-
 
     def teardown(self):
         Log.info('teardown')

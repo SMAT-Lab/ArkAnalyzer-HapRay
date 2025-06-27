@@ -124,26 +124,23 @@ class PerfTestCase(TestCase, ABC):
     def __init__(self, tag: str, configs):
         super().__init__(tag, configs)
         self.driver = UiDriver(self.device1)
-        self.TAG = tag
+        self.tag = tag
         self._start_app_package = None  # Package name for process identification
 
     @property
     @abstractmethod
     def steps(self) -> list:
         """List of test steps with name and description"""
-        pass
 
     @property
     @abstractmethod
     def app_package(self) -> str:
         """Package identifier of the application under test"""
-        pass
 
     @property
     @abstractmethod
     def app_name(self) -> str:
         """Human-readable name of the application under test"""
-        pass
 
     @property
     def report_path(self) -> str:
@@ -223,7 +220,7 @@ class PerfTestCase(TestCase, ABC):
     def _build_processes_args(self, sample_all: bool) -> str:
         if sample_all:
             return '-a'
-        process_ids, process_names = self._get_app_pids()
+        process_ids, _ = self._get_app_pids()
         if not process_ids:
             Log.error("No application processes found for collection")
             return ""
@@ -324,7 +321,7 @@ class PerfTestCase(TestCase, ABC):
             "app_id": self.app_package,
             "app_name": self.app_name,
             "app_version": self._get_app_version(),
-            "scene": self.TAG,
+            "scene": self.tag,
             "device": self.devices[0].device_description,
             "timestamp": int(time.time() * 1000)  # Millisecond precision
         }

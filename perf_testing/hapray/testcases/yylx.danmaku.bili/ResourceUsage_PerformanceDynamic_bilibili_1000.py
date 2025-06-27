@@ -3,11 +3,11 @@ import os
 import time
 
 from devicetest.core.test_case import Step
-
 from hypium import BY
+
+from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
 from hapray.core.perf_testcase import PerfTestCase, Log
-from hapray.core.common.common_utils import CommonUtils
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_1000(PerfTestCase):
@@ -76,7 +76,6 @@ class ResourceUsage_PerformanceDynamic_bilibili_1000(PerfTestCase):
             source_height=self.source_screen_height
         ))
         time.sleep(5)
-
 
     def teardown(self):
         Log.info('teardown')

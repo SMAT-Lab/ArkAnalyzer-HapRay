@@ -60,8 +60,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
             time.sleep(1)
 
             # 2. 点击全屏按钮，等待1s
-            driver.touch((1188, 1670)) # Mate60 Pro
-            #driver.touch((1144, 709))  # Mate70
+            driver.touch((1188, 1670))  # Mate60 Pro
+            # driver.touch((1144, 709))  # Mate70
             time.sleep(1)
 
             # 3. 全屏播放30s
