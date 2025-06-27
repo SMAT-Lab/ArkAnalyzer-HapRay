@@ -73,7 +73,7 @@ class FileInfo:
         """Extract .text segment data"""
         if self.file_type == FileType.SO:
             return self._extract_so_dot_text(self.absolute_path)
-        elif self.file_type == FileType.AR:
+        if self.file_type == FileType.AR:
             return self._extract_archive_dot_text()
         return []
 

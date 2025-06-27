@@ -6,8 +6,8 @@ from typing import Optional
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
@@ -81,7 +81,7 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                 BY.type('Image').text(text),
                 BY.type('Tab').text(text)
             ]
-            
+
             for strategy in strategies:
                 try:
                     component = driver.find_component(strategy)
@@ -90,7 +90,7 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                         return component
                 except Exception:
                     continue
-            
+
             Log.error(f'Bottom tab not found: {text} after trying all strategies')
             return None
         except Exception as e:
@@ -117,18 +117,18 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                 Step('1. 淘宝-首页上下滑5次，间隔2s')
                 try:
                     for i in range(5):
-                        Log.info(f'Performing swipe down {i+1}/5')
-                        CommonUtils.swipe(driver.device_sn, 
-                                       self.SWIPE_START_X, self.SWIPE_START_Y,
-                                       self.SWIPE_END_X, self.SWIPE_END_Y,
-                                       self.SWIPE_DURATION)
+                        Log.info(f'Performing swipe down {i + 1}/5')
+                        CommonUtils.swipe(driver.device_sn,
+                                          self.SWIPE_START_X, self.SWIPE_START_Y,
+                                          self.SWIPE_END_X, self.SWIPE_END_Y,
+                                          self.SWIPE_DURATION)
                         time.sleep(2)
                     for i in range(5):
-                        Log.info(f'Performing swipe up {i+1}/5')
+                        Log.info(f'Performing swipe up {i + 1}/5')
                         CommonUtils.swipe(driver.device_sn,
-                                       self.SWIPE_END_X, self.SWIPE_END_Y,
-                                       self.SWIPE_START_X, self.SWIPE_START_Y,
-                                       self.SWIPE_DURATION)
+                                          self.SWIPE_END_X, self.SWIPE_END_Y,
+                                          self.SWIPE_START_X, self.SWIPE_START_Y,
+                                          self.SWIPE_DURATION)
                         time.sleep(2)
                     time.sleep(3)
                 except Exception as e:
@@ -142,11 +142,11 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                         driver.touch(component)
                         time.sleep(2)
                         for i in range(3):
-                            Log.info(f'Performing swipe in 关注 page {i+1}/3')
+                            Log.info(f'Performing swipe in 关注 page {i + 1}/3')
                             CommonUtils.swipe(driver.device_sn,
-                                           self.SWIPE_START_X, self.SWIPE_START_Y,
-                                           self.SWIPE_END_X, self.SWIPE_END_Y,
-                                           self.SWIPE_DURATION)
+                                              self.SWIPE_START_X, self.SWIPE_START_Y,
+                                              self.SWIPE_END_X, self.SWIPE_END_Y,
+                                              self.SWIPE_DURATION)
                             time.sleep(2)
                         time.sleep(3)
                     else:
@@ -183,4 +183,4 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
             self.driver.stop_app(self.app_package)
             self.generate_reports()
         except Exception as e:
-            Log.error(f'Error in teardown: {str(e)}') 
+            Log.error(f'Error in teardown: {str(e)}')
