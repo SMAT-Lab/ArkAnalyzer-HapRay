@@ -51,7 +51,7 @@ def test_collect_empty_frame_loads():
         output_dir = os.path.join(root_dir, "empty_frame_loads_plots")
         visualize_empty_frame_loads(results, output_dir)
 
-        print(f"\n=== 收集完成 ===")
+        print("\n=== 收集完成 ===")
         print(f"总共收集到 {len(results)} 个场景的数据")
         print(f"结果已保存到: {output_file}")
         print(f"可视化图表已保存到: {output_dir}")
@@ -74,7 +74,7 @@ def update_empty_frame_results():
         print("\n=== 开始批量更新空帧分析数据 ===")
 
         # 遍历目录
-        for root, dirs, files in os.walk(root_dir):
+        for root, dirs, _ in os.walk(root_dir):
             # 过滤出符合条件的目录
             target_dirs = [d for d in dirs if
                            d.startswith('ResourceUsage_PerformanceDynamic_') and 'round' not in d.lower()]
@@ -248,7 +248,7 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
     results = []
 
     # 遍历目录
-    for root, dirs, files in os.walk(root_dir):
+    for root, _, files in os.walk(root_dir):
         for file in files:
             if file == 'empty_frames_analysis.json':
                 file_path = os.path.join(root, file)

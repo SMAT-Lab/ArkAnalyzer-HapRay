@@ -8,7 +8,7 @@ package-lock.json
 
 # Build Artifacts
 web/dist/
-toolbox/hapray-toolbox_v1.0.0.zip
+toolbox/hapray-toolbox*.zip
 *.tgz
 build
 dist
@@ -16,6 +16,12 @@ dist
 # Third-party and Generated Directories
 third-party/HapRayDep/
 third-party/trace_streamer_binary/
-perf_testing/hapray-toolbox/ 
+perf_testing/hapray-toolbox/
+perf_testing/.tox
+perf_testing/tmp_hypium/
+perf_testing/ts_tmp.perf.data
 third-party/HiSmartPerf_20250109/
 perf_testing/hypium-5.0.7.200/
+
+# Log
+*.log

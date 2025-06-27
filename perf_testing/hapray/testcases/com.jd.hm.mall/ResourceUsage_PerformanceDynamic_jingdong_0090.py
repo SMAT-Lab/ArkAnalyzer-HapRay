@@ -2,12 +2,11 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
@@ -54,7 +53,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         self.driver.wait(5)
         time.sleep(3)
 
-        #点击搜索框
+        # 点击搜索框
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
             x=608,  # 原始x坐标
@@ -95,7 +94,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         CommonUtils.swipes_up_load(self.driver, swip_num=1, sleep=2)
 
         def step1(driver):
-
             # 点击全部评价，等待2s
             self.driver.touch(BY.text('买家评价'))
             time.sleep(3)

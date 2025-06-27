@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
@@ -45,19 +45,19 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
         self.source_screen_width = 1260
         self.source_screen_height = 2720
         self.swipe_p1 = CoordinateAdapter.convert_coordinate(
-                            self.driver,
-                            x=630,  # 原始x坐标
-                            y=2320,  # 原始y坐标
-                            source_width=self.source_screen_width,
-                            source_height=self.source_screen_height
-                        )
+            self.driver,
+            x=630,  # 原始x坐标
+            y=2320,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        )
         self.swipe_p2 = CoordinateAdapter.convert_coordinate(
-                            self.driver,
-                            x=630,  # 原始x坐标
-                            y=1370,  # 原始y坐标
-                            source_width=self.source_screen_width,
-                            source_height=self.source_screen_height
-                        )
+            self.driver,
+            x=630,  # 原始x坐标
+            y=1370,  # 原始y坐标
+            source_width=self.source_screen_width,
+            source_height=self.source_screen_height
+        )
 
     @property
     def steps(self) -> list:
@@ -146,11 +146,13 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             # 直播间商品列表上滑下滑
             for i in range(5):
                 # 2. 直播间商品列表上滑，等待2s
-                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0], self.swipe_p2[1], 300)
+                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0],
+                                  self.swipe_p2[1], 300)
                 time.sleep(2)
 
                 # 3. 直播间商品列表下滑，等待2s
-                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
+                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0],
+                                  self.swipe_p1[1], 300)
                 time.sleep(2)
 
         def step4(driver):
@@ -169,13 +171,15 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             # 购物车商品列表上滑5次
             for i in range(5):
                 # 2. 购物车商品列表上滑5次，等待2s
-                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0], self.swipe_p2[1], 300)
+                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0],
+                                  self.swipe_p2[1], 300)
                 time.sleep(2)
 
             # 购物车商品列表下滑5次
             for i in range(5):
                 # 3. 购物车商品列表下滑5次，等待2s
-                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
+                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0],
+                                  self.swipe_p1[1], 300)
                 time.sleep(2)
 
         def step5(driver):
@@ -193,13 +197,15 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             # 购物车商品列表上滑5次
             for i in range(5):
                 # 2. 购物车商品列表上滑5次，等待2s
-                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0], self.swipe_p2[1], 300)
+                CommonUtils.swipe(driver.device_sn, self.swipe_p1[0], self.swipe_p1[1], self.swipe_p2[0],
+                                  self.swipe_p2[1], 300)
                 time.sleep(2)
 
             # 购物车商品列表下滑5次
             for i in range(5):
                 # 3. 购物车商品列表下滑5次，等待2s
-                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0], self.swipe_p1[1], 300)
+                CommonUtils.swipe(driver.device_sn, self.swipe_p2[0], self.swipe_p2[1], self.swipe_p1[0],
+                                  self.swipe_p1[1], 300)
                 time.sleep(2)
 
         self.execute_performance_step(1, step1, 10)

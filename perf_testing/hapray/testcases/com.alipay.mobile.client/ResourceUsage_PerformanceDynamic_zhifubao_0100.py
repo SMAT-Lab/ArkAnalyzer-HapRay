@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
@@ -84,7 +84,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
         time.sleep(10)
         self.driver.swipe_to_back()
         time.sleep(2)
-        self.driver.touch(BY.text('我的')) # 点不到
+        self.driver.touch(BY.text('我的'))  # 点不到
         time.sleep(2)
         self.driver.touch(BY.text('店铺关注'))
         time.sleep(2)

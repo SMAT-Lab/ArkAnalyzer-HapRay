@@ -23,15 +23,7 @@ from pathlib import Path
 from hypium import UiDriver
 
 
-class CommonUtils(object):
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def exe(cmd):
-        pi = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        return pi.stdout
-
+class CommonUtils:
     @staticmethod
     def exe_cmd(cmd, timeout=120000):
         ret = 'error'
@@ -74,7 +66,7 @@ class CommonUtils(object):
 
     @staticmethod
     def load_all_testcases() -> dict:
-        all_testcases = dict()
+        all_testcases = dict({})
         testcases_path = files("hapray.testcases")
         for second_dir in os.listdir(testcases_path):
             second_path = os.path.join(testcases_path, second_dir)
