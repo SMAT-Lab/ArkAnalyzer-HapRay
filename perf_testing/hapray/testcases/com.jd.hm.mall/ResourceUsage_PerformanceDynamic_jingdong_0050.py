@@ -1,10 +1,9 @@
 # coding: utf-8
 import os
 
-from hypium import BY
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
@@ -21,7 +20,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
                 "description": "1.京东观看直播场景，上滑3次，下滑3次"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1212
         self.source_screen_height = 2616
@@ -58,7 +57,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
             source_height=self.source_screen_height
         ))
         self.driver.wait(3)
-
 
         def step1(driver):
             # Step('京东直播上滑操作')
