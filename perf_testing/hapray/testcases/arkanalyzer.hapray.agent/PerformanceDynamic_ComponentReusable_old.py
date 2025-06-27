@@ -2,9 +2,11 @@
 # coding: utf-8
 
 import os
+
 from devicetest.core.test_case import Step
-from hapray.core.perf_testcase import PerfTestCase
+
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerformanceDynamic_ComponentReusable_old(PerfTestCase):
@@ -48,7 +50,8 @@ class PerformanceDynamic_ComponentReusable_old(PerfTestCase):
     def process(self):
         def step1(driver):
             Step('1. 上滑5次，每次等待1s;下滑5次，每次等待1s')
-            driver.start_app(package_name=self.app_package, page_name='ExecutorAbility', params=f'--ps testSuite {self._test_suite} --ps testCase {self._testCase}')
+            driver.start_app(package_name=self.app_package, page_name='ExecutorAbility',
+                             params=f'--ps testSuite {self._test_suite} --ps testCase {self._testCase}')
             driver.wait(2)
             for _ in range(5):
                 CommonUtils.swipes_up_load(driver, 1, 1, 300)
