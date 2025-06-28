@@ -41,7 +41,7 @@ class PerfAnalyzer(BaseAnalyzer):
         if len(kind) > 0:
             args.extend(['-k', kind])
 
-        logging.debug(f"Running perf analysis with command: {' '.join(args)}")
+        logging.debug("Running perf analysis with command: %s", ' '.join(args))
         ExeUtils.execute_hapray_cmd(args)
         self.generate_hiperf_report(perf_db_path)
         return {}
@@ -135,12 +135,13 @@ class PerfAnalyzer(BaseAnalyzer):
                     source_lib_indices.add(idx)
 
             if not source_lib_indices:
-                logging.warning(f"警告: 未找到源库 '{rule['source_file']}'，跳过符号拆分")
+                logging.warning("警告: 未找到源库 '%s'，跳过符号拆分", rule['source_file'])
                 continue
 
             filter_strs = ", ".join(f"'{fs}'" for fs in filter_str_list)
-            logging.info(f"处理规则: 从 '{rule['source_file']}' 移动包含 {filter_strs} 的符号到 '{new_lib_name}'")
-            logging.info(f"找到源库 '{rule['source_file']}' 的索引: {source_lib_indices}")
+            logging.info("处理规则: 从 '%s' 移动包含 %s 的符号到 '%s'",
+                         rule['source_file'], filter_strs, new_lib_name)
+            logging.info("找到源库 '%s' 的索引: %s", rule['source_file'], source_lib_indices)
 
             # 收集包含任一过滤字符串的符号的symbol ID
             filtered_symbol_ids = set()
@@ -161,7 +162,7 @@ class PerfAnalyzer(BaseAnalyzer):
                             sym_info['file'] = new_index
                             break
 
-            logging.info(f"从源库中找到 {len(filtered_symbol_ids)} 个匹配 {filter_strs} 的符号")
+            logging.info("从源库中找到 %s 个匹配 %s 的符号", len(filtered_symbol_ids), filter_strs)
             PerfAnalyzer.process_record_sample(data, source_lib_indices, filtered_symbol_ids, new_index)
 
         return data
