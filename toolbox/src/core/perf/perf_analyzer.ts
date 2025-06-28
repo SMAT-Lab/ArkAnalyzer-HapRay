@@ -446,7 +446,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             // ets 需要基于symbol 进一步分类
             call.classification = this.classifySymbol(call.symbolId, call.classification);
-
+            
             let callchain = this.callchainsMap.get(row[0] as number) || {
                 callchainId: row[0] as number,
                 selfEvent: 0,
