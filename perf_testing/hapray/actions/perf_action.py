@@ -13,21 +13,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import argparse
+import logging
 import os
 import re
 import shutil
 import time
-import logging
-import argparse
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+from typing import List, Optional
 
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
-from hapray.core.config.config import Config
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.folder_utils import scan_folders, delete_folder
+from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 ENV_ERR_STR = """
@@ -66,7 +66,7 @@ class PerfAction:
         return matched_cases
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> Optional[str]:
         """Executes performance testing workflow."""
         if not check_env():
             logging.error(ENV_ERR_STR)
@@ -163,3 +163,5 @@ class PerfAction:
                 logging.info("Summary Excel created successfully")
             else:
                 logging.error("Failed to create summary Excel")
+
+            return reports_path
