@@ -22,6 +22,8 @@ perf_testing/tmp_hypium/
 perf_testing/ts_tmp.perf.data
 third-party/HiSmartPerf_20250109/
 perf_testing/hypium-5.0.7.200/
+perf_testing/binary_analysis_report.xlsx
+perf_testing/files_results_cache/
 
 # Log
 *.log
