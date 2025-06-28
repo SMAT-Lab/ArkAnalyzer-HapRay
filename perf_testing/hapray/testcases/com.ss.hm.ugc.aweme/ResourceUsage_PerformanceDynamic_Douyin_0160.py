@@ -92,11 +92,11 @@ class ResourceUsage_PerformanceDynamic_Douyin_0160(PerfTestCase):
             driver.swipe_to_home()
 
         start(self.driver)
-        self.execute_step_with_perf_and_trace(1, step1, 60)
-        self.execute_step_with_perf_and_trace(2, step2, 60)
+        self.execute_performance_step(1, step1, 60)
+        self.execute_performance_step(2, step2, 60)
         finish(self.driver)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

@@ -37,9 +37,11 @@ function processData(data: PerfData|null) {
 
 const { xData, yData } = processData(props.chartData);
 
+const title = props.chartData?.steps[0].data[0].eventType==0?'cycles':'instructions';
+
 const option = {
     title: {
-        text: '步骤负载排名：instructions',
+        text: '步骤负载排名：'+title,
         left: 'left'
     },
     tooltip: {
