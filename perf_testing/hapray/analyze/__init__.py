@@ -22,7 +22,6 @@ import time
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.exe_utils import ExeUtils
-from hapray.core.config.config import Config
 
 # Configuration constants
 MAX_WORKERS = 4  # Optimal for I/O-bound tasks
@@ -154,7 +153,13 @@ def _process_single_step(
         scene_dir: str,
         analyzers: List[BaseAnalyzer]
 ):
-    """Process a single step directory with all analyzers."""
+    """Process a single step directory with all analyzers.
+    
+    Args:
+        step_dir: Step directory name
+        scene_dir: Root scene directory
+        analyzers: List of analyzer instances
+    """
     htrace_file = os.path.join(scene_dir, 'htrace', step_dir, 'trace.htrace')
     trace_db = os.path.join(scene_dir, 'htrace', step_dir, 'trace.db')
     perf_file = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.data')
