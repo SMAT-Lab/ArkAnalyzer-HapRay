@@ -30,15 +30,15 @@ from hapray.actions.opt_action import OptAction
 def check_report(report_path: str, perf_steps: [int]):
     # report
     report_html = os.path.join(report_path, 'report/hapray_report.html')
-    assert os.path.exists(report_html), f'{report_html} must exist'
+    assert os.path.exists(report_html), f'{os.path.basename(report_html)} must exist'
 
     # htrace
     component_reusability_report = os.path.join(report_path, 'htrace/component_reusability_report.json')
-    assert os.path.exists(component_reusability_report), f'{component_reusability_report} must exist'
+    assert os.path.exists(component_reusability_report), f'{os.path.basename(component_reusability_report)} must exist'
     empty_frames_analysis = os.path.join(report_path, 'htrace/empty_frames_analysis.json')
-    assert os.path.exists(empty_frames_analysis), f'{empty_frames_analysis} must exist'
+    assert os.path.exists(empty_frames_analysis), f'{os.path.basename(empty_frames_analysis)} must exist'
     frame_analysis_summary = os.path.join(report_path, 'htrace/frame_analysis_summary.json')
-    assert os.path.exists(frame_analysis_summary), f'{frame_analysis_summary} must exist'
+    assert os.path.exists(frame_analysis_summary), f'{os.path.basename(frame_analysis_summary)} must exist'
 
     # hiperf
     hiperf_info = os.path.join(report_path, 'hiperf/hiperf_info.json')
