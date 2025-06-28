@@ -53,8 +53,9 @@ class UpdateAction:
         )
         parser.add_argument(
             "--mode",
-            default="COMMUNITY",
-            help="select mode COMMUNITY COMPATIBILITY SIMPLE",
+            type=int,
+            default=Config.MODE_COMMUNITY,
+            help=f"select mode {Config.MODE_COMMUNITY} COMMUNITY {Config.MODE_COMPATIBILITY} COMPATIBILITY {Config.MODE_SIMPLE} SIMPLE",
         )
         parser.add_argument(
             "--package_name",
@@ -67,10 +68,10 @@ class UpdateAction:
         so_dir = os.path.abspath(parsed_args.so_dir) if parsed_args.so_dir else None
 
         Config.set("mode", parsed_args.mode)
-        if not os.path.exists(report_dir) and Config.get("mode") == "COMMUNITY":
+        if not os.path.exists(report_dir) and Config.get("mode") == Config.MODE_COMMUNITY:
             logging.error(f"Report directory not found: {report_dir}")
             return
-        elif Config.get("mode") == "SIMPLE":
+        elif Config.get("mode") == Config.MODE_SIMPLE:
             # 简单模式构造目录
             package_name = parsed_args.package_name
             create_simple_mode_structure(report_dir, package_name)
@@ -100,15 +101,15 @@ class UpdateAction:
             full_path = os.path.join(report_dir, entry)
             if os.path.isdir(full_path):
                 if all(
-                    os.path.exists(os.path.join(full_path, subdir))
-                    for subdir in ["hiperf", "htrace"]
+                        os.path.exists(os.path.join(full_path, subdir))
+                        for subdir in ["hiperf", "htrace"]
                 ):
                     testcase_dirs.append(full_path)
 
         if not testcase_dirs:
             if all(
-                os.path.exists(os.path.join(report_dir, subdir))
-                for subdir in ["hiperf", "htrace"]
+                    os.path.exists(os.path.join(report_dir, subdir))
+                    for subdir in ["hiperf", "htrace"]
             ):
                 testcase_dirs.append(report_dir)
 

@@ -36,18 +36,23 @@ class ConfigObject:
                 setattr(self, key, value)
 
 
-def deep_merge(default: Dict, custom: Dict) -> Dict:
-    """深度合并两个字典，custom中的值覆盖default中的值"""
-    merged = default.copy()
-    for key, value in custom.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-            merged[key] = deep_merge(merged[key], value)
+def deep_merge(base: Dict, update: Dict) -> Dict:
+    """深度合并两个字典"""
+    result = base.copy()
+    for key, value in update.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
         else:
-            merged[key] = value
-    return merged
+            result[key] = value
+    return result
 
 
 class Config:
+    # 模式常量定义
+    MODE_COMMUNITY = 0      # 社区模式
+    MODE_COMPATIBILITY = 1  # 兼容模式
+    MODE_SIMPLE = 2         # 简单模式
+    
     _instance = None  # 单例实例
     _lock = threading.Lock()  # 线程安全锁
     _default_config_path = files('hapray.core.config').joinpath("config.yaml")  # 默认配置文件路径
