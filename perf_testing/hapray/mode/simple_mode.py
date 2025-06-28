@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import re
+import glob
+import shutil
 
 
 def create_simple_mode_structure(report_dir, package_name):
@@ -12,9 +14,9 @@ def create_simple_mode_structure(report_dir, package_name):
     htrace_dir = os.path.join(report_dir, "htrace", "step1")
     report_report_dir = os.path.join(report_dir, "report")
     if (
-            not os.path.exists(hiperf_dir)
-            and not os.path.exists(htrace_dir)
-            and not os.path.exists(report_report_dir)
+        not os.path.exists(hiperf_dir)
+        and not os.path.exists(htrace_dir)
+        and not os.path.exists(report_report_dir)
     ):
         os.makedirs(hiperf_dir)
         os.makedirs(htrace_dir)
@@ -22,6 +24,31 @@ def create_simple_mode_structure(report_dir, package_name):
         logging.info(
             f"hiperf htrace report directory create success: {hiperf_dir} and {htrace_dir} and {report_dir}"
         )
+        
+        # 查找并移动.data文件到hiperf/step1/目录，重命名为perf.data
+        data_files = glob.glob(os.path.join(report_dir, "*.data"))
+        if data_files:
+            source_data_file = data_files[0]  # 取第一个找到的.data文件
+            target_data_file = os.path.join(hiperf_dir, "perf.data")
+            shutil.copy2(source_data_file, target_data_file)
+            logging.info(f"Copied {source_data_file} to {target_data_file}")
+        
+        # 查找并移动ps_ef.txt文件到hiperf/step1/目录
+        ps_ef_files = glob.glob(os.path.join(report_dir, "ps_ef.txt"))
+        if ps_ef_files:
+            source_ps_ef_file = ps_ef_files[0]
+            target_ps_ef_file = os.path.join(hiperf_dir, "ps_ef.txt")
+            shutil.copy2(source_ps_ef_file, target_ps_ef_file)
+            logging.info(f"Copied {source_ps_ef_file} to {target_ps_ef_file}")
+        
+        # 查找并移动.htrace文件到htrace/step1/目录，重命名为trace.htrace
+        htrace_files = glob.glob(os.path.join(report_dir, "*.htrace"))
+        if htrace_files:
+            source_htrace_file = htrace_files[0]  # 取第一个找到的.htrace文件
+            target_htrace_file = os.path.join(htrace_dir, "trace.htrace")
+            shutil.copy2(source_htrace_file, target_htrace_file)
+            logging.info(f"Copied {source_htrace_file} to {target_htrace_file}")
+        
         # 创建testInfo.json
         test_info = {
             "app_id": package_name,

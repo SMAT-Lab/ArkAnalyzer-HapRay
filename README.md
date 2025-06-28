@@ -75,7 +75,7 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
-- `--mode <mode>`: select mode COMMUNITY COMPATIBILITY SIMPLE
+- `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
 - `--package_name <package_name>`: SIMPLE mode need package_name
 
 Example:
@@ -88,33 +88,13 @@ python -m scripts.main update --report_dir reports/20240605120000 --so_dir updat
 python -m scripts.main update --report_dir reports/20240605120000
 
 # SIMPLE mode
-# Update reports for simple mode 
-# first run for create folder
+# put perf.data,ps_ef.txt,trace.htrace into reports/20240605120000
 # |-reports
 # |-|-20240605120000
-# |-|-|-hiperf
-# |-|-|-|-step1
-# |-|-|-|-steps.json
-# |-|-|-htrace
-# |-|-|-|-step1
-# |-|-|-report
-# |-|-|-testInfo.json
-python -m scripts.main update --report_dir reports/20240605120000 --mode SIMPLE --package_name com.jd.hm.mall
-# put in perf.data,ps_ef.txt,trace.htrace into folder
-# |-reports
-# |-|-20240605120000
-# |-|-|-hiperf
-# |-|-|-|-step1
-# |-|-|-|-|-perf.data
-# |-|-|-|-|-ps_ef.txt
-# |-|-|-|-steps.json
-# |-|-|-htrace
-# |-|-|-|-step1
-# |-|-|-|-|-trace.htrace
-# |-|-|-report
-# |-|-|-testInfo.json
-# second run for create report
-python -m scripts.main update --report_dir reports/20240605120000 --mode SIMPLE --package_name com.jd.hm.mall
+# |-|-|-perf.data
+# |-|-|-trace.htrace
+# |-|-|-ps_ef.txt
+python -m scripts.main update --report_dir reports/20240605120000 --mode SIMPLE --package_name com.jd.hm.mall 
 
 ```
 
