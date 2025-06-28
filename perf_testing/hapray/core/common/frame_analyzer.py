@@ -17,15 +17,12 @@ import codecs
 import json
 import logging
 import os
-import platform
 import sqlite3
-import subprocess
 import sys
-from typing import List, Dict, Any
+from typing import Dict, Any, List, Optional
+import traceback
 
 import pandas as pd
-
-from hapray.core.common.common_utils import CommonUtils
 
 # 同时设置标准输出编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -47,175 +44,19 @@ class FrameAnalyzer:
     _files_cache = {}      # 缓存files数据，格式: {step_id: pd.DataFrame}
     _pid_cache = {}        # 缓存pid数据，格式: {step_id: [pids]}
     _tid_cache = {}        # 缓存tid数据，格式: {step_id: [tids]}
+    _process_cache = {}    # 缓存process数据，格式: {step_id: pd.DataFrame}
 
-    @staticmethod
-    def _get_trace_streamer_path() -> str:
-        """获取对应系统的trace_streamer工具路径
-
-        Returns:
-            str: trace_streamer工具的完整路径
-        """
-
-        # 获取 perf_testing 目录
-        perf_testing_dir = CommonUtils.get_project_root()
-
-        # 根据系统类型选择对应的工具
-        system = platform.system().lower()
-        if system == 'windows':
-            tool_name = 'trace_streamer_window.exe'
-        elif system == 'darwin':  # macOS
-            tool_name = 'trace_streamer_mac'
-        elif system == 'linux':
-            tool_name = 'trace_streamer_linux'
-        else:
-            raise OSError(f"Unsupported operating system: {system}")
-
-        # 构建工具完整路径
-        tool_path = os.path.join(perf_testing_dir, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', tool_name)
-
-        # 检查工具是否存在
-        if not os.path.exists(tool_path):
-            raise FileNotFoundError(f"Trace streamer tool not found at: {tool_path}")
-
-        if system == 'darwin' or system == 'linux':
-            os.chmod(tool_path, 0o755)
-
-        return tool_path
-
-    @staticmethod
-    def convert_htrace_to_db(htrace_file: str, output_db: str) -> bool:
-        """将htrace文件转换为db文件
-
-        使用 trace_streamer 工具将 .htrace 文件转换为 .db 文件
-        命令格式: trace_streamer xxx.htrace -e xxx.db
-
-        Args:
-            htrace_file: htrace文件路径
-            output_db: 输出db文件路径
-
-        Returns:
-            bool: 转换是否成功
-        """
-        try:
-            # 确保输出目录存在
-            output_dir = os.path.dirname(output_db)
-            os.makedirs(output_dir, exist_ok=True)
-
-            # 获取trace_streamer工具路径
-            trace_streamer_path = FrameAnalyzer._get_trace_streamer_path()
-
-            # 构建并执行转换命令
-            cmd = f'"{trace_streamer_path}" "{htrace_file}" -e "{output_db}"'
-            logging.info(f"Converting htrace to db: {cmd}")
-
-            # 使用subprocess执行命令
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8'
-            )
-
-            # 检查命令执行结果
-            if result.returncode != 0:
-                logging.error(f"Failed to convert htrace to db: {result.stderr}")
-                return False
-
-            # 验证输出文件是否存在
-            if not os.path.exists(output_db):
-                logging.error(f"Output db file not found: {output_db}")
-                return False
-
-            logging.info(f"Successfully converted {htrace_file} to {output_db}")
-            return True
-
-        except Exception as e:
-            logging.error(f"Error converting htrace to db: {str(e)}")
-            return False
-
-    @staticmethod
-    def analyze_frame_drops(merge_folder_path: str) -> bool:
-        """分析指定目录下的卡顿帧数据
-
-        Args:
-            merge_folder_path: 合并后的报告目录路径
-
-        Returns:
-            bool: 分析是否成功
-        """
-        try:
-            htrace_dir = os.path.join(merge_folder_path, 'htrace')
-            if not os.path.exists(htrace_dir):
-                logging.error(f"Error: htrace directory not found at {htrace_dir}")
-                return False
-
-            # 用于存储所有步骤的分析结果
-            all_results = {}
-
-            # 遍历所有步骤目录
-            for step_dir in os.listdir(htrace_dir):
-                step_path = os.path.join(htrace_dir, step_dir)
-                if not os.path.isdir(step_path):
-                    continue
-
-                # 查找htrace文件
-                htrace_file = os.path.join(step_path, 'trace.htrace')
-                if not os.path.exists(htrace_file):
-                    logging.warning(f"No htrace file found in {step_path}")
-                    continue
-
-                # 设置db文件输出路径（与htrace文件在同一目录）
-                db_file = os.path.join(step_path, 'trace.db')
-                if not os.path.exists(db_file):
-                    # 转换htrace为db
-                    logging.info(f"Converting htrace to db for {step_dir}...")
-                    if not FrameAnalyzer.convert_htrace_to_db(htrace_file, db_file):
-                        logging.error(f"Failed to convert htrace to db for {step_dir}")
-                        continue
-
-                # 分析卡顿帧数据
-                logging.info(f"Analyzing frame drops for {step_dir}...")
-                try:
-                    # 查找对应的perf数据库
-                    perf_db_file = None
-                    hiperf_dir = os.path.join(merge_folder_path, 'hiperf')
-                    if os.path.exists(hiperf_dir):
-                        step_perf_dir = os.path.join(hiperf_dir, step_dir)
-                        if os.path.exists(step_perf_dir):
-                            perf_db_file = os.path.join(step_perf_dir, 'perf.db')
-                            if not os.path.exists(perf_db_file):
-                                perf_db_file = None
-                    
-                    result = FrameAnalyzer.analyze_stuttered_frames(db_file, perf_db_file, step_dir)
-                    all_results[step_dir] = result
-                except Exception as e:
-                    logging.error(f"Error analyzing frames for {step_dir}: {str(e)}")
-                    continue
-
-            # 保存汇总结果
-            if all_results:
-                summary_path = os.path.join(htrace_dir, 'frame_analysis_summary.json')
-                with open(summary_path, 'w', encoding='utf-8') as f:
-                    json.dump(all_results, f, indent=2, ensure_ascii=False)
-                logging.info(f"Summary results saved to: {summary_path}")
-            else:
-                logging.warning("No valid analysis results to summarize")
-
-            return True
-
-        except Exception as e:
-            logging.error(f"Error analyzing frame drops: {str(e)}")
-            return False
+    # 调试开关配置
+    _debug_vsync_enabled = False  # VSync调试开关，True时正常判断，False时永远不触发VSync条件
 
     @staticmethod
     def _get_app_pids(scene_dir: str, step_id: str) -> list:
         """获取应用进程ID列表
-        
+
         Args:
             scene_dir: 场景目录路径
             step_id: 步骤ID，如'step1'或'1'
-            
+
         Returns:
             list: 进程ID列表
         """
@@ -223,14 +64,14 @@ class FrameAnalyzer:
         if step_id in FrameAnalyzer._pid_cache:
             logging.debug(f"使用已缓存的PID数据: {step_id}")
             return FrameAnalyzer._pid_cache[step_id]
-        
+
         try:
             # 处理step_id，去掉'step'前缀
             step_number = int(step_id.replace('step', ''))
-            
+
             # 构建pids.json文件路径
             pids_json_path = os.path.join(scene_dir, 'hiperf', f'step{step_number}', 'pids.json')
-            
+
             if not os.path.exists(pids_json_path):
                 logging.warning(f"No pids.json found at {pids_json_path}")
                 return []
@@ -242,22 +83,23 @@ class FrameAnalyzer:
             # 提取pids和process_names
             pids = pids_data.get('pids', [])
             process_names = pids_data.get('process_names', [])
-            
+
             if not pids or not process_names:
                 logging.warning(f"No valid pids or process_names found in {pids_json_path}")
                 return []
-            
+
             # 确保pids和process_names长度一致
             if len(pids) != len(process_names):
-                logging.warning(f"Mismatch between pids ({len(pids)}) and process_names ({len(process_names)}) in {pids_json_path}")
+                logging.warning(
+                    f"Mismatch between pids ({len(pids)}) and process_names ({len(process_names)}) in {pids_json_path}")
                 # 取较短的长度
                 min_length = min(len(pids), len(process_names))
                 pids = pids[:min_length]
                 process_names = process_names[:min_length]
-            
+
             # 缓存PID数据
             FrameAnalyzer._pid_cache[step_id] = pids
-            
+
             logging.debug(f"缓存PID数据: {step_id}, PIDs: {len(pids)}")
             return pids
 
@@ -268,7 +110,7 @@ class FrameAnalyzer:
     @staticmethod
     def _update_pid_tid_cache(step_id: str, trace_df: pd.DataFrame) -> None:
         """根据trace_df中的数据更新PID和TID缓存
-        
+
         Args:
             step_id: 步骤ID，如'step1'或'1'
             trace_df: 包含pid和tid信息的DataFrame
@@ -276,19 +118,19 @@ class FrameAnalyzer:
         try:
             if trace_df.empty:
                 return
-            
+
             # 提取唯一的PID和TID
             unique_pids = set(trace_df['pid'].dropna().unique())
             unique_tids = set(trace_df['tid'].dropna().unique())
-            
+
             # 更新PID缓存
             FrameAnalyzer._pid_cache[step_id] = list(unique_pids)
-            
+
             # 更新TID缓存
             FrameAnalyzer._tid_cache[step_id] = list(unique_tids)
-            
+
             logging.debug(f"从trace_df更新缓存: {step_id}, PIDs: {len(unique_pids)}, TIDs: {len(unique_tids)}")
-            
+
         except Exception as e:
             logging.error(f"更新PID/TID缓存失败: {str(e)}")
 
@@ -296,25 +138,25 @@ class FrameAnalyzer:
     def _get_callchain_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
         """
         获取并缓存perf_callchain表的数据
-        
+
         Args:
             perf_conn: perf数据库连接
             step_id: 步骤ID，用作缓存key
-            
+
         Returns:
             pd.DataFrame: callchain缓存数据
         """
         # 如果没有提供step_id，使用连接对象作为key
         cache_key = step_id if step_id else str(perf_conn)
-        
+
         # 如果已有缓存且不为空，直接返回
         if cache_key in FrameAnalyzer._callchain_cache and not FrameAnalyzer._callchain_cache[cache_key].empty:
             logging.debug(f"使用已存在的callchain缓存，共 {len(FrameAnalyzer._callchain_cache[cache_key])} 条记录")
             return FrameAnalyzer._callchain_cache[cache_key]
-            
+
         try:
             callchain_cache = pd.read_sql_query("""
-                SELECT 
+                SELECT
                     id,
                     callchain_id,
                     depth,
@@ -322,12 +164,12 @@ class FrameAnalyzer:
                     symbol_id
                 FROM perf_callchain
             """, perf_conn)
-            
+
             # 保存到类变量
             FrameAnalyzer._callchain_cache[cache_key] = callchain_cache
             logging.debug(f"缓存了 {len(callchain_cache)} 条callchain记录，key: {cache_key}")
             return callchain_cache
-            
+
         except Exception as e:
             logging.error(f"获取callchain缓存数据失败: {str(e)}")
             return pd.DataFrame()
@@ -336,39 +178,76 @@ class FrameAnalyzer:
     def _get_files_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
         """
         获取并缓存perf_files表的数据
-        
+
         Args:
             perf_conn: perf数据库连接
             step_id: 步骤ID，用作缓存key
-            
+
         Returns:
             pd.DataFrame: files缓存数据
         """
         # 如果没有提供step_id，使用连接对象作为key
         cache_key = step_id if step_id else str(perf_conn)
-        
+
         # 如果已有缓存且不为空，直接返回
         if cache_key in FrameAnalyzer._files_cache and not FrameAnalyzer._files_cache[cache_key].empty:
             logging.debug(f"使用已存在的files缓存，共 {len(FrameAnalyzer._files_cache[cache_key])} 条记录")
             return FrameAnalyzer._files_cache[cache_key]
-            
+
         try:
             files_cache = pd.read_sql_query("""
-                SELECT 
+                SELECT
                     file_id,
                     serial_id,
                     symbol,
                     path
                 FROM perf_files
             """, perf_conn)
-            
+
             # 保存到类变量
             FrameAnalyzer._files_cache[cache_key] = files_cache
             logging.debug(f"缓存了 {len(files_cache)} 条files记录，key: {cache_key}")
             return files_cache
-            
+
         except Exception as e:
             logging.error(f"获取files缓存数据失败: {str(e)}")
+            return pd.DataFrame()
+
+    @staticmethod
+    def _get_process_cache(trace_conn, step_id: str = None) -> pd.DataFrame:
+        """
+        获取并缓存process表的数据
+
+        Args:
+            trace_conn: trace数据库连接
+            step_id: 步骤ID，用作缓存key
+
+        Returns:
+            pd.DataFrame: process缓存数据
+        """
+        # 如果没有提供step_id，使用连接对象作为key
+        cache_key = step_id if step_id else str(trace_conn)
+
+        # 如果已有缓存且不为空，直接返回
+        if cache_key in FrameAnalyzer._process_cache and not FrameAnalyzer._process_cache[cache_key].empty:
+            logging.debug(f"使用已存在的process缓存，共 {len(FrameAnalyzer._process_cache[cache_key])} 条记录")
+            return FrameAnalyzer._process_cache[cache_key]
+
+        try:
+            process_cache = pd.read_sql_query("""
+                SELECT
+                    ipid,
+                    name
+                FROM process
+            """, trace_conn)
+
+            # 保存到类变量
+            FrameAnalyzer._process_cache[cache_key] = process_cache
+            logging.debug(f"缓存了 {len(process_cache)} 条process记录，key: {cache_key}")
+            return process_cache
+
+        except Exception as e:
+            logging.error(f"获取process缓存数据失败: {str(e)}")
             return pd.DataFrame()
 
     @staticmethod
@@ -376,14 +255,14 @@ class FrameAnalyzer:
                                 files_cache: pd.DataFrame = None, step_id: str = None) -> list:
         """
         分析perf样本的调用链信息
-        
+
         Args:
             perf_conn: perf数据库连接
             callchain_id: 调用链ID
             callchain_cache: 缓存的callchain数据
             files_cache: 缓存的文件数据
             step_id: 步骤ID，用于缓存key
-            
+
         Returns:
             list: 调用链信息列表，每个元素包含symbol和path信息
         """
@@ -393,18 +272,19 @@ class FrameAnalyzer:
                 callchain_cache = FrameAnalyzer._get_callchain_cache(perf_conn, step_id)
             if files_cache is None or files_cache.empty:
                 files_cache = FrameAnalyzer._get_files_cache(perf_conn, step_id)
-            
+
             # 确定缓存key
             cache_key = step_id if step_id else str(perf_conn)
-            
+
             # 检查缓存是否为空
             if cache_key not in FrameAnalyzer._callchain_cache or FrameAnalyzer._callchain_cache[cache_key].empty or \
-               cache_key not in FrameAnalyzer._files_cache or FrameAnalyzer._files_cache[cache_key].empty:
+                    cache_key not in FrameAnalyzer._files_cache or FrameAnalyzer._files_cache[cache_key].empty:
                 logging.warning("缓存数据为空，无法分析调用链")
                 return []
-            
+
             # 从缓存中获取callchain数据
-            callchain_records = FrameAnalyzer._callchain_cache[cache_key][FrameAnalyzer._callchain_cache[cache_key]['callchain_id'] == callchain_id]
+            callchain_records = FrameAnalyzer._callchain_cache[cache_key][
+                FrameAnalyzer._callchain_cache[cache_key]['callchain_id'] == callchain_id]
 
             if callchain_records.empty:
                 logging.warning(f"未找到callchain_id={callchain_id}的记录")
@@ -414,8 +294,9 @@ class FrameAnalyzer:
             callchain_info = []
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
-                file_info = FrameAnalyzer._files_cache[cache_key][(FrameAnalyzer._files_cache[cache_key]['file_id'] == record['file_id']) & (
-                            FrameAnalyzer._files_cache[cache_key]['serial_id'] == record['symbol_id'])]
+                file_info = FrameAnalyzer._files_cache[cache_key][
+                    (FrameAnalyzer._files_cache[cache_key]['file_id'] == record['file_id']) & (
+                        FrameAnalyzer._files_cache[cache_key]['serial_id'] == record['symbol_id'])]
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
 
@@ -434,7 +315,8 @@ class FrameAnalyzer:
             return []
 
     @staticmethod
-    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list, scene_dir: str = None, step_id: str = None) -> dict:
+    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list, scene_dir: str = None,
+                             step_id: str = None) -> Optional[dict]:
         """
         分析空帧（flag=2, type=0）的负载情况
 
@@ -459,22 +341,24 @@ class FrameAnalyzer:
             version = cursor.fetchone()[0]
             version_parts = [int(x) for x in version.split('.')]
             if version_parts[0] < 3 or (version_parts[0] == 3 and version_parts[1] < 8):
-                raise ValueError(f"SQLite版本 {version} 不支持WITH子句，需要3.8.3或更高版本")
+                logging.error(f"SQLite版本 {version} 不支持WITH子句，需要3.8.3或更高版本")
+                return None
 
             # 确保所需表存在
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = [row[0] for row in cursor.fetchall()]
             required_tables = ['frame_slice', 'process', 'thread', 'callstack']
             if not all(table in tables for table in required_tables):
-                raise ValueError(f"数据库中缺少必要的表，需要: {required_tables}")
+                logging.error(f"数据库中缺少必要的表，需要: {required_tables}")
+                return None
 
             # 执行查询获取帧信息
-            query = """
+            query = f"""
             WITH filtered_frames AS (
                 -- 首先获取符合条件的帧
                 SELECT fs.ts, fs.dur, fs.ipid, fs.itid, fs.callstack_id
                 FROM frame_slice fs
-                WHERE fs.flag = 2 
+                WHERE fs.flag = 2
                 AND fs.type = 0
             ),
             process_filtered AS (
@@ -483,13 +367,13 @@ class FrameAnalyzer:
                 FROM filtered_frames ff
                 JOIN process p ON ff.ipid = p.ipid
                 JOIN thread t ON ff.itid = t.itid
-                WHERE p.pid IN ({})
+                WHERE p.pid IN ({','.join('?' * len(app_pids))})
             )
             -- 最后获取调用栈信息
             SELECT pf.*, cs.name as callstack_name
             FROM process_filtered pf
             JOIN callstack cs ON pf.callstack_id = cs.id
-            """.format(','.join('?' * len(app_pids)))
+            """
 
             # 获取帧信息
             trace_df = pd.read_sql_query(query, trace_conn, params=app_pids)
@@ -499,10 +383,8 @@ class FrameAnalyzer:
                 FrameAnalyzer._update_pid_tid_cache(step_id, trace_df)
 
             if trace_df.empty:
-                return {
-                    "status": "no_frames",
-                    "message": "未找到符合条件的帧"
-                }
+                logging.info("未找到符合条件的帧")
+                return None
 
             # 获取总负载
             total_load_query = "SELECT SUM(event_count) as total_load FROM perf_sample"
@@ -529,9 +411,9 @@ class FrameAnalyzer:
             for _, frame in trace_df.iterrows():
                 # 找出时间戳在帧区间内且线程ID匹配的样本
                 mask = (
-                        (perf_df['timestamp_trace'] >= frame['start_time']) &
-                        (perf_df['timestamp_trace'] <= frame['end_time']) &
-                        (perf_df['thread_id'] == frame['tid'])
+                    (perf_df['timestamp_trace'] >= frame['start_time'])
+                    & (perf_df['timestamp_trace'] <= frame['end_time'])
+                    & (perf_df['thread_id'] == frame['tid'])
                 )
                 frame_samples = perf_df[mask]
 
@@ -557,37 +439,41 @@ class FrameAnalyzer:
                                 if callchain_info:
                                     # 检查是否是VSyncCallBackListener相关的调用链
                                     is_vsync_chain = False
-                                    if len(callchain_info) >= 2:
-                                        for i in range(len(callchain_info) - 1):
-                                            current_symbol = callchain_info[i]['symbol']
-                                            next_symbol = callchain_info[i + 1]['symbol']
-                                            event_count = sample['event_count']
+                                    for i in range(len(callchain_info) - 1):
+                                        current_symbol = callchain_info[i]['symbol']
+                                        next_symbol = callchain_info[i + 1]['symbol']
+                                        event_count = sample['event_count']
 
-                                            # 如果任一symbol为空，跳过检查
-                                            if not current_symbol or not next_symbol:
-                                                continue
+                                        # 如果任一symbol为空，跳过检查
+                                        if not current_symbol or not next_symbol:
+                                            continue
 
-                                            if ('OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol and
-                                                    'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol and
-                                                    event_count < 2000000):
-                                                is_vsync_chain = True
-                                                break
+                                        # 使用调试开关控制VSync条件判断
+                                        if FrameAnalyzer._debug_vsync_enabled and (
+                                            'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
+                                            and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks'
+                                                in next_symbol
+                                            and event_count < 2000000
+                                        ):
+                                            is_vsync_chain = True
+                                            break
 
-                                        if not is_vsync_chain:
-                                            # 累加非VSync调用链的负载
-                                            frame_load += sample['event_count']
-                                            try:
-                                                sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                                                sample_callchains.append({
-                                                    'timestamp': int(sample['timestamp_trace']),
-                                                    'event_count': int(sample['event_count']),
-                                                    'load_percentage': float(sample_load_percentage),
-                                                    'callchain': callchain_info
-                                                })
-                                            except Exception as e:
-                                                logging.error(
-                                                    f"处理样本时出错: {str(e)}, sample: {sample.to_dict()}, frame_load: {frame_load}")
-                                                continue
+                                    if not is_vsync_chain:
+                                        # 累加非VSync调用链的负载
+                                        frame_load += sample['event_count']
+                                        try:
+                                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
+                                            sample_callchains.append({
+                                                'timestamp': int(sample['timestamp_trace']),
+                                                'event_count': int(sample['event_count']),
+                                                'load_percentage': float(sample_load_percentage),
+                                                'callchain': callchain_info
+                                            })
+                                        except Exception as e:
+                                            logging.error(
+                                                f"处理样本时出错: {str(e)}, "
+                                                f"sample: {sample.to_dict()}, frame_load: {frame_load}")
+                                            continue
                             except Exception as e:
                                 logging.error(f"分析调用链时出错: {str(e)}")
                                 continue
@@ -611,7 +497,8 @@ class FrameAnalyzer:
                         'callstack_name': frame['callstack_name'],
                         'frame_load': frame_load,
                         'is_main_thread': frame['is_main_thread'],
-                        'sample_callchains': sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)  # 按event_count从大到小排序
+                        'sample_callchains': sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)
+                        # 按event_count从大到小排序
                     })
 
             # 转换为DataFrame并按负载排序
@@ -620,9 +507,8 @@ class FrameAnalyzer:
                 # 分别获取主线程和后台线程的top5帧
                 main_thread_frames = result_df[result_df['is_main_thread'] == 1].sort_values('frame_load',
                                                                                              ascending=False).head(5)
-                background_thread_frames = result_df[result_df['is_main_thread'] == 0].sort_values('frame_load',
-                                                                                                   ascending=False).head(
-                    5)
+                background_thread_frames = (result_df[result_df['is_main_thread'] == 0]
+                                            .sort_values('frame_load', ascending=False).head(5))
 
                 # 只统计主线程空帧负载和后台线程负载
                 empty_frame_percentage = (empty_frame_load / total_load) * 100
@@ -645,11 +531,13 @@ class FrameAnalyzer:
                         "background_thread": background_thread_frames.to_dict('records')
                     }
                 }
-            else:
-                return {
-                    "status": "no_load",
-                    "message": "未找到任何帧负载数据"
-                }
+
+            logging.info("未找到任何帧负载数据")
+            return None
+
+        except Exception as e:
+            logging.error(f"分析空帧时发生异常: {str(e)}")
+            return None
 
         finally:
             trace_conn.close()
@@ -728,9 +616,12 @@ class FrameAnalyzer:
                 # 分析空帧数据
                 try:
                     result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, app_pids, report_dir, step_dir)
-                    # 将结果添加到总结果字典中
-                    all_results[step_dir] = result
-                    logging.info(f"Successfully analyzed empty frames for {step_dir}")
+                    # 如果有结果，将结果添加到总结果字典中
+                    if result is not None:
+                        all_results[step_dir] = result
+                        logging.info(f"Successfully analyzed empty frames for {step_dir}")
+                    else:
+                        logging.info(f"No empty frame data found for {step_dir}")
                 except Exception as e:
                     logging.error(f"Error analyzing empty frames for {step_dir}: {str(e)}")
                     return False
@@ -751,7 +642,7 @@ class FrameAnalyzer:
             return False
 
     @staticmethod
-    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None) -> dict:
+    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
         """
         分析卡顿帧数据并计算FPS
 
@@ -761,13 +652,17 @@ class FrameAnalyzer:
             step_id: 步骤ID，用于缓存key
 
         Returns:
-            dict: 分析结果数据
+            dict | None: 分析结果数据，如果没有数据或分析失败则返回None
         """
+        # 连接数据库
+        conn = None
+        perf_conn = None
+
         try:
             # 连接数据库
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            
+
             # 连接perf数据库（如果提供）
             perf_conn = None
             if perf_db_path:
@@ -799,6 +694,11 @@ class FrameAnalyzer:
                 runtime = None
 
             data = parse_frame_slice_db(db_path)
+
+            # 检查是否有有效数据
+            if not data:
+                logging.info("未找到任何帧数据")
+                return None
 
             FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
             STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧
@@ -877,7 +777,8 @@ class FrameAnalyzer:
                     # 处理跨多个窗口的情况
                     while frame_time >= current_window["end_time"]:
                         # 计算当前窗口的fps
-                        window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS, 1)
+                        window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS,
+                                                 1)
                         window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
                         if window_fps < LOW_FPS_THRESHOLD:
                             stats["fps_stats"]["low_fps_window_count"] += 1
@@ -921,24 +822,24 @@ class FrameAnalyzer:
                             # 分析帧的负载和调用链（如果有perf数据）
                             frame_load = 0
                             sample_callchains = []
-                            
+
                             if perf_df is not None and perf_conn is not None:
                                 # 为帧创建时间区间
                                 frame_start_time = frame["ts"]
                                 frame_end_time = frame["ts"] + frame["dur"]
-                                
+
                                 # 找出时间戳在帧区间内的样本
                                 mask = (
-                                    (perf_df['timestamp_trace'] >= frame_start_time) & 
-                                    (perf_df['timestamp_trace'] <= frame_end_time) &
-                                    (perf_df['thread_id'] == frame['tid'])
+                                    (perf_df['timestamp_trace'] >= frame_start_time)
+                                    & (perf_df['timestamp_trace'] <= frame_end_time)
+                                    & (perf_df['thread_id'] == frame['tid'])
                                 )
                                 frame_samples = perf_df[mask]
-                                
+
                                 if not frame_samples.empty:
                                     # 计算帧负载
                                     frame_load = frame_samples['event_count'].sum()
-                                    
+
                                     # 分析每个样本的调用链
                                     for _, sample in frame_samples.iterrows():
                                         if pd.notna(sample['callchain_id']):
@@ -952,7 +853,8 @@ class FrameAnalyzer:
                                                 )
                                                 if callchain_info:
                                                     try:
-                                                        sample_load_percentage = (sample['event_count'] / frame_load) * 100
+                                                        sample_load_percentage = (
+                                                            sample['event_count'] / frame_load) * 100
                                                         sample_callchains.append({
                                                             'timestamp': int(sample['timestamp_trace']),
                                                             'event_count': int(sample['event_count']),
@@ -1001,7 +903,8 @@ class FrameAnalyzer:
                                 "src": frame.get("src"),
                                 "dst": frame.get("dst"),
                                 "frame_load": int(frame_load),
-                                "sample_callchains": sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)  # 按event_count从大到小排序
+                                "sample_callchains": sorted(sample_callchains, key=lambda x: x['event_count'],
+                                                            reverse=True)  # 按event_count从大到小排序
                             }
                             stats["stutter_details"][stutter_type].append(stutter_detail)
 
@@ -1071,8 +974,15 @@ class FrameAnalyzer:
             return result
 
         except Exception as e:
-            import traceback
-            raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
+            logging.error(f"分析卡顿帧时发生异常: {str(e)}")
+            return None
+
+        finally:
+            # 确保数据库连接被正确关闭
+            if conn:
+                conn.close()
+            if perf_conn:
+                perf_conn.close()
 
 
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
@@ -1094,8 +1004,8 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
 
         # 直接获取所有数据，不排序
         cursor.execute("""
-            SELECT fs.*, t.tid 
-            FROM frame_slice fs 
+            SELECT fs.*, t.tid
+            FROM frame_slice fs
             LEFT JOIN thread t ON fs.itid = t.itid
         """)
 
@@ -1109,7 +1019,7 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         # 遍历所有行，将数据转换为字典并按vsync分组
         for row in cursor.fetchall():
             row_dict = dict(zip(columns, row))
-            
+
             vsync_value = row_dict['vsync']
             # 跳过vsync为None的数据
             if vsync_value is None:
@@ -1133,20 +1043,20 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         return dict(sorted(vsync_groups.items()))
 
     except sqlite3.Error as e:
-        import traceback
-        raise Exception(f"数据库操作错误: {str(e)}\n{traceback.format_exc()}")
+        raise Exception(f"数据库操作错误: {str(e)}\n{traceback.format_exc()}") from e
     except Exception as e:
-        import traceback
-        raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}")
+        raise Exception(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}") from e
 
 
-def get_frame_type(frame: dict, cursor) -> str:
+def get_frame_type(frame: dict, cursor, process_cache: pd.DataFrame = None, step_id: str = None) -> str:
     """
     获取帧的类型（进程名）
 
     参数:
         frame: 帧数据字典
         cursor: 数据库游标
+        process_cache: 缓存的process数据
+        step_id: 步骤ID，用于缓存key
 
     返回:
         str: 'ui'/'render'/'sceneboard'
@@ -1155,15 +1065,31 @@ def get_frame_type(frame: dict, cursor) -> str:
     if ipid is None:
         return "ui"
 
-    cursor.execute("SELECT name FROM process WHERE ipid = ?", (ipid,))
-    result = cursor.fetchone()
+    # 如果没有提供缓存，尝试获取缓存
+    if process_cache is None or process_cache.empty:
+        # 从cursor获取数据库连接
+        trace_conn = cursor.connection
+        process_cache = FrameAnalyzer._get_process_cache(trace_conn, step_id)
 
-    if not result:
+    # 确定缓存key
+    cache_key = step_id if step_id else str(cursor.connection)
+
+    # 检查缓存是否为空
+    if cache_key not in FrameAnalyzer._process_cache or FrameAnalyzer._process_cache[cache_key].empty:
+        logging.warning("process缓存为空，无法获取进程类型")
         return "ui"
 
-    process_name = result[0]
+    # 从缓存中查找进程名
+    process_info = FrameAnalyzer._process_cache[cache_key][FrameAnalyzer._process_cache[cache_key]['ipid'] == ipid]
+
+    if process_info.empty:
+        return "ui"
+
+    process_name = process_info['name'].iloc[0]
+
+    # 根据进程名返回类型
     if process_name == "render_service":
         return "render"
-    elif process_name == "ohos.sceneboard":
+    if process_name == "ohos.sceneboard":
         return "sceneboard"
     return "ui"

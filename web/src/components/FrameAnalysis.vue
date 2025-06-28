@@ -3,7 +3,7 @@
         <div class="stats-cards">
             <div class="stat-card data-panel">
                 <div class="card-title">
-                    <i>📊</i> 总帧数
+                    <i>📊</i> 有效帧数
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
@@ -350,12 +350,12 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, defaultEmptyJson } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 空刷JSON 数据
-const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? defaultEmptyJson;
+const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? getDefaultEmptyFrameData();
 const componentResuJsonData = jsonDataStore.componentResuData;
 
 const props = defineProps({

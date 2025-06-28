@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from hapray import VERSION
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
+from hapray.mode.simple_mode import create_simple_mode_structure
 
 
 class UpdateAction:
@@ -31,31 +32,52 @@ class UpdateAction:
     def execute(args):
         """Executes report update workflow."""
         parser = argparse.ArgumentParser(
-            description='Update existing performance reports',
-            prog='ArkAnalyzer-HapRay update')
-        parser.add_argument('--report_dir', '-r', required=True,
-                            help='Directory containing reports to update')
-        parser.add_argument('--so_dir', default=None,
-                            help='Directory for symbolicated .so files')
+            description="Update existing performance reports",
+            prog="ArkAnalyzer-HapRay update",
+        )
         parser.add_argument(
-            '-v', '--version',
-            action='version',
-            version=f'%(prog)s {VERSION}',
-            help="Show program's version number and exit"
+            "--report_dir",
+            "-r",
+            required=True,
+            help="Directory containing reports to update",
+        )
+        parser.add_argument(
+            "--so_dir", default=None, help="Directory for symbolicated .so files"
+        )
+        parser.add_argument(
+            "-v",
+            "--version",
+            action="version",
+            version=f"%(prog)s {VERSION}",
+            help="Show program's version number and exit",
+        )
+        parser.add_argument(
+            "--mode",
+            default="COMMUNITY",
+            help="select mode COMMUNITY COMPATIBILITY SIMPLE",
+        )
+        parser.add_argument(
+            "--package_name",
+            default="",
+            help="SIMPLE mode need package name",
         )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
         so_dir = os.path.abspath(parsed_args.so_dir) if parsed_args.so_dir else None
 
-        if not os.path.exists(report_dir):
+        Config.set("mode", parsed_args.mode)
+        if not os.path.exists(report_dir) and Config.get("mode") == "COMMUNITY":
             logging.error(f"Report directory not found: {report_dir}")
             return
-
+        elif Config.get("mode") == "SIMPLE":
+            # 简单模式构造目录
+            package_name = parsed_args.package_name
+            create_simple_mode_structure(report_dir, package_name)
         logging.info(f"Updating reports in: {report_dir}")
         if so_dir:
             logging.info(f"Using symbolicated .so files from: {so_dir}")
-            Config.set('so_dir', so_dir)
+            Config.set("so_dir", so_dir)
 
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
         if not testcase_dirs:
@@ -69,7 +91,7 @@ class UpdateAction:
     def find_testcase_dirs(report_dir):
         """Identifies valid test case directories in the report directory."""
         testcase_dirs = []
-        round_dir_pattern = re.compile(r'.*_round\d$')
+        round_dir_pattern = re.compile(r".*_round\d$")
 
         for entry in os.listdir(report_dir):
             if round_dir_pattern.match(entry):
@@ -77,13 +99,17 @@ class UpdateAction:
 
             full_path = os.path.join(report_dir, entry)
             if os.path.isdir(full_path):
-                if all(os.path.exists(os.path.join(full_path, subdir))
-                       for subdir in ['hiperf', 'htrace']):
+                if all(
+                    os.path.exists(os.path.join(full_path, subdir))
+                    for subdir in ["hiperf", "htrace"]
+                ):
                     testcase_dirs.append(full_path)
 
         if not testcase_dirs:
-            if all(os.path.exists(os.path.join(report_dir, subdir))
-                   for subdir in ['hiperf', 'htrace']):
+            if all(
+                os.path.exists(os.path.join(report_dir, subdir))
+                for subdir in ["hiperf", "htrace"]
+            ):
                 testcase_dirs.append(report_dir)
 
         return testcase_dirs
@@ -98,10 +124,7 @@ class UpdateAction:
             for case_dir in testcase_dirs:
                 scene_name = os.path.basename(case_dir)
                 logging.info(f"Updating report: {scene_name}")
-                future = executor.submit(
-                    report_generator.update_report,
-                    case_dir
-                )
+                future = executor.submit(report_generator.update_report, case_dir)
                 futures.append(future)
 
             # Monitor completion status
