@@ -60,16 +60,16 @@ def analyze_data(scene_dir: str):
 
     hiperf_path = os.path.join(scene_dir, 'hiperf')
     if not os.path.exists(hiperf_path):
-        logging.error(f"htrace directory not found: {hiperf_path}")
+        logging.error("htrace directory not found: %s", hiperf_path)
         return
 
     try:
         start_time = time.perf_counter()
         _process_steps_parallel(hiperf_path, scene_dir, analyzers)
         elapsed = time.perf_counter() - start_time
-        logging.info(f"Parallel processing completed in {elapsed:.2f} seconds")
+        logging.info("Parallel processing completed in %.2f seconds", elapsed)
     except Exception as e:
-        logging.exception(f"Analysis pipeline failed: {str(e)}")
+        logging.exception("Analysis pipeline failed: %s", str(e))
     finally:
         _finalize_analyzers(analyzers)
 
@@ -88,9 +88,9 @@ def _initialize_analyzers(scene_dir: str) -> List[BaseAnalyzer]:
                                 fromlist=[analyzer_class])
             cls = getattr(module, analyzer_class)
             analyzers.append(cls(scene_dir))
-            logging.info(f"Initialized analyzer: {analyzer_class}")
+            logging.info("Initialized analyzer: %s", analyzer_class)
         except (ImportError, AttributeError) as e:
-            logging.error(f"Failed to initialize {analyzer_class}: {str(e)}")
+            logging.error("Failed to initialize %s: %s", analyzer_class, str(e))
     return analyzers
 
 
@@ -117,7 +117,7 @@ def _process_steps_parallel(
         logging.warning("No valid step directories found")
         return
 
-    logging.info(f"Processing {len(step_dirs)} steps with {MAX_WORKERS} workers")
+    logging.info("Processing %d steps with %d workers", len(step_dirs), MAX_WORKERS)
 
     # Create a thread pool executor
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -140,12 +140,12 @@ def _process_steps_parallel(
             try:
                 future.result()  # Will re-raise any exceptions
                 success_count += 1
-                logging.debug(f"Step {step_dir} processed successfully")
+                logging.debug("Step %s processed successfully", step_dir)
             except Exception as e:
                 error_count += 1
-                logging.error(f"Step {step_dir} processing failed: {str(e)}")
+                logging.error("Step %s processing failed: %s", step_dir, str(e))
 
-    logging.info(f"Step processing completed: {success_count} successes, {error_count} errors")
+    logging.info("Step processing completed: %d successes, %d errors", success_count, error_count)
 
 
 def _process_single_step(
@@ -165,9 +165,9 @@ def _process_single_step(
     perf_db = os.path.join(scene_dir, 'hiperf', step_dir, 'perf.db')
 
     if not os.path.exists(trace_db) and os.path.exists(htrace_file):
-        logging.info(f"Converting htrace to db for {step_dir}...")
+        logging.info("Converting htrace to db for %s...", step_dir)
         if not ExeUtils.convert_data_to_db(htrace_file, trace_db):
-            logging.error(f"Failed to convert htrace to db for {step_dir}")
+            logging.error("Failed to convert htrace to db for %s", step_dir)
             return
 
     _run_analyzers(analyzers, step_dir, trace_db, perf_db)
@@ -191,7 +191,7 @@ def _run_analyzers(
         try:
             analyzer.analyze(step_dir, trace_db, perf_db)
         except Exception as e:
-            logging.error(f"Analyzer {type(analyzer).__name__} failed on {step_dir}: {str(e)}")
+            logging.error("Analyzer %s failed on %s: %s", type(analyzer).__name__, step_dir, str(e))
 
 
 def _finalize_analyzers(analyzers: List[BaseAnalyzer]):
@@ -199,6 +199,6 @@ def _finalize_analyzers(analyzers: List[BaseAnalyzer]):
     for analyzer in analyzers:
         try:
             analyzer.write_report()
-            logging.info(f"Report generated for {type(analyzer).__name__}")
+            logging.info("Report generated for %s", type(analyzer).__name__)
         except Exception as e:
-            logging.error(f"Failed to generate report for {type(analyzer).__name__}: {str(e)}")
+            logging.error("Failed to generate report for %s: %s", type(analyzer).__name__, str(e))

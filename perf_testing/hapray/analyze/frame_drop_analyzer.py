@@ -39,21 +39,21 @@ class FrameDropAnalyzer(BaseAnalyzer):
             Dictionary containing frame drop analysis result for this step, or None if no data
         """
         if not os.path.exists(trace_db_path):
-            logging.warning(f"Trace database not found: {trace_db_path}")
+            logging.warning("Trace database not found: %s", trace_db_path)
             return None
 
         try:
             # 分析卡顿帧数据
-            logging.info(f"Analyzing frame drops for {step_dir}...")
+            logging.info("Analyzing frame drops for %s...", step_dir)
             result = FrameAnalyzer.analyze_stuttered_frames(trace_db_path, perf_db_path, step_dir)
 
             # 如果没有数据，返回None
             if result is None:
-                logging.info(f"No frame drop data found for step {step_dir}")
+                logging.info("No frame drop data found for step %s", step_dir)
                 return None
 
             return result
 
         except Exception as e:
-            logging.error(f"Frame drop analysis failed: {str(e)}")
+            logging.error("Frame drop analysis failed: %s", str(e))
             return None

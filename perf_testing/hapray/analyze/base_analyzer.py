@@ -56,7 +56,7 @@ class BaseAnalyzer(ABC):
                 "Analysis completed for step %s in %.2f seconds [%s]", step_dir, time.time() - start_time,
                 self.report_name)
         except Exception as e:
-            self.logger.error(f"Analysis failed for step {step_dir}: {str(e)} [{self.report_name}]")
+            self.logger.error("Analysis failed for step %s: %s [%s]", step_dir, str(e), self.report_name)
             self.results[step_dir] = {"error": str(e)}
 
     @abstractmethod
@@ -75,13 +75,13 @@ class BaseAnalyzer(ABC):
     def write_report(self):
         """Write analysis results to JSON report."""
         if not self.results:
-            self.logger.warning(f"No results to write. Skipping report generation for {self.report_name}")
+            self.logger.warning("No results to write. Skipping report generation for %s", self.report_name)
             return
 
         try:
             os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
             with open(self.report_path, 'w', encoding='utf-8') as f:
                 json.dump(self.results, f, ensure_ascii=False, indent=2)
-            self.logger.info(f"Report successfully written to {self.report_path}")
+            self.logger.info("Report successfully written to %s", self.report_path)
         except Exception as e:
-            self.logger.exception(f"Failed to write report: {str(e)}")
+            self.logger.exception("Failed to write report: %s", str(e))

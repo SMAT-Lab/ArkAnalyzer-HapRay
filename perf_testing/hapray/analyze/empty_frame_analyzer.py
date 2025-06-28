@@ -40,7 +40,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             Dictionary containing empty frame analysis result for this step, or None if no data
         """
         if not os.path.exists(trace_db_path):
-            logging.warning(f"Trace database not found: {trace_db_path}")
+            logging.warning("Trace database not found: %s", trace_db_path)
             return None
 
         try:
@@ -48,12 +48,12 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             pids = self._get_step_pids(step_dir)
 
             if not pids:
-                logging.warning(f"No process info found for step {step_dir}")
+                logging.warning("No process info found for step %s", step_dir)
                 return None
 
             # 记录当前步骤的进程信息
             for name, pid in pids:
-                logging.info(f"Step {step_dir} - Process: {name} (PID: {pid})")
+                logging.info("Step %s - Process: %s (PID: %d)", step_dir, name, pid)
 
             # 提取PID列表
             pid_list = [pid for _, pid in pids]
@@ -63,13 +63,13 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
 
             # 如果没有数据，返回None
             if result is None:
-                logging.info(f"No empty frame data found for step {step_dir}")
+                logging.info("No empty frame data found for step %s", step_dir)
                 return None
 
             return result
 
         except Exception as e:
-            logging.error(f"Empty frame analysis failed: {str(e)}")
+            logging.error("Empty frame analysis failed: %s", str(e))
             return None
 
     def _get_step_pids(self, step_dir: str) -> list:
@@ -79,7 +79,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             pids_json_path = os.path.join(self.scene_dir, 'hiperf', step_dir, 'pids.json')
 
             if not os.path.exists(pids_json_path):
-                logging.warning(f"No pids.json found at {pids_json_path}")
+                logging.warning("No pids.json found at %s", pids_json_path)
                 return []
 
             # 读取JSON文件
@@ -91,13 +91,15 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             process_names = pids_data.get('process_names', [])
 
             if not pids or not process_names:
-                logging.warning(f"No valid pids or process_names found in {pids_json_path}")
+                logging.warning("No valid pids or process_names found in %s", pids_json_path)
                 return []
 
             # 确保pids和process_names长度一致
             if len(pids) != len(process_names):
                 logging.warning(
-                    f"Mismatch between pids ({len(pids)}) and process_names ({len(process_names)}) in {pids_json_path}")
+                    "Mismatch between pids (%d) and process_names (%d) in %s",
+                    len(pids), len(process_names), pids_json_path
+                )
                 # 取较短的长度
                 min_length = min(len(pids), len(process_names))
                 pids = pids[:min_length]
@@ -106,9 +108,9 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             # 组合成(process_name, pid)的列表
             step_pids = list(zip(process_names, pids))
 
-            logging.debug(f"Found {len(step_pids)} processes for step {step_dir}: {step_pids}")
+            logging.debug("Found %d processes for step %s: %s", len(step_pids), step_dir, step_pids)
             return step_pids
 
         except Exception as e:
-            logging.error(f"Failed to get step PIDs from {step_dir}: {str(e)}")
+            logging.error("Failed to get step PIDs from %s: %s", step_dir, str(e))
             return []
