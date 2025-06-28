@@ -75,7 +75,7 @@ class BaseAnalyzer(ABC):
     def write_report(self):
         """Write analysis results to JSON report."""
         if not self.results:
-            self.logger.warning(f"No results to write. Skipping report generation for {self.report_name}")
+            self.logger.warning("No results to write. Skipping report generation for %s", self.report_name)
             return
 
         try:

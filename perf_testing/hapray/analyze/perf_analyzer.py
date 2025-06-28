@@ -162,7 +162,7 @@ class PerfAnalyzer(BaseAnalyzer):
                             sym_info['file'] = new_index
                             break
 
-            logging.info(f"从源库中找到 {len(filtered_symbol_ids)} 个匹配 {filter_strs} 的符号")
+            logging.info("从源库中找到 %s 个匹配 %s 的符号", len(filtered_symbol_ids), filter_strs)
             PerfAnalyzer.process_record_sample(data, source_lib_indices, filtered_symbol_ids, new_index)
 
         return data

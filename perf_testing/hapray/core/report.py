@@ -147,7 +147,7 @@ class ReportData:
                 logging.warning("Invalid format in %s, expected list but got %s", path, type(data).__name__)
                 return default
             if isinstance(default, dict) and not isinstance(data, dict):
-                logging.warning(f"Invalid format in {path}, expected dict but got {type(data).__name__}")
+                logging.warning("Invalid format in %s, expected list but got %s", path, type(data).__name__)
                 return default
 
             return data
@@ -381,7 +381,7 @@ def create_perf_summary_excel(input_path: str) -> bool:
         if len(pivot_df.columns) > 1:
             # 添加百分比列（以第一列为基线）
             pivot_df = add_percentage_columns(pivot_df)
-            logging.info("已计算相对于 %s 的百分比增长", pivot_df.columns[0])
+            logging.info("已计算相对于 %f 的百分比增长", pivot_df.columns[0])
         else:
             logging.warning("警告: 数据列不足，无法计算百分比增长")
 
