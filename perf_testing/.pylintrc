@@ -446,7 +446,6 @@ disable=raw-checker-failed,
         missing-module-docstring,
         missing-class-docstring,
         broad-exception-caught,
-        logging-fstring-interpolation,
         import-error,
         missing-function-docstring
 

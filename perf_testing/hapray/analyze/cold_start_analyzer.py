@@ -34,24 +34,24 @@ class ColdStartAnalyzer(BaseAnalyzer):
         redundant_file_path = os.path.join(self.scene_dir, 'result', f'{bundle_name}_redundant_file.txt')
 
         if not os.path.exists(redundant_file_path):
-            logging.warning(f"Redundant file not found: {redundant_file_path}")
+            logging.warning("Redundant file not found: %s", redundant_file_path)
             return None
 
         try:
-            logging.info(f"Analyzing cold start redundant file for {step_dir}...")
+            logging.info("Analyzing cold start redundant file for %s...", step_dir)
             result = self._parse_redundant_file(redundant_file_path)
 
             if result is None:
-                logging.info(f"No cold start data found for step {step_dir}")
+                logging.info("No cold start data found for step %s", step_dir)
                 return None
 
             return result
 
         except Exception as e:
-            logging.error(f"Cold start analysis failed: {str(e)}")
+            logging.error("Cold start analysis failed: %s", str(e))
             return None
 
-    def _extract_bundle_name(self) -> str | None:
+    def _extract_bundle_name(self) -> Optional[str]:
         """Extract bundle name from testInfo.json file.
 
         Returns:
@@ -60,7 +60,7 @@ class ColdStartAnalyzer(BaseAnalyzer):
         try:
             test_info_path = os.path.join(self.scene_dir, 'testInfo.json')
             if not os.path.exists(test_info_path):
-                logging.warning(f"testInfo.json not found: {test_info_path}")
+                logging.warning("testInfo.json not found: %s", test_info_path)
                 return None
 
             with open(test_info_path, 'r', encoding='utf-8') as f:
@@ -74,7 +74,7 @@ class ColdStartAnalyzer(BaseAnalyzer):
             return None
 
         except Exception as e:
-            logging.error(f"Failed to extract bundle name from testInfo.json: {str(e)}")
+            logging.error("Failed to extract bundle name from testInfo.json: %s", str(e))
             return None
 
     def _parse_redundant_file(self, file_path: str) -> Optional[Dict[str, Any]]:
@@ -124,7 +124,7 @@ class ColdStartAnalyzer(BaseAnalyzer):
             return result
 
         except Exception as e:
-            logging.error(f"Failed to parse redundant file: {str(e)}")
+            logging.error("Failed to parse redundant file: %s", str(e))
             return None
 
     def _extract_file_list(self, content: str, file_type: str, top_n: int) -> List[Dict[str, Any]]:
