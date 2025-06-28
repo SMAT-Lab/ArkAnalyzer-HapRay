@@ -71,7 +71,7 @@ class InvokeSymbols:
                     progress_bar.set_postfix(file=file_info.logical_path, refresh=False)
                 except Exception as e:
                     # Handle errors for individual files without stopping entire process
-                    logging.error(f"Error processing file {file_info.logical_path}: {str(e)}")
+                    logging.error("Error processing file %s: %s", file_info.logical_path, str(e))
                 finally:
                     # Always update the progress count
                     progress_bar.update(1)
