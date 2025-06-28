@@ -59,6 +59,12 @@ export interface SoOriginal {
     reasoning?: string;
 }
 
+export interface SymbolSplit {
+    source_file: string;
+    new_file: string;
+    filter_symbols: string[];
+}
+
 export interface GlobalConfig {
     analysis: {
         onlineIdentifyThirdPart: boolean;
@@ -71,6 +77,7 @@ export interface GlobalConfig {
 
     perf: {
         kinds: ComponentConfig[];
+        symbolSplitRules: SymbolSplit[];
         soOrigins: Map<string, SoOriginal>;
         classify: {
             dfx_symbols: string[];
@@ -120,4 +127,5 @@ export interface GlobalConfig {
     osPlatform: OSPlatform;
     choose: boolean;
     checkTraceDb: boolean;
+    compatibility: boolean;
 }

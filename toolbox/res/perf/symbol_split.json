@@ -1,0 +1,7 @@
+[
+    {
+        "source_file": ".*libarkweb_engine.so",
+        "new_file": "/system/lib64/libarkweb_v8.so",
+        "filter_symbols": [".*v8::.*", ".*Builtins_.*"]
+    }
+]

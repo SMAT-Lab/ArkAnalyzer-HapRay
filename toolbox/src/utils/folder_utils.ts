@@ -63,7 +63,7 @@ export function checkPerfData(dir: string) {
     const hiperfDir = path.join(dir, 'hiperf');
     const stepDirs = getFirstLevelFolders(hiperfDir);
     if (stepDirs.length !== 0) {
-        stepDirs.forEach((stepDir) => {
+        stepDirs.forEach((stepDir, idx) => {
             const perfDataPath = path.join(stepDir, 'perf.data');
             if (!fs.existsSync(perfDataPath)) {
                 hasPerfData = false;
@@ -162,30 +162,15 @@ export async function copyFile(
     }
 }
 
-export async function checkPerfAndHtraceFiles(dirPath: string, summaryCount: number): Promise<boolean> {
+export async function checkPerfFiles(dirPath: string, summaryCount: number): Promise<boolean> {
     let hiperfDataCount = 0;
     const hiperfDir = path.join(dirPath, 'hiperf');
     const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
-    hiperfStepDirs.forEach((hiperfStepDir) => {
+    hiperfStepDirs.forEach((hiperfStepDir, idx) => {
         const perfDataPath = path.join(hiperfStepDir, 'perf.data');
         if (fs.existsSync(perfDataPath)) {
             hiperfDataCount++;
         }
     });
-
-    let htracefDataCount = 0;
-    const htraceDir = path.join(dirPath, 'htrace');
-    const htraceStepDirs = getFirstLevelFolders(htraceDir);
-    htraceStepDirs.forEach((htraceStepDir) => {
-        const htracePath = path.join(htraceStepDir, 'trace.htrace');
-        if (fs.existsSync(htracePath)) {
-            htracefDataCount++;
-        }
-    });
-
-    if (hiperfDataCount === htracefDataCount && hiperfDataCount === summaryCount) {
-        return true;
-    } else {
-        return false;
-    }
+    return hiperfDataCount === summaryCount;
 }

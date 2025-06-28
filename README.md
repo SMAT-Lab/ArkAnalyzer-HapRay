@@ -36,6 +36,7 @@ Options:
 - `--so_dir <directory>`: Directory containing symbolicated .so files
 - `--circles`: Sample CPU cycles instead of default events
 - `--round <N>`: Number of test rounds to execute (default: 5)
+- `--no-trace`: Disable trace capturing
 
 Requirements:
 - hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
@@ -74,14 +75,27 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
+- `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
+- `--package_name <package_name>`: SIMPLE mode need package_name
 
 Example:
 ```bash
+# COMMUNITY mode
 # Update existing reports with new symbol files
 python -m scripts.main update --report_dir reports/20240605120000 --so_dir updated_symbols
 
 # Update reports without changing symbol files
 python -m scripts.main update --report_dir reports/20240605120000
+
+# SIMPLE mode
+# put perf.data,ps_ef.txt,trace.htrace into reports/20240605120000
+# |-reports
+# |-|-20240605120000
+# |-|-|-perf.data
+# |-|-|-trace.htrace
+# |-|-|-ps_ef.txt
+python -m scripts.main update --report_dir reports/20240605120000 --mode SIMPLE --package_name com.jd.hm.mall 
+
 ```
 
 ### Dependencies
@@ -142,6 +156,8 @@ cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
+# Run pylint
+tox -e lint
 ```
 
 ### Windows Installation
@@ -157,6 +173,8 @@ cd perf_testing
 .venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
+# Run pylint
+tox -e lint
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
