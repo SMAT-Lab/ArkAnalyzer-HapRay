@@ -31,8 +31,8 @@ from hapray.core.common.folder_utils import scan_folders, delete_folder
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 ENV_ERR_STR = """
-The hdc or node command is not in PATH. 
-Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
+The hdc or node command is not in PATH.
+Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/),
 then add the following directories to PATH.
     $command_line_tools/tool/node/ (for Windows)
     $command_line_tools/tool/node/bin (for Mac/Linux)
@@ -87,6 +87,7 @@ class PerfAction:
         parser.add_argument('--run_testcases', nargs='+', default=None, help='Test cases to execute')
         parser.add_argument('--circles', action="store_true", help="Enable CPU cycle sampling")
         parser.add_argument('--round', type=int, default=5, help="Specify test round")
+        parser.add_argument('--no-trace', action='store_true', help="Disable trace capturing")
         parsed_args = parser.parse_args(args)
 
         root_path = os.getcwd()
@@ -100,6 +101,11 @@ class PerfAction:
 
         if parsed_args.circles:
             Config.set('hiperf.event', 'raw-cpu-cycles')
+
+        if parsed_args.no_trace:
+            Config.set('trace.enable', False)
+        else:
+            Config.set('trace.enable', True)
 
         all_testcases = CommonUtils.load_all_testcases()
 
