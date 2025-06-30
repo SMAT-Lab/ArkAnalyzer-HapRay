@@ -444,12 +444,10 @@ function safeProcessFrameData(data: FrameData | null | undefined): FrameData {
     // 如果步骤数据无效，使用默认结构替换
     result[stepName] = stepData ?? getDefaultFrameStepData();
   }
-
   // 确保至少有一个步骤
   if (Object.keys(result).length === 0) {
     result.step1 = getDefaultFrameStepData();
   }
-
   return result;
 }
 
@@ -468,12 +466,10 @@ function safeProcessEmptyFrameData(data: EmptyFrameData | null | undefined): Emp
     // 如果步骤数据无效，使用默认结构替换
     result[stepName] = stepData ?? getDefaultEmptyFrameStepData();
   }
-
   // 确保至少有一个步骤
   if (Object.keys(result).length === 0) {
     result.step1 = getDefaultEmptyFrameStepData();
   }
-
   return result;
 }
 
@@ -492,12 +488,10 @@ function safeProcessComponentResuData(data: ComponentResuData | null | undefined
     // 如果步骤数据无效，使用默认结构替换
     result[stepName] = stepData ?? getDefaultComponentResuStepData();
   }
-
   // 确保至少有一个步骤
   if (Object.keys(result).length === 0) {
     result.step1 = getDefaultComponentResuStepData();
   }
-
   return result;
 }
 
@@ -532,7 +526,6 @@ export const useJsonDataStore = defineStore('config', {
           this.emptyFrameData = getDefaultEmptyFrameData();
           this.componentResuData = getDefaultComponentResuData();
         }
-
         window.initialPage = 'perf';
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
