@@ -20,8 +20,8 @@ const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 export function runCommandSync(
     command: string,
-    args: string[],
-    allowNonZeroExit: boolean = true,
+    args: Array<string>,
+    allowNonZeroExit = true,
     env?: NodeJS.ProcessEnv
 ): string {
     let result = spawnSync(command, args, { encoding: 'utf-8', shell: true, env: env });
@@ -36,17 +36,17 @@ export function runCommandSync(
     return result.stdout;
 }
 
-export async function runCommand(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
+export async function runCommand(command: string, args: Array<string>, env?: NodeJS.ProcessEnv): Promise<string> {
     return new Promise((resolve) => {
-        let output: string[] = [];
+        let output: Array<string> = [];
         let cmdProcess = spawn(command, args, { shell: true, env: env });
         logger.info(`runCommand ${command} ${args.join(' ')}`);
-        cmdProcess.stdout.on('data', (data) => {
+        cmdProcess.stdout.on('data', (data: Buffer) => {
             logger.info(`runCommand ${data.toString()}`);
             output.push(data.toString());
         });
 
-        cmdProcess.stderr.on('data', (data) => {
+        cmdProcess.stderr.on('data', (data: Buffer) => {
             logger.debug(`runCommand stderr: ${data.toString()}`);
             output.push(data.toString());
         });

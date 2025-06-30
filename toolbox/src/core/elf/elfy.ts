@@ -83,7 +83,7 @@
  */
 
 import * as assert from 'assert';
-import { Buffer } from 'buffer';
+import type { Buffer } from 'buffer';
 import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -657,11 +657,11 @@ export interface ParsedRelocation {
 }
 
 interface ELFBody {
-    programs: ELFProgram[];
-    sections: ELFSection[];
-    symbols?: ParsedSymbol[]; // .dynsym
-    symtabSymbols?: ParsedSymbol[]; // .symtab
-    plt?: PLTEntry[]; // PLT entries
+    programs: Array<ELFProgram>;
+    sections: Array<ELFSection>;
+    symbols?: Array<ParsedSymbol>; // .dynsym
+    symtabSymbols?: Array<ParsedSymbol>; // .symtab
+    plt?: Array<PLTEntry>; // PLT entries
 }
 
 export interface ELF extends ELFHeader {
@@ -673,9 +673,9 @@ export interface ELF extends ELFHeader {
  */
 class Parser {
     private endian: 'little' | 'big' = 'little';
-    private is64: boolean = false;
+    private is64 = false;
 
-    private bufferSections?: ELFSection[];
+    private bufferSections?: Array<ELFSection>;
 
     constructor() {}
 
@@ -823,7 +823,7 @@ class Parser {
     /**
      * Slice buffer into chunks
      */
-    private sliceChunks(buf: Buffer, off: number | bigint, count: number, size: number): Buffer[] {
+    private sliceChunks(buf: Buffer, off: number | bigint, count: number, size: number): Array<Buffer> {
         const offset = typeof off === 'bigint' ? Number(off) : off;
         const start = offset;
         const end = start + count * size;
@@ -831,7 +831,7 @@ class Parser {
             throw new Error('Failed to slice chunks');
         }
 
-        const chunks: Buffer[] = [];
+        const chunks: Array<Buffer> = [];
         for (let current = start; current < end; current += size) {
             chunks.push(buf.slice(current, current + size));
         }
@@ -842,7 +842,7 @@ class Parser {
     /**
      * Parse program headers
      */
-    private parsePrograms(buf: Buffer, header: ELFHeader): ELFProgram[] {
+    private parsePrograms(buf: Buffer, header: ELFHeader): Array<ELFProgram> {
         if (header.phoff === 0 || header.phnum === 0) {
             return [];
         }
@@ -900,7 +900,7 @@ class Parser {
     /**
      * Parse section headers
      */
-    private parseSections(buf: Buffer, header: ELFHeader): ELFSection[] {
+    private parseSections(buf: Buffer, header: ELFHeader): Array<ELFSection> {
         if (header.shoff === 0 || header.shnum === 0) {
             return [];
         }
@@ -1014,8 +1014,8 @@ class Parser {
     /**
      * Parse the .dynsym section and return an array of ParsedSymbol
      */
-    public parseDynSym(section: ELFSection, stringTable: ELFSection): ParsedSymbol[] {
-        const symbols: ParsedSymbol[] = [];
+    public parseDynSym(section: ELFSection, stringTable: ELFSection): Array<ParsedSymbol> {
+        const symbols: Array<ParsedSymbol> = [];
         const buf = section.data;
         const is64 = this.is64;
         const symSize = is64 ? 24 : 16; // Size of each symbol entry
@@ -1049,7 +1049,7 @@ class Parser {
             const binding = this.getSymbolBinding(sym.st_info);
             const type = this.getSymbolType(sym.st_info);
             const visibility = this.getSymbolVisibility(sym.st_other);
-            const section = this.getSectionName(sym.st_shndx, stringTable);
+            const section = this.getSectionName(sym.st_shndx);
 
             // Resolve symbol name
             const name = this.resolveStr(stringTable.data, sym.st_name);
@@ -1143,7 +1143,7 @@ class Parser {
     /**
      * Get section name from section index
      */
-    private getSectionName(st_shndx: number, stringTable: ELFSection): string {
+    private getSectionName(st_shndx: number): string {
         if (st_shndx === 0) {
             return 'SHN_UNDEF';
         }
@@ -1171,8 +1171,8 @@ class Parser {
         relaPltSection: ELFSection,
         symtab: ELFSection,
         stringTable: ELFSection
-    ): PLTEntry[] {
-        const pltEntries: PLTEntry[] = [];
+    ): Array<PLTEntry> {
+        const pltEntries: Array<PLTEntry> = [];
         const buf = pltSection.data;
 
         // Determine PLT entry size based on architecture. Common sizes:
@@ -1233,8 +1233,8 @@ class Parser {
         section: ELFSection,
         symtab: ELFSection,
         stringTable: ELFSection
-    ): ParsedRelocation[] {
-        const relocations: ParsedRelocation[] = [];
+    ): Array<ParsedRelocation> {
+        const relocations: Array<ParsedRelocation> = [];
         const buf = section.data;
         const is64 = this.is64;
         const hasAddend = section.type === 'rela';
@@ -1254,8 +1254,8 @@ class Parser {
                 } else {
                     relocation = {
                         r_offset: this.readUInt64(buf, i * 16),
-                        r_info: this.readUInt32(buf, i * 16 + 8),
-                    } as any; // Elf64_Rel doesn't have addend
+                        r_info: this.readUInt64(buf, i * 16 + 8),
+                    } as Elf64_Rela; // Elf64_Rel doesn't have addend
                 }
             } else {
                 if (hasAddend) {
@@ -1268,7 +1268,7 @@ class Parser {
                     relocation = {
                         r_offset: this.readUInt32(buf, i * 8),
                         r_info: this.readUInt32(buf, i * 8 + 4),
-                    } as any; // Elf32_Rel doesn't have addend
+                    } as Elf32_Rela; // Elf32_Rel doesn't have addend
                 }
             }
 
@@ -1338,7 +1338,7 @@ class Parser {
     /**
      * Get parsed symbols from the ELF object
      */
-    public getSymbols(elf: ELF): ParsedSymbol[] {
+    public getSymbols(elf: ELF): Array<ParsedSymbol> {
         // Find the .dynsym section
         const dynsymSection = elf.body.sections.find((sec) => sec.name === '.dynsym' && sec.type === 'dynsym');
 
@@ -1361,7 +1361,7 @@ class Parser {
     /**
      * Get parsed symbols from the ELF object for .symtab
      */
-    public getSymtabSymbols(elf: ELF): ParsedSymbol[] {
+    public getSymtabSymbols(elf: ELF): Array<ParsedSymbol> {
         // Find the .symtab section
         const symtabSection = elf.body.sections.find((sec) => sec.name === '.symtab' && sec.type === 'symtab');
 
@@ -1384,7 +1384,7 @@ class Parser {
     /**
      * Get parsed PLT entries from the ELF object
      */
-    public getPLT(elf: ELF): PLTEntry[] {
+    public getPLT(elf: ELF): Array<PLTEntry> {
         // Find the .plt section
         const pltSection = elf.body.sections.find((sec) => sec.name === '.plt' && sec.type === 'progbits');
 
@@ -1394,7 +1394,7 @@ class Parser {
 
         // Find the corresponding relocation section (.rela.plt or .rel.plt)
         const relaPltSection =
-            elf.body.sections.find((sec) => sec.name === '.rela.plt' && sec.type === 'rela') ||
+            elf.body.sections.find((sec) => sec.name === '.rela.plt' && sec.type === 'rela') ??
             elf.body.sections.find((sec) => sec.name === '.rel.plt' && sec.type === 'rel');
 
         if (!relaPltSection) {
@@ -1403,7 +1403,7 @@ class Parser {
 
         // Find the symbol table (.dynsym or .symtab)
         const symtabSection =
-            elf.body.sections.find((sec) => sec.type === 'dynsym') ||
+            elf.body.sections.find((sec) => sec.type === 'dynsym') ??
             elf.body.sections.find((sec) => sec.type === 'symtab');
 
         if (!symtabSection) {
@@ -1412,7 +1412,7 @@ class Parser {
 
         // Find the associated string table (.dynstr or .strtab)
         const stringTableSection =
-            elf.body.sections.find((sec) => sec.name === '.dynstr' && sec.type === 'strtab') ||
+            elf.body.sections.find((sec) => sec.name === '.dynstr' && sec.type === 'strtab') ??
             elf.body.sections.find((sec) => sec.name === '.strtab' && sec.type === 'strtab');
 
         if (!stringTableSection) {
@@ -1460,5 +1460,5 @@ export function parseELF(buf: Buffer): ELF {
         logger.warn('PLT parsing failed:', (error as Error).message);
     }
 
-    return elfHeader as ELF;
+    return elfHeader;
 }

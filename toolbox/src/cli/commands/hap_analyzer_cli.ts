@@ -19,11 +19,16 @@ import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
+interface HapAnalyzerOptions {
+    input: string;
+    output: string;
+}
+
 export const HapAnalyzerCli = new Command('analyzer')
     .requiredOption('-i, --input <string>', 'Hap file path')
     .option('-o, --output <string>', 'output path', './')
-    .action(async (...args: any[]) => {
-        await main(args[0].hapPkgPath, args[0].output);
+    .action(async (options: HapAnalyzerOptions) => {
+        await main(options.input, options.output);
     });
 
 async function main(hapPkgPath: string, output: string): Promise<void> {

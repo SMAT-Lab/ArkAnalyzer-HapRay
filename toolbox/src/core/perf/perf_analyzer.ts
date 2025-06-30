@@ -15,25 +15,28 @@
 
 import path from 'path';
 import fs from 'fs';
-import initSqlJs, { Database } from 'sql.js';
+import type { Database } from 'sql.js';
+import initSqlJs from 'sql.js';
 import writeXlsxFile from 'write-excel-file/node';
 import { createHash } from 'crypto';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { ComponentCategory, OriginKind, getComponentCategories } from '../component';
-import {
+import type {
     ClassifyCategory,
-    CYCLES_EVENT,
     FileClassification,
-    INSTRUCTION_EVENT,
-    PerfAnalyzerBase,
-    PerfEvent,
     PerfSum,
     PerfSymbolDetailData,
     TestSceneInfo,
-    TestStep,
+    TestStep} from './perf_analyzer_base';
+import {
+    CYCLES_EVENT,
+    INSTRUCTION_EVENT,
+    PerfAnalyzerBase,
+    PerfEvent,
     UNKNOWN_STR,
 } from './perf_analyzer_base';
 import { getConfig } from '../../config';
+import type { SheetData } from 'write-excel-file';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -70,8 +73,8 @@ interface PerfCall {
 interface PerfCallchain {
     callchainId: number;
     selfEvent: number; // 标记取selfEvent位置
-    totalEvents: number[]; // 标记取totalEvent位置
-    stack: PerfCall[]; // 调用栈
+    totalEvents: Array<number>; // 标记取totalEvent位置
+    stack: Array<PerfCall>; // 调用栈
 }
 
 // 定义单个 step 的结构
@@ -161,8 +164,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     protected threadsMap: Map<number, PerfThread>; // 线程表
     protected callchainsMap: Map<number, PerfCallchain>; // 调用链表
     protected callchainIds: Set<number>;
-    protected testSteps: TestStep[];
-    protected samples: PerfSample[];
+    protected testSteps: Array<TestStep>;
+    protected samples: Array<PerfSample>;
 
     constructor(workspace: string) {
         super(workspace);
@@ -185,7 +188,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         logger.info(`calcTotalInstruction ${dbfile} start`);
         let db: Database | null = null;
         try {
-            db = new SQL.Database(fs.readFileSync(dbfile!));
+            db = new SQL.Database(fs.readFileSync(dbfile));
             // 读取样本数据
             total = this.queryProcessTotal(db);
         } catch (err) {
@@ -218,7 +221,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         await this.loadDbAndStatistics(testInfo, output, testInfo.packageName);
         let perfPath = '';
         let isFirstPerfPath = true;
-        for (const step of testInfo.rounds[testInfo.chooseRound].steps!) {
+        for (const step of testInfo.rounds[testInfo.chooseRound].steps) {
             if (isFirstPerfPath) {
                 perfPath = path.resolve(step.dbfile!);
                 isFirstPerfPath = false;
@@ -288,7 +291,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     private loadStatistics(db: Database, packageName: string, scene: string, groupId: number): number {
         // 读取所有线程信息
-        this.queryThreads(db, packageName, scene);
+        this.queryThreads(db);
         // 读取所有文件信息
         this.queryFiles(db);
         // 读取所有符号信息
@@ -304,7 +307,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     private queryTestStepTimestamps(db: Database, groupId: number): void {
         const results = db.exec(TEST_STEP_TIMESTAMPS);
-        let steps: { name: string; ts: number; dur: number }[] = [];
+        let steps: Array<{ name: string; ts: number; dur: number }> = [];
         if (results.length > 0) {
             results[0].values.map((row) => {
                 steps.push({ name: row[0] as string, ts: row[1] as number, dur: row[2] as number });
@@ -358,7 +361,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @returns
      */
-    private queryThreads(db: Database, packageName: string, scene: string): void {
+    private queryThreads(db: Database): void {
         const results = db.exec('SELECT thread_id, process_id, thread_name FROM perf_thread');
         if (results.length === 0) {
             return;
@@ -447,7 +450,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // ets 需要基于symbol 进一步分类
             call.classification = this.classifySymbol(call.symbolId, call.classification);
             
-            let callchain = this.callchainsMap.get(row[0] as number) || {
+            let callchain = this.callchainsMap.get(row[0] as number) ?? {
                 callchainId: row[0] as number,
                 selfEvent: 0,
                 totalEvents: [],
@@ -519,7 +522,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         const now = new Date().getTime();
         let order = 1;
 
-        let callchainData: { type?: any; value: any }[][] = [];
+        let callchainData: SheetData = [];
         callchainData.push(header);
 
         for (const [id, chain] of this.callchainsMap) {
@@ -538,11 +541,11 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 callchainData.push([
                     { value: chain.callchainId, type: Number },
                     { value: call.depth, type: Number },
-                    { value: call.classification.file || '', type: String },
-                    { value: this.symbolsMap.get(call.symbolId) || '', type: String },
-                    { value: ComponentCategory[call.classification.category!], type: String },
-                    { value: call.classification.subCategoryName || '', type: String },
-                    { value: OriginKind[call.classification.originKind!], type: String },
+                    { value: call.classification.file, type: String },
+                    { value: this.symbolsMap.get(call.symbolId) ?? '', type: String },
+                    { value: ComponentCategory[call.classification.category], type: String },
+                    { value: call.classification.subCategoryName ?? '', type: String },
+                    { value: OriginKind[call.classification.originKind], type: String },
                     { value: event, type: String },
                 ]);
             }
@@ -638,7 +641,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 };
                 this.threadsMap.set(sample.thread_id, thread);
             }
-            let process = this.threadsMap.get(thread.processId)!;
+            let process = this.threadsMap.get(thread.processId);
             if (!process) {
                 logger.error(`calcSymbolData process ${thread.processId} not found`);
                 continue;
@@ -657,7 +660,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 threadName: thread.name,
                 file: call.classification.file,
                 fileEvents: 0,
-                symbol: this.symbolsMap.get(call.symbolId) || '',
+                symbol: this.symbolsMap.get(call.symbolId) ?? '',
                 symbolEvents: sample.event_count,
                 symbolTotalEvents: 0,
                 originKind: call.classification.originKind,
@@ -665,10 +668,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 componentName: call.classification.subCategoryName,
             };
 
-            let threadEventCount = threadsEventMap.get(this.getThreadKey(data)) || 0;
+            let threadEventCount = threadsEventMap.get(this.getThreadKey(data)) ?? 0;
             threadsEventMap.set(this.getThreadKey(data), threadEventCount + sample.event_count);
 
-            let processEventCount = processEventMap.get(this.getProcessKey(data)) || 0;
+            let processEventCount = processEventMap.get(this.getProcessKey(data)) ?? 0;
             processEventMap.set(this.getProcessKey(data), processEventCount + sample.event_count);
 
             // 根据线程名直接分类
