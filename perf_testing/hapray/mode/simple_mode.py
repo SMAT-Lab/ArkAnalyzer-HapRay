@@ -4,19 +4,32 @@ import logging
 import re
 import glob
 import shutil
+import sqlite3
+
+import pandas as pd
+
+from hapray.core.common.exe_utils import ExeUtils
 
 
-def create_simple_mode_structure(report_dir, package_name):
+def create_simple_mode_structure(report_dir, perf_path, trace_path, package_name, pids):
     """
     SIMPLE模式下创建目录结构、testInfo.json、pids.json、steps.json
     """
+    # 检查输入文件是否存在
+    if not os.path.exists(perf_path):
+        raise FileNotFoundError(f"Performance data file not found: {perf_path}")
+    if not os.path.exists(trace_path):
+        raise FileNotFoundError(f"Trace file not found: {trace_path}")
+
     hiperf_dir = os.path.join(report_dir, "hiperf", "step1")
     htrace_dir = os.path.join(report_dir, "htrace", "step1")
     report_report_dir = os.path.join(report_dir, "report")
+    target_db_file = None
+
     if (
-        not os.path.exists(hiperf_dir)
-        and not os.path.exists(htrace_dir)
-        and not os.path.exists(report_report_dir)
+            not os.path.exists(hiperf_dir)
+            and not os.path.exists(htrace_dir)
+            and not os.path.exists(report_report_dir)
     ):
         os.makedirs(hiperf_dir)
         os.makedirs(htrace_dir)
@@ -24,31 +37,22 @@ def create_simple_mode_structure(report_dir, package_name):
         logging.info(
             f"hiperf htrace report directory create success: {hiperf_dir} and {htrace_dir} and {report_dir}"
         )
-        
-        # 查找并移动.data文件到hiperf/step1/目录，重命名为perf.data
-        data_files = glob.glob(os.path.join(report_dir, "*.data"))
-        if data_files:
-            source_data_file = data_files[0]  # 取第一个找到的.data文件
-            target_data_file = os.path.join(hiperf_dir, "perf.data")
-            shutil.copy2(source_data_file, target_data_file)
-            logging.info(f"Copied {source_data_file} to {target_data_file}")
-        
+
         # 查找并移动ps_ef.txt文件到hiperf/step1/目录
-        ps_ef_files = glob.glob(os.path.join(report_dir, "ps_ef.txt"))
+        ps_ef_files = glob.glob(os.path.join(os.path.dirname(perf_path), "ps_ef.txt"))
         if ps_ef_files:
             source_ps_ef_file = ps_ef_files[0]
             target_ps_ef_file = os.path.join(hiperf_dir, "ps_ef.txt")
             shutil.copy2(source_ps_ef_file, target_ps_ef_file)
             logging.info(f"Copied {source_ps_ef_file} to {target_ps_ef_file}")
-        
+
         # 查找并移动.htrace文件到htrace/step1/目录，重命名为trace.htrace
-        htrace_files = glob.glob(os.path.join(report_dir, "*.htrace"))
-        if htrace_files:
-            source_htrace_file = htrace_files[0]  # 取第一个找到的.htrace文件
-            target_htrace_file = os.path.join(htrace_dir, "trace.htrace")
-            shutil.copy2(source_htrace_file, target_htrace_file)
-            logging.info(f"Copied {source_htrace_file} to {target_htrace_file}")
-        
+
+        source_htrace_file = trace_path
+        target_htrace_file = os.path.join(htrace_dir, "trace.htrace")
+        shutil.copy2(source_htrace_file, target_htrace_file)
+        logging.info(f"Copied {source_htrace_file} to {target_htrace_file}")
+
         # 创建testInfo.json
         test_info = {
             "app_id": package_name,
@@ -83,9 +87,19 @@ def create_simple_mode_structure(report_dir, package_name):
         logging.info(
             f"steps.json create success: {os.path.join(hiperf_dir, 'steps.json')}"
         )
+    if os.path.exists(perf_path):
+        # 查找并移动.data文件到hiperf/step1/目录，重命名为perf.data
+        source_data_file = perf_path
+        target_data_file = os.path.join(hiperf_dir, "perf.data")
+        shutil.copy2(source_data_file, target_data_file)
+        logging.info(f"Copied {source_data_file} to {target_data_file}")
+        target_db_file = target_data_file.replace(".data", ".db")
+        if not os.path.exists(target_db_file) and os.path.exists(target_data_file):
+            if not ExeUtils.convert_data_to_db(target_data_file, target_db_file):
+                logging.error("Failed to convert perf to db for %s", target_data_file)
     # 创建pids.json
     pids_json = parse_processes(
-        os.path.join(hiperf_dir, "ps_ef.txt"), package_name
+        target_db_file or "", os.path.join(hiperf_dir, "ps_ef.txt"), package_name, pids
     )
     with open(os.path.join(hiperf_dir, "pids.json"), "w") as f:
         json.dump(pids_json, f)
@@ -94,39 +108,58 @@ def create_simple_mode_structure(report_dir, package_name):
     )
 
 
-def parse_processes(file_path: str, package_name: str):
+def parse_processes(target_db_file: str, file_path: str, package_name: str, pids: list):
     """
     解析进程文件，返回包含目标包名的进程pid和进程名列表。
+    :param target_db_file: 性能数据库文件路径
     :param file_path: 进程信息文件路径
     :param package_name: 目标包名
+    :param pids: 用户提供的进程ID列表
     :return: dict { 'pids': List[int], 'process_names': List[str] }
     """
-    if not file_path or not package_name:
-        raise ValueError("文件路径和包名不能为空")
-
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            lines = [line.strip() for line in f if line.strip()]
-
-        if len(lines) <= 1:
-            return {}
-
-        process_regex = re.compile(
-            r"^\s*(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$"
-        )
+    if not package_name:
+        raise ValueError("包名不能为空")
+    result = {"pids": [], "process_names": []}
+    if os.path.exists(target_db_file) and target_db_file:
+        # 连接trace数据库
+        perf_conn = sqlite3.connect(target_db_file)
+        try:
+            # 获取所有perf样本
+            perf_query = "SELECT distinct process_id,thread_name FROM perf_thread where thread_name like \'%{0}%\'".format(
+                package_name)
+            perf_pids = pd.read_sql_query(perf_query, perf_conn)
+            for index, row in perf_pids.iterrows():
+                result["pids"].append(row['process_id'])
+                result["process_names"].append(row['thread_name'])
+        except Exception as e:
+            logging.error(f"从db中获取pids时发生异常: {str(e)}")
+        finally:
+            perf_conn.close()
+    if os.path.exists(file_path):
         result = {"pids": [], "process_names": []}
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip()]
+            process_regex = re.compile(
+                r"^\s*(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$"
+            )
+            for line in lines[1:]:
+                match = process_regex.match(line)
+                if not match:
+                    continue
+                pid = int(match.group(2))
+                cmd = match.group(8)
+                if package_name in cmd:
+                    process_name = cmd[5:] if cmd.startswith("init ") else cmd
+                    result["pids"].append(pid)
+                    result["process_names"].append(process_name)
+        except Exception as err:
+            logging.error(f"处理文件失败: {err}")
+    if pids != []:
+        process_names = []
+        for pid in pids:
+            process_names.append(package_name)
+        result["pids"] = pids
+        result["process_names"] = process_names
 
-        for line in lines[1:]:
-            match = process_regex.match(line)
-            if not match:
-                continue
-            pid = int(match.group(2))
-            cmd = match.group(8)
-            if package_name in cmd:
-                process_name = cmd[5:] if cmd.startswith("init ") else cmd
-                result["pids"].append(pid)
-                result["process_names"].append(process_name)
-        return result
-    except Exception as err:
-        logging.error(f"处理文件失败: {err}")
-        return {}
+    return result

@@ -76,7 +76,10 @@ Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
 - `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
+- `--perf <path>`: SIMPLE mode need perf path
+- `--trace <path>`: SIMPLE mode need trace path
 - `--package_name <package_name>`: SIMPLE mode need package_name
+- `--pids <N+>`: SIMPLE mode optional pids
 
 Example:
 ```bash
@@ -88,13 +91,7 @@ python -m scripts.main update --report_dir reports/20240605120000 --so_dir updat
 python -m scripts.main update --report_dir reports/20240605120000
 
 # SIMPLE mode
-# put perf.data,ps_ef.txt,trace.htrace into reports/20240605120000
-# |-reports
-# |-|-20240605120000
-# |-|-|-perf.data
-# |-|-|-trace.htrace
-# |-|-|-ps_ef.txt
-python -m scripts.main update --report_dir reports/20240605120000 --mode SIMPLE --package_name com.jd.hm.mall 
+python -m scripts.main update --reports/20240605120000 --mode 2 --perf perf.data --trace trace.htrace --package_name com.jd.hm.mall --pids 1 2 3
 
 ```
 

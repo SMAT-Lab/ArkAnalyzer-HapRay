@@ -17,6 +17,7 @@ import os
 import re
 import logging
 import argparse
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
@@ -58,9 +59,26 @@ class UpdateAction:
             help=f"select mode {Config.MODE_COMMUNITY} COMMUNITY {Config.MODE_COMPATIBILITY} COMPATIBILITY {Config.MODE_SIMPLE} SIMPLE",
         )
         parser.add_argument(
+            "--perf",
+            default="",
+            help="SIMPLE mode need perf path",
+        )
+        parser.add_argument(
+            "--trace",
+            default="",
+            help="SIMPLE mode need trace path",
+        )
+        parser.add_argument(
             "--package_name",
             default="",
             help="SIMPLE mode need package name",
+        )
+        parser.add_argument(
+            "--pids",
+            nargs='+',
+            type=int,
+            default=[],
+            help="SIMPLE mode可选填pids（提供整数ID列表，如: --pids 1 2 3）"
         )
         parsed_args = parser.parse_args(args)
 
@@ -73,8 +91,22 @@ class UpdateAction:
             return
         elif Config.get("mode") == Config.MODE_SIMPLE:
             # 简单模式构造目录
+            perf_path = parsed_args.perf
+            trace_path = parsed_args.trace
+            pids = parsed_args.pids
+            
+            if not perf_path or not trace_path:
+                logging.error("SIMPLE mode requires both --perf and --trace parameters")
+                return
+                
+            if not parsed_args.package_name:
+                logging.error("SIMPLE mode requires --package_name parameter")
+                return
+                
             package_name = parsed_args.package_name
-            create_simple_mode_structure(report_dir, package_name)
+            timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+            report_dir = os.path.join(report_dir, timestamp)
+            create_simple_mode_structure(report_dir, perf_path, trace_path, package_name, pids)
         logging.info(f"Updating reports in: {report_dir}")
         if so_dir:
             logging.info(f"Using symbolicated .so files from: {so_dir}")
