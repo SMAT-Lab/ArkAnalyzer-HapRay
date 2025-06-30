@@ -3,7 +3,7 @@
         <div class="stats-cards">
             <div class="stat-card data-panel">
                 <div class="card-title">
-                    <i>📊</i> 总帧数
+                    <i>📊</i> 有效帧数
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
@@ -99,8 +99,8 @@
                 <div class="metric-grid">
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
-                        <div class="metric-label">复用组件数/总组件数/复用组件占比</div>
-                        <div class="metric-value">{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
+                        <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
+                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
                     </div>
                 </div>
             </div>
@@ -254,8 +254,8 @@
                                 selectedStutter.level_description }})</div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">线程</div>
-                            <div class="info-value">{{ callstackThread || '主线程' }}</div>
+                            <div class="info-label">卡顿负载</div>
+                            <div class="info-value">{{ selectedStutter.frame_load }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">调用栈数量</div>
@@ -350,12 +350,12 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, defaultEmptyJson } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 空刷JSON 数据
-const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? defaultEmptyJson;
+const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? getDefaultEmptyFrameData();
 const componentResuJsonData = jsonDataStore.componentResuData;
 
 const props = defineProps({
