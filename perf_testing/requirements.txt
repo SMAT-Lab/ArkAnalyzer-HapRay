@@ -11,5 +11,4 @@ tqdm>=4.67.1
 pandas>=2.0.3
 openpyxl>=3.1.5
 arpy~=2.3.0
-matplotlib
 tox
