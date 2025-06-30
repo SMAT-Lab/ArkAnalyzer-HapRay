@@ -43,6 +43,7 @@ class ReportData:
         self.frame_data = {}
         self.empty_frame_data = {}
         self.component_reusability_data = {}
+        self.cold_start_analysis_data = {}
         self.basic_info = {}
 
     @classmethod
@@ -52,12 +53,14 @@ class ReportData:
         frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
         empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
         component_reusability_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
+        cold_start_analysis_path = os.path.join(scene_dir, 'htrace', 'cold_start_analysis_summary.json')
 
         data = cls()
         data.load_perf_data(perf_data_path)
         data.load_frame_data(frame_data_path)
         data.load_empty_frame_data(empty_frames_analysis_path)
         data.load_component_reusability_data(component_reusability_path)
+        data.load_cold_start_analysis_data(cold_start_analysis_path)
         data.extract_basic_info()
         return data
 
@@ -90,6 +93,10 @@ class ReportData:
             if self.empty_frame_data != {}:
                 trace_data["emptyFrame"] = self.empty_frame_data
 
+            # 添加冷启动分析数据（可选）
+            if self.cold_start_analysis_data != {}:
+                trace_data["coldStart"] = self.cold_start_analysis_data
+
             merged_data["trace"] = trace_data
 
         # 路径1: Base64编码的gzip压缩JSON
@@ -111,6 +118,9 @@ class ReportData:
 
     def load_component_reusability_data(self, path):
         self.component_reusability_data = self._load_json_safe(path, default={})
+
+    def load_cold_start_analysis_data(self, path):
+        self.cold_start_analysis_data = self._load_json_safe(path, default={})
 
     def extract_basic_info(self):
         if self.perf_data and isinstance(self.perf_data, list):
@@ -373,7 +383,7 @@ def create_perf_summary_excel(input_path: str) -> bool:
         if len(pivot_df.columns) > 1:
             # 添加百分比列（以第一列为基线）
             pivot_df = add_percentage_columns(pivot_df)
-            logging.info("已计算相对于 %f 的百分比增长", pivot_df.columns[0])
+            logging.info("已计算相对于 %s 的百分比增长", pivot_df.columns[0])
         else:
             logging.warning("警告: 数据列不足，无法计算百分比增长")
 

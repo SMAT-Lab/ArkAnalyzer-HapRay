@@ -141,6 +141,15 @@ interface EmptyFrameSummary {
   empty_frames_with_load: number;
 }
 
+interface ColdStartSummary {
+  total_file_number: number;
+  total_time_ms: number;
+  used_file_count: number;
+  used_file_time_ms: number;
+  unused_file_count: number;
+  unused_file_time_ms: number;
+}
+
 interface CallstackFrame {
   depth: number;
   file_id: number;
@@ -154,6 +163,13 @@ interface SampleCallchain {
   event_count: number;
   load_percentage: number;
   callchain: CallstackFrame[];
+}
+
+interface FileInfo {
+  rank: number;
+  file_name: string;
+  cost_time_ms: number;
+  parent_module: string;  // 注意：实际数据中包含多行文本
 }
 
 interface EmptyFrame {
@@ -183,6 +199,14 @@ interface EmptyFrameStepData {
 
 export type EmptyFrameData = Record<string, EmptyFrameStepData>;
 
+interface ColdStartStepData {
+  summary: ColdStartSummary;
+  used_files_top10: FileInfo[];
+  unused_files_top10: FileInfo[];
+}
+
+export type ColdStartData = Record<string, ColdStartStepData>;
+
 interface ComponentResuStepData {
   total_builds: number;
   recycled_builds: number;
@@ -196,6 +220,7 @@ interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
   componentReuse: ComponentResuData;
+  coldStart?: ColdStartData;
 }
 
 export interface JSONData {
@@ -268,7 +293,7 @@ function createDefaultEmptyFrame(): EmptyFrame {
 }
 
 /** 获取默认的帧步骤数据 */
-function getDefaultFrameStepData(): FrameStepData {
+export function getDefaultFrameStepData(): FrameStepData {
   return {
     runtime: "",
     statistics: {
@@ -297,7 +322,7 @@ function getDefaultFrameStepData(): FrameStepData {
 }
 
 /** 获取默认的空帧步骤数据 */
-function getDefaultEmptyFrameStepData(): EmptyFrameStepData {
+export function getDefaultEmptyFrameStepData(): EmptyFrameStepData {
   return {
     status: "unknow",
     summary: {
@@ -317,7 +342,7 @@ function getDefaultEmptyFrameStepData(): EmptyFrameStepData {
 }
 
 /** 获取默认的组件复用步骤数据 */
-function getDefaultComponentResuStepData(): ComponentResuStepData {
+export function getDefaultComponentResuStepData(): ComponentResuStepData {
   return {
     total_builds: 0,
     recycled_builds: 0,
@@ -347,6 +372,51 @@ export function getDefaultComponentResuData(): ComponentResuData {
   };
 }
 
+function getDefaultColdStartStepData(): ColdStartStepData {
+  return {
+    summary: {
+      total_file_number: 0,
+      total_time_ms: 0,
+      used_file_count: 0,
+      used_file_time_ms: 0,
+      unused_file_count: 0,
+      unused_file_time_ms: 0
+    },
+    used_files_top10: [],
+    unused_files_top10: []
+  };
+}
+
+export function getDefaultColdStartData(): ColdStartData {
+  return {
+    step1: getDefaultColdStartStepData()
+  };
+}
+
+/**
+ * 安全处理冷启动数据 - 替换无效值为默认结构
+ * @param data 原始冷启动数据
+ * @returns 处理后的有效冷启动数据
+ */
+export function safeProcessColdStartData(data: ColdStartData | null | undefined): ColdStartData {
+  if (!data) return getDefaultColdStartData();
+
+  const result: ColdStartData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultColdStartStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultColdStartStepData();
+  }
+
+  return result;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
   basicInfo: BasicInfo | null;
@@ -356,6 +426,7 @@ interface JsonDataState {
   emptyFrameData: EmptyFrameData | null;
   comparePerfData: PerfData | null;
   componentResuData: ComponentResuData | null;
+  coldStartData: ColdStartData | null;
 }
 
 /**
@@ -365,20 +436,18 @@ interface JsonDataState {
  */
 function safeProcessFrameData(data: FrameData | null | undefined): FrameData {
   if (!data) return getDefaultFrameData();
-  
+
   const result: FrameData = {};
-  
+
   // 遍历所有步骤，确保每个步骤都有有效数据
   for (const [stepName, stepData] of Object.entries(data)) {
     // 如果步骤数据无效，使用默认结构替换
     result[stepName] = stepData ?? getDefaultFrameStepData();
   }
-  
   // 确保至少有一个步骤
   if (Object.keys(result).length === 0) {
     result.step1 = getDefaultFrameStepData();
   }
-  
   return result;
 }
 
@@ -389,20 +458,18 @@ function safeProcessFrameData(data: FrameData | null | undefined): FrameData {
  */
 function safeProcessEmptyFrameData(data: EmptyFrameData | null | undefined): EmptyFrameData {
   if (!data) return getDefaultEmptyFrameData();
-  
+
   const result: EmptyFrameData = {};
-  
+
   // 遍历所有步骤，确保每个步骤都有有效数据
   for (const [stepName, stepData] of Object.entries(data)) {
     // 如果步骤数据无效，使用默认结构替换
     result[stepName] = stepData ?? getDefaultEmptyFrameStepData();
   }
-  
   // 确保至少有一个步骤
   if (Object.keys(result).length === 0) {
     result.step1 = getDefaultEmptyFrameStepData();
   }
-  
   return result;
 }
 
@@ -413,20 +480,18 @@ function safeProcessEmptyFrameData(data: EmptyFrameData | null | undefined): Emp
  */
 function safeProcessComponentResuData(data: ComponentResuData | null | undefined): ComponentResuData {
   if (!data) return getDefaultComponentResuData();
-  
+
   const result: ComponentResuData = {};
-  
+
   // 遍历所有步骤，确保每个步骤都有有效数据
   for (const [stepName, stepData] of Object.entries(data)) {
     // 如果步骤数据无效，使用默认结构替换
     result[stepName] = stepData ?? getDefaultComponentResuStepData();
   }
-  
   // 确保至少有一个步骤
   if (Object.keys(result).length === 0) {
     result.step1 = getDefaultComponentResuStepData();
   }
-  
   return result;
 }
 
@@ -439,27 +504,28 @@ export const useJsonDataStore = defineStore('config', {
     emptyFrameData: null,
     comparePerfData: null,
     componentResuData: null,
+    coldStartData: null,
   }),
-  
+
   actions: {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.basicInfo = jsonData.basicInfo;
-      
+
       if (JSON.stringify(compareJsonData) === "\"\/tempCompareJsonData\/\"") {
         this.perfData = jsonData.perf;
-        
+
         if (jsonData.trace) {
           // 安全处理所有 trace 相关数据
           this.frameData = safeProcessFrameData(jsonData.trace.frames);
           this.emptyFrameData = safeProcessEmptyFrameData(jsonData.trace.emptyFrame);
           this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
+          this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
         } else {
           // 当没有 trace 数据时，设置完整的默认结构
           this.frameData = getDefaultFrameData();
           this.emptyFrameData = getDefaultEmptyFrameData();
           this.componentResuData = getDefaultComponentResuData();
         }
-        
         window.initialPage = 'perf';
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
