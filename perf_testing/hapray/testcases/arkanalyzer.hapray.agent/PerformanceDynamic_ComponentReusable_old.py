@@ -2,9 +2,11 @@
 # coding: utf-8
 
 import os
+
 from devicetest.core.test_case import Step
-from hapray.core.perf_testcase import PerfTestCase
+
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerformanceDynamic_ComponentReusable_old(PerfTestCase):
@@ -25,7 +27,7 @@ class PerformanceDynamic_ComponentReusable_old(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -43,12 +45,13 @@ class PerformanceDynamic_ComponentReusable_old(PerfTestCase):
 
     def teardown(self):
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()
 
     def process(self):
         def step1(driver):
             Step('1. 上滑5次，每次等待1s;下滑5次，每次等待1s')
-            driver.start_app(package_name=self.app_package, page_name='ExecutorAbility', params=f'--ps testSuite {self._test_suite} --ps testCase {self._testCase}')
+            driver.start_app(package_name=self.app_package, page_name='ExecutorAbility',
+                             params=f'--ps testSuite {self._test_suite} --ps testCase {self._testCase}')
             driver.wait(2)
             for _ in range(5):
                 CommonUtils.swipes_up_load(driver, 1, 1, 300)
@@ -60,4 +63,4 @@ class PerformanceDynamic_ComponentReusable_old(PerfTestCase):
         self.driver.start_app(package_name=self.app_package)
         self.driver.wait(5)  # 增加启动等待时间
 
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_performance_step(1, step1, 20)

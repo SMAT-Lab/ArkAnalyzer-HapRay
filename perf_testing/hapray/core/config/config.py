@@ -13,16 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from importlib.resources import files
-import yaml
-from typing import Any, Dict, Optional
 import os
 import threading
+from importlib.resources import files
+from typing import Any, Dict, Optional
+
+import yaml
 
 
 class ConfigError(Exception):
     """自定义配置异常"""
-    pass
 
 
 class ConfigObject:
@@ -36,18 +36,23 @@ class ConfigObject:
                 setattr(self, key, value)
 
 
-def deep_merge(default: Dict, custom: Dict) -> Dict:
-    """深度合并两个字典，custom中的值覆盖default中的值"""
-    merged = default.copy()
-    for key, value in custom.items():
-        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
-            merged[key] = deep_merge(merged[key], value)
+def deep_merge(base: Dict, update: Dict) -> Dict:
+    """深度合并两个字典"""
+    result = base.copy()
+    for key, value in update.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
         else:
-            merged[key] = value
-    return merged
+            result[key] = value
+    return result
 
 
 class Config:
+    # 模式常量定义
+    MODE_COMMUNITY = 0      # 社区模式
+    MODE_COMPATIBILITY = 1  # 兼容模式
+    MODE_SIMPLE = 2         # 简单模式
+    
     _instance = None  # 单例实例
     _lock = threading.Lock()  # 线程安全锁
     _default_config_path = files('hapray.core.config').joinpath("config.yaml")  # 默认配置文件路径
@@ -71,6 +76,10 @@ class Config:
                     self.reload()
                     self._initialized = True
 
+    @property
+    def data(self):
+        return self._data
+
     def reload(self):
         """重新加载配置文件，合并默认配置和用户配置"""
         try:
@@ -87,9 +96,9 @@ class Config:
             self._data = ConfigObject(merged_config)
 
         except FileNotFoundError as e:
-            raise ConfigError(f"配置文件未找到: {str(e)}")
+            raise ConfigError(f"配置文件未找到: {str(e)}") from e
         except yaml.YAMLError as e:
-            raise ConfigError(f"YAML 解析错误: {str(e)}")
+            raise ConfigError(f"YAML 解析错误: {str(e)}") from e
 
     def _load_config(self, path) -> Dict:
         """加载YAML配置文件"""
@@ -101,8 +110,8 @@ class Config:
             else:
                 # 处理importlib.resources路径
                 return yaml.safe_load(path.read_text(encoding='utf-8'))
-        except FileNotFoundError:
-            raise FileNotFoundError(f"配置文件未找到: {str(path)}")
+        except FileNotFoundError as e:
+            raise ConfigError(f"配置文件未找到: {str(path)}") from e
 
     def __getattr__(self, name: str) -> Any:
         """通过属性访问配置项"""
@@ -132,7 +141,7 @@ class Config:
         if cls._instance is None:
             Config()
         keys = key_path.split('.')
-        value = cls._instance._data
+        value = cls._instance.data
         try:
             for key in keys:
                 value = getattr(value, key)
@@ -156,7 +165,7 @@ class Config:
 
         keys = key_path.split('.')
         # 更新配置对象
-        obj = cls._instance._data
+        obj = cls._instance.data
         for key in keys[:-1]:
             obj = getattr(obj, key)
         setattr(obj, keys[-1], value)
