@@ -24,6 +24,7 @@ from hapray import VERSION
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.mode.simple_mode import create_simple_mode_structure
+from hapray.mode.mode import Mode
 
 
 class UpdateAction:
@@ -55,11 +56,11 @@ class UpdateAction:
         parser.add_argument(
             "--mode",
             type=int,
-            default=Config.MODE_COMMUNITY,
+            default=Mode.COMMUNITY,
             help=f"select mode "
-                 f"{Config.MODE_COMMUNITY} COMMUNITY "
-                 f"{Config.MODE_COMPATIBILITY} COMPATIBILITY "
-                 f"{Config.MODE_SIMPLE} SIMPLE",
+                 f"{Mode.COMMUNITY} COMMUNITY "
+                 f"{Mode.COMPATIBILITY} COMPATIBILITY "
+                 f"{Mode.SIMPLE} SIMPLE",
         )
         parser.add_argument(
             "--perf",
@@ -89,10 +90,10 @@ class UpdateAction:
         so_dir = os.path.abspath(parsed_args.so_dir) if parsed_args.so_dir else None
 
         Config.set("mode", parsed_args.mode)
-        if not os.path.exists(report_dir) and Config.get("mode") == Config.MODE_COMMUNITY:
+        if not os.path.exists(report_dir) and Config.get("mode") == Mode.COMMUNITY:
             logging.error(f"Report directory not found: {report_dir}")
             return
-        elif Config.get("mode") == Config.MODE_SIMPLE:
+        elif Config.get("mode") == Mode.SIMPLE:
             # 简单模式构造目录
             perf_path = parsed_args.perf
             trace_path = parsed_args.trace

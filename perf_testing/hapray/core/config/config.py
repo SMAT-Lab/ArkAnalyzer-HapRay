@@ -48,11 +48,6 @@ def deep_merge(default: Dict, custom: Dict) -> Dict:
 
 
 class Config:
-    # 模式常量定义
-    MODE_COMMUNITY = 0  # 社区模式
-    MODE_COMPATIBILITY = 1  # 兼容模式
-    MODE_SIMPLE = 2  # 简单模式
-
     _instance = None  # 单例实例
     _lock = threading.Lock()  # 线程安全锁
     _default_config_path = files('hapray.core.config').joinpath("config.yaml")  # 默认配置文件路径
