@@ -45,7 +45,9 @@ export class Hap {
 
         let zip = await JSZip.loadAsync(fs.readFileSync(hapFile));
         try {
-            let module = JSON.parse(await zip.file('module.json')?.async('string')!);
+            let module = JSON.parse(await zip.file('module.json')?.async('string')!) as {
+                app: { bundleName: string; versionCode: number; versionName: string; label: string };
+            };
             parser.bundleName = module.app.bundleName;
             parser.versionCode = module.app.versionCode;
             parser.versionName = module.app.versionName;
@@ -56,7 +58,7 @@ export class Hap {
             if (label.startsWith('$string:')) {
                 parser.appName = res.getStringValue(label.substring('$string:'.length));
             }
-        } catch (error) {
+        } catch {
             logger.error(`HapParser HAP ${hapFile} not found 'pack.info'.`);
         }
 
@@ -68,7 +70,7 @@ export class Hap {
         let abcMap = new Map<string, Buffer>();
         let zip = await JSZip.loadAsync(fs.readFileSync(this.file));
 
-        let metadata = (await zip.file('encrypt/metadata.info')?.async('string')) || '';
+        let metadata = (await zip.file('encrypt/metadata.info')?.async('string')) ?? '';
         if (metadata.length > 0) {
             let decryptPath = path.join(path.dirname(this.file), 'decrypt');
             if (fs.existsSync(decryptPath)) {
@@ -87,7 +89,7 @@ export class Hap {
                 if (metadata.lastIndexOf(entry.name) === -1) {
                     abcMap.set(entry.name, await entry.async('nodebuffer'));
                 } else {
-                    let key = (await entry.async('nodebuffer')!).subarray(0, 44).toString('base64');
+                    let key = (await entry.async('nodebuffer')).subarray(0, 44).toString('base64');
                     if (decrypt.has(key)) {
                         abcMap.set(entry.name, decrypt.get(key)!);
                     }

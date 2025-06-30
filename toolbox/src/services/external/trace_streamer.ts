@@ -46,14 +46,14 @@ function initTools(): string {
 export async function traceStreamerCmd(htraceFile: string, outDbFile: string): Promise<string> {
     let _traceStreamer = initTools();
 
-    if (!fs.existsSync(_traceStreamer!)) {
+    if (!fs.existsSync(_traceStreamer)) {
         logger.error('not found trace_streamer_binary');
         throw new Error('not found trace_streamer_binary');
     }
 
     if (getConfig().soDir !== '') {
-        return await runCommand(_traceStreamer!, [htraceFile, '-e', outDbFile, '--So_dir', getConfig().soDir]);
+        return await runCommand(_traceStreamer, [htraceFile, '-e', outDbFile, '--So_dir', getConfig().soDir]);
     } else {
-        return await runCommand(_traceStreamer!, [htraceFile, '-e', outDbFile]);
+        return await runCommand(_traceStreamer, [htraceFile, '-e', outDbFile]);
     }
 }

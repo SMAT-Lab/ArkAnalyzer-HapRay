@@ -164,7 +164,7 @@ def install_project_dependencies(pip_executable: Path) -> None:
 
     print(f"\n[3/3] Installing dependencies from {REQUIREMENTS_FILE}...")
     execute_command(
-        [str(pip_executable), "install", "-r", str(requirements_path)],
+        [str(pip_executable), "install", "-r", str(requirements_path), "--use-feature=fast-deps"],
         error_message="Failed to install requirements"
     )
 
@@ -177,7 +177,7 @@ def install_project_dependencies(pip_executable: Path) -> None:
     for package in package_files:
         print(f"Installing package: {package.name}")
         execute_command(
-            [str(pip_executable), "install", str(package)],
+            [str(pip_executable), "install", str(package), "--use-feature=fast-deps"],
             error_message=f"Failed to install package: {package.name}"
         )
 

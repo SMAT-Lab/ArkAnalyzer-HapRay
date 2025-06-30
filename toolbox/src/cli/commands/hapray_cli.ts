@@ -14,9 +14,18 @@
  */
 
 import { Command } from 'commander';
-import { GlobalConfig } from '../../config/types';
+import type { GlobalConfig } from '../../config/types';
 import { initConfig, updateKindConfig } from '../../config';
 import { main } from '../../services/report/test_report';
+
+interface HapAnalyzerOptions {
+    input: string;
+    output: string;
+    choose: boolean;
+    disableDbtools: boolean;
+    kindConfig?: string;
+    compatibility: boolean;
+}
 
 export const DbtoolsCli = new Command('dbtools')
     .requiredOption('-i, --input <string>', 'scene test report path')
@@ -25,16 +34,16 @@ export const DbtoolsCli = new Command('dbtools')
     .option('-s, --soDir <string>', '--So_dir soDir', '')
     .option('-k, --kind-config <string>', 'custom kind configuration in JSON format')
     .option('--compatibility', 'start compatibility mode', false)
-    .action(async (...args: any[]) => {
-        let cliArgs: Partial<GlobalConfig> = { ...args[0] };
+    .action(async (options: HapAnalyzerOptions) => {
+        let cliArgs: Partial<GlobalConfig> = { ...options };
         initConfig(cliArgs, (config) => {
-            config.choose = args[0].choose;
-            config.inDbtools = !args[0].disableDbtools;
-            if (args[0].kindConfig) {
-                updateKindConfig(config, args[0].kindConfig);
+            config.choose = options.choose;
+            config.inDbtools = !options.disableDbtools;
+            if (options.kindConfig) {
+                updateKindConfig(config, options.kindConfig);
             }
-            config.compatibility = args[0].compatibility;
+            config.compatibility = options.compatibility;
         });
 
-        await main(args[0].input);
+        await main(options.input);
     });
