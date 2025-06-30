@@ -125,6 +125,7 @@ const ConfigSchema = z.object({
     soDir: z.string().default(''),
     choose: z.boolean().default(false),
     checkTraceDb: z.boolean().default(false),
+    compatibility: z.boolean().default(false),
 });
 
 function getExtToolsRoot(): string {

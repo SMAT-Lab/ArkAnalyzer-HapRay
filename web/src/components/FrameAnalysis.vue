@@ -3,7 +3,7 @@
         <div class="stats-cards">
             <div class="stat-card data-panel">
                 <div class="card-title">
-                    <i>📊</i> 总帧数
+                    <i>📊</i> 有效帧数
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
