@@ -1,13 +1,59 @@
-import type { FileDataItem } from "@/components/PerfFileTable.vue";
-import type { ProcessDataItem } from "@/components/PerfProcessTable.vue";
-import type { SymbolDataItem } from "@/components/PerfSymbolTable.vue";
-import type { ThreadDataItem } from "@/components/PerfThreadTable.vue";
-import { ComponentCategory, type JSONData } from "@/stores/jsonDataStore";
+import { ComponentCategory, type PerfData } from "@/stores/jsonDataStore";
 import pako from 'pako';
 
+// 定义数据类型接口
+export interface ProcessDataItem {
+  stepId: number
+  process: string
+  category: string
+  componentName: string
+  instructions: number
+  compareInstructions: number
+  increaseInstructions: number
+  increasePercentage: number
+}
+
+export interface ThreadDataItem {
+  stepId: number
+  process: string
+  category: string
+  componentName: string
+  thread: string
+  instructions: number
+  compareInstructions: number
+  increaseInstructions: number
+  increasePercentage: number
+}
+
+export interface FileDataItem {
+  stepId: number
+  process: string
+  category: string
+  componentName: string
+  thread: string
+  file: string
+  instructions: number
+  compareInstructions: number
+  increaseInstructions: number
+  increasePercentage: number
+}
+
+export interface SymbolDataItem {
+  stepId: number
+  process: string
+  category: string
+  componentName: string
+  thread: string
+  file: string
+  symbol: string
+  instructions: number
+  compareInstructions: number
+  increaseInstructions: number
+  increasePercentage: number
+}
 
 // 处理 JSON 数据生成steps饼状图所需数据
-export function processJson2PieChartData(jsonData: JSONData, currentStepIndex: number) {
+export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: number) {
     if (!jsonData) {
         return { legendData: [], seriesData: [] };
     }
@@ -53,7 +99,7 @@ export function processJson2PieChartData(jsonData: JSONData, currentStepIndex: n
 }
 
 // 处理 JSON 数据生成进程负载饼状图所需数据
-export function processJson2ProcessPieChartData(jsonData: JSONData, currentStepIndex: number) {
+export function processJson2ProcessPieChartData(jsonData: PerfData, currentStepIndex: number) {
     if (!jsonData) {
         return { legendData: [], seriesData: [] };
     }
@@ -101,18 +147,21 @@ type ResultCreator<T> = (keyParts: string[], instructions: number, compareInstru
 
 // 通用比较函数
 function compareJsonDataByLevel<T>(
-    baseData: JSONData,
-    compareData: JSONData | null,
+    baseData: PerfData,
+    compareData: PerfData | null,
     keyGenerator: KeyGenerator,
-    resultCreator: ResultCreator<T>
+    resultCreator: ResultCreator<T>,
+    ignoreStep: boolean = false
 ): T[] {
     // 处理单个JSON数据
-    const processData = (data: JSONData): Map<string, number> => {
+    const processData = (data: PerfData): Map<string, number> => {
         const map = new Map<string, number>();
 
         for (const step of data.steps) {
             for (const item of step.data) {
-                const key = keyGenerator(item, step.step_id);
+                const key = ignoreStep
+                    ? keyGenerator(item, 0) // stepId=0
+                    : keyGenerator(item, step.step_id);
                 const current = map.get(key) || 0;
                 map.set(key, current + item.symbolEvents);
             }
@@ -167,16 +216,18 @@ function compareJsonDataByLevel<T>(
 //process-thread-file-symbol
 // 进程级别比较
 export function calculateProcessData(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): ProcessDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${item.processName}`;
+        
+        ignoreStep ? `${item.processName}` : `${stepId}|${item.processName}`;
 
     const resultCreator: ResultCreator<ProcessDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: keyParts[1],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
             instructions,
@@ -185,98 +236,102 @@ export function calculateProcessData(
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
 // 线程级别比较
 export function calculateThreadData(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${item.processName}|${item.threadName}`;
+        ignoreStep ? `${item.processName}|${item.threadName}` : `${stepId}|${item.processName}|${item.threadName}`;
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: keyParts[1],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
-            thread: keyParts[2],
+            thread: ignoreStep ? keyParts[1] : keyParts[2],
             instructions,
             compareInstructions,
             increaseInstructions,
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
 // 文件级别比较
 export function calculateFileData(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${item.processName}|${item.threadName}|${item.file}`;
+        ignoreStep ? `${item.processName}|${item.threadName}|${item.file}` : `${stepId}|${item.processName}|${item.threadName}|${item.file}`;
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: keyParts[1],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
-            thread: keyParts[2],
-            file: keyParts[3],
+            thread: ignoreStep ? keyParts[1] : keyParts[2],
+            file: ignoreStep ? keyParts[2] : keyParts[3],
             instructions,
             compareInstructions,
             increaseInstructions,
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
 // 符号级别比较
 export function calculateSymbolData(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${item.processName}|${item.threadName}|${item.file}|${item.symbol}`;
+        ignoreStep ? `${item.processName}|${item.threadName}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${item.threadName}|${item.file}|${item.symbol}`;
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: keyParts[1],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
-            thread: keyParts[2],
-            file: keyParts[3],
-            symbol: keyParts[4],
+            thread: ignoreStep ? keyParts[1] : keyParts[2],
+            file: ignoreStep ? keyParts[2] : keyParts[3],
+            symbol: ignoreStep ? keyParts[3] : keyParts[4],
             instructions,
             compareInstructions,
             increaseInstructions,
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
 //category-componentName-file-symbol
 // 大分类级别比较
 export function calculateCategorysData(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): ProcessDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${ComponentCategory[item.componentCategory]}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}` : `${stepId}|${ComponentCategory[item.componentCategory]}`;
 
     const resultCreator: ResultCreator<ProcessDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: "",
-            category: keyParts[1],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
+            category: ignoreStep ? keyParts[0] : keyParts[1],
             componentName: "",
             instructions,
             compareInstructions,
@@ -284,92 +339,115 @@ export function calculateCategorysData(
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
 // 小分类级别比较
 export function calculateComponentNameData(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.componentName}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}`;
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: "",
-            category: keyParts[1],
-            componentName: keyParts[2],
-            thread: "",
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
+            category: ignoreStep ? keyParts[0] : keyParts[1],
+            componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            thread: ignoreStep ? keyParts[1] : keyParts[2],
             instructions,
             compareInstructions,
             increaseInstructions,
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 文件级别比较
+// 文件级别比较（按分类）
 export function calculateFileData1(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}`;
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: "",
-            category: keyParts[1],
-            componentName: keyParts[2],
-            thread: "",
-            file: keyParts[3],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
+            category: ignoreStep ? keyParts[0] : keyParts[1],
+            componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            thread: ignoreStep ? keyParts[1] : keyParts[2],
+            file: ignoreStep ? keyParts[2] : keyParts[3],
             instructions,
             compareInstructions,
             increaseInstructions,
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 符号级别比较
+// 符号级别比较（按分类）
 export function calculateSymbolData1(
-    baseData: JSONData,
-    compareData: JSONData | null
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}|${item.symbol}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}|${item.symbol}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}|${item.symbol}`;
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
-            stepId: parseInt(keyParts[0], 10),
-            process: "",
-            category: keyParts[1],
-            componentName: keyParts[2],
-            thread: "",
-            file: keyParts[3],
-            symbol: keyParts[4],
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: ignoreStep ? keyParts[0] : keyParts[1],
+            category: ignoreStep ? keyParts[0] : keyParts[1],
+            componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            thread: ignoreStep ? keyParts[1] : keyParts[2],
+            file: ignoreStep ? keyParts[2] : keyParts[3],
+            symbol: ignoreStep ? keyParts[3] : keyParts[4],
             instructions,
             compareInstructions,
             increaseInstructions,
             increasePercentage,
         });
 
-    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator);
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
 
-export function changeBase64Str2Json(base64String:string) {
-    if(base64String=='/tempCompareJsonData/'){
+export function changeBase64Str2Json(base64String: string) {
+    if (base64String == '/tempCompareJsonData/') {
         return '/tempCompareJsonData/';
     }
-    const compressed = atob(base64String);
-    const uint8Array = new Uint8Array([...compressed].map(c => c.charCodeAt(0)));
-    const jsonString = pako.inflate(uint8Array, { to: 'string' });
-    const jsonData = JSON.parse(jsonString);
-    return jsonData;
+    if (isBase64(base64String)) {
+        const compressed = atob(base64String);
+        const uint8Array = new Uint8Array([...compressed].map(c => c.charCodeAt(0)));
+        const jsonString = pako.inflate(uint8Array, { to: 'string' });
+        const jsonData = JSON.parse(jsonString);
+        return jsonData;
+    }else{
+        return JSON.parse(base64String);
+    }
+
+}
+
+
+function isBase64(str: string) {
+    // 标准 Base64 正则（包含 = 填充符）
+    const base64Regex = /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;
+
+    // URL安全的 Base64 正则（支持 -_ 替代 +/）
+    const base64UrlRegex = /^([A-Za-z0-9\-_]{4})*([A-Za-z0-9\-_]{3}=?|[A-Za-z0-9\-_]{2}(==)?)?$/;
+
+    // 检查长度是否为4的倍数
+    if (str.length % 4 !== 0) return false;
+
+    // 检查是否匹配任一模式
+    return base64Regex.test(str) || base64UrlRegex.test(str);
 }

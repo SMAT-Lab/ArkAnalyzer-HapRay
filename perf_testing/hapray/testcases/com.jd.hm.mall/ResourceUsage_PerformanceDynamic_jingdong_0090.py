@@ -2,12 +2,11 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
@@ -30,7 +29,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         self.source_screen_height = 2688
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -54,7 +53,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         self.driver.wait(5)
         time.sleep(3)
 
-        #点击搜索框
+        # 点击搜索框
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
             x=608,  # 原始x坐标
@@ -95,7 +94,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
         CommonUtils.swipes_up_load(self.driver, swip_num=1, sleep=2)
 
         def step1(driver):
-
             # 点击全部评价，等待2s
             self.driver.touch(BY.text('买家评价'))
             time.sleep(3)
@@ -105,9 +103,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0090(PerfTestCase):
             # Step('浏览全部评价，下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

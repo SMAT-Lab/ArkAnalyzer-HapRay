@@ -1,13 +1,28 @@
-from importlib.resources import files
-import yaml
-from typing import Any, Dict, Optional
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import os
 import threading
+from importlib.resources import files
+from typing import Any, Dict, Optional
+
+import yaml
 
 
 class ConfigError(Exception):
     """自定义配置异常"""
-    pass
 
 
 class ConfigObject:
@@ -56,6 +71,10 @@ class Config:
                     self.reload()
                     self._initialized = True
 
+    @property
+    def data(self):
+        return self._data
+
     def reload(self):
         """重新加载配置文件，合并默认配置和用户配置"""
         try:
@@ -72,9 +91,9 @@ class Config:
             self._data = ConfigObject(merged_config)
 
         except FileNotFoundError as e:
-            raise ConfigError(f"配置文件未找到: {str(e)}")
+            raise ConfigError(f"配置文件未找到: {str(e)}") from e
         except yaml.YAMLError as e:
-            raise ConfigError(f"YAML 解析错误: {str(e)}")
+            raise ConfigError(f"YAML 解析错误: {str(e)}") from e
 
     def _load_config(self, path) -> Dict:
         """加载YAML配置文件"""
@@ -86,8 +105,8 @@ class Config:
             else:
                 # 处理importlib.resources路径
                 return yaml.safe_load(path.read_text(encoding='utf-8'))
-        except FileNotFoundError:
-            raise FileNotFoundError(f"配置文件未找到: {str(path)}")
+        except FileNotFoundError as e:
+            raise ConfigError(f"配置文件未找到: {str(path)}") from e
 
     def __getattr__(self, name: str) -> Any:
         """通过属性访问配置项"""
@@ -117,7 +136,7 @@ class Config:
         if cls._instance is None:
             Config()
         keys = key_path.split('.')
-        value = cls._instance._data
+        value = cls._instance.data
         try:
             for key in keys:
                 value = getattr(value, key)
@@ -141,7 +160,7 @@ class Config:
 
         keys = key_path.split('.')
         # 更新配置对象
-        obj = cls._instance._data
+        obj = cls._instance.data
         for key in keys[:-1]:
             obj = getattr(obj, key)
         setattr(obj, keys[-1], value)

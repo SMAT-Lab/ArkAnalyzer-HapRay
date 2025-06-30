@@ -6,7 +6,7 @@
         <i class="fa"></i>负载分析
       </button>
       <button class="tab-button" :class="{ active: currentTab === 'tab2' }" @click="currentTab = 'tab2'">
-        <i class="fa"></i>卡顿帧分析
+        <i class="fa"></i>帧分析
       </button>
     </div>
   </div>
@@ -36,24 +36,24 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="scenePieData" />
+          <PieChart :chart-data="scenePieData" :title="pieChartTitle" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <BarChart :chart-data="json" />
+          <BarChart :chart-data="perfData" />
         </div>
       </el-col>
     </el-row>
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="json" :seriesType="LeftLineChartSeriesType" />
+          <LineChart :chartData="perfData" :seriesType="LeftLineChartSeriesType" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="json" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chartData="perfData" :seriesType="RightLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
@@ -69,6 +69,7 @@
         <div class="step-header">
           <span class="step-order">STEP 0</span>
           <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
+          <span class="step-duration">{{ formatEnergy(getTotalTestStepsCount(testSteps)) }}</span>
         </div>
         <div class="step-name">全部步骤</div>
       </div>
@@ -81,6 +82,7 @@
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
+          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
@@ -102,7 +104,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle" />
         </div>
         <!-- 进程负载 -->
         <!-- <div class="data-panel">
@@ -115,7 +117,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle" />
         </div>
       </el-col>
     </el-row>
@@ -197,18 +199,18 @@
       ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
-
+          <span class="step-duration">{{ formatDuration(step.count) }}</span>
+          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
       </div>
     </div>
-    <FrameAnalysis :step="currentStepIndex" :data="htraceJson" />
+    <FrameAnalysis :step="currentStepIndex" :data="frameData" />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, computed, toRaw } from 'vue';
-import PerfProcessTable from './PerfProcessTable.vue';
 import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
 import PerfSymbolTable from './PerfSymbolTable.vue';
@@ -218,7 +220,8 @@ import LineChart from './LineChart.vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
-import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData } from '@/utils/jsonUtil.ts';
+import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
+import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -228,13 +231,15 @@ const currentTab = ref('tab1');
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
-const json = jsonDataStore.jsonData;
+const basicInfo = jsonDataStore.basicInfo;
 
-const htraceJson = toRaw(jsonDataStore.htraceJsonData);
+const perfData = jsonDataStore.perfData;
+
+const frameData = jsonDataStore.frameData;
 console.log('从元素获取到的 JSON 数据:');
 
 const testSteps = ref(
-  json!.steps.map((step, index) => ({
+  perfData!.steps.map((step, index) => ({
     //从1开始
     id: index + 1,
     step_name: step.step_name,
@@ -255,46 +260,47 @@ const getTotalTestStepsCount = (testSteps: any[]) => {
 
 const performanceData = ref(
   {
-    app_name: json!.app_name,
-    rom_version: json!.rom_version,
-    app_version: json!.app_version,
-    scene: json!.scene,
+    app_name: basicInfo!.app_name,
+    rom_version: basicInfo!.rom_version,
+    app_version: basicInfo!.app_version,
+    scene: basicInfo!.scene,
   }
-);
-
-const mergedProcessPerformanceData = ref(
-  calculateProcessData(json!, null)
-);
-
-const mergedThreadPerformanceData = ref(
-  calculateThreadData(json!, null)
-);
-
-const mergedComponentNamePerformanceData = ref(
-  calculateComponentNameData(json!, null)
-);
-
-const mergedFilePerformanceData = ref(
-  calculateFileData(json!, null)
-);
-
-const mergedFilePerformanceData1 = ref(
-  calculateFileData1(json!, null)
-);
-
-const mergedSymbolsPerformanceData = ref(
-  calculateSymbolData(json!, null)
-);
-
-const mergedSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(json!, null)
 );
 
 const currentStepIndex = ref(0);
 
+// 动态聚合数据（根据步骤是否为0决定是否全局聚合）
+const mergedProcessPerformanceData = computed(() =>
+  calculateProcessData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedThreadPerformanceData = computed(() =>
+  calculateThreadData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedComponentNamePerformanceData = computed(() =>
+  calculateComponentNameData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedFilePerformanceData = computed(() =>
+  calculateFileData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedFilePerformanceData1 = computed(() =>
+  calculateFileData1(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedSymbolsPerformanceData = computed(() =>
+  calculateSymbolData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedSymbolsPerformanceData1 = computed(() =>
+  calculateSymbolData1(perfData!, null, currentStepIndex.value === 0)
+);
+
 // 格式化持续时间的方法
 const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
+};
+
+// 格式化功耗信息
+const formatEnergy = (milliseconds: any) => {
+  const energy = calculateEnergyConsumption(milliseconds);
+  return `核算功耗（mAs）：${energy}`;
 };
 
 const scenePieData = ref();
@@ -302,14 +308,14 @@ const scenePieData = ref();
 const stepPieData = ref();
 
 const processPieData = ref();
-
-scenePieData.value = processJson2PieChartData(json!, currentStepIndex.value);
-stepPieData.value = processJson2PieChartData(json!, currentStepIndex.value);
-processPieData.value = processJson2ProcessPieChartData(json!, currentStepIndex.value);
+const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
+scenePieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
+stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
+processPieData.value = processJson2ProcessPieChartData(perfData!, currentStepIndex.value);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: any) => {
   currentStepIndex.value = stepId;
-  stepPieData.value = processJson2PieChartData(json!, currentStepIndex.value);
+  stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据

@@ -6,11 +6,11 @@
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import type { PropType } from 'vue';
 import * as echarts from 'echarts';
-import { ComponentCategory, type JSONData } from '../stores/jsonDataStore.ts';
+import { ComponentCategory, type PerfData } from '../stores/jsonDataStore.ts';
 
 const props = defineProps({
   chartData: {
-    type: Object as PropType<JSONData | null>,
+    type: Object as PropType<PerfData | null>,
     required: true,
   },
   seriesType: {
@@ -23,7 +23,7 @@ const chartRef = ref<HTMLElement | null>(null);
 let myChart: echarts.ECharts | null = null;
 
 // 处理数据函数
-const processData = (data: JSONData | null, seriesType: string) => {
+const processData = (data: PerfData | null, seriesType: string) => {
   if (!data) {
     return {
       xData: [],
@@ -60,7 +60,7 @@ const processData = (data: JSONData | null, seriesType: string) => {
 
   // 构建series数据
   const legendData: string[] = [];
-  const series:{}[] = [];
+  const series: {}[] = [];
 
   categoryMap.forEach((values, category) => {
     // 检查该类别在所有步骤中是否都为0
@@ -68,11 +68,11 @@ const processData = (data: JSONData | null, seriesType: string) => {
 
     const categoryName = ComponentCategory[category];
     legendData.push(categoryName);
-    
+
     // 确保seriesType有效
     const validTypes = ['bar', 'line'];
     const type = validTypes.includes(seriesType) ? seriesType : 'bar';
-    
+
     series.push({
       name: categoryName,
       type: type,
@@ -92,10 +92,10 @@ const updateChart = () => {
   if (!myChart || !chartRef.value) return;
 
   const { xData, legendData, series } = processData(props.chartData, props.seriesType);
-
+  const title = props.chartData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
   const option = {
     title: {
-      text: '步骤负载：instructions',
+      text: '步骤负载：' + title,
       left: 'left',
       textStyle: { fontSize: 16 },
     },
@@ -137,9 +137,9 @@ onMounted(() => {
     const resizeHandler = () => {
       myChart?.resize();
     };
-    
+
     window.addEventListener('resize', resizeHandler);
-    
+
     // 保存引用以便正确移除监听器
     (myChart as any).__resizeHandler = resizeHandler;
   }
@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
     // 获取并移除resize监听器
     const resizeHandler = (myChart as any).__resizeHandler;
     window.removeEventListener('resize', resizeHandler);
-    
+
     myChart.dispose();
     myChart = null;
   }

@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
@@ -37,7 +37,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
         self.source_screen_height = 2720
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -120,7 +120,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
                 y=2551,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
-            )) # TODO 这里有坑，不同视屏，点赞/收藏/评论数不同，坐标会便宜
+            ))  # TODO 这里有坑，不同视屏，点赞/收藏/评论数不同，坐标会便宜
             time.sleep(1)
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
@@ -141,7 +141,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             # 点击弹出视频评论区
             driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=1047,   # 原始x坐标
+                x=1047,  # 原始x坐标
                 y=2552,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
@@ -151,10 +151,11 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             # 上滑5次
             for i in range(5):
                 CommonUtils.swipes_up_load(self.driver, 1, 2)
+
         def after_step3():
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=650,   # 原始x坐标
+                x=650,  # 原始x坐标
                 y=360,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
@@ -163,14 +164,14 @@ class ResourceUsage_PerformanceDynamic_xhs_0010(PerfTestCase):
             self.driver.swipe_to_back()
             time.sleep(1)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
         after_step1()
-        self.execute_step_with_perf_and_trace(2, step2, 30)
+        self.execute_performance_step(2, step2, 30)
         after_step2()
-        self.execute_step_with_perf_and_trace(3, step3, 20)
+        self.execute_performance_step(3, step3, 20)
         after_step3()
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

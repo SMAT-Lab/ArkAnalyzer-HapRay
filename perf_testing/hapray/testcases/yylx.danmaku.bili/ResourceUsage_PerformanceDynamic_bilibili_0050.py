@@ -5,7 +5,7 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
@@ -25,7 +25,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -42,11 +42,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
-
         def step1(driver):
             time.sleep(5)
-
-
 
         Step('启动被测应用')
         self.driver.start_app(self.app_package, self._activityName)
@@ -59,17 +56,14 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         self.driver.touch(BY.text('哔哩哔哩王者荣耀赛事'))
         time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 5)
+        self.execute_performance_step(1, step1, 5)
 
         # 侧滑2次返回哔哩哔哩首页
         for i in range(2):
             self.driver.swipe_to_back()
             time.sleep(1)
 
-
-
-
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
@@ -42,7 +42,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -70,7 +70,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
             # 评论区上滑10次
             for i in range(10):
                 # CommonUtils.swipe(driver.device_sn, 703, 2471, 703, 1471)
-                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271) # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271)  # Mate70 Mate60Pro
                 time.sleep(2)
 
             # 评论区下滑10次
@@ -90,7 +90,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
 
             # 2. 点击全屏按钮，等待1s
             # driver.touch((1232, 770))
-            driver.touch((1144, 709)) #Mate70 Mate60Pro
+            driver.touch((1144, 709))  # Mate70 Mate60Pro
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -105,7 +105,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
 
             # 2. 点击关闭弹幕，等待1s
             # driver.touch((557, 1210))
-            driver.touch((526, 1125)) # Mate70 Mate60Pro
+            driver.touch((526, 1125))  # Mate70 Mate60Pro
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -141,7 +141,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         self.driver.touch((600, 500))
         time.sleep(1)
         # self.driver.touch((68, 776))
-        self.driver.touch((71, 709)) # Mate70 Mate60Pro
+        self.driver.touch((71, 709))  # Mate70 Mate60Pro
         time.sleep(1)
 
         # 点击到视频00分00秒
@@ -156,16 +156,16 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         time.sleep(1)
 
         # 视频播放30s
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
         # 点击评论
         self.driver.touch(BY.text('评论'))
         time.sleep(3)
-        self.execute_step_with_perf_and_trace(2, step2, 60)
-        self.execute_step_with_perf_and_trace(3, step3, 40)
-        self.execute_step_with_perf_and_trace(4, step4, 40)
-        self.execute_step_with_perf_and_trace(5, step5, 30)
+        self.execute_performance_step(2, step2, 60)
+        self.execute_performance_step(3, step3, 40)
+        self.execute_performance_step(4, step4, 40)
+        self.execute_performance_step(5, step5, 30)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

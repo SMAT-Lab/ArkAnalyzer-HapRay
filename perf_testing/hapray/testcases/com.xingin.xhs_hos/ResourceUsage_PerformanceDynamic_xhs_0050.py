@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
@@ -29,7 +29,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
         self.source_screen_height = 2720
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -52,7 +52,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-
         def step1(driver):
             Step('1. 查看图片及发布笔记')
             # 首页点击 ”+“
@@ -71,7 +70,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
             # 下滑3次，停留2s
             for i in range(3):
                 CommonUtils.swipes_down_load(driver, 1, 2, 300)
-
 
             # 点击第一张照片大图查看
             driver.touch(CoordinateAdapter.convert_coordinate(
@@ -112,7 +110,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
             driver.touch(component)
             time.sleep(1)
 
-        self.execute_step_with_perf_and_trace(1, step1, 40)
+        self.execute_performance_step(1, step1, 40)
         # 侧滑两次返回
         self.driver.swipe_to_back()
         time.sleep(1)
@@ -124,8 +122,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
         self.driver.swipe_to_back()
         time.sleep(1)
 
-
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()
