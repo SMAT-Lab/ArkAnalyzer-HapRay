@@ -11,7 +11,9 @@
   ],
   "scripts": {
     "build": "npm run build --ws",
-    "release": "npm pack --ws"
+    "release": "npm pack --ws",
+    "lint": "npm run lint --ws",
+    "test": "npm run test -w perf_testing"
   },
   "repository": {
     "type": "git",

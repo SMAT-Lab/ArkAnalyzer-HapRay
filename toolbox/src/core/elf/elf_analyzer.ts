@@ -16,7 +16,8 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
-import { ELF, parseELF } from './elfy';
+import type { ELF } from './elfy';
+import { parseELF } from './elfy';
 import { getAllFiles } from '../../utils/file_utils';
 import initSqlJs from 'sql.js';
 import { demangle } from './demangle';
@@ -29,18 +30,15 @@ export interface InvokeSymbol {
 }
 
 export class ElfAnalyzer {
-    private static instance: ElfAnalyzer;
+    private static instance: ElfAnalyzer | undefined;
 
     private constructor() {}
 
     public static getInstance(): ElfAnalyzer {
-        if (!this.instance) {
-            this.instance = new ElfAnalyzer();
-        }
-        return this.instance;
+        return (this.instance ??= new ElfAnalyzer());
     }
 
-    public async getSymbols(filePath: string): Promise<{ exports: string[]; imports: string[] }> {
+    public async getSymbols(filePath: string): Promise<{ exports: Array<string>; imports: Array<string> }> {
         let file = path.basename(filePath);
         const elfBuffer = fs.readFileSync(filePath);
         let elf: ELF;
@@ -53,8 +51,8 @@ export class ElfAnalyzer {
         }
 
         // Initialize export and import lists
-        const exportedSymbols: string[] = [];
-        const importedSymbols: string[] = [];
+        const exportedSymbols: Array<string> = [];
+        const importedSymbols: Array<string> = [];
 
         // Extract exported symbols from .dynsym
         if (elf.body.symbols) {
@@ -81,8 +79,12 @@ export class ElfAnalyzer {
         return { exports: exportedSymbols, imports: importedSymbols };
     }
 
-    public async getInvokeSymbols(filePath: string, perfPath: string, cache_file: string): Promise<InvokeSymbol[]> {
-        let result: InvokeSymbol[] = [];
+    public async getInvokeSymbols(
+        filePath: string,
+        perfPath: string,
+        cache_file: string
+    ): Promise<Array<InvokeSymbol>> {
+        let result: Array<InvokeSymbol> = [];
 
         let perfFiles = getAllFiles(perfPath, { exts: ['.db'] }).filter((value) => {
             let hiperf = path.dirname(path.dirname(value));
@@ -105,10 +107,10 @@ export class ElfAnalyzer {
         }
 
         logger.info(`${filePath} parse symbols from perf ${Array.from(invokeSymbols.values()).join('\n')}`);
-        let exports: string[] = [];
+        let exports: Array<string> = [];
         // read from cache
         if (fs.existsSync(cache_file)) {
-            let data = JSON.parse(fs.readFileSync(cache_file, { encoding: 'utf-8' }));
+            let data = JSON.parse(fs.readFileSync(cache_file, { encoding: 'utf-8' })) as Array<{ symbol: string }>;
             for (const item of data) {
                 exports.push(item.symbol);
             }

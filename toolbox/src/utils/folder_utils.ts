@@ -19,11 +19,11 @@ import * as path from 'path';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
-export function getFirstLevelFolders(dirPath: string): string[] {
+export function getFirstLevelFolders(dirPath: string): Array<string> {
     try {
         // 读取指定目录下的所有文件和文件夹
         const items = fs.readdirSync(dirPath);
-        const folders: string[] = [];
+        const folders: Array<string> = [];
 
         for (const item of items) {
             // 拼接完整路径
@@ -43,8 +43,8 @@ export function getFirstLevelFolders(dirPath: string): string[] {
     }
 }
 
-export function getSceneRoundsFolders(sceneDir: string): string[] {
-    let sceneRoundsFolders: string[] = [];
+export function getSceneRoundsFolders(sceneDir: string): Array<string> {
+    let sceneRoundsFolders: Array<string> = [];
     if (fs.existsSync(sceneDir) && checkPerfData(sceneDir)) {
         sceneRoundsFolders.push(sceneDir);
     } else {
@@ -58,12 +58,12 @@ export function getSceneRoundsFolders(sceneDir: string): string[] {
     return sceneRoundsFolders;
 }
 
-export function checkPerfData(dir: string) {
+export function checkPerfData(dir: string): boolean {
     let hasPerfData = true;
     const hiperfDir = path.join(dir, 'hiperf');
     const stepDirs = getFirstLevelFolders(hiperfDir);
     if (stepDirs.length !== 0) {
-        stepDirs.forEach((stepDir, idx) => {
+        stepDirs.forEach((stepDir) => {
             const perfDataPath = path.join(stepDir, 'perf.data');
             if (!fs.existsSync(perfDataPath)) {
                 hasPerfData = false;
@@ -79,7 +79,7 @@ export function checkPerfData(dir: string) {
  * 递归创建目录
  */
 async function ensureDirectoryExists(dirPath: string): Promise<void> {
-    if (fs.existsSync(dirPath)) return;
+    if (fs.existsSync(dirPath)) {return;}
 
     await ensureDirectoryExists(path.dirname(dirPath));
     await fs.promises.mkdir(dirPath);
@@ -120,7 +120,7 @@ export async function copyDirectory(sourceDir: string, targetDir: string, option
 
         const stats = await fs.promises.stat(sourcePath);
         const shouldCopy = await filter(sourcePath, stats);
-        if (!shouldCopy) continue;
+        if (!shouldCopy) {continue;}
 
         if (stats.isDirectory()) {
             await copyDirectory(sourcePath, targetPath, options);
@@ -166,7 +166,7 @@ export async function checkPerfFiles(dirPath: string, summaryCount: number): Pro
     let hiperfDataCount = 0;
     const hiperfDir = path.join(dirPath, 'hiperf');
     const hiperfStepDirs = getFirstLevelFolders(hiperfDir);
-    hiperfStepDirs.forEach((hiperfStepDir, idx) => {
+    hiperfStepDirs.forEach((hiperfStepDir) => {
         const perfDataPath = path.join(hiperfStepDir, 'perf.data');
         if (fs.existsSync(perfDataPath)) {
             hiperfDataCount++;

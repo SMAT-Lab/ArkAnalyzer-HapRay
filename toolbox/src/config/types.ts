@@ -28,25 +28,25 @@ export const OSPlatformMap: Map<string, OSPlatform> = new Map([
 export interface Ohpm {
     name: string;
     version: string;
-    versions: string[];
+    versions: Array<string>;
     main?: string;
     module?: string;
     types?: string;
-    files?: string[];
-    so?: string[];
+    files?: Array<string>;
+    so?: Array<string>;
     filesSet?: Set<string>;
 }
 
 export interface SubComponentConfig {
     name?: string;
-    files: string[];
-    threads?: string[];
+    files: Array<string>;
+    threads?: Array<string>;
 }
 
 export interface ComponentConfig {
     name: string;
     kind: number;
-    components: SubComponentConfig[];
+    components: Array<SubComponentConfig>;
 }
 
 export interface SoOriginal {
@@ -62,7 +62,41 @@ export interface SoOriginal {
 export interface SymbolSplit {
     source_file: string;
     new_file: string;
-    filter_symbols: string[];
+    filter_symbols: Array<string>;
+}
+
+export interface ProcessClassify {
+    dfx_symbols: Array<string>;
+    compute_files: Array<string>;
+    process: Record<
+        string, // domain
+        Record<
+            string, // subSystem
+            Record<
+                string, // component
+                {
+                    Android_Process: Array<string>;
+                    Harmony_Process: Array<string>;
+                    IOS_Process: Array<string>;
+                }
+            >
+        >
+    >;
+    process_special: Record<
+        string, // domain
+        Record<
+            string, // subSystem
+            Record<
+                string, // component
+                {
+                    scene: string;
+                    Android_Process: Array<string>;
+                    Harmony_Process: Array<string>;
+                    IOS_Process: Array<string>;
+                }
+            >
+        >
+    >;
 }
 
 export interface GlobalConfig {
@@ -70,48 +104,16 @@ export interface GlobalConfig {
         onlineIdentifyThirdPart: boolean;
         reSo: boolean;
         reAbc: boolean;
-        ohpm: Ohpm[];
-        npm: Ohpm[];
-        invalidNpm: string[];
+        ohpm: Array<Ohpm>;
+        npm: Array<Ohpm>;
+        invalidNpm: Array<string>;
     };
 
     perf: {
-        kinds: ComponentConfig[];
-        symbolSplitRules: SymbolSplit[];
+        kinds: Array<ComponentConfig>;
+        symbolSplitRules: Array<SymbolSplit>;
         soOrigins: Map<string, SoOriginal>;
-        classify: {
-            dfx_symbols: string[];
-            compute_files: string[];
-            process: Record<
-                string, // domain
-                Record<
-                    string, // subSystem
-                    Record<
-                        string, // component
-                        {
-                            Android_Process: string[];
-                            Harmony_Process: string[];
-                            IOS_Process: string[];
-                        }
-                    >
-                >
-            >;
-            process_special: Record<
-                string, // domain
-                Record<
-                    string, // subSystem
-                    Record<
-                        string, // component
-                        {
-                            scene: string;
-                            Android_Process: string[];
-                            Harmony_Process: string[];
-                            IOS_Process: string[];
-                        }
-                    >
-                >
-            >;
-        };
+        classify: ProcessClassify;
     };
 
     save: {
@@ -120,7 +122,7 @@ export interface GlobalConfig {
     inDbtools: boolean;
     jobs: number;
     input: string;
-    fuzzy: string[];
+    fuzzy: Array<string>;
     output: string;
     extToolsPath: string;
     soDir: string;
