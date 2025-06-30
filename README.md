@@ -78,7 +78,7 @@ Options:
 - `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
 - `--perf <path>`: SIMPLE mode need perf path
 - `--trace <path>`: SIMPLE mode need trace path
-- `--package_name <package_name>`: SIMPLE mode need package_name
+- `--package-name <package_name>`: SIMPLE mode need package_name
 - `--pids <N+>`: SIMPLE mode optional pids
 
 Example:
@@ -91,7 +91,7 @@ python -m scripts.main update --report_dir reports/20240605120000 --so_dir updat
 python -m scripts.main update --report_dir reports/20240605120000
 
 # SIMPLE mode
-python -m scripts.main update --reports/20240605120000 --mode 2 --perf perf.data --trace trace.htrace --package_name com.jd.hm.mall --pids 1 2 3
+python -m scripts.main update --reports/20240605120000 --mode 2 --perf perf.data --trace trace.htrace --package-name com.jd.hm.mall --pids 1 2 3
 
 ```
 

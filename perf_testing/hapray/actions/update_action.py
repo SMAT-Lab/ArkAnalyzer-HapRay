@@ -56,7 +56,10 @@ class UpdateAction:
             "--mode",
             type=int,
             default=Config.MODE_COMMUNITY,
-            help=f"select mode {Config.MODE_COMMUNITY} COMMUNITY {Config.MODE_COMPATIBILITY} COMPATIBILITY {Config.MODE_SIMPLE} SIMPLE",
+            help=f"select mode "
+                 f"{Config.MODE_COMMUNITY} COMMUNITY "
+                 f"{Config.MODE_COMPATIBILITY} COMPATIBILITY "
+                 f"{Config.MODE_SIMPLE} SIMPLE",
         )
         parser.add_argument(
             "--perf",
@@ -69,7 +72,7 @@ class UpdateAction:
             help="SIMPLE mode need trace path",
         )
         parser.add_argument(
-            "--package_name",
+            "--package-name",
             default="",
             help="SIMPLE mode need package name",
         )
@@ -94,15 +97,15 @@ class UpdateAction:
             perf_path = parsed_args.perf
             trace_path = parsed_args.trace
             pids = parsed_args.pids
-            
+
             if not perf_path or not trace_path:
                 logging.error("SIMPLE mode requires both --perf and --trace parameters")
                 return
-                
+
             if not parsed_args.package_name:
                 logging.error("SIMPLE mode requires --package_name parameter")
                 return
-                
+
             package_name = parsed_args.package_name
             timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             report_dir = os.path.join(report_dir, timestamp)

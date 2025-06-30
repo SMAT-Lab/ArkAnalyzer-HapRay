@@ -125,8 +125,9 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
         perf_conn = sqlite3.connect(target_db_file)
         try:
             # 获取所有perf样本
-            perf_query = "SELECT distinct process_id,thread_name FROM perf_thread where thread_name like \'%{0}%\'".format(
-                package_name)
+            perf_query = (
+                "SELECT distinct process_id,thread_name FROM perf_thread where thread_name like \'%{0}%\'".format(
+                    package_name))
             perf_pids = pd.read_sql_query(perf_query, perf_conn)
             for index, row in perf_pids.iterrows():
                 result["pids"].append(row['process_id'])

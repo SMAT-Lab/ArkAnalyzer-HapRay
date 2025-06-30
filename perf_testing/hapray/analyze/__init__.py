@@ -154,7 +154,6 @@ def _process_single_step(
         analyzers: List[BaseAnalyzer]
 ):
     """Process a single step directory with all analyzers.
-    
     Args:
         step_dir: Step directory name
         scene_dir: Root scene directory
@@ -208,4 +207,3 @@ def _finalize_analyzers(analyzers: List[BaseAnalyzer]):
             logging.info("Report generated for %s", type(analyzer).__name__)
         except Exception as e:
             logging.error("Failed to generate report for %s: %s", type(analyzer).__name__, str(e))
-
