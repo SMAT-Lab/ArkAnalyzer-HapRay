@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
-import { GlobalConfig, Ohpm } from './types';
+import type { ComponentConfig, GlobalConfig, Ohpm, ProcessClassify, SoOriginal, SymbolSplit } from './types';
 
 const ConfigSchema = z.object({
     analysis: z.object({
@@ -145,26 +145,58 @@ function loadResCfg(): Partial<GlobalConfig> {
         res = path.join(__dirname, '../../res');
     }
 
-    const config: Record<string, any> = {
-        analysis: { reSo: false, reAbc: false },
-        perf: { classify: { process: {} } },
-        save: {},
+    const config: GlobalConfig = {
+        analysis: {
+            onlineIdentifyThirdPart: false,
+            reSo: false,
+            reAbc: false,
+            ohpm: [],
+            npm: [],
+            invalidNpm: [],
+        },
+        perf: {
+            kinds: [],
+            symbolSplitRules: [],
+            soOrigins: new Map(),
+            classify: {
+                process: {},
+                process_special: {},
+                dfx_symbols: [],
+                compute_files: [],
+            },
+        },
+        save: {
+            callchain: false,
+        },
+        inDbtools: false,
+        jobs: 4,
+        input: '',
+        fuzzy: [],
+        output: 'output',
+        extToolsPath: '',
+        osPlatform: 0,
+        soDir: '',
+        choose: false,
+        checkTraceDb: false,
+        compatibility: false,
     };
     let perfKind = path.join(res, 'perf/kind.json');
-    config['perf']['kinds'] = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' }));
-    config['perf']['symbolSplitRules'] = JSON.parse(
+    config.perf.kinds = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' })) as Array<ComponentConfig>;
+    config.perf.symbolSplitRules = JSON.parse(
         fs.readFileSync(path.join(res, 'perf/symbol_split.json'), { encoding: 'utf-8' })
-    );
+    ) as Array<SymbolSplit>;
     let soOriginCfg = path.join(res, 'so/standardized_origins.json');
     if (fs.existsSync(soOriginCfg)) {
-        config['perf']['soOrigins'] = new Map(
-            Object.entries(JSON.parse(fs.readFileSync(soOriginCfg, { encoding: 'utf-8' })))
+        config.perf.soOrigins = new Map(
+            Object.entries(
+                JSON.parse(fs.readFileSync(soOriginCfg, { encoding: 'utf-8' })) as Record<string, SoOriginal>
+            )
         );
     }
 
     let classifyCfg = path.join(res, 'perf/classify.json');
     if (fs.existsSync(classifyCfg)) {
-        config.perf.classify = JSON.parse(fs.readFileSync(classifyCfg, { encoding: 'utf-8' }));
+        config.perf.classify = JSON.parse(fs.readFileSync(classifyCfg, { encoding: 'utf-8' })) as ProcessClassify;
     }
 
     let ohpmCfg = path.join(res, 'ohpm/ohpm.json');
@@ -180,7 +212,9 @@ function loadResCfg(): Partial<GlobalConfig> {
     }
 
     if (fs.existsSync(invalidNpmCfg)) {
-        config['analysis']['invalidNpm'] = JSON.parse(fs.readFileSync(invalidNpmCfg, { encoding: 'utf-8' }));
+        config['analysis']['invalidNpm'] = JSON.parse(
+            fs.readFileSync(invalidNpmCfg, { encoding: 'utf-8' })
+        ) as Array<string>;
     }
 
     config['extToolsPath'] = getExtToolsRoot();

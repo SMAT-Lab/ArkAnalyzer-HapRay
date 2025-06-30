@@ -17,13 +17,14 @@ import fs from 'fs';
 import path from 'path';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { PerfAnalyzer, Step } from '../../core/perf/perf_analyzer';
+import type { Step } from '../../core/perf/perf_analyzer';
+import { PerfAnalyzer } from '../../core/perf/perf_analyzer';
 import { getConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { saveJsonArray } from '../../utils/json_utils';
-import { Round, TestSceneInfo as PerfTestSceneInfo, TestStepGroup } from '../../core/perf/perf_analyzer_base';
-import { GlobalConfig } from '../../config/types';
+import type { Round, TestSceneInfo as PerfTestSceneInfo, TestStepGroup } from '../../core/perf/perf_analyzer_base';
+import type { GlobalConfig } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -54,7 +55,7 @@ export interface RoundInfo {
     count: number;
 }
 
-export type Steps = Step[];
+export type Steps = Array<Step>;
 
 // ===================== 主流程入口 =====================
 /**
@@ -117,10 +118,8 @@ async function handleGeneratePerfReport(input: string, scene: string, config: Gl
  * 加载步骤信息
  */
 async function loadSteps(basePath: string): Promise<Steps> {
-
     const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
     return await loadJsonFile<Steps>(stepsJsonPath);
-
 }
 
 /**
@@ -130,24 +129,34 @@ async function loadTestReportInfo(input: string, scene: string, config: GlobalCo
     if (config.compatibility) {
         return loadCompatibilityTestReportInfo(input, scene);
     } else {
-        return await loadStandardTestReportInfo(input, scene);
+        return await loadStandardTestReportInfo(input);
     }
 }
 
 /**
  * 加载标准模式的测试报告信息
  */
-async function loadStandardTestReportInfo(input: string, scene: string): Promise<TestReportInfo> {
+async function loadStandardTestReportInfo(input: string): Promise<TestReportInfo> {
     const testInfoPath = path.join(input, 'testInfo.json');
-    const testInfo = await loadJsonFile<any>(testInfoPath);
+    const testInfo = await loadJsonFile<{
+        app_id: string;
+        app_name: string;
+        app_version: string;
+        scene: string;
+        timestamp: number;
+        device?: {
+            version: string;
+            sn: string;
+        };
+    }>(testInfoPath);
     return {
-        app_id: testInfo.app_id || '',
-        app_name: testInfo.app_name || '',
-        app_version: testInfo.app_version || '',
-        scene: testInfo.scene || '',
-        timestamp: testInfo.timestamp || 0,
-        rom_version: testInfo.device?.version || '',
-        device_sn: testInfo.device?.sn || '',
+        app_id: testInfo.app_id,
+        app_name: testInfo.app_name,
+        app_version: testInfo.app_version,
+        scene: testInfo.scene,
+        timestamp: testInfo.timestamp,
+        rom_version: testInfo.device?.version ?? '',
+        device_sn: testInfo.device?.sn ?? '',
     };
 }
 
@@ -156,28 +165,32 @@ async function loadStandardTestReportInfo(input: string, scene: string): Promise
 /** 加载 JSON 文件 */
 export async function loadJsonFile<T>(filePath: string): Promise<T> {
     const rawData = await fs.promises.readFile(filePath, 'utf8');
-    return JSON.parse(rawData);
+    return JSON.parse(rawData) as T;
 }
 
 // ---- 轮次处理相关 ----
 /**
  * 处理轮次选择逻辑
  */
-export async function processRoundSelection(roundFolders: string[], steps: Steps, inputPath: string): Promise<RoundInfo[]> {
-    let roundInfos: RoundInfo[] = [];
+export async function processRoundSelection(
+    roundFolders: Array<string>,
+    steps: Steps,
+    inputPath: string
+): Promise<Array<RoundInfo>> {
+    let roundInfos: Array<RoundInfo> = [];
 
     await copyStandardFiles(roundFolders[0], inputPath);
 
-    for (let i = 0; i < steps.length; i++) {
-        const roundResults = await calculateRoundResults(roundFolders, steps[i]);
+    for (const step of steps) {
+        const roundResults = await calculateRoundResults(roundFolders, step);
         const selectedRound = selectOptimalRound(roundResults);
         const roundInfo: RoundInfo = {
-            step_id: steps[i].stepIdx,
+            step_id: step.stepIdx,
             round: selectedRound,
-            count: roundResults[selectedRound]
+            count: roundResults[selectedRound],
         };
         roundInfos.push(roundInfo);
-        await copySelectedRoundData(roundFolders[selectedRound], inputPath, steps[i]);
+        await copySelectedRoundData(roundFolders[selectedRound], inputPath, step);
     }
     return roundInfos;
 }
@@ -196,8 +209,8 @@ async function copyStandardFiles(sourceRound: string, inputPath: string): Promis
 /**
  * 计算每轮的结果
  */
-export async function calculateRoundResults(roundFolders: string[], step: Step): Promise<number[]> {
-    const results: number[] = [];
+export async function calculateRoundResults(roundFolders: Array<string>, step: Step): Promise<Array<number>> {
+    const results: Array<number> = [];
     const perfAnalyzer = new PerfAnalyzer('');
 
     for (let index = 0; index < roundFolders.length; index++) {
@@ -223,8 +236,10 @@ export async function calculateRoundResults(roundFolders: string[], step: Step):
 /**
  * 选择最佳轮次
  */
-export function selectOptimalRound(results: number[]): number {
-    if (results.length < 3) return 0;
+export function selectOptimalRound(results: Array<number>): number {
+    if (results.length < 3) {
+        return 0;
+    }
 
     const max = Math.max(...results);
     const min = Math.min(...results);
@@ -235,7 +250,9 @@ export function selectOptimalRound(results: number[]): number {
     let minDiff = Number.MAX_SAFE_INTEGER;
 
     results.forEach((value, index) => {
-        if (value === max || value === min) return;
+        if (value === max || value === min) {
+            return;
+        }
 
         const diff = Math.abs(value - avg);
         if (diff < minDiff) {
@@ -275,13 +292,13 @@ export async function generateSummaryInfoJson(
     input: string,
     testInfo: TestReportInfo,
     steps: Steps,
-    roundInfos: RoundInfo[]
+    roundInfos: Array<RoundInfo>
 ): Promise<void> {
     const outputDir = path.join(input, 'report');
-    let summaryJsonObject: SummaryInfo[] = [];
+    let summaryJsonObject: Array<SummaryInfo> = [];
 
     steps.forEach((step) => {
-        const roundInfo = roundInfos.find(round => round.step_id === step.stepIdx);
+        const roundInfo = roundInfos.find((round) => round.step_id === step.stepIdx);
         if (!roundInfo) {
             logger.warn(`未找到步骤 ${step.stepIdx} 的轮次信息`);
             return;
@@ -305,11 +322,7 @@ export async function generateSummaryInfoJson(
 /**
  * 生成性能分析报告
  */
-export async function generatePerfJson(
-    inputPath: string,
-    testInfo: TestReportInfo,
-    steps: Steps,
-): Promise<void> {
+export async function generatePerfJson(inputPath: string, testInfo: TestReportInfo, steps: Steps): Promise<void> {
     const outputDir = path.join(inputPath, 'report');
     const perfDataPaths = getPerfDataPaths(inputPath, steps);
     const perfDbPaths = getPerfDbPaths(inputPath, steps);
@@ -342,14 +355,13 @@ export async function generatePerfJson(
 
     testSceneInfo.rounds.push(round);
     await perfAnalyzer.analyze(testSceneInfo, outputDir);
-    perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
+    await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
 }
-
 
 /**
  * 获取 perf.data 路径数组（根据兼容性配置选择格式）
  */
-export function getPerfDataPaths(inputPath: string, steps: Steps): string[] {
+export function getPerfDataPaths(inputPath: string, steps: Steps): Array<string> {
     return steps.map((step) => {
         const stepDir = path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`);
         // 格式：perf.data
@@ -367,7 +379,7 @@ export function getPerfDataPaths(inputPath: string, steps: Steps): string[] {
 /**
  * 获取 perf.db 路径数组（根据兼容性配置选择格式）
  */
-export function getPerfDbPaths(inputPath: string, steps: Steps): string[] {
+export function getPerfDbPaths(inputPath: string, steps: Steps): Array<string> {
     return steps.map((step) => {
         const stepDir = path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`);
         // 格式：perf.db
@@ -384,7 +396,7 @@ export function getPerfDbPaths(inputPath: string, steps: Steps): string[] {
 /**
  * 获取 trace.htrace 路径数组（根据兼容性配置选择格式）
  */
-export function getHtracePaths(inputPath: string, steps: Steps): string[] {
+export function getHtracePaths(inputPath: string, steps: Steps): Array<string> {
     return steps.map((step) => {
         const stepDir = path.join(inputPath, 'htrace', `step${step.stepIdx.toString()}`);
         // 格式：trace.htrace
@@ -438,7 +450,7 @@ export function loadCompatibilityTestReportInfo(reportRoot: string, scene: strin
                         .replace(/^\[+/, '')
                         .replace(/]+$/, '')
                         .replace(/\\"/g, '"')
-                );
+                ) as {version: string; sn: string} ;
 
                 const starttime = new Date(starttimeStr);
                 info.rom_version = devices.version;
@@ -454,7 +466,7 @@ export function loadCompatibilityTestReportInfo(reportRoot: string, scene: strin
     let deviceInfoFile = path.join(reportRoot, 'env/device_info.json');
     try {
         if (fs.existsSync(deviceInfoFile)) {
-            let deviceInfo = JSON.parse(fs.readFileSync(deviceInfoFile, 'utf-8'));
+            let deviceInfo = JSON.parse(fs.readFileSync(deviceInfoFile, 'utf-8')) as {PackageName: string, App_Version: string};
             info.app_id = deviceInfo.PackageName;
             info.app_version = deviceInfo.App_Version;
         }

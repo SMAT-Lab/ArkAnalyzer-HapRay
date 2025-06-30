@@ -21,7 +21,7 @@ export interface Project {
     bundleName: string;
     versionName: string;
     versionId: string;
-    scenes: string[];
+    scenes: Array<string>;
 }
 
 export const PROJECT_ROOT = '.arkanalyzer';
@@ -62,7 +62,7 @@ export class AnalyzerProjectBase {
 
         const projectFile = path.join(this.projectRoot, PROJECT_FILE);
         if (fs.existsSync(projectFile)) {
-            this.project = JSON.parse(fs.readFileSync(projectFile, { encoding: 'utf-8' }));
+            this.project = JSON.parse(fs.readFileSync(projectFile, { encoding: 'utf-8' })) as Project;
         }
     }
 
