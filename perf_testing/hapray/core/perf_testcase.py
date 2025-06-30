@@ -118,6 +118,10 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
 CONFIG"""
 
 
+class ConnectedException(Exception):
+    pass
+
+
 class PerfTestCase(TestCase, ABC):
     """Base class for performance test cases with trace collection support"""
 
@@ -189,6 +193,44 @@ class PerfTestCase(TestCase, ABC):
         steps_info = self._collect_step_information()
         self._save_steps_info(steps_info)
         self._save_test_metadata()
+
+    def set_device_redundant_mode(self):
+        # 设置hdc参数
+        Log.info('设置hdc参数: persist.ark.properties 0x200105c')
+        os.system('hdc shell param set persist.ark.properties 0x200105c')
+
+    def reboot_device(self):
+        # 重启手机
+        Log.info('重启手机')
+        os.system('hdc shell reboot')
+
+        # 检测手机是否重启成功
+        Log.info('检测手机重启状态')
+        max_wait_time = 180  # 最大等待时间180秒
+        wait_interval = 10  # 每10秒检查一次
+        elapsed_time = 0
+
+        while elapsed_time < max_wait_time:
+            try:
+                # 使用hdc shell命令检测设备是否真正连接
+                result = os.system('hdc shell "echo device_ready"')
+                if result == 0:
+                    Log.info('手机重启成功，设备已连接')
+                    Log.info('等待手机完全启动到大屏幕界面...')
+                    time.sleep(60)  # 额外等待60秒确保系统完全启动到大屏幕
+                    return
+
+                Log.info(f'设备未连接，返回码: {result}')
+            except Exception as e:
+                Log.info(f'设备检测失败: {e}')
+
+            Log.info(f'等待设备重启中... ({elapsed_time}/{max_wait_time}秒)')
+            time.sleep(wait_interval)
+            elapsed_time += wait_interval
+            Log.info(f'时间已更新: {elapsed_time}秒')
+
+        # 如果超时仍未检测到设备
+        raise ConnectedException('手机重启超时，设备未连接')
 
     def _prepare_output_path(self, step_id: int) -> str:
         """Generate output file path on device"""
@@ -294,9 +336,13 @@ class PerfTestCase(TestCase, ABC):
         if not self._verify_remote_files_exist(device_file):
             return
 
+        if Config.get('trace.enable') and not self._verify_remote_files_exist(f"{device_file}.htrace"):
+            return
+
         self._transfer_perf_data(device_file, local_perf_path)
         if Config.get('trace.enable'):
             self._transfer_trace_data(device_file, local_trace_path)
+        self._transfer_redundant_data(trace_step_dir)
 
     def _collect_step_information(self) -> list:
         """Collect metadata about test steps"""
@@ -392,13 +438,6 @@ class PerfTestCase(TestCase, ABC):
             Log.error(f"Performance data missing: {device_file}")
             return False
 
-        if Config.get('trace.enable'):
-            trace_file = f"{device_file}.htrace"
-            trace_result = self.driver.shell(f"ls -l {trace_file}")
-            if "No such file" in trace_result:
-                Log.error(f"Trace data missing: {trace_file}")
-                return False
-
         return True
 
     def _transfer_perf_data(self, remote_path: str, local_path: str):
@@ -418,3 +457,15 @@ class PerfTestCase(TestCase, ABC):
             Log.info(f"Trace data saved: {local_path}")
         else:
             Log.error(f"Failed to transfer trace data: {local_path}")
+
+    def _transfer_redundant_data(self, trace_step_dir: str):
+        bundle_name = self._start_app_package or self.app_package
+        remote_path = f'data/app/el2/100/base/{bundle_name}/files/{bundle_name}_redundant_file.txt'
+        if not self._verify_remote_files_exist(remote_path):
+            return
+        local_path = os.path.join(trace_step_dir, 'redundant_file.txt')
+        self.driver.pull_file(remote_path, local_path)
+        if os.path.exists(local_path):
+            Log.info(f"Redundant data saved: {local_path}")
+        else:
+            Log.error(f"Failed to transfer redundant data: {local_path}")
