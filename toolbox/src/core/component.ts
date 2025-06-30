@@ -47,8 +47,8 @@ export interface Component {
     main?: boolean; // Master component
 }
 
-export function getComponentCategories(): ComponentCategoryType[] {
+export function getComponentCategories(): Array<ComponentCategoryType> {
     return Object.entries(ComponentCategory)
-        .filter((e) => !isNaN(e[0] as any))
-        .map((e) => ({ name: e[1] as string, id: parseInt(e[0]) }));
+        .filter(([key]) => !isNaN(Number(key)))
+        .map(([key, value]) => ({ name: value as string, id: parseInt(key) }));
 }

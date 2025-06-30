@@ -17,9 +17,9 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { Ohpm } from '../../config/types';
+import type { Ohpm } from '../../config/types';
 import { getConfig } from '../../config';
-import { Component } from '../component';
+import type { Component } from '../component';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -36,12 +36,12 @@ export class PkgIdentify {
         this.temp = '.temp';
         fs.mkdirSync(this.temp, { recursive: true });
 
-        getConfig().analysis.ohpm?.forEach((pkg) => {
+        getConfig().analysis.ohpm.forEach((pkg) => {
             pkg.filesSet = new Set(pkg.files);
             this.ohpm.set(pkg.name, pkg);
         });
 
-        getConfig().analysis.npm?.forEach((pkg) => {
+        getConfig().analysis.npm.forEach((pkg) => {
             pkg.filesSet = new Set(pkg.files);
             this.npmm.set(pkg.name, pkg);
         });
@@ -50,10 +50,7 @@ export class PkgIdentify {
     }
 
     public static getInstance(): PkgIdentify {
-        if (this.instance === undefined) {
-            this.instance = new PkgIdentify();
-        }
-        return this.instance;
+        return (this.instance ??= new PkgIdentify());
     }
 
     public save(output: string): void {
@@ -70,7 +67,7 @@ export class PkgIdentify {
         }
 
         try {
-            let response = JSON.parse(packInfo.stdout);
+            let response = JSON.parse(packInfo.stdout) as {version: string, versions: Array<string>, main: string, module: string, types: string};
             let pkg: Ohpm = {
                 name: pkgName,
                 version: response.version,
@@ -81,7 +78,8 @@ export class PkgIdentify {
             pkg.module = response.module;
             pkg.types = response.types;
             return pkg;
-        } finally {
+        } catch {
+            return undefined;
         }
     }
 
@@ -104,7 +102,7 @@ export class PkgIdentify {
 
         try {
             let filesSet = new Set<string>();
-            let packJson = JSON.parse(packInfo.stdout);
+            let packJson = JSON.parse(packInfo.stdout) as Array<{files: Array<{ path: string }>}>;
             packJson[0].files.forEach((entry: { path: string }) => {
                 logger.info(`${entry.path}`);
                 let matches = entry.path.match(/([\w\+\-\.\#\/]*)\.d\.(js|ts|ets|mjs|cjs)$/);
@@ -122,7 +120,8 @@ export class PkgIdentify {
             pkg.filesSet = filesSet;
             pkg.files = Array.from(pkg.filesSet);
             return pkg;
-        } finally {
+        } catch {
+            return;
         }
     }
 
@@ -164,17 +163,17 @@ export class PkgIdentify {
 
     private checkerFiles(pkg: Ohpm, module: Component): boolean {
         let matchCount = 0;
-        const files = pkg.filesSet!;
+        const files = pkg.filesSet;
         if (!module.files) {
             return false;
         }
-        for (const file of module.files!) {
+        for (const file of module.files) {
             if (files?.has(file)) {
                 matchCount++;
             }
         }
-        return matchCount / module.files!.size >= 0.45;
+        return matchCount / module.files.size >= 0.45;
     }
 
-    private static instance: PkgIdentify;
+    private static instance: PkgIdentify | undefined;
 }

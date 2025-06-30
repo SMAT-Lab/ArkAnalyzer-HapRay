@@ -27,21 +27,20 @@
  *  -s EXPORT_ALL=1 -s ENVIRONMENT=node -s MODULARIZE=1 -o demangle-wasm.js demangle.cpp
  */
 
-const createModule = require('./demangle-wasm.js');
-
 interface DemangleModule {
-    _malloc(size: number): number;
-    _free(ptr: number): void;
-    ___cxa_demangle(mangled: number, output: number, length: number, status: number): number;
-    UTF8ToString(ptr: number): string;
-    stringToUTF8(str: string, ptr: number, maxBytes: number): void;
+    _malloc: (size: number) => number;
+    _free: (ptr: number) => void;
+    ___cxa_demangle: (mangled: number, output: number, length: number, status: number) => number;
+    UTF8ToString: (ptr: number) => string;
+    stringToUTF8: (str: string, ptr: number, maxBytes: number) => void;
     HEAP32: Int32Array;
 }
 
+type CreateModuleFunction = () => Promise<DemangleModule>;
+const createModule: CreateModuleFunction = require('./demangle-wasm.js') as CreateModuleFunction;
+
 export async function demangle(mangled: string): Promise<string> {
-    const Module = await new Promise<DemangleModule>((resolve) => {
-        createModule().then((mod: any) => resolve(mod));
-    });
+    const Module = await createModule();
 
     const ptr = Module._malloc(mangled.length + 1);
     Module.stringToUTF8(mangled, ptr, mangled.length + 1);
