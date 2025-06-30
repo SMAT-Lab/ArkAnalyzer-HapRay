@@ -75,14 +75,24 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
+- `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
+- `--perf <path>`: SIMPLE mode need perf path
+- `--trace <path>`: SIMPLE mode need trace path
+- `--package-name <package_name>`: SIMPLE mode need package_name
+- `--pids <N+>`: SIMPLE mode optional pids
 
 Example:
 ```bash
+# COMMUNITY mode
 # Update existing reports with new symbol files
 python -m scripts.main update --report_dir reports/20240605120000 --so_dir updated_symbols
 
 # Update reports without changing symbol files
 python -m scripts.main update --report_dir reports/20240605120000
+
+# SIMPLE mode
+python -m scripts.main update --reports/20240605120000 --mode 2 --perf perf.data --trace trace.htrace --package-name com.jd.hm.mall --pids 1 2 3
+
 ```
 
 ### Dependencies

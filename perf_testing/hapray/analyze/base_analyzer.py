@@ -71,7 +71,6 @@ class BaseAnalyzer(ABC):
         Returns:
             Analysis results as a dictionary
         """
-        pass
 
     def write_report(self):
         """Write analysis results to JSON report."""
