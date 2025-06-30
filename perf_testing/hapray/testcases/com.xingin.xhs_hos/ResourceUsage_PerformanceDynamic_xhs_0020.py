@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
@@ -57,16 +57,16 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
             # 点击右上角搜索，停留1s
             driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=1169,   # 原始x坐标
+                x=1169,  # 原始x坐标
                 y=195,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
-            )) # Mate60Pro  Mate70
+            ))  # Mate60Pro  Mate70
             time.sleep(1)
             for i in range(3):
                 driver.input_text(CoordinateAdapter.convert_coordinate(
                     self.driver,
-                    x=300,   # 原始x坐标
+                    x=300,  # 原始x坐标
                     y=200,  # 原始y坐标
                     source_width=self.source_screen_width,
                     source_height=self.source_screen_height

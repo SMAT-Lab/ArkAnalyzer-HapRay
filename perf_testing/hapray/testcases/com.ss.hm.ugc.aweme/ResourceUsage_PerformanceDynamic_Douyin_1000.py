@@ -3,11 +3,11 @@ import os
 import time
 
 from devicetest.core.test_case import Step
-
 from hypium import BY
+
+from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
 from hapray.core.perf_testcase import PerfTestCase, Log
-from hapray.core.common.common_utils import CommonUtils
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_1000(PerfTestCase):
@@ -70,13 +70,12 @@ class ResourceUsage_PerformanceDynamic_Douyin_1000(PerfTestCase):
         time.sleep(1)
         self.driver.touch(CoordinateAdapter.convert_coordinate(
             self.driver,
-            x=630,   # 原始x坐标
+            x=630,  # 原始x坐标
             y=2459,  # 原始y坐标
             source_width=self.source_screen_width,
             source_height=self.source_screen_height
         ))
         time.sleep(5)
-
 
     def teardown(self):
         Log.info('teardown')

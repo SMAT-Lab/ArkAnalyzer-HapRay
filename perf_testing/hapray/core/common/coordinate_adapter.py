@@ -28,12 +28,12 @@ class CoordinateAdapter:
     @staticmethod
     def get_device_screen_size(driver: UiDriver, source_width: int, source_height: int) -> Tuple[int, int]:
         """获取当前设备的屏幕尺寸
-        
+
         Args:
             driver: UiDriver实例
             source_width: 采集坐标时的设备屏幕宽度
             source_height: 采集坐标时的设备屏幕高度
-            
+
         Returns:
             tuple: (width, height)，如果获取失败则返回source_width和source_height
         """
@@ -60,17 +60,17 @@ class CoordinateAdapter:
     @staticmethod
     def convert_coordinate(driver: UiDriver, x: int, y: int, source_width: int, source_height: int) -> tuple:
         """根据屏幕尺寸转换坐标
-        
+
         Args:
             driver: UiDriver实例
             x: 原始x坐标
             y: 原始y坐标
             source_width: 采集坐标时的设备屏幕宽度
             source_height: 采集坐标时的设备屏幕高度
-            
+
         Returns:
             tuple: 转换后的坐标元组 (new_x, new_y)，可直接用于touch等操作
-            
+
         Raises:
             ValueError: 当坐标或屏幕尺寸无效时抛出异常
         """
@@ -78,7 +78,8 @@ class CoordinateAdapter:
             # 验证输入参数
             if x < 0 or y < 0 or source_width <= 0 or source_height <= 0:
                 raise ValueError(
-                    f"Invalid input parameters: x={x}, y={y}, source_width={source_width}, source_height={source_height}")
+                    f"Invalid input parameters: x={x}, y={y}, "
+                    f"source_width={source_width}, source_height={source_height}")
 
             # 获取当前设备的屏幕尺寸
             current_width, current_height = CoordinateAdapter.get_device_screen_size(driver, source_width,
@@ -106,4 +107,4 @@ class CoordinateAdapter:
         except Exception as e:
             if isinstance(e, ValueError):
                 raise
-            raise ValueError(f"Failed to convert coordinate: {str(e)}")
+            raise ValueError(f"Failed to convert coordinate: {str(e)}") from e

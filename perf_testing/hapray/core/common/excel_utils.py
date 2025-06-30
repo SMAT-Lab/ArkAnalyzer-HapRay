@@ -27,7 +27,7 @@ class ExcelReportSaver:
 
         :param output_path: Path to save the Excel file
         """
-        self.output_path = os.path.relpath(output_path)
+        self.output_path = os.path.abspath(output_path)
         self.sheets = {}
 
     def add_sheet(self, df: pd.DataFrame, sheet_name: str):
@@ -56,7 +56,7 @@ class ExcelReportSaver:
                 df.to_excel(writer, sheet_name=sheet_name)
                 ExcelReportSaver._auto_adjust_columns(writer, sheet_name, df)
 
-        logging.info(f"Excel report saved to: {self.output_path}")
+        logging.info("Excel report saved to: %s", self.output_path)
 
     @staticmethod
     def _auto_adjust_columns(writer, sheet_name, df):

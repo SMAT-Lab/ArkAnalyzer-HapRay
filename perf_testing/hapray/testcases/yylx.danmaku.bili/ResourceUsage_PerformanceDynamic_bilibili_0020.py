@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
@@ -70,7 +70,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
             # 评论区上滑10次
             for i in range(10):
                 # CommonUtils.swipe(driver.device_sn, 703, 2471, 703, 1471)
-                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271) # Mate70 Mate60Pro
+                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271)  # Mate70 Mate60Pro
                 time.sleep(2)
 
             # 评论区下滑10次
@@ -90,7 +90,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
 
             # 2. 点击全屏按钮，等待1s
             # driver.touch((1232, 770))
-            driver.touch((1144, 709)) #Mate70 Mate60Pro
+            driver.touch((1144, 709))  # Mate70 Mate60Pro
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -105,7 +105,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
 
             # 2. 点击关闭弹幕，等待1s
             # driver.touch((557, 1210))
-            driver.touch((526, 1125)) # Mate70 Mate60Pro
+            driver.touch((526, 1125))  # Mate70 Mate60Pro
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -141,7 +141,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         self.driver.touch((600, 500))
         time.sleep(1)
         # self.driver.touch((68, 776))
-        self.driver.touch((71, 709)) # Mate70 Mate60Pro
+        self.driver.touch((71, 709))  # Mate70 Mate60Pro
         time.sleep(1)
 
         # 点击到视频00分00秒

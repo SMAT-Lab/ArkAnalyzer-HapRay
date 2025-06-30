@@ -42,11 +42,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
-
         def step1(driver):
             time.sleep(5)
-
-
 
         Step('启动被测应用')
         self.driver.start_app(self.app_package, self._activityName)
@@ -65,9 +62,6 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         for i in range(2):
             self.driver.swipe_to_back()
             time.sleep(1)
-
-
-
 
     def teardown(self):
         Log.info('teardown')

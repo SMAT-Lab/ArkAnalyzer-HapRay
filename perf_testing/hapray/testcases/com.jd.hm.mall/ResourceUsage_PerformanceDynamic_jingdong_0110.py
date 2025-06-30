@@ -2,12 +2,7 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
-from hypium import BY
-
 from hapray.core.perf_testcase import PerfTestCase, Log
-from hapray.core.common.common_utils import CommonUtils
-from hapray.core.common.coordinate_adapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
@@ -24,7 +19,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
                 "description": "1.京东-首页静置场景"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60）
         self.source_screen_width = 1216
         self.source_screen_height = 2688
