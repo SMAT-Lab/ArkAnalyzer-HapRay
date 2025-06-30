@@ -2,12 +2,11 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
@@ -28,7 +27,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
                 "description": "2.京东商品详情页-向上滑动3次"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
@@ -60,7 +59,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
         self.driver.touch(BY.text('新品'))
         self.driver.wait(0.5)
 
-
         def step1(driver):
             # Step('京东新品页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=5, sleep=2)
@@ -91,13 +89,11 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
         ))
         time.sleep(2)
 
-
         def step2(driver):
             # Step('京东收藏页上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
 
         self.execute_performance_step(2, step2, 10)
-
 
     def teardown(self):
         Log.info('teardown')

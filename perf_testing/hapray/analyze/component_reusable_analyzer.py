@@ -13,24 +13,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import os.path
-
-"""
-Analyzer for component reusability metrics.
-"""
 import re
 import sqlite3
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 
 
 class ComponentReusableAnalyzer(BaseAnalyzer):
+    """
+    Analyzer for component reusability metrics.
+    """
+
     pattern = re.compile(r'^H:CustomNode:BuildItem\s*\[([^\]]*)\]')
 
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'component_reusability_report.json')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any] | None:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Analyze component reusability metrics.
 
         Metrics:
@@ -54,21 +54,21 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
         }
 
         if not os.path.exists(trace_db_path):
-            return {}
+            return None
 
         try:
             with sqlite3.connect(trace_db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
 
-                result = dict()
+                result = dict({})
                 # Get total component builds
                 cursor.execute("SELECT name FROM callstack WHERE name LIKE '%H:CustomNode:Build%'")
                 for row in cursor.fetchall():
                     # H:CustomNode:BuildItem [ItemView][self:86][parent:-1]
                     # H:CustomNode:BuildRecycle ItemView
                     component = self._extract_component_name(row["name"])
-                    if component not in result.keys():
+                    if component not in result:
                         result[component] = [0, 0]
                     result[component][0] = result[component][0] + 1
                     if row["name"].startswith('H:CustomNode:BuildRecycle'):
@@ -94,7 +94,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                         2
                     )
         except sqlite3.Error as e:
-            self.logger.error(f"Database error: {str(e)}")
+            self.logger.error("Database error: %s", str(e))
             return {"error": f"Database operation failed: {str(e)}"}
 
         return metrics

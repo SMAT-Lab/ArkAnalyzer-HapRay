@@ -16,7 +16,7 @@ limitations under the License.
 import argparse
 import logging
 from concurrent.futures import ProcessPoolExecutor
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 import pandas as pd
 
@@ -31,7 +31,7 @@ class OptAction:
     """Handles binary optimization analysis actions."""
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> Optional[List[Tuple[str, pd.DataFrame]]]:
         """Executes binary optimization detection workflow."""
         parser = argparse.ArgumentParser(description="Analyze binary files for optimization flags",
                                          prog='ArkAnalyzer-HapRay opt')
@@ -76,6 +76,7 @@ class OptAction:
                 data.extend(future.result())
             action._generate_excel_report(data, parsed_args.output)
             logging.info(f"Analysis report saved to: {parsed_args.output}")
+            return data
         finally:
             file_collector.cleanup()
 

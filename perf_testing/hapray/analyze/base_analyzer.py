@@ -13,19 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-"""
-Abstract base class for all data analyzers.
-"""
-
 import json
 import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class BaseAnalyzer(ABC):
+    """
+    Abstract base class for all data analyzers.
+    """
+
     def __init__(self, scene_dir: str, report_name: str):
         """Initialize base analyzer.
 
@@ -53,13 +53,14 @@ class BaseAnalyzer(ABC):
             if result:
                 self.results[step_dir] = result
             self.logger.info(
-                f"Analysis completed for step {step_dir} in {time.time() - start_time:.2f} seconds [{self.report_name}]")
+                "Analysis completed for step %s in %.2f seconds [%s]", step_dir, time.time() - start_time,
+                self.report_name)
         except Exception as e:
-            self.logger.error(f"Analysis failed for step {step_dir}: {str(e)} [{self.report_name}]")
+            self.logger.error("Analysis failed for step %s: %s [%s]", step_dir, str(e), self.report_name)
             self.results[step_dir] = {"error": str(e)}
 
     @abstractmethod
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Dict[str, Any]:
+    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
         """Implementation of the analysis logic.
 
         Args:
@@ -75,13 +76,13 @@ class BaseAnalyzer(ABC):
     def write_report(self):
         """Write analysis results to JSON report."""
         if not self.results:
-            self.logger.warning(f"No results to write. Skipping report generation for {self.report_name}")
+            self.logger.warning("No results to write. Skipping report generation for %s", self.report_name)
             return
 
         try:
             os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
             with open(self.report_path, 'w', encoding='utf-8') as f:
                 json.dump(self.results, f, ensure_ascii=False, indent=2)
-            self.logger.info(f"Report successfully written to {self.report_path}")
+            self.logger.info("Report successfully written to %s", self.report_path)
         except Exception as e:
-            self.logger.exception(f"Failed to write report: {str(e)}")
+            self.logger.exception("Failed to write report: %s", str(e))
