@@ -390,7 +390,7 @@ import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { ComponentCategory, useJsonDataStore, type PerfData } from '../stores/jsonDataStore.ts';
-import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
+import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
 
 interface SceneLoadDiff {
   category: string;
@@ -561,36 +561,36 @@ compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChar
 //步骤负载增长卡片
 const stepDiff = ref();
 stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
-const mergedProcessPerformanceData = ref(
-  calculateProcessData(perfData!, comparePerfData!)
+const mergedProcessPerformanceData = computed(() =>
+  calculateProcessData(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedThreadPerformanceData = ref(
-  calculateThreadData(perfData!, comparePerfData!)
+const mergedThreadPerformanceData = computed(() =>
+  calculateThreadData(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedCategorysPerformanceData = ref(
-  calculateCategorysData(perfData!, comparePerfData!)
+const mergedCategorysPerformanceData = computed(() =>
+  calculateCategorysData(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedComponentNamePerformanceData = ref(
-  calculateComponentNameData(perfData!, comparePerfData!)
+const mergedComponentNamePerformanceData = computed(() =>
+  calculateComponentNameData(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedFilePerformanceData = ref(
-  calculateFileData(perfData!, comparePerfData!)
+const mergedFilePerformanceData = computed(() =>
+  calculateFileData(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedFilePerformanceData1 = ref(
-  calculateFileData1(perfData!, comparePerfData!)
+const mergedFilePerformanceData1 = computed(() =>
+  calculateFileData1(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedSymbolsPerformanceData = ref(
-  calculateSymbolData(perfData!, comparePerfData!)
+const mergedSymbolsPerformanceData = computed(() =>
+  calculateSymbolData(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
-const mergedSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(perfData!, comparePerfData!)
+const mergedSymbolsPerformanceData1 = computed(() =>
+  calculateSymbolData1(perfData!, comparePerfData!, currentStepIndex.value === 0)
 );
 
 const baseSymbolsPerformanceData = ref(

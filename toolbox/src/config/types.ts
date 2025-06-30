@@ -127,4 +127,5 @@ export interface GlobalConfig {
     osPlatform: OSPlatform;
     choose: boolean;
     checkTraceDb: boolean;
+    compatibility: boolean;
 }
