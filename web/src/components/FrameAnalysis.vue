@@ -62,7 +62,7 @@
                 <div class="card-title">
                     <i>🌀</i> 空刷帧统计
                 </div>
-                <div class="card-value">{{ summaryData.total_empty_frames.toLocaleString() }}</div>
+                <div class="card-value">{{ summaryData.empty_frames_with_load.toLocaleString() }}</div>
                 <div class="progress-bar">
                     <div class="progress-value"
                         :style="{ width: Math.min(100, summaryData.empty_frame_percentage) + '%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)' }">
