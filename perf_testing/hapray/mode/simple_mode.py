@@ -35,7 +35,7 @@ def create_simple_mode_structure(report_dir, perf_path, trace_path, package_name
         os.makedirs(htrace_dir)
         os.makedirs(report_report_dir)
         logging.info(
-            f"hiperf htrace report directory create success: {hiperf_dir} and {htrace_dir} and {report_dir}"
+            "hiperf htrace report directory create success: %s and %s and %s", hiperf_dir, htrace_dir, report_dir
         )
 
         # 查找并移动ps_ef.txt文件到hiperf/step1/目录
@@ -44,14 +44,14 @@ def create_simple_mode_structure(report_dir, perf_path, trace_path, package_name
             source_ps_ef_file = ps_ef_files[0]
             target_ps_ef_file = os.path.join(hiperf_dir, "ps_ef.txt")
             shutil.copy2(source_ps_ef_file, target_ps_ef_file)
-            logging.info(f"Copied {source_ps_ef_file} to {target_ps_ef_file}")
+            logging.info("Copied %s to %s", source_ps_ef_file, target_ps_ef_file)
 
         # 查找并移动.htrace文件到htrace/step1/目录，重命名为trace.htrace
 
         source_htrace_file = trace_path
         target_htrace_file = os.path.join(htrace_dir, "trace.htrace")
         shutil.copy2(source_htrace_file, target_htrace_file)
-        logging.info(f"Copied {source_htrace_file} to {target_htrace_file}")
+        logging.info("Copied %s to %s", source_htrace_file, target_htrace_file)
 
         # 创建testInfo.json
         test_info = {
@@ -69,10 +69,10 @@ def create_simple_mode_structure(report_dir, perf_path, trace_path, package_name
             },
             "timestamp": 0,
         }
-        with open(os.path.join(report_dir, "testInfo.json"), "w") as f:
+        with open(os.path.join(report_dir, "testInfo.json"), "w", encoding="utf-8") as f:
             json.dump(test_info, f)
         logging.info(
-            f"testInfo.json create success: {os.path.join(report_dir, 'testInfo.json')}"
+            "testInfo.json create success: %s", os.path.join(report_dir, 'testInfo.json')
         )
         # 创建steps.json
         steps_json = [
@@ -82,17 +82,17 @@ def create_simple_mode_structure(report_dir, perf_path, trace_path, package_name
                 "stepIdx": 1
             }
         ]
-        with open(os.path.join(report_dir, "hiperf", "steps.json"), "w") as f:
+        with open(os.path.join(report_dir, "hiperf", "steps.json"), "w", encoding="utf-8") as f:
             json.dump(steps_json, f)
         logging.info(
-            f"steps.json create success: {os.path.join(hiperf_dir, 'steps.json')}"
+            "steps.json create success: %s", os.path.join(hiperf_dir, 'steps.json')
         )
     if os.path.exists(perf_path):
         # 查找并移动.data文件到hiperf/step1/目录，重命名为perf.data
         source_data_file = perf_path
         target_data_file = os.path.join(hiperf_dir, "perf.data")
         shutil.copy2(source_data_file, target_data_file)
-        logging.info(f"Copied {source_data_file} to {target_data_file}")
+        logging.info("Copied %s to %s", source_data_file, target_data_file)
         target_db_file = target_data_file.replace(".data", ".db")
         if not os.path.exists(target_db_file) and os.path.exists(target_data_file):
             if not ExeUtils.convert_data_to_db(target_data_file, target_db_file):
@@ -101,10 +101,10 @@ def create_simple_mode_structure(report_dir, perf_path, trace_path, package_name
     pids_json = parse_processes(
         target_db_file or "", os.path.join(hiperf_dir, "ps_ef.txt"), package_name, pids
     )
-    with open(os.path.join(hiperf_dir, "pids.json"), "w") as f:
+    with open(os.path.join(hiperf_dir, "pids.json"), "w", encoding="utf-8") as f:
         json.dump(pids_json, f)
     logging.info(
-        f"pids.json create success: {os.path.join(report_dir, 'pids.json')}"
+        "pids.json create success: %s", os.path.join(report_dir, 'pids.json')
     )
 
 
@@ -125,15 +125,14 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
         perf_conn = sqlite3.connect(target_db_file)
         try:
             # 获取所有perf样本
-            perf_query = (
-                "SELECT distinct process_id,thread_name FROM perf_thread where thread_name like \'%{0}%\'".format(
-                    package_name))
-            perf_pids = pd.read_sql_query(perf_query, perf_conn)
-            for index, row in perf_pids.iterrows():
+            perf_query = "SELECT DISTINCT process_id, thread_name FROM perf_thread WHERE thread_name LIKE ?"
+            params = (f"%{package_name}%",)
+            perf_pids = pd.read_sql_query(perf_query, perf_conn, params=params)
+            for _, row in perf_pids.iterrows():
                 result["pids"].append(row['process_id'])
                 result["process_names"].append(row['thread_name'])
         except Exception as e:
-            logging.error(f"从db中获取pids时发生异常: {str(e)}")
+            logging.error("从db中获取pids时发生异常: %s", str(e))
         finally:
             perf_conn.close()
     if os.path.exists(file_path):
@@ -155,7 +154,7 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
                     result["pids"].append(pid)
                     result["process_names"].append(process_name)
         except Exception as err:
-            logging.error(f"处理文件失败: {err}")
+            logging.error("处理文件失败: %s", err)
     if pids != []:
         process_names = []
         for pid in pids:
