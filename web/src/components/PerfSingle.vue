@@ -36,7 +36,7 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="scenePieData" :title="pieChartTitle"/>
+          <PieChart :chart-data="scenePieData" :title="pieChartTitle" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -69,6 +69,7 @@
         <div class="step-header">
           <span class="step-order">STEP 0</span>
           <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
+          <span class="step-duration">{{ formatEnergy(getTotalTestStepsCount(testSteps)) }}</span>
         </div>
         <div class="step-name">全部步骤</div>
       </div>
@@ -81,6 +82,7 @@
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
+          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
@@ -102,7 +104,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle"/>
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle" />
         </div>
         <!-- 进程负载 -->
         <!-- <div class="data-panel">
@@ -115,7 +117,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle"/>
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle" />
         </div>
       </el-col>
     </el-row>
@@ -197,7 +199,8 @@
       ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
-
+          <span class="step-duration">{{ formatDuration(step.count) }}</span>
+          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
       </div>
@@ -218,6 +221,7 @@ import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
 import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
+import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -291,6 +295,12 @@ const mergedSymbolsPerformanceData1 = computed(() =>
 // 格式化持续时间的方法
 const formatDuration = (milliseconds: any) => {
   return `指令数：${milliseconds}`;
+};
+
+// 格式化功耗信息
+const formatEnergy = (milliseconds: any) => {
+  const energy = calculateEnergyConsumption(milliseconds);
+  return `核算功耗（mAs）：${energy}`;
 };
 
 const scenePieData = ref();
