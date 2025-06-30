@@ -5,7 +5,7 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
@@ -32,7 +32,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -60,8 +60,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
             time.sleep(1)
 
             # 2. 点击全屏按钮，等待1s
-            driver.touch((1188, 1670)) # Mate60 Pro
-            #driver.touch((1144, 709))  # Mate70
+            driver.touch((1188, 1670))  # Mate60 Pro
+            # driver.touch((1144, 709))  # Mate70
             time.sleep(1)
 
             # 3. 全屏播放30s
@@ -116,9 +116,9 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
         time.sleep(1)
 
         # 竖屏视频播放30s
-        self.execute_step_with_perf_and_trace(1, step1, 30)
-        self.execute_step_with_perf_and_trace(2, step2, 40)
-        self.execute_step_with_perf_and_trace(3, step3, 40)
+        self.execute_performance_step(1, step1, 30)
+        self.execute_performance_step(2, step2, 40)
+        self.execute_performance_step(3, step3, 40)
 
         # 侧滑4次返回哔哩哔哩首页
         for i in range(4):
@@ -128,4 +128,4 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

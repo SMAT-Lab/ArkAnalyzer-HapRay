@@ -2,11 +2,10 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
@@ -29,7 +28,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
         self.source_screen_height = 2688
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -75,7 +74,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
             ))
             time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 15)
+        self.execute_performance_step(1, step1, 15)
 
         # 返回购物车
         self.driver.swipe_to_back()
@@ -93,4 +92,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

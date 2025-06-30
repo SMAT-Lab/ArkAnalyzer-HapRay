@@ -24,7 +24,7 @@ const props = defineProps({
   // 图表标题
   title: {
     type: String,
-    default: '负载：instructions'
+    default: '负载：instructions!'
   },
   // 容器高度
   height: {

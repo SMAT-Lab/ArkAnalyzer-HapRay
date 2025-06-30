@@ -35,7 +35,12 @@ Options:
 - `--run_testcases <regex_patterns...>`: Run test cases matching specified regex patterns
 - `--so_dir <directory>`: Directory containing symbolicated .so files
 - `--circles`: Sample CPU cycles instead of default events
+- `--round <N>`: Number of test rounds to execute (default: 5)
+- `--no-trace`: Disable trace capturing
 
+Requirements:
+- hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
+  
 Example:
 ```bash
 # Run specific test cases with symbol files
@@ -53,11 +58,14 @@ Options:
 - `-i/--input <path>`: Directory/file containing binaries (.hap/.hsp/.so/.a)
 - `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
 - `-j/--jobs <N>`: Number of parallel jobs (default: 1)
+- `-r/--report_dir <path>`: Directory containing reports to analye invoked symbols (optional)
 
 Example:
 ```bash
 # Analyze binaries with 4 parallel jobs
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
+# Analyze binaries and analye invoked symbols
+python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
 ```
 
 #### Update Reports (`update`)
@@ -67,14 +75,24 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
+- `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
+- `--perf <path>`: SIMPLE mode need perf path
+- `--trace <path>`: SIMPLE mode need trace path
+- `--package-name <package_name>`: SIMPLE mode need package_name
+- `--pids <N+>`: SIMPLE mode optional pids
 
 Example:
 ```bash
+# COMMUNITY mode
 # Update existing reports with new symbol files
 python -m scripts.main update --report_dir reports/20240605120000 --so_dir updated_symbols
 
 # Update reports without changing symbol files
 python -m scripts.main update --report_dir reports/20240605120000
+
+# SIMPLE mode
+python -m scripts.main update --reports/20240605120000 --mode 2 --perf perf.data --trace trace.htrace --package-name com.jd.hm.mall --pids 1 2 3
+
 ```
 
 ### Dependencies
@@ -134,7 +152,9 @@ npm run build
 cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
-python -m scripts.main perf/opt [options]
+python -m scripts.main perf/opt/update [options]
+# Run pylint
+tox -e lint
 ```
 
 ### Windows Installation
@@ -149,7 +169,9 @@ cd perf_testing
 # Command-Line(CMD) Alternative the python virtual environment
 .venv\Scripts\activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
-python -m scripts.main perf/opt [options]
+python -m scripts.main perf/opt/update [options]
+# Run pylint
+tox -e lint
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:

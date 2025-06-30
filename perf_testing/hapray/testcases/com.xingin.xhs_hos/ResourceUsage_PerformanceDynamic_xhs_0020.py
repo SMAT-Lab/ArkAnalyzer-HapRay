@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
@@ -28,7 +28,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
         self.source_screen_height = 2720
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -57,16 +57,16 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
             # 点击右上角搜索，停留1s
             driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
-                x=1169,   # 原始x坐标
+                x=1169,  # 原始x坐标
                 y=195,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
-            )) # Mate60Pro  Mate70
+            ))  # Mate60Pro  Mate70
             time.sleep(1)
             for i in range(3):
                 driver.input_text(CoordinateAdapter.convert_coordinate(
                     self.driver,
-                    x=300,   # 原始x坐标
+                    x=300,  # 原始x坐标
                     y=200,  # 原始y坐标
                     source_width=self.source_screen_width,
                     source_height=self.source_screen_height
@@ -77,9 +77,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
                 driver.swipe_to_back()
                 time.sleep(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_performance_step(1, step1, 20)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

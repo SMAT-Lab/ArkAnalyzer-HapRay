@@ -1,10 +1,9 @@
 # coding: utf-8
 import os
 
-from hypium import BY
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
@@ -21,13 +20,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
                 "description": "1.京东观看直播场景，上滑3次，下滑3次"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1212
         self.source_screen_height = 2616
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -59,16 +58,15 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
         ))
         self.driver.wait(3)
 
-
         def step1(driver):
             # Step('京东直播上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
             # Step('京东直播下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=3, sleep=2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

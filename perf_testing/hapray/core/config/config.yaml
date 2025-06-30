@@ -4,3 +4,5 @@ hiperf: # 性能采样相关
   data_filename: "perf.data"  # 性能数据文件名
   db_filename: "perf.db"  # 数据库文件名
   event: raw-instruction-retired # 默认采集指令数，可配置为raw-cpu-cycles采集cycles
+trace:
+  enable: True

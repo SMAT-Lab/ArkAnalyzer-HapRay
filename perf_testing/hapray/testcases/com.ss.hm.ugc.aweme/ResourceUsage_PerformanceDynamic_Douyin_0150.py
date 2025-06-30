@@ -5,9 +5,9 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
@@ -89,10 +89,10 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
             time.sleep(1)
 
         start(self.driver)
-        self.execute_step_with_perf_and_trace(1, step1, 35)
+        self.execute_performance_step(1, step1, 35)
         finish(self.driver)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

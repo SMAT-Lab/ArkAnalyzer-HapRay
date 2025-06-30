@@ -63,6 +63,7 @@ module.exports = {
                 { from: 'res', to: 'res' },
                 { from: 'README.md', to: 'README.md' },
                 { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
+                { from: '../third-party/report.html', to: 'res/hiperf_report_template.html' },
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 {
                     from: '../node_modules/sql.js/package.json',
@@ -84,6 +85,10 @@ module.exports = {
                     from: '../web/dist/index.html',
                     to: 'res/report_template.html',
                 },
+                {
+                    from: 'src/core/elf/demangle-wasm.wasm',
+                    to: 'demangle-wasm.wasm'
+                }
             ],
         }),
 

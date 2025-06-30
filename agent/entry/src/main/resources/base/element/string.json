@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "label"
+    },
+    {
+      "name": "ExecutorAbility_desc",
+      "value": "Test Executor"
+    },
+    {
+      "name": "LoadTestcases_label",
+      "value": "加载的测试套件："
+    }
+  ]
+}

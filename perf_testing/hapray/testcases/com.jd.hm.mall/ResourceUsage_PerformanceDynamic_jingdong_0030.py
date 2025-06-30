@@ -1,12 +1,11 @@
 # coding: utf-8
 import os
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
@@ -23,14 +22,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
                 "description": "1.京东超市购物-点击3次，滑动8次"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60）
         self.source_screen_width = 1216
         self.source_screen_height = 2688
 
-
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -100,7 +98,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             ))
             self.driver.wait(2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 40, sample_all=True)
+        self.execute_performance_step(1, step1, 40, sample_all=True)
 
         # 从购物车移除第一个商品
         self.driver.touch(CoordinateAdapter.convert_coordinate(
@@ -115,4 +113,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

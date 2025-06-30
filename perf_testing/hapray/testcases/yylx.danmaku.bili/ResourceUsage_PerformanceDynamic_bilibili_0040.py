@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
@@ -25,7 +25,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -115,18 +115,16 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
             self.driver.touch(BY.text('搜索'))
             time.sleep(4)
 
-
-
         Step('启动被测应用')
         self.driver.start_app(self.app_package, self._activityName)
         self.driver.wait(5)
         # 点击搜索框，停留2s
-        self.driver.touch((657, 185)) # Mate60 Pro
+        self.driver.touch((657, 185))  # Mate60 Pro
         self.driver.wait(0.5)
         time.sleep(2)
 
         # 搜索框输入“航拍中国“ （键盘输入15次，每0.5s点击一次，15s），并且点击”航拍中国“（1s），点击搜索（1s）
-        self.execute_step_with_perf_and_trace(1, step1, 20)
+        self.execute_performance_step(1, step1, 20)
 
         Step('搜索结果页上滑3次：')
         CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
@@ -136,8 +134,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
             self.driver.swipe_to_back()
             time.sleep(1)
 
-
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

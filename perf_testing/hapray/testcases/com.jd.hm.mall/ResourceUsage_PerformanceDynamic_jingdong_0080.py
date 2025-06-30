@@ -2,12 +2,11 @@
 import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.PerfTestCase import PerfTestCase, Log
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.common.CoordinateAdapter import CoordinateAdapter
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
@@ -24,13 +23,13 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
                 "description": "1.京东-搜索商品购物"
             }
         ]
-        
+
         # 原始采集设备的屏幕尺寸（Mate 60）
         self.source_screen_width = 1216
         self.source_screen_height = 2688
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -77,15 +76,14 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
             self.driver.touch(BY.text('搜索'))
             time.sleep(2)
 
-
             # Step('搜索结果页浏览，上滑操作')
             CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
             # Step('搜索结果页浏览，下滑操作')
             CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
 
-        self.execute_step_with_perf_and_trace(1, step1, 30)
+        self.execute_performance_step(1, step1, 30)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()

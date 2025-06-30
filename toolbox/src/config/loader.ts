@@ -57,6 +57,15 @@ const ConfigSchema = z.object({
                 })
             )
             .default([]),
+        symbolSplitRules: z
+            .array(
+                z.object({
+                    source_file: z.string(),
+                    new_file: z.string(),
+                    filter_symbols: z.array(z.string()),
+                })
+            )
+            .default([]),
         soOrigins: z
             .map(
                 z.string(),
@@ -116,6 +125,7 @@ const ConfigSchema = z.object({
     soDir: z.string().default(''),
     choose: z.boolean().default(false),
     checkTraceDb: z.boolean().default(false),
+    compatibility: z.boolean().default(false),
 });
 
 function getExtToolsRoot(): string {
@@ -142,9 +152,12 @@ function loadResCfg(): Partial<GlobalConfig> {
     };
     let perfKind = path.join(res, 'perf/kind.json');
     config['perf']['kinds'] = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' }));
+    config['perf']['symbolSplitRules'] = JSON.parse(
+        fs.readFileSync(path.join(res, 'perf/symbol_split.json'), { encoding: 'utf-8' })
+    );
     let soOriginCfg = path.join(res, 'so/standardized_origins.json');
     if (fs.existsSync(soOriginCfg)) {
-        config['perf']['osOrigins'] = new Map(
+        config['perf']['soOrigins'] = new Map(
             Object.entries(JSON.parse(fs.readFileSync(soOriginCfg, { encoding: 'utf-8' })))
         );
     }

@@ -5,8 +5,8 @@ import time
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.CommonUtils import CommonUtils
-from hapray.core.PerfTestCase import PerfTestCase, Log
+from hapray.core.common.common_utils import CommonUtils
+from hapray.core.perf_testcase import PerfTestCase, Log
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
@@ -25,7 +25,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
         ]
 
     @property
-    def steps(self) -> []:
+    def steps(self) -> list:
         return self._steps
 
     @property
@@ -71,10 +71,10 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
             # 上滑返回桌面
             driver.swipe_to_home()
             time.sleep(1)
-        self.execute_step_with_perf_and_trace(1, step1, 65)
+        self.execute_performance_step(1, step1, 65)
         finish(self.driver)
 
     def teardown(self):
         Log.info('teardown')
         self.driver.stop_app(self.app_package)
-        self.make_reports()
+        self.generate_reports()
