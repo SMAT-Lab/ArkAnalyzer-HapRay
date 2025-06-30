@@ -3,7 +3,7 @@
         <div class="stats-cards">
             <div class="stat-card data-panel">
                 <div class="card-title">
-                    <i>📊</i> 总帧数
+                    <i>📊</i> 有效帧数
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
@@ -88,7 +88,36 @@
                     </div>
                 </div>
             </div>
-
+            <div class="stat-card data-panel">
+                <div class="card-title">
+                    <i>📁</i> 冷加载文件使用分析
+                </div>
+                <div class="card-value">{{ fileUsageData.summary?.total_file_number || 0 }}</div>
+                <div class="progress-bar">
+                    <div class="progress-value"
+                        :style="{ width: (fileUsageData.summary ? (fileUsageData.summary.used_file_count / fileUsageData.summary.total_file_number * 100) : 0) + '%', background: 'linear-gradient(90deg, #10b981, #34d399)' }">
+                    </div>
+                </div>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <div class="metric-label">已使用文件</div>
+                        <div class="metric-value">{{ fileUsageData.summary?.used_file_count || 0 }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">未使用文件</div>
+                        <div class="metric-value">{{ fileUsageData.summary?.unused_file_count || 0 }}</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">文件使用率</div>
+                        <div class="metric-value">{{ fileUsageData.summary ? (fileUsageData.summary.used_file_count /
+                            fileUsageData.summary.total_file_number * 100).toFixed(1) : 0 }}%</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">总耗时</div>
+                        <div class="metric-value">{{ formatFileTime(fileUsageData.summary?.total_time_ms || 0) }}</div>
+                    </div>
+                </div>
+            </div>
             <div class="stat-card data-panel">
                 <div class="card-title">
                     <i>ℹ️</i> 其他
@@ -100,7 +129,9 @@
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
                         <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
-                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
+                        <div class="metric-value">{{ componentResuData.max_component }}/{{
+                            componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{
+                                componentResuData.reusability_ratio*100 }}%</div>
                     </div>
                 </div>
             </div>
@@ -333,12 +364,62 @@
                         <td>{{ stutter.vsync }}</td>
                         <td :class="'level-' + stutter.stutter_level">
                             <span class="level-badge">{{ stutter.stutter_level }} - {{ stutter.level_description
-                                }}</span>
+                            }}</span>
                         </td>
                         <td>{{ (stutter.actual_duration / 1000000).toFixed(2) }}</td>
                         <td>{{ (stutter.expected_duration / 1000000).toFixed(2) }}</td>
                         <td :class="stutter.exceed_time >= 0 ? 'negative' : 'positive'">
                             {{ stutter.exceed_time >= 0 ? '+' : '' }}{{ stutter.exceed_time.toFixed(2) }}ms
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 文件使用分析表格 -->
+        <div class="table-container data-panel">
+            <div class="table-title">
+                <i>📁</i> 冷加载文件使用分析
+            </div>
+
+            <div class="filters">
+                <div class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
+                    @click="fileUsageFilter = 'used'">
+                    已使用文件 TOP 10 ({{ fileUsageData.used_files_top10.length }})
+                </div>
+                <div class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
+                    @click="fileUsageFilter = 'unused'">
+                    未使用文件 TOP 10 ({{ fileUsageData.unused_files_top10.length }})
+                </div>
+            </div>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>文件名</th>
+                        <th>耗时</th>
+                        <th>父模块</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(file, index) in filteredFileUsageData" :key="index">
+                        <td>
+                            <span class="rank-badge" :class="getFileRankClass(file.rank)">{{ file.rank }}</span>
+                        </td>
+                        <td class="file-name">{{ file.file_name }}</td>
+                        <td>{{ formatFileTime(file.cost_time_ms) }}</td>
+                        <td class="parent-module">
+                            <div class="module-content" @click="toggleModuleDetail(index)">
+                                <span class="module-text" :class="{ 'truncated': !expandedModules[index] }">
+                                    {{ file.parent_module || '-' }}
+                                </span>
+                                <i v-if="file.parent_module && file.parent_module.length > 30" 
+                                   class="expand-icon" 
+                                   :class="{ 'expanded': expandedModules[index] }">
+                                    {{ expandedModules[index] ? '收起' : '展开' }}
+                                </i>
+                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -350,13 +431,14 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, getDefaultEmptyFrameData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 空刷JSON 数据
 const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? getDefaultEmptyFrameData();
 const componentResuJsonData = jsonDataStore.componentResuData;
+const coldStartJsonData = safeProcessColdStartData(jsonDataStore.coldStartData) ?? getDefaultColdStartData();
 
 const props = defineProps({
     data: {
@@ -371,7 +453,7 @@ const props = defineProps({
 
 // 性能数据
 const performanceData = computed(() => {
-     if (props.step === 0 || props.data['step' + 2] == undefined) {
+    if (props.step === 0 || props.data['step' + 2] == undefined) {
         return props.data['step' + 1];
     } else {
         return props.data['step' + props.step];
@@ -396,7 +478,81 @@ const componentResuData = computed(() => {
     }
 });
 
+// 当前步骤冷启动文件使用信息
+const coldStartData = computed(() => {
+    if (props.step === 0 || coldStartJsonData['step' + 2] == undefined) {
+        return coldStartJsonData['step' + 1];
+    } else {
+        return coldStartJsonData['step' + props.step];
+    }
+});
 
+// 文件使用分析数据 - 由冷启动数据提供
+function mergeFileUsageDataAllSteps(coldStartJsonData) {
+    // 合并所有step的used_files_top10和unused_files_top10
+    const allUsed = {};
+    const allUnused = {};
+    let summary = {
+        total_file_number: 0,
+        total_time_ms: 0,
+        used_file_count: 0,
+        used_file_time_ms: 0,
+        unused_file_count: 0,
+        unused_file_time_ms: 0
+    };
+    Object.values(coldStartJsonData).forEach(step => {
+        // 累加summary
+        if (step.summary) {
+            summary.total_file_number += step.summary.total_file_number;
+            summary.total_time_ms += step.summary.total_time_ms;
+            summary.used_file_count += step.summary.used_file_count;
+            summary.used_file_time_ms += step.summary.used_file_time_ms;
+            summary.unused_file_count += step.summary.unused_file_count;
+            summary.unused_file_time_ms += step.summary.unused_file_time_ms;
+        }
+        // 合并used_files_top10
+        step.used_files_top10?.forEach(file => {
+            if (!allUsed[file.file_name]) {
+                allUsed[file.file_name] = { ...file };
+            } else {
+                allUsed[file.file_name].cost_time_ms += file.cost_time_ms;
+                // parent_module合并为多行
+                if (file.parent_module && !allUsed[file.file_name].parent_module.includes(file.parent_module)) {
+                    allUsed[file.file_name].parent_module += '\n' + file.parent_module;
+                }
+            }
+        });
+        // 合并unused_files_top10
+        step.unused_files_top10?.forEach(file => {
+            if (!allUnused[file.file_name]) {
+                allUnused[file.file_name] = { ...file };
+            } else {
+                allUnused[file.file_name].cost_time_ms += file.cost_time_ms;
+                if (file.parent_module && !allUnused[file.file_name].parent_module.includes(file.parent_module)) {
+                    allUnused[file.file_name].parent_module += '\n' + file.parent_module;
+                }
+            }
+        });
+    });
+    // 排序取前10
+    const used_files_top10 = Object.values(allUsed)
+        .sort((a, b) => b.cost_time_ms - a.cost_time_ms)
+        .slice(0, 10)
+        .map((file, idx) => ({ ...file, rank: idx + 1 }));
+    const unused_files_top10 = Object.values(allUnused)
+        .sort((a, b) => b.cost_time_ms - a.cost_time_ms)
+        .slice(0, 10)
+        .map((file, idx) => ({ ...file, rank: idx + 1 }));
+    return { summary, used_files_top10, unused_files_top10 };
+}
+
+const fileUsageData = computed(() => {
+    if (props.step === 0) {
+        return mergeFileUsageDataAllSteps(coldStartJsonData);
+    } else {
+        return coldStartData.value;
+    }
+});
 
 const fpsChart = ref(null);
 const selectedStutter = ref(null);
@@ -406,6 +562,33 @@ const callstackThread = ref('');
 
 const activeFilter = ref('all');
 const minTimestamp = ref(0); // 存储最小时间戳
+
+// 文件使用分析相关
+const fileUsageFilter = ref('used');
+
+// 父模块展开状态管理
+const expandedModules = ref({});
+
+// 切换父模块详情显示
+const toggleModuleDetail = (index) => {
+    expandedModules.value[index] = !expandedModules.value[index];
+};
+
+// 筛选文件使用数据
+const filteredFileUsageData = computed(() => {
+    if (fileUsageFilter.value === 'used') {
+        return fileUsageData.value.used_files_top10;
+    } else {
+        return fileUsageData.value.unused_files_top10;
+    }
+});
+
+// 获取文件排名样式类
+const getFileRankClass = (rank) => {
+    if (rank <= 3) return 'top-rank';
+    if (rank <= 5) return 'high-rank';
+    return 'normal-rank';
+};
 
 // 空刷帧汇总数据
 const summaryData = computed(() => emptyFrameData.value.summary);
@@ -425,6 +608,17 @@ const formatTime = (timestamp) => {
     // 纳秒转毫秒并减去最小时间戳
     const timeMs = timestamp / 1000000;
     return (timeMs - minTimestamp.value).toFixed(2);
+};
+
+// 格式化文件时间
+const formatFileTime = (timeMs) => {
+    if (timeMs < 1) {
+        return `${(timeMs * 1000).toFixed(2)}μs`;
+    } else if (timeMs < 1000) {
+        return `${timeMs.toFixed(2)}ms`;
+    } else {
+        return `${(timeMs / 1000).toFixed(2)}s`;
+    }
 };
 
 // 统计数据计算
@@ -492,7 +686,7 @@ const initCharts = () => {
         ].forEach(stutter => {
             const timeMs = stutter.timestamp / 1000000; // 转换为毫秒
             allTimestamps.push(timeMs);
-            
+
             // 查找对应时间点的FPS值
             let closestFps = 0;
             let minDiff = Infinity;
@@ -503,7 +697,7 @@ const initCharts = () => {
                     closestFps = fpsItem.fps;
                 }
             });
-            
+
             stutterPoints.push({
                 time: timeMs,
                 stutter: stutter,
@@ -898,7 +1092,6 @@ const findCallstackInfo = (timestamp) => {
             }
         }
     }
-  
 };
 
 onMounted(() => {
@@ -919,9 +1112,9 @@ watch(performanceData, (newVal, oldVal) => {
 
 // 监听步骤变化
 watch(() => props.step, (newStep, oldStep) => {
-  // 当步骤变化时关闭所有详情面板
-  selectedStutter.value = null;
-  selectedEmptyFrame.value = null;
+    // 当步骤变化时关闭所有详情面板
+    selectedStutter.value = null;
+    selectedEmptyFrame.value = null;
 });
 
 </script>
@@ -1603,5 +1796,102 @@ body {
     font-size: 1.4rem;
     font-weight: 700;
     color: #1e293b;
+}
+
+/* 文件使用分析样式 */
+.rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+}
+
+.rank-badge.top-rank {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+}
+
+.rank-badge.high-rank {
+    background: linear-gradient(135deg, #ffa726 0%, #ff9800 100%);
+}
+
+.rank-badge.normal-rank {
+    background: linear-gradient(135deg, #66bb6a 0%, #4caf50 100%);
+}
+
+.file-name {
+    font-size: 14px;
+    color: #2d3748;
+    font-weight: 500;
+    word-break: break-all;
+    max-width: 300px;
+}
+
+.parent-module {
+    font-size: 12px;
+    color: #718096;
+    word-break: break-all;
+    max-width: 200px;
+}
+
+/* 父模块展开/收起样式 */
+.module-content {
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.module-content:hover {
+    background: rgba(59, 130, 246, 0.05);
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+}
+
+.module-text {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.module-text.truncated {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.expand-icon {
+    font-size: 10px;
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+    font-style: normal;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.expand-icon:hover {
+    background: rgba(59, 130, 246, 0.2);
+    color: #2563eb;
+}
+
+.expand-icon.expanded {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.expand-icon.expanded:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
 }
 </style>

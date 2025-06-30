@@ -109,19 +109,8 @@
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
 import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore } from '../stores/jsonDataStore.ts';
+import type { ProcessDataItem } from '../utils/jsonUtil.ts';
 const emit = defineEmits(['custom-event']);
-
-// 定义数据类型接口
-export interface ProcessDataItem {
-  stepId: number
-  process: string
-  category: string
-  componentName: string
-  instructions: number
-  compareInstructions: number
-  increaseInstructions: number
-  increasePercentage: number
-}
 
 const props = defineProps({
   data: {
