@@ -13,26 +13,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import argparse
+import logging
 import os
 import re
 import shutil
 import time
-import logging
-import argparse
 from concurrent.futures import ThreadPoolExecutor
-from typing import List
+from typing import List, Optional
 
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
-from hapray.core.config.config import Config
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.folder_utils import scan_folders, delete_folder
+from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 ENV_ERR_STR = """
-The hdc or node command is not in PATH. 
-Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/), 
+The hdc or node command is not in PATH.
+Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/),
 then add the following directories to PATH.
     $command_line_tools/tool/node/ (for Windows)
     $command_line_tools/tool/node/bin (for Mac/Linux)
@@ -66,7 +66,7 @@ class PerfAction:
         return matched_cases
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> Optional[str]:
         """Executes performance testing workflow."""
         if not check_env():
             logging.error(ENV_ERR_STR)
@@ -86,6 +86,8 @@ class PerfAction:
         parser.add_argument('--so_dir', default=None, help='Directory for symbolicated .so files')
         parser.add_argument('--run_testcases', nargs='+', default=None, help='Test cases to execute')
         parser.add_argument('--circles', action="store_true", help="Enable CPU cycle sampling")
+        parser.add_argument('--round', type=int, default=5, help="Specify test round")
+        parser.add_argument('--no-trace', action='store_true', help="Disable trace capturing")
         parsed_args = parser.parse_args(args)
 
         root_path = os.getcwd()
@@ -99,6 +101,11 @@ class PerfAction:
 
         if parsed_args.circles:
             Config.set('hiperf.event', 'raw-cpu-cycles')
+
+        if parsed_args.no_trace:
+            Config.set('trace.enable', False)
+        else:
+            Config.set('trace.enable', True)
 
         all_testcases = CommonUtils.load_all_testcases()
 
@@ -121,13 +128,9 @@ class PerfAction:
 
             logging.info(f"Found {len(matched_cases)} test cases for execution")
 
-            so_dir = Config.get('so_dir', None)
-            if so_dir is not None:
-                so_dir = os.path.abspath(parsed_args.so_dir)
-
             for case_name in matched_cases:
                 scene_round_dirs = []
-                for round_num in range(5):
+                for round_num in range(parsed_args.round):
                     case_dir = all_testcases[case_name]
                     output = os.path.join(reports_path, f'{case_name}_round{round_num}')
                     main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
@@ -146,8 +149,7 @@ class PerfAction:
                 future = executor.submit(
                     report_generator.generate_report,
                     scene_round_dirs,
-                    merge_folder_path,
-                    so_dir
+                    merge_folder_path
                 )
                 futures.append(future)
 
@@ -161,3 +163,5 @@ class PerfAction:
                 logging.info("Summary Excel created successfully")
             else:
                 logging.error("Failed to create summary Excel")
+
+            return reports_path
