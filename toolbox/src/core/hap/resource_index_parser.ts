@@ -82,7 +82,7 @@ enum ResType {
 
 export class ResourceIndexParser {
     bufferHelper: BufferHelper;
-    stringValueMap: Map<string, string>[];
+    stringValueMap: Array<Map<string, string>>;
     constructor(buffer: Buffer) {
         this.bufferHelper = new BufferHelper(buffer);
         this.stringValueMap = [];

@@ -23,7 +23,7 @@ import path from 'path';
  * @param options - 可选配置
  */
 export async function saveJsonArray<T>(
-    data: T[],
+    data: Array<T>,
     filePath: string,
     options: {
         indent?: number; // 缩进空格数，默认为 2
@@ -63,7 +63,7 @@ export async function saveJsonArray<T>(
  * 同步版本：将 JSON 数组写入文件
  */
 export function saveJsonArraySync<T>(
-    data: T[],
+    data: Array<T>,
     filePath: string,
     options: {
         indent?: number;

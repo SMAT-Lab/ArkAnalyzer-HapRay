@@ -15,7 +15,8 @@
 
 import fs from 'fs';
 import sqlJs from 'sql.js';
-import { PerfEvent, PerfSymbolDetailData, TestStep } from './perf_analyzer_base';
+import type { PerfSymbolDetailData, TestStep } from './perf_analyzer_base';
+import { PerfEvent } from './perf_analyzer_base';
 import { Readable } from 'stream';
 import { ComponentCategory } from '../component';
 
@@ -84,7 +85,7 @@ export class PerfDatabase {
         return db;
     }
 
-    async insertTestSteps(db: sqlJs.Database, steps: TestStep[]): Promise<void> {
+    insertTestSteps(db: sqlJs.Database, steps: Array<TestStep>): void {
         const stmt = db.prepare(`
             INSERT INTO perf_test_step VALUES($id, $name, $start, $end);
         `);
@@ -102,7 +103,7 @@ export class PerfDatabase {
                 stmt.reset();
             }
             db.exec('COMMIT');
-        } catch (err) {
+        } catch {
             db.exec('ROLLBACK');
         } finally {
             stmt.free();
@@ -113,7 +114,7 @@ export class PerfDatabase {
         db: sqlJs.Database,
         osVersion: string,
         scene: string,
-        records: PerfSymbolDetailData[]
+        records: Array<PerfSymbolDetailData>
     ): Promise<void> {
         const stmt = db.prepare(`
             INSERT INTO perf_symbol_details VALUES (
@@ -143,15 +144,15 @@ export class PerfDatabase {
                     $symbol: record.symbol,
                     $symbolEvents: record.symbolEvents,
                     $symbolTotalEvents: record.symbolTotalEvents,
-                    $componentName: record.componentName || null,
+                    $componentName: record.componentName ?? null,
                     $componentCategory: record.componentCategory,
-                    $originKind: record.originKind || null,
+                    $originKind: record.originKind ?? null,
                 });
                 stmt.step();
                 stmt.reset();
             }
             db.exec('COMMIT');
-        } catch (err) {
+        } catch {
             db.exec('ROLLBACK');
         } finally {
             stmt.free();
@@ -184,7 +185,7 @@ export class PerfDatabase {
         });
     }
 
-    async queryOverview(): Promise<Instruction[]> {
+    async queryOverview(): Promise<Array<Instruction>> {
         const db = await this.initialize();
         const results = db.exec(`SELECT component_category, SUM(symbol_events) as count, step_id
             FROM perf_symbol_details GROUP BY component_category, step_id`);
@@ -192,20 +193,21 @@ export class PerfDatabase {
             return [];
         }
 
-        let overView: Instruction[] = [];
-        results[0].values.map((row: any) => {
+        let overView: Array<Instruction> = [];
+        const rows = results[0].values as Array<Array<number>>;
+        rows.map((row: Array<number>) => {
             overView.push({
-                category: row[0] as number,
-                name: ComponentCategory[row[0] as number],
-                count: row[1] as number,
-                stepId: row[2] as number,
+                category: row[0],
+                name: ComponentCategory[row[0]],
+                count: row[1],
+                stepId: row[2],
             });
         });
         db.close();
         return overView;
     }
 
-    async queryStepsInstruction(): Promise<Instruction[]> {
+    async queryStepsInstruction(): Promise<Array<Instruction>> {
         const db = await this.initialize();
         const results =
             db.exec(`SELECT perf_test_step.id, perf_test_step.name, SUM(perf_symbol_details.symbol_events) as count
@@ -217,19 +219,20 @@ export class PerfDatabase {
             return [];
         }
 
-        let overView: Instruction[] = [];
-        results[0].values.map((row: any) => {
+        let overView: Array<Instruction> = [];
+        const rows = results[0].values as Array<[number, string, number]>;
+        rows.map((row: [number, string, number]) => {
             overView.push({
-                stepId: row[0] as number,
-                name: row[1] as string,
-                count: row[2] as number,
+                stepId: row[0],
+                name: row[1],
+                count: row[2],
             });
         });
         db.close();
         return overView;
     }
 
-    async queryFilesByStep(stepId: number): Promise<Instruction[]> {
+    async queryFilesByStep(stepId: number): Promise<Array<Instruction>> {
         const SQL = `SELECT file, SUM(file_events) as count, component_category
             from perf_symbol_details
             where step_id = :stepId
@@ -245,19 +248,20 @@ export class PerfDatabase {
             return [];
         }
 
-        let filelist: Instruction[] = [];
-        results[0].values.map((row: any) => {
+        let filelist: Array<Instruction> = [];
+        const rows = results[0].values as Array<[string, number, number]>;
+        rows.map((row: [string, number, number]) => {
             filelist.push({
-                name: row[0] as string,
-                count: row[1] as number,
-                category: row[2] as number,
+                name: row[0],
+                count: row[1],
+                category: row[2],
             });
         });
         db.close();
         return filelist;
     }
 
-    async queryFileSymbolsByStep(stepId: number, file: string): Promise<Instruction[]> {
+    async queryFileSymbolsByStep(stepId: number, file: string): Promise<Array<Instruction>> {
         const SQL = `SELECT symbol, SUM(symbol_events) as count
             from perf_symbol_details
             where step_id = :stepId and file = :file
@@ -274,18 +278,19 @@ export class PerfDatabase {
             return [];
         }
 
-        let symbols: Instruction[] = [];
-        results[0].values.map((row: any) => {
+        let symbols: Array<Instruction> = [];
+        const rows = results[0].values as Array<[string, number]>;
+        rows.map((row: [string, number]) => {
             symbols.push({
-                name: row[0] as string,
-                count: row[1] as number,
+                name: row[0],
+                count: row[1],
             });
         });
         db.close();
         return symbols;
     }
 
-    async queryFilelist(category: number): Promise<Instruction[]> {
+    async queryFilelist(category: number): Promise<Array<Instruction>> {
         const SQL = `SELECT file, SUM(file_events)
             from perf_symbol_details
             where component_category = :category
@@ -297,19 +302,20 @@ export class PerfDatabase {
             return [];
         }
 
-        let filelist: Instruction[] = [];
-        results[0].values.map((row: any) => {
+        let filelist: Array<Instruction> = [];
+        const rows = results[0].values as Array<[number, number]>;
+        rows.map((row: [number, number]) => {
             filelist.push({
-                name: ComponentCategory[row[0] as number],
-                count: row[1] as number,
+                name: ComponentCategory[row[0]],
+                count: row[1],
             });
         });
         db.close();
         return filelist;
     }
 
-    async queryTestSteps(): Promise<TestStep[]> {
-        const SQL = `SELECT id, name, start, end from perf_test_step`;
+    async queryTestSteps(): Promise<Array<TestStep>> {
+        const SQL = 'SELECT id, name, start, end from perf_test_step';
 
         const db = await this.initialize();
         const results = db.exec(SQL);
@@ -317,14 +323,15 @@ export class PerfDatabase {
             return [];
         }
 
-        let steps: TestStep[] = [];
-        results[0].values.map((row: any) => {
+        let steps: Array<TestStep> = [];
+        const rows = results[0].values as Array<[number, string, number, number]>;
+        rows.map((row: [number, string, number, number]) => {
             steps.push({
-                id: row[0] as number,
+                id: row[0],
                 groupId: 1,
-                name: row[1] as string,
-                start: row[2] as number,
-                end: row[3] as number,
+                name: row[1],
+                start: row[2],
+                end: row[3],
             });
         });
         db.close();
@@ -332,25 +339,26 @@ export class PerfDatabase {
     }
 }
 
-export async function getProcessesNameFromDb(dbpath: string): Promise<string[]> {
+export async function getProcessesNameFromDb(dbpath: string): Promise<Array<string>> {
     let SQL = await sqlJs();
     const db = new SQL.Database(fs.readFileSync(dbpath));
-    let processes: string[] = [];
+    let processes: Array<string> = [];
 
     try {
         // 读取所有线程信息
         const results = db.exec(
-            `SELECT thread_name from perf_thread WHERE thread_id = process_id and thread_name LIKE '%.%'`
+            "SELECT thread_name from perf_thread WHERE thread_id = process_id and thread_name LIKE '%.%'"
         );
         if (results.length === 0) {
             return processes;
         }
-
-        processes = results[0].values
-            .filter((v: any) => {
-                return !(v[0] as string).endsWith('.elf') && (v[0] as string).indexOf(':') < 0;
+        
+        const rows = results[0].values as Array<[string]>;
+        processes = rows
+            .filter((v: [string]) => {
+                return !v[0].endsWith('.elf') && v[0].indexOf(':') < 0;
             })
-            .map((v: any) => v[0] as string);
+            .map((v: [string]) => v[0]);
     } finally {
         db.close();
     }

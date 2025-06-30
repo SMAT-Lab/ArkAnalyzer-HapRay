@@ -22,16 +22,16 @@ const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 export function getAllFiles(
     srcPath: string,
     filter: {
-        exts?: string[];
-        names?: string[];
-        ignore?: string[];
+        exts?: Array<string>;
+        names?: Array<string>;
+        ignore?: Array<string>;
     },
-    filenameArr: string[] = [],
+    filenameArr: Array<string> = [],
     visited: Set<string> = new Set<string>()
-): string[] {
+): Array<string> {
     // 如果源目录不存在，直接结束程序
     if (!fs.existsSync(srcPath)) {
-        logger.error(`Input directory is not exist, please check!`);
+        logger.error('Input directory is not exist, please check!');
         return filenameArr;
     }
 
