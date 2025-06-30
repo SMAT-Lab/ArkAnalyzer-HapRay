@@ -11,6 +11,8 @@
     "setup:unix": "python3 setup_env.py",
     "build": "",
     "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
+    "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint",
+    "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe",
     "prepack": "npm run build:python && node zip.js ArkAnalyzer-HapRay"
   },
   "author": "",

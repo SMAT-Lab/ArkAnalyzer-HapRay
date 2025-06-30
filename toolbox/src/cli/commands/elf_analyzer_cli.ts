@@ -21,12 +21,18 @@ import { ElfAnalyzer } from '../../core/elf/elf_analyzer';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
+interface ElfAnalyzerOptions {
+    input: string;
+    report_dir: string;
+    output: string;
+}
+
 export const ElfAnalyzerCli = new Command('elf')
     .requiredOption('-i, --input <string>', 'so file path')
     .requiredOption('-r, --report_dir <string>', 'Directory containing reports to read')
     .requiredOption('-o, --output <string>', 'output file')
-    .action(async (...args: any[]) => {
-        await main(args[0].input, args[0].report_dir, args[0].output);
+    .action(async (options: ElfAnalyzerOptions) => {
+        await main(options.input, options.report_dir, options.output);
     });
 
 async function main(input: string, report: string, output: string): Promise<void> {

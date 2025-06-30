@@ -15,7 +15,7 @@
 
 import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
 import { loadConfig } from './loader';
-import { GlobalConfig } from './types';
+import type { ComponentConfig, GlobalConfig } from './types';
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 let _config: GlobalConfig | null = null;
@@ -27,18 +27,14 @@ export function initConfig(cliArgs: Partial<GlobalConfig>, afterLoad: (cfg: Glob
 }
 
 export function getConfig(): GlobalConfig {
-    if (!_config) {
-        _config = Object.freeze(loadConfig({}));
-    }
-
-    return _config;
+    return (_config ??= Object.freeze(loadConfig({})));
 }
 
 export function updateKindConfig(config: GlobalConfig, kindsJson: string): void {
     try {
-        const kinds = JSON.parse(kindsJson);
+        const kinds = JSON.parse(kindsJson) as Array<ComponentConfig>;
         config.perf.kinds.push(...kinds);
-    } catch (error: any) {
-        logger.error(`Invalid kind configuration: ${error.message} ${kindsJson}`);
+    } catch (error) {
+        logger.error(`Invalid kind configuration: ${(error as Error).message} ${kindsJson}`);
     }
 }

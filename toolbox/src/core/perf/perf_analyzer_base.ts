@@ -15,12 +15,14 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Component, ComponentCategory, ComponentCategoryType, OriginKind } from '../component';
+import type { Component, ComponentCategoryType} from '../component';
+import { ComponentCategory, OriginKind } from '../component';
 import { AnalyzerProjectBase, PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
 import writeXlsxFile from 'write-excel-file/node';
 import { PerfDatabase } from './perf_database';
 import { saveJsonArray } from '../../utils/json_utils';
+import type { SheetData } from 'write-excel-file';
 
 export const UNKNOWN_STR = 'unknown';
 
@@ -30,7 +32,7 @@ export interface StepJsonData {
     count: number;
     round: number;
     perf_data_path: string;
-    data: PerfSymbolDetailData[];
+    data: Array<PerfSymbolDetailData>;
 }
 
 export interface TestStepGroup {
@@ -44,7 +46,7 @@ export interface TestStepGroup {
 }
 
 export interface Round {
-    steps: TestStepGroup[];
+    steps: Array<TestStepGroup>;
 }
 
 export interface TestSceneInfo {
@@ -56,7 +58,7 @@ export interface TestSceneInfo {
     appVersion: string;
     model?: string;
     sn?: string;
-    rounds: Round[];
+    rounds: Array<Round>;
     chooseRound: number;
 }
 
@@ -111,10 +113,10 @@ export interface PerfSymbolDetailData {
 
 export interface PerfStepSum {
     stepIdx: number; // 步骤编号
-    components: PerfComponent[]; // 计算统计组件负载
-    categoriesSum: number[][]; // 大类统计值
-    categoriesTotal: number[][]; // 大类Total值
-    total: number[]; // 总值, 0 circles, 1 instructions
+    components: Array<PerfComponent>; // 计算统计组件负载
+    categoriesSum: Array<Array<number>>; // 大类统计值
+    categoriesTotal: Array<Array<number>>; // 大类Total值
+    total: Array<number>; // 总值, 0 circles, 1 instructions
 }
 
 export interface PerfSum {
@@ -123,8 +125,8 @@ export interface PerfSum {
     timestamp: number;
     perfPath: string;
     perfId: string;
-    steps: PerfStepSum[];
-    categories: ComponentCategoryType[];
+    steps: Array<PerfStepSum>;
+    categories: Array<ComponentCategoryType>;
 }
 
 export interface TestStep {
@@ -138,7 +140,7 @@ export interface TestStep {
 interface SymbolSplitRule {
     source: RegExp;
     dst: string;
-    symbols: RegExp[];
+    symbols: Array<RegExp>;
 }
 
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
@@ -147,16 +149,16 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected fileClassifyCfg: Map<string, ClassifyCategory>;
     protected fileRegexClassifyCfg: Map<RegExp, ClassifyCategory>;
     protected hapComponents: Map<string, Component>;
-    protected symbolsSplitRulesCfg: SymbolSplitRule[];
+    protected symbolsSplitRulesCfg: Array<SymbolSplitRule>;
 
     // classify result
     protected filesClassifyMap: Map<number, FileClassification>;
     protected symbolsClassifyMap: Map<number, FileClassification>;
     protected symbolsMap: Map<number, string>;
 
-    protected testSteps: TestStep[];
+    protected testSteps: Array<TestStep>;
     protected stepSumMap: Map<number, PerfStepSum>;
-    protected details: PerfSymbolDetailData[];
+    protected details: Array<PerfSymbolDetailData>;
 
     constructor(workspace: string) {
         super(workspace);
@@ -183,7 +185,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     private loadHapComponents(): void {
         const componentFile = path.join(this.projectRoot, 'modules.json');
         if (fs.existsSync(componentFile)) {
-            let info = JSON.parse(fs.readFileSync(componentFile, { encoding: 'utf-8' }));
+            let info = JSON.parse(fs.readFileSync(componentFile, { encoding: 'utf-8' })) as Array<{components: Array<Component>}>;
             for (const node of info) {
                 for (const component of node.components) {
                     this.hapComponents.set(component.name, component);
@@ -336,7 +338,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             return this.symbolsClassifyMap.get(symbolId)!;
         }
 
-        const symbol = this.symbolsMap.get(symbolId) || '';
+        const symbol = this.symbolsMap.get(symbolId) ?? '';
         if (fileClassification.category === ComponentCategory.APP_ABC) {
             /**
              * ets symbol
@@ -387,7 +389,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         return fileClassification;
     }
 
-    public classifyThread(threadName: string): ClassifyCategory {
+    public classifyThread(threadName: string | null): ClassifyCategory {
         const unknown = {
             category: ComponentCategory.UNKNOWN,
             categoryName: UNKNOWN_STR,
@@ -417,7 +419,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         await db.insertRecords(database, perf.osVersion, perf.scene, this.details);
 
         db.insertTestSteps(database, this.testSteps);
-        db.close(database);
+        await db.close(database);
         let name = path.basename(outputFileName).replace(path.extname(outputFileName), '');
         fs.writeFileSync(
             path.join(this.getWorkspace(), `${name}_负载拆解.hpr`),
@@ -431,7 +433,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
      * @param outputFileName
      */
     protected async saveDbtoolsXlsx(testInfo: TestSceneInfo, perf: PerfSum, outputFileName: string): Promise<void> {
-        let symbolPerfData: { type?: any; value: any }[][] = [];
+        let symbolPerfData: SheetData = [];
         symbolPerfData.push([
             { value: '版本' },
             { value: '测试模型' },
@@ -496,10 +498,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             { value: 'origin_kind' },
         ]);
 
-        let symbolDetailsMap = new Map<string, PerfSymbolDetailData[]>();
+        let symbolDetailsMap = new Map<string, Array<PerfSymbolDetailData>>();
 
         for (const data of this.details) {
-            let row: PerfSymbolDetailData[] = [
+            let row: Array<PerfSymbolDetailData> = [
                 {
                     stepIdx: data.stepIdx,
                     eventType: PerfEvent.CYCLES_EVENT,
@@ -596,7 +598,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             symbolPerfData.push(row);
         }
 
-        let sceneStepData: { type?: any; value: any }[][] = [];
+        let sceneStepData: SheetData = [];
         sceneStepData.push([
             { value: '版本' },
             { value: '测试模型' },
@@ -692,7 +694,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     step_id: data.stepIdx,
                     count: data.symbolEvents,
                     round: testInfo.chooseRound,
-                    perf_data_path: step.dbfile || '',
+                    perf_data_path: step.dbfile ?? '',
                     data: [data],
                 };
                 stepMap.set(data.stepIdx, value);
