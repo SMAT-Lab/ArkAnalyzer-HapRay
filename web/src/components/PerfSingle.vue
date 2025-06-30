@@ -36,7 +36,7 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <PieChart :chart-data="scenePieData" />
+          <PieChart :chart-data="scenePieData" :title="pieChartTitle"/>
         </div>
       </el-col>
       <el-col :span="12">
@@ -102,7 +102,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle"/>
         </div>
         <!-- 进程负载 -->
         <!-- <div class="data-panel">
@@ -115,7 +115,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" />
+          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle"/>
         </div>
       </el-col>
     </el-row>
@@ -217,7 +217,7 @@ import LineChart from './LineChart.vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
-import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData } from '@/utils/jsonUtil.ts';
+import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
@@ -263,35 +263,30 @@ const performanceData = ref(
   }
 );
 
-const mergedProcessPerformanceData = ref(
-  calculateProcessData(perfData!, null)
-);
-
-const mergedThreadPerformanceData = ref(
-  calculateThreadData(perfData!, null)
-);
-
-const mergedComponentNamePerformanceData = ref(
-  calculateComponentNameData(perfData!, null)
-);
-
-const mergedFilePerformanceData = ref(
-  calculateFileData(perfData!, null)
-);
-
-const mergedFilePerformanceData1 = ref(
-  calculateFileData1(perfData!, null)
-);
-
-const mergedSymbolsPerformanceData = ref(
-  calculateSymbolData(perfData!, null)
-);
-
-const mergedSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(perfData!, null)
-);
-
 const currentStepIndex = ref(0);
+
+// 动态聚合数据（根据步骤是否为0决定是否全局聚合）
+const mergedProcessPerformanceData = computed(() =>
+  calculateProcessData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedThreadPerformanceData = computed(() =>
+  calculateThreadData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedComponentNamePerformanceData = computed(() =>
+  calculateComponentNameData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedFilePerformanceData = computed(() =>
+  calculateFileData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedFilePerformanceData1 = computed(() =>
+  calculateFileData1(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedSymbolsPerformanceData = computed(() =>
+  calculateSymbolData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedSymbolsPerformanceData1 = computed(() =>
+  calculateSymbolData1(perfData!, null, currentStepIndex.value === 0)
+);
 
 // 格式化持续时间的方法
 const formatDuration = (milliseconds: any) => {
@@ -303,7 +298,7 @@ const scenePieData = ref();
 const stepPieData = ref();
 
 const processPieData = ref();
-
+const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
 scenePieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 processPieData.value = processJson2ProcessPieChartData(perfData!, currentStepIndex.value);

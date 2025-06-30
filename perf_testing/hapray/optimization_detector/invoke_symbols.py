@@ -1,10 +1,10 @@
 import json
 import logging
 import os
-from typing import List, Tuple
-import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Tuple
 
+import pandas as pd
 from tqdm import tqdm
 
 from hapray.core.common.exe_utils import ExeUtils
@@ -23,7 +23,7 @@ class InvokeSymbols:
 
         symbol_data = []
         invoked = 0
-        summary_data = {'File': file_info.logical_path, 'count': 0, 'invoked': '' }
+        summary_data = {'File': file_info.logical_path, 'count': 0, 'invoked': ''}
         # Read and parse the generated JSON output
         with open(output_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -37,7 +37,7 @@ class InvokeSymbols:
                     'Invoke': symbol.get('invoke')
                 })
         summary_data['count'] = len(symbol_data)
-        summary_data['invoked'] = '{:.3f}'.format(invoked * 100 / len(symbol_data))
+        summary_data['invoked'] = f'{invoked * 100 / len(symbol_data):.3f}'
         return symbol_data, summary_data
 
     def analyze(self, file_infos: List[FileInfo], report_dir: str) -> List[Tuple[str, pd.DataFrame]]:
@@ -62,7 +62,7 @@ class InvokeSymbols:
                 file_info = future_to_file[future]
                 try:
                     # Get the result from completed future
-                    file_data, summary  = future.result()
+                    file_data, summary = future.result()
                     # Add file results to main report
                     symbol_detail_data.extend(file_data)
                     summary_data.append(summary)
@@ -71,7 +71,7 @@ class InvokeSymbols:
                     progress_bar.set_postfix(file=file_info.logical_path, refresh=False)
                 except Exception as e:
                     # Handle errors for individual files without stopping entire process
-                    logging.error(f"Error processing file {file_info.logical_path}: {str(e)}")
+                    logging.error("Error processing file %s: %s", file_info.logical_path, str(e))
                 finally:
                     # Always update the progress count
                     progress_bar.update(1)
