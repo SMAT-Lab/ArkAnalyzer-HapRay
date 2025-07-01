@@ -159,9 +159,9 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         plt.yticks(fontsize=10)
 
         # 添加数值标签
-        for bar in bars:
-            height = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width() / 2., height,
+        for _bar in bars:
+            height = _bar.get_height()
+            plt.text(_bar.get_x() + _bar.get_width() / 2., height,
                      f'{height:.1f}%',
                      ha='center', va='bottom',
                      fontsize=10)
@@ -222,7 +222,7 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         }
 
     except Exception as e:
-        logging.error(f"Error generating empty frame load visualizations: {str(e)}")
+        logging.error("Error generating empty frame load visualizations: %s", str(e))
         return None
 
 
@@ -272,7 +272,7 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
                     # 如果没找到，使用默认值
                     if not scene_name:
                         scene_name = f"Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}"
-                        logging.warning(f"Using default scene name for {file_path}: {scene_name}")
+                        logging.warning("Using default scene name for %s: %s", file_path, scene_name)
 
                     # 遍历每个步骤的数据
                     for step_id, step_data in data.items():
@@ -288,7 +288,7 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
                             })
 
                 except Exception as e:
-                    logging.error(f"Error processing {file_path}: {str(e)}")
+                    logging.error("Error processing %s: %s", file_path, str(e))
                     continue
 
     # 按负载百分比排序
