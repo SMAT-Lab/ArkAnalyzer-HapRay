@@ -14,13 +14,12 @@ limitations under the License.
 """
 
 import codecs
-import json
 import logging
 import os
 import sqlite3
 import sys
-from typing import Dict, Any, List, Optional
 import traceback
+from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
@@ -54,65 +53,6 @@ class FrameAnalyzer:
     STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧
     NS_TO_MS = 1_000_000
     WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
-
-    @staticmethod
-    def _get_app_pids(scene_dir: str, step_id: str) -> list:
-        """获取应用进程ID列表
-
-        Args:
-            scene_dir: 场景目录路径
-            step_id: 步骤ID，如'step1'或'1'
-
-        Returns:
-            list: 进程ID列表
-        """
-        # 检查缓存
-        if step_id in FrameAnalyzer._pid_cache:
-            logging.debug("使用已缓存的PID数据: %s", step_id)
-            return FrameAnalyzer._pid_cache[step_id]
-
-        try:
-            # 处理step_id，去掉'step'前缀
-            step_number = int(step_id.replace('step', ''))
-
-            # 构建pids.json文件路径
-            pids_json_path = os.path.join(scene_dir, 'hiperf', f'step{step_number}', 'pids.json')
-
-            if not os.path.exists(pids_json_path):
-                logging.warning("No pids.json found at %s", pids_json_path)
-                return []
-
-            # 读取JSON文件
-            with open(pids_json_path, 'r', encoding='utf-8') as f:
-                pids_data = json.load(f)
-
-            # 提取pids和process_names
-            pids = pids_data.get('pids', [])
-            process_names = pids_data.get('process_names', [])
-
-            if not pids or not process_names:
-                logging.warning("No valid pids or process_names found in %s", pids_json_path)
-                return []
-
-            # 确保pids和process_names长度一致
-            if len(pids) != len(process_names):
-                logging.warning(
-                    "Mismatch between pids (%s) and process_names (%s) in %s",
-                    len(pids), len(process_names), pids_json_path)
-                # 取较短的长度
-                min_length = min(len(pids), len(process_names))
-                pids = pids[:min_length]
-                process_names = process_names[:min_length]
-
-            # 缓存PID数据
-            FrameAnalyzer._pid_cache[step_id] = pids
-
-            logging.debug("缓存PID数据: %s, PIDs: %s", step_id, len(pids))
-            return pids
-
-        except Exception as e:
-            logging.error("Failed to get app PIDs: %s", str(e))
-            return []
 
     @staticmethod
     def _update_pid_tid_cache(step_id: str, trace_df: pd.DataFrame) -> None:
@@ -366,49 +306,52 @@ class FrameAnalyzer:
             & (perf_df['thread_id'] == frame['tid'])
         )
         frame_samples = perf_df[mask]
-        if not frame_samples.empty:
-            for _, sample in frame_samples.iterrows():
-                if pd.notna(sample['callchain_id']):
-                    try:
-                        callchain_info = FrameAnalyzer._analyze_perf_callchain(
-                            perf_conn,
-                            int(sample['callchain_id']),
-                            callchain_cache,
-                            files_cache,
-                            step_id
-                        )
-                        if callchain_info:
-                            is_vsync_chain = False
-                            for i in range(len(callchain_info) - 1):
-                                current_symbol = callchain_info[i]['symbol']
-                                next_symbol = callchain_info[i + 1]['symbol']
-                                event_count = sample['event_count']
-                                if not current_symbol or not next_symbol:
-                                    continue
-                                if FrameAnalyzer._debug_vsync_enabled and (
-                                    'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
-                                    and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
-                                    and event_count < 2000000
-                                ):
-                                    is_vsync_chain = True
-                                    break
-                            if not is_vsync_chain:
-                                frame_load += sample['event_count']
-                                try:
-                                    sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                                    sample_callchains.append({
-                                        'timestamp': int(sample['timestamp_trace']),
-                                        'event_count': int(sample['event_count']),
-                                        'load_percentage': float(sample_load_percentage),
-                                        'callchain': callchain_info
-                                    })
-                                except Exception as e:
-                                    logging.error(
-                                        "处理样本时出错: %s, sample: %s, frame_load: %s", str(e), sample.to_dict(), frame_load)
-                                    continue
-                    except Exception as e:
-                        logging.error("分析调用链时出错: %s", str(e))
-                        continue
+        if frame_samples.empty:
+            return frame_load, sample_callchains
+        for _, sample in frame_samples.iterrows():
+            if not pd.notna(sample['callchain_id']):
+                continue
+            try:
+                callchain_info = FrameAnalyzer._analyze_perf_callchain(
+                    perf_conn,
+                    int(sample['callchain_id']),
+                    callchain_cache,
+                    files_cache,
+                    step_id
+                )
+                if callchain_info:
+                    is_vsync_chain = False
+                    for i in range(len(callchain_info) - 1):
+                        current_symbol = callchain_info[i]['symbol']
+                        next_symbol = callchain_info[i + 1]['symbol']
+                        event_count = sample['event_count']
+                        if not current_symbol or not next_symbol:
+                            continue
+                        if FrameAnalyzer._debug_vsync_enabled and (
+                                'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
+                                and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
+                                and event_count < 2000000
+                        ):
+                            is_vsync_chain = True
+                            break
+                    if not is_vsync_chain:
+                        frame_load += sample['event_count']
+                        try:
+                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
+                            sample_callchains.append({
+                                'timestamp': int(sample['timestamp_trace']),
+                                'event_count': int(sample['event_count']),
+                                'load_percentage': float(sample_load_percentage),
+                                'callchain': callchain_info
+                            })
+                        except Exception as e:
+                            logging.error(
+                                "处理样本时出错: %s, sample: %s, frame_load: %s", str(e), sample.to_dict(),
+                                frame_load)
+                            continue
+            except Exception as e:
+                logging.error("分析调用链时出错: %s", str(e))
+                continue
         return frame_load, sample_callchains
 
     @staticmethod
@@ -567,104 +510,6 @@ class FrameAnalyzer:
             perf_conn.close()
 
     @staticmethod
-    def update_empty_frame_results(report_dir: str) -> bool:
-        """
-        更新指定目录下的空帧分析数据
-
-        目录结构要求：
-        report_dir/
-        ├── htrace/
-        │   ├── step1/
-        │   │   └── trace.db
-        │   └── step2/
-        │       └── trace.db
-        └── hiperf/
-            ├── step1/
-            │   └── perf.db
-            └── step2/
-                └── perf.db
-
-        分析结果将保存在：
-        report_dir/
-        └── htrace/
-            └── empty_frames_analysis.json
-
-        Args:
-            report_dir: 报告目录路径，该目录下应包含htrace和hiperf两个子目录
-
-        Returns:
-            bool: 更新是否成功
-        """
-        try:
-            # 检查目录是否存在
-            if not os.path.exists(report_dir):
-                logging.error("Error: Directory not found at %s", report_dir)
-                return False
-
-            # 获取htrace和hiperf目录
-            htrace_dir = os.path.join(report_dir, 'htrace')
-            hiperf_dir = os.path.join(report_dir, 'hiperf')
-
-            if not os.path.exists(htrace_dir) or not os.path.exists(hiperf_dir):
-                logging.error("Error: Required directories not found at %s", report_dir)
-                return False
-
-            # 用于存储所有步骤的分析结果
-            all_results = {}
-
-            # 遍历所有步骤目录
-            for step_dir in os.listdir(htrace_dir):
-                step_path = os.path.join(htrace_dir, step_dir)
-                if not os.path.isdir(step_path):
-                    continue
-
-                # 查找trace.db文件
-                trace_db = os.path.join(step_path, 'trace.db')
-                if not os.path.exists(trace_db):
-                    logging.warning("Missing trace.db in %s", step_path)
-                    continue
-
-                # 查找对应的perf.db文件
-                perf_db = os.path.join(hiperf_dir, step_dir, 'perf.db')
-                if not os.path.exists(perf_db):
-                    logging.warning("Missing perf.db in %s", os.path.join(hiperf_dir, step_dir))
-                    continue
-
-                # 获取进程ID列表
-                app_pids = FrameAnalyzer._get_app_pids(report_dir, step_dir)
-                if not app_pids:
-                    logging.warning("No app PIDs found for step %s", step_dir)
-                    continue
-
-                # 分析空帧数据
-                try:
-                    result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, app_pids, report_dir, step_dir)
-                    # 如果有结果，将结果添加到总结果字典中
-                    if result is not None:
-                        all_results[step_dir] = result
-                        logging.info("Successfully analyzed empty frames for %s", step_dir)
-                    else:
-                        logging.info("No empty frame data found for %s", step_dir)
-                except Exception as e:
-                    logging.error("Error analyzing empty frames for %s: %s", step_dir, str(e))
-                    return False
-
-            # 保存所有步骤的分析结果
-            if all_results:
-                output_file = os.path.join(htrace_dir, 'empty_frames_analysis.json')
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    json.dump(all_results, f, indent=2, ensure_ascii=False)
-                print(f"✓ 分析结果已保存到: {output_file}")
-            else:
-                logging.warning("No valid analysis results to save")
-
-            return True
-
-        except Exception as e:
-            logging.error("Error updating empty frame analysis: %s", str(e))
-            return False
-
-    @staticmethod
     def analyze_single_stuttered_frame(frame, vsync_key, context):
         """
         分析单个卡顿帧，返回分析结果和统计信息
@@ -682,74 +527,78 @@ class FrameAnalyzer:
         level_desc = None
         frame_load = 0
         sample_callchains = []
-        if frame.get("flag") == 1:
-            expected_frame = next((f for f in data[vsync_key] if f["type"] == 1), None)
-            if expected_frame:
-                exceed_time_ns = frame["dur"] - expected_frame["dur"]
-                exceed_time = exceed_time_ns / FrameAnalyzer.NS_TO_MS
-                exceed_frames = exceed_time / FrameAnalyzer.FRAME_DURATION
-                if perf_df is not None and perf_conn is not None:
-                    frame_start_time = frame["ts"]
-                    frame_end_time = frame["ts"] + frame["dur"]
-                    mask = (
-                        (perf_df['timestamp_trace'] >= frame_start_time)
-                        & (perf_df['timestamp_trace'] <= frame_end_time)
-                        & (perf_df['thread_id'] == frame['tid'])
-                    )
-                    frame_samples = perf_df[mask]
-                    if not frame_samples.empty:
-                        frame_load = frame_samples['event_count'].sum()
-                        for _, sample in frame_samples.iterrows():
-                            if pd.notna(sample['callchain_id']):
-                                try:
-                                    callchain_info = FrameAnalyzer._analyze_perf_callchain(
-                                        perf_conn,
-                                        int(sample['callchain_id']),
-                                        callchain_cache,
-                                        files_cache,
-                                        step_id
-                                    )
-                                    if callchain_info:
-                                        try:
-                                            sample_load_percentage = (
-                                                sample['event_count'] / frame_load) * 100
-                                            sample_callchains.append({
-                                                'timestamp': int(sample['timestamp_trace']),
-                                                'event_count': int(sample['event_count']),
-                                                'load_percentage': float(sample_load_percentage),
-                                                'callchain': callchain_info
-                                            })
-                                        except Exception as e:
-                                            logging.error(
-                                                "处理样本时出错: %s, sample: %s, frame_load: %s",
-                                                str(e), sample.to_dict(), frame_load)
-                                            continue
-                                except Exception as e:
-                                    logging.error("分析调用链时出错: %s", str(e))
-                                    continue
-                if frame.get("flag") == 3 or exceed_frames < FrameAnalyzer.STUTTER_LEVEL_1_FRAMES:
-                    stutter_level = 1
-                    level_desc = "轻微卡顿"
-                elif exceed_frames < FrameAnalyzer.STUTTER_LEVEL_2_FRAMES:
-                    stutter_level = 2
-                    level_desc = "中度卡顿"
-                else:
-                    stutter_level = 3
-                    level_desc = "严重卡顿"
-                stutter_detail = {
-                    "vsync": vsync_key,
-                    "timestamp": frame["ts"],
-                    "actual_duration": frame["dur"],
-                    "expected_duration": expected_frame["dur"],
-                    "exceed_time": exceed_time,
-                    "exceed_frames": exceed_frames,
-                    "stutter_level": stutter_level,
-                    "level_description": level_desc,
-                    "src": frame.get("src"),
-                    "dst": frame.get("dst"),
-                    "frame_load": int(frame_load),
-                    "sample_callchains": sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)
-                }
+        if frame.get("flag") != 1:
+            return frame_type, stutter_level, stutter_detail
+        expected_frame = next((f for f in data[vsync_key] if f["type"] == 1), None)
+        if expected_frame is None:
+            return frame_type, stutter_level, stutter_detail
+
+        exceed_time_ns = frame["dur"] - expected_frame["dur"]
+        exceed_time = exceed_time_ns / FrameAnalyzer.NS_TO_MS
+        exceed_frames = exceed_time / FrameAnalyzer.FRAME_DURATION
+        if perf_df is not None and perf_conn is not None:
+            frame_start_time = frame["ts"]
+            frame_end_time = frame["ts"] + frame["dur"]
+            mask = (
+                (perf_df['timestamp_trace'] >= frame_start_time)
+                & (perf_df['timestamp_trace'] <= frame_end_time)
+                & (perf_df['thread_id'] == frame['tid'])
+            )
+            frame_samples = perf_df[mask]
+            if not frame_samples.empty:
+                frame_load = frame_samples['event_count'].sum()
+                for _, sample in frame_samples.iterrows():
+                    if not pd.notna(sample['callchain_id']):
+                        continue
+                    try:
+                        callchain_info = FrameAnalyzer._analyze_perf_callchain(
+                            perf_conn,
+                            int(sample['callchain_id']),
+                            callchain_cache,
+                            files_cache,
+                            step_id
+                        )
+                        if len(callchain_info) == 0:
+                            continue
+                        try:
+                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
+                            sample_callchains.append({
+                                'timestamp': int(sample['timestamp_trace']),
+                                'event_count': int(sample['event_count']),
+                                'load_percentage': float(sample_load_percentage),
+                                'callchain': callchain_info
+                            })
+                        except Exception as e:
+                            logging.error(
+                                "处理样本时出错: %s, sample: %s, frame_load: %s",
+                                str(e), sample.to_dict(), frame_load)
+                            continue
+                    except Exception as e:
+                        logging.error("分析调用链时出错: %s", str(e))
+                        continue
+        if frame.get("flag") == 3 or exceed_frames < FrameAnalyzer.STUTTER_LEVEL_1_FRAMES:
+            stutter_level = 1
+            level_desc = "轻微卡顿"
+        elif exceed_frames < FrameAnalyzer.STUTTER_LEVEL_2_FRAMES:
+            stutter_level = 2
+            level_desc = "中度卡顿"
+        else:
+            stutter_level = 3
+            level_desc = "严重卡顿"
+        stutter_detail = {
+            "vsync": vsync_key,
+            "timestamp": frame["ts"],
+            "actual_duration": frame["dur"],
+            "expected_duration": expected_frame["dur"],
+            "exceed_time": exceed_time,
+            "exceed_frames": exceed_frames,
+            "stutter_level": stutter_level,
+            "level_description": level_desc,
+            "src": frame.get("src"),
+            "dst": frame.get("dst"),
+            "frame_load": int(frame_load),
+            "sample_callchains": sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)
+        }
         return frame_type, stutter_level, stutter_detail
 
     @staticmethod
