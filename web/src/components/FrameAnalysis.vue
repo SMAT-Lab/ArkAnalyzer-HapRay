@@ -131,7 +131,7 @@
                         <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
                         <div class="metric-value">{{ componentResuData.max_component }}/{{
                             componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{
-                                componentResuData.reusability_ratio*100 }}%</div>
+                                componentResuData.reusability_ratio * 100 }}%</div>
                     </div>
                 </div>
             </div>
@@ -364,7 +364,7 @@
                         <td>{{ stutter.vsync }}</td>
                         <td :class="'level-' + stutter.stutter_level">
                             <span class="level-badge">{{ stutter.stutter_level }} - {{ stutter.level_description
-                            }}</span>
+                                }}</span>
                         </td>
                         <td>{{ (stutter.actual_duration / 1000000).toFixed(2) }}</td>
                         <td>{{ (stutter.expected_duration / 1000000).toFixed(2) }}</td>
@@ -414,9 +414,8 @@
                                 <span class="module-text" :class="{ 'truncated': !expandedModules[index] }">
                                     {{ file.parent_module || '-' }}
                                 </span>
-                                <i v-if="file.parent_module && file.parent_module.length > 30" 
-                                   class="expand-icon" 
-                                   :class="{ 'expanded': expandedModules[index] }">
+                                <i v-if="file.parent_module && file.parent_module.length > 30" class="expand-icon"
+                                    :class="{ 'expanded': expandedModules[index] }">
                                     {{ expandedModules[index] ? '收起' : '展开' }}
                                 </i>
                             </div>
@@ -1861,7 +1860,6 @@ body {
 
 .module-text.truncated {
     display: -webkit-box;
-    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1889,7 +1887,6 @@ body {
     background: rgba(239, 68, 68, 0.1);
     color: #ef4444;
 }
-
 .expand-icon.expanded:hover {
     background: rgba(239, 68, 68, 0.2);
     color: #dc2626;

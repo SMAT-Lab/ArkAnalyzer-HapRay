@@ -53,12 +53,14 @@ class ReportData:
         frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
         empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
         component_reusability_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
+        cold_start_analysis_path = os.path.join(scene_dir, 'htrace', 'cold_start_analysis_summary.json')
 
         data = cls()
         data.load_perf_data(perf_data_path)
         data.load_frame_data(frame_data_path)
         data.load_empty_frame_data(empty_frames_analysis_path)
         data.load_component_reusability_data(component_reusability_path)
+        data.load_cold_start_analysis_data(cold_start_analysis_path)
         data.extract_basic_info()
         return data
 
