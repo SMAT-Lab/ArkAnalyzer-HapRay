@@ -53,7 +53,7 @@ const handleChartClick = (params: any) => {
   console.log(params);
 };
 
-let depsData = ref({ nodes: [], edges: [], categories: [] });
+const depsData = ref({ nodes: [], edges: [], categories: [] });
 
 const initChart = () => {
   const usedCategories = new Set<number>();

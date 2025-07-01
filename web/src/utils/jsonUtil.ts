@@ -191,7 +191,7 @@ function compareJsonDataByLevel<T>(
         const compareInstructions = compareMap.get(key) ?? -1;
 
         // 计算增量
-        let increaseInstructions = (compareInstructions === -1 ? 0 : compareInstructions) - (instructions === -1 ? 0 : instructions);
+        const increaseInstructions = (compareInstructions === -1 ? 0 : compareInstructions) - (instructions === -1 ? 0 : instructions);
 
         // 计算增量百分比
         let increasePercentage = NaN;

@@ -7,7 +7,8 @@
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
+                    <div
+class="progress-value"
                         :style="{ width: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)' }"></div>
                 </div>
                 <div class="card-desc">应用渲染的总帧数，反映整体运行情况</div>
@@ -33,7 +34,8 @@
                 </div>
                 <div class="card-value">{{ performanceData.statistics.total_stutter_frames }} </div>
                 <div class="progress-bar">
-                    <div class="progress-value"
+                    <div
+class="progress-value"
                         :style="{ width: (performanceData.statistics.stutter_rate * 100) + '%', background: '#f97316' }">
                     </div>
                 </div>
@@ -64,7 +66,8 @@
                 </div>
                 <div class="card-value">{{ summaryData.empty_frames_with_load.toLocaleString() }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
+                    <div
+class="progress-value"
                         :style="{ width: Math.min(100, summaryData.empty_frame_percentage) + '%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)' }">
                     </div>
                 </div>
@@ -88,13 +91,14 @@
                     </div>
                 </div>
             </div>
-            <div class="stat-card data-panel">
+            <div v-if="hasFileUsageData" class="stat-card data-panel">
                 <div class="card-title">
                     <i>📁</i> 冷加载文件使用分析
                 </div>
                 <div class="card-value">{{ fileUsageData.summary?.total_file_number || 0 }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
+                    <div
+class="progress-value"
                         :style="{ width: (fileUsageData.summary ? (fileUsageData.summary.used_file_count / fileUsageData.summary.total_file_number * 100) : 0) + '%', background: 'linear-gradient(90deg, #10b981, #34d399)' }">
                     </div>
                 </div>
@@ -128,9 +132,8 @@
                 <div class="metric-grid">
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
-                        <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
-                        <div class="metric-value">{{ componentResuData.max_component }}/{{
-                            componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{
+                        <div class="metric-label">组件名/总组件数/复用占比</div>
+                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.total_builds }}/{{
                                 componentResuData.reusability_ratio * 100 }}%</div>
                     </div>
                 </div>
@@ -143,13 +146,13 @@
                 <div class="chart-title">
                     <i class="fas fa-chart-line"></i> FPS、卡顿帧、空刷分析图（相对时间）
                 </div>
-                <div class="chart" ref="fpsChart"></div>
+                <div ref="fpsChart" class="chart"></div>
             </div>
         </div>
 
 
         <!-- 空刷帧详情面板 -->
-        <div class="detail-panel emptyframe-panel" v-if="selectedEmptyFrame">
+        <div v-if="selectedEmptyFrame" class="detail-panel emptyframe-panel">
             <div class="detail-header">
                 <div class="detail-title emptyframe-header">
                     <i class="fas fa-ghost"></i>
@@ -208,9 +211,11 @@
                         <i class="fas fa-code-branch"></i>
                         调用栈信息
                     </div>
-                    <div class="callstack-list"
-                        v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0">
-                        <div v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
+                    <div
+v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
+                        class="callstack-list">
+                        <div
+v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
                             class="callstack-item">
                             <div class="callstack-header">
                                 <div class="callstack-timestamp">
@@ -228,7 +233,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="placeholder" v-else>
+                    <div v-else class="placeholder">
                         <i class="fas fa-exclamation-circle"></i>
                         <h3>未找到调用栈信息</h3>
                         <p>当前空刷帧没有记录调用栈信息</p>
@@ -238,7 +243,7 @@
         </div>
 
         <!-- 卡顿详情面板 -->
-        <div class="detail-panel" v-if="selectedStutter">
+        <div v-if="selectedStutter" class="detail-panel">
             <div class="detail-header">
                 <div class="detail-title">
                     <i class="fas fa-bug"></i>
@@ -300,7 +305,7 @@
                         <i class="fas fa-code-branch"></i>
                         调用栈信息
                     </div>
-                    <div class="callstack-list" v-if="callstackData.length > 0">
+                    <div v-if="callstackData.length > 0" class="callstack-list">
                         <div v-for="(chain, idx) in callstackData" :key="idx" class="callstack-item">
                             <div class="callstack-header">
                                 <div class="callstack-timestamp">
@@ -318,7 +323,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="placeholder" v-else>
+                    <div v-else class="placeholder">
                         <i class="fas fa-exclamation-circle"></i>
                         <h3>未找到调用栈信息</h3>
                         <p>当前卡顿点没有记录调用栈信息，可能是系统级调用或未捕获的线程</p>
@@ -335,15 +340,18 @@
                 <div class="filter-item" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">
                     全部卡顿 ({{ performanceData.statistics.total_stutter_frames }})
                 </div>
-                <div class="filter-item" :class="{ active: activeFilter === 'level_1' }"
+                <div
+class="filter-item" :class="{ active: activeFilter === 'level_1' }"
                     @click="activeFilter = 'level_1'">
                     轻微卡顿 ({{ performanceData.statistics.stutter_levels.level_1 }})
                 </div>
-                <div class="filter-item" :class="{ active: activeFilter === 'level_2' }"
+                <div
+class="filter-item" :class="{ active: activeFilter === 'level_2' }"
                     @click="activeFilter = 'level_2'">
                     中度卡顿 ({{ performanceData.statistics.stutter_levels.level_2 }})
                 </div>
-                <div class="filter-item" :class="{ active: activeFilter === 'level_3' }"
+                <div
+class="filter-item" :class="{ active: activeFilter === 'level_3' }"
                     @click="activeFilter = 'level_3'">
                     严重卡顿 ({{ performanceData.statistics.stutter_levels.level_3 }})
                 </div>
@@ -377,17 +385,19 @@
         </div>
 
         <!-- 文件使用分析表格 -->
-        <div class="table-container data-panel">
+        <div v-if="hasFileUsageData" class="table-container data-panel">
             <div class="table-title">
                 <i>📁</i> 冷加载文件使用分析
             </div>
 
             <div class="filters">
-                <div class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
+                <div
+class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
                     @click="fileUsageFilter = 'used'">
                     已使用文件 TOP 10 ({{ fileUsageData.used_files_top10.length }})
                 </div>
-                <div class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
+                <div
+class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
                     @click="fileUsageFilter = 'unused'">
                     未使用文件 TOP 10 ({{ fileUsageData.unused_files_top10.length }})
                 </div>
@@ -399,7 +409,7 @@
                         <th>排名</th>
                         <th>文件名</th>
                         <th>耗时</th>
-                        <th>父模块</th>
+                        <!-- <th>父模块</th> -->
                     </tr>
                 </thead>
                 <tbody>
@@ -409,7 +419,7 @@
                         </td>
                         <td class="file-name">{{ file.file_name }}</td>
                         <td>{{ formatFileTime(file.cost_time_ms) }}</td>
-                        <td class="parent-module">
+                        <!-- <td class="parent-module">
                             <div class="module-content" @click="toggleModuleDetail(index)">
                                 <span class="module-text" :class="{ 'truncated': !expandedModules[index] }">
                                     {{ file.parent_module || '-' }}
@@ -419,7 +429,7 @@
                                     {{ expandedModules[index] ? '收起' : '展开' }}
                                 </i>
                             </div>
-                        </td>
+                        </td> -->
                     </tr>
                 </tbody>
             </table>
@@ -491,7 +501,7 @@ function mergeFileUsageDataAllSteps(coldStartJsonData) {
     // 合并所有step的used_files_top10和unused_files_top10
     const allUsed = {};
     const allUnused = {};
-    let summary = {
+    const summary = {
         total_file_number: 0,
         total_time_ms: 0,
         used_file_count: 0,
@@ -591,6 +601,17 @@ const getFileRankClass = (rank) => {
 
 // 空刷帧汇总数据
 const summaryData = computed(() => emptyFrameData.value.summary);
+
+// 判断冷启动数据是否有效
+const hasFileUsageData = computed(() => {
+    const data = fileUsageData.value;
+    if (!data) return false;
+    // summary所有字段都为0，且used_files_top10和unused_files_top10都为空时视为无数据
+    const s = data.summary;
+    const noSummary = !s || (s.total_file_number === 0 && s.total_time_ms === 0 && s.used_file_count === 0 && s.unused_file_count === 0);
+    const noFiles = (!data.used_files_top10 || data.used_files_top10.length === 0) && (!data.unused_files_top10 || data.unused_files_top10.length === 0);
+    return !(noSummary && noFiles);
+});
 
 // 格式化数字显示
 const formatNumber = (num) => {
