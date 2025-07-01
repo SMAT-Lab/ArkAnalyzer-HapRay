@@ -829,11 +829,6 @@ class FrameAnalyzer:
                 "fps_stats": stats["fps_stats"]
             }
 
-            # 关闭数据库连接
-            conn.close()
-            if perf_conn:
-                perf_conn.close()
-
             return result
 
         except Exception as e:

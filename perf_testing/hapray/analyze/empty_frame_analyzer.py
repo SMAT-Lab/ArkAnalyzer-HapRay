@@ -15,6 +15,7 @@ limitations under the License.
 
 import logging
 import os
+import traceback
 from typing import Dict, Any, Optional
 
 from hapray.analyze.base_analyzer import AnalyzerHelper, BaseAnalyzer
@@ -45,20 +46,12 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
         try:
             # 获取该步骤的进程信息
             pids = AnalyzerHelper.get_app_pids(self.scene_dir, step_dir)
-
             if not pids:
                 logging.warning("No process info found for step %s", step_dir)
                 return None
 
-            # 记录当前步骤的进程信息
-            for name, pid in pids:
-                logging.info("Step %s - Process: %s (PID: %d)", step_dir, name, pid)
-
-            # 提取PID列表
-            pid_list = [pid for _, pid in pids]
-
             # 执行空帧分析
-            result = FrameAnalyzer.analyze_empty_frames(trace_db_path, perf_db_path, pid_list, self.scene_dir, step_dir)
+            result = FrameAnalyzer.analyze_empty_frames(trace_db_path, perf_db_path, pids, self.scene_dir, step_dir)
 
             # 如果没有数据，返回None
             if result is None:
@@ -68,5 +61,5 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             return result
 
         except Exception as e:
-            logging.error("Empty frame analysis failed: %s", str(e))
+            logging.error("Empty frame analysis failed: %s %s", str(e), traceback.format_exc())
             return None
