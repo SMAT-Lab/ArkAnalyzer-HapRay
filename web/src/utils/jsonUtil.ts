@@ -159,7 +159,9 @@ function compareJsonDataByLevel<T>(
 
         for (const step of data.steps) {
             for (const item of step.data) {
-                const key = keyGenerator(item, ignoreStep ? 0 : step.step_id); // 如果ignoreStep为true，stepId统一为0
+                const key = ignoreStep
+                    ? keyGenerator(item, 0) // stepId=0
+                    : keyGenerator(item, step.step_id);
                 const current = map.get(key) || 0;
                 map.set(key, current + item.symbolEvents);
             }
