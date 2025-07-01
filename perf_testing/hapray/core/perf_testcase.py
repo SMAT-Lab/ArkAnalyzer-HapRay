@@ -130,6 +130,7 @@ class PerfTestCase(TestCase, ABC):
         self.driver = UiDriver(self.device1)
         self.tag = tag
         self._start_app_package = None  # Package name for process identification
+        self._redundant_mode_status = False  # default close redundant mode
 
     @property
     @abstractmethod
@@ -198,6 +199,7 @@ class PerfTestCase(TestCase, ABC):
         # 设置hdc参数
         Log.info('设置hdc参数: persist.ark.properties 0x200105c')
         os.system('hdc shell param set persist.ark.properties 0x200105c')
+        self._redundant_mode_status = True
 
     def reboot_device(self):
         # 重启手机
@@ -459,6 +461,8 @@ class PerfTestCase(TestCase, ABC):
             Log.error(f"Failed to transfer trace data: {local_path}")
 
     def _transfer_redundant_data(self, trace_step_dir: str):
+        if not self._transfer_redundant_data:
+            return
         bundle_name = self._start_app_package or self.app_package
         remote_path = f'data/app/el2/100/base/{bundle_name}/files/{bundle_name}_redundant_file.txt'
         if not self._verify_remote_files_exist(remote_path):
