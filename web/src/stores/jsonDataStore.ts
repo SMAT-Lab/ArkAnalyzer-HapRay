@@ -372,7 +372,7 @@ export function getDefaultComponentResuData(): ComponentResuData {
   };
 }
 
-function getDefaultColdStartStepData(): ColdStartStepData {
+export function getDefaultColdStartStepData(): ColdStartStepData {
   return {
     summary: {
       total_file_number: 0,
