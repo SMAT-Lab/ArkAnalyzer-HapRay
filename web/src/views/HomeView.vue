@@ -42,7 +42,7 @@ import PerfSingle from '@/components/PerfSingle.vue';
 import { getCurrentInstance } from 'vue';
 import { ElMessage } from 'element-plus';
 
-let showPage = ref('');
+const showPage = ref('');
 
 async function changeContent(page: string) {
   showPage.value = '';

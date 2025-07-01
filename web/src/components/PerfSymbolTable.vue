@@ -1,13 +1,14 @@
 <template>
-  <div class="instructions-table" id="perfsTable">
+  <div id="perfsTable" class="instructions-table">
     <!-- 搜索和过滤容器 -->
     <div class="filter-container">
       <el-radio-group v-model="filterModel.filterMode">
         <el-radio-button value="string">字符串模式</el-radio-button>
         <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
-      <el-input v-model="symbolNameQuery.symbolNameQuery" placeholder="根据函数搜索" clearable @input="handleFilterChange"
-        class="search-input">
+      <el-input
+v-model="symbolNameQuery.symbolNameQuery" placeholder="根据函数搜索" clearable class="search-input"
+        @input="handleFilterChange">
         <template #prefix>
           <el-icon>
             <search />
@@ -15,36 +16,41 @@
         </template>
       </el-input>
 
-      <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件搜索" clearable @input="handleFilterChange"
-        class="search-input">
+      <el-input
+v-model="fileNameQuery.fileNameQuery" placeholder="根据文件搜索" clearable class="search-input"
+        @input="handleFilterChange">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-input v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable
-        @input="handleFilterChange" class="search-input">
+      <el-input
+v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable
+        class="search-input" @input="handleFilterChange">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-input v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable
-        @input="handleFilterChange" class="search-input">
+      <el-input
+v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable
+        class="search-input" @input="handleFilterChange">
         <template #prefix>
           <el-icon>
             <search />
           </el-icon>
         </template>
       </el-input>
-      <el-select v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类"
-        clearable @change="handleFilterChange" class="category-select">
+      <el-select
+v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类"
+        clearable class="category-select" @change="handleFilterChange">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
-      <el-input v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
-        @input="handleFilterChange" class="search-input">
+      <el-input
+v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
+        class="search-input" @input="handleFilterChange">
         <template #prefix>
           <el-icon>
             <search />
@@ -78,9 +84,10 @@
     </el-row>
 
     <!-- 数据表格 -->
-    <el-table :data="paginatedData" @row-click="handleRowClick" style="width: 100%"
-      :default-sort="{ prop: 'instructions', order: 'descending' }" @sort-change="handleSortChange" stripe
-      highlight-current-row>
+    <el-table
+:data="paginatedData" style="width: 100%" :default-sort="{ prop: 'instructions', order: 'descending' }"
+      stripe highlight-current-row @row-click="handleRowClick"
+      @sort-change="handleSortChange">
       <el-table-column prop="name" label="函数" sortable>
         <template #default="{ row }">
           <div class="name-cell">{{ row.symbol }}</div>
@@ -152,7 +159,8 @@
           <el-option v-for="size in pageSizeOptions" :key="size" :label="`每页 ${size} 条`" :value="size" />
         </el-select>
 
-        <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="total" :background="true"
+        <el-pagination
+v-model:current-page="currentPage" :page-size="pageSize" :total="total" :background="true"
           layout="prev, pager, next" />
       </div>
     </div>
@@ -267,10 +275,10 @@ const filteredData = computed<SymbolDataItem[]>(() => {
   });
 
 
-  let basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
+  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
   filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
 
-  let comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions) * 100;
+  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions) * 100;
   filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
 
   // 应用排序（添加类型安全）
@@ -395,7 +403,7 @@ const handleSortChange = (sort: {
   }
 };
 
-let categoriesExit = new Set();
+const categoriesExit = new Set();
 
 props.data.forEach((item) => {
   categoriesExit.add(item.category);
