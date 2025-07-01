@@ -48,19 +48,20 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="perfData" :seriesType="LeftLineChartSeriesType" />
+          <LineChart :chart-data="perfData" :series-type="LeftLineChartSeriesType" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="perfData" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chart-data="perfData" :series-type="RightLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
 
     <!-- 测试步骤导航 -->
     <div class="step-nav">
-      <div :class="[
+      <div
+:class="[
         'step-item',
         {
           active: currentStepIndex === 0,
@@ -73,7 +74,8 @@
         </div>
         <div class="step-name">全部步骤</div>
       </div>
-      <div v-for="(step, index) in testSteps" :key="index" :class="[
+      <div
+v-for="(step, index) in testSteps" :key="index" :class="[
         'step-item',
         {
           active: currentStepIndex === step.id,
@@ -87,11 +89,13 @@
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
         <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
-        <button class="beautiful-btn primary-btn"
+        <button
+class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
           下载perf
         </button>
-        <button class="beautiful-btn primary-btn"
+        <button
+class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('trace.htrace', step.id, step.step_name)">
           下载trace
         </button>
@@ -104,7 +108,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle" />
+          <PieChart :step-id="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle" />
         </div>
         <!-- 进程负载 -->
         <!-- <div class="data-panel">
@@ -117,7 +121,7 @@
       <el-col :span="12">
         <!-- 步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle" />
+          <PieChart :step-id="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle" />
         </div>
       </el-col>
     </el-row>
@@ -128,8 +132,9 @@
           <h3 class="panel-title">
             <span class="version-tag">线程负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadPerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfThreadTable
+:step-id="currentStepIndex" :data="filteredThreadPerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -138,8 +143,9 @@
           <h3 class="panel-title">
             <span class="version-tag">小分类负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredComponentNamePerformanceData"
-            :hideColumn="isHidden" :hasCategory="true" />
+          <PerfThreadTable
+:step-id="currentStepIndex" :data="filteredComponentNamePerformanceData"
+            :hide-column="isHidden" :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -150,8 +156,9 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfFileTable
+:step-id="currentStepIndex" :data="filteredFilePerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -160,8 +167,9 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilePerformanceData1" :hideColumn="isHidden"
-            :hasCategory="true" />
+          <PerfFileTable
+:step-id="currentStepIndex" :data="filteredFilePerformanceData1" :hide-column="isHidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -172,8 +180,9 @@
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredSymbolPerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -182,8 +191,9 @@
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolPerformanceData1" :hideColumn="isHidden"
-            :hasCategory="true" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredSymbolPerformanceData1" :hide-column="isHidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -191,7 +201,8 @@
   <div v-if="currentTab === 'tab2'">
     <!-- 测试步骤导航 -->
     <div class="step-nav" style="margin-bottom: 20px;margin-top: 20px;">
-      <div v-for="(step, index) in testSteps" :key="index" :class="[
+      <div
+v-for="(step, index) in testSteps" :key="index" :class="[
         'step-item',
         {
           active: currentStepIndex === step.id,
