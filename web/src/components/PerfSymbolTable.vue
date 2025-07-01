@@ -227,6 +227,20 @@ const sortState = ref<{
 const filterAllBaseInstructionsCompareTotal = ref('');
 const filterAllCompareInstructionsCompareTotal = ref('');
 
+// 统计原始总指令数
+const beforeFilterBaseInstructions = ref(0);
+const beforeFilterCompareInstructions = ref(0);
+
+watch(() => props.data, (newVal) => {
+  let base = 0;
+  let compare = 0;
+  newVal.forEach((dataItem) => {
+    base += dataItem.instructions;
+    compare += dataItem.compareInstructions;
+  });
+  beforeFilterBaseInstructions.value = base;
+  beforeFilterCompareInstructions.value = compare;
+}, { immediate: true });
 
 // 数据处理（添加完整类型注解）
 const filteredData = computed<SymbolDataItem[]>(() => {
@@ -274,20 +288,11 @@ const filteredData = computed<SymbolDataItem[]>(() => {
     afterFilterCompareInstructions = afterFilterCompareInstructions + dataItem.compareInstructions;
   });
 
-
-  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions) * 100;
-  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
-
-  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions) * 100;
-  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? 100 + '%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
-
-  // 应用排序（添加类型安全）
+  // 排序
   if (sortState.value.order) {
     const sortProp = sortState.value.prop
     const modifier = sortState.value.order === 'ascending' ? 1 : -1
-
-    result.sort((a: SymbolDataItem, b: SymbolDataItem) => {
-      // 添加类型断言确保数值比较
+    result = [...result].sort((a: SymbolDataItem, b: SymbolDataItem) => {
       const aVal = a[sortProp] as number
       const bVal = b[sortProp] as number
       return (aVal - bVal) * modifier
@@ -325,6 +330,7 @@ function filterQueryCondition(queryName: string, queryCondition: string, result:
       return result;
     }
   } catch (error) {
+    console.error(error);
     return result;
   }
 }
@@ -414,6 +420,20 @@ const categoryFilters = Array.from(categoriesExit).map(item => ({
   text: item,
   value: item
 }));
+
+// 副作用赋值移到watch
+watch(filteredData, (newVal) => {
+  let afterFilterBaseInstructions = 0;
+  let afterFilterCompareInstructions = 0;
+  newVal.forEach((dataItem) => {
+    afterFilterBaseInstructions += dataItem.instructions;
+    afterFilterCompareInstructions += dataItem.compareInstructions;
+  });
+  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions.value) * 100;
+  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? '100%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
+  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions.value) * 100;
+  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? '100%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
+}, { immediate: true });
 
 </script>
 

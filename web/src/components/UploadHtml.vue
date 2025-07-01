@@ -17,6 +17,7 @@
 <script setup lang="ts">
   import { ref } from 'vue';
   import { ElMessage } from 'element-plus';
+  import type { UploadFile } from 'element-plus';
   
   // 存储选中的文件
   const selectedFile = ref<File | null>(null);
@@ -24,8 +25,12 @@
   const statusMessage = ref<string>('');
   
   // 处理文件选择事件
-  const handleFileChange = (file: any) => {
-    selectedFile.value = file.raw;
+  const handleFileChange = (file: UploadFile) => {
+    if (file.raw instanceof File) {
+      selectedFile.value = file.raw;
+    } else {
+      selectedFile.value = null;
+    }
   };
   
   // 处理并保存文件
@@ -70,6 +75,7 @@
       } catch (error) {
         statusMessage.value = '处理文件时出错';
         ElMessage.error('处理文件时出错');
+        console.error(error);
       }
     }
   };
