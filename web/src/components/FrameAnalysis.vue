@@ -131,9 +131,25 @@ class="progress-value"
                 </div>
                 <div class="metric-grid">
                     <div class="metric-item">
-                        <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
-                        <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
-                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
+                        <div class="metric-label"><span style="font-weight: bold">复用组件：</span>
+                            <a
+href="https://docs.openharmony.cn/pages/v5.1/zh-cn/application-dev/performance/component_recycle_case.md"
+                                target="_blank" title="查看OpenHarmony官方复用组件案例文档" class="external-link-icon"
+                                style="margin-left: 6px; vertical-align: middle;">
+                                <svg
+width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                    style="transition:stroke 0.2s;">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                </svg>
+                            </a>
+                        </div>
+                        <div class="metric-label">组件名/总组件数/复用组件占比</div>
+                        <div class="metric-value">{{ componentResuData.max_component }}/{{
+                            componentResuData.total_builds }}/{{
+                                componentResuData.reusability_ratio * 100 }}%</div>
                     </div>
                 </div>
             </div>
@@ -371,7 +387,7 @@ class="filter-item" :class="{ active: activeFilter === 'level_3' }"
                         <td>{{ stutter.vsync }}</td>
                         <td :class="'level-' + stutter.stutter_level">
                             <span class="level-badge">{{ stutter.stutter_level }} - {{ stutter.level_description
-                                }}</span>
+                            }}</span>
                         </td>
                         <td>{{ (stutter.actual_duration / 1000000).toFixed(2) }}</td>
                         <td>{{ (stutter.expected_duration / 1000000).toFixed(2) }}</td>
@@ -1900,6 +1916,7 @@ body {
     background: rgba(239, 68, 68, 0.1);
     color: #ef4444;
 }
+
 .expand-icon.expanded:hover {
     background: rgba(239, 68, 68, 0.2);
     color: #dc2626;
