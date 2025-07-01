@@ -19,6 +19,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
+from hapray.actions.compare_action import CompareAction
 from hapray.actions.opt_action import OptAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.update_action import UpdateAction
@@ -58,7 +59,8 @@ class HapRayCmd:
         actions = {
             "perf": PerfAction,
             "opt": OptAction,
-            "update": UpdateAction
+            "update": UpdateAction,
+            "compare": CompareAction,
         }
 
         parser = argparse.ArgumentParser(
