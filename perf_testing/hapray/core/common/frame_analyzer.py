@@ -53,6 +53,7 @@ class FrameAnalyzer:
     STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧
     STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧
     NS_TO_MS = 1_000_000
+    WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
 
     @staticmethod
     def _get_app_pids(scene_dir: str, step_id: str) -> list:
@@ -876,6 +877,51 @@ class FrameAnalyzer:
                         stutter_type = f"{frame_type}_stutter"
                         stats["stutter_details"][stutter_type].append(stutter_detail)
 
+                    frame_time = frame["ts"]
+                    frame_id = f"{vsync_key}_{frame_time}"  # 创建唯一帧标识符
+
+                    # 初始化窗口
+                    if current_window["start_time"] is None:
+                        current_window["start_time"] = frame_time
+                        current_window["end_time"] = frame_time + FrameAnalyzer.WINDOW_SIZE_MS * NS_TO_MS
+                        first_frame_time = frame_time
+
+                    # 处理跨多个窗口的情况
+                    while frame_time >= current_window["end_time"]:
+                        # 计算当前窗口的fps
+                        window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS,
+                                                 1)
+                        window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
+                        if window_fps < LOW_FPS_THRESHOLD:
+                            stats["fps_stats"]["low_fps_window_count"] += 1
+
+                        # 计算相对于第一帧的偏移时间（秒）
+                        start_offset = (current_window["start_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
+                        end_offset = (current_window["end_time"] - first_frame_time) / NS_TO_MS / 1000  # 转换为秒
+
+                        # 保存当前窗口的fps数据
+                        fps_windows.append({
+                            "start_time": start_offset,
+                            "end_time": end_offset,
+                            "start_time_ts": current_window["start_time"],
+                            "end_time_ts": current_window["end_time"],
+                            "frame_count": current_window["frame_count"],
+                            "fps": window_fps
+                        })
+
+                        # 新窗口推进 - 使用固定窗口大小
+                        current_window["start_time"] = current_window["end_time"]
+                        current_window["end_time"] = (current_window["start_time"]
+                                                      + FrameAnalyzer.WINDOW_SIZE_MS * NS_TO_MS)
+                        current_window["frame_count"] = 0
+                        current_window["frames"] = set()
+
+                    # 当前窗口更新 - 只计算时间戳在窗口范围内的帧
+                    if current_window["start_time"] <= frame_time < current_window["end_time"] and frame_id not in \
+                            current_window["frames"]:
+                        current_window["frame_count"] += 1
+                        current_window["frames"].add(frame_id)
+
             # 处理最后一个窗口
             if current_window["frame_count"] > 0:
                 window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / NS_TO_MS, 1)
@@ -1029,12 +1075,7 @@ def get_frame_type(frame: dict, cursor, step_id: str = None) -> str:
         str: 'ui'/'render'/'sceneboard'
     """
     ipid = frame.get("ipid")
-    if ipid is None:
-        return "ui"
-
-    # 检查cursor是否为None
-    if cursor is None:
-        logging.warning("cursor为None，无法获取数据库连接，使用默认类型'ui'")
+    if ipid is None or cursor is None:
         return "ui"
 
     # 确定缓存key
