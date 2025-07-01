@@ -187,7 +187,7 @@ class PerfTestCase(TestCase, ABC):
         action(self.driver)
 
         collection_thread.join()
-        self._save_performance_data_async(output_file, step_id)
+        self._save_performance_data(output_file, step_id)
 
     def generate_reports(self):
         """Generate test reports and metadata files"""
@@ -307,13 +307,7 @@ class PerfTestCase(TestCase, ABC):
         self.driver.shell(command, timeout=duration + 30)
         Log.info('Performance collection completed')
 
-    def _save_performance_data_async(self, device_file: str, step_id: int):
-        """Asynchronously save collected performance data"""
-        threading.Thread(
-            target=lambda: self._save_perf_and_trace_data(device_file, step_id)
-        ).start()
-
-    def _save_perf_and_trace_data(self, device_file: str, step_id: int):
+    def _save_performance_data(self, device_file: str, step_id: int):
         """Save performance and trace data to report directory"""
         perf_step_dir = os.path.join(
             self.report_path,
@@ -335,15 +329,8 @@ class PerfTestCase(TestCase, ABC):
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
         self._save_process_info(perf_step_dir)
 
-        if not self._verify_remote_files_exist(device_file):
-            return
-
-        if Config.get('trace.enable') and not self._verify_remote_files_exist(f"{device_file}.htrace"):
-            return
-
         self._transfer_perf_data(device_file, local_perf_path)
-        if Config.get('trace.enable'):
-            self._transfer_trace_data(device_file, local_trace_path)
+        self._transfer_trace_data(device_file, local_trace_path)
         self._transfer_redundant_data(trace_step_dir)
 
     def _collect_step_information(self) -> list:
@@ -444,6 +431,8 @@ class PerfTestCase(TestCase, ABC):
 
     def _transfer_perf_data(self, remote_path: str, local_path: str):
         """Transfer performance data from device to host"""
+        if not self._verify_remote_files_exist(remote_path):
+            return
         self.driver.shell(f"hiperf report -i {remote_path} --json -o {remote_path}.json")
         self.driver.pull_file(remote_path, local_path)
         self.driver.pull_file(f"{remote_path}.json", os.path.join(os.path.dirname(local_path), 'perf.json'))
@@ -454,6 +443,12 @@ class PerfTestCase(TestCase, ABC):
 
     def _transfer_trace_data(self, remote_path: str, local_path: str):
         """Transfer trace data from device to host"""
+        if not Config.get('trace.enable'):
+            return
+
+        if not self._verify_remote_files_exist(f"{remote_path}.htrace"):
+            return
+
         self.driver.pull_file(f"{remote_path}.htrace", local_path)
         if os.path.exists(local_path):
             Log.info(f"Trace data saved: {local_path}")

@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { Component, ComponentCategoryType} from '../component';
+import type { Component, ComponentCategoryType } from '../component';
 import { ComponentCategory, OriginKind } from '../component';
 import { AnalyzerProjectBase, PROJECT_ROOT } from '../project';
 import { getConfig } from '../../config';
@@ -185,7 +185,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     private loadHapComponents(): void {
         const componentFile = path.join(this.projectRoot, 'modules.json');
         if (fs.existsSync(componentFile)) {
-            let info = JSON.parse(fs.readFileSync(componentFile, { encoding: 'utf-8' })) as Array<{components: Array<Component>}>;
+            let info = JSON.parse(fs.readFileSync(componentFile, { encoding: 'utf-8' })) as Array<{
+                components: Array<Component>;
+            }>;
             for (const node of info) {
                 for (const component of node.components) {
                     this.hapComponents.set(component.name, component);
@@ -644,7 +646,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
             sceneStepData.push(row);
         }
-
+        if (!fs.existsSync(path.dirname(outputFileName))) {
+            fs.mkdirSync(path.dirname(outputFileName), { recursive: true });
+        }
         await writeXlsxFile([symbolPerfData, sceneStepData], {
             sheets: ['ecol_load_hiperf_detail', 'ecol_load_step'],
             filePath: outputFileName,
