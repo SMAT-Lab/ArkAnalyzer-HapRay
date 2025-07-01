@@ -456,7 +456,7 @@ class PerfTestCase(TestCase, ABC):
             Log.error(f"Failed to transfer trace data: {local_path}")
 
     def _transfer_redundant_data(self, trace_step_dir: str):
-        if not self._transfer_redundant_data:
+        if not self._redundant_mode_status:
             return
         bundle_name = self._start_app_package or self.app_package
         remote_path = f'data/app/el2/100/base/{bundle_name}/files/{bundle_name}_redundant_file.txt'
