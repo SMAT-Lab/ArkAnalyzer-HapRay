@@ -400,7 +400,7 @@ v-for="(step, index) in testSteps" :key="index" :class="[
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import PerfProcessTable from './PerfProcessTable.vue';
 import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
@@ -409,7 +409,7 @@ import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { ComponentCategory, useJsonDataStore, type PerfData } from '../stores/jsonDataStore.ts';
-import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
+import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
 
 interface SceneLoadDiff {
   category: string;
@@ -458,7 +458,8 @@ compareSceneLineChartData.value = mergeJSONData(perfData!, comparePerfData!, 0);
 
 function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_id: number): PerfData {
   if (!baselineData || !compareData) {
-    throw new Error('两个JSONData对象均为必需');
+    console.error('mergeJSONData: 两个JSONData对象均为必需');
+    return { steps: [] };
   }
 
   const mergedData: PerfData = {
@@ -544,7 +545,7 @@ const testSteps = ref(
 );
 
 // 全部步骤负载总数 
-const getTotalTestStepsCount = (testSteps: any[]) => {
+const getTotalTestStepsCount = (testSteps: {count: number}[]) => {
   let total = 0;
 
   testSteps.forEach((step) => {
@@ -554,31 +555,41 @@ const getTotalTestStepsCount = (testSteps: any[]) => {
 };
 
 // 格式化持续时间的方法
-const formatDuration = (milliseconds: any) => {
+const formatDuration = (milliseconds: number) => {
   return `指令数：${milliseconds}`;
 };
 
-// 处理步骤点击事件的方法，切换步骤，更新数据
-const handleStepClick = (stepId: any) => {
-  currentStepIndex.value = stepId;
-  stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
-  compareStepPieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
-  compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value);
+// 初始化ref
+const stepPieData = ref(processJson2PieChartData(perfData!, currentStepIndex.value));
+const compareStepPieData = ref(processJson2PieChartData(comparePerfData!, currentStepIndex.value));
+const compareLineChartData = ref(currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value));
+const stepDiff = ref(calculateCategoryCountDifference(compareLineChartData.value));
+
+// 响应式更新
+watch(currentStepIndex, (stepId) => {
+  stepPieData.value = processJson2PieChartData(perfData!, stepId);
+  compareStepPieData.value = processJson2PieChartData(comparePerfData!, stepId);
+  compareLineChartData.value = stepId === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, stepId);
   stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
+});
+
+// 处理步骤点击事件的方法，切换步骤，更新数据
+const handleStepClick = (stepId: number) => {
+  currentStepIndex.value = stepId;
 };
 
 // 性能迭代区域
 // 基线步骤饼图
-const stepPieData = ref();
+
 stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 // 迭代步骤饼图
-const compareStepPieData = ref();
+
 compareStepPieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
 // 步骤负载迭代折线图
-const compareLineChartData = ref();
+
 compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value);
 //步骤负载增长卡片
-const stepDiff = ref();
+
 stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 const mergedProcessPerformanceData = computed(() =>
   calculateProcessData(perfData!, comparePerfData!, currentStepIndex.value === 0)
@@ -626,77 +637,82 @@ const compareSymbolsPerformanceData1 = ref(
   calculateSymbolData1(comparePerfData!, null)
 );
 
+// 工具函数：安全排序，避免副作用
+function sortByInstructions<T extends { instructions: number }>(arr: T[]): T[] {
+  return [...arr].sort((a, b) => b.instructions - a.instructions);
+}
+
 // 进程负载表格
 const filteredProcessesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedProcessPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedProcessPerformanceData.value);
   }
-  return mergedProcessPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedProcessPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 线程负载表格
 const filteredThreadsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedThreadPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedThreadPerformanceData.value);
   }
-  return mergedThreadPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedThreadPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 大分类负载表格
 const filteredCategorysPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedCategorysPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedCategorysPerformanceData.value);
   }
-  return mergedCategorysPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedCategorysPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 小分类负载表格
 const filteredComponentNamePerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedComponentNamePerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedComponentNamePerformanceData.value);
   }
-  return mergedComponentNamePerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedComponentNamePerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 文件负载表格
 const filteredFilesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedFilePerformanceData.value);
   }
-  return mergedFilePerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedFilePerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 文件负载表格
 const filteredFilesPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedFilePerformanceData1.value);
   }
-  return mergedFilePerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedFilePerformanceData1.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 函数负载表格
 const filteredSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedSymbolsPerformanceData.value);
   }
-  return mergedSymbolsPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedSymbolsPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 // 函数负载表格
 const filteredSymbolsPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedSymbolsPerformanceData1.value);
   }
-  return mergedSymbolsPerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedSymbolsPerformanceData1.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 
@@ -704,119 +720,127 @@ const filteredSymbolsPerformanceData1 = computed(() => {
 // 新增文件负载表格
 const increaseFilesPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData.value.filter(data => data.instructions === -1 && data.compareInstructions !== -1).sort((a, b) => b.instructions - a.instructions)
+    return sortByInstructions(
+      mergedFilePerformanceData.value
+        .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
+        .map(item => ({
+          ...item,
+          instructions: item.compareInstructions,
+          compareInstructions: item.instructions
+        }))
+    );
+  }
+  return sortByInstructions(
+    mergedFilePerformanceData.value
+      .filter((item) => item.stepId === currentStepIndex.value)
+      .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
       .map(item => ({
         ...item,
         instructions: item.compareInstructions,
         compareInstructions: item.instructions
-      }));
-  }
-  return mergedFilePerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
-    .sort((a, b) => b.instructions - a.instructions)
-    .map(item => ({
-      ...item,
-      instructions: item.compareInstructions,
-      compareInstructions: item.instructions
-    }));
+      }))
+  );
 });
 // 新增文件负载表格1
 const increaseFilesPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData1.value.filter(data => data.instructions === -1 && data.compareInstructions !== -1).sort((a, b) => b.instructions - a.instructions)
+    return sortByInstructions(
+      mergedFilePerformanceData1.value
+        .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
+        .map(item => ({
+          ...item,
+          instructions: item.compareInstructions,
+          compareInstructions: item.instructions
+        }))
+    );
+  }
+  return sortByInstructions(
+    mergedFilePerformanceData1.value
+      .filter((item) => item.stepId === currentStepIndex.value)
+      .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
       .map(item => ({
         ...item,
         instructions: item.compareInstructions,
         compareInstructions: item.instructions
-      }));
-  }
-  return mergedFilePerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
-    .sort((a, b) => b.instructions - a.instructions)
-    .map(item => ({
-      ...item,
-      instructions: item.compareInstructions,
-      compareInstructions: item.instructions
-    }));
+      }))
+  );
 });
 // 新增函数负载表格
 const increaseSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData.value.filter(data => data.instructions === -1 && data.compareInstructions !== -1).sort((a, b) => b.instructions - a.instructions)
+    return sortByInstructions(
+      mergedSymbolsPerformanceData.value
+        .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
+        .map(item => ({
+          ...item,
+          instructions: item.compareInstructions,
+          compareInstructions: item.instructions
+        }))
+    );
+  }
+  return sortByInstructions(
+    mergedSymbolsPerformanceData.value
+      .filter((item) => item.stepId === currentStepIndex.value)
+      .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
       .map(item => ({
         ...item,
         instructions: item.compareInstructions,
         compareInstructions: item.instructions
-      }));
-  }
-  return mergedSymbolsPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
-    .sort((a, b) => b.instructions - a.instructions)
-    .map(item => ({
-      ...item,
-      instructions: item.compareInstructions,
-      compareInstructions: item.instructions
-    }));
+      }))
+  );
 });
 // 新增函数负载表格1
 const increaseSymbolsPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData1.value.filter(data => data.instructions === -1 && data.compareInstructions !== -1).sort((a, b) => b.instructions - a.instructions)
+    return sortByInstructions(
+      mergedSymbolsPerformanceData1.value
+        .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
+        .map(item => ({
+          ...item,
+          instructions: item.compareInstructions,
+          compareInstructions: item.instructions
+        }))
+    );
+  }
+  return sortByInstructions(
+    mergedSymbolsPerformanceData1.value
+      .filter((item) => item.stepId === currentStepIndex.value)
+      .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
       .map(item => ({
         ...item,
         instructions: item.compareInstructions,
         compareInstructions: item.instructions
-      }));
-  }
-  return mergedSymbolsPerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .filter(data => data.instructions === -1 && data.compareInstructions !== -1)
-    .sort((a, b) => b.instructions - a.instructions)
-    .map(item => ({
-      ...item,
-      instructions: item.compareInstructions,
-      compareInstructions: item.instructions
-    }));
+      }))
+  );
 });
 
 // 基线函数负载top10表格
 const filteredBaseSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return baseSymbolsPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(baseSymbolsPerformanceData.value);
   }
-  return baseSymbolsPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(baseSymbolsPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value));
 });
 // 基线函数负载top10表格1
 const filteredBaseSymbolsPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return baseSymbolsPerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(baseSymbolsPerformanceData1.value);
   }
-  return baseSymbolsPerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(baseSymbolsPerformanceData1.value.filter((item) => item.stepId === currentStepIndex.value));
 });
 // 迭代函数负载top10表格
 const filteredCompareSymbolsPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return compareSymbolsPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(compareSymbolsPerformanceData.value);
   }
-  return compareSymbolsPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(compareSymbolsPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value));
 });
 // 迭代函数负载top10表格1
 const filteredCompareSymbolsPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return compareSymbolsPerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(compareSymbolsPerformanceData1.value);
   }
-  return compareSymbolsPerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(compareSymbolsPerformanceData1.value.filter((item) => item.stepId === currentStepIndex.value));
 });
 
 

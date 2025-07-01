@@ -511,7 +511,7 @@ export const useJsonDataStore = defineStore('config', {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.basicInfo = jsonData.basicInfo;
 
-      if (JSON.stringify(compareJsonData) === "\"\/tempCompareJsonData\/\"") {
+      if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         this.perfData = jsonData.perf;
 
         if (jsonData.trace) {
