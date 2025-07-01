@@ -9,7 +9,7 @@
       >
         <el-button type="primary">上传对比html文件</el-button>
       </el-upload>
-      <el-button @click="processAndSaveFile" :disabled="!selectedFile">生成对比html文件</el-button>
+      <el-button :disabled="!selectedFile" @click="processAndSaveFile">生成对比html文件</el-button>
       <p v-if="statusMessage">{{ statusMessage }}</p>
     </div>
 </template>

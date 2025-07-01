@@ -75,7 +75,7 @@
     <el-row :gutter="20">
       <el-col :span="24">
         <div class="data-panel">
-          <LineChart :chartData="compareSceneLineChartData" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chart-data="compareSceneLineChartData" :series-type="RightLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
@@ -96,12 +96,12 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="perfData" :seriesType="LeftLineChartSeriesType" />
+          <LineChart :chart-data="perfData" :series-type="LeftLineChartSeriesType" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="comparePerfData" :seriesType="LeftLineChartSeriesType" />
+          <LineChart :chart-data="comparePerfData" :series-type="LeftLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
@@ -109,18 +109,19 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="perfData" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chart-data="perfData" :series-type="RightLineChartSeriesType" />
         </div>
       </el-col>
       <el-col :span="12">
         <div class="data-panel">
-          <LineChart :chartData="comparePerfData" :seriesType="RightLineChartSeriesType" />
+          <LineChart :chart-data="comparePerfData" :series-type="RightLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
     <!-- 测试步骤导航 -->
     <div class="step-nav">
-      <div :class="[
+      <div
+:class="[
         'step-item',
         {
           active: currentStepIndex === 0,
@@ -132,7 +133,8 @@
         </div>
         <div class="step-name">全部步骤</div>
       </div>
-      <div v-for="(step, index) in testSteps" :key="index" :class="[
+      <div
+v-for="(step, index) in testSteps" :key="index" :class="[
         'step-item',
         {
           active: currentStepIndex === step.id,
@@ -153,13 +155,13 @@
       <el-col :span="12">
         <!-- 基准步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" :chart-data="stepPieData" :title="pieChartTitle"/>
+          <PieChart :step-id="currentStepIndex" :chart-data="stepPieData" :title="pieChartTitle"/>
         </div>
       </el-col>
       <el-col :span="12">
         <!-- 迭代步骤饼图 -->
         <div class="data-panel">
-          <PieChart :stepId="currentStepIndex" :chart-data="compareStepPieData" :title="pieChartTitle"/>
+          <PieChart :step-id="currentStepIndex" :chart-data="compareStepPieData" :title="pieChartTitle"/>
         </div>
       </el-col>
     </el-row>
@@ -196,8 +198,9 @@
     <el-row :gutter="20">
       <el-col :span="24">
         <div class="data-panel">
-          <LineChart :stepId="currentStepIndex" :chartData="compareLineChartData"
-            :seriesType="RightLineChartSeriesType" />
+          <LineChart
+:step-id="currentStepIndex" :chart-data="compareLineChartData"
+            :series-type="RightLineChartSeriesType" />
         </div>
       </el-col>
     </el-row>
@@ -208,8 +211,9 @@
           <h3 class="panel-title">
             <span class="version-tag">进程负载</span>
           </h3>
-          <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessesPerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfProcessTable
+:step-id="currentStepIndex" :data="filteredProcessesPerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -218,8 +222,9 @@
           <h3 class="panel-title">
             <span class="version-tag">大分类负载</span>
           </h3>
-          <PerfProcessTable :stepId="currentStepIndex" :data="filteredCategorysPerformanceData" :hideColumn="isHidden"
-            :hasCategory="true" />
+          <PerfProcessTable
+:step-id="currentStepIndex" :data="filteredCategorysPerformanceData" :hide-column="isHidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -230,8 +235,9 @@
           <h3 class="panel-title">
             <span class="version-tag">线程负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredThreadsPerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfThreadTable
+:step-id="currentStepIndex" :data="filteredThreadsPerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -240,8 +246,9 @@
           <h3 class="panel-title">
             <span class="version-tag">小分类负载</span>
           </h3>
-          <PerfThreadTable :stepId="currentStepIndex" :data="filteredComponentNamePerformanceData"
-            :hideColumn="isHidden" :hasCategory="true" />
+          <PerfThreadTable
+:step-id="currentStepIndex" :data="filteredComponentNamePerformanceData"
+            :hide-column="isHidden" :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -252,8 +259,9 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfFileTable
+:step-id="currentStepIndex" :data="filteredFilesPerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -262,8 +270,9 @@
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="filteredFilesPerformanceData1" :hideColumn="isHidden"
-            :hasCategory="true" />
+          <PerfFileTable
+:step-id="currentStepIndex" :data="filteredFilesPerformanceData1" :hide-column="isHidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -274,8 +283,9 @@
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolsPerformanceData" :hideColumn="isHidden"
-            :hasCategory="false" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredSymbolsPerformanceData" :hide-column="isHidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -284,8 +294,9 @@
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredSymbolsPerformanceData1" :hideColumn="isHidden"
-            :hasCategory="true" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredSymbolsPerformanceData1" :hide-column="isHidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -296,8 +307,9 @@
           <h3 class="panel-title">
             <span class="version-tag">新增文件负载表格</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="increaseFilesPerformanceData" :hideColumn="hidden"
-            :hasCategory="false" />
+          <PerfFileTable
+:step-id="currentStepIndex" :data="increaseFilesPerformanceData" :hide-column="hidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -306,8 +318,9 @@
           <h3 class="panel-title">
             <span class="version-tag">新增文件负载表格</span>
           </h3>
-          <PerfFileTable :stepId="currentStepIndex" :data="increaseFilesPerformanceData1" :hideColumn="hidden"
-            :hasCategory="true" />
+          <PerfFileTable
+:step-id="currentStepIndex" :data="increaseFilesPerformanceData1" :hide-column="hidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -318,8 +331,9 @@
           <h3 class="panel-title">
             <span class="version-tag">新增符号负载表格</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="increaseSymbolsPerformanceData" :hideColumn="hidden"
-            :hasCategory="false" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="increaseSymbolsPerformanceData" :hide-column="hidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -328,8 +342,9 @@
           <h3 class="panel-title">
             <span class="version-tag">新增符号负载表格</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="increaseSymbolsPerformanceData1" :hideColumn="hidden"
-            :hasCategory="true" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="increaseSymbolsPerformanceData1" :hide-column="hidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -340,8 +355,9 @@
           <h3 class="panel-title">
             <span class="version-tag">基线函数负载top10</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredBaseSymbolsPerformanceData" :hideColumn="hidden"
-            :hasCategory="false" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredBaseSymbolsPerformanceData" :hide-column="hidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -350,8 +366,9 @@
           <h3 class="panel-title">
             <span class="version-tag">基线函数负载top10</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredBaseSymbolsPerformanceData1" :hideColumn="hidden"
-            :hasCategory="true" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredBaseSymbolsPerformanceData1" :hide-column="hidden"
+            :has-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -362,8 +379,9 @@
           <h3 class="panel-title">
             <span class="version-tag">迭代函数负载top10</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredCompareSymbolsPerformanceData" :hideColumn="hidden"
-            :hasCategory="false" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredCompareSymbolsPerformanceData" :hide-column="hidden"
+            :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
@@ -372,8 +390,9 @@
           <h3 class="panel-title">
             <span class="version-tag">迭代函数负载top10</span>
           </h3>
-          <PerfSymbolTable :stepId="currentStepIndex" :data="filteredCompareSymbolsPerformanceData1"
-            :hideColumn="hidden" :hasCategory="true" />
+          <PerfSymbolTable
+:step-id="currentStepIndex" :data="filteredCompareSymbolsPerformanceData1"
+            :hide-column="hidden" :has-category="true" />
         </div>
       </el-col>
     </el-row>
