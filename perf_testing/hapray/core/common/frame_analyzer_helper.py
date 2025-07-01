@@ -20,6 +20,7 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
+from perf_testing.hapray.analyze.base_analyzer import AnalyzerHelper
 
 from hapray.core.common.frame_analyzer import FrameAnalyzer
 
@@ -61,6 +62,104 @@ def test_collect_empty_frame_loads():
         raise
 
 
+def update_one_empty_frame_results(report_dir: str) -> bool:
+    """
+    更新指定目录下的空帧分析数据
+
+    目录结构要求：
+    report_dir/
+    ├── htrace/
+    │   ├── step1/
+    │   │   └── trace.db
+    │   └── step2/
+    │       └── trace.db
+    └── hiperf/
+        ├── step1/
+        │   └── perf.db
+        └── step2/
+            └── perf.db
+
+    分析结果将保存在：
+    report_dir/
+    └── htrace/
+        └── empty_frames_analysis.json
+
+    Args:
+        report_dir: 报告目录路径，该目录下应包含htrace和hiperf两个子目录
+
+    Returns:
+        bool: 更新是否成功
+    """
+    try:
+        # 检查目录是否存在
+        if not os.path.exists(report_dir):
+            logging.error("Error: Directory not found at %s", report_dir)
+            return False
+
+        # 获取htrace和hiperf目录
+        htrace_dir = os.path.join(report_dir, 'htrace')
+        hiperf_dir = os.path.join(report_dir, 'hiperf')
+
+        if not os.path.exists(htrace_dir) or not os.path.exists(hiperf_dir):
+            logging.error("Error: Required directories not found at %s", report_dir)
+            return False
+
+        # 用于存储所有步骤的分析结果
+        all_results = {}
+
+        # 遍历所有步骤目录
+        for step_dir in os.listdir(htrace_dir):
+            step_path = os.path.join(htrace_dir, step_dir)
+            if not os.path.isdir(step_path):
+                continue
+
+            # 查找trace.db文件
+            trace_db = os.path.join(step_path, 'trace.db')
+            if not os.path.exists(trace_db):
+                logging.warning("Missing trace.db in %s", step_path)
+                continue
+
+            # 查找对应的perf.db文件
+            perf_db = os.path.join(hiperf_dir, step_dir, 'perf.db')
+            if not os.path.exists(perf_db):
+                logging.warning("Missing perf.db in %s", os.path.join(hiperf_dir, step_dir))
+                continue
+
+            # 获取进程ID列表
+            app_pids = AnalyzerHelper.get_app_pids(report_dir, step_dir)
+            if not app_pids:
+                logging.warning("No app PIDs found for step %s", step_dir)
+                continue
+
+            # 分析空帧数据
+            try:
+                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, app_pids, report_dir, step_dir)
+                # 如果有结果，将结果添加到总结果字典中
+                if result is not None:
+                    all_results[step_dir] = result
+                    logging.info("Successfully analyzed empty frames for %s", step_dir)
+                else:
+                    logging.info("No empty frame data found for %s", step_dir)
+            except Exception as e:
+                logging.error("Error analyzing empty frames for %s: %s", step_dir, str(e))
+                return False
+
+        # 保存所有步骤的分析结果
+        if all_results:
+            output_file = os.path.join(htrace_dir, 'empty_frames_analysis.json')
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(all_results, f, indent=2, ensure_ascii=False)
+            print(f"✓ 分析结果已保存到: {output_file}")
+        else:
+            logging.warning("No valid analysis results to save")
+
+        return True
+
+    except Exception as e:
+        logging.error("Error updating empty frame analysis: %s", str(e))
+        return False
+
+
 def update_empty_frame_results():
     """
     批量更新空帧分析数据
@@ -84,7 +183,7 @@ def update_empty_frame_results():
                 print(f"\n处理目录: {report_dir}")
 
                 # 调用update_empty_frame_results函数
-                if FrameAnalyzer.update_empty_frame_results(report_dir):
+                if update_one_empty_frame_results(report_dir):
                     print(f"✓ 成功更新 {target_dir} 的空帧分析数据")
                 else:
                     print(f"✗ 更新 {target_dir} 的空帧分析数据失败")
@@ -247,6 +346,7 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
     """
     results = []
 
+    all_empty_frames_analysis = []
     # 遍历目录
     for root, _, files in os.walk(root_dir):
         for file in files:
@@ -255,41 +355,43 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
                 # 跳过包含'step'的路径
                 if 'step' in file_path.lower():
                     continue
-                try:
-                    # 读取JSON文件
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
+                all_empty_frames_analysis.append(file_path)
+    for file_path in all_empty_frames_analysis:
+        try:
+            # 读取JSON文件
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
 
-                    # 获取场景名称（最近的包含ResourceUsage_PerformanceDynamic的目录）
-                    current_dir = os.path.dirname(file_path)
-                    scene_name = None
-                    while current_dir != root_dir:
-                        if 'ResourceUsage_PerformanceDynamic' in os.path.basename(current_dir):
-                            scene_name = os.path.basename(current_dir)
-                            break
-                        current_dir = os.path.dirname(current_dir)
+            # 获取场景名称（最近的包含ResourceUsage_PerformanceDynamic的目录）
+            current_dir = os.path.dirname(file_path)
+            scene_name = None
+            while current_dir != root_dir:
+                if 'ResourceUsage_PerformanceDynamic' in os.path.basename(current_dir):
+                    scene_name = os.path.basename(current_dir)
+                    break
+                current_dir = os.path.dirname(current_dir)
 
-                    # 如果没找到，使用默认值
-                    if not scene_name:
-                        scene_name = f"Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}"
-                        logging.warning("Using default scene name for %s: %s", file_path, scene_name)
+            # 如果没找到，使用默认值
+            if not scene_name:
+                scene_name = f"Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}"
+                logging.warning("Using default scene name for %s: %s", file_path, scene_name)
 
-                    # 遍历每个步骤的数据
-                    for step_id, step_data in data.items():
-                        if step_data.get("status") == "success":
-                            summary = step_data.get("summary", {})
-                            load_percentage = summary.get("empty_frame_percentage", 0)
+            # 遍历每个步骤的数据
+            for step_id, step_data in data.items():
+                if step_data.get("status") == "success":
+                    summary = step_data.get("summary", {})
+                    load_percentage = summary.get("empty_frame_percentage", 0)
 
-                            results.append({
-                                "scene": scene_name,
-                                "step": step_id,
-                                "empty_frame_percentage": load_percentage,
-                                "file_path": file_path
-                            })
+                    results.append({
+                        "scene": scene_name,
+                        "step": step_id,
+                        "empty_frame_percentage": load_percentage,
+                        "file_path": file_path
+                    })
 
-                except Exception as e:
-                    logging.error("Error processing %s: %s", file_path, str(e))
-                    continue
+        except Exception as e:
+            logging.error("Error processing %s: %s", file_path, str(e))
+            continue
 
     # 按负载百分比排序
     results.sort(key=lambda x: x["empty_frame_percentage"], reverse=True)
