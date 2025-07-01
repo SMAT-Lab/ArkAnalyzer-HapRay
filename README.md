@@ -95,6 +95,28 @@ python -m scripts.main update --reports/20240605120000 --mode 2 --perf perf.data
 
 ```
 
+#### Compare Reports (`compare`)
+```bash
+python -m scripts.main compare --base_dir <base_report_directory> --compare_dir <compare_report_directory> [--output <output_excel>]
+```
+Options:
+- `--base_dir <path>`: Directory containing baseline reports (required)
+- `--compare_dir <path>`: Directory containing reports to compare (required)
+- `--output <path>`: Output Excel file path (default: compare_result.xlsx in current dir)
+
+Example:
+```bash
+# Specify output file
+python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
+```
+对比逻辑说明：
+- 以 scene + step_id + step_name 为主键
+- rom_version + app_version 组合为"版本"，每个版本为一列，count 为值
+- base 目录和 compare 目录的所有版本分别在左、右，自动对齐
+- 自动生成百分比变化列（(compare-base)/base），便于直观对比
+
+输出Excel格式为：主键信息 + base各版本count + compare各版本count + 百分比变化
+
 ### Dependencies
 - pip > 23.0.1
 - Python 3.9 ~ 3.12, 
