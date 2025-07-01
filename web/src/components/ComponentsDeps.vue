@@ -49,7 +49,7 @@ const vscode = getCurrentInstance()!.appContext.config.globalProperties.$vscode;
 const chartContainer = ref(null);
 let chartInstance: echarts.ECharts;
 
-const handleChartClick = (params: any) => {
+const handleChartClick = (params: unknown) => {
   console.log(params);
 };
 
@@ -151,8 +151,8 @@ const paginatedData = computed(() => {
 });
 
 // 显示范围
-const rangeStart = computed(() => (currentPage.value - 1) * pageSize.value + 1);
-const rangeEnd = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
+// const rangeStart = computed(() => (currentPage.value - 1) * pageSize.value + 1);
+// const rangeEnd = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
 
 // 数据变化重置页码
 watch(
