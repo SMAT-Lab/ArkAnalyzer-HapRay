@@ -85,3 +85,67 @@ class BaseAnalyzer(ABC):
             self.logger.info("Report successfully written to %s", self.report_path)
         except Exception as e:
             self.logger.exception("Failed to write report: %s", str(e))
+
+
+class AnalyzerHelper:
+    _pid_cache = {}
+
+    @staticmethod
+    def get_app_pids(scene_dir: str, step_id: str) -> list:
+        """获取应用进程ID列表
+
+        Args:
+            scene_dir: 场景目录路径
+            step_id: 步骤ID，如'step1'或'1'
+
+        Returns:
+            list: 进程ID列表
+        """
+        # 检查缓存
+        cache_key = f'{scene_dir}-{step_id}'
+        if cache_key in AnalyzerHelper._pid_cache:
+            logging.debug("使用已缓存的PID数据: %s", cache_key)
+            return AnalyzerHelper._pid_cache[cache_key]
+
+        try:
+            # 处理step_id，去掉'step'前缀
+            step_number = int(step_id.replace('step', ''))
+
+            # 构建pids.json文件路径
+            pids_json_path = os.path.join(scene_dir, 'hiperf', f'step{step_number}', 'pids.json')
+
+            if not os.path.exists(pids_json_path):
+                logging.warning("No pids.json found at %s", pids_json_path)
+                return []
+
+            # 读取JSON文件
+            with open(pids_json_path, 'r', encoding='utf-8') as f:
+                pids_data = json.load(f)
+
+            # 提取pids和process_names
+            pids = pids_data.get('pids', [])
+            process_names = pids_data.get('process_names', [])
+
+            if not pids or not process_names:
+                logging.warning("No valid pids or process_names found in %s", pids_json_path)
+                return []
+
+            # 确保pids和process_names长度一致
+            if len(pids) != len(process_names):
+                logging.warning(
+                    "Mismatch between pids (%s) and process_names (%s) in %s",
+                    len(pids), len(process_names), pids_json_path)
+                # 取较短的长度
+                min_length = min(len(pids), len(process_names))
+                pids = pids[:min_length]
+                process_names = process_names[:min_length]
+
+            # 缓存PID数据
+            AnalyzerHelper._pid_cache[cache_key] = pids
+
+            logging.debug("缓存PID数据: %s, PIDs: %s", step_id, len(pids))
+            return pids
+
+        except Exception as e:
+            logging.error("Failed to get app PIDs: %s", str(e))
+            return []
