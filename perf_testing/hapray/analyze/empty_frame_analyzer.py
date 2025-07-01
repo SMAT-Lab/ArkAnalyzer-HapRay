@@ -13,12 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import json
 import logging
 import os
 from typing import Dict, Any, Optional
 
-from hapray.analyze.base_analyzer import BaseAnalyzer
+from hapray.analyze.base_analyzer import AnalyzerHelper, BaseAnalyzer
 from hapray.core.common.frame_analyzer import FrameAnalyzer
 
 
@@ -45,7 +44,7 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
 
         try:
             # 获取该步骤的进程信息
-            pids = self._get_step_pids(step_dir)
+            pids = AnalyzerHelper.get_app_pids(self.scene_dir, step_dir)
 
             if not pids:
                 logging.warning("No process info found for step %s", step_dir)
@@ -71,46 +70,3 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
         except Exception as e:
             logging.error("Empty frame analysis failed: %s", str(e))
             return None
-
-    def _get_step_pids(self, step_dir: str) -> list:
-        """获取指定步骤的进程信息"""
-        try:
-            # 构建pids.json文件路径
-            pids_json_path = os.path.join(self.scene_dir, 'hiperf', step_dir, 'pids.json')
-
-            if not os.path.exists(pids_json_path):
-                logging.warning("No pids.json found at %s", pids_json_path)
-                return []
-
-            # 读取JSON文件
-            with open(pids_json_path, 'r', encoding='utf-8') as f:
-                pids_data = json.load(f)
-
-            # 提取pids和process_names
-            pids = pids_data.get('pids', [])
-            process_names = pids_data.get('process_names', [])
-
-            if not pids or not process_names:
-                logging.warning("No valid pids or process_names found in %s", pids_json_path)
-                return []
-
-            # 确保pids和process_names长度一致
-            if len(pids) != len(process_names):
-                logging.warning(
-                    "Mismatch between pids (%d) and process_names (%d) in %s",
-                    len(pids), len(process_names), pids_json_path
-                )
-                # 取较短的长度
-                min_length = min(len(pids), len(process_names))
-                pids = pids[:min_length]
-                process_names = process_names[:min_length]
-
-            # 组合成(process_name, pid)的列表
-            step_pids = list(zip(process_names, pids))
-
-            logging.debug("Found %d processes for step %s: %s", len(step_pids), step_dir, step_pids)
-            return step_pids
-
-        except Exception as e:
-            logging.error("Failed to get step PIDs from %s: %s", step_dir, str(e))
-            return []
