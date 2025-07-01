@@ -60,7 +60,7 @@ const processData = (data: PerfData | null, seriesType: string) => {
 
   // 构建series数据
   const legendData: string[] = [];
-  const series: {}[] = [];
+  const series: object[] = [];
 
   categoryMap.forEach((values, category) => {
     // 检查该类别在所有步骤中是否都为0
@@ -141,7 +141,7 @@ onMounted(() => {
     window.addEventListener('resize', resizeHandler);
 
     // 保存引用以便正确移除监听器
-    (myChart as any).__resizeHandler = resizeHandler;
+    (myChart as unknown as { __resizeHandler?: () => void }).__resizeHandler = resizeHandler;
   }
 });
 
@@ -158,8 +158,10 @@ watch(
 onBeforeUnmount(() => {
   if (myChart) {
     // 获取并移除resize监听器
-    const resizeHandler = (myChart as any).__resizeHandler;
-    window.removeEventListener('resize', resizeHandler);
+    const resizeHandler = (myChart as unknown as { __resizeHandler?: () => void }).__resizeHandler;
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler);
+    }
 
     myChart.dispose();
     myChart = null;

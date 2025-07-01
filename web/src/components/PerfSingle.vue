@@ -221,7 +221,7 @@ v-for="(step, index) in testSteps" :key="index" :class="[
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, toRaw } from 'vue';
+import { ref, computed } from 'vue';
 import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
 import PerfSymbolTable from './PerfSymbolTable.vue';
@@ -231,7 +231,7 @@ import LineChart from './LineChart.vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
-import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
+import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData } from '@/utils/jsonUtil.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
@@ -260,7 +260,14 @@ const testSteps = ref(
   }))
 );
 
-const getTotalTestStepsCount = (testSteps: any[]) => {
+interface TestStep {
+  id: number;
+  step_name: string;
+  count: number;
+  round: number;
+  perf_data_path: string;
+}
+const getTotalTestStepsCount = (testSteps: TestStep[]) => {
   let total = 0;
 
   testSteps.forEach((step) => {
@@ -281,9 +288,9 @@ const performanceData = ref(
 const currentStepIndex = ref(0);
 
 // 动态聚合数据（根据步骤是否为0决定是否全局聚合）
-const mergedProcessPerformanceData = computed(() =>
-  calculateProcessData(perfData!, null, currentStepIndex.value === 0)
-);
+// const mergedProcessPerformanceData = computed(() =>
+//   calculateProcessData(perfData!, null, currentStepIndex.value === 0)
+// );
 const mergedThreadPerformanceData = computed(() =>
   calculateThreadData(perfData!, null, currentStepIndex.value === 0)
 );
@@ -303,13 +310,18 @@ const mergedSymbolsPerformanceData1 = computed(() =>
   calculateSymbolData1(perfData!, null, currentStepIndex.value === 0)
 );
 
+// 工具函数：安全排序，避免副作用
+function sortByInstructions<T extends { instructions: number }>(arr: T[]): T[] {
+  return [...arr].sort((a, b) => b.instructions - a.instructions);
+}
+
 // 格式化持续时间的方法
-const formatDuration = (milliseconds: any) => {
+const formatDuration = (milliseconds: number) => {
   return `指令数：${milliseconds}`;
 };
 
 // 格式化功耗信息
-const formatEnergy = (milliseconds: any) => {
+const formatEnergy = (milliseconds: number) => {
   const energy = calculateEnergyConsumption(milliseconds);
   return `核算功耗（mAs）：${energy}`;
 };
@@ -324,74 +336,74 @@ scenePieData.value = processJson2PieChartData(perfData!, currentStepIndex.value)
 stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 processPieData.value = processJson2ProcessPieChartData(perfData!, currentStepIndex.value);
 // 处理步骤点击事件的方法
-const handleStepClick = (stepId: any) => {
+const handleStepClick = (stepId: number) => {
   currentStepIndex.value = stepId;
   stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
 };
 
 // 计算属性，根据当前步骤 ID 过滤性能数据
-const filteredProcessPerformanceData = computed(() => {
-  if (currentStepIndex.value === 0) {
-    return mergedProcessPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
-  }
-  return mergedProcessPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
-});
+// const filteredProcessPerformanceData = computed(() => {
+//   if (currentStepIndex.value === 0) {
+//     return mergedProcessPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+//   }
+//   return mergedProcessPerformanceData.value
+//     .filter((item) => item.stepId === currentStepIndex.value)
+//     .sort((a, b) => b.instructions - a.instructions);
+// });
 
 const filteredThreadPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedThreadPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedThreadPerformanceData.value);
   }
-  return mergedThreadPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedThreadPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 const filteredComponentNamePerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedComponentNamePerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedComponentNamePerformanceData.value);
   }
-  return mergedComponentNamePerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedComponentNamePerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 
 const filteredFilePerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedFilePerformanceData.value);
   }
-  return mergedFilePerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedFilePerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 const filteredFilePerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedFilePerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedFilePerformanceData1.value);
   }
-  return mergedFilePerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedFilePerformanceData1.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 const filteredSymbolPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedSymbolsPerformanceData.value);
   }
-  return mergedSymbolsPerformanceData.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedSymbolsPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 const filteredSymbolPerformanceData1 = computed(() => {
   if (currentStepIndex.value === 0) {
-    return mergedSymbolsPerformanceData1.value.sort((a, b) => b.instructions - a.instructions);
+    return sortByInstructions(mergedSymbolsPerformanceData1.value);
   }
-  return mergedSymbolsPerformanceData1.value
-    .filter((item) => item.stepId === currentStepIndex.value)
-    .sort((a, b) => b.instructions - a.instructions);
+  return sortByInstructions(
+    mergedSymbolsPerformanceData1.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
 });
 
 const handleDownloadAndRedirect = (file: string, stepId: number, name: string) => {
