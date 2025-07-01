@@ -30,17 +30,17 @@
 </template>
 
 <script lang="ts" setup>
-import { Document, Menu as IconMenu, Location, Setting } from '@element-plus/icons-vue';
-import { onMounted, ref, type Ref } from 'vue';
-import type Node from 'element-plus/es/components/tree/src/model/node';
-import type { TreeNodeData } from 'element-plus/es/components/tree/src/tree.type';
+//import { Document, Menu as IconMenu, Location, Setting } from '@element-plus/icons-vue';
+import { onMounted, ref } from 'vue';
+//import type Node from 'element-plus/es/components/tree/src/model/node';
+//import type { TreeNodeData } from 'element-plus/es/components/tree/src/tree.type';
 
 import PerfCompare from '@/components/PerfCompare.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 
-import { getCurrentInstance } from 'vue';
-import { ElMessage } from 'element-plus';
+//import { getCurrentInstance } from 'vue';
+//import { ElMessage } from 'element-plus';
 
 const showPage = ref('');
 
@@ -53,12 +53,12 @@ async function changeContent(page: string) {
   console.log(`切换到按钮${page}的内容`);
 }
 
-const { proxy } = getCurrentInstance() as any;
+// const { proxy } = getCurrentInstance() as any;
 
-function handleLanguageChange(newLanguage: string) {
-  console.log('old language is:', proxy.$i18n.locale);
-  proxy.$i18n.locale = newLanguage;
-}
+// function handleLanguageChange(newLanguage: string) {
+//   console.log('old language is:', proxy.$i18n.locale);
+//   proxy.$i18n.locale = newLanguage;
+// }
 
 onMounted(() => {
   changeContent(window.initialPage?.toLowerCase())
