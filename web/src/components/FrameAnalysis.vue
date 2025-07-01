@@ -1,7 +1,7 @@
 <template>
     <div class="app-container">
         <div class="stats-cards">
-            <div class="stat-card data-panel">
+            <div v-if="hasPerformanceData" class="stat-card data-panel">
                 <div class="card-title">
                     <i>📊</i> 有效帧数
                 </div>
@@ -28,7 +28,7 @@ class="progress-value"
                 </div>
             </div>
 
-            <div class="stat-card data-panel">
+            <div v-if="hasPerformanceData" class="stat-card data-panel">
                 <div class="card-title">
                     <i>⚠️</i> 卡顿帧数
                 </div>
@@ -60,11 +60,11 @@ class="progress-value"
                 </div>
             </div>
 
-            <div class="stat-card data-panel">
+            <div v-if="hasEmptyFrameData" class="stat-card data-panel">
                 <div class="card-title">
                     <i>🌀</i> 空刷帧统计
                 </div>
-                <div class="card-value">{{ summaryData.empty_frames_with_load.toLocaleString() }}</div>
+                <div class="card-value">{{ summaryData.total_empty_frames.toLocaleString() }}</div>
                 <div class="progress-bar">
                     <div
 class="progress-value"
@@ -122,7 +122,7 @@ class="progress-value"
                     </div>
                 </div>
             </div>
-            <div class="stat-card data-panel">
+            <div v-if="hasComponentResuData" class="stat-card data-panel">
                 <div class="card-title">
                     <i>ℹ️</i> 其他
                 </div>
@@ -132,9 +132,8 @@ class="progress-value"
                 <div class="metric-grid">
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span></div>
-                        <div class="metric-label">组件名/总组件数/复用占比</div>
-                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.total_builds }}/{{
-                                componentResuData.reusability_ratio * 100 }}%</div>
+                        <div class="metric-label">组件名/复用组件数/总组件数/复用组件占比</div>
+                        <div class="metric-value">{{ componentResuData.max_component }}/{{ componentResuData.recycled_builds }}/{{ componentResuData.total_builds }}/{{ componentResuData.reusability_ratio*100 }}%</div>
                     </div>
                 </div>
             </div>
@@ -440,7 +439,7 @@ class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -462,38 +461,26 @@ const props = defineProps({
 
 // 性能数据
 const performanceData = computed(() => {
-    if (props.step === 0 || props.data['step' + 2] == undefined) {
-        return props.data['step' + 1];
-    } else {
-        return props.data['step' + props.step];
-    }
+    const key = props.step === 0 || props.data['step' + 2] == undefined ? 'step1' : 'step' + props.step;
+    return props.data[key] ?? getDefaultFrameStepData();
 });
 
 // 当前步骤空刷信息
 const emptyFrameData = computed(() => {
-    if (props.step === 0 || emptyFrameJsonData['step' + 2] == undefined) {
-        return emptyFrameJsonData['step' + 1];
-    } else {
-        return emptyFrameJsonData['step' + props.step];
-    }
+    const key = props.step === 0 || emptyFrameJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
+    return emptyFrameJsonData[key] ?? getDefaultEmptyFrameStepData();
 });
 
 // 当前步骤组件复用信息
 const componentResuData = computed(() => {
-    if (props.step === 0 || componentResuJsonData['step' + 2] == undefined) {
-        return componentResuJsonData['step' + 1];
-    } else {
-        return componentResuJsonData['step' + props.step];
-    }
+    const key = props.step === 0 || componentResuJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
+    return componentResuJsonData[key] ?? getDefaultComponentResuStepData();
 });
 
 // 当前步骤冷启动文件使用信息
 const coldStartData = computed(() => {
-    if (props.step === 0 || coldStartJsonData['step' + 2] == undefined) {
-        return coldStartJsonData['step' + 1];
-    } else {
-        return coldStartJsonData['step' + props.step];
-    }
+    const key = props.step === 0 || coldStartJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
+    return coldStartJsonData[key] ?? getDefaultColdStartStepData();
 });
 
 // 文件使用分析数据 - 由冷启动数据提供
@@ -612,6 +599,11 @@ const hasFileUsageData = computed(() => {
     const noFiles = (!data.used_files_top10 || data.used_files_top10.length === 0) && (!data.unused_files_top10 || data.unused_files_top10.length === 0);
     return !(noSummary && noFiles);
 });
+
+// 判断各类step数据是否有效
+const hasPerformanceData = computed(() => !!performanceData.value && performanceData.value.statistics && performanceData.value.statistics.total_frames > 0);
+const hasEmptyFrameData = computed(() => !!emptyFrameData.value && emptyFrameData.value.summary && emptyFrameData.value.summary.total_empty_frames > 0);
+const hasComponentResuData = computed(() => !!componentResuData.value && componentResuData.value.total_builds > 0);
 
 // 格式化数字显示
 const formatNumber = (num) => {
