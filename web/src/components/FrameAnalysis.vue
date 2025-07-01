@@ -563,12 +563,12 @@ const minTimestamp = ref(0); // 存储最小时间戳
 const fileUsageFilter = ref('used');
 
 // 父模块展开状态管理
-const expandedModules = ref({});
+//const expandedModules = ref({});
 
 // 切换父模块详情显示
-const toggleModuleDetail = (index) => {
-    expandedModules.value[index] = !expandedModules.value[index];
-};
+// const toggleModuleDetail = (index) => {
+//     expandedModules.value[index] = !expandedModules.value[index];
+// };
 
 // 筛选文件使用数据
 const filteredFileUsageData = computed(() => {
@@ -634,16 +634,16 @@ const formatFileTime = (timeMs) => {
 };
 
 // 统计数据计算
-const totalFrames = computed(() => performanceData.value.statistics.total_frames);
-const stutterFrames = computed(() => performanceData.value.statistics.total_stutter_frames);
-const stutterRate = computed(() => performanceData.value.statistics.stutter_rate * 100);
-const avgFPS = computed(() => performanceData.value.fps_stats.average_fps);
-const minFPS = computed(() => performanceData.value.fps_stats.min_fps);
-const maxFPS = computed(() => performanceData.value.fps_stats.max_fps);
-const uiStutterFrames = computed(() => performanceData.value.statistics.frame_stats.ui.stutter);
-const renderStutterFrames = computed(() => performanceData.value.statistics.frame_stats.render.stutter);
-const stutterLevels = computed(() => performanceData.value.statistics.stutter_levels);
-const totalStutterFrames = computed(() => stutterFrames.value);
+// const totalFrames = computed(() => performanceData.value.statistics.total_frames);
+// const stutterFrames = computed(() => performanceData.value.statistics.total_stutter_frames);
+// const stutterRate = computed(() => performanceData.value.statistics.stutter_rate * 100);
+// const avgFPS = computed(() => performanceData.value.fps_stats.average_fps);
+// const minFPS = computed(() => performanceData.value.fps_stats.min_fps);
+// const maxFPS = computed(() => performanceData.value.fps_stats.max_fps);
+// const uiStutterFrames = computed(() => performanceData.value.statistics.frame_stats.ui.stutter);
+// const renderStutterFrames = computed(() => performanceData.value.statistics.frame_stats.render.stutter);
+// const stutterLevels = computed(() => performanceData.value.statistics.stutter_levels);
+// const totalStutterFrames = computed(() => stutterFrames.value);
 
 // 筛选卡顿数据
 const filteredStutters = computed(() => {
@@ -1123,7 +1123,7 @@ watch(performanceData, (newVal, oldVal) => {
 }, { deep: true });
 
 // 监听步骤变化
-watch(() => props.step, (newStep, oldStep) => {
+watch(() => props.step, () => {
     // 当步骤变化时关闭所有详情面板
     selectedStutter.value = null;
     selectedEmptyFrame.value = null;

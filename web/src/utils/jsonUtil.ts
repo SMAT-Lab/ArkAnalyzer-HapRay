@@ -52,6 +52,26 @@ export interface SymbolDataItem {
   increasePercentage: number
 }
 
+// 细化类型：PerfDataStep.data的item类型
+export interface PerfDataItem {
+  stepIdx: number;
+  eventType: number;
+  pid: number;
+  processName: string;
+  processEvents: number;
+  tid: number;
+  threadName: string;
+  threadEvents: number;
+  file: string;
+  fileEvents: number;
+  symbol: string;
+  symbolEvents: number;
+  symbolTotalEvents: number;
+  componentName?: string;
+  componentCategory: number;
+  originKind?: number;
+}
+
 // 处理 JSON 数据生成steps饼状图所需数据
 export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: number) {
     if (!jsonData) {
@@ -73,7 +93,7 @@ export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: n
 
     // 准备按枚举值排序的数据
     const sortedEntries = Array.from(categoryMap.entries())
-        .filter(([_, value]) => value !== 0) // 过滤掉值为零的分类
+        .filter(([, value]) => value !== 0) // 过滤掉值为零的分类
         .sort(([catA], [catB]) => {
             // 按枚举值升序排序
             if (catA < catB) return -1;
@@ -121,7 +141,7 @@ export function processJson2ProcessPieChartData(jsonData: PerfData, currentStepI
 
     // 转换为数组并过滤零值
     const processEntries = Array.from(processMap.entries())
-        .filter(([_, value]) => value > 0); // 过滤掉负载为零的进程
+        .filter(([, value]) => value > 0); // 过滤掉负载为零的进程
 
     // 按负载值降序排序（展示负载最高的进程在前）
     processEntries.sort((a, b) => b[1] - a[1]);
@@ -139,7 +159,7 @@ export function processJson2ProcessPieChartData(jsonData: PerfData, currentStepI
 }
 
 // 定义键生成策略
-type KeyGenerator = (item: any, stepId: number) => string;
+type KeyGenerator = (item: PerfDataItem, stepId: number) => string;
 
 // 定义结果创建策略
 type ResultCreator<T> = (keyParts: string[], instructions: number, compareInstructions: number,
