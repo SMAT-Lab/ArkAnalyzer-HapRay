@@ -47,6 +47,9 @@ class ResourceUsage_PerformanceDynamic_bilibili_1000(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
+        self.set_device_redundant_mode()
+        self.reboot_device()
+
     def process(self):
         # self.driver.swipe_to_home()
         self.driver.press_home()

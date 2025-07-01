@@ -96,7 +96,8 @@ class FrameAnalyzer:
             # 确保pids和process_names长度一致
             if len(pids) != len(process_names):
                 logging.warning(
-                    "Mismatch between pids (%s) and process_names (%s) in %s", len(pids), len(process_names), pids_json_path)
+                    "Mismatch between pids (%s) and process_names (%s) in %s",
+                    len(pids), len(process_names), pids_json_path)
                 # 取较短的长度
                 min_length = min(len(pids), len(process_names))
                 pids = pids[:min_length]
@@ -674,7 +675,6 @@ class FrameAnalyzer:
         cursor = context.get("cursor")  # 从context中获取cursor
         callchain_cache = FrameAnalyzer._get_callchain_cache(perf_conn, step_id)
         files_cache = FrameAnalyzer._get_files_cache(perf_conn, step_id)
-        
         frame_type = get_frame_type(frame, cursor, step_id=step_id)
         stutter_detail = None
         stutter_level = None
@@ -720,7 +720,8 @@ class FrameAnalyzer:
                                             })
                                         except Exception as e:
                                             logging.error(
-                                                "处理样本时出错: %s, sample: %s, frame_load: %s", str(e), sample.to_dict(), frame_load)
+                                                "处理样本时出错: %s, sample: %s, frame_load: %s",
+                                                str(e), sample.to_dict(), frame_load)
                                             continue
                                 except Exception as e:
                                     logging.error("分析调用链时出错: %s", str(e))
