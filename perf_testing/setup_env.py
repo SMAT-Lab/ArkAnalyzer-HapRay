@@ -60,8 +60,6 @@ def execute_command(command: list, working_dir: Path = None, error_message: str 
             cwd=working_dir,
             check=True,
             shell=platform.system() == "Windows",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             text=True
         )
     except subprocess.CalledProcessError as e:
