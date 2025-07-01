@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -24,15 +23,8 @@ class ColdStartAnalyzer(BaseAnalyzer):
         Returns:
             Dictionary containing cold start analysis result for this step, or None if no data
         """
-        # 从testInfo.json中提取bundle name
-        bundle_name = self._extract_bundle_name()
-        if not bundle_name:
-            logging.warning("Could not extract bundle name from testInfo.json")
-            return None
-
         # 构建redundant file路径 - 在scene_dir/result/目录下
-        redundant_file_path = os.path.join(self.scene_dir, 'result', f'{bundle_name}_redundant_file.txt')
-
+        redundant_file_path = os.path.join(os.path.dirname(trace_db_path), 'redundant_file.txt')
         if not os.path.exists(redundant_file_path):
             logging.warning("Redundant file not found: %s", redundant_file_path)
             return None
@@ -49,32 +41,6 @@ class ColdStartAnalyzer(BaseAnalyzer):
 
         except Exception as e:
             logging.error("Cold start analysis failed: %s", str(e))
-            return None
-
-    def _extract_bundle_name(self) -> Optional[str]:
-        """Extract bundle name from testInfo.json file.
-
-        Returns:
-            Bundle name (app_id) or None if extraction fails
-        """
-        try:
-            test_info_path = os.path.join(self.scene_dir, 'testInfo.json')
-            if not os.path.exists(test_info_path):
-                logging.warning("testInfo.json not found: %s", test_info_path)
-                return None
-
-            with open(test_info_path, 'r', encoding='utf-8') as f:
-                test_info = json.load(f)
-
-            app_id = test_info.get('app_id')
-            if app_id:
-                return app_id
-
-            logging.warning("app_id not found in testInfo.json")
-            return None
-
-        except Exception as e:
-            logging.error("Failed to extract bundle name from testInfo.json: %s", str(e))
             return None
 
     def _parse_redundant_file(self, file_path: str) -> Optional[Dict[str, Any]]:
