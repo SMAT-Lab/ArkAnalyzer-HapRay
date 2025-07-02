@@ -21,5 +21,5 @@ export function calculateEnergyConsumption(instructionCount: number): number {
     }
     
     // 四舍五入保留6位小数
-    return parseFloat(result.toFixed(6));
+    return parseFloat(result.toFixed(2));
 }
