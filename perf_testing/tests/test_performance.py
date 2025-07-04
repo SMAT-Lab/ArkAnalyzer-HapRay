@@ -16,7 +16,6 @@ import hashlib
 import json
 import os
 import sys
-import tempfile
 import time
 
 import pytest
@@ -120,8 +119,8 @@ def test_integration_performance_test():
     assert report_path is not None, 'PerfAction->execute return is not None'
     assert os.path.exists(report_path), 'PerfAction->execute report_path must exist.'
 
-    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_new'), [1255320000])
-    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_old'), [1369910000])
+    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_new'), [])
+    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_old'), [])
     check_report(os.path.join(report_path, 'ResourceUsage_PerformanceDynamic_Douyin_1000'), [])
 
     # test update

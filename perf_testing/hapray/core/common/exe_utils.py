@@ -95,6 +95,18 @@ class ExeUtils:
         return ['node', ExeUtils.hapray_cmd_path, 'hapray', *args]
 
     @staticmethod
+    def execute_command_check_output(cmd, timeout=120000):
+        ret = 'error'
+        try:
+            ret = subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.STDOUT, shell=True)
+            return ret.decode('gbk', 'ignore').encode('utf-8')
+        except subprocess.CalledProcessError as e:
+            logger.error('cmd->%s excute error output=%s', cmd, e.output)
+        except subprocess.TimeoutExpired as e:
+            logger.error('cmd->%s excute error output=%s', cmd, e.output)
+        return ret
+
+    @staticmethod
     def execute_command(cmd: List[str]) -> Tuple[bool, Optional[str], Optional[str]]:
         """Executes a shell command and captures its output.
 
