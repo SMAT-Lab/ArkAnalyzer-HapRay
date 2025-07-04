@@ -1,11 +1,10 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
@@ -43,38 +42,33 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
-        def step1(driver):
+        def step1():
             Step('1. 竖屏视频播放30s')
             time.sleep(10)
 
-        def step2(driver):
+        def step2():
             Step('2. 点击视频中间，点击全屏按钮，全屏播放30s')
             # 1. 点击视频中间，等待1s
-            driver.touch((600, 500))
+            self.driver.touch((600, 500))
             time.sleep(1)
 
             # 2. 点击全屏按钮，等待1s
-            driver.touch((1188, 1670))  # Mate60 Pro
+            self.driver.touch((1188, 1670))  # Mate60 Pro
             # driver.touch((1144, 709))  # Mate70
             time.sleep(1)
 
             # 3. 全屏播放30s
             time.sleep(10)
 
-        def step3(driver):
+        def step3():
             Step('3. 点击视频中间，点击关闭弹幕，全屏播放30s')
             # 1. 点击视频中间，等待1s
-            driver.touch((630, 1373))
+            self.driver.touch((630, 1373))
             time.sleep(1)
 
             # 2. 点击关闭弹幕，等待1s
-            driver.touch((90, 2519))  # Mate60 Pro
+            self.driver.touch((90, 2519))  # Mate60 Pro
             # driver.touch((526, 1125))  # Mate70
             time.sleep(1)
 
@@ -124,8 +118,3 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
         for i in range(4):
             self.driver.swipe_to_back()
             time.sleep(1)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

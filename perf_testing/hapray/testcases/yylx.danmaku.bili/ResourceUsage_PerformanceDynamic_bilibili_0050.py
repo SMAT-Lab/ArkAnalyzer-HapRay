@@ -42,7 +42,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
-        def step1(driver):
+        def step1():
             time.sleep(5)
 
         Step('启动被测应用')

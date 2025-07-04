@@ -1,11 +1,9 @@
 # coding: utf-8
-import os
 
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
@@ -39,11 +37,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
         self.driver.swipe_to_home()
 
@@ -73,9 +66,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
         self.driver.touch(BY.type('Text').text('全部频道'))
         self.driver.wait(2)
 
-        CommonUtils.swipes_up_load(self.driver, swip_num=1, sleep=2)
+        self.swipes_up(swip_num=1, sleep=2)
 
-        def step1(driver):
+        def step1():
             self.driver.touch(BY.text('京东超市'))
             self.driver.wait(2)
 
@@ -84,9 +77,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             self.driver.wait(2)
 
             # Step('粮油调味页上滑操作')
-            CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
+            self.swipes_up(swip_num=3, sleep=2)
             # Step('粮油调味页下滑操作')
-            CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
+            self.swipes_down(swip_num=5, sleep=2)
 
             # 加入第一个商品到购物车
             self.driver.touch(CoordinateAdapter.convert_coordinate(
@@ -109,8 +102,3 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             source_height=self.source_screen_height
         ))
         self.driver.wait(2)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

@@ -1,12 +1,10 @@
 # coding: utf-8
-import os
 import time
 from typing import Optional
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.perf_testcase import PerfTestCase, Log
 
 
@@ -50,11 +48,6 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
     @property
     def app_name(self) -> str:
         return self._app_name
-
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def find_component_safely(self, driver, by_type: str, text: str, timeout: int = 5) -> Optional[object]:
         """Safely find a component with retry and logging."""
@@ -113,40 +106,31 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
             else:
                 Log.error('Failed to find 推荐 button, continuing with test...')
 
-            def step1(driver):
+            def step1():
                 Step('1. 淘宝-首页上下滑5次，间隔2s')
                 try:
                     for i in range(5):
                         Log.info(f'Performing swipe down {i + 1}/5')
-                        CommonUtils.swipe(driver.device_sn,
-                                          self.SWIPE_START_X, self.SWIPE_START_Y,
-                                          self.SWIPE_END_X, self.SWIPE_END_Y,
-                                          self.SWIPE_DURATION)
-                        time.sleep(2)
+                        self.swipes_up(1, 2, 300)
                     for i in range(5):
                         Log.info(f'Performing swipe up {i + 1}/5')
-                        CommonUtils.swipe(driver.device_sn,
-                                          self.SWIPE_END_X, self.SWIPE_END_Y,
-                                          self.SWIPE_START_X, self.SWIPE_START_Y,
-                                          self.SWIPE_DURATION)
-                        time.sleep(2)
+                        self.swipes_down(1, 2, 300)
                     time.sleep(3)
                 except Exception as e:
                     Log.error(f'Error in step1: {str(e)}')
 
-            def step2(driver):
+            def step2():
                 Step('2. 淘宝-点击关注按钮并滑动几次')
                 try:
-                    component = self.find_component_safely(driver, 'Text', '关注')
+                    component = self.find_component_safely(self.driver, 'Text', '关注')
                     if component:
-                        driver.touch(component)
+                        self.driver.touch(component)
                         time.sleep(2)
                         for i in range(3):
                             Log.info(f'Performing swipe in 关注 page {i + 1}/3')
-                            CommonUtils.swipe(driver.device_sn,
-                                              self.SWIPE_START_X, self.SWIPE_START_Y,
-                                              self.SWIPE_END_X, self.SWIPE_END_Y,
-                                              self.SWIPE_DURATION)
+                            self._swipe(self.SWIPE_START_X, self.SWIPE_START_Y,
+                                        self.SWIPE_END_X, self.SWIPE_END_Y,
+                                        self.SWIPE_DURATION)
                             time.sleep(2)
                         time.sleep(3)
                     else:
@@ -154,15 +138,15 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                 except Exception as e:
                     Log.error(f'Error in step2: {str(e)}')
 
-            def step3(driver):
+            def step3():
                 Step('3. 淘宝-点击上新标签并等待')
                 try:
                     # Find and click on '上新'
-                    component = self.find_component_safely(driver, 'Text', '上新')
+                    component = self.find_component_safely(self.driver, 'Text', '上新')
                     if component:
-                        driver.touch(component)
+                        self.driver.touch(component)
                         time.sleep(5)
-                        driver.swipe_to_back()
+                        self.driver.swipe_to_back()
                         time.sleep(2)
                     else:
                         Log.error('Failed to find 上新 button')
@@ -176,11 +160,3 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
         except Exception as e:
             Log.error(f'Error in process: {str(e)}')
             raise
-
-    def teardown(self):
-        Log.info('teardown')
-        try:
-            self.driver.stop_app(self.app_package)
-            self.generate_reports()
-        except Exception as e:
-            Log.error(f'Error in teardown: {str(e)}')

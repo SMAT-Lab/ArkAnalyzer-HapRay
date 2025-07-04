@@ -1,12 +1,10 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
@@ -36,13 +34,8 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
-        def step1(driver):
+        def step1():
             Step('1. 搜索框输入“航拍中国“ （键盘输入15次，每0.5s点击一次，15s），并且点击”航拍中国“（1s），点击搜索（1s）')
 
             # 点击H
@@ -127,14 +120,9 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
         self.execute_performance_step(1, step1, 20)
 
         Step('搜索结果页上滑3次：')
-        CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
+        self.swipes_up(swip_num=3, sleep=2)
 
         # 侧滑3次返回哔哩哔哩首页
         for i in range(3):
             self.driver.swipe_to_back()
             time.sleep(1)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

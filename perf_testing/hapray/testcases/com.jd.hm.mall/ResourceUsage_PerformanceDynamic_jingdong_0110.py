@@ -1,8 +1,7 @@
 # coding: utf-8
-import os
 import time
 
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
@@ -36,11 +35,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
         self.driver.swipe_to_home()
 
@@ -48,13 +42,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-        def step1(driver):
+        def step1():
             # 点击直播
             time.sleep(30)
 
         self.execute_performance_step(1, step1, 30)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

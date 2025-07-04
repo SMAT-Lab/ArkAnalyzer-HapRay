@@ -1,5 +1,4 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
@@ -7,7 +6,7 @@ from hypium import BY
 
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
@@ -51,11 +50,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
     @property
     def app_name(self) -> str:
         return self._app_name
-
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
 
     def process(self):
         self.driver.swipe_to_home()
@@ -101,11 +95,11 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         ))
         time.sleep(2)
 
-        def step1(driver):
+        def step1():
             Step('1. 领饲料，上下拖滑3次，间隔2s')
             # 领饲料
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                driver,
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
                 x=337,  # 原始x坐标
                 y=2500,  # 原始y坐标
                 source_width=self.source_screen_width,
@@ -113,34 +107,34 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
             ))
             time.sleep(2)
             for i in range(3):
-                CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 2100, 300)
+                CommonUtils.swipe(self.driver.device_sn, 625, 2500, 625, 2100, 300)
                 time.sleep(2)
             for i in range(3):
-                CommonUtils.swipe(driver.device_sn, 625, 2100, 625, 2500, 300)
+                CommonUtils.swipe(self.driver.device_sn, 625, 2100, 625, 2500, 300)
                 time.sleep(2)
             time.sleep(3)
 
-        def step2(driver):
+        def step2():
             Step('2. 去捐蛋，上下拖滑1次，间隔2s')
             # self.driver.touch(BY.text('去捐蛋'))
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                driver,
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
                 x=780,  # 原始x坐标
                 y=2500,  # 原始y坐标
                 source_width=self.source_screen_width,
                 source_height=self.source_screen_height
             ))
             time.sleep(2)
-            CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 1550, 300)
+            CommonUtils.swipe(self.driver.device_sn, 625, 2500, 625, 1550, 300)
             time.sleep(2)
-            CommonUtils.swipe(driver.device_sn, 625, 1550, 625, 2500, 300)
+            CommonUtils.swipe(self.driver.device_sn, 625, 1550, 625, 2500, 300)
             time.sleep(2)
 
-        def step3(driver):
+        def step3():
             Step('3. 芭芭农场，领肥料，上下拖滑3次，间隔2s')
             # 点左边树苗
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                driver,
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
                 x=56,  # 原始x坐标
                 y=1515,  # 原始y坐标
                 source_width=self.source_screen_width,
@@ -148,8 +142,8 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
             ))
             time.sleep(5)
             # self.driver.touch(BY.text('领肥料'))
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                driver,
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
                 x=1125,  # 原始x坐标
                 y=2200,  # 原始y坐标
                 source_width=self.source_screen_width,
@@ -157,17 +151,17 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
             ))
             time.sleep(5)
             for i in range(3):
-                CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 2100, 300)
+                CommonUtils.swipe(self.driver.device_sn, 625, 2500, 625, 2100, 300)
                 time.sleep(2)
             for i in range(3):
-                CommonUtils.swipe(driver.device_sn, 625, 2100, 625, 2500, 300)
+                CommonUtils.swipe(self.driver.device_sn, 625, 2100, 625, 2500, 300)
                 time.sleep(2)
 
-        def step4(driver):
+        def step4():
             Step('4. 跳转至蚂蚁森林，点击奖励，上下拖滑3次，间隔2s')
             # 点击右侧树苗
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                driver,
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
                 x=910,  # 原始x坐标
                 y=1198,  # 原始y坐标
                 source_width=self.source_screen_width,
@@ -175,8 +169,8 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
             ))
             time.sleep(3)
             # self.driver.touch(BY.text('奖励'))
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                driver,
+            self.driver.touch(CoordinateAdapter.convert_coordinate(
+                self.driver,
                 x=520,  # 原始x坐标
                 y=1820,  # 原始y坐标
                 source_width=self.source_screen_width,
@@ -185,10 +179,10 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
 
             time.sleep(3)
             for i in range(3):
-                CommonUtils.swipe(driver.device_sn, 625, 2500, 625, 2100, 300)
+                CommonUtils.swipe(self.driver.device_sn, 625, 2500, 625, 2100, 300)
                 time.sleep(2)
             for i in range(3):
-                CommonUtils.swipe(driver.device_sn, 625, 2100, 625, 2500, 300)
+                CommonUtils.swipe(self.driver.device_sn, 625, 2100, 625, 2500, 300)
                 time.sleep(2)
 
         self.execute_performance_step(1, step1, 25)
@@ -238,8 +232,3 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0080(PerfTestCase):
         self.execute_performance_step(4, step4, 25)
         # 上滑返回桌面
         self.driver.swipe_to_home()
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

@@ -6,7 +6,7 @@ from hypium import BY
 from hapray.core.perf_testcase import PerfTestCase
 
 
-class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
+class ResourceUsage_PerformanceDynamic_Douyin_0200(PerfTestCase):
 
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
@@ -17,8 +17,8 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
         self._steps = [
             {
                 "name": "step1",
-                "description": "1. 搜索列表浏览"
-            }
+                "description": "1. 经验页浏览"
+            },
         ]
         # 原始采集设备的屏幕尺寸（Pura 70 Pro）
         self.source_screen_width = 1260
@@ -37,24 +37,20 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
         return self._app_name
 
     def process(self):
-        def start():
-            # 1. 打开抖音，等待 5s
-            self.start_app()
+        # 1. 打开抖音，等待 5s
+        self.start_app()
 
-            # 2. 点击搜索框，输入【与辉同行】
-            self.touch_by_id('topTabsRightSlot', 2)
-            self.driver.input_text(BY.type('TextInput'), '与辉同行')
-            time.sleep(2)
-            self.touch_by_id('search_button')
+        # 2. 左滑进入‘经验’ tab页
+        self.driver.swipe('RIGHT', 60, area=BY.id("topTabsMiddleSlot"))
+        time.sleep(3)
+        self.touch_by_text('经验', 5)
 
-            # 3. 预加载
-            self.swipes_up(15, 1, 300)
-            self.swipes_down(10, 1, 300)
+        # 3. 预先下滑预加载10次，再上滑8次
+        self.swipes_up(10, 2, 100)
+        self.swipes_down(8, 2, 100)
 
         def step1():
-            # 搜索列表上滑10次，每次间隔1s
-            self.swipes_up(10, 1, 300)
-            self.swipes_down(10, 1, 300)
+            self.swipes_up(5, 2, 100)
+            self.swipes_down(5, 2, 100)
 
-        start()
-        self.execute_performance_step(1, step1, 35)
+        self.execute_performance_step(1, step1, 30)
