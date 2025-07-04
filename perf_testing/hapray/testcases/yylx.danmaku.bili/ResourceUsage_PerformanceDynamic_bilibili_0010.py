@@ -1,12 +1,10 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0010(PerfTestCase):
@@ -41,19 +39,14 @@ class ResourceUsage_PerformanceDynamic_bilibili_0010(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
-        def step1(driver):
+        def step1():
             Step('b站首页上滑操作')
-            CommonUtils.swipes_up_load(self.driver, swip_num=10, sleep=2)
+            self.swipes_up(swip_num=10, sleep=2)
             Step('b站首页下滑操作')
-            CommonUtils.swipes_down_load(self.driver, swip_num=10, sleep=2)
+            self.swipes_down(swip_num=10, sleep=2)
 
-        def step2(driver):
+        def step2():
             # 点击“追番”页面，等待5秒
             self.driver.touch(BY.text('追番'))
             time.sleep(5)
@@ -82,11 +75,6 @@ class ResourceUsage_PerformanceDynamic_bilibili_0010(PerfTestCase):
 
         # 哔哩哔哩“热门”页面，上滑3次
         Step('b站“热门”页上滑操作')
-        CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
+        self.swipes_up(swip_num=3, sleep=2)
 
         self.execute_performance_step(2, step2, 20)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

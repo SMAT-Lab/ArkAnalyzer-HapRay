@@ -1,12 +1,10 @@
 # coding: utf-8
-import os
 import time
 
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
@@ -40,11 +38,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
         self.driver.swipe_to_home()
 
@@ -53,7 +46,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
         self.driver.wait(5)
         time.sleep(3)
 
-        def step1(driver):
+        def step1():
             # 点击搜索框
             self.driver.touch(CoordinateAdapter.convert_coordinate(
                 self.driver,
@@ -77,13 +70,8 @@ class ResourceUsage_PerformanceDynamic_jingdong_0080(PerfTestCase):
             time.sleep(2)
 
             # Step('搜索结果页浏览，上滑操作')
-            CommonUtils.swipes_up_load(self.driver, swip_num=3, sleep=2)
+            self.swipes_up(swip_num=3, sleep=2)
             # Step('搜索结果页浏览，下滑操作')
-            CommonUtils.swipes_down_load(self.driver, swip_num=5, sleep=2)
+            self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step(1, step1, 30)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

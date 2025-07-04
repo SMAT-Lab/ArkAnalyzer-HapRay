@@ -1,12 +1,10 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
@@ -36,11 +34,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
         self.driver.swipe_to_home()
 
@@ -50,15 +43,15 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-        def step1(driver):
+        def step1():
             Step('1. 支付宝 点击视频播放，拖滑切换视频5次，每次间隔10s')
             time_start = time.time()
-            component = driver.find_component(BY.type('Text').text('视频'))
-            driver.touch(component)
+            component = self.driver.find_component(BY.type('Text').text('视频'))
+            self.driver.touch(component)
             time.sleep(2)
             for _ in range(5):
                 # driver.slide((604, 2020), (604, 930), slide_time=0.3)  # 从上往下滑   ## TODO swipe_OH()
-                CommonUtils.swipes_up_load(driver, swip_num=1, sleep=10, timeout=300)
+                self.swipes_up(swip_num=1, sleep=10, timeout=300)
                 # driver.wait(1)  # TODO driver.wait 和 sleep 有什么区别
                 # driver.drag((604, 2020), (604, 930), drag_time=0.5) # TODO drag 和 slide 区别？
                 time.sleep(10)
@@ -67,14 +60,10 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0070(PerfTestCase):
             if time_end - time_start < 65:
                 time.sleep(65 - (time_end - time_start))
 
-        def finish(driver):
+        def finish():
             # 上滑返回桌面
-            driver.swipe_to_home()
+            self.driver.swipe_to_home()
             time.sleep(1)
-        self.execute_performance_step(1, step1, 65)
-        finish(self.driver)
 
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()
+        self.execute_performance_step(1, step1, 65)
+        finish()
