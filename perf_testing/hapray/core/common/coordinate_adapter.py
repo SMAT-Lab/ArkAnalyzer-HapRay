@@ -19,7 +19,7 @@ from typing import Tuple
 
 from hypium import UiDriver
 
-from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.exe_utils import ExeUtils
 
 
 class CoordinateAdapter:
@@ -40,7 +40,7 @@ class CoordinateAdapter:
         try:
             # 使用hidumper命令获取屏幕尺寸
             cmd = f'hdc -t {driver.device_sn} shell hidumper -s RenderService -a screen'
-            result = CommonUtils.exe_cmd(cmd)
+            result = ExeUtils.execute_command_check_output(cmd)
 
             # 将字节类型转换为字符串
             result_str = result.decode('utf-8') if isinstance(result, bytes) else result

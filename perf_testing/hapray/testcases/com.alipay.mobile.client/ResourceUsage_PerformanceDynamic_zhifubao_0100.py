@@ -1,13 +1,11 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
@@ -44,11 +42,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
         self.driver.swipe_to_home()
         Step('启动被测应用')
@@ -70,15 +63,15 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
         self.driver.touch(BY.text('西安半导体产业园 0102'))
         time.sleep(2)
 
-        def step1(driver):
+        def step1():
             Step('1. 支付宝-饿了么 页面浏览 上滑5次，间隔2s')
             for i in range(5):
-                CommonUtils.swipes_up_load(driver, 1, 2, 300)
+                self.swipes_up(1, 2, 300)
 
-        def step2(driver):
+        def step2():
             Step('2. 支付宝-饿了么 店铺浏览 上滑10次，间隔2s')
             for i in range(10):
-                CommonUtils.swipes_up_load(driver, 1, 2, 300)
+                self.swipes_up(1, 2, 300)
 
         self.execute_performance_step(1, step1, 20)
         time.sleep(10)
@@ -91,8 +84,3 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0100(PerfTestCase):
         self.driver.touch(BY.text('每一天便利店(西滩社区店)'))
         time.sleep(2)
         self.execute_performance_step(2, step2, 35)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()

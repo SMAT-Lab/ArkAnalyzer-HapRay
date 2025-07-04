@@ -1,12 +1,10 @@
 # coding: utf-8
-import os
 import time
 
 from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.common.common_utils import CommonUtils
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
@@ -53,69 +51,64 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
-        def step1(driver):
+        def step1():
             Step('1. 视频播放30s')
             time.sleep(30)
 
-        def step2(driver):
+        def step2():
             # 依赖提前关注 EDIFIER漫步者
             Step('2. 视频区评论')
             time_start = time.time()
             # 评论区上滑10次
             for i in range(10):
                 # CommonUtils.swipe(driver.device_sn, 703, 2471, 703, 1471)
-                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271)  # Mate70 Mate60Pro
+                self._swipe(703, 2271, 703, 1271)  # Mate70 Mate60Pro
                 time.sleep(2)
 
             # 评论区下滑10次
             for i in range(10):
                 # CommonUtils.swipe(driver.device_sn, 703, 1471, 703, 2471)
-                CommonUtils.swipe(driver.device_sn, 703, 2271, 703, 1271)  # Mate70 Mate60Pro
+                self._swipe(703, 2271, 703, 1271)  # Mate70 Mate60Pro
                 time.sleep(2)
             time_end = time.time()
             if time_end - time_start < 60:
                 time.sleep(60 - (time_end - time_start))
 
-        def step3(driver):
+        def step3():
             Step('3. 全屏播放30s')
             # 1. 点击视频中间，等待1s
-            driver.touch((600, 500))
+            self.driver.touch((600, 500))
             time.sleep(1)
 
             # 2. 点击全屏按钮，等待1s
             # driver.touch((1232, 770))
-            driver.touch((1144, 709))  # Mate70 Mate60Pro
+            self.driver.touch((1144, 709))  # Mate70 Mate60Pro
             time.sleep(1)
 
             # 3. 全屏播放30s
             time.sleep(30)
 
-        def step4(driver):
+        def step4():
             Step('4. 关闭弹幕，全屏播放30s')
 
             # 1. 点击视频中间，等待1s
-            driver.touch((1416, 680))
+            self.driver.touch((1416, 680))
             time.sleep(1)
 
             # 2. 点击关闭弹幕，等待1s
             # driver.touch((557, 1210))
-            driver.touch((526, 1125))  # Mate70 Mate60Pro
+            self.driver.touch((526, 1125))  # Mate70 Mate60Pro
             time.sleep(1)
 
             # 3. 全屏播放30s
             time.sleep(30)
 
-        def step5(driver):
+        def step5():
             Step('5. 长按视频中间，倍速播放30s')
             time_start = time.time()
             # 1. 长按视频中间
-            driver.long_click((1416, 680), press_time=30)
+            self.driver.long_click((1416, 680), press_time=30)
             time.sleep(1)
             time_end = time.time()
             if time_end - time_start < 30:
@@ -164,8 +157,3 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         self.execute_performance_step(3, step3, 40)
         self.execute_performance_step(4, step4, 40)
         self.execute_performance_step(5, step5, 30)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()
