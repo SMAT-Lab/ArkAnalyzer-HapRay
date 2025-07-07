@@ -17,12 +17,13 @@ jobs:
       - name: Set up static Python
         run: |
           # 下载预编译的静态Python
+          git clone https://gitcode.com/bbsun/HapRay-workflow.git .workflow
           PYTHON_VERSION=3.10.17
           BUILD_TAG=20250529
-          wget https://gitcode.com/bbsun/HapRay-workflow/releases/download/v1.0.0/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz
+          
           # 解压到 /opt/python-static
           sudo mkdir -p /opt/python-static
-          sudo tar -xzf cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C /opt/python-static --strip-components=1
+          sudo tar -xzf .workflow/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C /opt/python-static --strip-components=1
           
           # 设置环境变量
           echo "/opt/python-static/bin" >> $GITHUB_PATH
