@@ -31,6 +31,9 @@ jobs:
           $(pwd)/python-static/bin/python3 -c "import sys; print(sys.executable)"
           export PATH=$(pwd)/python-static/bin/:$PATH
           python3 --version
-      - run: cd repo_workspace && npm install
-      - run: cd repo_workspace && npm run build --if-present
+          python --version
+      - run: |
+          export PATH=$(pwd)/python-static/bin/:$PATH
+          cd repo_workspace && npm install
+      - run: cd repo_workspace && npm run build
       - run: cd repo_workspace && npm run lint
