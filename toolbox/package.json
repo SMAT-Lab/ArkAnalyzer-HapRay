@@ -1,13 +1,13 @@
 {
   "name": "hapray-toolbox",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "index.js",
   "files": [
     "lib"
   ],
   "scripts": {
     "postinstall": "node unzip_third-party.js",
-    "build": "tsc && npx webpack --config webpack.config.js",
+    "build": "tsc && webpack --config webpack.config.js",
     "lint": "eslint --ext .ts src",
     "lint:fix": "eslint --ext .ts src --fix",
     "prepack": "npm run build",
