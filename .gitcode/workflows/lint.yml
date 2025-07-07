@@ -14,6 +14,25 @@ jobs:
         uses: setup-node@0.0.1
         with:
           node-version: '20.10.0'
+      - name: Set up static Python
+        run: |
+          # 下载预编译的静态Python
+          PYTHON_VERSION=3.10.17
+          BUILD_TAG=20250529
+          wget https://gitcode.com/bbsun/HapRay-workflow/releases/download/v1.0.0/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz
+          # 解压到 /opt/python-static
+          sudo mkdir -p /opt/python-static
+          sudo tar -xzf cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C /opt/python-static --strip-components=1
+          
+          # 设置环境变量
+          echo "/opt/python-static/bin" >> $GITHUB_PATH
+          echo "PYTHON_STATIC=/opt/python-static" >> $GITHUB_ENV
+          
+          # 验证安装
+          /opt/python-static/bin/python3 --version
+          /opt/python-static/bin/python3 -c "import sys; print(sys.executable)"
+          export PATH=/opt/python-static/bin/:$PATH
+          python3 --version
       - name: Set up Python
         uses: setup-python@0.0.1
         with:
