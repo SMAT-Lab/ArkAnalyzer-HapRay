@@ -170,9 +170,8 @@ git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
 npm install
 npm run build
-# Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
-cd perf_testing
-source .venv/bin/activate
+# Activate the python virtual environment perf_testing/.venv
+source activate.sh
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
 # Run pylint
@@ -186,10 +185,8 @@ git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
 npm install
 npm run build
-# Before running tests (make sure you are in the ArkAnalyzer-HapRay directory)
-cd perf_testing
-# Command-Line(CMD) Alternative the python virtual environment
-.venv\Scripts\activate.bat
+# Command-Line(CMD) Alternative the python virtual environment perf_testing/.venv
+activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
 # Run pylint
