@@ -21,18 +21,13 @@ jobs:
           PYTHON_VERSION=3.10.17
           BUILD_TAG=20250529
           
-          # 解压到 /opt/python-static
-          sudo mkdir -p /opt/python-static
-          sudo tar -xzf .workflow/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C /opt/python-static --strip-components=1
-          
-          # 设置环境变量
-          echo "/opt/python-static/bin" >> $GITHUB_PATH
-          echo "PYTHON_STATIC=/opt/python-static" >> $GITHUB_ENV
+          # 解压到 $(pwd)/python-static
+          tar -xzf .workflow/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C $(pwd)/python-static --strip-components=1
           
           # 验证安装
-          /opt/python-static/bin/python3 --version
-          /opt/python-static/bin/python3 -c "import sys; print(sys.executable)"
-          export PATH=/opt/python-static/bin/:$PATH
+          $(pwd)/python-static/bin/python3 --version
+          $(pwd)/python-static/bin/python3 -c "import sys; print(sys.executable)"
+          export PATH=$(pwd)/python-static/bin/:$PATH
           python3 --version
       - run: cd repo_workspace && npm install
       - run: cd repo_workspace && npm run build --if-present
