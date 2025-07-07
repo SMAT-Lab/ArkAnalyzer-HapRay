@@ -34,6 +34,8 @@ jobs:
           python --version
       - run: |
           export PATH=$(pwd)/python-static/bin/:$PATH
+          pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+          pip config set install.trusted-host mirrors.aliyun.com
           cd repo_workspace && npm install
       - run: cd repo_workspace && npm run build
       - run: cd repo_workspace && npm run lint
