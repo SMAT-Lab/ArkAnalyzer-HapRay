@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: setup-python@0.0.1
         with:
-          python-version: '3.9'
+          python-version: '3.12'
       - run: cd repo_workspace && npm install
       - run: cd repo_workspace && npm run build --if-present
       - run: cd repo_workspace && npm run lint
