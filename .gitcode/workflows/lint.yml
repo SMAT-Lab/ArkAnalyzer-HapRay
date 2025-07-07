@@ -22,6 +22,8 @@ jobs:
           BUILD_TAG=20250529
           
           # 解压到 $(pwd)/python-static
+          env
+          mkdir $(pwd)/python-static
           tar -xzf .workflow/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C $(pwd)/python-static --strip-components=1
           
           # 验证安装
