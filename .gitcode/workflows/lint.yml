@@ -1,0 +1,41 @@
+name: Npm build
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  build:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - name: Use Node.js
+        uses: setup-node@0.0.1
+        with:
+          node-version: '20.10.0'
+      - name: Set up static Python
+        run: |
+          # 下载预编译的静态Python
+          git clone https://gitcode.com/bbsun/HapRay-workflow.git .workflow
+          PYTHON_VERSION=3.10.17
+          BUILD_TAG=20250529
+          
+          # 解压到 $(pwd)/python-static
+          env
+          mkdir $(pwd)/python-static
+          tar -xzf .workflow/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C $(pwd)/python-static --strip-components=1
+          
+          # 验证安装
+          $(pwd)/python-static/bin/python3 --version
+          $(pwd)/python-static/bin/python3 -c "import sys; print(sys.executable)"
+          export PATH=$(pwd)/python-static/bin/:$PATH
+          python3 --version
+          python --version
+      - run: |
+          export PATH=$(pwd)/python-static/bin/:$PATH
+          pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+          pip config set install.trusted-host mirrors.aliyun.com
+          cd repo_workspace && npm install
+      - run: cd repo_workspace && npm run build
+      - run: cd repo_workspace && npm run lint
