@@ -385,13 +385,13 @@ def create_perf_summary_excel(input_path: str) -> bool:
         # 只保留同一rom_version的数据
         rom_versions = df['rom_version'].unique()
         if len(rom_versions) > 1:
-            logging.warning(f"检测到多个ROM版本，仅保留第一个: {rom_versions[0]}")
+            logging.warning("检测到多个ROM版本，仅保留第一个: %s", rom_versions[0])
         rom_version = rom_versions[0]
         df = df[df['rom_version'] == rom_version]
 
         # 重新组织列结构，将rom_version、app_version、count作为列名
         result_df = df[['rom_version', 'app_version', 'scene', 'step_id', 'step_name', 'count']].copy()
-        
+
         # 按场景、步骤ID、步骤名称排序
         result_df = result_df.sort_values(['scene', 'step_id', 'step_name', 'app_version'])
 
