@@ -11,16 +11,6 @@ class ResourceUsage_PerformanceDynamic_xhs_1000(PerfTestCase):
 
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 应用冷启动"
-            }
-        ]
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -41,4 +31,4 @@ class ResourceUsage_PerformanceDynamic_xhs_1000(PerfTestCase):
             self.start_app()
             self.swipe_to_home()
 
-        self.execute_performance_step(1, step1, 10, True)
+        self.execute_performance_step("小红书-冷启动场景-step1应用冷启动", 10, step1, sample_all_processes=True)

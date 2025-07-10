@@ -12,20 +12,6 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
 
         self._app_package = 'com.jd.hm.mall'
         self._app_name = '京东'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1.京东-首页静置场景"
-            }
-        ]
-
-        # 原始采集设备的屏幕尺寸（Mate 60）
-        self.source_screen_width = 1216
-        self.source_screen_height = 2688
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -46,4 +32,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
             # 点击直播
             time.sleep(30)
 
-        self.execute_performance_step(1, step1, 30)
+        self.execute_performance_step("京东-首页静置场景-step1首页静置", 30, step1)

@@ -14,27 +14,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0090(PerfTestCase):
 
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 观看直播"
-            },
-            {
-                "name": "step2",
-                "description": "2. 互动发送"
-            },
-            {
-                "name": "step3",
-                "description": "3. 直播间购物车商品列表页浏览"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Nova14）
         self.source_screen_width = 1084
         self.source_screen_height = 2412
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -74,10 +56,10 @@ class ResourceUsage_PerformanceDynamic_xhs_0090(PerfTestCase):
                 # 3. 直播间商品列表下滑，等待2s
                 self.swipes_down(1, 2, 300)
 
-        self.execute_performance_step(1, step1, 35)
+        self.execute_performance_step("小红书-直播购物场景-step1观看直播", 35, step1)
 
         self.touch_by_text('说点什么...', 2)
         self.driver.swipe_to_back()
 
-        self.execute_performance_step(2, step2, 15)
-        self.execute_performance_step(3, step3, 35)
+        self.execute_performance_step("小红书-直播购物场景-step2互动发送", 15, step2)
+        self.execute_performance_step("小红书-直播购物场景-step3直播间购物车商品列表页浏览", 35, step3)
