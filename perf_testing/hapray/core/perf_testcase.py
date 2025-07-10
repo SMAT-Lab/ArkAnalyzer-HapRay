@@ -229,8 +229,8 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
                 if regex.match(pid.strip()):
                     Log.info('手机重启成功，设备已连接')
                     Log.info('等待手机完全启动到大屏幕界面...')
-                    time.sleep(20)
                     self.driver.wake_up_display()
+                    self.driver.swipe_to_back()
                     self.driver.swipe_to_home(5)
                     return
 
