@@ -132,11 +132,12 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self.tag = tag
         self._start_app_package = None  # Package name for process identification
         self._redundant_mode_status = False  # default close redundant mode
+        self._steps = []
 
     @property
-    @abstractmethod
     def steps(self) -> list:
         """List of test steps with name and description"""
+        return self._steps
 
     @property
     @abstractmethod
@@ -154,6 +155,8 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         self.stop_app()
+        self.driver.wake_up_display()
+        self.driver.swipe_to_home()
 
     def teardown(self):
         """common teardown"""
@@ -163,11 +166,11 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
     def execute_performance_step(
             self,
-            step_id: int,
-            action: callable,
+            step_name: str,
             duration: int,
-            sample_all_processes: bool = False
-    ):
+            action: callable,
+            *args,
+            sample_all_processes: bool = False):
         """
         Execute a test step while collecting performance and trace data
 
@@ -177,6 +180,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             duration: Data collection time in seconds
             sample_all_processes: Whether to sample all system processes
         """
+        step_id = len(self._steps) + 1
+        self._steps.append({"name": f"step{step_id}",
+                            "description": step_name})
         output_file = self._prepare_output_path(step_id)
         self._clean_previous_output(output_file)
 
@@ -193,7 +199,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         collection_thread.start()
 
         # Execute the test action while data collection runs
-        action()
+        action(*args)
 
         collection_thread.join()
         self._save_performance_data(output_file, step_id)
@@ -223,7 +229,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
                 if regex.match(pid.strip()):
                     Log.info('手机重启成功，设备已连接')
                     Log.info('等待手机完全启动到大屏幕界面...')
-                    time.sleep(20)
+                    self.driver.wake_up_display()
+                    self.driver.swipe_to_back()
+                    self.driver.swipe_to_home(5)
                     return
 
                 Log.info(f'设备未连接，返回码: {pid}')

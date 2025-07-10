@@ -11,23 +11,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0080(PerfTestCase):
 
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 视频切换浏览"
-            },
-            {
-                "name": "step2",
-                "description": "2. 评论区浏览"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Nova14）
         self.source_screen_width = 1084
         self.source_screen_height = 2412
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -60,6 +46,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0080(PerfTestCase):
             self.touch_by_coordinates(884, 2257, 2)
             self.swipes_up(5, 2, 300)
 
-        self.execute_performance_step(1, step1, 40)
+        self.execute_performance_step("小红书-视频及评论浏览-step1视频切换浏览", 40, step1)
         self.swipes_up(1, 2)
-        self.execute_performance_step(2, step2, 20)
+        self.execute_performance_step("小红书-视频及评论浏览-step2评论区浏览", 20, step2)

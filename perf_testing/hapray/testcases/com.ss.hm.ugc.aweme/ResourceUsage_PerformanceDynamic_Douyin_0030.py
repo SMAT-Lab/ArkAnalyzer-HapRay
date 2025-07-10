@@ -14,31 +14,9 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
 
         self._app_package = 'com.ss.hm.ugc.aweme'
         self._app_name = '抖音'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 点击播放置顶视频"
-            },
-            {
-                "name": "step2",
-                "description": "2. 评论界面弹出/收起"
-            },
-            {
-                "name": "step3",
-                "description": "3. 评论内容浏览"
-            },
-            {
-                "name": "step4",
-                "description": "4. 输入框弹出/收起"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Pura 70 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2844
-
-    @property
-    def steps(self) -> list[dict[str, str]]:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -92,11 +70,11 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
                 self.touch_by_coordinates(630, 338, 1)
 
         start()
-        self.execute_performance_step(1, step1, 10)
+        self.execute_performance_step("抖音-短视频浏览评论场景-step1点击观看历史", 10, step1)
         # 暂停播放视频
         self.touch_by_id('MAIN_SHELL_ID', 1)
 
-        self.execute_performance_step(2, step2, 10)
+        self.execute_performance_step("抖音-短视频浏览评论场景-step2评论界面弹出/收起", 10, step2)
 
         # 点击评论图标，弹出评论界面, 预先上滑/下滑一轮后再抓取
         self.touch_by_text('2.4万', 2)
@@ -104,7 +82,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
         self.swipes_down(10, 1)
 
         self.touch_by_text('2.4万', 2)
-        self.execute_performance_step(3, step3, 40)
+        self.execute_performance_step("抖音-短视频浏览评论场景-step3评论内容浏览", 40, step3)
 
         self.touch_by_text('2.4万', 2)
-        self.execute_performance_step(4, step4, 35)
+        self.execute_performance_step("抖音-短视频浏览评论场景-step4输入框弹出/收起", 35, step4)

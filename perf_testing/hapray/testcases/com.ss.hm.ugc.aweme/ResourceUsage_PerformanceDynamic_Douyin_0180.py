@@ -11,19 +11,9 @@ class ResourceUsage_PerformanceDynamic_Douyin_0180(PerfTestCase):
 
         self._app_package = 'com.ss.hm.ugc.aweme'
         self._app_name = '抖音'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 关注页浏览"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Pura 70 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2844
-
-    @property
-    def steps(self) -> list[dict[str, str]]:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -50,4 +40,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0180(PerfTestCase):
             self.swipes_up(10, 2, 100)
             self.swipes_down(10, 2, 100)
 
-        self.execute_performance_step(1, step1, 50)
+        self.execute_performance_step("抖音-关注页面浏览场景-step1关注页浏览", 50, step1)
