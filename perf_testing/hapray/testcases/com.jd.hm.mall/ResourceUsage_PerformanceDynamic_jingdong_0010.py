@@ -11,20 +11,9 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
 
         self._app_package = 'com.jd.hm.mall'
         self._app_name = '京东'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1.京东首页-滑动-应用内操作"
-            }
-        ]
-
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -47,4 +36,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0010(PerfTestCase):
             # Step('京东首页下滑操作')
             self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step(1, step1, 30)
+        self.execute_performance_step("京东-首页、超市滑动浏览场景-step1首页上下滑动", 30, step1)

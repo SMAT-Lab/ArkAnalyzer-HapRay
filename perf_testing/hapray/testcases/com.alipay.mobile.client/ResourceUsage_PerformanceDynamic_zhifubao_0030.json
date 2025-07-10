@@ -9,7 +9,7 @@
     "driver": {
         "type": "DeviceTest",
         "py_file": [
-            "ResourceUsage_PerformanceDynamic_zhifubao_0100.py"
+            "ResourceUsage_PerformanceDynamic_zhifubao_0030.py"
         ]
     },
     "kits":[

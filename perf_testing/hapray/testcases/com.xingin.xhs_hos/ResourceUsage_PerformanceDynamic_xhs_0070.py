@@ -14,19 +14,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
 
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 动态图片启动退出"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -64,4 +54,4 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
                 self.driver.touch(BY.key("AppIcon_Image_com.xingin.xhs_hosEntryAbilityredbook0_undefined"))
                 time.sleep(2)
 
-        self.execute_performance_step(1, step1, 30)
+        self.execute_performance_step("小红书-动态图片启动退出场景-step1动态图片启动退出", 30, step1)

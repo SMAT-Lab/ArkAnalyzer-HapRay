@@ -15,16 +15,9 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
 
         self._app_package = 'com.alipay.mobile.client'
         self._app_name = '支付宝'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 支付宝-理财-我的-消息-首页"
-            }
-        ]
-
-    @property
-    def steps(self) -> list:
-        return self._steps
+        # 原始采集设备的屏幕尺寸（Nova 14）
+        self.source_screen_width = 1084
+        self.source_screen_height = 2412
 
     @property
     def app_package(self) -> str:
@@ -42,27 +35,21 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
         self.driver.wait(5)
 
         def step1():
-            Step('1. 支付宝-理财-我的-消息-首页')
-            component = self.driver.find_component(BY.type('Text').text('理财'))
-            self.driver.touch(component)
-            time.sleep(5)
-            # 点击 “我的”
-            # driver.touch((1178, 2640))
-            component = self.driver.find_component(BY.type('Text').text('我的'))
-            self.driver.touch(component)
-            time.sleep(5)
-            # 点击 “消息”
-            # driver.touch((924, 2618))
-            component = self.driver.find_component(BY.type('Text').text('消息'))
-            self.driver.touch(component)
-            time.sleep(5)
-            component = self.driver.find_component(BY.type('Text').text('首页'))
-            self.driver.touch(component)
+            # 点击理财
+            self.driver.touch(BY.type('Text').text('理财'))
             time.sleep(5)
 
-        def finish():
-            time.sleep(10)
-            self.driver.swipe_to_home()
+            # 点击保险
+            self.touch_by_coordinates(900, 600, 5)
+            # 保险页上滑3次
+            self.swipes_up(3, 2)
 
-        self.execute_performance_step(1, step1, 30)
-        finish()
+        # 点击“理财”
+        self.driver.touch(BY.type('Text').text('理财'))
+        time.sleep(2)
+
+        # 点击“首页”
+        self.driver.touch(BY.type('Text').text('首页'))
+        time.sleep(2)
+
+        self.execute_performance_step("支付宝-理财基金浏览场景-step1基金页面浏览", 20, step1)

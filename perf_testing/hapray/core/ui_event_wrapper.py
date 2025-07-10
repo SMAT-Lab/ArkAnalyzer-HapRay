@@ -33,19 +33,17 @@ class UIEventWrapper(ABC):
     def app_package(self) -> str:
         """Package identifier of the application under test"""
 
-    def start_app(self, wait_seconds=5):
+    def start_app(self, package_name: str = None, page_name: str = None, params: str = "", wait_time: float = 5):
         """通用应用启动方法"""
-        self.driver.wake_up_display()
-        time.sleep(1)
-        self.driver.swipe_to_home()
-        time.sleep(1)
-        self.driver.start_app(self.app_package)
-        time.sleep(wait_seconds)
+        if package_name is None:
+            package_name = self.app_package
+        self.driver.start_app(package_name, page_name, params, wait_time)
 
-    def stop_app(self):
+    def stop_app(self, package_name: str = None, wait_time: float = 0.5):
         """通用应用退出方法"""
-        self.driver.swipe_to_home()
-        self.driver.stop_app(self.app_package)
+        if package_name is None:
+            package_name = self.app_package
+        self.driver.stop_app(package_name, wait_time)
 
     def convert_coordinate(self, x, y) -> tuple:
         return CoordinateAdapter.convert_coordinate(

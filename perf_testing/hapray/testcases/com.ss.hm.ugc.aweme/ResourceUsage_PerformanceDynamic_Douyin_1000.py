@@ -11,19 +11,9 @@ class ResourceUsage_PerformanceDynamic_Douyin_1000(PerfTestCase):
 
         self._app_package = 'com.ss.hm.ugc.aweme'
         self._app_name = '抖音'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 应用冷启动"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -42,5 +32,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_1000(PerfTestCase):
         def step1():
             self.start_app()
             self.swipe_to_home()
-
-        self.execute_performance_step(1, step1, 10, True)
+        self.execute_performance_step("抖音-冷启动场景-step1应用冷启动", 10, step1, sample_all_processes=True)
