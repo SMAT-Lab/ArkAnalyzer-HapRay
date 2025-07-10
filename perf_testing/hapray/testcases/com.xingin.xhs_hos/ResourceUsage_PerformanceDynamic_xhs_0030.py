@@ -12,31 +12,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
 
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 收藏图片浏览"
-            },
-            {
-                "name": "step2",
-                "description": "2. 双指捏合放大/缩小"
-            },
-            {
-                "name": "step3",
-                "description": "3. 评论页浏览"
-            },
-            {
-                "name": "step4",
-                "description": "4. 长文笔记浏览"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -104,9 +82,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
             self.swipes_up(3, 2, 300)
             self.swipes_down(3, 2, 300)
 
-        self.execute_performance_step(1, step1, 20)
-        self.execute_performance_step(2, step2, 15)
-        self.execute_performance_step(3, step3, 25)
+        self.execute_performance_step("小红书-浏览图文详情及评论场景-step1收藏图片浏览", 20, step1)
+        self.execute_performance_step("小红书-浏览图文详情及评论场景-step2双指捏合放大/缩小", 15, step2)
+        self.execute_performance_step("小红书-浏览图文详情及评论场景-step3评论页浏览", 25, step3)
         self.driver.swipe_to_back()
         self.touch_by_text('漫步上海佛罗伦萨小镇｜快乐不止一点点', 2)
-        self.execute_performance_step(4, step4, 25)
+        self.execute_performance_step("小红书-浏览图文详情及评论场景-step4长文笔记浏览", 25, step4)
