@@ -12,19 +12,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
 
         self._app_package = 'com.xingin.xhs_hos'
         self._app_name = '小红书'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 直播间观看/退出"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Mate 60 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2720
-
-    @property
-    def steps(self) -> list:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -54,4 +44,4 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
                 self.driver.swipe_to_back()
                 time.sleep(2)
 
-        self.execute_performance_step(1, step1, 30)
+        self.execute_performance_step("小红书-浏览直播场景-step1直播间观看/退出", 30, step1)
