@@ -1,11 +1,9 @@
 # coding: utf-8
-import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
@@ -13,27 +11,10 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
-        self._activityName = 'EntryAbility'
         self._app_package = 'yylx.danmaku.bili'
         self._app_name = '哔哩哔哩'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 竖屏视频播放30s"
-            },
-            {
-                "name": "step2",
-                "description": "2. 点击视频中间，点击全屏按钮，全屏播放30s"
-            },
-            {
-                "name": "step3",
-                "description": "3. 点击视频中间，点击关闭弹幕，全屏播放30s"
-            }
-        ]
-
-    @property
-    def steps(self) -> list:
-        return self._steps
+        self.source_screen_width = 1084
+        self.source_screen_height = 2412
 
     @property
     def app_package(self) -> str:
@@ -43,47 +24,35 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
-        def step1(driver):
-            Step('1. 竖屏视频播放30s')
+        def step1():
+            # 竖屏视频播放30s
             time.sleep(10)
 
-        def step2(driver):
-            Step('2. 点击视频中间，点击全屏按钮，全屏播放30s')
+        def step2():
+            # 点击视频中间，点击全屏按钮，全屏播放30s
             # 1. 点击视频中间，等待1s
-            driver.touch((600, 500))
-            time.sleep(1)
+            self.touch_by_coordinates(600, 500, 1)
 
             # 2. 点击全屏按钮，等待1s
-            driver.touch((1188, 1670))  # Mate60 Pro
-            # driver.touch((1144, 709))  # Mate70
-            time.sleep(1)
+            self.touch_by_coordinates(1018, 1474, 1)
 
             # 3. 全屏播放30s
-            time.sleep(10)
+            time.sleep(30)
 
-        def step3(driver):
-            Step('3. 点击视频中间，点击关闭弹幕，全屏播放30s')
-            # 1. 点击视频中间，等待1s
-            driver.touch((630, 1373))
+        def step3():
+            # 点击视频中间，点击关闭弹幕，全屏播放30s
+            self.driver.touch((1416, 680))
             time.sleep(1)
 
             # 2. 点击关闭弹幕，等待1s
-            driver.touch((90, 2519))  # Mate60 Pro
-            # driver.touch((526, 1125))  # Mate70
-            time.sleep(1)
+            self.touch_by_coordinates(102, 2241, 1)
 
             # 3. 全屏播放30s
-            time.sleep(10)
+            time.sleep(30)
 
-        Step('启动被测应用')
-        self.driver.start_app(self.app_package, self._activityName)
-        self.driver.wait(5)
+        # 启动被测应用
+        self.start_app()
 
         # 点击“我的”页面
         self.driver.touch(BY.text('我的'))
@@ -99,33 +68,17 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
         time.sleep(2)
 
         # 暂停播放
-        self.driver.touch((600, 500))
-        time.sleep(1)
-        self.driver.touch((71, 1670))
-        # self.driver.touch((71, 709)) # Mate70
-        time.sleep(1)
+        self.touch_by_coordinates(600, 500, 1)
+        self.touch_by_coordinates(66, 1473, 1)
 
         # 点击到视频00分00秒
-        self.driver.touch((169, 1670))
-        self.driver.wait(0.5)
-        # self.driver.touch((169, 709)) # Mate70
-
-        # 点击视频播放
-        self.driver.touch((71, 1670))
-        # self.driver.touch((71, 709))  # Mate70
+        self.touch_by_coordinates(155, 1474, 1)
         time.sleep(1)
 
+        # 点击视频播放
+        self.touch_by_coordinates(66, 1473, 1)
+
         # 竖屏视频播放30s
-        self.execute_performance_step(1, step1, 30)
-        self.execute_performance_step(2, step2, 40)
-        self.execute_performance_step(3, step3, 40)
-
-        # 侧滑4次返回哔哩哔哩首页
-        for i in range(4):
-            self.driver.swipe_to_back()
-            time.sleep(1)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()
+        self.execute_performance_step("哔哩哔哩-竖屏视频播放场景-step1视频播放", 30, step1)
+        self.execute_performance_step("哔哩哔哩-竖屏视频播放场景-step2全屏播放", 40, step2)
+        self.execute_performance_step("哔哩哔哩-竖屏视频播放场景-step3关闭弹幕", 40, step3)

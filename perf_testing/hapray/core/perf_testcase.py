@@ -15,15 +15,16 @@ limitations under the License.
 
 import json
 import os
+import re
 import threading
 import time
 from abc import ABC, abstractmethod
 
 from devicetest.core.test_case import TestCase
-from hypium import UiDriver
 from xdevice import platform_logger
 
 from hapray.core.config.config import Config
+from hapray.core.ui_event_wrapper import UIEventWrapper
 
 Log = platform_logger("PerfTestCase")
 
@@ -122,25 +123,21 @@ class ConnectedException(Exception):
     pass
 
 
-class PerfTestCase(TestCase, ABC):
+class PerfTestCase(TestCase, UIEventWrapper, ABC):
     """Base class for performance test cases with trace collection support"""
 
     def __init__(self, tag: str, configs):
-        super().__init__(tag, configs)
-        self.driver = UiDriver(self.device1)
+        TestCase.__init__(self, tag, configs)
+        UIEventWrapper.__init__(self, self.device1)
         self.tag = tag
         self._start_app_package = None  # Package name for process identification
         self._redundant_mode_status = False  # default close redundant mode
+        self._steps = []
 
     @property
-    @abstractmethod
     def steps(self) -> list:
         """List of test steps with name and description"""
-
-    @property
-    @abstractmethod
-    def app_package(self) -> str:
-        """Package identifier of the application under test"""
+        return self._steps
 
     @property
     @abstractmethod
@@ -152,13 +149,28 @@ class PerfTestCase(TestCase, ABC):
         """Path where test reports will be stored"""
         return self.get_case_report_path()
 
+    def setup(self):
+        """common setup"""
+        Log.info('PerfTestCase setup')
+        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
+        self.stop_app()
+        self.driver.wake_up_display()
+        self.driver.swipe_to_home()
+
+    def teardown(self):
+        """common teardown"""
+        Log.info('PerfTestCase teardown')
+        self.stop_app()
+        self._generate_reports()
+
     def execute_performance_step(
             self,
-            step_id: int,
-            action: callable,
+            step_name: str,
             duration: int,
-            sample_all_processes: bool = False
-    ):
+            action: callable,
+            *args,
+            sample_all_processes: bool = False):
         """
         Execute a test step while collecting performance and trace data
 
@@ -168,6 +180,9 @@ class PerfTestCase(TestCase, ABC):
             duration: Data collection time in seconds
             sample_all_processes: Whether to sample all system processes
         """
+        step_id = len(self._steps) + 1
+        self._steps.append({"name": f"step{step_id}",
+                            "description": step_name})
         output_file = self._prepare_output_path(step_id)
         self._clean_previous_output(output_file)
 
@@ -184,16 +199,10 @@ class PerfTestCase(TestCase, ABC):
         collection_thread.start()
 
         # Execute the test action while data collection runs
-        action(self.driver)
+        action(*args)
 
         collection_thread.join()
         self._save_performance_data(output_file, step_id)
-
-    def generate_reports(self):
-        """Generate test reports and metadata files"""
-        steps_info = self._collect_step_information()
-        self._save_steps_info(steps_info)
-        self._save_test_metadata()
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
@@ -202,6 +211,7 @@ class PerfTestCase(TestCase, ABC):
         self._redundant_mode_status = True
 
     def reboot_device(self):
+        regex = re.compile(r'\d+')
         # 重启手机
         Log.info('重启手机')
         os.system('hdc shell reboot')
@@ -214,15 +224,17 @@ class PerfTestCase(TestCase, ABC):
 
         while elapsed_time < max_wait_time:
             try:
-                # 使用hdc shell命令检测设备是否真正连接
-                result = os.system('hdc shell "echo device_ready"')
-                if result == 0:
+                # 检测设备桌面是否完成启动
+                pid = self.driver.shell('pidof com.ohos.sceneboard', 10)
+                if regex.match(pid.strip()):
                     Log.info('手机重启成功，设备已连接')
                     Log.info('等待手机完全启动到大屏幕界面...')
-                    time.sleep(60)  # 额外等待60秒确保系统完全启动到大屏幕
+                    self.driver.wake_up_display()
+                    self.driver.swipe_to_back()
+                    self.driver.swipe_to_home(5)
                     return
 
-                Log.info(f'设备未连接，返回码: {result}')
+                Log.info(f'设备未连接，返回码: {pid}')
             except Exception as e:
                 Log.info(f'设备检测失败: {e}')
 
@@ -233,6 +245,12 @@ class PerfTestCase(TestCase, ABC):
 
         # 如果超时仍未检测到设备
         raise ConnectedException('手机重启超时，设备未连接')
+
+    def _generate_reports(self):
+        """Generate test reports and metadata files"""
+        steps_info = self._collect_step_information()
+        self._save_steps_info(steps_info)
+        self._save_test_metadata()
 
     def _prepare_output_path(self, step_id: int) -> str:
         """Generate output file path on device"""
