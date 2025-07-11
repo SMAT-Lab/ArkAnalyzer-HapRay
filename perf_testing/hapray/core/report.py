@@ -376,26 +376,32 @@ def create_perf_summary_excel(input_path: str) -> bool:
             logging.error("错误: 没有找到任何summary_info.json文件或文件内容为空")
             return False
 
-        # 处理为透视表
-        pivot_df = process_to_dataframe(merged_data)
+        # 转为DataFrame
+        df = pd.DataFrame(merged_data)
+        if df.empty:
+            logging.error("错误: 合并后的数据为空")
+            return False
 
-        # 确保有足够的列来计算百分比
-        if len(pivot_df.columns) > 1:
-            # 添加百分比列（以第一列为基线）
-            pivot_df = add_percentage_columns(pivot_df)
-            logging.info("已计算相对于 %s 的百分比增长", pivot_df.columns[0])
-        else:
-            logging.warning("警告: 数据列不足，无法计算百分比增长")
+        # 只保留同一rom_version的数据
+        rom_versions = df['rom_version'].unique()
+        if len(rom_versions) > 1:
+            logging.warning("检测到多个ROM版本，仅保留第一个: %s", rom_versions[0])
+        rom_version = rom_versions[0]
+        df = df[df['rom_version'] == rom_version]
 
-        # 确定输出路径
+        # 重新组织列结构，将rom_version、app_version、count作为列名
+        result_df = df[['rom_version', 'app_version', 'scene', 'step_id', 'step_name', 'count']].copy()
+
+        # 按场景、步骤ID、步骤名称排序
+        result_df = result_df.sort_values(['scene', 'step_id', 'step_name', 'app_version'])
+
+        # 输出路径
         output_path = Path(input_path) / 'summary_pivot.xlsx'
-
-        # 确保输出目录存在
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # 保存到Excel
         report_saver = ExcelReportSaver(str(output_path))
-        report_saver.add_sheet(pivot_df, 'Summary')
+        report_saver.add_sheet(result_df, 'Summary')
         report_saver.save()
 
         return True

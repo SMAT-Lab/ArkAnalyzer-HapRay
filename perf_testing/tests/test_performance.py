@@ -16,7 +16,6 @@ import hashlib
 import json
 import os
 import sys
-import tempfile
 import time
 
 import pytest
@@ -30,15 +29,15 @@ from hapray.actions.opt_action import OptAction
 def check_report(report_path: str, perf_steps: [int]):
     # report
     report_html = os.path.join(report_path, 'report/hapray_report.html')
-    assert os.path.exists(report_html), f'{os.path.basename(report_html)} must exist'
+    assert os.path.exists(report_html), f'{os.path.basename(report_path)} hapray_report.html must exist'
 
     # htrace
     component_reusability_report = os.path.join(report_path, 'htrace/component_reusability_report.json')
-    assert os.path.exists(component_reusability_report), f'{os.path.basename(component_reusability_report)} must exist'
+    assert os.path.exists(component_reusability_report), f'{os.path.basename(report_path)} component_reusability_report.json must exist'
     empty_frames_analysis = os.path.join(report_path, 'htrace/empty_frames_analysis.json')
-    assert os.path.exists(empty_frames_analysis), f'{os.path.basename(empty_frames_analysis)} must exist'
+    assert os.path.exists(empty_frames_analysis), f'{os.path.basename(report_path)} empty_frames_analysis.json must exist'
     frame_analysis_summary = os.path.join(report_path, 'htrace/frame_analysis_summary.json')
-    assert os.path.exists(frame_analysis_summary), f'{os.path.basename(frame_analysis_summary)} must exist'
+    assert os.path.exists(frame_analysis_summary), f'{os.path.basename(report_path)} frame_analysis_summary.json must exist'
 
     # hiperf
     hiperf_info = os.path.join(report_path, 'hiperf/hiperf_info.json')
@@ -83,7 +82,7 @@ def check_update(report_path: str):
     before = calculate_hash(files_path)
     UpdateAction.execute(['-r', report_path])
     end = calculate_hash(files_path)
-    assert before == end, f'files hash must equal {before} == {end}'
+    assert before == end, f'{os.path.basename(report_path)} files hash must equal {before} == {end}'
 
 
 @pytest.mark.integration
@@ -120,8 +119,8 @@ def test_integration_performance_test():
     assert report_path is not None, 'PerfAction->execute return is not None'
     assert os.path.exists(report_path), 'PerfAction->execute report_path must exist.'
 
-    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_new'), [1255320000])
-    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_old'), [1369910000])
+    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_new'), [1567135027])
+    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_old'), [1622226867])
     check_report(os.path.join(report_path, 'ResourceUsage_PerformanceDynamic_Douyin_1000'), [])
 
     # test update
