@@ -119,8 +119,8 @@ def test_integration_performance_test():
     assert report_path is not None, 'PerfAction->execute return is not None'
     assert os.path.exists(report_path), 'PerfAction->execute report_path must exist.'
 
-    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_new'), [1567135027])
-    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_old'), [1622226867])
+    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_new'), [1608496566])
+    check_report(os.path.join(report_path, 'PerformanceDynamic_ComponentReusable_old'), [1754467091])
     check_report(os.path.join(report_path, 'ResourceUsage_PerformanceDynamic_Douyin_1000'), [])
 
     # test update

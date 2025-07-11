@@ -28,6 +28,7 @@ from hapray import VERSION
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.folder_utils import scan_folders, delete_folder
 from hapray.core.config.config import Config
+from hapray.core.dsl.dsl_test_runner import DSLTestRunner
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 
 ENV_ERR_STR = """
@@ -129,22 +130,7 @@ class PerfAction:
             logging.info(f"Found {len(matched_cases)} test cases for execution")
 
             for case_name in matched_cases:
-                scene_round_dirs = []
-                for round_num in range(parsed_args.round):
-                    case_dir = all_testcases[case_name]
-                    output = os.path.join(reports_path, f'{case_name}_round{round_num}')
-                    main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
-
-                    # Verify and retry if data is incomplete
-                    for attempt in range(5):
-                        if scan_folders(output):
-                            scene_round_dirs.append(output)
-                            break
-                        else:
-                            if delete_folder(output):
-                                logging.warning(f'Incomplete perf.data, retrying ({attempt + 1}/5) for {output}')
-                                main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
-
+                scene_round_dirs = PerfAction.run_testcase(case_name, reports_path, all_testcases, parsed_args.round)
                 merge_folder_path = os.path.join(reports_path, case_name)
                 future = executor.submit(
                     report_generator.generate_report,
@@ -165,3 +151,29 @@ class PerfAction:
                 logging.error("Failed to create summary Excel")
 
             return reports_path
+
+    @staticmethod
+    def run_testcase(case_name: str, reports_path: str, all_testcases: dict, _round: int) -> List[str]:
+        scene_round_dirs = []
+        for round_num in range(_round):
+            case_dir, file_extension = all_testcases[case_name]
+            output = os.path.join(reports_path, f'{case_name}_round{round_num}')
+
+            if file_extension == '.py':
+                main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
+            else:
+                DSLTestRunner.run_testcase(f'{case_dir}/{case_name}{file_extension}', output)
+
+            # Verify and retry if data is incomplete
+            for attempt in range(5):
+                if scan_folders(output):
+                    scene_round_dirs.append(output)
+                    break
+                else:
+                    if delete_folder(output):
+                        logging.warning(f'Incomplete perf.data, retrying ({attempt + 1}/5) for {output}')
+                        if file_extension == '.py':
+                            main_process(f'run -l {case_name} -tcpath {case_dir} -rp {output}')
+                        else:
+                            DSLTestRunner.run_testcase(f'{case_dir}/{case_name}.{file_extension}', output)
+        return scene_round_dirs
