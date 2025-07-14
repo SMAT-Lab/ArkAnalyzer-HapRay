@@ -297,23 +297,14 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
          * /proc/8836/root/data/storage/el1/bundle/libs/arm64/libalog.so
          */
         let regex = new RegExp('/proc/.*/data/storage/.*/bundle/.*');
-        if (file.match(regex)) {
+        if (
+            file.match(regex) ||
+            (this.project.bundleName === 'com.ohos.sceneboard' && file.startsWith('/system/app/SceneBoard/')) ||
+            (this.project.bundleName === 'com.huawei.hmos.photos' && file.startsWith('/system/app/PhotosHm/'))
+        ) {
             let name = path.basename(file);
             if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
                 fileClassify.category = ComponentCategory.APP_SO;
-                // if (this.soOrigins.has(path.basename(file))) {
-                //     let origin = this.soOrigins.get(name)!.broad_category;
-                //     if (origin === 'THIRD_PARTY') {
-                //         fileClassify.originKind = OriginKind.THIRD_PARTY;
-                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
-                //     } else if (origin === 'OPENSOURCE') {
-                //         fileClassify.originKind = OriginKind.OPEN_SOURCE;
-                //         fileClassify.subCategory = this.soOrigins.get(name)!.specific_origin;
-                //     } else if (origin === 'FIRST_PARTY') {
-                //         fileClassify.originKind = OriginKind.FIRST_PARTY;
-                //     }
-                // }
-
                 return fileClassify;
             }
 
