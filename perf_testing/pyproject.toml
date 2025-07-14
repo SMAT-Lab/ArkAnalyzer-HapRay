@@ -37,7 +37,9 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 hapray = [
-    "core/config/*.yaml",
+    "core/**/*.yaml",
+    "core/**/*.json",
+    "testcases/**/*.yaml",
     "testcases/**/*.json",
     "testcases/**/*.py",
     "optimization_detector/models/*.h5"
