@@ -109,13 +109,20 @@ Example:
 # Specify output file
 python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
 ```
-对比逻辑说明：
-- 以 scene + step_id + step_name 为主键
-- rom_version + app_version 组合为"版本"，每个版本为一列，count 为值
-- base 目录和 compare 目录的所有版本分别在左、右，自动对齐
-- 自动生成百分比变化列（(compare-base)/base），便于直观对比
 
-输出Excel格式为：主键信息 + base各版本count + compare各版本count + 百分比变化
+### Guide: Running Release Program on macOS
+1. Open Terminal (Applications > Utilities)
+2. Grant Execution Permission
+```bash
+chmod +x /path/to/ArkAnalyzer-HapRay
+```
+3. Remove Quarantine Attribute
+macOS marks downloaded files with a security flag. Remove it with:
+```bash
+sudo xattr -r -d com.apple.quarantine /path/to/ArkAnalyzer-HapRay
+```
+Replace /path/to/ArkAnalyzer-HapRay with your actual program path
+Enter your administrator password when prompted
 
 ### Dependencies
 - pip > 23.0.1
