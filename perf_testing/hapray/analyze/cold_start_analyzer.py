@@ -10,9 +10,13 @@ class ColdStartAnalyzer(BaseAnalyzer):
     """Analyzer for cold start redundant file analysis"""
 
     def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'cold_start_analysis_summary.json')
+        super().__init__(scene_dir, 'trace/coldStart')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(self,
+                      step_dir: str,
+                      trace_db_path: str,
+                      perf_db_path: str,
+                      app_pids: list) -> Optional[Dict[str, Any]]:
         """Analyze cold start redundant file for a single step.
 
         Args:

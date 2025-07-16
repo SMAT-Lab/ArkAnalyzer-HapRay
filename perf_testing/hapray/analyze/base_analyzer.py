@@ -26,18 +26,17 @@ class BaseAnalyzer(ABC):
     Abstract base class for all data analyzers.
     """
 
-    def __init__(self, scene_dir: str, report_name: str):
+    def __init__(self, scene_dir: str, report_path: str):
         """Initialize base analyzer.
 
         Args:
             scene_dir: Root directory of the scene
-            report_name: Output report filename
+            report_path: report path of result dict
         """
         self.results: Dict[str, Any] = {}
         self.scene_dir = scene_dir
-        self.report_path = os.path.join(self.scene_dir, 'htrace', report_name)
+        self.report_path = report_path
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.report_name = report_name
 
     def analyze(self, step_dir: str, trace_db_path: str, perf_db_path: str):
         """Public method to execute analysis for a single step.
@@ -49,18 +48,23 @@ class BaseAnalyzer(ABC):
         """
         try:
             start_time = time.time()
-            result = self._analyze_impl(step_dir, trace_db_path, perf_db_path)
+            pids = AnalyzerHelper.get_app_pids(self.scene_dir, step_dir)
+            result = self._analyze_impl(step_dir, trace_db_path, perf_db_path, pids)
             if result:
                 self.results[step_dir] = result
             self.logger.info(
                 "Analysis completed for step %s in %.2f seconds [%s]", step_dir, time.time() - start_time,
-                self.report_name)
+                self.report_path)
         except Exception as e:
-            self.logger.error("Analysis failed for step %s: %s [%s]", step_dir, str(e), self.report_name)
+            self.logger.error("Analysis failed for step %s: %s [%s]", step_dir, str(e), self.report_path)
             self.results[step_dir] = {"error": str(e)}
 
     @abstractmethod
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(self,
+                      step_dir: str,
+                      trace_db_path: str,
+                      perf_db_path: str,
+                      app_pids: list) -> Optional[Dict[str, Any]]:
         """Implementation of the analysis logic.
 
         Args:
@@ -72,19 +76,30 @@ class BaseAnalyzer(ABC):
             Analysis results as a dictionary
         """
 
-    def write_report(self):
+    def write_report(self, result: dict):
         """Write analysis results to JSON report."""
         if not self.results:
-            self.logger.warning("No results to write. Skipping report generation for %s", self.report_name)
+            self.logger.warning("No results to write. Skipping report generation for %s", self.report_path)
             return
 
         try:
-            os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
-            with open(self.report_path, 'w', encoding='utf-8') as f:
+            file_path = os.path.join(self.scene_dir, 'report', self.report_path.replace('/', '_') + '.json')
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.results, f, ensure_ascii=False, indent=2)
-            self.logger.info("Report successfully written to %s", self.report_path)
+            self.logger.info("Report successfully written to %s", file_path)
         except Exception as e:
             self.logger.exception("Failed to write report: %s", str(e))
+
+        dict_path = self.report_path.split('/')
+        v = result
+        for key in dict_path:
+            if key == dict_path[-1]:
+                break
+            if key not in v:
+                v[key] = {}
+            v = v[key]
+        v[dict_path[-1]] = self.results
 
 
 class AnalyzerHelper:
