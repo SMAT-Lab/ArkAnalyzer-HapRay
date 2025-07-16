@@ -27,9 +27,13 @@ from hapray.core.config.config import Config
 
 class PerfAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'hiperf_info.json')
+        super().__init__(scene_dir, 'perf')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(self,
+                      step_dir: str,
+                      trace_db_path: str,
+                      perf_db_path: str,
+                      app_pids: list) -> Optional[Dict[str, Any]]:
         """Run performance analysis"""
         args = ['dbtools', '-i', self.scene_dir]
 
@@ -45,10 +49,6 @@ class PerfAnalyzer(BaseAnalyzer):
         ExeUtils.execute_hapray_cmd(args)
         self.generate_hiperf_report(perf_db_path)
         return {}
-
-    def write_report(self):
-        # override
-        pass
 
     @staticmethod
     def convert_kind_to_json() -> str:
