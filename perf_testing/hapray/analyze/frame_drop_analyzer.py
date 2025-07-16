@@ -25,9 +25,13 @@ class FrameDropAnalyzer(BaseAnalyzer):
     """Analyzer for frame drops analysis"""
 
     def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'frame_analysis_summary.json')
+        super().__init__(scene_dir, 'trace/frames')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(self,
+                      step_dir: str,
+                      trace_db_path: str,
+                      perf_db_path: str,
+                      app_pids: list) -> Optional[Dict[str, Any]]:
         """Analyze frame drops for a single step.
 
         Args:
