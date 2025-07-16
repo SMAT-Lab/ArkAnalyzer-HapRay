@@ -21,6 +21,7 @@ import time
 from abc import ABC, abstractmethod
 
 from devicetest.core.test_case import TestCase
+from hypium.uidriver.uitree import UiTree
 from xdevice import platform_logger
 
 from hapray.core.config.config import Config
@@ -133,6 +134,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self._start_app_package = None  # Package name for process identification
         self._redundant_mode_status = False  # default close redundant mode
         self._steps = []
+        self.uitree = UiTree(self.driver)
 
     @property
     def steps(self) -> list:
@@ -186,6 +188,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         output_file = self._prepare_output_path(step_id)
         self._clean_previous_output(output_file)
 
+        # dump view tree when start test step
+        perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
+        self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_start.json'))
+
         cmd = self._build_collection_command(
             output_file,
             duration,
@@ -202,6 +208,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         action(*args)
 
         collection_thread.join()
+
+        # dump view tree when end test step
+        self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_end.json'))
         self._save_performance_data(output_file, step_id)
 
     def set_device_redundant_mode(self):
