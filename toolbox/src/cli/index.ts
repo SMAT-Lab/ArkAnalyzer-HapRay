@@ -18,6 +18,7 @@ import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger
 import { HapAnalyzerCli } from './commands/hap_analyzer_cli';
 import { DbtoolsCli } from './commands/hapray_cli';
 import { ElfAnalyzerCli } from './commands/elf_analyzer_cli';
+import { BjcCli } from './commands/bjc_cli';
 
 Logger.configure('arkanalyzer-hapray.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -27,6 +28,7 @@ const HaprayCli = new Command('hapray').version(VERSION);
 HaprayCli.addCommand(HapAnalyzerCli);
 HaprayCli.addCommand(DbtoolsCli);
 HaprayCli.addCommand(ElfAnalyzerCli);
+HaprayCli.addCommand(BjcCli);
 
 try {
     program
