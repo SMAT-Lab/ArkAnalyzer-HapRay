@@ -41,11 +41,11 @@ class UIEventWrapper(ABC):
 
     def stop_app(self, package_name: str = None, wait_time: float = 0.5):
         """通用应用退出方法"""
+        if package_name is None:
+            package_name = self.app_package
         # 桌面应用不能退出
         if package_name == 'com.ohos.sceneboard':
             return
-        if package_name is None:
-            package_name = self.app_package
         self.driver.stop_app(package_name, wait_time)
 
     def convert_coordinate(self, x, y) -> tuple:
