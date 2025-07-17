@@ -32,6 +32,7 @@ ANALYZER_CLASSES = [
     'FrameDropAnalyzer',
     'ColdStartAnalyzer',
     'GCAnalyzer',
+    'CovAnalyzer',
     # Add more analyzers here
 ]
 
