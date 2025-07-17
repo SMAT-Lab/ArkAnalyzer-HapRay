@@ -10,6 +10,7 @@ For more detailed information, please refer to the following documents:
 - [工具介绍](docs/工具介绍.md) - Tool Introduction
 - [收益测试分析](docs/收益测试分析.md) - Performance Test Analysis
 - [用例执行预置条件](docs/用例执行预置条件.md) - Test Case Prerequisites
+- [鸿蒙应用覆盖率](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/ide-ui-test) - ArkTs Coverage Analysis
 
 ## Build
 ```
