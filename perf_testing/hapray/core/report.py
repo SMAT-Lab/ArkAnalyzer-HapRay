@@ -71,6 +71,7 @@ class ReportData:
             raise FileNotFoundError(f"hiperf_info.json not found: {path}")
         first_entry = self.perf_data[0]
         self.result["perf"]["steps"] = first_entry.get("steps", [])
+        self.result["perf"]["har"] = first_entry.get("har", {})
         self.result['basicInfo'] = {
             "rom_version": first_entry.get("rom_version", ""),
             "app_id": first_entry.get("app_id", ""),
