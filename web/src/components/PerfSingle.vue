@@ -29,7 +29,7 @@
       <el-descriptions-item>
         <div class="description-item-content">
           场景名称：{{ performanceData.scene }}
-          <UploadHtml />
+          <!-- <UploadHtml /> -->
         </div>
       </el-descriptions-item>
     </el-descriptions>
@@ -108,8 +108,20 @@ class="beautiful-btn primary-btn"
       <el-col :span="12">
         <!-- 步骤饼图（左，进程-线程-文件-符号） -->
         <div class="data-panel">
+          <!-- 面包屑导航 -->
+          <div class="breadcrumb-nav" v-if="processPieDrilldownStack.length > 0">
+            <span class="breadcrumb-item" @click="handleProcessPieDrillup">
+              {{ getBreadcrumbLabel('process', 0) }}
+            </span>
+            <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
+              <i class="breadcrumb-separator">></i>
+              <span @click="handleProcessBreadcrumbClick(index)">
+                {{ getBreadcrumbLabel('process', index + 1, item) }}
+              </span>
+            </span>
+          </div>
           <PieChart
-:step-id="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle"
+            :step-id="currentStepIndex" height="585px" :chart-data="processPieData" :title="pieChartTitle"
             :drilldown-stack="processPieDrilldownStack" :legend-truncate="false" @drilldown="handleProcessPieDrilldown"
             @drillup="handleProcessPieDrillup"
           />
@@ -123,10 +135,22 @@ class="beautiful-btn primary-btn"
         </div> -->
       </el-col>
       <el-col :span="12">
-        <!-- 步骤饼图（右，分类-进程-线程-文件-符号） -->
+        <!-- 步骤饼图（右，分类-小分类-文件-符号） -->
         <div class="data-panel">
+          <!-- 面包屑导航 -->
+          <div class="breadcrumb-nav" v-if="stepPieDrilldownStack.length > 0">
+            <span class="breadcrumb-item" @click="handleStepPieDrillup">
+              {{ getBreadcrumbLabel('category', 0) }}
+            </span>
+            <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
+              <i class="breadcrumb-separator">></i>
+              <span @click="handleStepBreadcrumbClick(index)">
+                {{ getBreadcrumbLabel('category', index + 1, item) }}
+              </span>
+            </span>
+          </div>
           <PieChart
-:step-id="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle"
+            :step-id="currentStepIndex" height="585px" :chart-data="stepPieData" :title="pieChartTitle"
             :drilldown-stack="stepPieDrilldownStack" :legend-truncate="false" @drilldown="handleStepPieDrilldown"
             @drillup="handleStepPieDrillup"
           />
@@ -237,7 +261,7 @@ import PieChart from './PieChart.vue';
 import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
-import UploadHtml from './UploadHtml.vue';
+// import UploadHtml from './UploadHtml.vue';
 import FrameAnalysis from './FrameAnalysis.vue';
 import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, calculateCategorysData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
@@ -630,6 +654,37 @@ const handleDownloadAndRedirect = (file: string, stepId: number, name: string) =
     window.open('https://localhost:9000/application/', 'trace example');
   }, 300);
 };
+
+// 获取面包屑标签
+function getBreadcrumbLabel(type: 'process' | 'category', level: number, item?: string): string {
+  if (type === 'process') {
+    const labels = ['进程', '线程', '文件', '符号'];
+    return level === 0 ? labels[0] : `${labels[level]}: ${item}`;
+  } else {
+    const labels = ['大分类', '小分类', '文件', '符号'];
+    return level === 0 ? labels[0] : `${labels[level]}: ${item}`;
+  }
+}
+
+// 处理进程饼图面包屑点击
+function handleProcessBreadcrumbClick(targetIndex: number) {
+  // 回退到指定层级
+  const targetLevel = targetIndex + 1;
+  while (processPieDrilldownStack.value.length > targetLevel) {
+    processPieDrilldownStack.value.pop();
+    processPieData.value = processPieDataStack.value.pop() || processPieData.value;
+  }
+}
+
+// 处理步骤饼图面包屑点击
+function handleStepBreadcrumbClick(targetIndex: number) {
+  // 回退到指定层级
+  const targetLevel = targetIndex + 1;
+  while (stepPieDrilldownStack.value.length > targetLevel) {
+    stepPieDrilldownStack.value.pop();
+    stepPieData.value = stepPieDataStack.value.pop() || stepPieData.value;
+  }
+}
 </script>
 
 <style scoped>
@@ -918,4 +973,37 @@ const handleDownloadAndRedirect = (file: string, stepId: number, name: string) =
   box-sizing: border-box;
   font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
+
+/* 面包屑导航样式 */
+.breadcrumb-nav {
+  padding: 8px 16px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.breadcrumb-item {
+  color: #606266;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.breadcrumb-item:hover {
+  color: #409eff;
+}
+
+.breadcrumb-separator {
+  margin: 0 8px;
+  color: #c0c4cc;
+  font-style: normal;
+}
+
+.breadcrumb-item:last-child {
+  color: #409eff;
+  font-weight: 500;
+}
 </style>
+
+
+

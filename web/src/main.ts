@@ -28,10 +28,12 @@ declare global {
         frameJsonData: string;
         emptyFrameJson: string;
         compareJsonData: string;
+        baseMark: string;
+        compareMark: string;
     }
 }
 
 if (window.jsonData) {
-    jsonDataStore.setJsonData(changeBase64Str2Json(window.jsonData),changeBase64Str2Json(window.compareJsonData));
+    jsonDataStore.setJsonData(changeBase64Str2Json(window.jsonData), changeBase64Str2Json(window.compareJsonData));
 }
 app.mount('#app');
