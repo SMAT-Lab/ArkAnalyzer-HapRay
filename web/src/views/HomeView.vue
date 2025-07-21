@@ -1,28 +1,17 @@
 <template>
   <div class="common-layout">
+    <Navigation :current-page="showPage" @page-change="changeContent" />
     <el-container style="width: 100%; height: 100%">
       <el-container style="height: 100%-50px">
         <!-- main -->
         <el-main>
           <!-- {{ $t('home.name') }} -->
-          <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'perf_compare'">
-              <PerfCompare />
-            </div>
-          </transition>
-
-          <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'perf'">
-              <PerfSingle />
-            </div>
-          </transition>
-
-          <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'deps'">
-              <ComponentsDeps />
-            </div>
-          </transition>
-
+          <keep-alive>
+            <PerfCompare v-if="showPage === 'perf_compare'" />
+            <PerfSingle v-else-if="showPage === 'perf'" />
+            <PerfMulti v-else-if="showPage === 'perf_multi'" />
+          </keep-alive>
+          <ComponentsDeps v-if="showPage === 'deps'" />
         </el-main>
       </el-container>
     </el-container>
@@ -31,18 +20,29 @@
 
 <script lang="ts" setup>
 //import { Document, Menu as IconMenu, Location, Setting } from '@element-plus/icons-vue';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 //import type Node from 'element-plus/es/components/tree/src/model/node';
 //import type { TreeNodeData } from 'element-plus/es/components/tree/src/tree.type';
 
 import PerfCompare from '@/components/PerfCompare.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
+import PerfMulti from '@/components/PerfMulti.vue';
+import Navigation from '@/components/Navigation.vue';
 
 //import { getCurrentInstance } from 'vue';
 //import { ElMessage } from 'element-plus';
 
 const showPage = ref('');
+
+const componentMap = {
+  perf: PerfSingle,
+  perf_compare: PerfCompare,
+  perf_multi: PerfMulti,
+  deps: ComponentsDeps,
+};
+
+const currentComponent = computed(() => componentMap[showPage.value as keyof typeof componentMap]);
 
 async function changeContent(page: string) {
   showPage.value = '';
