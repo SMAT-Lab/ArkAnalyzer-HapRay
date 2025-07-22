@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from perf_testing.hapray.analyze.base_analyzer import AnalyzerHelper
 
-from hapray.core.common.frame_analyzer import FrameAnalyzer
+from hapray.core.common.frame import FrameAnalyzer
 
 
 def test_collect_empty_frame_loads():
