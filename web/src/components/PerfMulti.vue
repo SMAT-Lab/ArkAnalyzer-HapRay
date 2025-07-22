@@ -59,7 +59,7 @@
             </template>
           </el-table-column>
           <el-table-column label="操作" width="120">
-            <template #default="{ row, $index }">
+            <template #default="{ $index }">
               <el-button type="danger" size="small" @click="removeData($index)">删除</el-button>
             </template>
           </el-table-column>
@@ -177,17 +177,38 @@ import { ref, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
 import TrendChart from './TrendChart.vue';
-import type { JSONData } from '../stores/jsonDataStore';
+import type { JSONData, BasicInfo, PerfData } from '../stores/jsonDataStore';
 import { processJson2PieChartData, calculateCategorysData } from '../utils/jsonUtil';
 import * as pako from 'pako';
 
+interface PieChartData {
+  legendData: string[];
+  seriesData: Array<{ name: string; value: number }>;
+}
+
+interface CategoryDataItem {
+  category: string;
+  instructions: number;
+}
+
+interface StepDataItem {
+  stepId: number;
+  stepName: string;
+  count: number;
+}
+
 interface MultiDataItem {
   fileName: string;
-  basicInfo: any;
-  perfData: any;
-  scenePieData: any;
-  categoryData: Array<{ category: string; instructions: number }>;
-  stepData: any;
+  basicInfo: BasicInfo;
+  perfData: PerfData;
+  scenePieData: PieChartData;
+  categoryData: CategoryDataItem[];
+  stepData: StepDataItem[];
+}
+
+interface UploadFile {
+  name: string;
+  raw: File;
 }
 
 const uploadRef = ref();
@@ -240,7 +261,7 @@ const sceneTrendData = computed(() => {
     series: [{
       name: '总负载',
       data: sortedData.map(item => {
-        const total = item.scenePieData.seriesData.reduce((sum: number, d: any) => sum + d.value, 0);
+        const total = item.scenePieData.seriesData.reduce((sum: number, d: { value: number }) => sum + d.value, 0);
         return total;
       })
     }]
@@ -256,60 +277,60 @@ const categoryTrendData = computed(() => {
     series: categories.map(category => ({
       name: category,
       data: sortedData.map(item => {
-        const categoryItem = item.categoryData.find((d: any) => d.category === category);
+        const categoryItem = item.categoryData.find((d: CategoryDataItem) => d.category === category);
         return categoryItem ? categoryItem.instructions : 0;
       })
     }))
   };
 });
 
-const stepTrendData = computed(() => {
-  const sortedData = [...filteredData.value].sort((a, b) => a.basicInfo.timestamp - b.basicInfo.timestamp);
-  return {
-    xAxis: sortedData.map(item => `${item.basicInfo.rom_version}-${item.basicInfo.app_version}`),
-    series: [{
-      name: '步骤负载',
-      data: sortedData.map(item => {
-        const total = item.stepData.reduce((sum: number, d: any) => sum + d.count, 0);
-        return total;
-      })
-    }]
-  };
-});
+// const stepTrendData = computed(() => {
+//   const sortedData = [...filteredData.value].sort((a, b) => a.basicInfo.timestamp - b.basicInfo.timestamp);
+//   return {
+//     xAxis: sortedData.map(item => `${item.basicInfo.rom_version}-${item.basicInfo.app_version}`),
+//     series: [{
+//       name: '步骤负载',
+//       data: sortedData.map(item => {
+//         const total = item.stepData.reduce((sum: number, d: any) => sum + d.count, 0);
+//         return total;
+//       })
+//     }]
+//   };
+// });
 
-const comparisonTableData = computed(() => {
-  const sortedData = [...filteredData.value].sort((a, b) => a.basicInfo.timestamp - b.basicInfo.timestamp);
+// const comparisonTableData = computed(() => {
+//   const sortedData = [...filteredData.value].sort((a, b) => a.basicInfo.timestamp - b.basicInfo.timestamp);
   
-  return sortedData.map((item, index) => {
-    const totalLoad = item.scenePieData.seriesData.reduce((sum: number, d: any) => sum + d.value, 0);
-    const appLoad = item.categoryData
-      .filter((d: any) => ['APP_ABC', 'APP_LIB', 'APP_SO'].includes(d.category))
-      .reduce((sum: number, d: any) => sum + d.instructions, 0);
-    const systemLoad = item.categoryData
-      .filter((d: any) => ['OS_Runtime', 'SYS_SDK'].includes(d.category))
-      .reduce((sum: number, d: any) => sum + d.instructions, 0);
-    const thirdPartyLoad = item.categoryData
-      .filter((d: any) => ['RN', 'Flutter', 'WEB'].includes(d.category))
-      .reduce((sum: number, d: any) => sum + d.instructions, 0);
+//   return sortedData.map((item, index) => {
+//     const totalLoad = item.scenePieData.seriesData.reduce((sum: number, d: any) => sum + d.value, 0);
+//     const appLoad = item.categoryData
+//       .filter((d: any) => ['APP_ABC', 'APP_LIB', 'APP_SO'].includes(d.category))
+//       .reduce((sum: number, d: any) => sum + d.instructions, 0);
+//     const systemLoad = item.categoryData
+//       .filter((d: any) => ['OS_Runtime', 'SYS_SDK'].includes(d.category))
+//       .reduce((sum: number, d: any) => sum + d.instructions, 0);
+//     const thirdPartyLoad = item.categoryData
+//       .filter((d: any) => ['RN', 'Flutter', 'WEB'].includes(d.category))
+//       .reduce((sum: number, d: any) => sum + d.instructions, 0);
     
-    let changeRate = 0;
-    if (index > 0) {
-      const prevTotal = sortedData[index - 1].scenePieData.seriesData.reduce((sum: number, d: any) => sum + d.value, 0);
-      changeRate = ((totalLoad - prevTotal) / prevTotal) * 100;
-    }
+//     let changeRate = 0;
+//     if (index > 0) {
+//       const prevTotal = sortedData[index - 1].scenePieData.seriesData.reduce((sum: number, d: any) => sum + d.value, 0);
+//       changeRate = ((totalLoad - prevTotal) / prevTotal) * 100;
+//     }
     
-    return {
-      version: `${item.basicInfo.rom_version}-${item.basicInfo.app_version}`,
-      totalLoad: totalLoad.toFixed(2),
-      appLoad: appLoad.toFixed(2),
-      systemLoad: systemLoad.toFixed(2),
-      thirdPartyLoad: thirdPartyLoad.toFixed(2),
-      changeRate: changeRate.toFixed(2)
-    };
-  });
-});
+//     return {
+//       version: `${item.basicInfo.rom_version}-${item.basicInfo.app_version}`,
+//       totalLoad: totalLoad.toFixed(2),
+//       appLoad: appLoad.toFixed(2),
+//       systemLoad: systemLoad.toFixed(2),
+//       thirdPartyLoad: thirdPartyLoad.toFixed(2),
+//       changeRate: changeRate.toFixed(2)
+//     };
+//   });
+// });
 
-const handleHtmlFileChange = async (file: any) => {
+const handleHtmlFileChange = async (file: UploadFile) => {
   try {
     const content = await readFileContent(file.raw);
     // 提取const json = 'base64...'字符串
@@ -328,7 +349,7 @@ const handleHtmlFileChange = async (file: any) => {
     }
     // pako解压
     const decompressed = pako.inflate(charData, { to: 'string' });
-    const jsonData = JSON.parse(decompressed);
+    const jsonData = JSON.parse(decompressed) as JSONData;
     // 处理数据
     const processedData = await processJsonData(jsonData, file.name);
     multiData.value.push(processedData);
@@ -338,7 +359,7 @@ const handleHtmlFileChange = async (file: any) => {
   }
 };
 
-const handleFileRemove = (file: any) => {
+const handleFileRemove = (file: UploadFile) => {
   const index = multiData.value.findIndex(item => item.fileName === file.name);
   if (index !== -1) {
     multiData.value.splice(index, 1);
@@ -359,8 +380,8 @@ const readFileContent = (file: File): Promise<string> => {
 };
 
 const processJsonData = async (jsonData: JSONData, fileName: string): Promise<MultiDataItem> => {
-  let scenePieData;
-  let categoryData: Array<{ category: string; instructions: number }>;
+  let scenePieData: PieChartData;
+  let categoryData: CategoryDataItem[];
   
   try {
     scenePieData = processJson2PieChartData(jsonData.perf, 0);
@@ -368,11 +389,11 @@ const processJsonData = async (jsonData: JSONData, fileName: string): Promise<Mu
   } catch (error) {
     console.error('数据处理错误:', error);
     // 提供默认数据
-    scenePieData = { seriesData: [] };
+    scenePieData = { legendData: [], seriesData: [] };
     categoryData = [];
   }
   
-  const stepData = jsonData.perf.steps.map(step => ({
+  const stepData: StepDataItem[] = jsonData.perf.steps.map(step => ({
     stepId: step.step_id,
     stepName: step.step_name,
     count: step.count
@@ -497,3 +518,6 @@ onMounted(() => {
   height: 200px;
 }
 </style> 
+
+
+

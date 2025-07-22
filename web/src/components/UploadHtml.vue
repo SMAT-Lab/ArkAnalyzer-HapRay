@@ -65,17 +65,17 @@ const onFileInputChange = async (event: Event) => {
   try {
     const reader = new FileReader();
     reader.readAsText(file);
-    await new Promise((resolve) => {
+    await new Promise(() => {
       reader.onload = () => {
         const htmlContent = reader.result as string;
        
         // 替换对比数据和版本标识
-        let newHtmlContent = htmlContent
+        const newHtmlContent = htmlContent
           .replace(/'\/tempCompareJsonData\/'/g, JSON.stringify(window.jsonData))
           .replace('window.jsonData = json','window.jsonData = compareJson')
           .replace('window.compareJsonData = compareJson','window.compareJsonData = json')
-          .replace(/\'WINDOW_BASE_MARK_PLACEHOLDER\'/g, JSON.stringify(window.baseMark))
-          .replace(/\'WINDOW_COMPARE_MARK_PLACEHOLDER\'/g, JSON.stringify(window.compareMark));
+          .replace(/'WINDOW_BASE_MARK_PLACEHOLDER'/g, JSON.stringify(window.baseMark))
+          .replace(/'WINDOW_COMPARE_MARK_PLACEHOLDER'/g, JSON.stringify(window.compareMark));
 
         const blob = new Blob([newHtmlContent], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
