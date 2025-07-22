@@ -18,7 +18,7 @@ import os
 from typing import Dict, Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
-from hapray.core.common.frame_analyzer import FrameAnalyzer
+from hapray.core.common.frame import FrameAnalyzer
 
 
 class FrameDropAnalyzer(BaseAnalyzer):
