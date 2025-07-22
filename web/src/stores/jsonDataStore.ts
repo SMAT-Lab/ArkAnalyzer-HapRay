@@ -28,7 +28,7 @@ enum OriginKind {
   THIRD_PARTY = 3,
 }
 
-interface BasicInfo {
+export interface BasicInfo {
   rom_version: string;
   app_id: string;
   app_name: string;
@@ -207,6 +207,17 @@ interface ColdStartStepData {
 
 export type ColdStartData = Record<string, ColdStartStepData>;
 
+interface GcThreadStepData {
+  FullGC: number;
+  SharedFullGC: number;
+  SharedGC: number;
+  PartialGC: number;
+  GCStatus: string;
+  perf_percentage: number;
+}
+
+export type GcThreadData = Record<string, GcThreadStepData>;
+
 interface ComponentResuStepData {
   total_builds: number;
   recycled_builds: number;
@@ -221,6 +232,7 @@ interface TraceData {
   emptyFrame?: EmptyFrameData;
   componentReuse: ComponentResuData;
   coldStart?: ColdStartData;
+  gc_thread?: GcThreadData;
 }
 
 export interface JSONData {
@@ -427,6 +439,9 @@ interface JsonDataState {
   comparePerfData: PerfData | null;
   componentResuData: ComponentResuData | null;
   coldStartData: ColdStartData | null;
+  gcThreadData: GcThreadData | null;
+  baseMark: string | null;
+  compareMark: string | null;
 }
 
 /**
@@ -505,31 +520,38 @@ export const useJsonDataStore = defineStore('config', {
     comparePerfData: null,
     componentResuData: null,
     coldStartData: null,
+    gcThreadData: null,
+    baseMark: null,
+    compareMark: null,
   }),
 
   actions: {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.basicInfo = jsonData.basicInfo;
 
-      if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
-        this.perfData = jsonData.perf;
+      this.perfData = jsonData.perf;
+      this.baseMark = window.baseMark;
+      this.compareMark = window.compareMark;
 
-        if (jsonData.trace) {
-          // 安全处理所有 trace 相关数据
-          this.frameData = safeProcessFrameData(jsonData.trace.frames);
-          this.emptyFrameData = safeProcessEmptyFrameData(jsonData.trace.emptyFrame);
-          this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
-          this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
-        } else {
-          // 当没有 trace 数据时，设置完整的默认结构
-          this.frameData = getDefaultFrameData();
-          this.emptyFrameData = getDefaultEmptyFrameData();
-          this.componentResuData = getDefaultComponentResuData();
-        }
+      if (jsonData.trace) {
+        // 安全处理所有 trace 相关数据
+        this.frameData = safeProcessFrameData(jsonData.trace.frames);
+        this.emptyFrameData = safeProcessEmptyFrameData(jsonData.trace.emptyFrame);
+        this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
+        this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
+        this.gcThreadData = safeProcessGcThreadData(jsonData.trace.gc_thread);
+      } else {
+        // 当没有 trace 数据时，设置完整的默认结构
+        this.frameData = getDefaultFrameData();
+        this.emptyFrameData = getDefaultEmptyFrameData();
+        this.componentResuData = getDefaultComponentResuData();
+        this.coldStartData = getDefaultColdStartData();
+        this.gcThreadData = getDefaultGcThreadData();
+      }
+      if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         window.initialPage = 'perf';
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
-        this.perfData = jsonData.perf;
         this.comparePerfData = compareJsonData.perf;
         window.initialPage = 'perf_compare';
       }
@@ -579,3 +601,45 @@ export const useComponentNameStore = defineStore('componentNameQuery', {
     componentNameQuery: '' as string,
   })
 });
+
+/** 获取默认的GC线程步骤数据 */
+export function getDefaultGcThreadStepData(): GcThreadStepData {
+  return {
+    FullGC: 0,
+    SharedFullGC: 0,
+    SharedGC: 0,
+    PartialGC: 0,
+    GCStatus: "OK",
+    perf_percentage: 0.0
+  };
+}
+
+export function getDefaultGcThreadData(): GcThreadData {
+  return {
+    step1: getDefaultGcThreadStepData()
+  };
+}
+
+/**
+ * 安全处理GC线程数据 - 替换无效值为默认结构
+ * @param data 原始GC线程数据
+ * @returns 处理后的有效GC线程数据
+ */
+export function safeProcessGcThreadData(data: GcThreadData | null | undefined): GcThreadData {
+  if (!data) return getDefaultGcThreadData();
+
+  const result: GcThreadData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultGcThreadStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultGcThreadStepData();
+  }
+
+  return result;
+}

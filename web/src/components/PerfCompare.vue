@@ -1,406 +1,421 @@
 <template>
   <div class="performance-comparison">
-    <div class="info-box">
-      负载分类说明：
-      <p>APP_ABC => 应用代码 |
-        APP_LIB => 应用三方ArkTS库 |
-        APP_SO => 应用native库 |
-        OS_Runtime => 系统运行时 |
-        SYS_SDK => 系统SDK |
-        RN => 三方框架React Native |
-        Flutter => 三方框架Flutter |
-        WEB => 三方框架ArkWeb</p>
-    </div>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <el-descriptions :title="performanceData.app_name" :column="1" class="beautified-descriptions">
-          <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
-          <el-descriptions-item label="应用版本：">{{ performanceData.app_version }}</el-descriptions-item>
-          <el-descriptions-item label="场景名称：">{{ performanceData.scene }}</el-descriptions-item>
-        </el-descriptions>
-      </el-col>
-      <el-col :span="12">
-        <el-descriptions :title="comparePerformanceData.app_name" :column="1" class="beautified-descriptions">
-          <el-descriptions-item label="系统版本：">{{ comparePerformanceData.rom_version }}</el-descriptions-item>
-          <el-descriptions-item label="应用版本：">{{ comparePerformanceData.app_version }}</el-descriptions-item>
-          <el-descriptions-item label="场景名称：">{{ comparePerformanceData.scene }}</el-descriptions-item>
-        </el-descriptions>
-      </el-col>
-    </el-row>
-    <!--场景负载饼状图 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <div class="data-panel">
-          <PieChart :chart-data="scenePieData" :title="pieChartTitle"/>
+    <el-card v-if="loading" class="loading-card">
+      <div class="loading-content">
+        <el-icon class="el-icon--loading" style="font-size:32px;margin-bottom:10px;"><i class="el-icon-loading"></i></el-icon>
+        <div>正在加载版本对比页面，请稍候...</div>
+      </div>
+    </el-card>
+    <div v-else>
+      <div v-if="!hasCompareData" style="margin-bottom: 16px;">
+        <UploadHtml />
+      </div>
+      <template v-else>
+        <div class="info-box">
+          负载分类说明：
+          <p>APP_ABC => 应用代码 |
+            APP_LIB => 应用三方ArkTS库 |
+            APP_SO => 应用native库 |
+            OS_Runtime => 系统运行时 |
+            SYS_SDK => 系统SDK |
+            RN => 三方框架React Native |
+            Flutter => 三方框架Flutter |
+            WEB => 三方框架ArkWeb</p>
         </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="data-panel">
-          <PieChart :chart-data="compareScenePieData" :title="pieChartTitle"/>
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 场景负载增长卡片 -->
-    <el-row :gutter="20">
-      <el-col :span="24">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-descriptions :title="performanceData.app_name" :column="1" class="beautified-descriptions">
+              <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
+              <el-descriptions-item label="应用版本：">{{ performanceData.app_version }}</el-descriptions-item>
+              <el-descriptions-item label="场景名称：">{{ performanceData.scene }}</el-descriptions-item>
+              <el-descriptions-item label="自定义版本标识：">{{ baseMark }}</el-descriptions-item>
+            </el-descriptions>
+          </el-col>
+          <el-col :span="12">
+            <el-descriptions :title="comparePerformanceData.app_name" :column="1" class="beautified-descriptions">
+              <el-descriptions-item label="系统版本：">{{ comparePerformanceData.rom_version }}</el-descriptions-item>
+              <el-descriptions-item label="应用版本：">{{ comparePerformanceData.app_version }}</el-descriptions-item>
+              <el-descriptions-item label="场景名称：">{{ comparePerformanceData.scene }}</el-descriptions-item>
+              <el-descriptions-item label="自定义版本标识：">{{ compareMark }}</el-descriptions-item>
+            </el-descriptions>
+          </el-col>
+        </el-row>
+        <!--场景负载饼状图 -->
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <div class="data-panel">
+              <PieChart :chart-data="scenePieData" :title="pieChartTitle"/>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="data-panel">
+              <PieChart :chart-data="compareScenePieData" :title="pieChartTitle"/>
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 场景负载增长卡片 -->
+        <el-row :gutter="20">
+          <el-col :span="24">
 
-        <div class="card-container" style="margin-bottom:10px;">
-          <div v-for="item in sceneDiff.values()" :key="item.category" class="category-card">
-            <el-card>
-              <template #header>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 16px; font-weight: bold;">{{ item.category }}</span>
-                  <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
-                    负载占比：{{ item.total_percentage }}
-                  </span>
-                </div>
-              </template>
-              <div style="padding: 16px;">
-                <p>
-                  负载增长：
-                  <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
-                    {{ item.percentage }}
-                  </span>
-                  <br>
-                  <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">{{ item.diff }}</span>
-                </p>
+            <div class="card-container" style="margin-bottom:10px;">
+              <div v-for="item in sceneDiff.values()" :key="item.category" class="category-card">
+                <el-card>
+                  <template #header>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="font-size: 16px; font-weight: bold;">{{ item.category }}</span>
+                      <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
+                        负载占比：{{ item.total_percentage }}
+                      </span>
+                    </div>
+                  </template>
+                  <div style="padding: 16px;">
+                    <p>
+                      负载增长：
+                      <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
+                        {{ item.percentage }}
+                      </span>
+                      <br>
+                      <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">{{ item.diff }}</span>
+                    </p>
 
+                  </div>
+                </el-card>
               </div>
-            </el-card>
-          </div>
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 场景负载迭代折线图 -->
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <div class="data-panel">
-          <LineChart :chart-data="compareSceneLineChartData" :series-type="RightLineChartSeriesType" />
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 步骤负载排名横向柱状图 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <div class="data-panel">
-          <BarChart :chart-data="perfData" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="data-panel">
-          <BarChart :chart-data="comparePerfData" />
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 步骤负载柱状图 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <div class="data-panel">
-          <LineChart :chart-data="perfData" :series-type="LeftLineChartSeriesType" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="data-panel">
-          <LineChart :chart-data="comparePerfData" :series-type="LeftLineChartSeriesType" />
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 步骤负载折线图 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <div class="data-panel">
-          <LineChart :chart-data="perfData" :series-type="RightLineChartSeriesType" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <div class="data-panel">
-          <LineChart :chart-data="comparePerfData" :series-type="RightLineChartSeriesType" />
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 测试步骤导航 -->
-    <div class="step-nav">
-      <div
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 场景负载迭代折线图 -->
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <LineChart :chart-data="compareSceneLineChartData" :series-type="RightLineChartSeriesType" />
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 步骤负载排名横向柱状图 -->
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <div class="data-panel">
+              <BarChart :chart-data="perfData" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="data-panel">
+              <BarChart :chart-data="comparePerfData" />
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 步骤负载柱状图 -->
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <div class="data-panel">
+              <LineChart :chart-data="perfData" :series-type="LeftLineChartSeriesType" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="data-panel">
+              <LineChart :chart-data="comparePerfData" :series-type="LeftLineChartSeriesType" />
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 步骤负载折线图 -->
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <div class="data-panel">
+              <LineChart :chart-data="perfData" :series-type="RightLineChartSeriesType" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="data-panel">
+              <LineChart :chart-data="comparePerfData" :series-type="RightLineChartSeriesType" />
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 测试步骤导航 -->
+        <div class="step-nav">
+          <div
 :class="[
-        'step-item',
-        {
-          active: currentStepIndex === 0,
-        },
-      ]" @click="handleStepClick(0)">
-        <div class="step-header">
-          <span class="step-order">STEP 0</span>
-          <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
-        </div>
-        <div class="step-name">全部步骤</div>
-      </div>
-      <div
+            'step-item',
+            {
+              active: currentStepIndex === 0,
+            },
+          ]" @click="handleStepClick(0)">
+            <div class="step-header">
+              <span class="step-order">STEP 0</span>
+              <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
+            </div>
+            <div class="step-name">全部步骤</div>
+          </div>
+          <div
 v-for="(step, index) in testSteps" :key="index" :class="[
-        'step-item',
-        {
-          active: currentStepIndex === step.id,
-        },
-      ]" @click="handleStepClick(step.id)">
-        <div class="step-header">
-          <span class="step-order">STEP {{ step.id }}</span>
-          <span class="step-duration">{{ formatDuration(step.count) }}</span>
-        </div>
-        <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-        <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
-        <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
-      </div>
-    </div>
-
-    <!-- 性能迭代区域 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 基准步骤饼图 -->
-        <div class="data-panel">
-          <PieChart :step-id="currentStepIndex" :chart-data="stepPieData" :title="pieChartTitle"/>
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 迭代步骤饼图 -->
-        <div class="data-panel">
-          <PieChart :step-id="currentStepIndex" :chart-data="compareStepPieData" :title="pieChartTitle"/>
-        </div>
-      </el-col>
-    </el-row>
-    <!-- 步骤负载增长卡片 -->
-    <el-row :gutter="20">
-      <el-col :span="24">
-
-        <div class="card-container" style="margin-bottom:10px;">
-          <div v-for="item in stepDiff.values()" :key="item.category" class="category-card">
-            <el-card>
-              <template #header>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 16px; font-weight: bold;">{{ item.category }}</span>
-                  <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
-                    负载占比：{{ item.total_percentage }}
-                  </span>
-                </div>
-              </template>
-              <div style="padding: 16px;">
-                <p>
-                  负载增长：
-                  <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
-                    {{ item.percentage }}
-                  </span><br>
-                  <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">{{ item.diff }}</span>
-                </p>
-              </div>
-            </el-card>
+            'step-item',
+            {
+              active: currentStepIndex === step.id,
+            },
+          ]" @click="handleStepClick(step.id)">
+            <div class="step-header">
+              <span class="step-order">STEP {{ step.id }}</span>
+              <span class="step-duration">{{ formatDuration(step.count) }}</span>
+            </div>
+            <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
+            <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
+            <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
           </div>
         </div>
-      </el-col>
-    </el-row>
-    <!-- 步骤负载迭代折线图-->
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <div class="data-panel">
-          <LineChart
+
+        <!-- 性能迭代区域 -->
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 基准步骤饼图 -->
+            <div class="data-panel">
+              <PieChart :step-id="currentStepIndex" :chart-data="stepPieData" :title="pieChartTitle"/>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 迭代步骤饼图 -->
+            <div class="data-panel">
+              <PieChart :step-id="currentStepIndex" :chart-data="compareStepPieData" :title="pieChartTitle"/>
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 步骤负载增长卡片 -->
+        <el-row :gutter="20">
+          <el-col :span="24">
+
+            <div class="card-container" style="margin-bottom:10px;">
+              <div v-for="item in stepDiff.values()" :key="item.category" class="category-card">
+                <el-card>
+                  <template #header>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="font-size: 16px; font-weight: bold;">{{ item.category }}</span>
+                      <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
+                        负载占比：{{ item.total_percentage }}
+                      </span>
+                    </div>
+                  </template>
+                  <div style="padding: 16px;">
+                    <p>
+                      负载增长：
+                      <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">
+                        {{ item.percentage }}
+                      </span><br>
+                      <span :style="{ color: item.diff > 0 ? 'red' : 'green' }">{{ item.diff }}</span>
+                    </p>
+                  </div>
+                </el-card>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+        <!-- 步骤负载迭代折线图-->
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <LineChart
 :step-id="currentStepIndex" :chart-data="compareLineChartData"
-            :series-type="RightLineChartSeriesType" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 进程负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">进程负载</span>
-          </h3>
-          <PerfProcessTable
+                :series-type="RightLineChartSeriesType" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 进程负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">进程负载</span>
+              </h3>
+              <PerfProcessTable
 :step-id="currentStepIndex" :data="filteredProcessesPerformanceData" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 进程负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">大分类负载</span>
-          </h3>
-          <PerfProcessTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 进程负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">大分类负载</span>
+              </h3>
+              <PerfProcessTable
 :step-id="currentStepIndex" :data="filteredCategorysPerformanceData" :hide-column="isHidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 线程负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">线程负载</span>
-          </h3>
-          <PerfThreadTable
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 线程负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">线程负载</span>
+              </h3>
+              <PerfThreadTable
 :step-id="currentStepIndex" :data="filteredThreadsPerformanceData" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 线程负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">小分类负载</span>
-          </h3>
-          <PerfThreadTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 线程负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">小分类负载</span>
+              </h3>
+              <PerfThreadTable
 :step-id="currentStepIndex" :data="filteredComponentNamePerformanceData"
-            :hide-column="isHidden" :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 文件负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">文件负载</span>
-          </h3>
-          <PerfFileTable
+                :hide-column="isHidden" :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 文件负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">文件负载</span>
+              </h3>
+              <PerfFileTable
 :step-id="currentStepIndex" :data="filteredFilesPerformanceData" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 文件负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">文件负载</span>
-          </h3>
-          <PerfFileTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 文件负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">文件负载</span>
+              </h3>
+              <PerfFileTable
 :step-id="currentStepIndex" :data="filteredFilesPerformanceData1" :hide-column="isHidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 函数负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">函数负载</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 函数负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">函数负载</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="filteredSymbolsPerformanceData" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 函数负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">函数负载</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 函数负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">函数负载</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="filteredSymbolsPerformanceData1" :hide-column="isHidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 新增文件负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">新增文件负载表格</span>
-          </h3>
-          <PerfFileTable
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 新增文件负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">新增文件负载表格</span>
+              </h3>
+              <PerfFileTable
 :step-id="currentStepIndex" :data="increaseFilesPerformanceData" :hide-column="hidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 新增文件负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">新增文件负载表格</span>
-          </h3>
-          <PerfFileTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 新增文件负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">新增文件负载表格</span>
+              </h3>
+              <PerfFileTable
 :step-id="currentStepIndex" :data="increaseFilesPerformanceData1" :hide-column="hidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 新增符号负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">新增符号负载表格</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 新增符号负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">新增符号负载表格</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="increaseSymbolsPerformanceData" :hide-column="hidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 新增符号负载表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">新增符号负载表格</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 新增符号负载表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">新增符号负载表格</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="increaseSymbolsPerformanceData1" :hide-column="hidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 基线函数负载top10表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">基线函数负载top10</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 基线函数负载top10表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">基线函数负载top10</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="filteredBaseSymbolsPerformanceData" :hide-column="hidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 基线函数负载top10表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">基线函数负载top10</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 基线函数负载top10表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">基线函数负载top10</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="filteredBaseSymbolsPerformanceData1" :hide-column="hidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 迭代函数负载top10表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">迭代函数负载top10</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <!-- 迭代函数负载top10表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">迭代函数负载top10</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="filteredCompareSymbolsPerformanceData" :hide-column="hidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 迭代函数负载top10表格 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">迭代函数负载top10</span>
-          </h3>
-          <PerfSymbolTable
+                :has-category="false" />
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <!-- 迭代函数负载top10表格 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">迭代函数负载top10</span>
+              </h3>
+              <PerfSymbolTable
 :step-id="currentStepIndex" :data="filteredCompareSymbolsPerformanceData1"
-            :hide-column="hidden" :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
+                :hide-column="hidden" :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+      </template>
+    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import PerfProcessTable from './PerfProcessTable.vue';
 import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
@@ -410,6 +425,7 @@ import BarChart from './BarChart.vue';
 import LineChart from './LineChart.vue';
 import { ComponentCategory, useJsonDataStore, type PerfData } from '../stores/jsonDataStore.ts';
 import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
+import UploadHtml from './UploadHtml.vue';
 
 interface SceneLoadDiff {
   category: string;
@@ -423,42 +439,59 @@ const hidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
 const currentStepIndex = ref(0);
+const loading = ref(true);
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 // 通过 getter 获取 JSON 数据
 const basicInfo = jsonDataStore.basicInfo;
 const compareBasicInfo = jsonDataStore.compareBasicInfo;
-const perfData = jsonDataStore.perfData!;
-const comparePerfData = jsonDataStore.comparePerfData!;
+const perfData = jsonDataStore.perfData || { steps: [] };
+const comparePerfData = jsonDataStore.comparePerfData || { steps: [] };
+const baseMark = jsonDataStore.baseMark;
+const compareMark = jsonDataStore.compareMark;
 
 //thread可能是null，需要处理下。
 const performanceData = ref(
-  {
-    app_name: basicInfo!.app_name,
-    rom_version: basicInfo!.rom_version,
-    app_version: basicInfo!.app_version,
-    scene: basicInfo!.scene,
-  }
+  basicInfo
+    ? {
+        app_name: basicInfo.app_name,
+        rom_version: basicInfo.rom_version,
+        app_version: basicInfo.app_version,
+        scene: basicInfo.scene,
+      }
+    : {
+        app_name: '',
+        rom_version: '',
+        app_version: '',
+        scene: '',
+      }
 );
 
 const comparePerformanceData = ref(
-  {
-    app_name: compareBasicInfo!.app_name,
-    rom_version: compareBasicInfo!.rom_version,
-    app_version: compareBasicInfo!.app_version,
-    scene: compareBasicInfo!.scene,
-  }
-
+  compareBasicInfo
+    ? {
+        app_name: compareBasicInfo.app_name,
+        rom_version: compareBasicInfo.rom_version,
+        app_version: compareBasicInfo.app_version,
+        scene: compareBasicInfo.scene,
+      }
+    : {
+        app_name: '',
+        rom_version: '',
+        app_version: '',
+        scene: '',
+      }
 );
 
 // 场景负载迭代折线图
 const compareSceneLineChartData = ref();
-compareSceneLineChartData.value = mergeJSONData(perfData!, comparePerfData!, 0);
+compareSceneLineChartData.value = (perfData.steps.length && comparePerfData.steps.length)
+  ? mergeJSONData(perfData, comparePerfData, 0)
+  : { steps: [] };
 
 function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_id: number): PerfData {
-  if (!baselineData || !compareData) {
-    console.error('mergeJSONData: 两个JSONData对象均为必需');
+  if (!baselineData || !compareData || !baselineData.steps.length || !compareData.steps.length) {
     return { steps: [] };
   }
 
@@ -520,21 +553,23 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
   mergedData.steps.push(baselineStep, comparisonStep);
   return mergedData;
 }
-const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
+const pieChartTitle = (perfData.steps[0]?.data?.[0]?.eventType ?? 0) == 0 ? 'cycles' : 'instructions';
 // 场景负载饼状图
 const scenePieData = ref();
 const compareScenePieData = ref();
-scenePieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
-compareScenePieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
+scenePieData.value = perfData.steps.length ? processJson2PieChartData(perfData, currentStepIndex.value) : { legendData: [], seriesData: [] };
+compareScenePieData.value = comparePerfData.steps.length ? processJson2PieChartData(comparePerfData, currentStepIndex.value) : { legendData: [], seriesData: [] };
 // 场景负载增长卡片
 const sceneDiff = ref();
-sceneDiff.value = calculateCategoryCountDifference(compareSceneLineChartData.value);
+sceneDiff.value = compareSceneLineChartData.value && compareSceneLineChartData.value.steps.length >= 2
+  ? calculateCategoryCountDifference(compareSceneLineChartData.value)
+  : [];
 
 
 
 //测试步骤导航卡片
 const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
+  perfData.steps.map((step, index) => ({
     //从1开始
     id: index + 1,
     step_name: step.step_name,
@@ -560,17 +595,19 @@ const formatDuration = (milliseconds: number) => {
 };
 
 // 初始化ref
-const stepPieData = ref(processJson2PieChartData(perfData!, currentStepIndex.value));
-const compareStepPieData = ref(processJson2PieChartData(comparePerfData!, currentStepIndex.value));
-const compareLineChartData = ref(currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value));
-const stepDiff = ref(calculateCategoryCountDifference(compareLineChartData.value));
+const stepPieData = ref(perfData.steps.length ? processJson2PieChartData(perfData, currentStepIndex.value) : { legendData: [], seriesData: [] });
+const compareStepPieData = ref(comparePerfData.steps.length ? processJson2PieChartData(comparePerfData, currentStepIndex.value) : { legendData: [], seriesData: [] });
+const compareLineChartData = ref(currentStepIndex.value === 0 ? compareSceneLineChartData.value : (perfData.steps.length && comparePerfData.steps.length ? mergeJSONData(perfData, comparePerfData, currentStepIndex.value) : { steps: [] }));
+const stepDiff = ref(compareLineChartData.value && compareLineChartData.value.steps.length >= 2 ? calculateCategoryCountDifference(compareLineChartData.value) : []);
 
 // 响应式更新
 watch(currentStepIndex, (stepId) => {
-  stepPieData.value = processJson2PieChartData(perfData!, stepId);
-  compareStepPieData.value = processJson2PieChartData(comparePerfData!, stepId);
-  compareLineChartData.value = stepId === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, stepId);
-  stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
+  stepPieData.value = perfData.steps.length ? processJson2PieChartData(perfData, stepId) : { legendData: [], seriesData: [] };
+  compareStepPieData.value = comparePerfData.steps.length ? processJson2PieChartData(comparePerfData, stepId) : { legendData: [], seriesData: [] };
+  compareLineChartData.value = stepId === 0
+    ? compareSceneLineChartData.value
+    : (perfData.steps.length && comparePerfData.steps.length ? mergeJSONData(perfData, comparePerfData, stepId) : { steps: [] });
+  stepDiff.value = compareLineChartData.value && compareLineChartData.value.steps.length >= 2 ? calculateCategoryCountDifference(compareLineChartData.value) : [];
 });
 
 // 处理步骤点击事件的方法，切换步骤，更新数据
@@ -581,60 +618,60 @@ const handleStepClick = (stepId: number) => {
 // 性能迭代区域
 // 基线步骤饼图
 
-stepPieData.value = processJson2PieChartData(perfData!, currentStepIndex.value);
+stepPieData.value = processJson2PieChartData(perfData, currentStepIndex.value);
 // 迭代步骤饼图
 
-compareStepPieData.value = processJson2PieChartData(comparePerfData!, currentStepIndex.value);
+compareStepPieData.value = processJson2PieChartData(comparePerfData, currentStepIndex.value);
 // 步骤负载迭代折线图
 
-compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData!, comparePerfData!, currentStepIndex.value);
+compareLineChartData.value = currentStepIndex.value === 0 ? compareSceneLineChartData.value : mergeJSONData(perfData, comparePerfData, currentStepIndex.value);
 //步骤负载增长卡片
 
 stepDiff.value = calculateCategoryCountDifference(compareLineChartData.value);
 const mergedProcessPerformanceData = computed(() =>
-  calculateProcessData(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateProcessData(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedThreadPerformanceData = computed(() =>
-  calculateThreadData(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateThreadData(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedCategorysPerformanceData = computed(() =>
-  calculateCategorysData(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateCategorysData(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedComponentNamePerformanceData = computed(() =>
-  calculateComponentNameData(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateComponentNameData(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedFilePerformanceData = computed(() =>
-  calculateFileData(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateFileData(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedFilePerformanceData1 = computed(() =>
-  calculateFileData1(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateFileData1(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedSymbolsPerformanceData = computed(() =>
-  calculateSymbolData(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateSymbolData(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const mergedSymbolsPerformanceData1 = computed(() =>
-  calculateSymbolData1(perfData!, comparePerfData!, currentStepIndex.value === 0)
+  calculateSymbolData1(perfData, comparePerfData, currentStepIndex.value === 0)
 );
 
 const baseSymbolsPerformanceData = ref(
-  calculateSymbolData(perfData!, null)
+  calculateSymbolData(perfData, null)
 );
 const baseSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(perfData!, null)
+  calculateSymbolData1(perfData, null)
 );
 
 const compareSymbolsPerformanceData = ref(
-  calculateSymbolData(comparePerfData!, null)
+  calculateSymbolData(comparePerfData, null)
 );
 const compareSymbolsPerformanceData1 = ref(
-  calculateSymbolData1(comparePerfData!, null)
+  calculateSymbolData1(comparePerfData, null)
 );
 
 // 工具函数：安全排序，避免副作用
@@ -847,9 +884,8 @@ const filteredCompareSymbolsPerformanceData1 = computed(() => {
 
 function calculateCategoryCountDifference(data: PerfData): SceneLoadDiff[] {
   if (!data) return [];
-
-  if (data.steps.length < 2) {
-    throw new Error('至少需要 2 个 step 才能计算差值');
+  if (!data.steps || data.steps.length < 2) {
+    return [];
   }
 
   const step1 = data.steps[0];
@@ -916,6 +952,16 @@ function calculatePercentageWithFixed(part: number, total: number, decimalPlaces
   const percentage = (part / total) * 100;
   return Number.parseFloat(percentage.toFixed(decimalPlaces));
 }
+
+const hasCompareData = computed(() => {
+  return !!(comparePerformanceData.value && comparePerformanceData.value.app_name);
+});
+
+onMounted(() => {
+  setTimeout(() => {
+    loading.value = false;
+  }, 500); // 模拟加载过程，实际可根据数据加载完成时机调整
+});
 </script>
 
 <style scoped>
@@ -1133,4 +1179,22 @@ function calculatePercentageWithFixed(part: number, total: number, decimalPlaces
   flex-grow: 1;
   /* 允许卡片根据可用空间扩展 */
 }
+
+.loading-card {
+  margin: 40px auto;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  font-size: 18px;
+  color: #2196f3;
+}
 </style>
+
