@@ -1,28 +1,17 @@
 <template>
   <div class="common-layout">
+    <AppNavigation :current-page="showPage" @page-change="changeContent" />
     <el-container style="width: 100%; height: 100%">
       <el-container style="height: 100%-50px">
         <!-- main -->
         <el-main>
           <!-- {{ $t('home.name') }} -->
-          <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'perf_compare'">
-              <PerfCompare />
-            </div>
-          </transition>
-
-          <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'perf'">
-              <PerfSingle />
-            </div>
-          </transition>
-
-          <transition name="el-fade-in-linear">
-            <div v-if="showPage === 'deps'">
-              <ComponentsDeps />
-            </div>
-          </transition>
-
+          <keep-alive>
+            <PerfCompare v-if="showPage === 'perf_compare'" />
+            <PerfSingle v-else-if="showPage === 'perf'" />
+            <PerfMulti v-else-if="showPage === 'perf_multi'" />
+          </keep-alive>
+          <ComponentsDeps v-if="showPage === 'deps'" />
         </el-main>
       </el-container>
     </el-container>
@@ -38,11 +27,14 @@ import { onMounted, ref } from 'vue';
 import PerfCompare from '@/components/PerfCompare.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
+import PerfMulti from '@/components/PerfMulti.vue';
+import AppNavigation from '@/components/AppNavigation.vue';
 
 //import { getCurrentInstance } from 'vue';
 //import { ElMessage } from 'element-plus';
 
 const showPage = ref('');
+
 
 async function changeContent(page: string) {
   showPage.value = '';
