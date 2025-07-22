@@ -55,13 +55,16 @@ def execute_command(command: list, working_dir: Path = None, error_message: str 
         error_message: Custom error message for exception handling
     """
     try:
-        subprocess.run(
+        result = subprocess.run(
             command,
             cwd=working_dir,
             check=True,
             shell=platform.system() == "Windows",
             text=True
         )
+        print(result.stdout)
+        if result.stderr:
+            print(f"Warning: {result.stderr}")
     except subprocess.CalledProcessError as e:
         print(f"Error: {error_message}")
         print(f"Command: {e.cmd}")
@@ -161,10 +164,18 @@ def install_project_dependencies(pip_executable: Path) -> None:
         return
 
     print(f"\n[3/3] Installing dependencies from {REQUIREMENTS_FILE}...")
-    execute_command(
-        [str(pip_executable), "install", "-r", str(requirements_path)],
-        error_message="Failed to install requirements"
-    )
+    print(f"Using pip executable: {pip_executable}")
+    print(f"Requirements file path: {requirements_path}")
+    
+    try:
+        execute_command(
+            [str(pip_executable), "install", "-r", str(requirements_path)],
+            error_message="Failed to install requirements"
+        )
+        print("Successfully installed requirements")
+    except Exception as e:
+        print(f"Error installing requirements: {str(e)}")
+        raise
 
     # Install Hypium packages in specific order
     packages_dir = Path(HYPIUM_DIR)
@@ -174,10 +185,15 @@ def install_project_dependencies(pip_executable: Path) -> None:
 
     for package in package_files:
         print(f"Installing package: {package.name}")
-        execute_command(
-            [str(pip_executable), "install", str(package)],
-            error_message=f"Failed to install package: {package.name}"
-        )
+        try:
+            execute_command(
+                [str(pip_executable), "install", str(package)],
+                error_message=f"Failed to install package: {package.name}"
+            )
+            print(f"Successfully installed {package.name}")
+        except Exception as e:
+            print(f"Error installing {package.name}: {str(e)}")
+            raise
 
 
 def display_activation_instructions() -> None:

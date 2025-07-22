@@ -19,24 +19,30 @@ from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
-from .frame_cache_manager import FrameCacheManager
 from .frame_load_calculator import FrameLoadCalculator
 from .frame_data_parser import validate_database_compatibility
+from .frame_cache_manager import FrameCacheManager
 
 
 class EmptyFrameAnalyzer:
     """空帧分析器
-    
+
     专门用于分析空帧（flag=2, type=0）的负载情况，包括：
     1. 空帧负载计算
     2. 主线程vs后台线程分析
     3. 空帧调用链分析
+
+    帧标志 (flag) 定义：
+    - flag = 0: 实际渲染帧不卡帧（正常帧）
+    - flag = 1: 实际渲染帧卡帧（expectEndTime < actualEndTime为异常）
+    - flag = 2: 数据不需要绘制（空帧，本分析器专门分析此类帧）
+    - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
     """
 
     def __init__(self, debug_vsync_enabled: bool = False):
         """
         初始化空帧分析器
-        
+
         Args:
             debug_vsync_enabled: VSync调试开关
         """
@@ -51,6 +57,8 @@ class EmptyFrameAnalyzer:
         step_id: str = None
     ) -> Optional[dict]:
         """分析空帧（flag=2, type=0）的负载情况
+
+        空帧定义：flag=2 表示数据不需要绘制（没有frameNum信息）
 
         参数:
         - trace_db_path: str，trace数据库文件路径
@@ -126,12 +134,12 @@ class EmptyFrameAnalyzer:
             for _, frame in trace_df.iterrows():
                 frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
                     frame, perf_df, perf_conn, step_id)
-                    
+
                 if frame['is_main_thread'] == 1:
                     empty_frame_load += frame_load
                 else:
                     background_thread_load += frame_load
-                    
+
                 frame_loads.append({
                     'ts': frame['ts'],
                     'dur': frame['dur'],
@@ -272,4 +280,4 @@ class EmptyFrameAnalyzer:
             "background_thread_load": background_thread_load,
             "background_thread_percentage": background_thread_percentage,
             "frames_with_load": len([f for f in main_thread_frames if f['frame_load'] > 0])
-        } 
+        }

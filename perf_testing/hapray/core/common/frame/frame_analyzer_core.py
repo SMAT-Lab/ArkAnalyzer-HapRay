@@ -13,20 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import codecs
 import logging
 import os
-import sys
 from typing import Dict, Any, List, Optional
 
 # 设置环境变量
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
-from .frame_cache_manager import FrameCacheManager
+# 导入新的模块化组件
 from .frame_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_database_compatibility
 from .empty_frame_analyzer import EmptyFrameAnalyzer
 from .stuttered_frame_analyzer import StutteredFrameAnalyzer
+from .frame_cache_manager import FrameCacheManager
 
 
 class FrameAnalyzerCore:
@@ -34,32 +33,38 @@ class FrameAnalyzerCore:
 
     使用模块化组件，职责分离清晰：
     1. 缓存管理 - FrameCacheManager
-    2. 负载计算 - FrameLoadCalculator  
+    2. 负载计算 - FrameLoadCalculator
     3. 数据解析 - frame_data_parser
     4. 空帧分析 - EmptyFrameAnalyzer
     5. 卡顿帧分析 - StutteredFrameAnalyzer
     6. 核心协调 - 本类
+
+    帧标志 (flag) 定义：
+    - flag = 0: 实际渲染帧不卡帧（正常帧）
+    - flag = 1: 实际渲染帧卡帧（expectEndTime < actualEndTime为异常）
+    - flag = 2: 数据不需要绘制（空帧，不参与卡顿分析）
+    - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
     """
 
     # 调试开关配置
     _debug_vsync_enabled = False  # VSync调试开关
 
-    # 常量定义
+    # 卡顿分级阈值常量
     FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
-    STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧
-    STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧
+    STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧（33.34ms）
+    STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧（100ms）
     NS_TO_MS = 1_000_000
     WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
 
     def __init__(self, debug_vsync_enabled: bool = False):
         """
         初始化FrameAnalyzerCore
-        
+
         Args:
             debug_vsync_enabled: VSync调试开关
         """
         self._debug_vsync_enabled = debug_vsync_enabled
-        
+
         # 初始化各个专门的分析器
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
         self.empty_frame_analyzer = EmptyFrameAnalyzer(debug_vsync_enabled)
@@ -267,4 +272,4 @@ class FrameAnalyzerCore:
                 "NS_TO_MS": self.NS_TO_MS,
                 "WINDOW_SIZE_MS": self.WINDOW_SIZE_MS
             }
-        } 
+        }

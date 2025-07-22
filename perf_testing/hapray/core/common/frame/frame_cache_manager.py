@@ -14,13 +14,13 @@ limitations under the License.
 """
 
 import logging
+
 import pandas as pd
-from typing import List
 
 
 class FrameCacheManager:
     """帧分析缓存管理器
-    
+
     负责管理所有与帧分析相关的缓存数据，包括：
     1. callchain缓存
     2. files缓存
@@ -224,4 +224,4 @@ class FrameCacheManager:
             "pid_cache_size": len(FrameCacheManager._pid_cache),
             "tid_cache_size": len(FrameCacheManager._tid_cache),
             "process_cache_size": len(FrameCacheManager._process_cache)
-        } 
+        }
