@@ -3,8 +3,8 @@
     <el-menu
       :default-active="activePage"
       mode="horizontal"
-      @select="handleSelect"
       class="nav-menu"
+      @select="handleSelect"
     >
       <el-menu-item index="perf">
         <el-icon><DataAnalysis /></el-icon>

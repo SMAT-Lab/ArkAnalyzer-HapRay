@@ -28,7 +28,7 @@ enum OriginKind {
   THIRD_PARTY = 3,
 }
 
-interface BasicInfo {
+export interface BasicInfo {
   rom_version: string;
   app_id: string;
   app_name: string;

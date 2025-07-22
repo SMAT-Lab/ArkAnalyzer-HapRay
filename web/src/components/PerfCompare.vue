@@ -416,7 +416,6 @@ v-for="(step, index) in testSteps" :key="index" :class="[
 
 <script lang="ts" setup>
 import { ref, computed, watch, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
 import PerfProcessTable from './PerfProcessTable.vue';
 import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
@@ -484,33 +483,6 @@ const comparePerformanceData = ref(
         scene: '',
       }
 );
-
-// 自定义版本号
-const customVersionBase = ref('基线版本');
-const customVersionCompare = ref('对比版本');
-
-// 更新自定义版本号
-const updateCustomVersion = (type: 'base' | 'compare') => {
-  if (type === 'base') {
-    ElMessage.success(`基线版本标识已更新为: ${customVersionBase.value}`);
-  } else {
-    ElMessage.success(`对比版本标识已更新为: ${customVersionCompare.value}`);
-  }
-};
-
-// 获取完整版本信息用于导出
-const getVersionInfo = () => {
-  return {
-    base: {
-      ...performanceData.value,
-      customVersion: customVersionBase.value
-    },
-    compare: {
-      ...comparePerformanceData.value,
-      customVersion: customVersionCompare.value
-    }
-  };
-};
 
 // 场景负载迭代折线图
 const compareSceneLineChartData = ref();

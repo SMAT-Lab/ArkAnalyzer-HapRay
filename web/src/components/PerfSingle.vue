@@ -109,7 +109,7 @@ class="beautiful-btn primary-btn"
         <!-- 步骤饼图（左，进程-线程-文件-符号） -->
         <div class="data-panel">
           <!-- 面包屑导航 -->
-          <div class="breadcrumb-nav" v-if="processPieDrilldownStack.length > 0">
+          <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
             <span class="breadcrumb-item" @click="handleProcessPieDrillup">
               {{ getBreadcrumbLabel('process', 0) }}
             </span>
@@ -138,7 +138,7 @@ class="beautiful-btn primary-btn"
         <!-- 步骤饼图（右，分类-小分类-文件-符号） -->
         <div class="data-panel">
           <!-- 面包屑导航 -->
-          <div class="breadcrumb-nav" v-if="stepPieDrilldownStack.length > 0">
+          <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
             <span class="breadcrumb-item" @click="handleStepPieDrillup">
               {{ getBreadcrumbLabel('category', 0) }}
             </span>

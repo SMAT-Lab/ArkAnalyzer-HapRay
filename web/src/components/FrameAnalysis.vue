@@ -7,8 +7,7 @@
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
-                        :style="{ width: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)' }"></div>
+                    <div class="progress-value" :style="{ width: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)' }"></div>
                 </div>
                 <div class="card-desc">应用渲染的总帧数，反映整体运行情况</div>
                 <div class="metric-grid">
@@ -33,8 +32,7 @@
                 </div>
                 <div class="card-value">{{ performanceData.statistics.total_stutter_frames }} </div>
                 <div class="progress-bar">
-                    <div class="progress-value"
-                        :style="{ width: (performanceData.statistics.stutter_rate * 100) + '%', background: '#f97316' }">
+                    <div class="progress-value" :style="{ width: (performanceData.statistics.stutter_rate * 100) + '%', background: '#f97316' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -64,8 +62,7 @@
                 </div>
                 <div class="card-value">{{ summaryData.total_empty_frames.toLocaleString() }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
-                        :style="{ width: Math.min(100, summaryData.empty_frame_percentage) + '%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)' }">
+                    <div class="progress-value" :style="{ width: Math.min(100, summaryData.empty_frame_percentage) + '%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -94,8 +91,7 @@
                 </div>
                 <div class="card-value">{{ fileUsageData.summary?.total_file_number || 0 }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
-                        :style="{ width: (fileUsageData.summary ? (fileUsageData.summary.used_file_count / fileUsageData.summary.total_file_number * 100) : 0) + '%', background: 'linear-gradient(90deg, #10b981, #34d399)' }">
+                    <div class="progress-value" :style="{ width: (fileUsageData.summary ? (fileUsageData.summary.used_file_count / fileUsageData.summary.total_file_number * 100) : 0) + '%', background: 'linear-gradient(90deg, #10b981, #34d399)' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -124,8 +120,7 @@
                 </div>
                 <div class="card-value">{{ gcThreadData.GCStatus }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value"
-                        :style="{ width: Math.min(100, gcThreadData.perf_percentage * 100) + '%', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }">
+                    <div class="progress-value" :style="{ width: Math.min(100, gcThreadData.perf_percentage * 100) + '%', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -161,10 +156,12 @@
                 <div class="metric-grid">
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span>
-                            <a href="https://docs.openharmony.cn/pages/v5.1/zh-cn/application-dev/performance/component_recycle_case.md"
+                            <a 
+                                href="https://docs.openharmony.cn/pages/v5.1/zh-cn/application-dev/performance/component_recycle_case.md" 
                                 target="_blank" title="查看OpenHarmony官方复用组件案例文档" class="external-link-icon"
                                 style="margin-left: 6px; vertical-align: middle;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
+                                <svg 
+                                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                                     style="transition:stroke 0.2s;">
                                     <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -253,9 +250,11 @@
                         <i class="fas fa-code-branch"></i>
                         调用栈信息
                     </div>
-                    <div v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
+                    <div 
+                        v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
                         class="callstack-list">
-                        <div v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
+                        <div 
+                            v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
                             class="callstack-item">
                             <div class="callstack-header">
                                 <div class="callstack-timestamp">
@@ -380,15 +379,18 @@
                 <div class="filter-item" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">
                     全部卡顿 ({{ performanceData.statistics.total_stutter_frames }})
                 </div>
-                <div class="filter-item" :class="{ active: activeFilter === 'level_1' }"
+                <div 
+                    class="filter-item" :class="{ active: activeFilter === 'level_1' }"
                     @click="activeFilter = 'level_1'">
                     轻微卡顿 ({{ performanceData.statistics.stutter_levels.level_1 }})
                 </div>
-                <div class="filter-item" :class="{ active: activeFilter === 'level_2' }"
+                <div 
+                    class="filter-item" :class="{ active: activeFilter === 'level_2' }"
                     @click="activeFilter = 'level_2'">
                     中度卡顿 ({{ performanceData.statistics.stutter_levels.level_2 }})
                 </div>
-                <div class="filter-item" :class="{ active: activeFilter === 'level_3' }"
+                <div 
+                    class="filter-item" :class="{ active: activeFilter === 'level_3' }"
                     @click="activeFilter = 'level_3'">
                     严重卡顿 ({{ performanceData.statistics.stutter_levels.level_3 }})
                 </div>
@@ -428,11 +430,13 @@
             </div>
 
             <div class="filters">
-                <div class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
+                <div 
+                    class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
                     @click="fileUsageFilter = 'used'">
                     已使用文件 TOP 10 ({{ fileUsageData.used_files_top10.length }})
                 </div>
-                <div class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
+                <div 
+                    class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
                     @click="fileUsageFilter = 'unused'">
                     未使用文件 TOP 10 ({{ fileUsageData.unused_files_top10.length }})
                 </div>

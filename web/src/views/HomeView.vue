@@ -1,6 +1,6 @@
 <template>
   <div class="common-layout">
-    <Navigation :current-page="showPage" @page-change="changeContent" />
+    <AppNavigation :current-page="showPage" @page-change="changeContent" />
     <el-container style="width: 100%; height: 100%">
       <el-container style="height: 100%-50px">
         <!-- main -->
@@ -20,7 +20,7 @@
 
 <script lang="ts" setup>
 //import { Document, Menu as IconMenu, Location, Setting } from '@element-plus/icons-vue';
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref } from 'vue';
 //import type Node from 'element-plus/es/components/tree/src/model/node';
 //import type { TreeNodeData } from 'element-plus/es/components/tree/src/tree.type';
 
@@ -28,21 +28,13 @@ import PerfCompare from '@/components/PerfCompare.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
-import Navigation from '@/components/Navigation.vue';
+import AppNavigation from '@/components/AppNavigation.vue';
 
 //import { getCurrentInstance } from 'vue';
 //import { ElMessage } from 'element-plus';
 
 const showPage = ref('');
 
-const componentMap = {
-  perf: PerfSingle,
-  perf_compare: PerfCompare,
-  perf_multi: PerfMulti,
-  deps: ComponentsDeps,
-};
-
-const currentComponent = computed(() => componentMap[showPage.value as keyof typeof componentMap]);
 
 async function changeContent(page: string) {
   showPage.value = '';
