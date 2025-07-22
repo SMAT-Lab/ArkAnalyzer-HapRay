@@ -1,9 +1,6 @@
 # coding: utf-8
 
-import os
-import time
 from hapray.core.perf_testcase import PerfTestCase
-
 
 """
 @场景用例
@@ -16,13 +13,15 @@ from hapray.core.perf_testcase import PerfTestCase
 2. 执行多次左滑操作。
 3. 执行多次右滑操作。
 """
+
+
 class ResourceUsage_PerformanceDynamic_Launcher_0020(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
 
         self._app_package = 'com.ohos.sceneboard'
-        self._app_name = '桌面' 
+        self._app_name = '桌面'
 
         self.source_screen_width = 1260
         self.source_screen_height = 2720
@@ -40,9 +39,6 @@ class ResourceUsage_PerformanceDynamic_Launcher_0020(PerfTestCase):
         主测试流程：启动桌面应用并执行滑动性能场景。
         """
 
-        #self.start_app() 
-        #self.driver.wait(3) # 等待应用稳定
-
         def desktop_swipe_action():
             # 1. 屏幕左滑 3 次
             self.swipes_left(3, 2, 300)
@@ -50,9 +46,8 @@ class ResourceUsage_PerformanceDynamic_Launcher_0020(PerfTestCase):
             # 右滑3次，停留2s
             self.swipes_right(3, 2, 300)
 
-
         self.execute_performance_step(
             "桌面-滑动场景",
             30,  # 性能数据采集将持续 30 秒
-            desktop_swipe_action # 实际执行滑动操作的函数
+            desktop_swipe_action  # 实际执行滑动操作的函数
         )
