@@ -23,9 +23,15 @@ from .frame_cache_manager import FrameCacheManager
 
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
     """解析数据库文件，按vsync值分组数据
-    
+
     结果按vsync值（key）从小到大排序
-    只保留flag=0和flag=0, 1, 3的帧（实际渲染的帧）
+    只保留flag=0、1、3的帧（实际渲染的帧），排除flag=2的空帧
+
+    帧标志 (flag) 定义：
+    - flag = 0: 实际渲染帧不卡帧（正常帧）
+    - flag = 1: 实际渲染帧卡帧（expectEndTime < actualEndTime为异常）
+    - flag = 2: 数据不需要绘制（空帧，不参与卡顿分析）
+    - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
 
     Args:
         db_path: 数据库文件路径
@@ -252,4 +258,4 @@ def extract_frame_statistics(db_path: str) -> Dict[str, Any]:
 
     except Exception as e:
         logging.error("提取帧统计信息失败: %s", str(e))
-        return {} 
+        return {}

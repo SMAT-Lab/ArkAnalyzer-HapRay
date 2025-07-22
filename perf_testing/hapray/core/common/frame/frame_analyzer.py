@@ -13,10 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import codecs
-import logging
 import os
-import sys
 from typing import Dict, Any, List, Optional
 
 import pandas as pd
@@ -40,11 +37,18 @@ class FrameAnalyzer:
     1. 将htrace文件转换为db文件
     2. 分析卡顿帧数据
     3. 生成分析报告
-    
+
+    帧标志 (flag) 定义：
+    - flag = 0: 实际渲染帧不卡帧（正常帧）
+    - flag = 1: 实际渲染帧卡帧（expectEndTime < actualEndTime为异常）
+    - flag = 2: 数据不需要绘制（空帧，不参与卡顿分析）
+    - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
+
     注意：本类现在委托给新的模块化实现
     """
 
     # 类变量用于存储缓存 - 委托给FrameCacheManager
+    # 这些是类变量，可以直接访问
     _callchain_cache = FrameCacheManager._callchain_cache
     _files_cache = FrameCacheManager._files_cache
     _pid_cache = FrameCacheManager._pid_cache
@@ -54,10 +58,10 @@ class FrameAnalyzer:
     # 调试开关配置
     _debug_vsync_enabled = False  # VSync调试开关，True时正常判断，False时永远不触发VSync条件
 
-    # 常量定义
+    # 卡顿分级阈值常量
     FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
-    STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧
-    STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧
+    STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧（33.34ms）
+    STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧（100ms）
     NS_TO_MS = 1_000_000
     WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
 
@@ -187,7 +191,12 @@ class FrameAnalyzer:
             list: callchain分析结果
         """
         core = FrameAnalyzer._get_core_analyzer()
-        return core.load_calculator.analyze_perf_callchain(perf_conn, callchain_id, callchain_cache, files_cache, step_id)
+        return core.load_calculator.analyze_perf_callchain(
+            perf_conn,
+            callchain_id,
+            callchain_cache,
+            files_cache,
+            step_id)
 
     @staticmethod
     def analyze_single_frame(frame, perf_df, perf_conn, step_id):
@@ -263,8 +272,7 @@ class FrameAnalyzer:
         Returns:
             Dict[int, List[Dict[str, Any]]]: 解析结果
         """
-        from .frame_data_parser import parse_frame_slice_db as _parse_frame_slice_db
-        return _parse_frame_slice_db(db_path)
+        return parse_frame_slice_db(db_path)
 
     @staticmethod
     def get_frame_type(frame: dict, cursor, step_id: str = None) -> str:
@@ -278,34 +286,4 @@ class FrameAnalyzer:
         Returns:
             str: 帧类型
         """
-        from .frame_data_parser import get_frame_type as _get_frame_type
-        return _get_frame_type(frame, cursor, step_id)
-
-
-# 兼容性函数 - 直接委托给新的模块化实现
-def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
-    """解析frame_slice数据库 - 兼容性函数
-
-    Args:
-        db_path: 数据库路径
-
-    Returns:
-        Dict[int, List[Dict[str, Any]]]: 解析结果
-    """
-    from .frame_data_parser import parse_frame_slice_db as _parse_frame_slice_db
-    return _parse_frame_slice_db(db_path)
-
-
-def get_frame_type(frame: dict, cursor, step_id: str = None) -> str:
-    """获取帧类型 - 兼容性函数
-
-    Args:
-        frame: 帧数据
-        cursor: 数据库游标
-        step_id: 步骤ID
-
-    Returns:
-        str: 帧类型
-    """
-    from .frame_data_parser import get_frame_type as _get_frame_type
-    return _get_frame_type(frame, cursor, step_id)
+        return get_frame_type(frame, cursor, step_id)

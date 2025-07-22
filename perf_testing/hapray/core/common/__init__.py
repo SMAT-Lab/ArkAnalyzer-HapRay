@@ -6,33 +6,33 @@ from .frame import (
     FrameAnalyzerCore,
     FrameCacheManager,
     FrameLoadCalculator,
-    
+
     # 专门分析器
     EmptyFrameAnalyzer,
     StutteredFrameAnalyzer,
-    
+
     # 数据解析函数
     parse_frame_slice_db,
     get_frame_type,
     validate_database_compatibility,
     get_database_metadata,
     extract_frame_statistics,
-    
+
     # 兼容性包装器
     FrameAnalyzer,
 )
 
 # 工具模块
-from .common_utils import *
-from .coordinate_adapter import *
-from .exe_utils import *
-from .folder_utils import *
-from .excel_utils import *
+from .common_utils import CommonUtils
+from .coordinate_adapter import CoordinateAdapter
+from .exe_utils import ExeUtils
+from .folder_utils import scan_folders, delete_folder, read_json_arrays_from_dir
+from .excel_utils import ExcelReportSaver
 
 __all__ = [
     # Frame Analyzer 组件
     'FrameAnalyzerCore',
-    'FrameCacheManager', 
+    'FrameCacheManager',
     'FrameLoadCalculator',
     'EmptyFrameAnalyzer',
     'StutteredFrameAnalyzer',
@@ -42,4 +42,12 @@ __all__ = [
     'get_database_metadata',
     'extract_frame_statistics',
     'FrameAnalyzer',
+    # 工具模块
+    'CommonUtils',
+    'CoordinateAdapter',
+    'ExeUtils',
+    'scan_folders',
+    'delete_folder',
+    'read_json_arrays_from_dir',
+    'ExcelReportSaver',
 ]

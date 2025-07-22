@@ -14,15 +14,16 @@ limitations under the License.
 """
 
 import logging
+from typing import Dict, List, Tuple, Any
+
 import pandas as pd
-from typing import Dict, List, Tuple, Optional, Any
 
 from .frame_cache_manager import FrameCacheManager
 
 
 class FrameLoadCalculator:
     """帧负载计算器
-    
+
     负责计算帧的负载和调用链分析，包括：
     1. 帧负载计算
     2. 调用链分析
@@ -33,7 +34,7 @@ class FrameLoadCalculator:
     def __init__(self, debug_vsync_enabled: bool = False):
         """
         初始化帧负载计算器
-        
+
         Args:
             debug_vsync_enabled: VSync调试开关，True时正常判断，False时永远不触发VSync条件
         """
@@ -70,14 +71,19 @@ class FrameLoadCalculator:
             cache_key = step_id if step_id else str(perf_conn)
 
             # 检查缓存是否为空
-            if cache_key not in FrameCacheManager._callchain_cache or FrameCacheManager._callchain_cache[cache_key].empty or \
-                    cache_key not in FrameCacheManager._files_cache or FrameCacheManager._files_cache[cache_key].empty:
+            if (cache_key not in FrameCacheManager._callchain_cache
+                    or FrameCacheManager._callchain_cache[cache_key].empty
+                    or cache_key not in FrameCacheManager._files_cache
+                    or FrameCacheManager._files_cache[cache_key].empty):
                 logging.warning("缓存数据为空，无法分析调用链")
                 return []
 
             # 从缓存中获取callchain数据
-            callchain_records = FrameCacheManager._callchain_cache[cache_key][
-                FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id]
+            callchain_records = (
+                FrameCacheManager._callchain_cache[cache_key][
+                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id
+                ]
+            )
 
             if callchain_records.empty:
                 logging.warning("未找到callchain_id=%s的记录", callchain_id)
@@ -87,9 +93,12 @@ class FrameLoadCalculator:
             callchain_info = []
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
-                file_info = FrameCacheManager._files_cache[cache_key][
-                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id']) & (
-                        FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])]
+                file_info = (
+                    FrameCacheManager._files_cache[cache_key][
+                        (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])
+                        & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])
+                    ]
+                )
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
 
@@ -109,7 +118,7 @@ class FrameLoadCalculator:
 
     def analyze_single_frame(self, frame, perf_df, perf_conn, step_id):
         """分析单个帧的负载和调用链，返回frame_load和sample_callchains
-        
+
         这是从原始FrameAnalyzer.analyze_single_frame方法迁移的代码
         """
         # 在函数内部获取缓存
@@ -117,21 +126,21 @@ class FrameLoadCalculator:
         files_cache = FrameCacheManager.get_files_cache(perf_conn, step_id)
         frame_load = 0
         sample_callchains = []
-        
+
         mask = (
             (perf_df['timestamp_trace'] >= frame['start_time'])
             & (perf_df['timestamp_trace'] <= frame['end_time'])
             & (perf_df['thread_id'] == frame['tid'])
         )
         frame_samples = perf_df[mask]
-        
+
         if frame_samples.empty:
             return frame_load, sample_callchains
-            
+
         for _, sample in frame_samples.iterrows():
             if not pd.notna(sample['callchain_id']):
                 continue
-                
+
             try:
                 callchain_info = self.analyze_perf_callchain(
                     perf_conn,
@@ -140,17 +149,17 @@ class FrameLoadCalculator:
                     files_cache,
                     step_id
                 )
-                
+
                 if callchain_info:
                     is_vsync_chain = False
                     for i in range(len(callchain_info) - 1):
                         current_symbol = callchain_info[i]['symbol']
                         next_symbol = callchain_info[i + 1]['symbol']
                         event_count = sample['event_count']
-                        
+
                         if not current_symbol or not next_symbol:
                             continue
-                            
+
                         if self.debug_vsync_enabled and (
                                 'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
                                 and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
@@ -158,7 +167,7 @@ class FrameLoadCalculator:
                         ):
                             is_vsync_chain = True
                             break
-                            
+
                     if not is_vsync_chain:
                         frame_load += sample['event_count']
                         try:
@@ -171,15 +180,15 @@ class FrameLoadCalculator:
                             })
                         except Exception as e:
                             logging.error(
-                                "处理样本时出错: %s, sample: %s, frame_load: %s", 
+                                "处理样本时出错: %s, sample: %s, frame_load: %s",
                                 str(e), sample.to_dict(), frame_load
                             )
                             continue
-                            
+
             except Exception as e:
                 logging.error("分析调用链时出错: %s", str(e))
                 continue
-                
+
         return frame_load, sample_callchains
 
     def calculate_frame_load(
@@ -319,8 +328,8 @@ class FrameLoadCalculator:
                 continue
 
             if ('OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
-                and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
-                and event_count < 2000000):
+                    and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
+                    and event_count < 2000000):
                 return True
 
         return False
@@ -356,4 +365,4 @@ class FrameLoadCalculator:
                 callchain_cache, files_cache, include_vsync_filter
             )
             results.append((load, callchains))
-        return results 
+        return results

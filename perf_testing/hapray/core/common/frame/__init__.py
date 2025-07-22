@@ -24,20 +24,17 @@ from .frame_analyzer import FrameAnalyzer
 __all__ = [
     # 核心组件
     'FrameAnalyzerCore',
-    'FrameCacheManager', 
+    'FrameCacheManager',
     'FrameLoadCalculator',
-    
     # 专门分析器
     'EmptyFrameAnalyzer',
     'StutteredFrameAnalyzer',
-    
     # 数据解析函数
     'parse_frame_slice_db',
     'get_frame_type',
     'validate_database_compatibility',
     'get_database_metadata',
     'extract_frame_statistics',
-    
     # 兼容性包装器
     'FrameAnalyzer',
-] 
+]
