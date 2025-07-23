@@ -464,6 +464,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def _transfer_perf_data(self, remote_path: str, local_path: str):
         """Transfer performance data from device to host"""
         if not self._verify_remote_files_exist(remote_path):
+            Log.error("Not found %s", remote_path)
             return
         self.driver.shell(f"hiperf report -i {remote_path} --json -o {remote_path}.json")
         self.driver.pull_file(remote_path, local_path)
@@ -503,9 +504,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def _collect_coverage_data(self, perf_step_dir: str):
         self.driver.shell('aa dump -c -l')
         self.driver.wait(1)
-        result = self.driver.shell(f'ls data/app/el2/100/base/{self.app_package}/haps/{self.module_name}/cache/bjc*')
+        file = f'data/app/el2/100/base/{self.app_package}/haps/{self.module_name}/cache/bjc*'
+        result = self.driver.shell(f'ls {file}')
         # not found bjc_cov file
-        if result.find('No such file or directory') != -1:
+        if result.find(file) != -1:
             return
 
         files = result.splitlines()

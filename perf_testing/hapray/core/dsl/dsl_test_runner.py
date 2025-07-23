@@ -150,8 +150,10 @@ class DSLTestRunner(PerfTestCase):
         self._app_name = self.config.app_name
 
     @staticmethod
-    def run_testcase(dsl_file: str, output: str):
-        main_process(f'run -l dsl_test_runner -tcpath {os.path.dirname(__file__)} -rp {output} -ta dsl:{dsl_file}')
+    def run_testcase(dsl_file: str, output: str, device_id: str):
+        device = f"-sn {device_id}" if device_id else ""
+        command = f'run -l dsl_test_runner {device} -tcpath {os.path.dirname(__file__)} -rp {output} -ta dsl:{dsl_file}'
+        main_process(command)
 
     @property
     def app_package(self) -> str:
