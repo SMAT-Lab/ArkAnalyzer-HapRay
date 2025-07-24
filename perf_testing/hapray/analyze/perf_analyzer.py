@@ -99,8 +99,8 @@ class PerfAnalyzer(BaseAnalyzer):
             html_str = html_file.read()
         with open(report_file, 'w', encoding='utf-8') as report_html_file:
             report_html_file.write(html_str + base64_all_json_str + '</script>'
-                                                         ' </body>'
-                                                         ' </html>')
+                                                                    ' </body>'
+                                                                    ' </html>')
 
     @staticmethod
     def filter_and_move_symbols(data, filter_rules):
