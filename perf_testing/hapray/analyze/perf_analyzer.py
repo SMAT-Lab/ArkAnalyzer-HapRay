@@ -36,8 +36,11 @@ class PerfAnalyzer(BaseAnalyzer):
                       perf_db_path: str,
                       app_pids: list) -> Optional[Dict[str, Any]]:
         """Run performance analysis"""
+        self.generate_hiperf_report(perf_db_path)
+        # Execute only in step1
+        if step_dir != 'step1':
+            return None
         args = ['dbtools', '-i', self.scene_dir]
-
         so_dir = Config.get('so_dir', None)
         if so_dir:
             args.extend(['-s', os.path.abspath(so_dir)])
@@ -48,7 +51,6 @@ class PerfAnalyzer(BaseAnalyzer):
 
         logging.debug("Running perf analysis with command: %s", ' '.join(args))
         ExeUtils.execute_hapray_cmd(args)
-        self.generate_hiperf_report(perf_db_path)
         return {}
 
     @staticmethod
