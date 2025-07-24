@@ -12,11 +12,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
+import base64
 import json
 import logging
 import os
 import re
+import zlib
 from typing import Dict, Any, Optional
 
 from hapray.analyze import BaseAnalyzer
@@ -91,12 +92,15 @@ class PerfAnalyzer(BaseAnalyzer):
             return
 
         all_json = PerfAnalyzer.apply_symbol_split_rules(perf_json_file)
+        compressed_bytes = zlib.compress(all_json.encode('utf-8'), level=9)
+        base64_bytes = base64.b64encode(compressed_bytes)
+        base64_all_json_str = base64_bytes.decode('ascii')
         with open(template_file, 'r', encoding='utf-8') as html_file:
             html_str = html_file.read()
         with open(report_file, 'w', encoding='utf-8') as report_html_file:
-            report_html_file.write(html_str + all_json + '</script>'
-                                                         ' </body>'
-                                                         ' </html>')
+            report_html_file.write(html_str + base64_all_json_str + '</script>'
+                                                                    ' </body>'
+                                                                    ' </html>')
 
     @staticmethod
     def filter_and_move_symbols(data, filter_rules):
