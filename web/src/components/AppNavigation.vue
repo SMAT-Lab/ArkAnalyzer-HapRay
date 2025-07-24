@@ -18,13 +18,17 @@
         <el-icon><TrendCharts /></el-icon>
         <span>多版本趋势</span>
       </el-menu-item>
+      <el-menu-item index="perf_flame">
+        <el-icon><Histogram /></el-icon>
+        <span>火焰图</span>
+      </el-menu-item>
     </el-menu>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, watch } from 'vue';
-import { DataAnalysis, Switch, TrendCharts } from '@element-plus/icons-vue';
+import { DataAnalysis, Switch, TrendCharts, Histogram } from '@element-plus/icons-vue';
 
 const props = defineProps<{
   currentPage: string;

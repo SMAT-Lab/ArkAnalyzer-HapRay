@@ -10,6 +10,7 @@
             <PerfCompare v-if="showPage === 'perf_compare'" />
             <PerfSingle v-else-if="showPage === 'perf'" />
             <PerfMulti v-else-if="showPage === 'perf_multi'" />
+            <FlameGraph v-else-if="showPage === 'perf_flame'" />
           </keep-alive>
           <ComponentsDeps v-if="showPage === 'deps'" />
         </el-main>
@@ -18,44 +19,20 @@
   </div>
 </template>
 
-<script lang="ts" setup>
-//import { Document, Menu as IconMenu, Location, Setting } from '@element-plus/icons-vue';
-import { onMounted, ref } from 'vue';
-//import type Node from 'element-plus/es/components/tree/src/model/node';
-//import type { TreeNodeData } from 'element-plus/es/components/tree/src/tree.type';
-
+<script setup lang="ts">
+import { ref } from 'vue';
+import AppNavigation from '@/components/AppNavigation.vue';
 import PerfCompare from '@/components/PerfCompare.vue';
-import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
-import AppNavigation from '@/components/AppNavigation.vue';
+import FlameGraph from '@/components/FlameGraph.vue';
+import ComponentsDeps from '@/components/ComponentsDeps.vue';
 
-//import { getCurrentInstance } from 'vue';
-//import { ElMessage } from 'element-plus';
+const showPage = ref('perf');
 
-const showPage = ref('');
-
-
-async function changeContent(page: string) {
-  showPage.value = '';
-  setTimeout(() => {
-    showPage.value = page;
-  }, 300); // 这里设置一个延迟，
-
-  console.log(`切换到按钮${page}的内容`);
-}
-
-// const { proxy } = getCurrentInstance() as any;
-
-// function handleLanguageChange(newLanguage: string) {
-//   console.log('old language is:', proxy.$i18n.locale);
-//   proxy.$i18n.locale = newLanguage;
-// }
-
-onMounted(() => {
-  changeContent(window.initialPage?.toLowerCase())
-  // changeContent('perf')
-});
+const changeContent = (page: string) => {
+  showPage.value = page;
+};
 </script>
 
 <style scoped>
