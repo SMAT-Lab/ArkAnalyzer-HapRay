@@ -11,6 +11,7 @@ For more detailed information, please refer to the following documents:
 - [收益测试分析](docs/收益测试分析.md) - Performance Test Analysis
 - [用例执行预置条件](docs/用例执行预置条件.md) - Test Case Prerequisites
 - [鸿蒙应用覆盖率](docs/鸿蒙应用覆盖率.md) - ArkTs Coverage Analysis
+- [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md) - SO Optimization Detection
 
 ## Build
 ```
