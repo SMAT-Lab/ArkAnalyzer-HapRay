@@ -5312,9 +5312,9 @@ input{
         }
 
         function initGlobalObjects() {
-           let recordData = document.querySelector('#record_data').textContent;
-    
-			if (recordData.trim().length > 0) {
+            let recordData = document.querySelector('#record_data').textContent;
+            let recordType = document.querySelector('#record_data').type;
+			if (recordData.trim().length > 0 && recordType === 'application/gzip+json;base64') {
 				return new Promise((resolve, reject) => {
 					try {
 						// 1. Base64 解码
@@ -5331,6 +5331,17 @@ input{
 						
 						// 4. 解析 JSON
 						const jsonData = JSON.parse(decompressed);
+						resolve(jsonData);
+					} catch (error) {
+						console.error('数据处理失败:', error);
+						reject(error);
+					}
+				});
+            } else if (recordData.trim().length > 0 && recordType === 'application/json') {
+                return new Promise((resolve, reject) => {
+					try {
+						// 4. 解析 JSON
+						const jsonData = JSON.parse(recordData);
 						resolve(jsonData);
 					} catch (error) {
 						console.error('数据处理失败:', error);
@@ -5417,4 +5428,3 @@ input{
         </lit-tabpane>
     </lit-tabs>
 </div>
-<script id="record_data" type="application/json">

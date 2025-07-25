@@ -235,12 +235,17 @@ interface TraceData {
   gc_thread?: GcThreadData;
 }
 
+interface MoreData {
+  flame_graph: Record<string, string>;
+}
+
 export interface JSONData {
   type: number;
   versionCode: number;
   basicInfo: BasicInfo;
   perf: PerfData;
   trace?: TraceData;
+  more?: MoreData;
 }
 
 // ==================== 默认值生成函数 ====================
@@ -442,6 +447,7 @@ interface JsonDataState {
   gcThreadData: GcThreadData | null;
   baseMark: string | null;
   compareMark: string | null;
+  flameGraph: Record<string, string> | null;
 }
 
 /**
@@ -523,6 +529,7 @@ export const useJsonDataStore = defineStore('config', {
     gcThreadData: null,
     baseMark: null,
     compareMark: null,
+    flameGraph: null,
   }),
 
   actions: {
@@ -548,6 +555,11 @@ export const useJsonDataStore = defineStore('config', {
         this.coldStartData = getDefaultColdStartData();
         this.gcThreadData = getDefaultGcThreadData();
       }
+      if (jsonData.more) {
+        // 火焰图
+        this.flameGraph = jsonData.more.flame_graph;
+      }
+
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         window.initialPage = 'perf';
       } else {
