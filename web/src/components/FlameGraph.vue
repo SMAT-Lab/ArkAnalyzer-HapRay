@@ -18,16 +18,19 @@ v-for="(step, index) in testSteps" :key="index" :class="[
     </div>
     <div class="embed-container">
         <!-- 通过iframe嵌入静态HTML -->
-        <iframe :src="htmlPath" class="html-iframe" frameborder="0" scrolling="auto"></iframe>
+        <iframe :srcdoc="htmlContent" class="html-iframe" frameborder="0" scrolling="auto"></iframe>
     </div>
 </template>
 
 <script lang='ts' setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
+import flameTemplateHtml from '../../../third-party/report.html?raw';
 const jsonDataStore = useJsonDataStore();
 const perfData = jsonDataStore.perfData;
+const script_start = '<script id="record_data" type="application/json">';
+const script_end = atob('PC9zY3JpcHQ+PC9ib2R5PjwvaHRtbD4=');
 
 const testSteps = ref(
     perfData!.steps.map((step, index) => ({
@@ -45,7 +48,11 @@ const currentStepIndex = ref(0);
 // 处理步骤点击事件的方法
 const handleStepClick = (stepId: number) => {
     currentStepIndex.value = stepId;
-    htmlPath.value = '../hiperf/step'+stepId+'/hiperf_report.html'
+    if (jsonDataStore.flameGraph) {
+        htmlContent.value = flameTemplateHtml + script_start + jsonDataStore.flameGraph['step'+stepId] + script_end;
+    } else {
+        htmlContent.value = flameTemplateHtml + script_start + script_end;
+    }
 };
 
 
@@ -61,7 +68,11 @@ const formatDuration = (milliseconds: number) => {
 };
 
 // 静态HTML文件路径（放在public目录下）
-const htmlPath = ref('../hiperf/step1/hiperf_report.html');
+const htmlContent = ref(flameTemplateHtml + script_start + script_end);
+onMounted(() => {
+    handleStepClick(1)
+})
+
 </script>
 
 <style scoped>
