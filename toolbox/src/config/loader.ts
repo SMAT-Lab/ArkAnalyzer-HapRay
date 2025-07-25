@@ -126,6 +126,7 @@ const ConfigSchema = z.object({
     choose: z.boolean().default(false),
     checkTraceDb: z.boolean().default(false),
     compatibility: z.boolean().default(false),
+    ut: z.boolean().default(false),
 });
 
 function getExtToolsRoot(): string {
@@ -179,6 +180,7 @@ function loadResCfg(): Partial<GlobalConfig> {
         choose: false,
         checkTraceDb: false,
         compatibility: false,
+        ut: false
     };
     let perfKind = path.join(res, 'perf/kind.json');
     config.perf.kinds = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' })) as Array<ComponentConfig>;
