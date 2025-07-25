@@ -64,10 +64,12 @@ export type Steps = Array<Step>;
 export async function main(input: string): Promise<void> {
     const config = getConfig();
     const scene = path.basename(input);
-
+    if (config.ut === true) {
+        input = path.join(__dirname, '..', '..', '..', 'test', 'resources', 'ResourceUsage_PerformanceDynamic_jingdong_0010');
+    }
     logger.info(`输入目录: ${input}`);
 
-    if (config.choose) {
+    if (config.choose && !config.ut) {
         await handleChooseRound(input, scene, config);
     } else {
         await handleGeneratePerfReport(input, scene, config);
@@ -325,7 +327,7 @@ export async function generateSummaryInfoJson(
 export async function generatePerfJson(inputPath: string, testInfo: TestReportInfo, steps: Steps): Promise<void> {
     const outputDir = path.join(inputPath, 'report');
     const perfDataPaths = getPerfDataPaths(inputPath, steps);
-    const perfDbPaths = getPerfDbPaths(inputPath, steps);
+    const perfDbPaths = await getPerfDbPaths(inputPath, steps);
     const htracePaths = getHtracePaths(inputPath, steps);
 
     const perfAnalyzer = new PerfAnalyzer('');
@@ -379,18 +381,27 @@ export function getPerfDataPaths(inputPath: string, steps: Steps): Array<string>
 /**
  * 获取 perf.db 路径数组（根据兼容性配置选择格式）
  */
-export function getPerfDbPaths(inputPath: string, steps: Steps): Array<string> {
-    return steps.map((step) => {
+export async function getPerfDbPaths(inputPath: string, steps: Steps): Promise<Array<string>> {
+    const results: Array<string> = [];
+
+    for (const step of steps) {
         const stepDir = path.join(inputPath, 'hiperf', `step${step.stepIdx.toString()}`);
         // 格式：perf.db
         const oldFile = path.join(stepDir, 'perf.db');
+
         if (fs.existsSync(oldFile)) {
-            return oldFile;
+            results.push(oldFile);
+            continue;
         }
-        // 如果都找不到，返回默认路径
-        logger.warn(`未找到步骤 ${step.stepIdx} 的 perf.db 文件`);
-        return oldFile;
-    });
+
+        if (!fs.existsSync(oldFile)) {
+            await traceStreamerCmd(path.join(path.dirname(oldFile), 'perf.data'), oldFile);
+        }
+
+        results.push(oldFile);
+    }
+
+    return results;
 }
 
 /**
@@ -450,7 +461,7 @@ export function loadCompatibilityTestReportInfo(reportRoot: string, scene: strin
                         .replace(/^\[+/, '')
                         .replace(/]+$/, '')
                         .replace(/\\"/g, '"')
-                ) as {version: string; sn: string} ;
+                ) as { version: string; sn: string };
 
                 const starttime = new Date(starttimeStr);
                 info.rom_version = devices.version;
@@ -466,7 +477,7 @@ export function loadCompatibilityTestReportInfo(reportRoot: string, scene: strin
     let deviceInfoFile = path.join(reportRoot, 'env/device_info.json');
     try {
         if (fs.existsSync(deviceInfoFile)) {
-            let deviceInfo = JSON.parse(fs.readFileSync(deviceInfoFile, 'utf-8')) as {PackageName: string, App_Version: string};
+            let deviceInfo = JSON.parse(fs.readFileSync(deviceInfoFile, 'utf-8')) as { PackageName: string, App_Version: string };
             info.app_id = deviceInfo.PackageName;
             info.app_version = deviceInfo.App_Version;
         }

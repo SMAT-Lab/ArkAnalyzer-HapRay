@@ -15,6 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import type { Component, ComponentCategoryType } from '../component';
 import { ComponentCategory, OriginKind } from '../component';
 import { AnalyzerProjectBase, PROJECT_ROOT } from '../project';
@@ -23,6 +24,9 @@ import writeXlsxFile from 'write-excel-file/node';
 import { PerfDatabase } from './perf_database';
 import { saveJsonArray } from '../../utils/json_utils';
 import type { SheetData } from 'write-excel-file';
+import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+
+const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 export const UNKNOWN_STR = 'unknown';
 
@@ -661,7 +665,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         )}:${padStart(date.getMinutes())}:${padStart(date.getSeconds())}`;
     }
 
-    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void> {
+    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void|boolean> {
         let harMap = new Map<string, { name: string; count: number }>();
         let stepMap = new Map<number, StepJsonData>();
 
@@ -709,10 +713,42 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             steps: Array.from(stepMap.values()),
             har: Array.from(harMap.values()),
         };
-        await saveJsonArray([jsonObject], outputFileName);
+        if (getConfig().ut) {
+            const jsonString = JSON.stringify([jsonObject], null, 2);
+            return this.isRight(jsonString,outputFileName);
+        } else {
+            await saveJsonArray([jsonObject], outputFileName);
+        }
+
     }
 
     private getStepByGroupId(testInfo: TestSceneInfo, groupId: number): TestStepGroup {
         return testInfo.rounds[testInfo.chooseRound].steps.filter((step) => step.groupId === groupId)[0];
+    }
+
+    private isRight(jsonString: string, outputFileName: string): boolean {
+        // 将jsonObject转换成字符串并计算hash值
+
+        const currentHash = createHash('sha256').update(jsonString).digest('hex');
+
+        // 读取目标文件的内容并计算hash值
+        const targetFilePath = outputFileName;
+
+        try {
+            if (fs.existsSync(targetFilePath)) {
+                const targetFileContent = fs.readFileSync(targetFilePath, 'utf-8');
+                const targetHash = createHash('sha256').update(targetFileContent).digest('hex');
+
+                logger.log(`Current jsonObject hash: ${currentHash}`);
+                logger.log(`expect file hash: ${targetHash}`);
+                logger.log(`Hash values are equal: ${currentHash === targetHash}`);
+                return currentHash === targetHash;
+            } else {
+                logger.log(`expect file not found: ${targetFilePath}`);
+            }
+        } catch (error) {
+            logger.error(`Error reading expect file: ${error}`);
+        }
+        return false;
     }
 }
