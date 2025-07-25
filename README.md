@@ -23,10 +23,15 @@ npm run build
 npm run release
 ```
 
+## Lint
+```
+npm run lint
+```
+
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides three main commands: `perf` for performance testing, `opt` for optimization detection, and `update` for updating existing reports.
+The tool provides four main commands: `perf` for performance testing, `opt` for optimization detection, `update` for updating existing reports, and `compare` for report comparison.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -38,6 +43,7 @@ Options:
 - `--circles`: Sample CPU cycles instead of default events
 - `--round <N>`: Number of test rounds to execute (default: 5)
 - `--no-trace`: Disable trace capturing
+- `--devices <device_serial_numbers...>`: Device serial numbers (e.g., HX1234567890)
 
 Requirements:
 - hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
@@ -68,6 +74,7 @@ python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
 # Analyze binaries and analye invoked symbols
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
 ```
+For more detailed information about Optimization Detection, please refer to [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md)
 
 #### Update Reports (`update`)
 ```bash
@@ -76,11 +83,11 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
-- `--mode <int>`: select mode 0 COMMUNITY 1 COMPATIBILITY 2 SIMPLE
-- `--perf <path>`: SIMPLE mode need perf path
-- `--trace <path>`: SIMPLE mode need trace path
-- `--package-name <package_name>`: SIMPLE mode need package_name
-- `--pids <N+>`: SIMPLE mode optional pids
+- `--mode <int>`: Select mode: 0 COMMUNITY, 1 COMPATIBILITY, 2 SIMPLE
+- `--perf <path>`: Perf data path (required for SIMPLE mode)
+- `--trace <path>`: Trace file path (required for SIMPLE mode)
+- `--package-name <package_name>`: Application package name (required for SIMPLE mode)
+- `--pids <N+>`: Process IDs (optional for SIMPLE mode)
 
 Example:
 ```bash
@@ -182,8 +189,6 @@ npm run build
 source activate.sh
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
-# Run pylint
-tox -e lint
 ```
 
 ### Windows Installation
@@ -197,8 +202,6 @@ npm run build
 activate.bat
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
-# Run pylint
-tox -e lint
 ```
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
@@ -249,12 +252,17 @@ kind:
   Use case 1 is passed through the command line, and use case 2 is configured in the configuration file. Eventually, both use cases will be executed.
 ```
 
-## About Flame diagram
+## Starting HiSmartPerf Server
 
-### start HiSmartPerf server:
+To launch the HiSmartPerf web server, execute the appropriate binary for your operating system:
 
-#### third-party/HiSmartPerf_20250109/main.exe
-#### third-party/HiSmartPerf_20250109/main_darwin
-#### third-party/HiSmartPerf_20250109/main_linux
+| Operating System | Command                                       |
+|------------------|----------------------------------------------|
+| Windows          | `third-party/HiSmartPerf_20250109/main.exe`  |
+| macOS            | `third-party/HiSmartPerf_20250109/main_darwin`|
+| Linux            | `third-party/HiSmartPerf_20250109/main_linux`|
+
+After successful startup, access the analysis interface at:  
+`https://localhost:9000/application/`
 
 
