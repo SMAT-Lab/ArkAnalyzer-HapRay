@@ -1,0 +1,15 @@
+{
+    "app_id": "com.jd.hm.mall",
+    "app_name": "京东",
+    "app_version": "15.1.90",
+    "scene": "ResourceUsage_PerformanceDynamic_jingdong_0010",
+    "device": {
+        "sn": "4UR9K25113000554",
+        "model": "TLR-AL00",
+        "type": "phone",
+        "platform": "HarmonyOS NEXT",
+        "version": "TLR-AL00 5.0.1.125(SP3C00E9R2P1)",
+        "others": {}
+    },
+    "timestamp": 1753174003541
+}

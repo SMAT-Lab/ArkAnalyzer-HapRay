@@ -130,4 +130,5 @@ export interface GlobalConfig {
     choose: boolean;
     checkTraceDb: boolean;
     compatibility: boolean;
+    ut: boolean;
 }

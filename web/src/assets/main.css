@@ -1,12 +1,17 @@
 @import './base.css';
 
 #app {
-  /* max-width: 1280px; */
   margin: 0 auto;
-  /* padding: 2rem; */
   font-weight: normal;
   width: 100vw;
   height: 100vh;
+  overflow: hidden; /* 隐藏app级别的滚动条 */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* 隐藏body级别的滚动条 */
 }
 
 a,
@@ -29,9 +34,4 @@ a,
     place-items: center;
   }
 
-  #app {
-    /* display: grid; */
-    /* grid-template-columns: 1fr 1fr; */
-    /* padding: 0 2rem; */
-  }
 }

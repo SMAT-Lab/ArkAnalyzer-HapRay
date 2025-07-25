@@ -1,0 +1,5 @@
+<testsuites name="ResourceUsage_PerformanceDynamic_jingdong_0010" tests="1" failures="0" disabled="" errors="" starttime="2025-07-22 16:48:22" endtime="2025-07-22 16:49:46" report_version="1.0" repeat="1" round="1" test_type="DeviceTest" devices="[{'sn': '4UR9K25113000554', 'model': 'TLR-AL00', 'type': 'phone', 'platform': 'HarmonyOS NEXT', 'version': 'TLR-AL00 5.0.1.125(SP3C00E9R2P1)', 'others': {}}]">
+  <testsuite modulename="ResourceUsage_PerformanceDynamic_jingdong_0010" name="ResourceUsage_PerformanceDynamic_jingdong_0010" tests="1" failures="0" disabled="0" time="80.49" result="true" result_kind="Passed" report="details\ResourceUsage_PerformanceDynamic_jingdong_0010.html">
+    <testcase name="ResourceUsage_PerformanceDynamic_jingdong_0010" status="run" classname="ResourceUsage_PerformanceDynamic_jingdong_0010" level="" result="true" result_kind="Passed" message="" report="details\ResourceUsage_PerformanceDynamic_jingdong_0010.html" />
+  </testsuite>
+</testsuites>
