@@ -72,7 +72,7 @@ class FaultTreeAnalyzer(BaseAnalyzer):
                 result['av_codec']['soft_decoder'] = self._collect_av_codec_soft_decoder(cursor)
 
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("FaultTreeAnalyzer _analyze_impl Database error: %s", str(e))
 
         return result
 
@@ -102,7 +102,7 @@ class FaultTreeAnalyzer(BaseAnalyzer):
             rows = cursor.fetchall()
             return rows[0][0]
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("FaultTreeAnalyzer invoke Database error: %s", str(e))
         return 0
 
     @staticmethod
@@ -171,9 +171,10 @@ class FaultTreeAnalyzer(BaseAnalyzer):
                            ipid in (
                                SELECT ipid FROM process  where name like 'av_codec_servic%'
                            )
+                   )
         """)
             rows = cursor.fetchall()
             return rows[0][0] > 0
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("FaultTreeAnalyzer av_codec Database error: %s", str(e))
         return False

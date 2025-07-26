@@ -24,7 +24,7 @@ from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.exe_utils import ExeUtils
 
 # Configuration constants
-MAX_WORKERS = 4  # Optimal for I/O-bound tasks
+MAX_WORKERS = 8  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
     'PerfAnalyzer',
