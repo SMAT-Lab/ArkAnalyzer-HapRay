@@ -116,6 +116,7 @@ class DeviceBoundTestRunner:
             )
 
         for attempt in range(5):
+            self._wait_for_completion()
             if scan_folders(output_dir):
                 break
 
@@ -127,6 +128,13 @@ class DeviceBoundTestRunner:
                     DSLTestRunner.run_testcase(f'{case_dir}/{case_name}{file_extension}',
                                                output_dir, device_id=device_sn)
         return output_dir
+
+    def _wait_for_completion(self):
+        for _ in range(5):
+            if os.path.exists(os.path.join(self.reports_path, 'testInfo.json')):
+                break
+            else:
+                time.sleep(5)
 
 
 class ParallelReportGenerator:
