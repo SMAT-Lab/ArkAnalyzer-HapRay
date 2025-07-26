@@ -84,7 +84,7 @@ class GCAnalyzer(BaseAnalyzer):
                 return gc_perf * 1.0 / total_perf
 
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("GCAnalyzer _calc_gc_perf Database error: %s", str(e))
         return 0.0
 
     def _calc_gc_invoke_times(self, trace_db_path: str, app_pids: list) -> dict:
@@ -128,7 +128,7 @@ class GCAnalyzer(BaseAnalyzer):
                     result["GCStatus"] = "OK"
 
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("GCAnalyzer _calc_gc_invoke_times Database error: %s", str(e))
 
         return result
 

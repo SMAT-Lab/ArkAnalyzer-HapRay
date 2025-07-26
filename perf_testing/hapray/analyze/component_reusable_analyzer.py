@@ -98,7 +98,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                         2
                     )
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("ComponentReusableAnalyzer Database error: %s", str(e))
             return {"error": f"Database operation failed: {str(e)}"}
 
         return metrics
