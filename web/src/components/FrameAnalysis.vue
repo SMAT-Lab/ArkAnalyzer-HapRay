@@ -500,7 +500,7 @@ const props = defineProps({
     }
 });
 
-// 性能数据
+// 帧数据
 const performanceData = computed(() => {
     const key = props.step === 0 || props.data['step' + 2] == undefined ? 'step1' : 'step' + props.step;
     return props.data[key] ?? getDefaultFrameStepData();
@@ -842,7 +842,7 @@ const initCharts = () => {
                     color: '#1e293b'
                 },
                 formatter: function (params) {
-                    let html = `<div style="font-weight:bold;margin-bottom:8px;color:#3b82f6;">性能数据详情</div>`;
+                    let html = `<div style="font-weight:bold;margin-bottom:8px;color:#3b82f6;">帧数据详情</div>`;
                     const timeParam = params[0];
                     const relativeTime = Math.max(0, timeParam.value[0] - minTimestamp.value);
                     html += `<div>相对时间: <span style="color:#3b82f6;font-weight:500">${relativeTime.toFixed(2)} ms</span></div>`;
