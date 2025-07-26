@@ -50,7 +50,34 @@ const updateChart = () => {
         crossStyle: {
           color: '#999',
         },
+        label: {
+          formatter: function(params: { axisDimension: string; value: number }) {
+            // 显示完整的版本信息
+            if (params.axisDimension === 'x') {
+              const fullName = props.chartData.xAxis[params.value];
+              return fullName;
+            }
+            return params.value;
+          }
+        }
       },
+      formatter: function(params: { dataIndex: number; color: string; seriesName: string; value: number }[] | { dataIndex: number; color: string; seriesName: string; value: number }) {
+        if (!Array.isArray(params)) params = [params];
+        const dataIndex = params[0].dataIndex;
+        const fullVersionName = props.chartData.xAxis[dataIndex];
+        let html = `<div style="font-weight: bold; margin-bottom: 8px; color: #333;">
+          版本: ${fullVersionName}
+        </div>`;
+
+        params.forEach((param) => {
+          html += `<div style="margin: 4px 0;">
+            <span style="display: inline-block; width: 10px; height: 10px; background: ${param.color}; margin-right: 8px; border-radius: 50%;"></span>
+            ${param.seriesName}: <strong>${param.value.toLocaleString()}</strong>
+          </div>`;
+        });
+
+        return html;
+      }
     },
     legend: {
       type: 'scroll',
@@ -62,8 +89,31 @@ const updateChart = () => {
       type: 'category',
       data: props.chartData.xAxis,
       axisLabel: {
-        rotate: 45,
-        interval: 0
+        interval: 0, // 强制显示所有标签
+        fontSize: 9, // 进一步减小字体
+        margin: 8,
+        color: '#666',
+        fontWeight: 'normal',
+        formatter: function(_value: string, index: number) {
+          // 只显示版本编号，如 v1, v2
+          return `v${index + 1}`;
+        },
+        rich: {
+          // 定义富文本样式
+          normal: {
+            fontSize: 9,
+            color: '#666'
+          }
+        }
+      },
+      axisTick: {
+        alignWithLabel: true,
+        length: 4
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#e0e0e0'
+        }
       }
     },
     yAxis: {
