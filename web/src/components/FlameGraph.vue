@@ -1,7 +1,7 @@
 <template>
   <div class="flame-graph-container">
     <!-- 当前步骤信息卡片 -->
-    <div v-if="currentStepInfo" class="step-info-card">
+    <!-- <div v-if="currentStepInfo" class="step-info-card">
       <div class="step-header">
         <div class="step-badge">STEP {{ currentStepIndex }}</div>
         <div class="step-details">
@@ -15,10 +15,10 @@
               <span class="metric-label">功耗估算：</span>
               <span class="metric-value">{{ formatEnergy(currentStepInfo.count) }}</span>
             </div>
-            <!-- <div class="metric-item">
+            <div class="metric-item">
               <span class="metric-label">轮次：</span>
               <span class="metric-value">{{ currentStepInfo.round }}</span>
-            </div> -->
+            </div>
           </div>
         </div>
         <div class="step-actions">
@@ -28,7 +28,7 @@
           </el-button>
         </div>
       </div>
-    </div>
+    </div> -->
 
     <div class="embed-container">
         <!-- 通过iframe嵌入当前步骤对应的静态HTML -->
@@ -39,10 +39,10 @@
 
 <script lang='ts' setup>
 import { ref, computed, watch, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
-import { Download } from '@element-plus/icons-vue';
+//import { ElMessage } from 'element-plus';
+//import { Download } from '@element-plus/icons-vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
-import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
+//import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 import flameTemplateHtml from '../../../third-party/report.html?raw';
 
 // 定义props
@@ -90,15 +90,15 @@ watch(() => props.step, (newStep) => {
 }, { immediate: true });
 
 // 格式化功耗信息
-const formatEnergy = (milliseconds: number) => {
-    const energy = calculateEnergyConsumption(milliseconds);
-    return `核算功耗（mAs）：${energy}`;
-};
+// const formatEnergy = (milliseconds: number) => {
+//     const energy = calculateEnergyConsumption(milliseconds);
+//     return `核算功耗（mAs）：${energy}`;
+// };
 
 // 格式化持续时间的方法
-const formatDuration = (milliseconds: number) => {
-    return `指令数：${milliseconds}`;
-};
+// const formatDuration = (milliseconds: number) => {
+//     return `指令数：${milliseconds}`;
+// };
 
 // 根据当前步骤生成HTML内容
 const htmlContent = computed(() => {
@@ -111,49 +111,49 @@ const htmlContent = computed(() => {
 });
 
 // 导出状态
-const isExporting = ref(false);
+//const isExporting = ref(false);
 
 // 导出火焰图为HTML文件
-const exportFlameGraph = async () => {
-  if (!currentStepInfo.value) {
-    ElMessage.error('当前步骤信息不可用');
-    return;
-  }
+// const exportFlameGraph = async () => {
+//   if (!currentStepInfo.value) {
+//     ElMessage.error('当前步骤信息不可用');
+//     return;
+//   }
 
-  isExporting.value = true;
+//   isExporting.value = true;
 
-  try {
-    // 获取当前步骤的火焰图HTML内容
-    const flameGraphHtml = htmlContent.value;
+//   try {
+//     // 获取当前步骤的火焰图HTML内容
+//     const flameGraphHtml = htmlContent.value;
 
-    // 创建Blob对象
-    const blob = new Blob([flameGraphHtml], { type: 'text/html;charset=utf-8' });
+//     // 创建Blob对象
+//     const blob = new Blob([flameGraphHtml], { type: 'text/html;charset=utf-8' });
 
-    // 创建下载链接
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
+//     // 创建下载链接
+//     const url = URL.createObjectURL(blob);
+//     const link = document.createElement('a');
+//     link.href = url;
 
-    // 使用步骤名称作为文件名，去除特殊字符
-    const fileName = `${currentStepInfo.value.step_name.replace(/[^\w\u4e00-\u9fa5]/g, '_')}_火焰图.html`;
-    link.download = fileName;
+//     // 使用步骤名称作为文件名，去除特殊字符
+//     const fileName = `${currentStepInfo.value.step_name.replace(/[^\w\u4e00-\u9fa5]/g, '_')}_火焰图.html`;
+//     link.download = fileName;
 
-    // 触发下载
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+//     // 触发下载
+//     document.body.appendChild(link);
+//     link.click();
+//     document.body.removeChild(link);
 
-    // 清理URL对象
-    URL.revokeObjectURL(url);
+//     // 清理URL对象
+//     URL.revokeObjectURL(url);
 
-    ElMessage.success(`火焰图已导出为 ${fileName}`);
-  } catch (error) {
-    console.error('导出火焰图失败:', error);
-    ElMessage.error('导出火焰图失败，请重试');
-  } finally {
-    isExporting.value = false;
-  }
-};
+//     ElMessage.success(`火焰图已导出为 ${fileName}`);
+//   } catch (error) {
+//     console.error('导出火焰图失败:', error);
+//     ElMessage.error('导出火焰图失败，请重试');
+//   } finally {
+//     isExporting.value = false;
+//   }
+// };
 
 onMounted(() => {
     console.log(`初始化步骤 ${currentStepIndex.value} 的火焰图`);

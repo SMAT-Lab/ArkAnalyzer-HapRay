@@ -1,7 +1,7 @@
 <template>
   <div class="step-load-container">
     <!-- 步骤信息卡片 -->
-    <div class="step-info-card">
+    <!-- <div class="step-info-card">
       <div class="step-header">
         <div class="step-badge">STEP {{ stepId }}</div>
         <div class="step-details">
@@ -15,24 +15,24 @@
               <span class="metric-label">功耗估算：</span>
               <span class="metric-value">{{ formatEnergy(stepInfo?.count || 0) }}</span>
             </div>
-            <!-- <div class="metric-item">
+            <div class="metric-item">
               <span class="metric-label">轮次：</span>
               <span class="metric-value">{{ stepInfo?.round || 0 }}</span>
-            </div> -->
+            </div>
           </div>
         </div>
         <div class="step-actions">
-          <!-- <el-button type="primary" @click="downloadPerfData">
+          <el-button type="primary" @click="downloadPerfData">
             <el-icon><Download /></el-icon>
             下载perf
           </el-button>
           <el-button type="success" @click="downloadTraceData">
             <el-icon><Download /></el-icon>
             下载trace
-          </el-button> -->
+          </el-button>
         </div>
       </div>
-    </div>
+    </div> -->
 
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
@@ -222,9 +222,9 @@ const testSteps = ref(
 // }
 
 // 获取当前步骤信息
-const stepInfo = computed(() => {
-  return testSteps.value.find(step => step.id === props.stepId);
-});
+// const stepInfo = computed(() => {
+//   return testSteps.value.find(step => step.id === props.stepId);
+// });
 
 // 动态聚合数据
 const mergedThreadPerformanceData = computed(() =>
@@ -251,16 +251,16 @@ function sortByInstructions<T extends { instructions: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => b.instructions - a.instructions);
 }
 
-// 格式化数字
-const formatNumber = (num: number) => {
-  return num.toLocaleString();
-};
+// // 格式化数字
+// const formatNumber = (num: number) => {
+//   return num.toLocaleString();
+// };
 
-// 格式化功耗信息
-const formatEnergy = (milliseconds: number) => {
-  const energy = calculateEnergyConsumption(milliseconds);
-  return `${energy} mAs`;
-};
+// // 格式化功耗信息
+// const formatEnergy = (milliseconds: number) => {
+//   const energy = calculateEnergyConsumption(milliseconds);
+//   return `${energy} mAs`;
+// };
 
 const processPieDrilldownStack = ref<string[]>([]);
 const processPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);

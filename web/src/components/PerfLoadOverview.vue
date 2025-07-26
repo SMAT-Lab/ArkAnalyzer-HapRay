@@ -108,7 +108,11 @@
       <el-table :data="testSteps" style="width: 100%" stripe>
         <el-table-column prop="id" label="步骤编号" width="100" />
         <el-table-column prop="step_name" label="步骤名称" min-width="200" />
-        <el-table-column prop="count" label="指令数" width="150" :formatter="formatInstructions" />
+        <el-table-column label="指令数" width="150">
+          <template #default="scope">
+            {{ formatInstructions(scope.row.count) }}
+          </template>
+        </el-table-column>
         <el-table-column label="功耗估算" width="150">
           <template #default="scope">
             {{ formatEnergyValue(scope.row.count) }}

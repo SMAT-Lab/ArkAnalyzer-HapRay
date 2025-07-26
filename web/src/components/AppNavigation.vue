@@ -14,28 +14,22 @@
       </el-icon>
     </div>
 
-    <el-menu
-      :default-active="activePage"
-      mode="vertical"
-      class="nav-menu"
-      :unique-opened="true"
-      :collapse="isCollapsed"
-      @select="handleSelect"
-    >
+    <el-menu :default-active="activePage" mode="vertical" class="nav-menu" :unique-opened="true" :collapse="isCollapsed"
+      @select="handleSelect">
       <!-- 单版本分析子菜单 -->
       <el-sub-menu index="single-analysis">
         <template #title>
-          <el-icon><DataAnalysis /></el-icon>
+          <el-icon>
+            <DataAnalysis />
+          </el-icon>
           <span>单版本分析</span>
         </template>
 
-        <el-tooltip
-          effect="dark"
-          content="负载总览"
-          placement="right"
-          :disabled="!isCollapsed">
+        <el-tooltip effect="dark" content="负载总览" placement="right" :disabled="!isCollapsed">
           <el-menu-item index="perf_load_overview">
-            <el-icon><PieChart /></el-icon>
+            <el-icon>
+              <PieChart />
+            </el-icon>
             <span>负载总览</span>
           </el-menu-item>
         </el-tooltip>
@@ -43,33 +37,40 @@
         <!-- 步骤选择子菜单 -->
         <el-sub-menu index="step-selection">
           <template #title>
-            <el-icon><List /></el-icon>
+            <el-icon>
+              <List />
+            </el-icon>
             <span>步骤选择</span>
           </template>
 
           <!-- 动态生成步骤菜单 -->
-          <el-sub-menu
-            v-for="step in testSteps"
-            :key="step.id"
-            :index="`step_${step.id}`">
+          <el-sub-menu v-for="step in testSteps" :key="step.id" :index="`step_${step.id}`">
             <template #title>
-              <el-icon><Document /></el-icon>
+              <el-icon>
+                <Document />
+              </el-icon>
               <span :title="step.step_name">步骤{{ step.id }}</span>
             </template>
 
             <!-- 步骤下的分析类型子菜单 -->
             <el-menu-item :index="`perf_step_${step.id}`" :title="step.step_name">
-              <el-icon><Monitor /></el-icon>
+              <el-icon>
+                <Monitor />
+              </el-icon>
               <span>负载分析</span>
             </el-menu-item>
 
             <el-menu-item :index="`frame_step_${step.id}`" :title="step.step_name">
-              <el-icon><VideoPlay /></el-icon>
+              <el-icon>
+                <VideoPlay />
+              </el-icon>
               <span>帧分析</span>
             </el-menu-item>
 
             <el-menu-item :index="`flame_step_${step.id}`" :title="step.step_name">
-              <el-icon><Histogram /></el-icon>
+              <el-icon>
+                <Histogram />
+              </el-icon>
               <span>火焰图分析</span>
             </el-menu-item>
           </el-sub-menu>
@@ -77,28 +78,31 @@
       </el-sub-menu>
 
       <!-- 其他负载分析菜单项 -->
-      <el-tooltip
-        effect="dark"
-        content="版本对比"
-        placement="right"
-        :disabled="!isCollapsed">
+      <el-tooltip effect="dark" content="版本对比" placement="right" :disabled="!isCollapsed">
         <el-menu-item index="perf_compare">
-          <el-icon><Switch /></el-icon>
+          <el-icon>
+            <Switch />
+          </el-icon>
           <span>版本对比</span>
         </el-menu-item>
       </el-tooltip>
 
-      <el-tooltip
-        effect="dark"
-        content="多版本趋势"
-        placement="right"
-        :disabled="!isCollapsed">
+      <el-tooltip effect="dark" content="多版本趋势" placement="right" :disabled="!isCollapsed">
         <el-menu-item index="perf_multi">
-          <el-icon><TrendCharts /></el-icon>
+          <el-icon>
+            <TrendCharts />
+          </el-icon>
           <span>多版本趋势</span>
         </el-menu-item>
       </el-tooltip>
     </el-menu>
+
+    <!-- 版本号区域 -->
+    <div class="version-section" v-show="!isCollapsed">
+      <a href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay" target="_blank" class="version-link">
+        <span class="version-text">版本号：{{ version }}</span>
+      </a>
+    </div>
   </div>
 </template>
 
@@ -165,6 +169,10 @@ const testSteps = computed(() => {
   }));
 });
 
+// 从 jsonDataStore 读取版本号，提供响应式和默认值
+const version = computed(() => {
+  return 'v' + jsonDataStore.version || 'v1.0.0';
+});
 
 </script>
 
@@ -258,6 +266,7 @@ const testSteps = computed(() => {
   0% {
     transform: translateX(-100%) translateY(-100%) rotate(45deg);
   }
+
   100% {
     transform: translateX(100%) translateY(100%) rotate(45deg);
   }
@@ -326,10 +335,12 @@ const testSteps = computed(() => {
     transform: scale(1);
     opacity: 0.3;
   }
+
   50% {
     transform: scale(1.2);
     opacity: 0.1;
   }
+
   100% {
     transform: scale(1.4);
     opacity: 0;
@@ -360,6 +371,38 @@ const testSteps = computed(() => {
   border: none;
   background: white;
   padding: 24px 0;
+}
+
+/* 版本号区域样式 */
+.version-section {
+  padding: 16px 24px;
+  border-top: 1px solid #e4e7ed;
+  background: #f8f9fa;
+  text-align: center;
+}
+
+.version-link {
+  display: inline-block;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  border-radius: 6px;
+  padding: 8px 16px;
+}
+
+.version-link:hover {
+  background: rgba(102, 126, 234, 0.1);
+  transform: translateY(-1px);
+}
+
+.version-text {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.version-link:hover .version-text {
+  color: #667eea;
 }
 
 /* 重写Element Plus菜单样式 */
@@ -589,6 +632,11 @@ const testSteps = computed(() => {
 /* 折叠状态下的样式优化 */
 .collapsed .nav-menu {
   padding: 16px 0;
+}
+
+/* 折叠状态下隐藏版本号 */
+.collapsed .version-section {
+  display: none;
 }
 
 /* 折叠状态下的菜单项样式 */

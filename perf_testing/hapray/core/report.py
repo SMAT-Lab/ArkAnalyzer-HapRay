@@ -24,6 +24,7 @@ from typing import List, Dict, Any
 
 import pandas as pd
 
+from hapray import VERSION
 from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
@@ -42,6 +43,7 @@ class ReportData:
         self.scene_dir = scene_dir
         self.perf_data = []
         self.result = {**{
+            "version": VERSION,
             "type": DataType.BASE64_GZIP_JSON.value,
             "versionCode": 1,
             "basicInfo": {},
