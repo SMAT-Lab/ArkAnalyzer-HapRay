@@ -14,7 +14,8 @@
       </el-icon>
     </div>
 
-    <el-menu :default-active="activePage" mode="vertical" class="nav-menu" :unique-opened="true" :collapse="isCollapsed"
+    <el-menu 
+      :default-active="activePage" mode="vertical" class="nav-menu" :unique-opened="true" :collapse="isCollapsed"
       @select="handleSelect">
       <!-- 单版本分析子菜单 -->
       <el-sub-menu index="single-analysis">
@@ -98,9 +99,14 @@
     </el-menu>
 
     <!-- 版本号区域 -->
-    <div class="version-section" v-show="!isCollapsed">
-      <a href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay" target="_blank" class="version-link">
-        <span class="version-text">版本号：{{ version }}</span>
+    <div v-show="!isCollapsed" class="version-section">
+      <a
+        href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
+        target="_blank"
+        class="version-link"
+        :title="`https://gitcode.com/SMAT/ArkAnalyzer-HapRay - 版本号：${version}`">
+        <span class="version-text">https://gitcode.com/SMAT/ArkAnalyzer-HapRay</span>
+        <span class="version-text">{{ version }}</span>
       </a>
     </div>
   </div>
@@ -382,11 +388,13 @@ const version = computed(() => {
 }
 
 .version-link {
-  display: inline-block;
+  display: block;
   text-decoration: none;
   transition: all 0.3s ease;
   border-radius: 6px;
-  padding: 8px 16px;
+  padding: 8px 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .version-link:hover {
@@ -395,10 +403,15 @@ const version = computed(() => {
 }
 
 .version-text {
-  font-size: 12px;
+  font-size: 9px;
   color: #909399;
   font-weight: 500;
   transition: color 0.3s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  width: 100%;
 }
 
 .version-link:hover .version-text {

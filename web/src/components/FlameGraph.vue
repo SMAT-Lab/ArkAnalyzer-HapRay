@@ -51,20 +51,20 @@ const props = defineProps<{
 }>();
 
 const jsonDataStore = useJsonDataStore();
-const perfData = jsonDataStore.perfData;
+//const perfData = jsonDataStore.perfData;
 const script_start = '<script id="record_data" type="application/json">';
 const script_end = atob('PC9zY3JpcHQ+PC9ib2R5PjwvaHRtbD4=');
 
-const testSteps = ref(
-    perfData!.steps.map((step, index) => ({
-        //从1开始
-        id: index + 1,
-        step_name: step.step_name,
-        count: step.count,
-        round: step.round,
-        perf_data_path: step.perf_data_path,
-    }))
-);
+// const testSteps = ref(
+//     perfData!.steps.map((step, index) => ({
+//         //从1开始
+//         id: index + 1,
+//         step_name: step.step_name,
+//         count: step.count,
+//         round: step.round,
+//         perf_data_path: step.perf_data_path,
+//     }))
+// );
 
 // interface TestStep {
 //   id: number;
@@ -78,9 +78,9 @@ const testSteps = ref(
 const currentStepIndex = ref(props.step || 1);
 
 // 当前步骤信息
-const currentStepInfo = computed(() => {
-  return testSteps.value.find(step => step.id === currentStepIndex.value);
-});
+// const currentStepInfo = computed(() => {
+//   return testSteps.value.find(step => step.id === currentStepIndex.value);
+// });
 
 // 监听props.step变化
 watch(() => props.step, (newStep) => {

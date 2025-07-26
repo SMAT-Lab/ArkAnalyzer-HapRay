@@ -20,7 +20,7 @@
             </div>
 
             <!-- 当前步骤信息 -->
-            <div class="step-info" v-if="shouldShowSteps() && currentStepInfo">
+            <div v-if="shouldShowSteps() && currentStepInfo" class="step-info">
               <div class="step-badge">
                 <span class="step-label">
                   <span class="step-icon">📋</span>
@@ -310,8 +310,17 @@ const formatEnergy = (count: number) => {
   return `${energy} mAs`;
 };
 
+// 步骤数据类型定义
+interface TestStep {
+  id: number;
+  step_name: string;
+  count: number;
+  round: number;
+  perf_data_path: string;
+}
+
 // 计算步骤占比
-const getStepPercentage = (step: any) => {
+const getStepPercentage = (step: TestStep) => {
   const total = testSteps.value.reduce((sum, s) => sum + s.count, 0);
   return total > 0 ? ((step.count / total) * 100).toFixed(1) : '0.0';
 };
