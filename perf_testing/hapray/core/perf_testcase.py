@@ -208,11 +208,11 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             args=(cmd, duration)
         )
         collection_thread.start()
-
-        # Execute the test action while data collection runs
-        action(*args)
-
-        collection_thread.join()
+        try:
+            # Execute the test action while data collection runs
+            action(*args)
+        finally:
+            collection_thread.join()
 
         # dump view tree when end test step
         self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_end.json'))
