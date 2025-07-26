@@ -30,10 +30,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 import FrameAnalysis from './FrameAnalysis.vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
-import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
+//import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
 // 定义props
 const props = defineProps<{
@@ -42,20 +42,20 @@ const props = defineProps<{
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
-const perfData = jsonDataStore.perfData;
+//const perfData = jsonDataStore.perfData;
 const frameData = jsonDataStore.frameData;
 
 console.log('帧分析组件获取到的 JSON 数据:', props.step);
 
-const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
-    id: index + 1,
-    step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
-  }))
-);
+// const testSteps = ref(
+//   perfData!.steps.map((step, index) => ({
+//     id: index + 1,
+//     step_name: step.step_name,
+//     count: step.count,
+//     round: step.round,
+//     perf_data_path: step.perf_data_path,
+//   }))
+// );
 
 // interface TestStep {
 //   id: number;

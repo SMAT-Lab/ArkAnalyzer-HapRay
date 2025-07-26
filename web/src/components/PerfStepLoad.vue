@@ -189,7 +189,7 @@ import {
   type FileDataItem, 
   type SymbolDataItem 
 } from '@/utils/jsonUtil.ts';
-import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
+//import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
 const props = defineProps<{
   stepId: number;
@@ -203,15 +203,15 @@ const perfData = jsonDataStore.perfData;
 
 console.log('步骤负载组件获取到的 JSON 数据:', props.stepId);
 
-const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
-    id: index + 1,
-    step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
-  }))
-);
+// const testSteps = ref(
+//   perfData!.steps.map((step, index) => ({
+//     id: index + 1,
+//     step_name: step.step_name,
+//     count: step.count,
+//     round: step.round,
+//     perf_data_path: step.perf_data_path,
+//   }))
+// );
 
 // interface TestStep {
 //   id: number;
