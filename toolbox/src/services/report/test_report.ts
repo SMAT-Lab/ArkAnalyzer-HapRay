@@ -286,7 +286,7 @@ export async function copySelectedRoundData(sourceRound: string, destPath: strin
     ]);
 }
 
-// ---- 性能分析/报告生成 ----
+// ---- 负载分析/报告生成 ----
 /**
  * 生成 summary_info.json
  */
@@ -322,7 +322,7 @@ export async function generateSummaryInfoJson(
 }
 
 /**
- * 生成性能分析报告
+ * 生成负载分析报告
  */
 export async function generatePerfJson(inputPath: string, testInfo: TestReportInfo, steps: Steps): Promise<void> {
     const outputDir = path.join(inputPath, 'report');

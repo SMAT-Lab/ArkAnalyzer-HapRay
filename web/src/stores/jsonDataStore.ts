@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 
 // ==================== 类型定义 ====================
-/** 性能事件类型 */
+/** 负载事件类型 */
 export enum PerfEvent {
   CYCLES_EVENT = 0,
   INSTRUCTION_EVENT = 1,

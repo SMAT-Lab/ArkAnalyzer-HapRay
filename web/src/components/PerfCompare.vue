@@ -163,7 +163,7 @@ v-for="(step, index) in testSteps" :key="index" :class="[
           </div>
         </div>
 
-        <!-- 性能迭代区域 -->
+        <!-- 负载迭代区域 -->
         <el-row :gutter="20">
           <el-col :span="12">
             <!-- 基准步骤饼图 -->
@@ -615,7 +615,7 @@ const handleStepClick = (stepId: number) => {
   currentStepIndex.value = stepId;
 };
 
-// 性能迭代区域
+// 负载迭代区域
 // 基线步骤饼图
 
 stepPieData.value = processJson2PieChartData(perfData, currentStepIndex.value);

@@ -1,7 +1,7 @@
 <template>
   <div class="perf-multi">
     <div class="info-box">
-      多版本性能趋势分析：
+      多版本负载趋势分析：
       <p>支持上传多个对比html文件，自动解析并展示不同维度的数据变化趋势</p>
     </div>
 
