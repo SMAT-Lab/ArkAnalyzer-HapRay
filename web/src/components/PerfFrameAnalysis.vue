@@ -1,7 +1,7 @@
 <template>
   <div class="frame-analysis-container">
     <!-- 当前步骤信息卡片 -->
-    <div v-if="currentStepInfo" class="step-info-card">
+    <!-- <div v-if="currentStepInfo" class="step-info-card">
       <div class="step-header">
         <div class="step-badge">STEP {{ currentStepIndex }}</div>
         <div class="step-details">
@@ -15,14 +15,14 @@
               <span class="metric-label">功耗估算：</span>
               <span class="metric-value">{{ formatEnergy(currentStepInfo.count) }}</span>
             </div>
-            <!-- <div class="metric-item">
+           <div class="metric-item">
               <span class="metric-label">轮次：</span>
               <span class="metric-value">{{ currentStepInfo.round }}</span>
-            </div> -->
+            </div> 
           </div>
         </div>
       </div>
-    </div>
+    </div> -->
 
     <!-- 帧分析组件 -->
     <FrameAnalysis :step="currentStepIndex" :data="frameData" />
@@ -69,9 +69,9 @@ const testSteps = ref(
 const currentStepIndex = ref(props.step || 1);
 
 // 当前步骤信息
-const currentStepInfo = computed(() => {
-  return testSteps.value.find(step => step.id === currentStepIndex.value);
-});
+// const currentStepInfo = computed(() => {
+//   return testSteps.value.find(step => step.id === currentStepIndex.value);
+// });
 
 // 监听props.step变化
 watch(() => props.step, (newStep) => {
@@ -80,16 +80,16 @@ watch(() => props.step, (newStep) => {
   }
 }, { immediate: true });
 
-// 格式化持续时间的方法
-const formatDuration = (milliseconds: number) => {
-  return `指令数：${milliseconds}`;
-};
+// // 格式化持续时间的方法
+// const formatDuration = (milliseconds: number) => {
+//   return `指令数：${milliseconds}`;
+// };
 
-// 格式化功耗信息
-const formatEnergy = (milliseconds: number) => {
-  const energy = calculateEnergyConsumption(milliseconds);
-  return `核算功耗（mAs）：${energy}`;
-};
+// // 格式化功耗信息
+// const formatEnergy = (milliseconds: number) => {
+//   const energy = calculateEnergyConsumption(milliseconds);
+//   return `核算功耗（mAs）：${energy}`;
+// };
 
 
 </script>

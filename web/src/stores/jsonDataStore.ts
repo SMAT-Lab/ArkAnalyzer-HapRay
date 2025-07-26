@@ -240,6 +240,7 @@ interface MoreData {
 }
 
 export interface JSONData {
+  version: string;
   type: number;
   versionCode: number;
   basicInfo: BasicInfo;
@@ -436,6 +437,7 @@ export function safeProcessColdStartData(data: ColdStartData | null | undefined)
 
 // ==================== Store 定义 ====================
 interface JsonDataState {
+  version: string | null;
   basicInfo: BasicInfo | null;
   compareBasicInfo: BasicInfo | null;
   perfData: PerfData | null;
@@ -518,6 +520,7 @@ function safeProcessComponentResuData(data: ComponentResuData | null | undefined
 
 export const useJsonDataStore = defineStore('config', {
   state: (): JsonDataState => ({
+    version: null,
     basicInfo: null,
     compareBasicInfo: null,
     perfData: null,
@@ -534,6 +537,7 @@ export const useJsonDataStore = defineStore('config', {
 
   actions: {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
+      this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
 
       this.perfData = jsonData.perf;

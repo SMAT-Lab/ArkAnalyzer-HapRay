@@ -6,9 +6,47 @@
     <!-- 主内容区域 -->
     <div class="main-content" :class="{ 'nav-collapsed': isNavCollapsed }">
       <div class="content-header">
-        <h1 class="page-title">{{ getPageTitle() }}</h1>
-        <div class="breadcrumb">
-          <span class="breadcrumb-item">{{ getBreadcrumb() }}</span>
+        <div class="header-main">
+          <h1 class="page-title">{{ getPageTitle() }}</h1>
+          <div class="breadcrumb-container">
+            <div class="breadcrumb">
+              <span
+                v-for="(item, index) in getBreadcrumbItems()"
+                :key="index"
+                class="breadcrumb-item">
+                {{ item }}
+                <span v-if="index < getBreadcrumbItems().length - 1" class="breadcrumb-separator"> / </span>
+              </span>
+            </div>
+
+            <!-- 当前步骤信息 -->
+            <div class="step-info" v-if="shouldShowSteps() && currentStepInfo">
+              <div class="step-badge">
+                <span class="step-label">
+                  <span class="step-icon">📋</span>
+                  步骤 {{ currentStepInfo.id }}
+                </span>
+                <span class="step-name" :title="currentStepInfo.step_name">{{ currentStepInfo.step_name }}</span>
+              </div>
+              <div class="step-metrics">
+                <span class="metric">
+                  <span class="metric-icon">📊</span>
+                  <span class="metric-label">指令数:</span>
+                  <span class="metric-value">{{ formatNumber(currentStepInfo.count) }}</span>
+                </span>
+                <span class="metric">
+                  <span class="metric-icon">⚡</span>
+                  <span class="metric-label">功耗:</span>
+                  <span class="metric-value">{{ formatEnergy(currentStepInfo.count) }}</span>
+                </span>
+                <span class="metric">
+                  <span class="metric-icon">📈</span>
+                  <span class="metric-label">占比:</span>
+                  <span class="metric-value">{{ getStepPercentage(currentStepInfo) }}%</span>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -72,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import AppNavigation from '@/components/AppNavigation.vue';
 import PerfCompare from '@/components/PerfCompare.vue';
 import PerfLoadOverview from '@/components/PerfLoadOverview.vue';
@@ -83,9 +121,27 @@ import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
+import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
+import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
 const showPage = ref('perf_load_overview');
 const isNavCollapsed = ref(false);
+
+// 获取存储实例
+const jsonDataStore = useJsonDataStore();
+const perfData = jsonDataStore.perfData;
+
+// 步骤数据
+const testSteps = computed(() => {
+  if (!perfData) return [];
+  return perfData.steps.map((step, index) => ({
+    id: index + 1,
+    step_name: step.step_name,
+    count: step.count,
+    round: step.round,
+    perf_data_path: step.perf_data_path,
+  }));
+});
 
 const changeContent = (page: string) => {
   showPage.value = page;
@@ -117,13 +173,9 @@ const pageTitles: Record<string, string> = {
 // 面包屑导航映射
 const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
-  'perf': '负载分析 / 单版本分析',
-  'perf_load': '负载分析 / 单版本分析 / 负载分析',
-  'perf_load_overview': '负载分析 / 单版本分析 / 负载总览',
-  'perf_frame': '负载分析 / 单版本分析 / 帧分析',
-  'perf_compare': '负载分析 / 版本对比',
-  'perf_multi': '负载分析 / 多版本趋势',
-  'perf_flame': '负载分析 / 火焰图'
+  'perf_load_overview': '单版本分析 / 负载总览',
+  'perf_compare': '版本对比',
+  'perf_multi': '多版本趋势'
 };
 
 // 从页面ID中提取步骤ID
@@ -153,7 +205,7 @@ const getStepPageTitle = (pageId: string): string => {
 // 动态获取步骤页面面包屑
 const getStepPageBreadcrumb = (pageId: string): string => {
   const stepId = getStepId(pageId);
-  return `负载分析 / 单版本分析 / 负载分析 / 步骤${stepId}`;
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 负载分析`;
 };
 
 // 动态获取帧步骤页面标题
@@ -165,7 +217,7 @@ const getFrameStepPageTitle = (pageId: string): string => {
 // 动态获取帧步骤页面面包屑
 const getFrameStepPageBreadcrumb = (pageId: string): string => {
   const stepId = getFrameStepId(pageId);
-  return `负载分析 / 单版本分析 / 帧分析 / 步骤${stepId}`;
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 帧分析`;
 };
 
 // 动态获取火焰图步骤页面标题
@@ -177,7 +229,7 @@ const getFlameStepPageTitle = (pageId: string): string => {
 // 动态获取火焰图步骤页面面包屑
 const getFlameStepPageBreadcrumb = (pageId: string): string => {
   const stepId = getFlameStepId(pageId);
-  return `负载分析 / 单版本分析 / 火焰图分析 / 步骤${stepId}`;
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 火焰图分析`;
 };
 
 const getPageTitle = () => {
@@ -204,6 +256,64 @@ const getBreadcrumb = () => {
     return getFlameStepPageBreadcrumb(showPage.value);
   }
   return breadcrumbMap[showPage.value] || '首页';
+};
+
+const getBreadcrumbItems = () => {
+  const breadcrumbString = getBreadcrumb();
+  return breadcrumbString.split(' / ').map(item => item.trim());
+};
+
+// 步骤相关方法
+const shouldShowSteps = () => {
+  // 在负载总览、负载分析、帧分析、火焰图分析等页面显示步骤
+  const pagesWithSteps = [
+    'perf_load_overview',
+    'perf_load',
+    'perf_frame',
+    'perf_flame',
+    'perf',
+    'perf_compare'
+  ];
+  return pagesWithSteps.includes(showPage.value) ||
+         showPage.value.startsWith('perf_step_') ||
+         showPage.value.startsWith('frame_step_') ||
+         showPage.value.startsWith('flame_step_');
+};
+
+// 获取当前步骤信息（计算属性）
+const currentStepInfo = computed(() => {
+  let currentStepId = null;
+
+  if (showPage.value.startsWith('perf_step_')) {
+    currentStepId = getStepId(showPage.value);
+  } else if (showPage.value.startsWith('frame_step_')) {
+    currentStepId = getFrameStepId(showPage.value);
+  } else if (showPage.value.startsWith('flame_step_')) {
+    currentStepId = getFlameStepId(showPage.value);
+  }
+
+  if (currentStepId) {
+    return testSteps.value.find(step => step.id === currentStepId);
+  }
+
+  return null;
+});
+
+// 格式化数字
+const formatNumber = (num: number) => {
+  return num.toLocaleString();
+};
+
+// 格式化功耗信息
+const formatEnergy = (count: number) => {
+  const energy = calculateEnergyConsumption(count);
+  return `${energy} mAs`;
+};
+
+// 计算步骤占比
+const getStepPercentage = (step: any) => {
+  const total = testSteps.value.reduce((sum, s) => sum + s.count, 0);
+  return total > 0 ? ((step.count / total) * 100).toFixed(1) : '0.0';
 };
 </script>
 
@@ -235,6 +345,100 @@ const getBreadcrumb = () => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+.header-main {
+  width: 100%;
+}
+
+.breadcrumb-container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  min-height: 40px;
+}
+
+.breadcrumb {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.step-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.step-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  min-width: 0;
+  flex: 1;
+  max-width: 60%;
+}
+
+.step-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-icon {
+  font-size: 14px;
+}
+
+.step-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #303133;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 500px;
+  flex: 1;
+}
+
+.step-metrics {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.metric-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.metric-label {
+  color: #909399;
+  font-weight: 500;
+}
+
+.metric-value {
+  color: #303133;
+  font-weight: 600;
+}
+
 .page-title {
   font-size: 28px;
   font-weight: 600;
@@ -243,12 +447,27 @@ const getBreadcrumb = () => {
 }
 
 .breadcrumb {
-  color: #909399;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   font-size: 14px;
+  line-height: 1.5;
 }
 
 .breadcrumb-item {
   color: #606266;
+  transition: color 0.3s ease;
+}
+
+.breadcrumb-item:last-child {
+  color: #303133;
+  font-weight: 500;
+}
+
+.breadcrumb-separator {
+  color: #c0c4cc;
+  margin: 0 8px;
+  font-weight: normal;
 }
 
 .content-body {
@@ -261,15 +480,20 @@ const getBreadcrumb = () => {
 /* 欢迎页面样式 */
 .welcome-page {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  height: 100%;
-  min-height: 500px;
+  min-height: calc(100vh - 200px);
+  padding: 40px 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  width: 100%;
 }
 
 .welcome-content {
   text-align: center;
   max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .welcome-content h2 {
@@ -287,10 +511,12 @@ const getBreadcrumb = () => {
 
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 20px;
   margin-top: 40px;
   max-width: 1200px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .feature-card {
@@ -339,13 +565,53 @@ const getBreadcrumb = () => {
 }
 
 /* 响应式设计 */
+@media (max-width: 1024px) {
+  .feature-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 18px;
+  }
+}
+
 @media (max-width: 768px) {
   .main-content {
     margin-left: 220px;
   }
 
+  .main-content.nav-collapsed {
+    margin-left: 64px;
+  }
+
   .content-header {
     padding: 16px 20px;
+  }
+
+  .breadcrumb-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .step-info {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .step-badge {
+    padding: 4px 8px;
+  }
+
+  .step-badge {
+    max-width: 100%;
+  }
+
+  .step-name {
+    max-width: 100%;
+  }
+
+  .step-metrics {
+    gap: 8px;
   }
 
   .page-title {
@@ -356,23 +622,86 @@ const getBreadcrumb = () => {
     padding: 16px 20px;
   }
 
+  .welcome-page {
+    min-height: calc(100vh - 150px);
+    padding: 20px 16px;
+    align-items: flex-start;
+  }
+
+  .welcome-content {
+    max-width: 100%;
+    padding: 0;
+  }
+
   .feature-grid {
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
     gap: 16px;
+    margin-top: 32px;
+  }
+
+  .feature-card {
+    padding: 24px 20px;
+  }
+
+  .card-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+
+  .feature-card h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .feature-card p {
+    font-size: 13px;
   }
 
   .welcome-content h2 {
     font-size: 28px;
+    margin-bottom: 12px;
+  }
+
+  .welcome-content p {
+    font-size: 15px;
+    margin-bottom: 32px;
   }
 }
 
 @media (max-width: 480px) {
   .main-content {
-    margin-left: 0;
+    margin-left: 200px;
+  }
+
+  .main-content.nav-collapsed {
+    margin-left: 64px;
   }
 
   .content-header {
     padding: 12px 16px;
+    gap: 12px;
+  }
+
+  .step-badge {
+    padding: 3px 6px;
+  }
+
+  .step-label {
+    font-size: 11px;
+  }
+
+  .step-name {
+    font-size: 12px;
+  }
+
+  .step-metrics {
+    gap: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .metric {
+    font-size: 11px;
   }
 
   .page-title {
@@ -381,6 +710,154 @@ const getBreadcrumb = () => {
 
   .content-body {
     padding: 12px 16px;
+  }
+
+  .welcome-page {
+    min-height: auto;
+    padding: 16px 12px;
+    align-items: flex-start;
+  }
+
+  .welcome-content {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .welcome-content h2 {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .welcome-content p {
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .feature-card {
+    padding: 20px 16px;
+  }
+
+  .card-icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+  }
+
+  .feature-card h3 {
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 360px) {
+  .welcome-page {
+    padding: 12px 8px;
+  }
+
+  .welcome-content {
+    padding: 0;
+  }
+
+  .welcome-content h2 {
+    font-size: 20px;
+  }
+
+  .welcome-content p {
+    font-size: 13px;
+  }
+
+  .feature-card {
+    padding: 16px 12px;
+  }
+
+  .card-icon {
+    font-size: 32px;
+  }
+
+  .feature-card h3 {
+    font-size: 15px;
+  }
+
+  .feature-card p {
+    font-size: 11px;
+  }
+}
+
+/* 极小屏幕布局优化 */
+@media (max-width: 360px) {
+  .main-content {
+    margin-left: 180px;
+  }
+
+  .main-content.nav-collapsed {
+    margin-left: 64px;
+  }
+}
+
+/* 极小屏幕优化 */
+@media (max-width: 320px) {
+  .main-content {
+    margin-left: 160px;
+  }
+
+  .main-content.nav-collapsed {
+    margin-left: 64px;
+  }
+  .welcome-page {
+    padding: 8px 4px;
+  }
+
+  .welcome-content h2 {
+    font-size: 18px;
+  }
+
+  .welcome-content p {
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  .feature-grid {
+    margin-top: 16px;
+    gap: 8px;
+  }
+
+  .feature-card {
+    padding: 12px 8px;
+  }
+
+  .card-icon {
+    font-size: 28px;
+  }
+
+  .feature-card h3 {
+    font-size: 14px;
+  }
+
+  .feature-card p {
+    font-size: 10px;
+  }
+}
+
+/* 超极小屏幕 - 移动端优先 */
+@media (max-width: 280px) {
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .main-content.nav-collapsed {
+    margin-left: 64px;
   }
 }
 </style>

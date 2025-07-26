@@ -59,7 +59,7 @@
     </el-row>
 
     <!-- 测试步骤导航 -->
-    <div class="step-nav">
+    <!-- <div class="step-nav">
       <div
 :class="[
         'step-item',
@@ -87,9 +87,9 @@ v-for="(step, index) in testSteps" :key="index" :class="[
           <span class="step-duration">{{ formatEnergy(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-        <!-- <div class="step-name">测试轮次：{{ step.round }}</div> -->
-        <!-- <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div> -->
-        <!-- <button
+        <div class="step-name">测试轮次：{{ step.round }}</div>
+        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
+        <button
 class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
           下载perf
@@ -98,9 +98,9 @@ class="beautiful-btn primary-btn"
 class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('trace.htrace', step.id, step.step_name)">
           下载trace
-        </button> -->
+        </button>
       </div>
-    </div>
+    </div> -->
 
     <!-- 负载对比区域 -->
 
@@ -292,21 +292,21 @@ const testSteps = ref(
   }))
 );
 
-interface TestStep {
-  id: number;
-  step_name: string;
-  count: number;
-  round: number;
-  perf_data_path: string;
-}
-const getTotalTestStepsCount = (testSteps: TestStep[]) => {
-  let total = 0;
+// interface TestStep {
+//   id: number;
+//   step_name: string;
+//   count: number;
+//   round: number;
+//   perf_data_path: string;
+// }
+// const getTotalTestStepsCount = (testSteps: TestStep[]) => {
+//   let total = 0;
 
-  testSteps.forEach((step) => {
-    total += step.count;
-  });
-  return total;
-};
+//   testSteps.forEach((step) => {
+//     total += step.count;
+//   });
+//   return total;
+// };
 
 const performanceData = ref(
   {
