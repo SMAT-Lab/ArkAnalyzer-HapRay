@@ -15,12 +15,14 @@ limitations under the License.
 
 import logging
 import sqlite3
+import traceback
 from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
-from .frame_load_calculator import FrameLoadCalculator
+from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
+from .frame_core_cache_manager import FrameCacheManager
 
 
 class StutteredFrameAnalyzer:
@@ -101,9 +103,21 @@ class StutteredFrameAnalyzer:
             if perf_db_path:
                 try:
                     perf_conn = sqlite3.connect(perf_db_path)
-                    # 获取perf样本数据用于调用链分析
-                    perf_query = "SELECT callchain_id, timestamp_trace, thread_id, event_count FROM perf_sample"
-                    perf_df = pd.read_sql_query(perf_query, perf_conn)
+                    
+                    # ==================== 标准化缓存检查和使用 ====================
+                    # 在分析开始前，确保所有需要的数据都已缓存
+                    if step_id:
+                        # 预加载analyzer需要的基础数据
+                        preload_result = FrameCacheManager.preload_analyzer_data(
+                            conn, perf_conn, step_id
+                        )
+                        # logging.info("预加载数据结果: %s", preload_result)
+                        
+                        # 确保帧负载数据缓存已初始化
+                        FrameCacheManager.ensure_data_cached('frame_loads', step_id=step_id)
+                    
+                    # 使用缓存管理器获取perf样本数据
+                    perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
                 except Exception as e:
                     logging.warning("无法连接perf数据库或获取数据: %s", str(e))
                     perf_df = None
@@ -123,7 +137,7 @@ class StutteredFrameAnalyzer:
 
             # 检查是否有有效数据
             if not data:
-                logging.info("未找到任何帧数据")
+                # logging.info("未找到任何帧数据")
                 return None
 
             LOW_FPS_THRESHOLD = 45  # 低FPS阈值
@@ -296,6 +310,7 @@ class StutteredFrameAnalyzer:
 
         except Exception as e:
             logging.error("分析卡顿帧时发生异常: %s", str(e))
+            logging.error("异常堆栈跟踪:\n%s", traceback.format_exc())
             return None
 
         finally:
@@ -332,50 +347,37 @@ class StutteredFrameAnalyzer:
         exceed_frames = exceed_time / self.FRAME_DURATION
 
         if perf_df is not None and perf_conn is not None:
-            frame_start_time = frame["ts"]
-            frame_end_time = frame["ts"] + frame["dur"]
-
-            mask = (
-                (perf_df['timestamp_trace'] >= frame_start_time)
-                & (perf_df['timestamp_trace'] <= frame_end_time)
-                & (perf_df['thread_id'] == frame['tid'])
-            )
-            frame_samples = perf_df[mask]
-
-            if not frame_samples.empty:
-                frame_load = frame_samples['event_count'].sum()
-
-                for _, sample in frame_samples.iterrows():
-                    if not pd.notna(sample['callchain_id']):
-                        continue
-
-                    try:
-                        callchain_info = self.load_calculator.analyze_perf_callchain(
-                            perf_conn,
-                            int(sample['callchain_id']),
-                            step_id=step_id
-                        )
-
-                        if len(callchain_info) == 0:
-                            continue
-
-                        try:
-                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                            sample_callchains.append({
-                                'timestamp': int(sample['timestamp_trace']),
-                                'event_count': int(sample['event_count']),
-                                'load_percentage': float(sample_load_percentage),
-                                'callchain': callchain_info
-                            })
-                        except Exception as e:
-                            logging.error(
-                                "处理样本时出错: %s, sample: %s, frame_load: %s",
-                                str(e), sample.to_dict(), frame_load)
-                            continue
-
-                    except Exception as e:
-                        logging.error("分析调用链时出错: %s", str(e))
-                        continue
+            # 检查缓存中是否已有该帧的负载数据
+            cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
+            cached_frame = None
+            
+            for cached in cached_frame_loads:
+                if (cached.get('ts') == frame['ts'] and 
+                    cached.get('dur') == frame['dur'] and 
+                    cached.get('thread_id') == frame['tid']):
+                    cached_frame = cached
+                    break
+            
+            if cached_frame:
+                # 使用缓存中的帧负载数据
+                frame_load = cached_frame.get('frame_load', 0)
+                sample_callchains = cached_frame.get('sample_callchains', [])
+                # logging.info("使用缓存的帧负载数据: ts=%s, load=%s", frame['ts'], frame_load)
+                
+                # 如果缓存中没有sample_callchains，尝试补充
+                if not sample_callchains:
+                    # logging.info("缓存中缺少sample_callchains，尝试补充: ts=%s", frame['ts'])
+                    # 重新分析获取调用链
+                    frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
+                        frame, perf_df, perf_conn, step_id)
+                    # logging.info("重新分析获取调用链: ts=%s, load=%s", frame['ts'], frame_load)
+            else:
+                # 缓存中没有，执行帧负载分析
+                # 使用统一的帧负载计算方法
+                frame_load, sample_callchains = self.load_calculator.calculate_frame_load(
+                    frame, perf_df, perf_conn, step_id
+                )
+                # logging.info("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
 
         # 卡顿分级逻辑
         # flag=3 归类为轻微卡顿：进程间异常阈值仅 1ms，远小于轻微卡顿的 33.34ms 阈值
