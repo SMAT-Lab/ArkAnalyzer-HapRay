@@ -22,8 +22,8 @@ import pandas as pd
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 # 导入新的模块化组件
-from .frame_analyzer_core import FrameAnalyzerCore
-from .frame_cache_manager import FrameCacheManager
+from .frame_core_analyzer import FrameAnalyzerCore
+from .frame_core_cache_manager import FrameCacheManager
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
 
 

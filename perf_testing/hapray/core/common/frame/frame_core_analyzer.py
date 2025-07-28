@@ -21,11 +21,11 @@ from typing import Dict, Any, List, Optional
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 # 导入新的模块化组件
-from .frame_load_calculator import FrameLoadCalculator
+from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_database_compatibility
-from .empty_frame_analyzer import EmptyFrameAnalyzer
-from .stuttered_frame_analyzer import StutteredFrameAnalyzer
-from .frame_cache_manager import FrameCacheManager
+from .frame_analyzer_empty import EmptyFrameAnalyzer
+from .frame_analyzer_stuttered import StutteredFrameAnalyzer
+from .frame_core_cache_manager import FrameCacheManager
 
 
 class FrameAnalyzerCore:
@@ -158,7 +158,7 @@ class FrameAnalyzerCore:
             # 获取缓存统计
             result["cache_stats"] = FrameCacheManager.get_cache_stats()
 
-            logging.info("综合分析完成")
+            # logging.info("综合分析完成")
             return result
 
         except Exception as e:

@@ -18,7 +18,7 @@ import sqlite3
 import traceback
 from typing import Dict, Any, List
 
-from .frame_cache_manager import FrameCacheManager
+from .frame_core_cache_manager import FrameCacheManager
 
 
 def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
