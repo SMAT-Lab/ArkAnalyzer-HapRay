@@ -15,11 +15,13 @@ limitations under the License.
 
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+import pandas as pd
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
-from hapray.core.common.frame import FrameAnalyzerCore
+from hapray.core.common.frame.frame_core_analyzer import FrameAnalyzerCore
 from hapray.core.common.frame.frame_core_cache_manager import FrameCacheManager
+from hapray.core.common.frame.frame_time_utils import FrameTimeUtils
 
 
 class FrameLoadAnalyzer(BaseAnalyzer):
@@ -108,7 +110,7 @@ class FrameLoadAnalyzer(BaseAnalyzer):
                              sample_frame.get('vsync'))
             
             # 生成时间线数据
-            load_timeline = self._generate_load_timeline(all_frame_loads)
+            load_timeline = self._generate_load_timeline(all_frame_loads, step_dir)
             
             # 构建最终结果
             result = {
@@ -124,11 +126,12 @@ class FrameLoadAnalyzer(BaseAnalyzer):
             logging.error("Frame load analysis failed for step %s: %s", step_dir, str(e))
             return None
 
-    def _generate_load_timeline(self, frame_loads: list) -> list:
+    def _generate_load_timeline(self, frame_loads: list, step_id: str = None) -> list:
         """生成帧负载时间线数据
         
         Args:
             frame_loads: 帧负载数据列表
+            step_id: 步骤ID，用于获取第一帧时间戳
             
         Returns:
             list: 时间线数据
@@ -136,10 +139,21 @@ class FrameLoadAnalyzer(BaseAnalyzer):
         if not frame_loads:
             return []
         
+        # 获取第一帧时间戳用于相对时间计算
+        # 从缓存中获取第一帧时间戳
+        if step_id:
+            try:
+                # 从缓存中获取第一帧时间戳
+                first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
+            except Exception:
+                first_frame_time = min([frame.get('ts', 0) for frame in frame_loads]) if frame_loads else 0
+        else:
+            first_frame_time = min([frame.get('ts', 0) for frame in frame_loads]) if frame_loads else 0
+        
         timeline = []
         for frame in frame_loads:
             timeline.append({
-                'timestamp': frame.get('ts', 0),
+                'timestamp': FrameTimeUtils.convert_to_relative_nanoseconds(frame.get('ts', 0), first_frame_time),
                 'frame_load': frame.get('frame_load', 0),
                 'process_name': frame.get('process_name', ''),
                 'frame_type': frame.get('frame_type', ''),

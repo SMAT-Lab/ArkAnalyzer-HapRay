@@ -40,6 +40,7 @@ class FrameCacheManager:
     _frame_loads_cache = {}
     _frames_cache = {}
     _perf_samples_cache = {}
+    _first_frame_timestamp_cache = {}  # 第一帧时间戳缓存
     
     # 缓存命中率统计
     _cache_hit_stats = {
@@ -47,7 +48,8 @@ class FrameCacheManager:
         'perf_samples': {'hits': 0, 'misses': 0},
         'callchain': {'hits': 0, 'misses': 0},
         'files': {'hits': 0, 'misses': 0},
-        'process': {'hits': 0, 'misses': 0}
+        'process': {'hits': 0, 'misses': 0},
+        'first_frame_timestamp': {'hits': 0, 'misses': 0}
     }
 
     # ==================== 标准化缓存使用模式 ====================
@@ -229,6 +231,7 @@ class FrameCacheManager:
             FrameCacheManager._pid_cache.pop(step_id, None)
             FrameCacheManager._tid_cache.pop(step_id, None)
             FrameCacheManager._frame_loads_cache.pop(step_id, None)
+            FrameCacheManager._first_frame_timestamp_cache.pop(step_id, None)
             # logging.info("已清除步骤 %s 的缓存", step_id)
         else:
             # 清除所有缓存
@@ -240,6 +243,7 @@ class FrameCacheManager:
             FrameCacheManager._pid_cache.clear()
             FrameCacheManager._tid_cache.clear()
             FrameCacheManager._frame_loads_cache.clear()
+            FrameCacheManager._first_frame_timestamp_cache.clear()
             # 重置缓存命中率统计
             FrameCacheManager.reset_cache_hit_stats()
             # logging.info("已清除所有缓存")
@@ -260,6 +264,7 @@ class FrameCacheManager:
             'pid_cache_size': len(FrameCacheManager._pid_cache),
             'tid_cache_size': len(FrameCacheManager._tid_cache),
             'frame_loads_cache_size': len(FrameCacheManager._frame_loads_cache),
+            'first_frame_timestamp_cache_size': len(FrameCacheManager._first_frame_timestamp_cache),
             'cache_hit_stats': FrameCacheManager.get_cache_hit_stats()
         }
         
@@ -275,7 +280,7 @@ class FrameCacheManager:
             for key, df in cache_dict.items():
                 if not df.empty:
                     # 估算DataFrame内存使用量
-                    memory_estimate = df.memory_usage(deep=True).sum()
+                    memory_estimate = int(df.memory_usage(deep=True).sum())  # 确保返回Python原生int类型
                     total_memory_estimate += memory_estimate
         
         stats['total_memory_estimate_bytes'] = total_memory_estimate
@@ -386,6 +391,51 @@ class FrameCacheManager:
 
     # ==================== 数据访问委托方法 ====================
     
+    @staticmethod
+    def get_first_frame_timestamp(trace_conn, step_id: str = None) -> int:
+        """获取第一帧时间戳（带缓存）
+        
+        Args:
+            trace_conn: trace数据库连接
+            step_id: 步骤ID
+            
+        Returns:
+            int: 第一帧的时间戳（纳秒）
+        """
+        # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
+        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        
+        if cache_key in FrameCacheManager._first_frame_timestamp_cache:
+            # 缓存命中
+            FrameCacheManager._cache_hit_stats['first_frame_timestamp']['hits'] += 1
+            return FrameCacheManager._first_frame_timestamp_cache[cache_key]
+        
+        # 缓存未命中
+        FrameCacheManager._cache_hit_stats['first_frame_timestamp']['misses'] += 1
+        
+        # 优先从数据访问层获取基准时间戳（与HiSmartPerf工具保持一致）
+        first_frame_timestamp = 0
+        if trace_conn:
+            try:
+                # 委托给数据访问层获取基准时间戳
+                from .frame_data_basic_accessor import FrameDbBasicAccessor
+                first_frame_timestamp = FrameDbBasicAccessor.get_benchmark_timestamp(trace_conn)
+            except Exception as e:
+                logging.warning("获取trace开始时间失败，使用备选方案: %s", str(e))
+                # 备选方案：从缓存中获取所有帧数据并计算最小时间戳
+                frames_df = FrameCacheManager.get_frames_data(trace_conn, step_id)
+                if not frames_df.empty:
+                    first_frame_timestamp = int(frames_df['ts'].min())
+        else:
+            # 如果没有数据库连接，从缓存中获取
+            frames_df = FrameCacheManager.get_frames_data(None, step_id)
+            if not frames_df.empty:
+                first_frame_timestamp = int(frames_df['ts'].min())
+            
+        # 缓存结果
+        FrameCacheManager._first_frame_timestamp_cache[cache_key] = first_frame_timestamp
+        return first_frame_timestamp
+
     @staticmethod
     def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
         """获取帧数据（带缓存）"""
@@ -637,14 +687,14 @@ class FrameCacheManager:
             }
             
         frame_load_values = [item.get('frame_load', 0) for item in frame_loads]
-        total_load = sum(frame_load_values)
+        total_load = int(sum(frame_load_values))  # 确保返回Python原生int类型
         
         stats = {
             'total_frames': len(frame_loads),
             'total_load': total_load,
-            'average_load': total_load / len(frame_load_values) if frame_load_values else 0,
-            'max_load': max(frame_load_values) if frame_load_values else 0,
-            'min_load': min(frame_load_values) if frame_load_values else 0,
+            'average_load': float(total_load / len(frame_load_values)) if frame_load_values else 0.0,  # 确保返回Python原生float类型
+            'max_load': int(max(frame_load_values)) if frame_load_values else 0,  # 确保返回Python原生int类型
+            'min_load': int(min(frame_load_values)) if frame_load_values else 0,  # 确保返回Python原生int类型
             'high_load_frames': len([x for x in frame_load_values if x > 80])  # 高负载帧（>80%）
         }
         
