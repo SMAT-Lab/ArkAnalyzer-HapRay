@@ -44,11 +44,12 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # 直接获取所有数据，不排序
+        # 修改SQL查询，获取process.name和thread.name字段
         cursor.execute("""
-            SELECT fs.*, t.tid
+            SELECT fs.*, t.tid, t.name as thread_name, p.name as process_name
             FROM frame_slice fs
             LEFT JOIN thread t ON fs.itid = t.itid
+            LEFT JOIN process p ON fs.ipid = p.ipid
         """)
 
         # 获取列名

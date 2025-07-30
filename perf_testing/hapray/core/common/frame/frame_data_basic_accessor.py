@@ -102,7 +102,7 @@ class FrameDbBasicAccessor:
         SELECT 
             perf_sample.id,                    -- 唯一标识
             perf_sample.callchain_id,          -- 关联perf_callchain表callchain_id
-            perf_sample.timestamp,             -- 未进行时钟源同步的时间戳
+            perf_sample.timeStamp as timestamp, -- 未进行时钟源同步的时间戳（修正字段名）
             perf_sample.thread_id,             -- 线程号
             perf_sample.event_count,           -- 采样统计
             perf_sample.event_type_id,         -- 事件类型编号
@@ -110,7 +110,7 @@ class FrameDbBasicAccessor:
             perf_sample.cpu_id,                -- cpu核编号
             perf_sample.thread_state           -- 线程状态
         FROM perf_sample
-        ORDER BY perf_sample.timestamp
+        ORDER BY perf_sample.timeStamp
         """
         
         perf_df = pd.read_sql_query(query, perf_conn)

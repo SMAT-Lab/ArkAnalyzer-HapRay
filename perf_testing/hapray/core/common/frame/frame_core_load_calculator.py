@@ -206,6 +206,22 @@ class FrameLoadCalculator:
                 logging.error("分析调用链时出错: %s", str(e))
                 continue
 
+        # 保存帧负载数据到缓存
+        if step_id:
+            frame_load_data = {
+                'ts': frame.get('ts', frame.get('start_time', 0)),
+                'dur': frame.get('dur', frame.get('end_time', 0) - frame.get('start_time', 0)),
+                'frame_load': frame_load,
+                'thread_id': frame.get('tid'),
+                'thread_name': frame.get('thread_name', 'unknown'),
+                'process_name': frame.get('process_name', 'unknown'),
+                'type': frame.get('type', 0),
+                'vsync': frame.get('vsync', 'unknown'),
+                'flag': frame.get('flag'),
+                'sample_callchains': sample_callchains
+            }
+            FrameCacheManager.add_frame_load(step_id, frame_load_data)
+
         return frame_load, sample_callchains
 
     def calculate_frame_load(
