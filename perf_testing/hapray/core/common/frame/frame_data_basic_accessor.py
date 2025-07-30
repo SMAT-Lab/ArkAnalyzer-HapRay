@@ -579,7 +579,7 @@ class FrameDbBasicAccessor:
             return perf_df
         
         # 处理数值字段的NaN值
-        numeric_fields = ['id', 'callchain_id', 'timestamp', 'thread_id', 'event_count', 'event_type_id', 'timestamp_trace', 'cpu_id']
+        numeric_fields = ['id', 'callchain_id', 'timestamp_trace', 'thread_id', 'event_count', 'event_type_id', 'cpu_id']
         for field in numeric_fields:
             if field in perf_df.columns:
                 perf_df[field] = pd.to_numeric(perf_df[field], errors='coerce').fillna(0)
@@ -594,11 +594,11 @@ class FrameDbBasicAccessor:
             logging.warning("perf_df中缺少thread_state字段")
             perf_df['thread_state'] = '-'
         
-        # 添加计算字段（确保timestamp和timestamp_trace字段存在）
-        if 'timestamp_trace' in perf_df.columns and 'timestamp' in perf_df.columns:
-            perf_df['time_sync_diff'] = perf_df['timestamp_trace'] - perf_df['timestamp']
+        # 添加计算字段（使用timestamp_trace作为主要时间字段）
+        if 'timestamp_trace' in perf_df.columns:
+            perf_df['time_sync_diff'] = 0  # 如果只有timestamp_trace，时间差设为0
         else:
-            logging.warning("perf_df中缺少timestamp或timestamp_trace字段，无法计算time_sync_diff")
+            logging.warning("perf_df中缺少timestamp_trace字段")
             perf_df['time_sync_diff'] = 0
         
         # 添加线程状态标识字段
@@ -762,6 +762,44 @@ class FrameDbBasicAccessor:
                 cleaned_data[key] = value
         
         return cleaned_data
+
+    @staticmethod
+    def get_benchmark_timestamp(trace_conn) -> int:
+        """获取基准时间戳（与HiSmartPerf工具保持一致）
+        
+        HiSmartPerf工具使用trace_range表的start_ts作为基准时间戳来计算相对时间。
+        为了确保我们的分析结果与HiSmartPerf工具一致，我们也使用相同的基准点。
+        
+        Args:
+            trace_conn: trace数据库连接
+            
+        Returns:
+            int: 基准时间戳（纳秒）
+        """
+        try:
+            cursor = trace_conn.cursor()
+            # 优先从trace_range表获取start_ts作为基准时间戳（与HiSmartPerf工具一致）
+            cursor.execute("SELECT start_ts FROM trace_range LIMIT 1")
+            result = cursor.fetchone()
+            if result and result[0] is not None:
+                return int(result[0])
+            
+            # 如果trace_range表中没有数据，尝试获取frame_slice表的最小时间戳
+            cursor.execute("SELECT MIN(ts) FROM frame_slice WHERE ts IS NOT NULL")
+            result = cursor.fetchone()
+            if result and result[0] is not None:
+                return int(result[0])
+            
+            # 如果frame_slice表中也没有数据，尝试从perf_sample表获取
+            cursor.execute("SELECT MIN(timestamp_trace) FROM perf_sample WHERE timestamp_trace IS NOT NULL")
+            result = cursor.fetchone()
+            if result and result[0] is not None:
+                return int(result[0])
+            
+            return 0
+        except Exception as e:
+            logging.warning("获取基准时间戳失败: %s", str(e))
+            return 0
 
     @staticmethod
     def extract_pid_tid_info(trace_df: pd.DataFrame) -> tuple:

@@ -15,13 +15,15 @@ limitations under the License.
 
 import logging
 import sqlite3
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Any, Optional
 
 import pandas as pd
 
 from .frame_core_load_calculator import FrameLoadCalculator
-from .frame_data_parser import validate_database_compatibility
 from .frame_core_cache_manager import FrameCacheManager
+from .frame_data_advanced_accessor import FrameDbAdvancedAccessor
+from .frame_time_utils import FrameTimeUtils
+from .frame_data_parser import validate_database_compatibility
 
 
 class EmptyFrameAnalyzer:
@@ -119,6 +121,19 @@ class EmptyFrameAnalyzer:
             trace_df['start_time'] = trace_df['ts']
             trace_df['end_time'] = trace_df['ts'] + trace_df['dur']
 
+            # 获取第一帧时间戳用于相对时间计算
+            # 从缓存中获取第一帧时间戳
+            if step_id:
+                try:
+                    # 从缓存中获取第一帧时间戳
+                    first_frame_time = FrameCacheManager.get_first_frame_timestamp(trace_conn, step_id)
+                except Exception:
+                    # 如果获取缓存失败，则使用空帧中的最小时间戳作为备选
+                    first_frame_time = int(trace_df['ts'].min()) if not trace_df.empty else 0
+            else:
+                # 如果无法获取step_id，则使用空帧中的最小时间戳作为备选
+                first_frame_time = int(trace_df['ts'].min()) if not trace_df.empty else 0
+
             # 初始化结果列表
             frame_loads = []
             empty_frame_load = 0  # 主线程空帧总负载（即空刷主线程负载）
@@ -177,7 +192,7 @@ class EmptyFrameAnalyzer:
                     background_thread_load += frame_load
 
                 frame_loads.append({
-                    'ts': frame['ts'],
+                    'ts': FrameTimeUtils.convert_to_relative_nanoseconds(frame['ts'], first_frame_time),
                     'dur': frame['dur'],
                     'ipid': frame['ipid'],
                     'itid': frame['itid'],
@@ -335,8 +350,8 @@ class EmptyFrameAnalyzer:
         background_thread_frames = [f for f in frame_loads if f.get('is_main_thread') != 1]
 
         # 计算负载
-        empty_frame_load = sum(f['frame_load'] for f in main_thread_frames)
-        background_thread_load = sum(f['frame_load'] for f in background_thread_frames)
+        empty_frame_load = int(sum(f['frame_load'] for f in main_thread_frames))  # 确保返回Python原生int类型
+        background_thread_load = int(sum(f['frame_load'] for f in background_thread_frames))  # 确保返回Python原生int类型
 
         # 计算百分比
         empty_frame_percentage = (empty_frame_load / total_load) * 100 if total_load > 0 else 0
