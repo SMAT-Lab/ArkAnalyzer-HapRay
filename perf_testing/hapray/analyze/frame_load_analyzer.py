@@ -52,25 +52,10 @@ class FrameLoadAnalyzer(BaseAnalyzer):
                       trace_db_path: str,
                       perf_db_path: str,
                       app_pids: list) -> Optional[Dict[str, Any]]:
-        """实现帧负载分析逻辑
-
-        Args:
-            step_dir: 步骤目录
-            trace_db_path: trace数据库路径
-            perf_db_path: perf数据库路径
-            app_pids: 应用进程ID列表
-
-        Returns:
-            Optional[Dict[str, Any]]: 分析结果
-        """
-        logging.info("Analyzing frame loads for %s...", step_dir)
-            
-        if not os.path.exists(trace_db_path):
-            logging.warning("Trace database not found: %s", trace_db_path)
-            return None
-
-        if not os.path.exists(perf_db_path):
-            logging.warning("Perf database not found: %s", perf_db_path)
+        """实现帧负载分析逻辑"""
+        
+        if not os.path.exists(trace_db_path) or not os.path.exists(perf_db_path):
+            logging.warning("数据库文件不存在，跳过帧负载分析")
             return None
 
         try:
@@ -97,27 +82,24 @@ class FrameLoadAnalyzer(BaseAnalyzer):
             # 获取Top帧数据
             top_frames = FrameCacheManager.get_top_frame_loads(step_dir, self.top_frames_count)
             
-            # 获取所有帧负载数据用于时间线
-            all_frame_loads = FrameCacheManager.get_frame_loads(step_dir)
+            # 获取第一帧时间戳用于相对时间计算
+            first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_dir)
             
-            # 调试信息：检查缓存中的数据
-            logging.debug("Cache frame loads count: %d", len(all_frame_loads))
-            if all_frame_loads:
-                sample_frame = all_frame_loads[0]
-                logging.debug("Sample frame from cache: ts=%s, load=%s, process_name=%s, frame_type=%s, vsync=%s", 
-                             sample_frame.get('ts'), sample_frame.get('frame_load'), 
-                             sample_frame.get('process_name'), sample_frame.get('frame_type'), 
-                             sample_frame.get('vsync'))
+            # 将top_frames中的ts转换为相对时间戳，与卡顿帧、空刷帧保持一致
+            processed_top_frames = []
+            for frame in top_frames:
+                processed_frame = frame.copy()
+                # 将ts转换为相对时间戳
+                processed_frame['ts'] = FrameTimeUtils.convert_to_relative_nanoseconds(
+                    frame.get('ts', 0), first_frame_time
+                )
+                processed_top_frames.append(processed_frame)
             
-            # 生成时间线数据
-            load_timeline = self._generate_load_timeline(all_frame_loads, step_dir)
-            
-            # 构建最终结果
+            # 构建最终结果 - 移除load_timeline字段，简化JSON结构
             result = {
                 'statistics': statistics,
-                'top_frames': top_frames,
-                'load_timeline': load_timeline,
-                'total_frames': len(all_frame_loads)
+                'top_frames': processed_top_frames,
+                'total_frames': len(FrameCacheManager.get_frame_loads(step_dir))
             }
             
             return result
@@ -126,41 +108,7 @@ class FrameLoadAnalyzer(BaseAnalyzer):
             logging.error("Frame load analysis failed for step %s: %s", step_dir, str(e))
             return None
 
-    def _generate_load_timeline(self, frame_loads: list, step_id: str = None) -> list:
-        """生成帧负载时间线数据
-        
-        Args:
-            frame_loads: 帧负载数据列表
-            step_id: 步骤ID，用于获取第一帧时间戳
-            
-        Returns:
-            list: 时间线数据
-        """
-        if not frame_loads:
-            return []
-        
-        # 获取第一帧时间戳用于相对时间计算
-        # 从缓存中获取第一帧时间戳
-        if step_id:
-            try:
-                # 从缓存中获取第一帧时间戳
-                first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
-            except Exception:
-                first_frame_time = min([frame.get('ts', 0) for frame in frame_loads]) if frame_loads else 0
-        else:
-            first_frame_time = min([frame.get('ts', 0) for frame in frame_loads]) if frame_loads else 0
-        
-        timeline = []
-        for frame in frame_loads:
-            timeline.append({
-                'timestamp': FrameTimeUtils.convert_to_relative_nanoseconds(frame.get('ts', 0), first_frame_time),
-                'frame_load': frame.get('frame_load', 0),
-                'process_name': frame.get('process_name', ''),
-                'frame_type': frame.get('frame_type', ''),
-                'vsync': frame.get('vsync', 0)
-            })
-        
-        return timeline
+
 
     def _clean_data_for_json(self, data):
         """清理数据，确保JSON序列化安全"""

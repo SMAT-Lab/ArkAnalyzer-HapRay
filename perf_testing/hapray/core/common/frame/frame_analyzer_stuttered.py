@@ -410,7 +410,7 @@ class StutteredFrameAnalyzer:
         
         stutter_detail = {
             "vsync": vsync_key,
-            "timestamp": FrameTimeUtils.convert_to_relative_nanoseconds(frame["ts"], first_frame_time),
+            "ts": FrameTimeUtils.convert_to_relative_nanoseconds(frame["ts"], first_frame_time),
             "actual_duration": frame["dur"],
             "expected_duration": expected_frame["dur"],
             "exceed_time": exceed_time,
