@@ -15,13 +15,15 @@ limitations under the License.
 
 import logging
 import sqlite3
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Any, Optional
 
 import pandas as pd
 
-from .frame_load_calculator import FrameLoadCalculator
+from .frame_core_load_calculator import FrameLoadCalculator
+from .frame_core_cache_manager import FrameCacheManager
+from .frame_data_advanced_accessor import FrameDbAdvancedAccessor
+from .frame_time_utils import FrameTimeUtils
 from .frame_data_parser import validate_database_compatibility
-from .frame_cache_manager import FrameCacheManager
 
 
 class EmptyFrameAnalyzer:
@@ -79,61 +81,110 @@ class EmptyFrameAnalyzer:
         perf_conn = sqlite3.connect(perf_db_path)
 
         try:
-            # 执行查询获取帧信息
-            query = f"""
-            WITH filtered_frames AS (
-                -- 首先获取符合条件的帧
-                SELECT fs.ts, fs.dur, fs.ipid, fs.itid, fs.callstack_id
-                FROM frame_slice fs
-                WHERE fs.flag = 2
-                AND fs.type = 0
-            ),
-            process_filtered AS (
-                -- 通过process表过滤出app_pids中的帧
-                SELECT ff.*, p.pid, p.name as process_name, t.tid, t.name as thread_name, t.is_main_thread
-                FROM filtered_frames ff
-                JOIN process p ON ff.ipid = p.ipid
-                JOIN thread t ON ff.itid = t.itid
-                WHERE p.pid IN ({','.join('?' * len(app_pids))})
-            )
-            -- 最后获取调用栈信息
-            SELECT pf.*, cs.name as callstack_name
-            FROM process_filtered pf
-            JOIN callstack cs ON pf.callstack_id = cs.id
-            """
-
-            # 获取帧信息
-            trace_df = pd.read_sql_query(query, trace_conn, params=app_pids)
-
-            # 更新PID和TID缓存（如果提供了scene_dir和step_id）
-            if scene_dir and step_id:
-                FrameCacheManager.update_pid_tid_cache(step_id, trace_df)
+            # ==================== 标准化缓存检查和使用 ====================
+            # 在分析开始前，确保所有需要的数据都已缓存
+            if step_id:
+                # 预加载analyzer需要的基础数据
+                preload_result = FrameCacheManager.preload_analyzer_data(
+                    trace_conn, perf_conn, step_id, app_pids
+                )
+                # logging.info("预加载数据结果: %s", preload_result)
+                
+                # 确保帧负载数据缓存已初始化
+                FrameCacheManager.ensure_data_cached('frame_loads', step_id=step_id)
+            
+            # 使用复杂查询接口获取空帧详细信息
+            trace_df = FrameCacheManager.get_empty_frames_with_details(trace_conn, app_pids, step_id)
 
             if trace_df.empty:
-                logging.info("未找到符合条件的帧")
+                # logging.info("未找到符合条件的帧")
                 return None
 
             # 获取总负载
             total_load_query = "SELECT SUM(event_count) as total_load FROM perf_sample"
-            total_load = pd.read_sql_query(total_load_query, perf_conn)['total_load'].iloc[0]
+            total_load_result = pd.read_sql_query(total_load_query, perf_conn)
+            
+            # 安全处理total_load，处理None和NaN情况
+            if total_load_result.empty or total_load_result['total_load'].iloc[0] is None or pd.isna(total_load_result['total_load'].iloc[0]):
+                total_load = 0
+                logging.warning("perf_sample表中没有找到有效的event_count数据，设置total_load为0")
+            else:
+                total_load = total_load_result['total_load'].iloc[0]
+                if total_load <= 0:
+                    logging.warning("total_load计算结果为0或负数: %s，设置total_load为0", total_load)
+                    total_load = 0
 
             # 获取所有perf样本
-            perf_query = "SELECT callchain_id, timestamp_trace, thread_id, event_count FROM perf_sample"
-            perf_df = pd.read_sql_query(perf_query, perf_conn)
+            perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
 
             # 为每个帧创建时间区间
             trace_df['start_time'] = trace_df['ts']
             trace_df['end_time'] = trace_df['ts'] + trace_df['dur']
+
+            # 获取第一帧时间戳用于相对时间计算
+            # 从缓存中获取第一帧时间戳
+            if step_id:
+                try:
+                    # 从缓存中获取第一帧时间戳
+                    first_frame_time = FrameCacheManager.get_first_frame_timestamp(trace_conn, step_id)
+                except Exception:
+                    # 如果获取缓存失败，则使用空帧中的最小时间戳作为备选
+                    first_frame_time = int(trace_df['ts'].min()) if not trace_df.empty else 0
+            else:
+                # 如果无法获取step_id，则使用空帧中的最小时间戳作为备选
+                first_frame_time = int(trace_df['ts'].min()) if not trace_df.empty else 0
 
             # 初始化结果列表
             frame_loads = []
             empty_frame_load = 0  # 主线程空帧总负载（即空刷主线程负载）
             background_thread_load = 0  # 后台线程空帧总负载
 
-            # 对每个帧进行分析 - 使用模块化的负载计算器
+            # 对每个帧进行分析 - 优先使用缓存中的帧负载数据
             for _, frame in trace_df.iterrows():
-                frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
-                    frame, perf_df, perf_conn, step_id)
+                # 构建帧标识符用于查找缓存
+                frame_key = f"{frame['ts']}_{frame['dur']}_{frame['tid']}"
+                
+                # 检查缓存中是否已有该帧的负载数据
+                cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
+                cached_frame = None
+                
+                for cached in cached_frame_loads:
+                    if (cached.get('ts') == frame['ts'] and 
+                        cached.get('dur') == frame['dur'] and 
+                        cached.get('thread_id') == frame['tid']):
+                        cached_frame = cached
+                        break
+                
+                if cached_frame:
+                    # 使用缓存中的帧负载数据
+                    frame_load = cached_frame.get('frame_load', 0)
+                    sample_callchains = cached_frame.get('sample_callchains', [])
+                    # logging.debug("使用缓存的帧负载数据: ts=%s, load=%s", frame['ts'], frame_load)
+                    
+                    # 如果缓存中没有sample_callchains，尝试补充
+                    if not sample_callchains:
+                        # logging.debug("缓存中缺少sample_callchains，尝试补充: ts=%s", frame['ts'])
+                        # 直接调用analyze_single_frame重新分析
+                        try:
+                            frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
+                                frame, perf_df, perf_conn, step_id)
+                            # logging.debug("重新分析帧调用链: ts=%s, load=%s", frame['ts'], frame_load)
+                        except Exception as e:
+                            # 如果分析失败，使用默认值
+                            frame_load = cached_frame.get('frame_load', 0)
+                            sample_callchains = []
+                            logging.warning("重新分析帧调用链失败: ts=%s, error=%s", frame['ts'], str(e))
+                else:
+                    # 缓存中没有，执行帧负载分析
+                    try:
+                        frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
+                            frame, perf_df, perf_conn, step_id)
+                        # logging.debug("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
+                    except Exception as e:
+                        # 如果分析失败，使用默认值
+                        frame_load = 0
+                        sample_callchains = []
+                        logging.warning("执行帧负载分析失败: ts=%s, error=%s", frame['ts'], str(e))
 
                 if frame['is_main_thread'] == 1:
                     empty_frame_load += frame_load
@@ -141,7 +192,7 @@ class EmptyFrameAnalyzer:
                     background_thread_load += frame_load
 
                 frame_loads.append({
-                    'ts': frame['ts'],
+                    'ts': FrameTimeUtils.convert_to_relative_nanoseconds(frame['ts'], first_frame_time),
                     'dur': frame['dur'],
                     'ipid': frame['ipid'],
                     'itid': frame['itid'],
@@ -153,6 +204,9 @@ class EmptyFrameAnalyzer:
                     'callstack_name': frame['callstack_name'],
                     'frame_load': frame_load,
                     'is_main_thread': frame['is_main_thread'],
+                    'vsync': frame.get('vsync') if pd.notna(frame.get('vsync')) else None,  # 安全处理NaN
+                    'flag': frame.get('flag') if pd.notna(frame.get('flag')) else 0,  # 安全处理NaN
+                    'type': frame.get('type') if pd.notna(frame.get('type')) else 0,  # 安全处理NaN
                     'sample_callchains': sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)
                 })
 
@@ -166,8 +220,13 @@ class EmptyFrameAnalyzer:
                                             .sort_values('frame_load', ascending=False).head(5))
 
                 # 只统计主线程空帧负载和后台线程负载
-                empty_frame_percentage = (empty_frame_load / total_load) * 100
-                background_thread_percentage = (background_thread_load / total_load) * 100
+                if total_load > 0:
+                    empty_frame_percentage = (empty_frame_load / total_load) * 100
+                    background_thread_percentage = (background_thread_load / total_load) * 100
+                else:
+                    empty_frame_percentage = 0.0
+                    background_thread_percentage = 0.0
+                    logging.warning("total_load为0，无法计算百分比，设置为0")
 
                 # 构建结果字典
                 return {
@@ -187,7 +246,7 @@ class EmptyFrameAnalyzer:
                     }
                 }
 
-            logging.info("未找到任何帧负载数据")
+            # logging.info("未找到任何帧负载数据")
             return None
 
         except Exception as e:
@@ -223,10 +282,35 @@ class EmptyFrameAnalyzer:
         trace_df['start_time'] = trace_df['ts']
         trace_df['end_time'] = trace_df['ts'] + trace_df['dur']
 
-        # 对每个帧进行分析
+        # 对每个帧进行分析 - 优先使用缓存中的帧负载数据
         for _, frame in trace_df.iterrows():
-            frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
-                frame, perf_df, perf_conn, step_id)
+            # 检查缓存中是否已有该帧的负载数据
+            cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
+            cached_frame = None
+            
+            for cached in cached_frame_loads:
+                if (cached.get('ts') == frame['ts'] and 
+                    cached.get('dur') == frame['dur'] and 
+                    cached.get('thread_id') == frame['tid']):
+                    cached_frame = cached
+                    break
+            
+            if cached_frame:
+                # 使用缓存中的帧负载数据
+                frame_load = cached_frame.get('frame_load', 0)
+                sample_callchains = cached_frame.get('sample_callchains', [])
+                # logging.debug("使用缓存的帧负载数据: ts=%s, load=%s", frame['ts'], frame_load)
+            else:
+                # 缓存中没有，执行帧负载分析
+                try:
+                    frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
+                        frame, perf_df, perf_conn, step_id)
+                    # logging.debug("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
+                except Exception as e:
+                    # 如果分析失败，使用默认值
+                    frame_load = 0
+                    sample_callchains = []
+                    logging.warning("帧负载分析失败: ts=%s, error=%s", frame['ts'], str(e))
 
             frame_loads.append({
                 'ts': frame['ts'],
@@ -266,8 +350,8 @@ class EmptyFrameAnalyzer:
         background_thread_frames = [f for f in frame_loads if f.get('is_main_thread') != 1]
 
         # 计算负载
-        empty_frame_load = sum(f['frame_load'] for f in main_thread_frames)
-        background_thread_load = sum(f['frame_load'] for f in background_thread_frames)
+        empty_frame_load = int(sum(f['frame_load'] for f in main_thread_frames))  # 确保返回Python原生int类型
+        background_thread_load = int(sum(f['frame_load'] for f in background_thread_frames))  # 确保返回Python原生int类型
 
         # 计算百分比
         empty_frame_percentage = (empty_frame_load / total_load) * 100 if total_load > 0 else 0

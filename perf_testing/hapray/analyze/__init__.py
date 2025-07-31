@@ -28,8 +28,10 @@ MAX_WORKERS = 8  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
     'PerfAnalyzer',
-    'EmptyFrameAnalyzer',
-    'FrameDropAnalyzer',
+    'FrameLoadAnalyzer',      # 提前执行，作为数据收集前驱
+    'EmptyFrameAnalyzer',     # 使用缓存的帧负载数据
+    'FrameDropAnalyzer',      # 使用缓存的帧负载数据
+    'VSyncAnomalyAnalyzer',   # VSync异常分析器
     'ColdStartAnalyzer',
     'GCAnalyzer',
     'CovAnalyzer',

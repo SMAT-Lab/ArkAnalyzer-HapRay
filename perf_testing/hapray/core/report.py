@@ -60,12 +60,51 @@ class ReportData:
 
     def __str__(self):
         # 路径1: Base64编码的gzip压缩JSON
-        json_str = json.dumps(self.result)
+        # 清理数据中的NaN值以确保JSON序列化安全
+        cleaned_result = self._clean_data_for_json(self.result)
+        json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
             f.write(json_str)
         compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=9)
         base64_bytes = base64.b64encode(compressed_bytes)
         return base64_bytes.decode('ascii')
+
+    def _clean_data_for_json(self, data):
+        """清理数据，将numpy类型和NaN值转换为标准Python类型以确保JSON序列化"""
+        import pandas as pd
+        
+        if isinstance(data, dict):
+            return {key: self._clean_data_for_json(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._clean_data_for_json(item) for item in data]
+        elif hasattr(data, 'dtype') and hasattr(data, 'item'):
+            # numpy类型
+            if pd.isna(data):
+                # 处理NaN值
+                if 'int' in str(data.dtype):
+                    return 0
+                elif 'float' in str(data.dtype):
+                    return 0.0
+                else:
+                    return None
+            elif 'int' in str(data.dtype):
+                return int(data)
+            elif 'float' in str(data.dtype):
+                return float(data)
+            else:
+                return data.item()
+        elif hasattr(data, '__class__') and 'int64' in str(data.__class__):
+            # 其他可能的int64类型
+            if pd.isna(data):
+                return 0
+            return int(data)
+        elif pd.isna(data):
+            # 处理pandas NaN值
+            if isinstance(data, (int, float)):
+                return 0
+            return None
+        else:
+            return data
 
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])
