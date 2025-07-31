@@ -183,7 +183,7 @@
         <div class="chart-grid">
             <div class="chart-container data-panel">
                 <div class="chart-title">
-                    <i class="fas fa-chart-line"></i> FPS、卡顿帧、空刷分析图（相对时间）
+                    <i class="fas fa-chart-line"></i> FPS、卡顿帧、空刷分析图（实际时间）
                 </div>
                 <div ref="fpsChart" class="chart"></div>
             </div>
@@ -209,7 +209,7 @@
                     </div>
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">相对时间</div>
+                            <div class="info-label">实际时间</div>
                             <div class="info-value">
                                 {{ formatTime(selectedEmptyFrame.ts) }} ms
                             </div>
@@ -300,9 +300,9 @@
                     </div>
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">相对时间</div>
+                            <div class="info-label">实际时间</div>
                             <div class="info-value">
-                                {{ formatTime(selectedStutter.timestamp) }} ms
+                                {{ formatTime(selectedStutter.ts) }} ms
                             </div>
                         </div>
                         <div class="info-item">
@@ -370,6 +370,91 @@
                 </div>
             </div>
         </div>
+
+        <!-- 帧负载详情面板 -->
+        <div v-if="selectedFrameLoad" class="detail-panel frameload-panel">
+            <div class="detail-header">
+                <div class="detail-title frameload-header">
+                    <i class="fas fa-chart-bar"></i>
+                    帧负载详情 - VSync: {{ selectedFrameLoad.vsync }} ({{ selectedFrameLoad.thread_name }})
+                </div>
+                <el-button type="info" @click="selectedFrameLoad = null">
+                    <i class="fas fa-times"></i> 关闭详情
+                </el-button>
+            </div>
+            <div class="detail-content">
+                <div class="stutter-info">
+                    <div class="info-title">
+                        <i class="fas fa-info-circle"></i>
+                        基本信息
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">实际时间</div>
+                            <div class="info-value">
+                                {{ formatTime(selectedFrameLoad.ts) }} ms
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">持续时间</div>
+                            <div class="info-value">{{ (selectedFrameLoad.dur / 1000000).toFixed(2) }} ms</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">帧负载</div>
+                            <div class="info-value">{{ selectedFrameLoad.frame_load }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">进程名称</div>
+                            <div class="info-value">{{ selectedFrameLoad.process_name }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">线程名称</div>
+                            <div class="info-value">{{ selectedFrameLoad.thread_name }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">调用栈数量</div>
+                            <div class="info-value">{{ selectedFrameLoad.sample_callchains?.length || 0 }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="callstack-info">
+                    <div class="info-title">
+                        <i class="fas fa-code-branch"></i>
+                        调用栈信息
+                    </div>
+                    <div
+                        v-if="selectedFrameLoad.sample_callchains && selectedFrameLoad.sample_callchains.length > 0"
+                        class="callstack-list">
+                        <div
+                            v-for="(chain, idx) in selectedFrameLoad.sample_callchains" :key="idx"
+                            class="callstack-item">
+                            <div class="callstack-header">
+                                <div class="callstack-timestamp">
+                                    调用栈 {{ idx + 1 }}
+                                </div>
+                                <div class="callstack-stats">
+                                    事件数: {{ chain.event_count }} | 负载: {{ chain.load_percentage.toFixed(2) }}%
+                                </div>
+                            </div>
+                            <div class="callstack-frames">
+                                <div
+                                    v-for="(frame, frameIdx) in chain.callchain" :key="frameIdx"
+                                    class="callstack-frame">
+                                    <div class="frame-symbol">{{ frame.symbol }}</div>
+                                    <div class="frame-location">{{ frame.file }}:{{ frame.line }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="no-callstack">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        暂无调用栈信息
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="table-container data-panel">
             <div class="table-title">
                 <i>📋</i> 卡顿详情
@@ -479,7 +564,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultFrameLoadsData, safeProcessFrameLoadsData, getDefaultFrameLoadsStepData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -488,6 +573,7 @@ const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? getDefaultEmptyFrameD
 const componentResuJsonData = jsonDataStore.componentResuData;
 const coldStartJsonData = safeProcessColdStartData(jsonDataStore.coldStartData) ?? getDefaultColdStartData();
 const gcThreadJsonData = safeProcessGcThreadData(jsonDataStore.gcThreadData) ?? getDefaultGcThreadData();
+const frameLoadsJsonData = safeProcessFrameLoadsData(jsonDataStore.frameLoadsData) ?? getDefaultFrameLoadsData();
 
 const props = defineProps({
     data: {
@@ -528,6 +614,12 @@ const gcThreadData = computed(() => {
 const coldStartData = computed(() => {
     const key = props.step === 0 || coldStartJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
     return coldStartJsonData[key] ?? getDefaultColdStartStepData();
+});
+
+// 当前步骤帧负载信息
+const frameLoadsData = computed(() => {
+    const key = props.step === 0 || frameLoadsJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
+    return frameLoadsJsonData[key] ?? getDefaultFrameLoadsStepData();
 });
 
 // 文件使用分析数据 - 由冷启动数据提供
@@ -600,6 +692,7 @@ const fileUsageData = computed(() => {
 const fpsChart = ref(null);
 const selectedStutter = ref(null);
 const selectedEmptyFrame = ref(null);
+const selectedFrameLoad = ref(null);
 const callstackData = ref([]);
 const callstackThread = ref('');
 
@@ -652,6 +745,7 @@ const hasPerformanceData = computed(() => !!performanceData.value && performance
 const hasEmptyFrameData = computed(() => !!emptyFrameData.value && emptyFrameData.value.summary && emptyFrameData.value.summary.total_empty_frames > 0);
 const hasComponentResuData = computed(() => !!componentResuData.value && componentResuData.value.total_builds > 0);
 const hasGcThreadData = computed(() => !!gcThreadData.value && Object.keys(gcThreadData.value).length > 0);
+const hasFrameLoadsData = computed(() => !!frameLoadsData.value && frameLoadsData.value.top_frames && frameLoadsData.value.top_frames.length > 0);
 
 // 格式化数字显示
 const formatNumber = (num) => {
@@ -663,11 +757,11 @@ const formatNumber = (num) => {
     return num;
 };
 
-// 格式化时间为相对时间
+// 格式化时间为实际时间
 const formatTime = (timestamp) => {
-    // 纳秒转毫秒并减去最小时间戳
+    // 纳秒转毫秒
     const timeMs = timestamp / 1000000;
-    return (timeMs - minTimestamp.value).toFixed(2);
+    return timeMs.toFixed(2);
 };
 
 // 格式化文件时间
@@ -728,8 +822,8 @@ const initCharts = () => {
         // 收集FPS数据点
         const fpsData = [];
         performanceData.value.fps_stats.fps_windows.forEach(window => {
-            // 使用窗口开始时间作为时间点
-            const timeMs = window.start_time_ts / 1000000; // 转换为毫秒
+            // 使用窗口开始时间作为时间点，改用start_time而不是start_time_ts
+            const timeMs = window.start_time / 1000000; // 转换为毫秒
             allTimestamps.push(timeMs);
             fpsData.push({
                 time: timeMs,
@@ -744,24 +838,67 @@ const initCharts = () => {
             ...performanceData.value.stutter_details.ui_stutter,
             ...performanceData.value.stutter_details.render_stutter
         ].forEach(stutter => {
-            const timeMs = stutter.timestamp / 1000000; // 转换为毫秒
+            const timeMs = stutter.ts / 1000000; // 转换为毫秒
             allTimestamps.push(timeMs);
 
-            // 查找对应时间点的FPS值
-            let closestFps = 0;
-            let minDiff = Infinity;
-            fpsData.forEach(fpsItem => {
-                const diff = Math.abs(fpsItem.time - timeMs);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestFps = fpsItem.fps;
+            // 优化FPS值匹配算法：让卡顿点精确落在FPS折线上
+            let matchedFps = 0;
+
+            // 对fpsData按时间排序（确保顺序正确）
+            const sortedFpsData = [...fpsData].sort((a, b) => a.time - b.time);
+
+            // 查找卡顿时间戳在FPS折线上的对应位置
+            let foundExactMatch = false;
+
+            // 首先检查是否有完全匹配的时间点
+            for (const fpsPoint of sortedFpsData) {
+                if (Math.abs(fpsPoint.time - timeMs) < 1) { // 1ms容差
+                    matchedFps = fpsPoint.fps;
+                    foundExactMatch = true;
+                    break;
                 }
-            });
+            }
+
+            // 如果没有完全匹配，在FPS折线上进行插值
+            if (!foundExactMatch) {
+                let prevPoint = null;
+                let nextPoint = null;
+
+                // 查找卡顿时间戳前后的FPS数据点
+                for (let i = 0; i < sortedFpsData.length; i++) {
+                    const fpsPoint = sortedFpsData[i];
+
+                    if (fpsPoint.time <= timeMs) {
+                        prevPoint = fpsPoint;
+                    } else if (fpsPoint.time > timeMs && !nextPoint) {
+                        nextPoint = fpsPoint;
+                        break;
+                    }
+                }
+
+                // 在FPS折线上进行线性插值
+                if (prevPoint && nextPoint) {
+                    const timeRange = nextPoint.time - prevPoint.time;
+                    const timeOffset = timeMs - prevPoint.time;
+                    const ratio = timeRange > 0 ? timeOffset / timeRange : 0;
+
+                    matchedFps = prevPoint.fps + (nextPoint.fps - prevPoint.fps) * ratio;
+                } else if (prevPoint) {
+                    // 只有前一个点，使用前一个点的FPS
+                    matchedFps = prevPoint.fps;
+                } else if (nextPoint) {
+                    // 只有后一个点，使用后一个点的FPS
+                    matchedFps = nextPoint.fps;
+                } else {
+                    // 没有任何FPS数据点，使用平均FPS
+                    matchedFps = performanceData.value.fps_stats.average_fps || 0;
+                }
+            }
 
             stutterPoints.push({
                 time: timeMs,
                 stutter: stutter,
-                fps: closestFps  // 添加对应的FPS值
+                fps: matchedFps  // 使用优化后的FPS值
             });
         });
 
@@ -822,7 +959,25 @@ const initCharts = () => {
         //    loadData.push(frame.frame_load);
         //});
 
-        const maxBarNum = loadData.length > 0 ? Math.max(...loadData) : 0;
+        // 收集frameLoads数据（用于蓝色柱状图）
+        const frameLoadsBarData = [];
+        const frameLoadsValues = [];
+
+        frameLoadsData.value.top_frames.forEach(frameLoad => {
+            const timeMs = frameLoad.ts / 1000000; // 转换为毫秒
+            frameLoadsBarData.push({
+                time: timeMs,
+                load: frameLoad.frame_load,
+                frameLoad: frameLoad,  // 添加完整的frameLoad对象
+                type: 'frame_load'
+            });
+            frameLoadsValues.push(frameLoad.frame_load);
+        });
+
+        const maxBarNum = Math.max(
+            loadData.length > 0 ? Math.max(...loadData) : 0,
+            frameLoadsValues.length > 0 ? Math.max(...frameLoadsValues) : 0
+        );
 
         // 找到最小时间戳作为起点
         minTimestamp.value = allTimestamps.length > 0 ? Math.min(...allTimestamps) : 0;
@@ -841,23 +996,65 @@ const initCharts = () => {
                 textStyle: {
                     color: '#1e293b'
                 },
+                // 动态定位，确保不超出画布
+                position: function (point, params, dom, rect, size) {
+                    // point: 鼠标位置 [x, y]
+                    // size: tooltip大小 {contentSize: [width, height], viewSize: [width, height]}
+
+                    const tooltipWidth = size.contentSize[0];
+                    const tooltipHeight = size.contentSize[1];
+                    const chartWidth = size.viewSize[0];
+                    const chartHeight = size.viewSize[1];
+
+                    let x = point[0];
+                    let y = point[1];
+
+                    // 水平方向调整：如果tooltip会超出右边界，则显示在鼠标左侧
+                    if (x + tooltipWidth + 20 > chartWidth) {
+                        x = x - tooltipWidth - 20;
+                    } else {
+                        x = x + 20; // 默认显示在鼠标右侧
+                    }
+
+                    // 垂直方向调整：如果tooltip会超出下边界，则向上调整
+                    if (y + tooltipHeight + 20 > chartHeight) {
+                        y = y - tooltipHeight - 20;
+                    } else {
+                        y = y + 20; // 默认显示在鼠标下方
+                    }
+
+                    // 确保不会超出左边界和上边界
+                    x = Math.max(10, x);
+                    y = Math.max(10, y);
+
+                    return [x, y];
+                },
                 formatter: function (params) {
                     let html = `<div style="font-weight:bold;margin-bottom:8px;color:#3b82f6;">帧数据详情</div>`;
                     const timeParam = params[0];
-                    const relativeTime = Math.max(0, timeParam.value[0] - minTimestamp.value);
-                    html += `<div>相对时间: <span style="color:#3b82f6;font-weight:500">${relativeTime.toFixed(2)} ms</span></div>`;
+                    const actualTime = timeParam.value[0];
+                    html += `<div>实际时间: <span style="color:#3b82f6;font-weight:500">${actualTime.toFixed(2)} ms</span></div>`;
 
                     params.forEach(param => {
                         if (param.seriesName === 'FPS值') {
                             html += `<div>FPS: <span style="color:#3b82f6;font-weight:bold">${param.value[1]}</span></div>`;
                         } else if (param.seriesName === '空刷负载') {
                             // 修复1: 显示空刷负载
-                            html += `<div>帧负载: <span style="color:${param.color};font-weight:bold">${param.value[1]}</span></div>`;
+                            html += `<div>空刷负载: <span style="color:${param.color};font-weight:bold">${param.value[1]}</span></div>`;
 
                             // 显示线程类型信息
                             if (param.data.type) {
                                 const threadType = param.data.type === 'main_thread' ? '主线程' : '后台线程';
                                 html += `<div>线程类型: ${threadType}</div>`;
+                            }
+                        } else if (param.seriesName === '帧负载') {
+                            // 显示frameLoads负载
+                            html += `<div>帧负载: <span style="color:${param.color};font-weight:bold">${param.value[1]}</span></div>`;
+
+                            // 显示线程和进程信息
+                            if (param.data.frameLoad) {
+                                html += `<div>进程: ${param.data.frameLoad.process_name}</div>`;
+                                html += `<div>线程: ${param.data.frameLoad.thread_name}</div>`;
                             }
                         } else if (param.seriesName === '卡顿点') {
                             const stutter = param.data.stutter;
@@ -876,6 +1073,11 @@ const initCharts = () => {
                     // 统一图例颜色为主线程紫色（#8b5cf6）
                     icon: 'rect',
                     itemStyle: { color: '#8b5cf6' }
+                }, {
+                    name: '帧负载',
+                    // 蓝色柱状图
+                    icon: 'rect',
+                    itemStyle: { color: '#3b82f6' }
                 }, '卡顿点', '空刷帧'],
                 top: 10,
                 textStyle: {
@@ -891,7 +1093,7 @@ const initCharts = () => {
             },
             xAxis: {
                 type: 'value',
-                name: '相对时间 (ms)',
+                name: '实际时间 (ms)',
                 nameLocation: 'middle',
                 nameGap: 30,
                 nameTextStyle: {
@@ -905,12 +1107,10 @@ const initCharts = () => {
                 axisLabel: {
                     color: '#64748b',
                     formatter: function (value) {
-                        // 确保x轴显示非负值
-                        const relativeTime = Math.max(0, value - minTimestamp.value);
-                        return parseInt(relativeTime).toLocaleString();
+                        // 显示实际时间数字
+                        return parseInt(value).toLocaleString();
                     }
-                },
-                min: minTimestamp.value
+                }
             },
             yAxis: [
                 {
@@ -991,7 +1191,7 @@ const initCharts = () => {
                     name: '空刷负载',
                     type: 'bar',
                     yAxisIndex: 1, // 使用第二个y轴
-                    barWidth: 8,
+                    barWidth: 6,
                     data: frameLoadData.map(item => {
                         // 确保每个数据点包含完整信息
                         return {
@@ -1011,6 +1211,24 @@ const initCharts = () => {
                             }
                             return '#8b5cf6'; // 默认也用主线程紫色
                         }
+                    },
+                    triggerEvent: true  // 确保柱状图可以触发事件
+                },
+                {
+                    name: '帧负载',
+                    type: 'bar',
+                    yAxisIndex: 1, // 使用第二个y轴
+                    barWidth: 6,
+                    data: frameLoadsBarData.map(item => {
+                        // 确保每个数据点包含完整信息
+                        return {
+                            value: [item.time, item.load],
+                            frameLoad: item.frameLoad, // 传递frameLoad对象
+                            type: item.type    // 传递类型
+                        };
+                    }),
+                    itemStyle: {
+                        color: '#3b82f6' // 蓝色
                     },
                     triggerEvent: true  // 确保柱状图可以触发事件
                 },
@@ -1035,6 +1253,7 @@ const initCharts = () => {
                     type: 'scatter',
                     symbol: 'circle',
                     symbolSize: 16,
+                    z: 10, // 设置较高的z-index，确保在最上层显示
                     data: stutterPoints.map(p => {
                         return {
                             value: [p.time, p.fps],  // 使用对应时间点的FPS值作为y坐标
@@ -1046,7 +1265,9 @@ const initCharts = () => {
                         color: function (params) {
                             const stutter = params.data.stutter;
                             return getStutterColor(stutter.stutter_level);
-                        }
+                        },
+                        borderColor: '#ffffff', // 添加白色边框，增强可见性
+                        borderWidth: 2
                     },
                     tooltip: {
                         formatter: function (params) {
@@ -1079,8 +1300,22 @@ const initCharts = () => {
                     console.log('找到帧对象', params.data.frame);
                     selectedEmptyFrame.value = params.data.frame;
                     selectedStutter.value = null;
+                    selectedFrameLoad.value = null;
                 } else {
                     console.warn('点击柱状图但未找到frame对象', params);
+                }
+            }
+
+            // 处理帧负载系列的点击事件
+            if (params.seriesName === '帧负载') {
+                // 检查数据点是否包含frameLoad对象
+                if (params.data && params.data.frameLoad) {
+                    console.log('找到帧负载对象', params.data.frameLoad);
+                    selectedFrameLoad.value = params.data.frameLoad;
+                    selectedEmptyFrame.value = null;
+                    selectedStutter.value = null;
+                } else {
+                    console.warn('点击帧负载柱状图但未找到frameLoad对象', params);
                 }
             }
 
@@ -1089,7 +1324,8 @@ const initCharts = () => {
                 if (params.data && params.data.stutter) {
                     selectedStutter.value = params.data.stutter;
                     selectedEmptyFrame.value = null;
-                    findCallstackInfo(params.data.stutter.timestamp);
+                    selectedFrameLoad.value = null;
+                    findCallstackInfo(params.data.stutter.ts);
                 }
             }
         });
@@ -1130,7 +1366,7 @@ const findCallstackInfo = (timestamp) => {
     // 在卡顿帧ui_stutter里面找
     const uiStutterCallChains = performanceData.value.stutter_details.ui_stutter;
     for (const uiStutterCallChain of uiStutterCallChains) {
-        if (timestamp >= uiStutterCallChain.timestamp && timestamp <= uiStutterCallChain.timestamp + uiStutterCallChain.actual_duration) {
+        if (timestamp >= uiStutterCallChain.ts && timestamp <= uiStutterCallChain.ts + uiStutterCallChain.actual_duration) {
             if (uiStutterCallChain.sample_callchains) {
                 callstackData.value = uiStutterCallChain.sample_callchains;
                 return;
@@ -1138,22 +1374,24 @@ const findCallstackInfo = (timestamp) => {
         }
     }
     // 在卡顿帧render_stutter里面找
-    const renderStutterCallChains = performanceData.value.stutter_details.ui_stutter;
+    const renderStutterCallChains = performanceData.value.stutter_details.render_stutter;
     for (const renderStutterCallChain of renderStutterCallChains) {
-        if (timestamp >= renderStutterCallChain.timestamp && timestamp <= renderStutterCallChain.timestamp + renderStutterCallChain.actual_duration) {
+        if (timestamp >= renderStutterCallChain.ts && timestamp <= renderStutterCallChain.ts + renderStutterCallChain.actual_duration) {
             if (renderStutterCallChain.sample_callchains) {
                 callstackData.value = renderStutterCallChain.sample_callchains;
                 return;
             }
         }
     }
-    // 在卡顿帧sceneboard_stutter里面找
-    const sceneboardStutterCallChains = performanceData.value.stutter_details.ui_stutter;
-    for (const sceneboardStutterCallChain of sceneboardStutterCallChains) {
-        if (timestamp >= sceneboardStutterCallChain.timestamp && timestamp <= sceneboardStutterCallChain.timestamp + sceneboardStutterCallChain.actual_duration) {
-            if (sceneboardStutterCallChain.sample_callchains) {
-                callstackData.value = sceneboardStutterCallChain.sample_callchains;
-                return;
+    // 在卡顿帧sceneboard_stutter里面找（如果存在的话）
+    if (performanceData.value.stutter_details.sceneboard_stutter) {
+        const sceneboardStutterCallChains = performanceData.value.stutter_details.sceneboard_stutter;
+        for (const sceneboardStutterCallChain of sceneboardStutterCallChains) {
+            if (timestamp >= sceneboardStutterCallChain.ts && timestamp <= sceneboardStutterCallChain.ts + sceneboardStutterCallChain.actual_duration) {
+                if (sceneboardStutterCallChain.sample_callchains) {
+                    callstackData.value = sceneboardStutterCallChain.sample_callchains;
+                    return;
+                }
             }
         }
     }
@@ -1180,6 +1418,7 @@ watch(() => props.step, () => {
     // 当步骤变化时关闭所有详情面板
     selectedStutter.value = null;
     selectedEmptyFrame.value = null;
+    selectedFrameLoad.value = null;
 });
 
 </script>
@@ -1957,5 +2196,23 @@ body {
 .expand-icon.expanded:hover {
     background: rgba(239, 68, 68, 0.2);
     color: #dc2626;
+}
+
+/* 空刷帧详情面板样式 */
+.emptyframe-header {
+    color: #8b5cf6;
+}
+
+.emptyframe-panel {
+    border-left: 4px solid #8b5cf6;
+}
+
+/* 帧负载详情面板样式 */
+.frameload-header {
+    color: #3b82f6;
+}
+
+.frameload-panel {
+    border-left: 4px solid #3b82f6;
 }
 </style>
