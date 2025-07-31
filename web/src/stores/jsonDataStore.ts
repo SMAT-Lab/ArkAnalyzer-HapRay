@@ -260,6 +260,47 @@ interface FrameLoadsStepData {
 
 export type FrameLoadsData = Record<string, FrameLoadsStepData>;
 
+interface VSyncFrequencyAnomaly {
+  type: string;
+  start_vsync: number;
+  end_vsync: number;
+  start_ts: number;
+  end_ts: number;
+  duration: number;
+  interval_count: number;
+  avg_interval: number;
+  avg_frequency: number;
+  min_frequency: number;
+  max_frequency: number;
+  severity: string;
+  description: string;
+}
+
+interface VSyncFrameMismatch {
+  type: string;
+  vsync: number;
+  expect_frames?: number;
+  actual_frames?: number;
+  description: string;
+  ts: number;
+  thread_name: string;
+  process_name: string;
+}
+
+interface VSyncAnomalyStepData {
+  status?: string;
+  statistics?: {
+    total_vsync_signals: number;
+    frequency_anomalies_count: number;
+    frame_mismatch_count: number;
+    anomaly_rate: number;
+  };
+  frequency_anomalies: VSyncFrequencyAnomaly[];
+  frame_mismatches: VSyncFrameMismatch[];
+}
+
+export type VSyncAnomalyData = Record<string, VSyncAnomalyStepData>;
+
 interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
@@ -267,6 +308,7 @@ interface TraceData {
   coldStart?: ColdStartData;
   gc_thread?: GcThreadData;
   frameLoads?: FrameLoadsData;
+  vsyncAnomaly?: VSyncAnomalyData;
 }
 
 interface MoreData {
@@ -358,6 +400,37 @@ function createDefaultFrameLoad(): FrameLoad {
       load_percentage: 0,
       callchain: [createDefaultCallstackFrame()]
     }]
+  };
+}
+
+function createDefaultVSyncFrequencyAnomaly(): VSyncFrequencyAnomaly {
+  return {
+    type: "",
+    start_vsync: 0,
+    end_vsync: 0,
+    start_ts: 0,
+    end_ts: 0,
+    duration: 0,
+    interval_count: 0,
+    avg_interval: 0,
+    avg_frequency: 0,
+    min_frequency: 0,
+    max_frequency: 0,
+    severity: "",
+    description: ""
+  };
+}
+
+function createDefaultVSyncFrameMismatch(): VSyncFrameMismatch {
+  return {
+    type: "",
+    vsync: 0,
+    expect_frames: 0,
+    actual_frames: 0,
+    description: "",
+    ts: 0,
+    thread_name: "",
+    process_name: ""
   };
 }
 
@@ -463,6 +536,28 @@ export function getDefaultFrameLoadsData(): FrameLoadsData {
   };
 }
 
+/** 获取默认的VSync异常步骤数据 */
+export function getDefaultVSyncAnomalyStepData(): VSyncAnomalyStepData {
+  return {
+    status: "unknown",
+    statistics: {
+      total_vsync_signals: 0,
+      frequency_anomalies_count: 0,
+      frame_mismatch_count: 0,
+      anomaly_rate: 0
+    },
+    frequency_anomalies: [createDefaultVSyncFrequencyAnomaly()],
+    frame_mismatches: [createDefaultVSyncFrameMismatch()]
+  };
+}
+
+/** 获取默认的VSync异常数据（包含一个默认步骤） */
+export function getDefaultVSyncAnomalyData(): VSyncAnomalyData {
+  return {
+    step1: getDefaultVSyncAnomalyStepData()
+  };
+}
+
 export function getDefaultColdStartStepData(): ColdStartStepData {
   return {
     summary: {
@@ -532,6 +627,30 @@ export function safeProcessFrameLoadsData(data: FrameLoadsData | null | undefine
   return result;
 }
 
+/**
+ * 安全处理VSync异常数据 - 替换无效值为默认结构
+ * @param data 原始VSync异常数据
+ * @returns 处理后的有效VSync异常数据
+ */
+export function safeProcessVSyncAnomalyData(data: VSyncAnomalyData | null | undefined): VSyncAnomalyData {
+  if (!data) return getDefaultVSyncAnomalyData();
+
+  const result: VSyncAnomalyData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultVSyncAnomalyStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultVSyncAnomalyStepData();
+  }
+
+  return result;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
   version: string | null;
@@ -545,6 +664,7 @@ interface JsonDataState {
   coldStartData: ColdStartData | null;
   gcThreadData: GcThreadData | null;
   frameLoadsData: FrameLoadsData | null;
+  vsyncAnomalyData: VSyncAnomalyData | null;
   baseMark: string | null;
   compareMark: string | null;
   flameGraph: Record<string, string> | null;
@@ -629,6 +749,7 @@ export const useJsonDataStore = defineStore('config', {
     coldStartData: null,
     gcThreadData: null,
     frameLoadsData: null,
+    vsyncAnomalyData: null,
     baseMark: null,
     compareMark: null,
     flameGraph: null,
@@ -651,6 +772,7 @@ export const useJsonDataStore = defineStore('config', {
         this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
         this.gcThreadData = safeProcessGcThreadData(jsonData.trace.gc_thread);
         this.frameLoadsData = safeProcessFrameLoadsData(jsonData.trace.frameLoads);
+        this.vsyncAnomalyData = safeProcessVSyncAnomalyData(jsonData.trace.vsyncAnomaly);
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
@@ -659,6 +781,7 @@ export const useJsonDataStore = defineStore('config', {
         this.coldStartData = getDefaultColdStartData();
         this.gcThreadData = getDefaultGcThreadData();
         this.frameLoadsData = getDefaultFrameLoadsData();
+        this.vsyncAnomalyData = getDefaultVSyncAnomalyData();
       }
       if (jsonData.more) {
         // 火焰图
