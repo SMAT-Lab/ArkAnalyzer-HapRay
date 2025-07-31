@@ -86,6 +86,9 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
         """分析VSync异常"""
         
         try:
+            # 获取第一帧时间戳用于相对时间计算
+            first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
+            
             # 1. 按vsync分组分析
             vsync_groups = self._group_frames_by_vsync(frames_df)
             
@@ -93,12 +96,12 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                 logging.info("No valid VSync groups found")
                 return None
             
-            # 2. 计算VSync间隔
-            vsync_intervals = self._calculate_vsync_intervals(vsync_groups)
+            # 2. 计算VSync间隔（使用相对时间戳）
+            vsync_intervals = self._calculate_vsync_intervals(vsync_groups, first_frame_time)
             
             # 3. 检测各种异常
             frequency_anomalies = self._detect_frequency_anomalies(vsync_intervals)
-            frame_mismatches = self._detect_frame_mismatches(vsync_groups)
+            frame_mismatches = self._detect_frame_mismatches(vsync_groups, first_frame_time)
             
             return {
                 'statistics': {
@@ -145,7 +148,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
         
         return vsync_groups
 
-    def _calculate_vsync_intervals(self, vsync_groups: pd.DataFrame) -> List[Dict[str, Any]]:
+    def _calculate_vsync_intervals(self, vsync_groups: pd.DataFrame, first_frame_time: int) -> List[Dict[str, Any]]:
         """计算VSync间隔"""
         
         intervals = []
@@ -162,7 +165,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                 'vsync2': current_vsync['vsync'],
                 'interval': interval,
                 'frequency': frequency,
-                'ts': previous_vsync['start_time']
+                'ts': previous_vsync['start_time'] - first_frame_time # 使用相对时间戳
             })
         
         return intervals
@@ -202,8 +205,8 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                 'type': 'high_frequency_period',
                 'start_vsync': int(period['start_vsync']),
                 'end_vsync': int(period['end_vsync']),
-                'start_ts': int(period['start_ts']),
-                'end_ts': int(period['end_ts']),
+                'start_ts': int(period['start_ts']),  # 已经是相对时间戳
+                'end_ts': int(period['end_ts']),      # 已经是相对时间戳
                 'duration': int(period['duration']),
                 'interval_count': int(period['interval_count']),
                 'avg_interval': int(period['avg_interval']),
@@ -225,8 +228,8 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                 'type': 'low_frequency_period',
                 'start_vsync': int(period['start_vsync']),
                 'end_vsync': int(period['end_vsync']),
-                'start_ts': int(period['start_ts']),
-                'end_ts': int(period['end_ts']),
+                'start_ts': int(period['start_ts']),  # 已经是相对时间戳
+                'end_ts': int(period['end_ts']),      # 已经是相对时间戳
                 'duration': int(period['duration']),
                 'interval_count': int(period['interval_count']),
                 'avg_interval': int(period['avg_interval']),
@@ -321,7 +324,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
 
 
-    def _detect_frame_mismatches(self, vsync_groups: pd.DataFrame) -> List[Dict[str, Any]]:
+    def _detect_frame_mismatches(self, vsync_groups: pd.DataFrame, first_frame_time: int) -> List[Dict[str, Any]]:
         """检测VSync与帧的不匹配异常"""
         
         mismatches = []
@@ -337,7 +340,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                     'vsync': int(row['vsync']),
                     'expect_frames': int(expect_frames),
                     'description': f"VSync {int(row['vsync'])} 只有期望帧，没有实际渲染帧",
-                    'ts': int(row['start_time']),
+                    'ts': int(row['start_time'] - first_frame_time), # 使用相对时间戳
                     'thread_name': str(row['thread_name']),
                     'process_name': str(row['process_name'])
                 })
@@ -347,7 +350,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                     'vsync': int(row['vsync']),
                     'actual_frames': int(actual_frames),
                     'description': f"VSync {int(row['vsync'])} 只有实际帧，没有期望帧",
-                    'ts': int(row['start_time']),
+                    'ts': int(row['start_time'] - first_frame_time), # 使用相对时间戳
                     'thread_name': str(row['thread_name']),
                     'process_name': str(row['process_name'])
                 })
