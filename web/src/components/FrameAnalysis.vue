@@ -183,7 +183,7 @@
         <div class="chart-grid">
             <div class="chart-container data-panel">
                 <div class="chart-title">
-                    <i class="fas fa-chart-line"></i> FPS、卡顿帧、空刷分析图（实际时间）
+                    <i class="fas fa-chart-line"></i> FPS、卡顿帧、空刷分析图（相对时间）
                 </div>
                 <div ref="fpsChart" class="chart"></div>
             </div>
@@ -209,7 +209,7 @@
                     </div>
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">实际时间</div>
+                            <div class="info-label">相对时间</div>
                             <div class="info-value">
                                 {{ formatTime(selectedEmptyFrame.ts) }} ms
                             </div>
@@ -300,7 +300,7 @@
                     </div>
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">实际时间</div>
+                            <div class="info-label">相对时间</div>
                             <div class="info-value">
                                 {{ formatTime(selectedStutter.ts) }} ms
                             </div>
@@ -390,7 +390,7 @@
                     </div>
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">实际时间</div>
+                            <div class="info-label">相对时间</div>
                             <div class="info-value">
                                 {{ formatTime(selectedFrameLoad.ts) }} ms
                             </div>
@@ -450,6 +450,108 @@
                     <div v-else class="no-callstack">
                         <i class="fas fa-exclamation-triangle"></i>
                         暂无调用栈信息
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VSync异常详情面板 -->
+        <div v-if="selectedVSyncAnomaly" class="detail-panel vsync-anomaly-panel">
+            <div class="detail-header">
+                <div class="detail-title vsync-anomaly-header">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    VSync异常详情 - {{ selectedVSyncAnomaly.anomalyCategory === 'frequency_anomaly' ? '频率异常' : '帧不匹配' }}
+                </div>
+                <el-button type="info" @click="selectedVSyncAnomaly = null">
+                    <i class="fas fa-times"></i> 关闭详情
+                </el-button>
+            </div>
+            <div class="detail-content">
+                <!-- 频率异常信息 -->
+                <div v-if="selectedVSyncAnomaly.anomalyCategory === 'frequency_anomaly'" class="stutter-info">
+                    <div class="info-title">
+                        <i class="fas fa-wave-square"></i>
+                        频率异常信息
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">异常类型</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.type }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">VSync范围</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.start_vsync }} - {{ selectedVSyncAnomaly.end_vsync }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">持续时间</div>
+                            <div class="info-value">{{ (selectedVSyncAnomaly.duration / 1000000).toFixed(2) }} ms</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">间隔数量</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.interval_count }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">平均间隔</div>
+                            <div class="info-value">{{ (selectedVSyncAnomaly.avg_interval / 1000000).toFixed(2) }} ms</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">平均频率</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.avg_frequency.toFixed(1) }} Hz</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">频率范围</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.min_frequency.toFixed(1) }} - {{ selectedVSyncAnomaly.max_frequency.toFixed(1) }} Hz</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">严重程度</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.severity }}</div>
+                        </div>
+                    </div>
+                    <div class="info-description">
+                        <div class="info-label">描述</div>
+                        <div class="info-value">{{ selectedVSyncAnomaly.description }}</div>
+                    </div>
+                </div>
+
+                <!-- 帧不匹配信息 -->
+                <div v-else-if="selectedVSyncAnomaly.anomalyCategory === 'frame_mismatch'" class="stutter-info">
+                    <div class="info-title">
+                        <i class="fas fa-unlink"></i>
+                        帧不匹配信息
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">异常类型</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.type }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">VSync编号</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.vsync }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">时间戳</div>
+                            <div class="info-value">{{ formatTime(selectedVSyncAnomaly.ts) }} ms</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">进程名称</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.process_name }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">线程名称</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.thread_name }}</div>
+                        </div>
+                        <div class="info-item" v-if="selectedVSyncAnomaly.expect_frames !== undefined">
+                            <div class="info-label">期望帧数</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.expect_frames }}</div>
+                        </div>
+                        <div class="info-item" v-if="selectedVSyncAnomaly.actual_frames !== undefined">
+                            <div class="info-label">实际帧数</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.actual_frames }}</div>
+                        </div>
+                    </div>
+                    <div class="info-description">
+                        <div class="info-label">描述</div>
+                        <div class="info-value">{{ selectedVSyncAnomaly.description }}</div>
                     </div>
                 </div>
             </div>
@@ -564,7 +666,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultFrameLoadsData, safeProcessFrameLoadsData, getDefaultFrameLoadsStepData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultFrameLoadsData, safeProcessFrameLoadsData, getDefaultFrameLoadsStepData, getDefaultVSyncAnomalyData, getDefaultVSyncAnomalyStepData, safeProcessVSyncAnomalyData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -574,6 +676,7 @@ const componentResuJsonData = jsonDataStore.componentResuData;
 const coldStartJsonData = safeProcessColdStartData(jsonDataStore.coldStartData) ?? getDefaultColdStartData();
 const gcThreadJsonData = safeProcessGcThreadData(jsonDataStore.gcThreadData) ?? getDefaultGcThreadData();
 const frameLoadsJsonData = safeProcessFrameLoadsData(jsonDataStore.frameLoadsData) ?? getDefaultFrameLoadsData();
+const vsyncAnomalyJsonData = safeProcessVSyncAnomalyData(jsonDataStore.vsyncAnomalyData) ?? getDefaultVSyncAnomalyData();
 
 const props = defineProps({
     data: {
@@ -620,6 +723,12 @@ const coldStartData = computed(() => {
 const frameLoadsData = computed(() => {
     const key = props.step === 0 || frameLoadsJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
     return frameLoadsJsonData[key] ?? getDefaultFrameLoadsStepData();
+});
+
+// 当前步骤VSync异常信息
+const vsyncAnomalyData = computed(() => {
+    const key = props.step === 0 || vsyncAnomalyJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
+    return vsyncAnomalyJsonData[key] ?? getDefaultVSyncAnomalyStepData();
 });
 
 // 文件使用分析数据 - 由冷启动数据提供
@@ -693,6 +802,7 @@ const fpsChart = ref(null);
 const selectedStutter = ref(null);
 const selectedEmptyFrame = ref(null);
 const selectedFrameLoad = ref(null);
+const selectedVSyncAnomaly = ref(null);
 const callstackData = ref([]);
 const callstackThread = ref('');
 
@@ -757,7 +867,7 @@ const formatNumber = (num) => {
     return num;
 };
 
-// 格式化时间为实际时间
+// 格式化时间为相对时间
 const formatTime = (timestamp) => {
     // 纳秒转毫秒
     const timeMs = timestamp / 1000000;
@@ -974,6 +1084,32 @@ const initCharts = () => {
             frameLoadsValues.push(frameLoad.frame_load);
         });
 
+        // 收集VSync异常数据
+        const vsyncAnomalyPoints = [];
+
+        // 收集频率异常点
+        vsyncAnomalyData.value.frequency_anomalies.forEach(anomaly => {
+            const timeMs = anomaly.start_ts / 1000000; // 转换为毫秒
+            allTimestamps.push(timeMs);
+            vsyncAnomalyPoints.push({
+                time: timeMs,
+                anomaly: anomaly,
+                type: 'frequency_anomaly'
+            });
+        });
+
+        // 收集帧不匹配异常点
+        // vsyncAnomalyData.value.frame_mismatches.forEach(mismatch => {
+        //     const timeMs = mismatch.ts / 1000000; // 转换为毫秒
+        //     allTimestamps.push(timeMs);
+        //     vsyncAnomalyPoints.push({
+        //         time: timeMs,
+        //         anomaly: mismatch,
+        //         type: 'frame_mismatch',  // 统一标记为frame_mismatch类型
+        //         originalType: mismatch.type  // 保存原始类型
+        //     });
+        // });
+
         const maxBarNum = Math.max(
             loadData.length > 0 ? Math.max(...loadData) : 0,
             frameLoadsValues.length > 0 ? Math.max(...frameLoadsValues) : 0
@@ -1030,39 +1166,162 @@ const initCharts = () => {
                     return [x, y];
                 },
                 formatter: function (params) {
-                    let html = `<div style="font-weight:bold;margin-bottom:8px;color:#3b82f6;">帧数据详情</div>`;
+                    // 优化后的tooltip样式
+                    let html = `
+                    `;
+
+                    // 时间信息 - 使用更清晰的格式
                     const timeParam = params[0];
                     const actualTime = timeParam.value[0];
-                    html += `<div>实际时间: <span style="color:#3b82f6;font-weight:500">${actualTime.toFixed(2)} ms</span></div>`;
+                    html += `
+                        <div style="
+                            background: rgba(59, 130, 246, 0.1);
+                            padding: 6px 10px;
+                            border-radius: 4px;
+                            margin-bottom: 8px;
+                            border-left: 3px solid #3b82f6;
+                        ">
+                            🕐 时间: <span style="color:#3b82f6;font-weight:600">${actualTime.toFixed(2)} ms</span>
+                        </div>
+                    `;
 
-                    params.forEach(param => {
-                        if (param.seriesName === 'FPS值') {
-                            html += `<div>FPS: <span style="color:#3b82f6;font-weight:bold">${param.value[1]}</span></div>`;
-                        } else if (param.seriesName === '空刷负载') {
-                            // 修复1: 显示空刷负载
-                            html += `<div>空刷负载: <span style="color:${param.color};font-weight:bold">${param.value[1]}</span></div>`;
+                    // 按类型分组显示数据
+                    const fpsData = params.find(p => p.seriesName === 'FPS值');
+                    const emptyLoadData = params.find(p => p.seriesName === '空刷负载');
+                    const frameLoadData = params.find(p => p.seriesName === '帧负载');
+                    const stutterData = params.find(p => p.seriesName === '卡顿点');
+                    const vsyncAnomalyData = params.find(p => p.seriesName === 'VSync异常');
 
-                            // 显示线程类型信息
-                            if (param.data.type) {
-                                const threadType = param.data.type === 'main_thread' ? '主线程' : '后台线程';
-                                html += `<div>线程类型: ${threadType}</div>`;
-                            }
-                        } else if (param.seriesName === '帧负载') {
-                            // 显示frameLoads负载
-                            html += `<div>帧负载: <span style="color:${param.color};font-weight:bold">${param.value[1]}</span></div>`;
+                    // FPS信息
+                    if (fpsData) {
+                        const fpsValue = fpsData.value[1];
+                        const fpsColor = fpsValue >= 55 ? '#10b981' : fpsValue >= 30 ? '#f59e0b' : '#ef4444';
+                        const fpsIcon = fpsValue >= 55 ? '🟢' : fpsValue >= 30 ? '🟡' : '🔴';
+                        html += `
+                            <div style="
+                                background: rgba(16, 185, 129, 0.1);
+                                padding: 6px 10px;
+                                border-radius: 4px;
+                                margin-bottom: 6px;
+                                border-left: 3px solid ${fpsColor};
+                            ">
+                                ${fpsIcon} FPS: <span style="color:${fpsColor};font-weight:bold;font-size:14px">${fpsValue}</span>
+                            </div>
+                        `;
+                    }
 
-                            // 显示线程和进程信息
-                            if (param.data.frameLoad) {
-                                html += `<div>进程: ${param.data.frameLoad.process_name}</div>`;
-                                html += `<div>线程: ${param.data.frameLoad.thread_name}</div>`;
-                            }
-                        } else if (param.seriesName === '卡顿点') {
-                            const stutter = param.data.stutter;
-                            html += `<div style="margin-top:10px;color:${param.color};font-weight:bold">卡顿等级: ${stutter.level_description}</div>`;
-                            html += `<div>VSync: ${stutter.vsync}</div>`;
-                            html += `<div>超出时间: ${stutter.exceed_time.toFixed(2)} ms</div>`;
+                    // 空刷负载信息
+                    if (emptyLoadData) {
+                        const threadType = emptyLoadData.data.type === 'main_thread' ? '主线程' : '后台线程';
+                        const threadIcon = emptyLoadData.data.type === 'main_thread' ? '🧵' : '⚙️';
+                        html += `
+                            <div style="
+                                background: rgba(139, 92, 246, 0.1);
+                                padding: 6px 10px;
+                                border-radius: 4px;
+                                margin-bottom: 6px;
+                                border-left: 3px solid #8b5cf6;
+                            ">
+                                ${threadIcon} 空刷负载: <span style="color:#8b5cf6;font-weight:bold">${emptyLoadData.value[1]}</span>
+                                <br><small style="color:#6b7280">类型: ${threadType}</small>
+                            </div>
+                        `;
+                    }
+
+                    // 帧负载信息
+                    if (frameLoadData && frameLoadData.data.frameLoad) {
+                        const frameLoad = frameLoadData.data.frameLoad;
+                        html += `
+                            <div style="
+                                background: rgba(59, 130, 246, 0.1);
+                                padding: 6px 10px;
+                                border-radius: 4px;
+                                margin-bottom: 6px;
+                                border-left: 3px solid #3b82f6;
+                            ">
+                                📈 帧负载: <span style="color:#3b82f6;font-weight:bold">${frameLoadData.value[1]}</span>
+                                <br><small style="color:#6b7280">进程: ${frameLoad.process_name}</small>
+                                <br><small style="color:#6b7280">线程: ${frameLoad.thread_name}</small>
+                            </div>
+                        `;
+                    }
+
+                    // 卡顿点信息
+                    if (stutterData) {
+                        const stutter = stutterData.data.stutter;
+                        const severityIcon = stutter.stutter_level === 3 ? '🔴' : stutter.stutter_level === 2 ? '🟡' : '🟠';
+                        html += `
+                            <div style="
+                                background: rgba(239, 68, 68, 0.1);
+                                padding: 6px 10px;
+                                border-radius: 4px;
+                                margin-bottom: 6px;
+                                border-left: 3px solid ${stutterData.color};
+                            ">
+                                ${severityIcon} 卡顿: <span style="color:${stutterData.color};font-weight:bold">${stutter.level_description}</span>
+                                <br><small style="color:#6b7280">VSync: ${stutter.vsync}</small>
+                                <br><small style="color:#6b7280">超出: ${stutter.exceed_time.toFixed(2)} ms</small>
+                            </div>
+                        `;
+                    }
+
+                    // VSync异常信息
+                    if (vsyncAnomalyData) {
+                        const anomaly = vsyncAnomalyData.data.anomaly;
+                        if (anomaly.type && anomaly.type.includes('frequency')) {
+                            const severityIcon = anomaly.severity === 'high' ? '🔴' : anomaly.severity === 'medium' ? '🟡' : '🟢';
+                            html += `
+                                <div style="
+                                    background: rgba(220, 38, 38, 0.1);
+                                    padding: 6px 10px;
+                                    border-radius: 4px;
+                                    margin-bottom: 6px;
+                                    border-left: 3px solid ${vsyncAnomalyData.color};
+                                ">
+                                    ${severityIcon} VSync频率异常
+                                    <br><small style="color:#6b7280">范围: ${anomaly.start_vsync} - ${anomaly.end_vsync}</small>
+                                    <br><small style="color:#6b7280">频率: ${anomaly.avg_frequency.toFixed(1)} Hz</small>
+                                    <br><small style="color:#6b7280">严重程度: ${anomaly.severity}</small>
+                                </div>
+                            `;
+                        } else if (anomaly.type && (anomaly.type.includes('frame') || anomaly.type.includes('actual') || anomaly.type.includes('expect'))) {
+                            html += `
+                                <div style="
+                                    background: rgba(124, 58, 237, 0.1);
+                                    padding: 6px 10px;
+                                    border-radius: 4px;
+                                    margin-bottom: 6px;
+                                    border-left: 3px solid #7c3aed;
+                                ">
+                                    🔗 VSync帧不匹配
+                                    <br><small style="color:#6b7280">VSync: ${anomaly.vsync}</small>
+                                    <br><small style="color:#6b7280">线程: ${anomaly.thread_name}</small>
+                                    ${anomaly.expect_frames !== undefined ? `<br><small style="color:#6b7280">期望: ${anomaly.expect_frames}帧</small>` : ''}
+                                    ${anomaly.actual_frames !== undefined ? `<br><small style="color:#6b7280">实际: ${anomaly.actual_frames}帧</small>` : ''}
+                                </div>
+                            `;
                         }
-                    });
+                    }
+
+                    // 检查是否有可点击的数据类型
+                    const hasClickableData = emptyLoadData || frameLoadData || stutterData || vsyncAnomalyData;
+
+                    // 只有当存在可点击数据时才显示操作提示
+                    if (hasClickableData) {
+                        html += `
+                            <div style="
+                                background: rgba(107, 114, 128, 0.1);
+                                padding: 4px 8px;
+                                border-radius: 4px;
+                                margin-top: 8px;
+                                text-align: center;
+                                font-size: 11px;
+                                color: #6b7280;
+                            ">
+                                💡 点击数据点查看详细信息
+                            </div>
+                        `;
+                    }
 
                     return html;
                 }
@@ -1078,7 +1337,11 @@ const initCharts = () => {
                     // 蓝色柱状图
                     icon: 'rect',
                     itemStyle: { color: '#3b82f6' }
-                }, '卡顿点', '空刷帧'],
+                }, '卡顿点', {
+                    name: 'VSync异常',
+                    icon: 'diamond',
+                    itemStyle: { color: '#dc2626' }
+                }, '空刷帧'],
                 top: 10,
                 textStyle: {
                     color: '#64748b'
@@ -1093,7 +1356,7 @@ const initCharts = () => {
             },
             xAxis: {
                 type: 'value',
-                name: '实际时间 (ms)',
+                name: '相对时间 (ms)',
                 nameLocation: 'middle',
                 nameGap: 30,
                 nameTextStyle: {
@@ -1107,7 +1370,7 @@ const initCharts = () => {
                 axisLabel: {
                     color: '#64748b',
                     formatter: function (value) {
-                        // 显示实际时间数字
+                        // 显示相对时间数字
                         return parseInt(value).toLocaleString();
                     }
                 }
@@ -1282,6 +1545,99 @@ const initCharts = () => {
                             `;
                         }
                     }
+                },
+                {
+                    name: 'VSync异常',
+                    type: 'scatter',
+                    symbol: 'diamond',
+                    symbolSize: 14,
+                    z: 12, // 设置较高的z-index，确保在最上层显示
+                    data: vsyncAnomalyPoints.map(p => {
+                        // 找到对应时间点的FPS值
+                        let matchedFps = 0;
+                        const sortedFpsData = [...fpsData].sort((a, b) => a.time - b.time);
+
+                        for (const fpsPoint of sortedFpsData) {
+                            if (Math.abs(fpsPoint.time - p.time) < 1) {
+                                matchedFps = fpsPoint.fps;
+                                break;
+                            }
+                        }
+
+                        if (matchedFps === 0 && sortedFpsData.length > 0) {
+                            // 如果没有精确匹配，使用最近的FPS值
+                            let closestFps = sortedFpsData[0];
+                            let minDistance = Math.abs(sortedFpsData[0].time - p.time);
+
+                            for (const fpsPoint of sortedFpsData) {
+                                const distance = Math.abs(fpsPoint.time - p.time);
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    closestFps = fpsPoint;
+                                }
+                            }
+                            matchedFps = closestFps.fps;
+                        }
+
+                        return {
+                            value: [p.time, matchedFps],
+                            time: p.time,
+                            anomaly: p.anomaly,
+                            type: p.type
+                        };
+                    }),
+                    itemStyle: {
+                        color: function (params) {
+                            const anomalyType = params.data.type;
+                            if (anomalyType === 'frequency_anomaly') {
+                                const severity = params.data.anomaly.severity;
+                                if (severity === 'high') return '#dc2626'; // 红色 - 严重
+                                if (severity === 'medium') return '#ea580c'; // 橙色 - 中度
+                                return '#facc15'; // 黄色 - 轻微
+                            } else if (anomalyType === 'frame_mismatch') {
+                                return '#7c3aed'; // 紫色 - 帧不匹配
+                            }
+                            return '#6b7280'; // 默认灰色
+                        },
+                        borderColor: '#ffffff',
+                        borderWidth: 2
+                    },
+                    tooltip: {
+                        formatter: function (params) {
+                            const anomaly = params.data.anomaly;
+                            const anomalyType = params.data.type;
+
+                            if (anomalyType === 'frequency_anomaly') {
+                                return `
+                                    <div style="font-weight:bold;color:#dc2626;">
+                                        VSync频率异常
+                                    </div>
+                                    <div>类型: ${anomaly.type}</div>
+                                    <div>VSync范围: ${anomaly.start_vsync} - ${anomaly.end_vsync}</div>
+                                    <div>平均频率: ${anomaly.avg_frequency.toFixed(1)} Hz</div>
+                                    <div>持续时间: ${(anomaly.duration / 1000000).toFixed(1)} ms</div>
+                                    <div>严重程度: ${anomaly.severity}</div>
+                                `;
+                            } else if (anomalyType === 'frame_mismatch') {
+                                let content = `
+                                    <div style="font-weight:bold;color:#7c3aed;">
+                                        VSync帧不匹配
+                                    </div>
+                                    <div>类型: ${anomaly.type}</div>
+                                    <div>VSync: ${anomaly.vsync}</div>
+                                    <div>线程: ${anomaly.thread_name}</div>
+                                `;
+                                if (anomaly.expect_frames !== undefined) {
+                                    content += `<div>期望帧数: ${anomaly.expect_frames}</div>`;
+                                }
+                                if (anomaly.actual_frames !== undefined) {
+                                    content += `<div>实际帧数: ${anomaly.actual_frames}</div>`;
+                                }
+                                return content;
+                            }
+                            return '';
+                        }
+                    }
                 }
 
             ]
@@ -1301,6 +1657,7 @@ const initCharts = () => {
                     selectedEmptyFrame.value = params.data.frame;
                     selectedStutter.value = null;
                     selectedFrameLoad.value = null;
+                    selectedVSyncAnomaly.value = null;
                 } else {
                     console.warn('点击柱状图但未找到frame对象', params);
                 }
@@ -1314,6 +1671,7 @@ const initCharts = () => {
                     selectedFrameLoad.value = params.data.frameLoad;
                     selectedEmptyFrame.value = null;
                     selectedStutter.value = null;
+                    selectedVSyncAnomaly.value = null;
                 } else {
                     console.warn('点击帧负载柱状图但未找到frameLoad对象', params);
                 }
@@ -1325,7 +1683,24 @@ const initCharts = () => {
                     selectedStutter.value = params.data.stutter;
                     selectedEmptyFrame.value = null;
                     selectedFrameLoad.value = null;
+                    selectedVSyncAnomaly.value = null;
                     findCallstackInfo(params.data.stutter.ts);
+                }
+            }
+
+            // 处理VSync异常系列的点击事件
+            if (params.seriesName === 'VSync异常') {
+                if (params.data && params.data.anomaly) {
+                    console.log('找到VSync异常对象', params.data.anomaly);
+                    // 为异常对象添加类别标识，便于详情面板判断
+                    const anomalyWithCategory = {
+                        ...params.data.anomaly,
+                        anomalyCategory: params.data.type  // 添加类别字段
+                    };
+                    selectedVSyncAnomaly.value = anomalyWithCategory;
+                    selectedStutter.value = null;
+                    selectedEmptyFrame.value = null;
+                    selectedFrameLoad.value = null;
                 }
             }
         });
@@ -1419,6 +1794,7 @@ watch(() => props.step, () => {
     selectedStutter.value = null;
     selectedEmptyFrame.value = null;
     selectedFrameLoad.value = null;
+    selectedVSyncAnomaly.value = null;
 });
 
 </script>
@@ -1747,26 +2123,71 @@ body {
     margin-bottom: 20px;
 }
 
+/* 详情面板基础样式 */
+.detail-panel {
+    background: white;
+    border-radius: 16px;
+    padding: 25px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    margin-bottom: 25px;
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.detail-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.detail-panel:hover {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
 .detail-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 25px;
     padding-bottom: 20px;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+    border-bottom: 2px solid rgba(226, 232, 240, 0.6);
+    position: relative;
+}
+
+.detail-header::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    border-radius: 1px;
 }
 
 .detail-title {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     font-weight: 700;
-    color: #0ea5e9;
+    color: #1e293b;
     display: flex;
     align-items: center;
     gap: 12px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .detail-title i {
-    color: #0ea5e9;
+    font-size: 1.4rem;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
 }
 
 .detail-content {
@@ -1778,55 +2199,98 @@ body {
 
 .stutter-info,
 .callstack-info {
-    background: rgba(241, 245, 249, 0.85);
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%);
     border-radius: 16px;
-    padding: 20px;
-    border: 1px solid rgba(226, 232, 240, 0.8);
+    padding: 24px;
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.stutter-info::before,
+.callstack-info::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
 }
 
 .info-title {
-    font-size: 1.3rem;
-    color: #3b82f6;
-    margin-bottom: 20px;
+    font-size: 1.4rem;
+    color: #1e293b;
+    margin-bottom: 24px;
     display: flex;
     align-items: center;
     gap: 12px;
-    font-weight: 600;
+    font-weight: 700;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.5);
 }
 
 .info-title i {
+    font-size: 1.2rem;
+    padding: 6px;
+    border-radius: 6px;
+    background: rgba(59, 130, 246, 0.1);
     color: #3b82f6;
 }
 
 .info-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
 }
 
 .info-item {
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.9);
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 12px;
-    transition: all 0.2s ease;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.info-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .info-item:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.05);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.info-item:hover::before {
+    opacity: 1;
 }
 
 .info-label {
     color: #64748b;
-    font-size: 0.95rem;
-    margin-bottom: 10px;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .info-value {
-    font-size: 1.3rem;
+    font-size: 1.25rem;
     font-weight: 700;
+    color: #1e293b;
+    line-height: 1.4;
     color: #1e293b;
 }
 
@@ -2199,20 +2663,109 @@ body {
 }
 
 /* 空刷帧详情面板样式 */
-.emptyframe-header {
+.emptyframe-panel::before {
+    background: linear-gradient(90deg, #8b5cf6, #a855f7);
+}
+
+.emptyframe-panel .detail-title i {
+    background: rgba(139, 92, 246, 0.1);
     color: #8b5cf6;
 }
 
-.emptyframe-panel {
-    border-left: 4px solid #8b5cf6;
+.emptyframe-panel .detail-header::after {
+    background: linear-gradient(90deg, #8b5cf6, #a855f7);
+}
+
+.emptyframe-panel .info-title i {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+}
+
+.emptyframe-panel .stutter-info::before,
+.emptyframe-panel .callstack-info::before {
+    background: linear-gradient(90deg, #8b5cf6, #a855f7);
 }
 
 /* 帧负载详情面板样式 */
-.frameload-header {
+.frameload-panel::before {
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+.frameload-panel .detail-title i {
+    background: rgba(59, 130, 246, 0.1);
     color: #3b82f6;
 }
 
-.frameload-panel {
-    border-left: 4px solid #3b82f6;
+.frameload-panel .detail-header::after {
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+.frameload-panel .info-title i {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+.frameload-panel .stutter-info::before,
+.frameload-panel .callstack-info::before {
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+/* VSync异常详情面板样式 */
+.vsync-anomaly-panel::before {
+    background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+.vsync-anomaly-panel .detail-title i {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+}
+
+.vsync-anomaly-panel .detail-header::after {
+    background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+.vsync-anomaly-panel .info-title i {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+}
+
+.vsync-anomaly-panel .stutter-info::before,
+.vsync-anomaly-panel .callstack-info::before {
+    background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+.info-description {
+    margin-top: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.9) 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    position: relative;
+    overflow: hidden;
+}
+
+.info-description::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+}
+
+.info-description .info-label {
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-description .info-value {
+    color: #475569;
+    line-height: 1.6;
+    font-size: 0.95rem;
 }
 </style>
