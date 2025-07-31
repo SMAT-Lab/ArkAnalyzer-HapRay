@@ -7,7 +7,8 @@
                 </div>
                 <div class="card-value">{{ formatNumber(performanceData.statistics.total_frames) }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value" :style="{ width: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)' }"></div>
+                    <div class="progress-value"
+                        :style="{ width: '100%', background: 'linear-gradient(90deg, #38bdf8, #818cf8)' }"></div>
                 </div>
                 <div class="card-desc">应用渲染的总帧数，反映整体运行情况</div>
                 <div class="metric-grid">
@@ -32,7 +33,8 @@
                 </div>
                 <div class="card-value">{{ performanceData.statistics.total_stutter_frames }} </div>
                 <div class="progress-bar">
-                    <div class="progress-value" :style="{ width: (performanceData.statistics.stutter_rate * 100) + '%', background: '#f97316' }">
+                    <div class="progress-value"
+                        :style="{ width: (performanceData.statistics.stutter_rate * 100) + '%', background: '#f97316' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -62,7 +64,8 @@
                 </div>
                 <div class="card-value">{{ summaryData.total_empty_frames.toLocaleString() }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value" :style="{ width: Math.min(100, summaryData.empty_frame_percentage) + '%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)' }">
+                    <div class="progress-value"
+                        :style="{ width: Math.min(100, summaryData.empty_frame_percentage) + '%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -91,7 +94,8 @@
                 </div>
                 <div class="card-value">{{ fileUsageData.summary?.total_file_number || 0 }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value" :style="{ width: (fileUsageData.summary ? (fileUsageData.summary.used_file_count / fileUsageData.summary.total_file_number * 100) : 0) + '%', background: 'linear-gradient(90deg, #10b981, #34d399)' }">
+                    <div class="progress-value"
+                        :style="{ width: (fileUsageData.summary ? (fileUsageData.summary.used_file_count / fileUsageData.summary.total_file_number * 100) : 0) + '%', background: 'linear-gradient(90deg, #10b981, #34d399)' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -120,7 +124,8 @@
                 </div>
                 <div class="card-value">{{ gcThreadData.GCStatus }}</div>
                 <div class="progress-bar">
-                    <div class="progress-value" :style="{ width: Math.min(100, gcThreadData.perf_percentage * 100) + '%', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }">
+                    <div class="progress-value"
+                        :style="{ width: Math.min(100, gcThreadData.perf_percentage * 100) + '%', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }">
                     </div>
                 </div>
                 <div class="metric-grid">
@@ -156,12 +161,10 @@
                 <div class="metric-grid">
                     <div class="metric-item">
                         <div class="metric-label"><span style="font-weight: bold">复用组件：</span>
-                            <a 
-                                href="https://docs.openharmony.cn/pages/v5.1/zh-cn/application-dev/performance/component_recycle_case.md" 
+                            <a href="https://docs.openharmony.cn/pages/v5.1/zh-cn/application-dev/performance/component_recycle_case.md"
                                 target="_blank" title="查看OpenHarmony官方复用组件案例文档" class="external-link-icon"
                                 style="margin-left: 6px; vertical-align: middle;">
-                                <svg 
-                                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                                     style="transition:stroke 0.2s;">
                                     <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -250,11 +253,9 @@
                         <i class="fas fa-code-branch"></i>
                         调用栈信息
                     </div>
-                    <div 
-                        v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
+                    <div v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
                         class="callstack-list">
-                        <div 
-                            v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
+                        <div v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
                             class="callstack-item">
                             <div class="callstack-header">
                                 <div class="callstack-timestamp">
@@ -371,89 +372,7 @@
             </div>
         </div>
 
-        <!-- 帧负载详情面板 -->
-        <div v-if="selectedFrameLoad" class="detail-panel frameload-panel">
-            <div class="detail-header">
-                <div class="detail-title frameload-header">
-                    <i class="fas fa-chart-bar"></i>
-                    帧负载详情 - VSync: {{ selectedFrameLoad.vsync }} ({{ selectedFrameLoad.thread_name }})
-                </div>
-                <el-button type="info" @click="selectedFrameLoad = null">
-                    <i class="fas fa-times"></i> 关闭详情
-                </el-button>
-            </div>
-            <div class="detail-content">
-                <div class="stutter-info">
-                    <div class="info-title">
-                        <i class="fas fa-info-circle"></i>
-                        基本信息
-                    </div>
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <div class="info-label">相对时间</div>
-                            <div class="info-value">
-                                {{ formatTime(selectedFrameLoad.ts) }} ms
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">持续时间</div>
-                            <div class="info-value">{{ (selectedFrameLoad.dur / 1000000).toFixed(2) }} ms</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">帧负载</div>
-                            <div class="info-value">{{ selectedFrameLoad.frame_load }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">进程名称</div>
-                            <div class="info-value">{{ selectedFrameLoad.process_name }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">线程名称</div>
-                            <div class="info-value">{{ selectedFrameLoad.thread_name }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">调用栈数量</div>
-                            <div class="info-value">{{ selectedFrameLoad.sample_callchains?.length || 0 }}</div>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="callstack-info">
-                    <div class="info-title">
-                        <i class="fas fa-code-branch"></i>
-                        调用栈信息
-                    </div>
-                    <div
-                        v-if="selectedFrameLoad.sample_callchains && selectedFrameLoad.sample_callchains.length > 0"
-                        class="callstack-list">
-                        <div
-                            v-for="(chain, idx) in selectedFrameLoad.sample_callchains" :key="idx"
-                            class="callstack-item">
-                            <div class="callstack-header">
-                                <div class="callstack-timestamp">
-                                    调用栈 {{ idx + 1 }}
-                                </div>
-                                <div class="callstack-stats">
-                                    事件数: {{ chain.event_count }} | 负载: {{ chain.load_percentage.toFixed(2) }}%
-                                </div>
-                            </div>
-                            <div class="callstack-frames">
-                                <div
-                                    v-for="(frame, frameIdx) in chain.callchain" :key="frameIdx"
-                                    class="callstack-frame">
-                                    <div class="frame-symbol">{{ frame.symbol }}</div>
-                                    <div class="frame-location">{{ frame.file }}:{{ frame.line }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div v-else class="no-callstack">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        暂无调用栈信息
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- VSync异常详情面板 -->
         <div v-if="selectedVSyncAnomaly" class="detail-panel vsync-anomaly-panel">
@@ -480,7 +399,8 @@
                         </div>
                         <div class="info-item">
                             <div class="info-label">VSync范围</div>
-                            <div class="info-value">{{ selectedVSyncAnomaly.start_vsync }} - {{ selectedVSyncAnomaly.end_vsync }}</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.start_vsync }} - {{
+                                selectedVSyncAnomaly.end_vsync }}</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">持续时间</div>
@@ -492,7 +412,8 @@
                         </div>
                         <div class="info-item">
                             <div class="info-label">平均间隔</div>
-                            <div class="info-value">{{ (selectedVSyncAnomaly.avg_interval / 1000000).toFixed(2) }} ms</div>
+                            <div class="info-value">{{ (selectedVSyncAnomaly.avg_interval / 1000000).toFixed(2) }} ms
+                            </div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">平均频率</div>
@@ -500,7 +421,8 @@
                         </div>
                         <div class="info-item">
                             <div class="info-label">频率范围</div>
-                            <div class="info-value">{{ selectedVSyncAnomaly.min_frequency.toFixed(1) }} - {{ selectedVSyncAnomaly.max_frequency.toFixed(1) }} Hz</div>
+                            <div class="info-value">{{ selectedVSyncAnomaly.min_frequency.toFixed(1) }} - {{
+                                selectedVSyncAnomaly.max_frequency.toFixed(1) }} Hz</div>
                         </div>
                         <div class="info-item">
                             <div class="info-label">严重程度</div>
@@ -566,18 +488,15 @@
                 <div class="filter-item" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">
                     全部卡顿 ({{ performanceData.statistics.total_stutter_frames }})
                 </div>
-                <div 
-                    class="filter-item" :class="{ active: activeFilter === 'level_1' }"
+                <div class="filter-item" :class="{ active: activeFilter === 'level_1' }"
                     @click="activeFilter = 'level_1'">
                     轻微卡顿 ({{ performanceData.statistics.stutter_levels.level_1 }})
                 </div>
-                <div 
-                    class="filter-item" :class="{ active: activeFilter === 'level_2' }"
+                <div class="filter-item" :class="{ active: activeFilter === 'level_2' }"
                     @click="activeFilter = 'level_2'">
                     中度卡顿 ({{ performanceData.statistics.stutter_levels.level_2 }})
                 </div>
-                <div 
-                    class="filter-item" :class="{ active: activeFilter === 'level_3' }"
+                <div class="filter-item" :class="{ active: activeFilter === 'level_3' }"
                     @click="activeFilter = 'level_3'">
                     严重卡顿 ({{ performanceData.statistics.stutter_levels.level_3 }})
                 </div>
@@ -617,13 +536,11 @@
             </div>
 
             <div class="filters">
-                <div 
-                    class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
+                <div class="filter-item" :class="{ active: fileUsageFilter === 'used' }"
                     @click="fileUsageFilter = 'used'">
                     已使用文件 TOP 10 ({{ fileUsageData.used_files_top10.length }})
                 </div>
-                <div 
-                    class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
+                <div class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
                     @click="fileUsageFilter = 'unused'">
                     未使用文件 TOP 10 ({{ fileUsageData.unused_files_top10.length }})
                 </div>
@@ -666,7 +583,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
-import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultFrameLoadsData, safeProcessFrameLoadsData, getDefaultFrameLoadsStepData, getDefaultVSyncAnomalyData, getDefaultVSyncAnomalyStepData, safeProcessVSyncAnomalyData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultVSyncAnomalyData, getDefaultVSyncAnomalyStepData, safeProcessVSyncAnomalyData } from '../stores/jsonDataStore.ts';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -675,7 +592,7 @@ const emptyFrameJsonData = jsonDataStore.emptyFrameData ?? getDefaultEmptyFrameD
 const componentResuJsonData = jsonDataStore.componentResuData;
 const coldStartJsonData = safeProcessColdStartData(jsonDataStore.coldStartData) ?? getDefaultColdStartData();
 const gcThreadJsonData = safeProcessGcThreadData(jsonDataStore.gcThreadData) ?? getDefaultGcThreadData();
-const frameLoadsJsonData = safeProcessFrameLoadsData(jsonDataStore.frameLoadsData) ?? getDefaultFrameLoadsData();
+
 const vsyncAnomalyJsonData = safeProcessVSyncAnomalyData(jsonDataStore.vsyncAnomalyData) ?? getDefaultVSyncAnomalyData();
 
 const props = defineProps({
@@ -719,11 +636,7 @@ const coldStartData = computed(() => {
     return coldStartJsonData[key] ?? getDefaultColdStartStepData();
 });
 
-// 当前步骤帧负载信息
-const frameLoadsData = computed(() => {
-    const key = props.step === 0 || frameLoadsJsonData['step' + 2] == undefined ? 'step1' : 'step' + props.step;
-    return frameLoadsJsonData[key] ?? getDefaultFrameLoadsStepData();
-});
+
 
 // 当前步骤VSync异常信息
 const vsyncAnomalyData = computed(() => {
@@ -801,7 +714,7 @@ const fileUsageData = computed(() => {
 const fpsChart = ref(null);
 const selectedStutter = ref(null);
 const selectedEmptyFrame = ref(null);
-const selectedFrameLoad = ref(null);
+
 const selectedVSyncAnomaly = ref(null);
 const callstackData = ref([]);
 const callstackThread = ref('');
@@ -1069,20 +982,7 @@ const initCharts = () => {
         //    loadData.push(frame.frame_load);
         //});
 
-        // 收集frameLoads数据（用于蓝色柱状图）
-        const frameLoadsBarData = [];
-        const frameLoadsValues = [];
 
-        frameLoadsData.value.top_frames.forEach(frameLoad => {
-            const timeMs = frameLoad.ts / 1000000; // 转换为毫秒
-            frameLoadsBarData.push({
-                time: timeMs,
-                load: frameLoad.frame_load,
-                frameLoad: frameLoad,  // 添加完整的frameLoad对象
-                type: 'frame_load'
-            });
-            frameLoadsValues.push(frameLoad.frame_load);
-        });
 
         // 收集VSync异常数据
         const vsyncAnomalyPoints = [];
@@ -1110,10 +1010,7 @@ const initCharts = () => {
         //     });
         // });
 
-        const maxBarNum = Math.max(
-            loadData.length > 0 ? Math.max(...loadData) : 0,
-            frameLoadsValues.length > 0 ? Math.max(...frameLoadsValues) : 0
-        );
+
 
         // 找到最小时间戳作为起点
         minTimestamp.value = allTimestamps.length > 0 ? Math.min(...allTimestamps) : 0;
@@ -1188,15 +1085,14 @@ const initCharts = () => {
                     // 按类型分组显示数据
                     const fpsData = params.find(p => p.seriesName === 'FPS值');
                     const emptyLoadData = params.find(p => p.seriesName === '空刷负载');
-                    const frameLoadData = params.find(p => p.seriesName === '帧负载');
                     const stutterData = params.find(p => p.seriesName === '卡顿点');
                     const vsyncAnomalyData = params.find(p => p.seriesName === 'VSync异常');
 
                     // FPS信息
                     if (fpsData) {
                         const fpsValue = fpsData.value[1];
-                        const fpsColor = fpsValue >= 55 ? '#10b981' : fpsValue >= 30 ? '#f59e0b' : '#ef4444';
-                        const fpsIcon = fpsValue >= 55 ? '🟢' : fpsValue >= 30 ? '🟡' : '🔴';
+                        const fpsColor = fpsValue >= 55 ? '#3b82f6' : fpsValue >= 30 ? '#3b82f6' : '#3b82f6';
+                        const fpsIcon = fpsValue >= 55 ? '🔵' : fpsValue >= 30 ? '🔵' : '🔵';
                         html += `
                             <div style="
                                 background: rgba(16, 185, 129, 0.1);
@@ -1228,23 +1124,7 @@ const initCharts = () => {
                         `;
                     }
 
-                    // 帧负载信息
-                    if (frameLoadData && frameLoadData.data.frameLoad) {
-                        const frameLoad = frameLoadData.data.frameLoad;
-                        html += `
-                            <div style="
-                                background: rgba(59, 130, 246, 0.1);
-                                padding: 6px 10px;
-                                border-radius: 4px;
-                                margin-bottom: 6px;
-                                border-left: 3px solid #3b82f6;
-                            ">
-                                📈 帧负载: <span style="color:#3b82f6;font-weight:bold">${frameLoadData.value[1]}</span>
-                                <br><small style="color:#6b7280">进程: ${frameLoad.process_name}</small>
-                                <br><small style="color:#6b7280">线程: ${frameLoad.thread_name}</small>
-                            </div>
-                        `;
-                    }
+
 
                     // 卡顿点信息
                     if (stutterData) {
@@ -1304,7 +1184,7 @@ const initCharts = () => {
                     }
 
                     // 检查是否有可点击的数据类型
-                    const hasClickableData = emptyLoadData || frameLoadData || stutterData || vsyncAnomalyData;
+                    const hasClickableData = emptyLoadData || stutterData || vsyncAnomalyData;
 
                     // 只有当存在可点击数据时才显示操作提示
                     if (hasClickableData) {
@@ -1333,15 +1213,14 @@ const initCharts = () => {
                     icon: 'rect',
                     itemStyle: { color: '#8b5cf6' }
                 }, {
-                    name: '帧负载',
-                    // 蓝色柱状图
-                    icon: 'rect',
-                    itemStyle: { color: '#3b82f6' }
-                }, '卡顿点', {
-                    name: 'VSync异常',
-                    icon: 'diamond',
-                    itemStyle: { color: '#dc2626' }
-                }, '空刷帧'],
+                    name: '卡顿点',
+                    icon: 'circle',
+                    itemStyle: { color: '#eab308' }  // 黄色
+                }, {
+                        name: 'VSync异常',
+                        icon: 'diamond',
+                        itemStyle: { color: '#dc2626' }
+                    }, '空刷帧'],
                 top: 10,
                 textStyle: {
                     color: '#64748b'
@@ -1400,9 +1279,8 @@ const initCharts = () => {
                 },
                 {
                     type: 'value',
-                    name: '帧负载',
+                    name: '空刷负载',
                     min: 0,
-                    max: maxBarNum * 1.1, // 调整最大值为适当范围
                     nameTextStyle: {
                         color: '#64748b'
                     },
@@ -1415,7 +1293,7 @@ const initCharts = () => {
                     axisLabel: {
                         color: '#64748b',
                         formatter: function (value) {
-                            // 格式化帧负载显示
+                            // 格式化空刷负载显示
                             if (value >= 1000000) {
                                 return (value / 1000000).toFixed(1) + 'M';
                             } else if (value >= 1000) {
@@ -1478,37 +1356,17 @@ const initCharts = () => {
                     triggerEvent: true  // 确保柱状图可以触发事件
                 },
                 {
-                    name: '帧负载',
-                    type: 'bar',
-                    yAxisIndex: 1, // 使用第二个y轴
-                    barWidth: 6,
-                    data: frameLoadsBarData.map(item => {
-                        // 确保每个数据点包含完整信息
-                        return {
-                            value: [item.time, item.load],
-                            frameLoad: item.frameLoad, // 传递frameLoad对象
-                            type: item.type    // 传递类型
-                        };
-                    }),
-                    itemStyle: {
-                        color: '#3b82f6' // 蓝色
-                    },
-                    triggerEvent: true  // 确保柱状图可以触发事件
-                },
-                {
                     name: 'FPS值',
                     type: 'line',
                     smooth: true,
                     symbol: 'circle',
-                    symbolSize: 6,
+                    symbolSize: 4, // 缩小点的大小，从6改为4
                     data: fpsData.map(item => [item.time, item.fps]),
                     itemStyle: {
-                        color: function (params) {
-                            const fps = params.value[1];
-                            if (fps >= 60) return '#3b82f6';
-                            if (fps >= 30) return '#0ea5e9';
-                            return '#ef4444';
-                        }
+                        color: '#3b82f6' // 统一为蓝色，移除动态颜色判断
+                    },
+                    lineStyle: {
+                        color: '#3b82f6' // 确保线条也是蓝色
                     }
                 },
                 {
@@ -1656,33 +1514,20 @@ const initCharts = () => {
                     console.log('找到帧对象', params.data.frame);
                     selectedEmptyFrame.value = params.data.frame;
                     selectedStutter.value = null;
-                    selectedFrameLoad.value = null;
+
                     selectedVSyncAnomaly.value = null;
                 } else {
                     console.warn('点击柱状图但未找到frame对象', params);
                 }
             }
 
-            // 处理帧负载系列的点击事件
-            if (params.seriesName === '帧负载') {
-                // 检查数据点是否包含frameLoad对象
-                if (params.data && params.data.frameLoad) {
-                    console.log('找到帧负载对象', params.data.frameLoad);
-                    selectedFrameLoad.value = params.data.frameLoad;
-                    selectedEmptyFrame.value = null;
-                    selectedStutter.value = null;
-                    selectedVSyncAnomaly.value = null;
-                } else {
-                    console.warn('点击帧负载柱状图但未找到frameLoad对象', params);
-                }
-            }
+
 
             // 处理卡顿点系列的点击事件
             if (params.seriesName === '卡顿点') {
                 if (params.data && params.data.stutter) {
                     selectedStutter.value = params.data.stutter;
                     selectedEmptyFrame.value = null;
-                    selectedFrameLoad.value = null;
                     selectedVSyncAnomaly.value = null;
                     findCallstackInfo(params.data.stutter.ts);
                 }
@@ -1700,7 +1545,6 @@ const initCharts = () => {
                     selectedVSyncAnomaly.value = anomalyWithCategory;
                     selectedStutter.value = null;
                     selectedEmptyFrame.value = null;
-                    selectedFrameLoad.value = null;
                 }
             }
         });
@@ -1793,7 +1637,6 @@ watch(() => props.step, () => {
     // 当步骤变化时关闭所有详情面板
     selectedStutter.value = null;
     selectedEmptyFrame.value = null;
-    selectedFrameLoad.value = null;
     selectedVSyncAnomaly.value = null;
 });
 
@@ -2686,29 +2529,7 @@ body {
     background: linear-gradient(90deg, #8b5cf6, #a855f7);
 }
 
-/* 帧负载详情面板样式 */
-.frameload-panel::before {
-    background: linear-gradient(90deg, #3b82f6, #2563eb);
-}
 
-.frameload-panel .detail-title i {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
-}
-
-.frameload-panel .detail-header::after {
-    background: linear-gradient(90deg, #3b82f6, #2563eb);
-}
-
-.frameload-panel .info-title i {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
-}
-
-.frameload-panel .stutter-info::before,
-.frameload-panel .callstack-info::before {
-    background: linear-gradient(90deg, #3b82f6, #2563eb);
-}
 
 /* VSync异常详情面板样式 */
 .vsync-anomaly-panel::before {
