@@ -540,11 +540,11 @@
                             <div class="info-label">线程名称</div>
                             <div class="info-value">{{ selectedVSyncAnomaly.thread_name }}</div>
                         </div>
-                        <div class="info-item" v-if="selectedVSyncAnomaly.expect_frames !== undefined">
+                        <div v-if="selectedVSyncAnomaly.expect_frames !== undefined" class="info-item">
                             <div class="info-label">期望帧数</div>
                             <div class="info-value">{{ selectedVSyncAnomaly.expect_frames }}</div>
                         </div>
-                        <div class="info-item" v-if="selectedVSyncAnomaly.actual_frames !== undefined">
+                        <div v-if="selectedVSyncAnomaly.actual_frames !== undefined" class="info-item">
                             <div class="info-label">实际帧数</div>
                             <div class="info-value">{{ selectedVSyncAnomaly.actual_frames }}</div>
                         </div>
@@ -855,7 +855,7 @@ const hasPerformanceData = computed(() => !!performanceData.value && performance
 const hasEmptyFrameData = computed(() => !!emptyFrameData.value && emptyFrameData.value.summary && emptyFrameData.value.summary.total_empty_frames > 0);
 const hasComponentResuData = computed(() => !!componentResuData.value && componentResuData.value.total_builds > 0);
 const hasGcThreadData = computed(() => !!gcThreadData.value && Object.keys(gcThreadData.value).length > 0);
-const hasFrameLoadsData = computed(() => !!frameLoadsData.value && frameLoadsData.value.top_frames && frameLoadsData.value.top_frames.length > 0);
+//const hasFrameLoadsData = computed(() => !!frameLoadsData.value && frameLoadsData.value.top_frames && frameLoadsData.value.top_frames.length > 0);
 
 // 格式化数字显示
 const formatNumber = (num) => {
