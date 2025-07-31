@@ -1,6 +1,5 @@
 # coding: utf-8
 import time
-from hypium import BY
 from hapray.core.perf_testcase import PerfTestCase
 
 
@@ -37,6 +36,5 @@ class ResourceUsage_PerformanceDynamic_sina_0010(PerfTestCase):
 
             # 向上滑动
             self.swipes_up(swip_num=5, sleep=2)
-
 
         self.execute_performance_step("新浪新闻等待页面加载完成。", 30, step1)
