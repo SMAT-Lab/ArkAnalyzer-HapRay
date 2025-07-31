@@ -91,7 +91,7 @@ interface FrameStatistics {
 
 interface StutterDetail {
   vsync: number;
-  timestamp: number;
+  ts: number;
   actual_duration: number;
   expected_duration: number;
   exceed_time: number;
@@ -227,12 +227,46 @@ interface ComponentResuStepData {
 
 export type ComponentResuData = Record<string, ComponentResuStepData>;
 
+interface FrameLoad {
+  ts: number;
+  dur: number;
+  ipid?: number;
+  itid?: number;
+  pid?: number;
+  tid: number;
+  callstack_id?: number;
+  process_name: string;
+  thread_name: string;
+  callstack_name?: string;
+  frame_load: number;
+  is_main_thread?: number;
+  vsync?: number | string;
+  flag?: number;
+  type?: number;
+  sample_callchains?: SampleCallchain[];
+}
+
+interface FrameLoadsStepData {
+  status?: string;
+  summary?: {
+    total_frames: number;
+    total_load: number;
+    average_load: number;
+    max_load: number;
+    min_load: number;
+  };
+  top_frames: FrameLoad[];
+}
+
+export type FrameLoadsData = Record<string, FrameLoadsStepData>;
+
 interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
   componentReuse: ComponentResuData;
   coldStart?: ColdStartData;
   gc_thread?: GcThreadData;
+  frameLoads?: FrameLoadsData;
 }
 
 interface MoreData {
@@ -254,7 +288,7 @@ export interface JSONData {
 function createDefaultStutterDetail(): StutterDetail {
   return {
     vsync: 0,
-    timestamp: 0,
+    ts: 0,
     actual_duration: 0,
     expected_duration: 0,
     exceed_time: 0,
@@ -301,6 +335,23 @@ function createDefaultEmptyFrame(): EmptyFrame {
     callstack_name: "",
     frame_load: 0,
     is_main_thread: 0,
+    sample_callchains: [{
+      timestamp: 0,
+      event_count: 0,
+      load_percentage: 0,
+      callchain: [createDefaultCallstackFrame()]
+    }]
+  };
+}
+
+function createDefaultFrameLoad(): FrameLoad {
+  return {
+    ts: 0,
+    dur: 0,
+    tid: 0,
+    process_name: "",
+    thread_name: "",
+    frame_load: 0,
     sample_callchains: [{
       timestamp: 0,
       event_count: 0,
@@ -390,6 +441,28 @@ export function getDefaultComponentResuData(): ComponentResuData {
   };
 }
 
+/** 获取默认的帧负载步骤数据 */
+export function getDefaultFrameLoadsStepData(): FrameLoadsStepData {
+  return {
+    status: "unknown",
+    summary: {
+      total_frames: 0,
+      total_load: 0,
+      average_load: 0,
+      max_load: 0,
+      min_load: 0
+    },
+    top_frames: [createDefaultFrameLoad()]
+  };
+}
+
+/** 获取默认的帧负载数据（包含一个默认步骤） */
+export function getDefaultFrameLoadsData(): FrameLoadsData {
+  return {
+    step1: getDefaultFrameLoadsStepData()
+  };
+}
+
 export function getDefaultColdStartStepData(): ColdStartStepData {
   return {
     summary: {
@@ -435,6 +508,30 @@ export function safeProcessColdStartData(data: ColdStartData | null | undefined)
   return result;
 }
 
+/**
+ * 安全处理帧负载数据 - 替换无效值为默认结构
+ * @param data 原始帧负载数据
+ * @returns 处理后的有效帧负载数据
+ */
+export function safeProcessFrameLoadsData(data: FrameLoadsData | null | undefined): FrameLoadsData {
+  if (!data) return getDefaultFrameLoadsData();
+
+  const result: FrameLoadsData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultFrameLoadsStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultFrameLoadsStepData();
+  }
+
+  return result;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
   version: string | null;
@@ -447,6 +544,7 @@ interface JsonDataState {
   componentResuData: ComponentResuData | null;
   coldStartData: ColdStartData | null;
   gcThreadData: GcThreadData | null;
+  frameLoadsData: FrameLoadsData | null;
   baseMark: string | null;
   compareMark: string | null;
   flameGraph: Record<string, string> | null;
@@ -530,6 +628,7 @@ export const useJsonDataStore = defineStore('config', {
     componentResuData: null,
     coldStartData: null,
     gcThreadData: null,
+    frameLoadsData: null,
     baseMark: null,
     compareMark: null,
     flameGraph: null,
@@ -551,6 +650,7 @@ export const useJsonDataStore = defineStore('config', {
         this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
         this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
         this.gcThreadData = safeProcessGcThreadData(jsonData.trace.gc_thread);
+        this.frameLoadsData = safeProcessFrameLoadsData(jsonData.trace.frameLoads);
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
@@ -558,6 +658,7 @@ export const useJsonDataStore = defineStore('config', {
         this.componentResuData = getDefaultComponentResuData();
         this.coldStartData = getDefaultColdStartData();
         this.gcThreadData = getDefaultGcThreadData();
+        this.frameLoadsData = getDefaultFrameLoadsData();
       }
       if (jsonData.more) {
         // 火焰图
