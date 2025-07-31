@@ -15,12 +15,15 @@ limitations under the License.
 
 import logging
 import sqlite3
+import traceback
 from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
-from .frame_load_calculator import FrameLoadCalculator
+from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
+from .frame_core_cache_manager import FrameCacheManager
+from .frame_time_utils import FrameTimeUtils
 
 
 class StutteredFrameAnalyzer:
@@ -71,6 +74,8 @@ class StutteredFrameAnalyzer:
         """
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
 
+
+
     def analyze_stuttered_frames(
         self,
         db_path: str,
@@ -101,9 +106,21 @@ class StutteredFrameAnalyzer:
             if perf_db_path:
                 try:
                     perf_conn = sqlite3.connect(perf_db_path)
-                    # 获取perf样本数据用于调用链分析
-                    perf_query = "SELECT callchain_id, timestamp_trace, thread_id, event_count FROM perf_sample"
-                    perf_df = pd.read_sql_query(perf_query, perf_conn)
+                    
+                    # ==================== 标准化缓存检查和使用 ====================
+                    # 在分析开始前，确保所有需要的数据都已缓存
+                    if step_id:
+                        # 预加载analyzer需要的基础数据
+                        preload_result = FrameCacheManager.preload_analyzer_data(
+                            conn, perf_conn, step_id
+                        )
+                        # logging.info("预加载数据结果: %s", preload_result)
+                        
+                        # 确保帧负载数据缓存已初始化
+                        FrameCacheManager.ensure_data_cached('frame_loads', step_id=step_id)
+                    
+                    # 使用缓存管理器获取perf样本数据
+                    perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
                 except Exception as e:
                     logging.warning("无法连接perf数据库或获取数据: %s", str(e))
                     perf_df = None
@@ -123,12 +140,12 @@ class StutteredFrameAnalyzer:
 
             # 检查是否有有效数据
             if not data:
-                logging.info("未找到任何帧数据")
+                # logging.info("未找到任何帧数据")
                 return None
 
             LOW_FPS_THRESHOLD = 45  # 低FPS阈值
 
-            # 初始化第一帧时间戳
+            # 初始化第一帧时间戳（用于相对时间计算）
             first_frame_time = None
 
             stats = {
@@ -207,16 +224,16 @@ class StutteredFrameAnalyzer:
                         if window_fps < LOW_FPS_THRESHOLD:
                             stats["fps_stats"]["low_fps_window_count"] += 1
 
-                        # 计算相对于第一帧的偏移时间（秒）
-                        start_offset = (current_window["start_time"] - first_frame_time) / self.NS_TO_MS / 1000
-                        end_offset = (current_window["end_time"] - first_frame_time) / self.NS_TO_MS / 1000
+                        # 计算相对于第一帧的时间（纳秒）
+                        start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"], first_frame_time)
+                        end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"], first_frame_time)
 
                         # 保存当前窗口的fps数据
                         fps_windows.append({
                             "start_time": start_offset,
                             "end_time": end_offset,
-                            "start_time_ts": current_window["start_time"],
-                            "end_time_ts": current_window["end_time"],
+                            "start_time_ts": int(current_window["start_time"]),  # 确保返回Python原生int类型
+                            "end_time_ts": int(current_window["end_time"]),  # 确保返回Python原生int类型
                             "frame_count": current_window["frame_count"],
                             "fps": window_fps
                         })
@@ -241,15 +258,15 @@ class StutteredFrameAnalyzer:
                 if window_fps < LOW_FPS_THRESHOLD:
                     stats["fps_stats"]["low_fps_window_count"] += 1
 
-                # 计算最后一个窗口的偏移时间
-                start_offset = (current_window["start_time"] - first_frame_time) / self.NS_TO_MS / 1000
-                end_offset = (current_window["end_time"] - first_frame_time) / self.NS_TO_MS / 1000
+                # 计算相对于第一帧的时间（纳秒）
+                start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"], first_frame_time)
+                end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"], first_frame_time)
 
                 fps_windows.append({
                     "start_time": start_offset,
                     "end_time": end_offset,
-                    "start_time_ts": current_window["start_time"],
-                    "end_time_ts": current_window["end_time"],
+                    "start_time_ts": int(current_window["start_time"]),  # 确保返回Python原生int类型
+                    "end_time_ts": int(current_window["end_time"]),  # 确保返回Python原生int类型
                     "frame_count": current_window["frame_count"],
                     "fps": window_fps
                 })
@@ -275,7 +292,7 @@ class StutteredFrameAnalyzer:
                     stats["frame_stats"][process_type]["stutter_rate"] = 0
 
             # 计算总卡顿率
-            total_stutter = sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"])
+            total_stutter = int(sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"]))  # 确保返回Python原生int类型
             stats["total_stutter_frames"] = total_stutter
             stats["stutter_rate"] = round(total_stutter / stats["total_frames"], 4)
 
@@ -296,6 +313,7 @@ class StutteredFrameAnalyzer:
 
         except Exception as e:
             logging.error("分析卡顿帧时发生异常: %s", str(e))
+            logging.error("异常堆栈跟踪:\n%s", traceback.format_exc())
             return None
 
         finally:
@@ -332,50 +350,37 @@ class StutteredFrameAnalyzer:
         exceed_frames = exceed_time / self.FRAME_DURATION
 
         if perf_df is not None and perf_conn is not None:
-            frame_start_time = frame["ts"]
-            frame_end_time = frame["ts"] + frame["dur"]
-
-            mask = (
-                (perf_df['timestamp_trace'] >= frame_start_time)
-                & (perf_df['timestamp_trace'] <= frame_end_time)
-                & (perf_df['thread_id'] == frame['tid'])
-            )
-            frame_samples = perf_df[mask]
-
-            if not frame_samples.empty:
-                frame_load = frame_samples['event_count'].sum()
-
-                for _, sample in frame_samples.iterrows():
-                    if not pd.notna(sample['callchain_id']):
-                        continue
-
-                    try:
-                        callchain_info = self.load_calculator.analyze_perf_callchain(
-                            perf_conn,
-                            int(sample['callchain_id']),
-                            step_id=step_id
-                        )
-
-                        if len(callchain_info) == 0:
-                            continue
-
-                        try:
-                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                            sample_callchains.append({
-                                'timestamp': int(sample['timestamp_trace']),
-                                'event_count': int(sample['event_count']),
-                                'load_percentage': float(sample_load_percentage),
-                                'callchain': callchain_info
-                            })
-                        except Exception as e:
-                            logging.error(
-                                "处理样本时出错: %s, sample: %s, frame_load: %s",
-                                str(e), sample.to_dict(), frame_load)
-                            continue
-
-                    except Exception as e:
-                        logging.error("分析调用链时出错: %s", str(e))
-                        continue
+            # 检查缓存中是否已有该帧的负载数据
+            cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
+            cached_frame = None
+            
+            for cached in cached_frame_loads:
+                if (cached.get('ts') == frame['ts'] and 
+                    cached.get('dur') == frame['dur'] and 
+                    cached.get('thread_id') == frame['tid']):
+                    cached_frame = cached
+                    break
+            
+            if cached_frame:
+                # 使用缓存中的帧负载数据
+                frame_load = cached_frame.get('frame_load', 0)
+                sample_callchains = cached_frame.get('sample_callchains', [])
+                # logging.info("使用缓存的帧负载数据: ts=%s, load=%s", frame['ts'], frame_load)
+                
+                # 如果缓存中没有sample_callchains，尝试补充
+                if not sample_callchains:
+                    # logging.info("缓存中缺少sample_callchains，尝试补充: ts=%s", frame['ts'])
+                    # 重新分析获取调用链
+                    frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
+                        frame, perf_df, perf_conn, step_id)
+                    # logging.info("重新分析获取调用链: ts=%s, load=%s", frame['ts'], frame_load)
+            else:
+                # 缓存中没有，执行帧负载分析
+                # 使用统一的帧负载计算方法
+                frame_load, sample_callchains = self.load_calculator.calculate_frame_load(
+                    frame, perf_df, perf_conn, step_id
+                )
+                # logging.info("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
 
         # 卡顿分级逻辑
         # flag=3 归类为轻微卡顿：进程间异常阈值仅 1ms，远小于轻微卡顿的 33.34ms 阈值
@@ -389,9 +394,23 @@ class StutteredFrameAnalyzer:
             stutter_level = 3
             level_desc = "严重卡顿"
 
+        # 获取第一帧时间戳用于相对时间计算
+        # 从缓存中获取第一帧时间戳
+        if context and 'step_id' in context:
+            step_id = context['step_id']
+            try:
+                # 从缓存中获取第一帧时间戳
+                first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
+            except Exception:
+                # 如果获取缓存失败，则使用卡顿帧中的最小时间戳作为备选
+                first_frame_time = min([f["ts"] for vsync in data.values() for f in vsync]) if data else 0
+        else:
+            # 如果无法获取step_id，则使用卡顿帧中的最小时间戳作为备选
+            first_frame_time = min([f["ts"] for vsync in data.values() for f in vsync]) if data else 0
+        
         stutter_detail = {
             "vsync": vsync_key,
-            "timestamp": frame["ts"],
+            "ts": FrameTimeUtils.convert_to_relative_nanoseconds(frame["ts"], first_frame_time),
             "actual_duration": frame["dur"],
             "expected_duration": expected_frame["dur"],
             "exceed_time": exceed_time,
