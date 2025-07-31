@@ -12,11 +12,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
+import base64
 import json
 import logging
 import os
 import re
+import zlib
 from typing import Dict, Any, Optional
 
 from hapray.analyze import BaseAnalyzer
@@ -27,28 +28,29 @@ from hapray.core.config.config import Config
 
 class PerfAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'hiperf_info.json')
+        super().__init__(scene_dir, 'more/flame_graph')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(self,
+                      step_dir: str,
+                      trace_db_path: str,
+                      perf_db_path: str,
+                      app_pids: list) -> Optional[Dict[str, Any]]:
         """Run performance analysis"""
-        args = ['dbtools', '-i', self.scene_dir]
+        flame_graph = self.generate_hiperf_report(perf_db_path)
+        # Execute only in step1
+        if step_dir == 'step1':
+            args = ['dbtools', '-i', self.scene_dir]
+            so_dir = Config.get('so_dir', None)
+            if so_dir:
+                args.extend(['-s', os.path.abspath(so_dir)])
 
-        so_dir = Config.get('so_dir', None)
-        if so_dir:
-            args.extend(['-s', os.path.abspath(so_dir)])
+            kind = self.convert_kind_to_json()
+            if len(kind) > 0:
+                args.extend(['-k', kind])
 
-        kind = self.convert_kind_to_json()
-        if len(kind) > 0:
-            args.extend(['-k', kind])
-
-        logging.debug("Running perf analysis with command: %s", ' '.join(args))
-        ExeUtils.execute_hapray_cmd(args)
-        self.generate_hiperf_report(perf_db_path)
-        return {}
-
-    def write_report(self):
-        # override
-        pass
+            logging.debug("Running perf analysis with command: %s", ' '.join(args))
+            ExeUtils.execute_hapray_cmd(args)
+        return flame_graph
 
     @staticmethod
     def convert_kind_to_json() -> str:
@@ -76,27 +78,30 @@ class PerfAnalyzer(BaseAnalyzer):
         return json.dumps([kind_entry])
 
     @staticmethod
-    def generate_hiperf_report(perf_path: str):
+    def generate_hiperf_report(perf_path: str) -> Optional[Dict[str, Any]]:
         report_file = os.path.join(os.path.dirname(perf_path), 'hiperf_report.html')
-        if os.path.exists(report_file):
-            return
         template_file = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'res',
                                      'hiperf_report_template.html')
         if not os.path.exists(template_file):
             logging.warning('Not found file %s', template_file)
-            return
+            return None
         perf_json_file = os.path.join(os.path.dirname(perf_path), 'perf.json')
         if not os.path.exists(perf_json_file):
             logging.warning('Not found file %s', perf_json_file)
-            return
+            return None
 
+        script_start = '<script id="record_data" type="application/gzip+json;base64">'
+        script_end = '</script></body></html>'
         all_json = PerfAnalyzer.apply_symbol_split_rules(perf_json_file)
+        compressed_bytes = zlib.compress(all_json.encode('utf-8'), level=9)
+        base64_bytes = base64.b64encode(compressed_bytes)
+        base64_all_json_str = base64_bytes.decode('ascii')
         with open(template_file, 'r', encoding='utf-8') as html_file:
             html_str = html_file.read()
         with open(report_file, 'w', encoding='utf-8') as report_html_file:
-            report_html_file.write(html_str + all_json + '</script>'
-                                                         ' </body>'
-                                                         ' </html>')
+            report_html_file.write(html_str)
+            report_html_file.write(script_start + base64_all_json_str + script_end)
+        return all_json
 
     @staticmethod
     def filter_and_move_symbols(data, filter_rules):

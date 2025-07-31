@@ -38,7 +38,8 @@ class ResourceUsage_PerformanceDynamic_Douyin_0010(PerfTestCase):
 
         def step1():
             # 1. 抖音“我”页面点击观看历史，等待2s
-            self.touch_by_text('观看历史')
+            if not self.touch_by_text('观看历史', 2):
+                self.touch_by_coordinates(442, 609, 2)
 
         def step2():
             # 2. 观看历史上滑5次，每次等待1s;观看历史下滑5次，每次等待1s'

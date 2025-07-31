@@ -24,6 +24,7 @@ from typing import List, Dict, Any
 
 import pandas as pd
 
+from hapray import VERSION
 from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
@@ -38,101 +39,88 @@ class DataType(enum.Enum):
 class ReportData:
     """封装报告生成所需的所有数据"""
 
-    def __init__(self):
+    def __init__(self, scene_dir: str, result: dict):
+        self.scene_dir = scene_dir
         self.perf_data = []
-        self.frame_data = {}
-        self.empty_frame_data = {}
-        self.component_reusability_data = {}
-        self.cold_start_analysis_data = {}
-        self.basic_info = {}
+        self.result = {**{
+            "version": VERSION,
+            "type": DataType.BASE64_GZIP_JSON.value,
+            "versionCode": 1,
+            "basicInfo": {},
+            "perf": {"steps": []}  # 默认空步骤
+        }, **result}
 
     @classmethod
-    def from_paths(cls, scene_dir):
+    def from_paths(cls, scene_dir: str, result: dict):
         """从文件路径加载数据"""
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
-        frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
-        empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
-        component_reusability_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
-        cold_start_analysis_path = os.path.join(scene_dir, 'htrace', 'cold_start_analysis_summary.json')
-
-        data = cls()
+        data = cls(scene_dir, result)
         data.load_perf_data(perf_data_path)
-        data.load_frame_data(frame_data_path)
-        data.load_empty_frame_data(empty_frames_analysis_path)
-        data.load_component_reusability_data(component_reusability_path)
-        data.load_cold_start_analysis_data(cold_start_analysis_path)
-        data.extract_basic_info()
         return data
 
     def __str__(self):
-        # 构建基础数据结构
-        merged_data = {
-            "type": DataType.BASE64_GZIP_JSON.value,
-            "versionCode": 1,
-            "basicInfo": self.basic_info or {},
-            "perf": {"steps": []}  # 默认空步骤
-        }
-
-        # 处理性能数据
-        if isinstance(self.perf_data, list) and len(self.perf_data) > 0:
-            first_entry = self.perf_data[0]
-            merged_data["perf"]["steps"] = first_entry.get("steps", [])
-
-        # 处理跟踪数据（可选）
-        if self.frame_data:
-            trace_data = {
-                "componentReuse": self.component_reusability_data
-            }
-
-            # 添加帧分析数据
-            frames = self.frame_data
-            if frames != {}:
-                trace_data["frames"] = frames
-
-            # 添加空帧分析数据（可选）
-            if self.empty_frame_data != {}:
-                trace_data["emptyFrame"] = self.empty_frame_data
-
-            # 添加冷启动分析数据（可选）
-            if self.cold_start_analysis_data != {}:
-                trace_data["coldStart"] = self.cold_start_analysis_data
-
-            merged_data["trace"] = trace_data
-
         # 路径1: Base64编码的gzip压缩JSON
-        json_bytes = json.dumps(merged_data).encode('utf-8')
-        compressed_bytes = zlib.compress(json_bytes, level=9)
+        # 清理数据中的NaN值以确保JSON序列化安全
+        cleaned_result = self._clean_data_for_json(self.result)
+        json_str = json.dumps(cleaned_result)
+        with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
+            f.write(json_str)
+        compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=9)
         base64_bytes = base64.b64encode(compressed_bytes)
         return base64_bytes.decode('ascii')
+
+    def _clean_data_for_json(self, data):
+        """清理数据，将numpy类型和NaN值转换为标准Python类型以确保JSON序列化"""
+        import pandas as pd
+        
+        if isinstance(data, dict):
+            return {key: self._clean_data_for_json(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._clean_data_for_json(item) for item in data]
+        elif hasattr(data, 'dtype') and hasattr(data, 'item'):
+            # numpy类型
+            if pd.isna(data):
+                # 处理NaN值
+                if 'int' in str(data.dtype):
+                    return 0
+                elif 'float' in str(data.dtype):
+                    return 0.0
+                else:
+                    return None
+            elif 'int' in str(data.dtype):
+                return int(data)
+            elif 'float' in str(data.dtype):
+                return float(data)
+            else:
+                return data.item()
+        elif hasattr(data, '__class__') and 'int64' in str(data.__class__):
+            # 其他可能的int64类型
+            if pd.isna(data):
+                return 0
+            return int(data)
+        elif pd.isna(data):
+            # 处理pandas NaN值
+            if isinstance(data, (int, float)):
+                return 0
+            return None
+        else:
+            return data
 
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])
         if len(self.perf_data) == 0:
             raise FileNotFoundError(f"hiperf_info.json not found: {path}")
-
-    def load_frame_data(self, path):
-        self.frame_data = self._load_json_safe(path, default={})
-
-    def load_empty_frame_data(self, path):
-        self.empty_frame_data = self._load_json_safe(path, default={})
-
-    def load_component_reusability_data(self, path):
-        self.component_reusability_data = self._load_json_safe(path, default={})
-
-    def load_cold_start_analysis_data(self, path):
-        self.cold_start_analysis_data = self._load_json_safe(path, default={})
-
-    def extract_basic_info(self):
-        if self.perf_data and isinstance(self.perf_data, list):
-            first_entry = self.perf_data[0]
-            self.basic_info = {
-                "rom_version": first_entry.get("rom_version", ""),
-                "app_id": first_entry.get("app_id", ""),
-                "app_name": first_entry.get("app_name", ""),
-                "app_version": first_entry.get("app_version", ""),
-                "scene": first_entry.get("scene", ""),
-                "timestamp": first_entry.get("timestamp", 0)
-            }
+        first_entry = self.perf_data[0]
+        self.result["perf"]["steps"] = first_entry.get("steps", [])
+        self.result["perf"]["har"] = first_entry.get("har", {})
+        self.result['basicInfo'] = {
+            "rom_version": first_entry.get("rom_version", ""),
+            "app_id": first_entry.get("app_id", ""),
+            "app_name": first_entry.get("app_name", ""),
+            "app_version": first_entry.get("app_version", ""),
+            "scene": first_entry.get("scene", ""),
+            "timestamp": first_entry.get("timestamp", 0)
+        }
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""
@@ -201,10 +189,10 @@ class ReportGenerator:
                 return False
 
         # Step 2: Analyze data (includes empty frames and frame drops analysis)
-        analyze_data(scene_dir)
+        result = analyze_data(scene_dir)
 
         # Step 3: Generate HTML report
-        self._create_html_report(scene_dir)
+        self._create_html_report(scene_dir, result)
 
         logging.info("Report successfully %s for %s", 'updated' if skip_round_selection else 'generated', scene_dir)
         return True
@@ -223,10 +211,10 @@ class ReportGenerator:
         logging.debug("Selecting round with command: %s", ' '.join(args))
         return ExeUtils.execute_hapray_cmd(args)
 
-    def _create_html_report(self, scene_dir: str) -> None:
+    def _create_html_report(self, scene_dir: str, result: dict) -> None:
         """Create the final HTML report"""
         try:
-            json_data_str = self._build_json_data(scene_dir)
+            json_data_str = self._build_json_data(scene_dir, result)
 
             template_path = os.path.join(
                 self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
@@ -249,8 +237,8 @@ class ReportGenerator:
             logging.error("Failed to create HTML report: %s", str(e))
 
     @staticmethod
-    def _build_json_data(scene_dir: str) -> str:
-        return str(ReportData.from_paths(scene_dir))
+    def _build_json_data(scene_dir: str, result: dict) -> str:
+        return str(ReportData.from_paths(scene_dir, result))
 
     @staticmethod
     def _inject_json_to_html(

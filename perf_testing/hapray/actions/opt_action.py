@@ -53,44 +53,47 @@ class OptAction:
         action = OptAction()
         file_collector = FileCollector()
         try:
-            logging.info(f"Collecting binary files from: {parsed_args.input}")
+            logging.info("Collecting binary files from: %s", parsed_args.input)
             file_infos = file_collector.collect_binary_files(parsed_args.input)
 
             if not file_infos:
                 logging.warning("No valid binary files found")
-                return
+                return None
 
-            logging.info(f"Starting optimization detection on {len(file_infos)} files")
+            logging.info("Starting optimization detection on %d files", len(file_infos))
 
             with ProcessPoolExecutor(max_workers=2) as executor:
                 futures = []
-                future = executor.submit(action._run_detection, parsed_args.jobs, file_infos)
+                future = executor.submit(action.run_detection, parsed_args.jobs, file_infos)
                 futures.append(future)
                 if parsed_args.report_dir:
-                    future = executor.submit(action._run_invoke_analysis, file_infos, parsed_args.report_dir)
+                    future = executor.submit(action.run_invoke_analysis, file_infos, parsed_args.report_dir)
                     futures.append(future)
 
             data = []
             # Wait for all report generation tasks
             for future in futures:
                 data.extend(future.result())
-            action._generate_excel_report(data, parsed_args.output)
-            logging.info(f"Analysis report saved to: {parsed_args.output}")
+            action.generate_excel_report(data, parsed_args.output)
+            logging.info("Analysis report saved to: %s", parsed_args.output)
             return data
         finally:
             file_collector.cleanup()
 
-    def _run_detection(self, jobs, file_infos):
+    @staticmethod
+    def run_detection(jobs, file_infos):
         """Run optimization detection in a separate process"""
         detector = OptimizationDetector(jobs)
         return detector.detect_optimization(file_infos)
 
-    def _run_invoke_analysis(self, file_infos, report_dir):
+    @staticmethod
+    def run_invoke_analysis(file_infos, report_dir):
         """Run invoke symbols analysis in a separate process"""
         invoke_symbols = InvokeSymbols()
         return invoke_symbols.analyze(file_infos, report_dir)
 
-    def _generate_excel_report(self, data: List[Tuple[str, pd.DataFrame]], output_file: str) -> None:
+    @staticmethod
+    def generate_excel_report(data: List[Tuple[str, pd.DataFrame]], output_file: str) -> None:
         """Generate Excel report using pandas"""
         report_saver = ExcelReportSaver(output_file)
         for row in data:

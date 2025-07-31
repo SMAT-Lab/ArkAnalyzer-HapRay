@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 
 // ==================== 类型定义 ====================
-/** 性能事件类型 */
+/** 负载事件类型 */
 export enum PerfEvent {
   CYCLES_EVENT = 0,
   INSTRUCTION_EVENT = 1,
@@ -28,7 +28,7 @@ enum OriginKind {
   THIRD_PARTY = 3,
 }
 
-interface BasicInfo {
+export interface BasicInfo {
   rom_version: string;
   app_id: string;
   app_name: string;
@@ -91,7 +91,7 @@ interface FrameStatistics {
 
 interface StutterDetail {
   vsync: number;
-  timestamp: number;
+  ts: number;
   actual_duration: number;
   expected_duration: number;
   exceed_time: number;
@@ -207,6 +207,17 @@ interface ColdStartStepData {
 
 export type ColdStartData = Record<string, ColdStartStepData>;
 
+interface GcThreadStepData {
+  FullGC: number;
+  SharedFullGC: number;
+  SharedGC: number;
+  PartialGC: number;
+  GCStatus: string;
+  perf_percentage: number;
+}
+
+export type GcThreadData = Record<string, GcThreadStepData>;
+
 interface ComponentResuStepData {
   total_builds: number;
   recycled_builds: number;
@@ -216,19 +227,102 @@ interface ComponentResuStepData {
 
 export type ComponentResuData = Record<string, ComponentResuStepData>;
 
+interface FrameLoad {
+  ts: number;
+  dur: number;
+  ipid?: number;
+  itid?: number;
+  pid?: number;
+  tid: number;
+  callstack_id?: number;
+  process_name: string;
+  thread_name: string;
+  callstack_name?: string;
+  frame_load: number;
+  is_main_thread?: number;
+  vsync?: number | string;
+  flag?: number;
+  type?: number;
+  sample_callchains?: SampleCallchain[];
+}
+
+interface FrameLoadsStepData {
+  status?: string;
+  summary?: {
+    total_frames: number;
+    total_load: number;
+    average_load: number;
+    max_load: number;
+    min_load: number;
+  };
+  top_frames: FrameLoad[];
+}
+
+export type FrameLoadsData = Record<string, FrameLoadsStepData>;
+
+interface VSyncFrequencyAnomaly {
+  type: string;
+  start_vsync: number;
+  end_vsync: number;
+  start_ts: number;
+  end_ts: number;
+  duration: number;
+  interval_count: number;
+  avg_interval: number;
+  avg_frequency: number;
+  min_frequency: number;
+  max_frequency: number;
+  severity: string;
+  description: string;
+}
+
+interface VSyncFrameMismatch {
+  type: string;
+  vsync: number;
+  expect_frames?: number;
+  actual_frames?: number;
+  description: string;
+  ts: number;
+  thread_name: string;
+  process_name: string;
+}
+
+interface VSyncAnomalyStepData {
+  status?: string;
+  statistics?: {
+    total_vsync_signals: number;
+    frequency_anomalies_count: number;
+    frame_mismatch_count: number;
+    anomaly_rate: number;
+  };
+  frequency_anomalies: VSyncFrequencyAnomaly[];
+  frame_mismatches: VSyncFrameMismatch[];
+}
+
+export type VSyncAnomalyData = Record<string, VSyncAnomalyStepData>;
+
 interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
   componentReuse: ComponentResuData;
   coldStart?: ColdStartData;
+  gc_thread?: GcThreadData;
+  frameLoads?: FrameLoadsData;
+  vsyncAnomaly?: VSyncAnomalyData;
+}
+
+interface MoreData {
+  flame_graph: Record<string, string>;
 }
 
 export interface JSONData {
+  version: string;
   type: number;
   versionCode: number;
   basicInfo: BasicInfo;
   perf: PerfData;
   trace?: TraceData;
+  more?: MoreData;
 }
 
 // ==================== 默认值生成函数 ====================
@@ -236,7 +330,7 @@ export interface JSONData {
 function createDefaultStutterDetail(): StutterDetail {
   return {
     vsync: 0,
-    timestamp: 0,
+    ts: 0,
     actual_duration: 0,
     expected_duration: 0,
     exceed_time: 0,
@@ -289,6 +383,54 @@ function createDefaultEmptyFrame(): EmptyFrame {
       load_percentage: 0,
       callchain: [createDefaultCallstackFrame()]
     }]
+  };
+}
+
+function createDefaultFrameLoad(): FrameLoad {
+  return {
+    ts: 0,
+    dur: 0,
+    tid: 0,
+    process_name: "",
+    thread_name: "",
+    frame_load: 0,
+    sample_callchains: [{
+      timestamp: 0,
+      event_count: 0,
+      load_percentage: 0,
+      callchain: [createDefaultCallstackFrame()]
+    }]
+  };
+}
+
+function createDefaultVSyncFrequencyAnomaly(): VSyncFrequencyAnomaly {
+  return {
+    type: "",
+    start_vsync: 0,
+    end_vsync: 0,
+    start_ts: 0,
+    end_ts: 0,
+    duration: 0,
+    interval_count: 0,
+    avg_interval: 0,
+    avg_frequency: 0,
+    min_frequency: 0,
+    max_frequency: 0,
+    severity: "",
+    description: ""
+  };
+}
+
+function createDefaultVSyncFrameMismatch(): VSyncFrameMismatch {
+  return {
+    type: "",
+    vsync: 0,
+    expect_frames: 0,
+    actual_frames: 0,
+    description: "",
+    ts: 0,
+    thread_name: "",
+    process_name: ""
   };
 }
 
@@ -372,6 +514,50 @@ export function getDefaultComponentResuData(): ComponentResuData {
   };
 }
 
+/** 获取默认的帧负载步骤数据 */
+export function getDefaultFrameLoadsStepData(): FrameLoadsStepData {
+  return {
+    status: "unknown",
+    summary: {
+      total_frames: 0,
+      total_load: 0,
+      average_load: 0,
+      max_load: 0,
+      min_load: 0
+    },
+    top_frames: [createDefaultFrameLoad()]
+  };
+}
+
+/** 获取默认的帧负载数据（包含一个默认步骤） */
+export function getDefaultFrameLoadsData(): FrameLoadsData {
+  return {
+    step1: getDefaultFrameLoadsStepData()
+  };
+}
+
+/** 获取默认的VSync异常步骤数据 */
+export function getDefaultVSyncAnomalyStepData(): VSyncAnomalyStepData {
+  return {
+    status: "unknown",
+    statistics: {
+      total_vsync_signals: 0,
+      frequency_anomalies_count: 0,
+      frame_mismatch_count: 0,
+      anomaly_rate: 0
+    },
+    frequency_anomalies: [createDefaultVSyncFrequencyAnomaly()],
+    frame_mismatches: [createDefaultVSyncFrameMismatch()]
+  };
+}
+
+/** 获取默认的VSync异常数据（包含一个默认步骤） */
+export function getDefaultVSyncAnomalyData(): VSyncAnomalyData {
+  return {
+    step1: getDefaultVSyncAnomalyStepData()
+  };
+}
+
 export function getDefaultColdStartStepData(): ColdStartStepData {
   return {
     summary: {
@@ -417,8 +603,57 @@ export function safeProcessColdStartData(data: ColdStartData | null | undefined)
   return result;
 }
 
+/**
+ * 安全处理帧负载数据 - 替换无效值为默认结构
+ * @param data 原始帧负载数据
+ * @returns 处理后的有效帧负载数据
+ */
+export function safeProcessFrameLoadsData(data: FrameLoadsData | null | undefined): FrameLoadsData {
+  if (!data) return getDefaultFrameLoadsData();
+
+  const result: FrameLoadsData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultFrameLoadsStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultFrameLoadsStepData();
+  }
+
+  return result;
+}
+
+/**
+ * 安全处理VSync异常数据 - 替换无效值为默认结构
+ * @param data 原始VSync异常数据
+ * @returns 处理后的有效VSync异常数据
+ */
+export function safeProcessVSyncAnomalyData(data: VSyncAnomalyData | null | undefined): VSyncAnomalyData {
+  if (!data) return getDefaultVSyncAnomalyData();
+
+  const result: VSyncAnomalyData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultVSyncAnomalyStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultVSyncAnomalyStepData();
+  }
+
+  return result;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
+  version: string | null;
   basicInfo: BasicInfo | null;
   compareBasicInfo: BasicInfo | null;
   perfData: PerfData | null;
@@ -427,6 +662,12 @@ interface JsonDataState {
   comparePerfData: PerfData | null;
   componentResuData: ComponentResuData | null;
   coldStartData: ColdStartData | null;
+  gcThreadData: GcThreadData | null;
+  frameLoadsData: FrameLoadsData | null;
+  vsyncAnomalyData: VSyncAnomalyData | null;
+  baseMark: string | null;
+  compareMark: string | null;
+  flameGraph: Record<string, string> | null;
 }
 
 /**
@@ -497,6 +738,7 @@ function safeProcessComponentResuData(data: ComponentResuData | null | undefined
 
 export const useJsonDataStore = defineStore('config', {
   state: (): JsonDataState => ({
+    version: null,
     basicInfo: null,
     compareBasicInfo: null,
     perfData: null,
@@ -505,31 +747,51 @@ export const useJsonDataStore = defineStore('config', {
     comparePerfData: null,
     componentResuData: null,
     coldStartData: null,
+    gcThreadData: null,
+    frameLoadsData: null,
+    vsyncAnomalyData: null,
+    baseMark: null,
+    compareMark: null,
+    flameGraph: null,
   }),
 
   actions: {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
+      this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
 
-      if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
-        this.perfData = jsonData.perf;
+      this.perfData = jsonData.perf;
+      this.baseMark = window.baseMark;
+      this.compareMark = window.compareMark;
 
-        if (jsonData.trace) {
-          // 安全处理所有 trace 相关数据
-          this.frameData = safeProcessFrameData(jsonData.trace.frames);
-          this.emptyFrameData = safeProcessEmptyFrameData(jsonData.trace.emptyFrame);
-          this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
-          this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
-        } else {
-          // 当没有 trace 数据时，设置完整的默认结构
-          this.frameData = getDefaultFrameData();
-          this.emptyFrameData = getDefaultEmptyFrameData();
-          this.componentResuData = getDefaultComponentResuData();
-        }
+      if (jsonData.trace) {
+        // 安全处理所有 trace 相关数据
+        this.frameData = safeProcessFrameData(jsonData.trace.frames);
+        this.emptyFrameData = safeProcessEmptyFrameData(jsonData.trace.emptyFrame);
+        this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
+        this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
+        this.gcThreadData = safeProcessGcThreadData(jsonData.trace.gc_thread);
+        this.frameLoadsData = safeProcessFrameLoadsData(jsonData.trace.frameLoads);
+        this.vsyncAnomalyData = safeProcessVSyncAnomalyData(jsonData.trace.vsyncAnomaly);
+      } else {
+        // 当没有 trace 数据时，设置完整的默认结构
+        this.frameData = getDefaultFrameData();
+        this.emptyFrameData = getDefaultEmptyFrameData();
+        this.componentResuData = getDefaultComponentResuData();
+        this.coldStartData = getDefaultColdStartData();
+        this.gcThreadData = getDefaultGcThreadData();
+        this.frameLoadsData = getDefaultFrameLoadsData();
+        this.vsyncAnomalyData = getDefaultVSyncAnomalyData();
+      }
+      if (jsonData.more) {
+        // 火焰图
+        this.flameGraph = jsonData.more.flame_graph;
+      }
+
+      if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         window.initialPage = 'perf';
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
-        this.perfData = jsonData.perf;
         this.comparePerfData = compareJsonData.perf;
         window.initialPage = 'perf_compare';
       }
@@ -579,3 +841,45 @@ export const useComponentNameStore = defineStore('componentNameQuery', {
     componentNameQuery: '' as string,
   })
 });
+
+/** 获取默认的GC线程步骤数据 */
+export function getDefaultGcThreadStepData(): GcThreadStepData {
+  return {
+    FullGC: 0,
+    SharedFullGC: 0,
+    SharedGC: 0,
+    PartialGC: 0,
+    GCStatus: "OK",
+    perf_percentage: 0.0
+  };
+}
+
+export function getDefaultGcThreadData(): GcThreadData {
+  return {
+    step1: getDefaultGcThreadStepData()
+  };
+}
+
+/**
+ * 安全处理GC线程数据 - 替换无效值为默认结构
+ * @param data 原始GC线程数据
+ * @returns 处理后的有效GC线程数据
+ */
+export function safeProcessGcThreadData(data: GcThreadData | null | undefined): GcThreadData {
+  if (!data) return getDefaultGcThreadData();
+
+  const result: GcThreadData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultGcThreadStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultGcThreadStepData();
+  }
+
+  return result;
+}

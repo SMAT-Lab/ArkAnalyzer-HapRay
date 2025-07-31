@@ -25,6 +25,7 @@ interface HapAnalyzerOptions {
     disableDbtools: boolean;
     kindConfig?: string;
     compatibility: boolean;
+    ut: boolean;
 }
 
 export const DbtoolsCli = new Command('dbtools')
@@ -34,6 +35,7 @@ export const DbtoolsCli = new Command('dbtools')
     .option('-s, --soDir <string>', '--So_dir soDir', '')
     .option('-k, --kind-config <string>', 'custom kind configuration in JSON format')
     .option('--compatibility', 'start compatibility mode', false)
+    .option('--ut', 'ut mode', false)
     .action(async (options: HapAnalyzerOptions) => {
         let cliArgs: Partial<GlobalConfig> = { ...options };
         initConfig(cliArgs, (config) => {
@@ -43,6 +45,7 @@ export const DbtoolsCli = new Command('dbtools')
                 updateKindConfig(config, options.kindConfig);
             }
             config.compatibility = options.compatibility;
+            config.ut = options.ut;
         });
 
         await main(options.input);

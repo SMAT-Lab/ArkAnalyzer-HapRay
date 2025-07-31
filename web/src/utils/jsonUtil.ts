@@ -441,11 +441,11 @@ export function calculateSymbolData1(
 }
 
 
-export function changeBase64Str2Json(base64String: string) {
+export function changeBase64Str2Json(base64String: string, dataType: string) {
     if (base64String == '/tempCompareJsonData/') {
         return '/tempCompareJsonData/';
     }
-    if (isBase64(base64String)) {
+    if (isBase64(base64String, dataType)) {
         const compressed = atob(base64String);
         const uint8Array = new Uint8Array([...compressed].map(c => c.charCodeAt(0)));
         const jsonString = pako.inflate(uint8Array, { to: 'string' });
@@ -458,16 +458,12 @@ export function changeBase64Str2Json(base64String: string) {
 }
 
 
-function isBase64(str: string) {
-    // 标准 Base64 正则（包含 = 填充符）
-    const base64Regex = /^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/;
-
-    // URL安全的 Base64 正则（支持 -_ 替代 +/）
-    const base64UrlRegex = /^([A-Za-z0-9\-_]{4})*([A-Za-z0-9\-_]{3}=?|[A-Za-z0-9\-_]{2}(==)?)?$/;
-
-    // 检查长度是否为4的倍数
-    if (str.length % 4 !== 0) return false;
-
-    // 检查是否匹配任一模式
-    return base64Regex.test(str) || base64UrlRegex.test(str);
+function isBase64(str: string, dataType: string) {
+    if (dataType === 'application/gzip+json;base64') {
+        return true;
+    }
+    if (str.indexOf('{') !== -1) {
+        return false;
+    }
+    return true;
 }

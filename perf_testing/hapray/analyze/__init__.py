@@ -16,21 +16,26 @@ limitations under the License.
 import logging
 import os
 import re
-from typing import List
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.exe_utils import ExeUtils
 
 # Configuration constants
-MAX_WORKERS = 4  # Optimal for I/O-bound tasks
+MAX_WORKERS = 8  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
     'PerfAnalyzer',
-    'EmptyFrameAnalyzer',
-    'FrameDropAnalyzer',
+    'FrameLoadAnalyzer',      # 提前执行，作为数据收集前驱
+    'EmptyFrameAnalyzer',     # 使用缓存的帧负载数据
+    'FrameDropAnalyzer',      # 使用缓存的帧负载数据
+    'VSyncAnomalyAnalyzer',   # VSync异常分析器
     'ColdStartAnalyzer',
+    'GCAnalyzer',
+    'CovAnalyzer',
+    'FaultTreeAnalyzer',
     # Add more analyzers here
 ]
 
@@ -47,21 +52,22 @@ def camel_to_snake(name: str) -> str:
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-def analyze_data(scene_dir: str):
+def analyze_data(scene_dir: str) -> dict:
     """Main entry point for data analysis pipeline.
 
     Args:
         scene_dir: Root directory containing scene data
     """
+    result = {}
     analyzers = _initialize_analyzers(scene_dir)
     if not analyzers:
         logging.error("No analyzers initialized. Aborting analysis.")
-        return
+        return result
 
     hiperf_path = os.path.join(scene_dir, 'hiperf')
     if not os.path.exists(hiperf_path):
         logging.error("htrace directory not found: %s", hiperf_path)
-        return
+        return result
 
     try:
         start_time = time.perf_counter()
@@ -71,7 +77,8 @@ def analyze_data(scene_dir: str):
     except Exception as e:
         logging.exception("Analysis pipeline failed: %s", str(e))
     finally:
-        _finalize_analyzers(analyzers)
+        result = _finalize_analyzers(analyzers)
+    return result
 
 
 def _initialize_analyzers(scene_dir: str) -> List[BaseAnalyzer]:
@@ -199,11 +206,14 @@ def _run_analyzers(
             logging.error("Analyzer %s failed on %s: %s", type(analyzer).__name__, step_dir, str(e))
 
 
-def _finalize_analyzers(analyzers: List[BaseAnalyzer]):
+def _finalize_analyzers(analyzers: List[BaseAnalyzer]) -> dict:
     """Finalize all analyzers and write reports."""
+    result = {}
     for analyzer in analyzers:
         try:
-            analyzer.write_report()
+            analyzer.write_report(result)
             logging.info("Report generated for %s", type(analyzer).__name__)
         except Exception as e:
             logging.error("Failed to generate report for %s: %s", type(analyzer).__name__, str(e))
+
+    return result

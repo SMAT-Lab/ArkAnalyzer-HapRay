@@ -28,9 +28,13 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
     pattern = re.compile(r'^H:CustomNode:BuildItem\s*\[([^\]]*)\]')
 
     def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'component_reusability_report.json')
+        super().__init__(scene_dir, 'trace/componentReuse')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(self,
+                      step_dir: str,
+                      trace_db_path: str,
+                      perf_db_path: str,
+                      app_pids: list) -> Optional[Dict[str, Any]]:
         """Analyze component reusability metrics.
 
         Metrics:
@@ -94,7 +98,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                         2
                     )
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
+            self.logger.error("ComponentReusableAnalyzer Database error: %s", str(e))
             return {"error": f"Database operation failed: {str(e)}"}
 
         return metrics
