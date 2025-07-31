@@ -12,12 +12,14 @@
     "lint:fix": "eslint --ext .ts src --fix",
     "prepack": "npm run build",
     "test": "vitest",
-    "hapray": "node -r ts-node/register src/cli/index.ts hapray dbtools -i D:\\gitcode\\ArkAnalyzer-HapRay\\perf_testing\\scripts\\reports\\20250513165531\\ResourceUsage_PerformanceDynamic_jingdong_0020"
+    "hapray": "node -r ts-node/register src/cli/index.ts hapray dbtools -i D:\\gitcode\\ArkAnalyzer-HapRay\\perf_testing\\scripts\\reports\\20250513165531\\ResourceUsage_PerformanceDynamic_jingdong_0020",
+    "unittest":"node -r ts-node/register src/cli/index.ts hapray dbtools -i a --ut true"
   },
   "dependencies": {
     "@types/sql.js": "^1.4.9",
     "@xmldom/xmldom": "^0.9.8",
     "arkanalyzer": "^1.0.7",
+    "bjc": "^1.0.19",
     "commander": "^12.1.0",
     "jszip": "^3.10.1",
     "read-excel-file": "^5.8.7",

@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from perf_testing.hapray.analyze.base_analyzer import AnalyzerHelper
 
-from hapray.core.common.frame_analyzer import FrameAnalyzer
+from hapray.core.common.frame import FrameAnalyzer
 
 
 def test_collect_empty_frame_loads():
@@ -146,10 +146,14 @@ def update_one_empty_frame_results(report_dir: str) -> bool:
 
         # 保存所有步骤的分析结果
         if all_results:
+            # 直接保存JSON文件
             output_file = os.path.join(htrace_dir, 'empty_frames_analysis.json')
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(all_results, f, indent=2, ensure_ascii=False)
-            print(f"✓ 分析结果已保存到: {output_file}")
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(all_results, f, ensure_ascii=False, indent=2)
+                print(f"✓ 分析结果已保存到: {output_file}")
+            except Exception as e:
+                logging.error("保存空帧分析结果失败: %s", str(e))
         else:
             logging.warning("No valid analysis results to save")
 

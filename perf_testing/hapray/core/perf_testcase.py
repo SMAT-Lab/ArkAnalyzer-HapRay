@@ -21,6 +21,8 @@ import time
 from abc import ABC, abstractmethod
 
 from devicetest.core.test_case import TestCase
+from hypium.uidriver.ohos.app_manager import get_bundle_info
+from hypium.uidriver.uitree import UiTree
 from xdevice import platform_logger
 
 from hapray.core.config.config import Config
@@ -130,9 +132,11 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         TestCase.__init__(self, tag, configs)
         UIEventWrapper.__init__(self, self.device1)
         self.tag = tag
-        self._start_app_package = None  # Package name for process identification
         self._redundant_mode_status = False  # default close redundant mode
         self._steps = []
+        self.uitree = UiTree(self.driver)
+        self.bundle_info = None
+        self.module_name = None
 
     @property
     def steps(self) -> list:
@@ -152,6 +156,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def setup(self):
         """common setup"""
         Log.info('PerfTestCase setup')
+        self.bundle_info = get_bundle_info(self.driver, self.app_package)
+        self.module_name = self.bundle_info.get('entryModuleName')
+
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
         self.stop_app()
@@ -186,6 +193,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         output_file = self._prepare_output_path(step_id)
         self._clean_previous_output(output_file)
 
+        # dump view tree when start test step
+        perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
+        self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_start.json'))
+
         cmd = self._build_collection_command(
             output_file,
             duration,
@@ -197,11 +208,15 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             args=(cmd, duration)
         )
         collection_thread.start()
+        try:
+            # Execute the test action while data collection runs
+            action(*args)
+        finally:
+            collection_thread.join()
 
-        # Execute the test action while data collection runs
-        action(*args)
-
-        collection_thread.join()
+        # dump view tree when end test step
+        self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_end.json'))
+        self._collect_coverage_data(perf_step_dir)
         self._save_performance_data(output_file, step_id)
 
     def set_device_redundant_mode(self):
@@ -398,8 +413,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
     def _get_app_pids(self) -> tuple[list[int], list[str]]:
         """Get all PIDs and process names associated with the application"""
-        target_package = self._start_app_package or self.app_package
-        cmd = f"ps -ef | grep {target_package}"
+        cmd = f"ps -ef | grep {self.app_package}"
         result = self.driver.shell(cmd)
 
         process_ids = []
@@ -450,6 +464,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def _transfer_perf_data(self, remote_path: str, local_path: str):
         """Transfer performance data from device to host"""
         if not self._verify_remote_files_exist(remote_path):
+            Log.error("Not found %s", remote_path)
             return
         self.driver.shell(f"hiperf report -i {remote_path} --json -o {remote_path}.json")
         self.driver.pull_file(remote_path, local_path)
@@ -476,8 +491,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def _transfer_redundant_data(self, trace_step_dir: str):
         if not self._redundant_mode_status:
             return
-        bundle_name = self._start_app_package or self.app_package
-        remote_path = f'data/app/el2/100/base/{bundle_name}/files/{bundle_name}_redundant_file.txt'
+        remote_path = f'data/app/el2/100/base/{self.app_package}/files/{self.app_package}_redundant_file.txt'
         if not self._verify_remote_files_exist(remote_path):
             return
         local_path = os.path.join(trace_step_dir, 'redundant_file.txt')
@@ -486,3 +500,16 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             Log.info(f"Redundant data saved: {local_path}")
         else:
             Log.error(f"Failed to transfer redundant data: {local_path}")
+
+    def _collect_coverage_data(self, perf_step_dir: str):
+        self.driver.shell('aa dump -c -l')
+        self.driver.wait(1)
+        file = f'data/app/el2/100/base/{self.app_package}/haps/{self.module_name}/cache/bjc*'
+        result = self.driver.shell(f'ls {file}')
+        # not found bjc_cov file
+        if result.find(file) != -1:
+            return
+
+        files = result.splitlines()
+        files.sort(key=lambda x: x, reverse=True)
+        self.driver.pull_file(files[0], os.path.join(perf_step_dir, 'bjc_cov.json'))

@@ -13,12 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import os
-import logging
 import argparse
 import json
-import pandas as pd
+import logging
+import os
 from typing import List
+
+import pandas as pd
+
 from hapray.core.common.excel_utils import ExcelReportSaver
 
 
@@ -37,7 +39,7 @@ def load_summary_info(directory: str):
                         elif isinstance(content, list):
                             data.extend([item for item in content if isinstance(item, dict)])
                 except Exception as e:
-                    logging.error(f"Failed to read {file_path}: {e}")
+                    logging.error("Failed to read %s: %s", file_path, str(e))
     return data
 
 
@@ -112,13 +114,13 @@ class CompareAction:
         output_path = parsed.output or os.path.join(os.getcwd(), 'compare_result.xlsx')
 
         if not os.path.isdir(base_dir):
-            logging.error(f"Base directory does not exist: {base_dir}")
+            logging.error("Base directory does not exist: %s", base_dir)
             return
         if not os.path.isdir(compare_dir):
-            logging.error(f"Compare directory does not exist: {compare_dir}")
+            logging.error("Compare directory does not exist: %s", compare_dir)
             return
 
-        logging.info(f"Comparing base: {base_dir} with compare: {compare_dir}")
+        logging.info("Comparing base: %s with compare: %s", base_dir, compare_dir)
         base_data = load_summary_info(base_dir)
         compare_data = load_summary_info(compare_dir)
         if not base_data and not compare_data:
@@ -133,4 +135,4 @@ class CompareAction:
         saver = ExcelReportSaver(output_path)
         saver.add_sheet(merged_df, 'Compare')
         saver.save()
-        logging.info(f"Comparison Excel saved to {output_path}")
+        logging.info("Comparison Excel saved to %s", output_path)

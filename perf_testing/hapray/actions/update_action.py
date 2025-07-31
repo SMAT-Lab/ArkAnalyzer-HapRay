@@ -91,9 +91,9 @@ class UpdateAction:
 
         Config.set("mode", parsed_args.mode)
         if not os.path.exists(report_dir) and Config.get("mode") == Mode.COMMUNITY:
-            logging.error(f"Report directory not found: {report_dir}")
+            logging.error("Report directory not found: %s", report_dir)
             return
-        elif Config.get("mode") == Mode.SIMPLE:
+        if Config.get("mode") == Mode.SIMPLE:
             # 简单模式构造目录
             perf_path = parsed_args.perf
             trace_path = parsed_args.trace
@@ -111,9 +111,9 @@ class UpdateAction:
             timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             report_dir = os.path.join(report_dir, timestamp)
             create_simple_mode_structure(report_dir, perf_path, trace_path, package_name, pids)
-        logging.info(f"Updating reports in: {report_dir}")
+        logging.info("Updating reports in: %s", report_dir)
         if so_dir:
-            logging.info(f"Using symbolicated .so files from: {so_dir}")
+            logging.info("Using symbolicated .so files from: %s", so_dir)
             Config.set("so_dir", so_dir)
 
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
@@ -121,7 +121,7 @@ class UpdateAction:
             logging.error("No valid test case reports found")
             return
 
-        logging.info(f"Found {len(testcase_dirs)} test case reports for updating")
+        logging.info("Found %d test case reports for updating", len(testcase_dirs))
         UpdateAction.process_reports(testcase_dirs, report_dir)
 
     @staticmethod
@@ -160,7 +160,7 @@ class UpdateAction:
 
             for case_dir in testcase_dirs:
                 scene_name = os.path.basename(case_dir)
-                logging.info(f"Updating report: {scene_name}")
+                logging.info("Updating report: %s", scene_name)
                 future = executor.submit(report_generator.update_report, case_dir)
                 futures.append(future)
 
@@ -172,7 +172,7 @@ class UpdateAction:
                     else:
                         logging.error("Report update failed")
                 except Exception as e:
-                    logging.error(f"Error updating report: {str(e)}")
+                    logging.error("Error updating report: %s", str(e))
 
         # Generate summary report
         logging.info("Generating summary Excel report")
