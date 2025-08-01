@@ -23,7 +23,7 @@ from hapray.core.common.frame import FrameAnalyzerCore
 
 class FrameDropAnalyzer(BaseAnalyzer):
     """Analyzer for frame drops analysis
-    
+
     卡顿帧分析器 - 遵循正确的架构设计：
     1. 继承BaseAnalyzer，负责业务逻辑协调
     2. 使用FrameAnalyzerCore进行核心分析
@@ -74,5 +74,3 @@ class FrameDropAnalyzer(BaseAnalyzer):
         except Exception as e:
             logging.error("Frame drop analysis failed for step %s: %s", step_dir, str(e))
             return None
-
-

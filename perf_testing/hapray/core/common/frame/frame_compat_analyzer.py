@@ -18,13 +18,13 @@ from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
-# 设置环境变量
-os.environ["PYTHONIOENCODING"] = "utf-8"
-
 # 导入新的模块化组件
 from .frame_core_analyzer import FrameAnalyzerCore
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
+
+# 设置环境变量
+os.environ["PYTHONIOENCODING"] = "utf-8"
 
 
 class FrameAnalyzer:
