@@ -23,7 +23,7 @@ from hapray.core.common.frame import FrameAnalyzerCore
 
 class EmptyFrameAnalyzer(BaseAnalyzer):
     """Analyzer for empty frames analysis
-    
+
     空帧分析器 - 遵循正确的架构设计：
     1. 继承BaseAnalyzer，负责业务逻辑协调
     2. 使用FrameAnalyzerCore进行核心分析

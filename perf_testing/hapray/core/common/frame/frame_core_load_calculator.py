@@ -41,12 +41,12 @@ class FrameLoadCalculator:
         self.debug_vsync_enabled = debug_vsync_enabled
 
     def analyze_perf_callchain(
-        self,
-        perf_conn,
-        callchain_id: int,
-        callchain_cache: pd.DataFrame = None,
-        files_cache: pd.DataFrame = None,
-        step_id: str = None
+            self,
+            perf_conn,
+            callchain_id: int,
+            callchain_cache: pd.DataFrame = None,
+            files_cache: pd.DataFrame = None,
+            step_id: str = None
     ) -> List[Dict[str, Any]]:
         """分析perf样本的调用链信息
 
@@ -79,8 +79,8 @@ class FrameLoadCalculator:
                     or cache_key not in FrameCacheManager._files_cache
                     or FrameCacheManager._files_cache[cache_key].empty):
                 logging.warning("缓存数据为空，无法分析调用链: cache_key=%s", cache_key)
-                            # logging.info("callchain_cache keys: %s", list(FrameCacheManager._callchain_cache.keys()))
-            # logging.info("files_cache keys: %s", list(FrameCacheManager._files_cache.keys()))
+                # logging.info("callchain_cache keys: %s", list(FrameCacheManager._callchain_cache.keys()))
+                # logging.info("files_cache keys: %s", list(FrameCacheManager._files_cache.keys()))
                 return []
 
             # 从缓存中获取callchain数据
@@ -101,11 +101,11 @@ class FrameLoadCalculator:
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
                 file_mask = (
-                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id']) &
-                    (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])
+                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])
+                    & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])
                 )
                 file_info = FrameCacheManager._files_cache[cache_key][file_mask]
-                
+
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
 
@@ -138,7 +138,7 @@ class FrameLoadCalculator:
         # 计算帧的开始和结束时间
         frame_start_time = frame.get('start_time', frame.get('ts', 0))
         frame_end_time = frame.get('end_time', frame.get('ts', 0) + frame.get('dur', 0))
-        
+
         mask = (
             (perf_df['timestamp_trace'] >= frame_start_time)
             & (perf_df['timestamp_trace'] <= frame_end_time)
@@ -147,11 +147,11 @@ class FrameLoadCalculator:
         frame_samples = perf_df[mask]
 
         if frame_samples.empty:
-            # logging.info("analyze_single_frame: 帧时间窗口内无样本, ts=%s, 时间窗口=[%s, %s], tid=%s", 
+            # logging.info("analyze_single_frame: 帧时间窗口内无样本, ts=%s, 时间窗口=[%s, %s], tid=%s",
             #              frame.get('ts'), frame_start_time, frame_end_time, frame.get('tid'))
             return frame_load, sample_callchains
 
-        # logging.info("analyze_single_frame: 找到样本, ts=%s, 时间窗口=[%s, %s], tid=%s, 样本数=%s", 
+        # logging.info("analyze_single_frame: 找到样本, ts=%s, 时间窗口=[%s, %s], tid=%s, 样本数=%s",
         #              frame.get('ts'), frame_start_time, frame_end_time, frame.get('tid'), len(frame_samples))
 
         for _, sample in frame_samples.iterrows():
@@ -225,14 +225,14 @@ class FrameLoadCalculator:
         return frame_load, sample_callchains
 
     def calculate_frame_load(
-        self,
-        frame: Dict[str, Any],
-        perf_df: pd.DataFrame,
-        perf_conn,
-        step_id: str = None,
-        callchain_cache: pd.DataFrame = None,
-        files_cache: pd.DataFrame = None,
-        include_vsync_filter: bool = True
+            self,
+            frame: Dict[str, Any],
+            perf_df: pd.DataFrame,
+            perf_conn,
+            step_id: str = None,
+            callchain_cache: pd.DataFrame = None,
+            files_cache: pd.DataFrame = None,
+            include_vsync_filter: bool = True
     ) -> Tuple[int, List[Dict[str, Any]]]:
         """计算单个帧的负载和调用链
 
@@ -255,7 +255,7 @@ class FrameLoadCalculator:
         # 计算帧的开始和结束时间
         frame_start_time = frame.get('start_time', frame.get('ts', 0))
         frame_end_time = frame.get('end_time', frame.get('ts', 0) + frame.get('dur', 0))
-        
+
         mask = (
             (perf_df['timestamp_trace'] >= frame_start_time)
             & (perf_df['timestamp_trace'] <= frame_end_time)
@@ -268,9 +268,9 @@ class FrameLoadCalculator:
 
         # 计算总负载（用于百分比计算）
         total_frame_load = frame_samples['event_count'].sum()
-        
-        # logging.info("帧分析开始: ts=%s, dur=%s, tid=%s, 时间窗口=[%s, %s], 样本数=%s, 总负载=%s", 
-        #              frame.get('ts'), frame.get('dur'), frame.get('tid'), 
+
+        # logging.info("帧分析开始: ts=%s, dur=%s, tid=%s, 时间窗口=[%s, %s], 样本数=%s, 总负载=%s",
+        #              frame.get('ts'), frame.get('dur'), frame.get('tid'),
         #              frame_start_time, frame_end_time, len(frame_samples), total_frame_load)
 
         for _, sample in frame_samples.iterrows():
@@ -294,7 +294,7 @@ class FrameLoadCalculator:
 
                 # VSync过滤（可选）
                 if include_vsync_filter and self._is_vsync_chain(callchain_info, sample['event_count']):
-                    # logging.info("VSync过滤掉调用链: callchain_id=%s, event_count=%s", 
+                    # logging.info("VSync过滤掉调用链: callchain_id=%s, event_count=%s",
                     #              sample['callchain_id'], sample['event_count'])
                     continue
 
@@ -310,7 +310,7 @@ class FrameLoadCalculator:
                         'load_percentage': float(sample_load_percentage),
                         'callchain': callchain_info
                     })
-                    # logging.info("成功添加调用链: callchain_id=%s, event_count=%s, 调用链长度=%s", 
+                    # logging.info("成功添加调用链: callchain_id=%s, event_count=%s, 调用链长度=%s",
                     #              sample['callchain_id'], sample['event_count'], len(callchain_info))
                 except Exception as e:
                     logging.error(
@@ -323,7 +323,7 @@ class FrameLoadCalculator:
                 logging.error("分析调用链时出错: %s", str(e))
                 continue
 
-        # logging.info("帧分析完成: ts=%s, frame_load=%s, sample_callchains数量=%s", 
+        # logging.info("帧分析完成: ts=%s, frame_load=%s, sample_callchains数量=%s",
         #              frame.get('ts'), frame_load, len(sample_callchains))
 
         # 保存帧负载数据到缓存
@@ -345,9 +345,9 @@ class FrameLoadCalculator:
         return frame_load, sample_callchains
 
     def calculate_frame_load_simple(
-        self,
-        frame: Dict[str, Any],
-        perf_df: pd.DataFrame
+            self,
+            frame: Dict[str, Any],
+            perf_df: pd.DataFrame
     ) -> int:
         """简单计算帧负载（不包含调用链分析）
 
@@ -401,14 +401,14 @@ class FrameLoadCalculator:
         return False
 
     def batch_calculate_frame_loads(
-        self,
-        frames: List[Dict[str, Any]],
-        perf_df: pd.DataFrame,
-        perf_conn,
-        step_id: str = None,
-        callchain_cache: pd.DataFrame = None,
-        files_cache: pd.DataFrame = None,
-        include_vsync_filter: bool = True
+            self,
+            frames: List[Dict[str, Any]],
+            perf_df: pd.DataFrame,
+            perf_conn,
+            step_id: str = None,
+            callchain_cache: pd.DataFrame = None,
+            files_cache: pd.DataFrame = None,
+            include_vsync_filter: bool = True
     ) -> List[Tuple[int, List[Dict[str, Any]]]]:
         """批量计算多个帧的负载
 
