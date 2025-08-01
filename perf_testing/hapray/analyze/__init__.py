@@ -34,7 +34,6 @@ ANALYZER_CLASSES = [
     'VSyncAnomalyAnalyzer',   # VSync异常分析器
     'ColdStartAnalyzer',
     'GCAnalyzer',
-    'CovAnalyzer',
     'FaultTreeAnalyzer',
     # Add more analyzers here
 ]
