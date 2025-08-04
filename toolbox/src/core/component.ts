@@ -22,6 +22,7 @@ export enum ComponentCategory {
     RN = 5,
     Flutter = 6,
     WEB = 7,
+    KMP = 8,
     UNKNOWN = -1,
 }
 
