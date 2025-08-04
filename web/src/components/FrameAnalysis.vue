@@ -122,7 +122,7 @@ class="progress-value"
                     </div>
                 </div>
             </div>
-            <div v-if="hasGcThreadData" class="stat-card data-panel">
+            <div v-if="hasGcThreadData && gcThreadData.perf_percentage > 0" class="stat-card data-panel">
                 <div class="card-title">
                     <i>🗑️</i> GC线程状态
                 </div>
