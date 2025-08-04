@@ -15,7 +15,8 @@ limitations under the License.
 
 import argparse
 import logging
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 from typing import Tuple, List, Optional
 
 import pandas as pd
@@ -61,7 +62,7 @@ class OptAction:
                 return None
 
             logging.info("Starting optimization detection on %d files", len(file_infos))
-
+            multiprocessing.freeze_support()
             with ProcessPoolExecutor(max_workers=2) as executor:
                 futures = []
                 future = executor.submit(action.run_detection, parsed_args.jobs, file_infos)
@@ -70,21 +71,25 @@ class OptAction:
                     future = executor.submit(action.run_invoke_analysis, file_infos, parsed_args.report_dir)
                     futures.append(future)
 
-            data = []
-            # Wait for all report generation tasks
-            for future in futures:
-                data.extend(future.result())
-            action.generate_excel_report(data, parsed_args.output)
-            logging.info("Analysis report saved to: %s", parsed_args.output)
-            return data
+                data = []
+                # Wait for all report generation tasks
+                for future in as_completed(futures):
+                    data.extend(future.result())
+                action.generate_excel_report(data, parsed_args.output)
+                logging.info("Analysis report saved to: %s", parsed_args.output)
+                return data
         finally:
             file_collector.cleanup()
 
     @staticmethod
     def run_detection(jobs, file_infos):
         """Run optimization detection in a separate process"""
-        detector = OptimizationDetector(jobs)
-        return detector.detect_optimization(file_infos)
+        try:
+            detector = OptimizationDetector(jobs)
+            return detector.detect_optimization(file_infos)
+        except Exception as e:
+            logging.error("OptimizationDetector error: %s", str(e))
+            return []
 
     @staticmethod
     def run_invoke_analysis(file_infos, report_dir):
