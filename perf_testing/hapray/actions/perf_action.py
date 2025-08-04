@@ -246,6 +246,9 @@ class PerfAction:
     @staticmethod
     def execute(args) -> Optional[str]:
         """Execute performance testing workflow"""
+        if "--multiprocessing-fork" in args:
+            return None
+        
         if not check_env():
             logging.error(ENV_ERR_STR)
             return None

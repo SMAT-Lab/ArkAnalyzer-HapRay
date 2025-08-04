@@ -36,5 +36,6 @@ class ResourceUsage_PerformanceDynamic_sina_0010(PerfTestCase):
 
             # 向上滑动
             self.swipes_up(swip_num=5, sleep=2)
+            self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step("新浪新闻等待页面加载完成。", 30, step1)
+        self.execute_performance_step("新浪新闻-新闻浏览场景-step1新闻专题浏览", 30, step1)
