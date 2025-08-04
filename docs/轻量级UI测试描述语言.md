@@ -107,72 +107,72 @@ config:
   scene_name: 'ResourceUsage_PerformanceDynamic_Douyin_0010' # 测试场景名
 
 test_cases:
-	- name: "start"
-		steps:
-			# 启动应用，等待5s
-			- type: "start_app"
-			- type: "wait"
-				duration: 5
-				
-			# 浏览视频，上滑5次, 每次等待1s
-			- type: "loop"
-				count: 5
-				steps:
-					- type: "swipe",
-						direction: "UP"
-						
-					- type: "wait"
-						duration: 1
-						
-				# 抖音点击“我”，等待 2s
-				- type: "touch"
-					target:
-						text: "我"
-				- type: "wait"
-					duration: 2
-					
-				# 抖音“我”页面点击右上角选项，等待2s
-				- type: "touch"
+  - name: "start"
+    steps:
+      # 启动应用，等待5s
+      - type: "start_app"
+      - type: "wait"
+        duration: 5
+        
+      # 浏览视频，上滑5次, 每次等待1s
+      - type: "loop"
+        count: 5
+        steps:
+          - type: "swipe",
+            direction: "UP"
+            
+          - type: "wait"
+            duration: 1
+            
+        # 抖音点击“我”，等待 2s
+        - type: "touch"
           target:
-					  pos: [988, 183]
-				- type: "wait"
-					duration: 2
-		
-		- name: "点击观看历史"
-			perf:
-				step: 1           # 步骤
-				duration: 10   # perf/trace采集时间10s
-			steps:
-				- type: "touch"
-					target:
-						text: "观看历史"
-				- type: "wait"
-					duration: 2
-		
-		- name: "观看历史浏览"
-			performance:
-				step: 2
-				duration: 20	# 采集时间20s
-			steps:
-				# 上滑5次
-				- type: "loop"
-					count: 5
-					steps:
-						- type: "swipe",
-							direction: "UP"
-							
-						- type: "wait"
-							duration: 1
-							
-					# 下滑5次
-					- type: "loop"
-					count: 3
-					steps:
-						- type: "swipe",
-							direction: "DOWN"
-							
-						- type: "wait"
-							duration: 1
+            text: "我"
+        - type: "wait"
+          duration: 2
+          
+        # 抖音“我”页面点击右上角选项，等待2s
+        - type: "touch"
+          target:
+            pos: [988, 183]
+        - type: "wait"
+          duration: 2
+    
+    - name: "点击观看历史"
+      perf:
+        step: 1           # 步骤
+        duration: 10   # perf/trace采集时间10s
+      steps:
+        - type: "touch"
+          target:
+            text: "观看历史"
+        - type: "wait"
+          duration: 2
+    
+    - name: "观看历史浏览"
+      performance:
+        step: 2
+        duration: 20  # 采集时间20s
+      steps:
+        # 上滑5次
+        - type: "loop"
+          count: 5
+          steps:
+            - type: "swipe",
+              direction: "UP"
+              
+            - type: "wait"
+              duration: 1
+              
+          # 下滑5次
+          - type: "loop"
+          count: 3
+          steps:
+            - type: "swipe",
+              direction: "DOWN"
+              
+            - type: "wait"
+              duration: 1
 ```
 
 ### 2.3 详细接口定义

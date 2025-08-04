@@ -149,5 +149,17 @@
                 ]
             }
         ]
+    },
+    {
+        "name": "KMP",
+        "kind": 8,
+        "components": [
+            {
+                "files": [
+                    "/proc/.*/bundle/libs/arm64/libkn.so",
+                    "/proc/.*/bundle/libs/arm64/libskia.so"
+                ]
+            }
+        ]
     }
 ]
