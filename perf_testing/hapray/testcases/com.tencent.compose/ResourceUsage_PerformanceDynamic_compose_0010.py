@@ -71,26 +71,26 @@ class ResourceUsage_PerformanceDynamic_compose_0010(PerfTestCase):
 
         self.swipes_up(1, 2)
         self.execute_performance_step("ComposeSample-1500View测试场景-step1 Compose 1500View", 30, step1,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step2 CApi 1500View", 30, step2,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step3 Compose 1500View CApi", 30, step3,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step4 Compose 1500Text", 30, step4,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step5 CApi 1500Text", 30, step5,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step6 Compose 1500Text CApi", 30, step6,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step7 CApi 1500Image", 30, step7,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
         self.execute_performance_step("ComposeSample-1500View测试场景-step8 Compose 1500Image CApi", 30, step8,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()
