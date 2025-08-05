@@ -157,7 +157,8 @@
             {
                 "files": [
                     "/proc/.*/bundle/libs/arm64/libkn.so",
-                    "/proc/.*/bundle/libs/arm64/libskia.so"
+                    "/proc/.*/bundle/libs/arm64/libskia.so",
+                    "/proc/.*/bundle/libs/arm64/libskikobridge.so"
                 ]
             }
         ]
