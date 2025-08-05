@@ -35,5 +35,5 @@ class ResourceUsage_PerformanceDynamic_compose_0020(PerfTestCase):
 
         self.swipes_up(1, 2)
         self.execute_performance_step("ComposeSample-活动列表测试场景-step1 AutoScrollingInfiniteList", 30, step1,
-                                      sample_all_processes=True)
+                                      sample_all_processes=False)
         self.driver.swipe_to_back()

@@ -13,3 +13,4 @@ openpyxl>=3.1.5
 arpy~=2.3.0
 tox
 jsonschema
+lxml
