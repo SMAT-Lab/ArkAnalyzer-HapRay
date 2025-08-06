@@ -496,6 +496,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             '/system/lib64/platformsdk/libace_napi.z.so',
             '/system/lib64/libark_jsoptimizer.so',
             '/system/lib64/libc++.so',
+            '/system/lib64/libdfmalloc.z.so',
             '/system/lib/ld-musl-aarch64.so.1',
             '/system/etc/abc/framework/stateMgmt.abc',
             'sysmgr.elf',
