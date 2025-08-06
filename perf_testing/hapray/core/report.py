@@ -71,8 +71,6 @@ class ReportData:
 
     def _clean_data_for_json(self, data):
         """清理数据，将numpy类型和NaN值转换为标准Python类型以确保JSON序列化"""
-        import pandas as pd
-        
         if isinstance(data, dict):
             return {key: self._clean_data_for_json(value) for key, value in data.items()}
         elif isinstance(data, list):
