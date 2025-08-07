@@ -14,8 +14,9 @@ limitations under the License.
 """
 
 import logging
-import pandas as pd
 from typing import List, Dict
+
+import pandas as pd
 
 
 class FrameDbAdvancedAccessor:
@@ -29,7 +30,7 @@ class FrameDbAdvancedAccessor:
     """
 
     @staticmethod
-    def get_empty_frames_with_details(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_empty_frames_with_details(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取空帧详细信息（包含进程、线程、调用栈信息）
 
         Args:
@@ -83,7 +84,7 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_stuttered_frames_with_context(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def get_stuttered_frames_with_context(trace_conn, step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取卡顿帧上下文信息
 
         Args:
@@ -130,7 +131,7 @@ class FrameDbAdvancedAccessor:
 
     @staticmethod
     def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int],
-                                     step_id: str = None) -> Dict[str, pd.DataFrame]:
+                                     step_id: str = None) -> Dict[str, pd.DataFrame]:  # pylint: disable=unused-argument
         """获取帧负载分析所需的完整数据
 
         Args:
@@ -235,7 +236,7 @@ class FrameDbAdvancedAccessor:
             }
 
     @staticmethod
-    def get_frame_statistics_by_process(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_frame_statistics_by_process(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """按进程获取帧统计信息
 
         Args:
@@ -287,15 +288,13 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000,
-                                    step_id: str = None) -> pd.DataFrame:
+    def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000) -> pd.DataFrame:
         """获取帧时间线分析数据
 
         Args:
             trace_conn: trace数据库连接
             app_pids: 应用进程ID列表
             time_window_ms: 时间窗口大小（毫秒）
-            step_id: 步骤ID，用于缓存
 
         Returns:
             pd.DataFrame: 时间线分析数据
@@ -356,12 +355,11 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_perf_samples_with_callchain(perf_conn, step_id: str = None) -> pd.DataFrame:
+    def get_perf_samples_with_callchain(perf_conn) -> pd.DataFrame:
         """获取性能样本及其调用链信息
 
         Args:
             perf_conn: perf数据库连接
-            step_id: 步骤ID，用于缓存
 
         Returns:
             pd.DataFrame: 包含调用链信息的性能样本数据
@@ -386,15 +384,12 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_thread_performance_analysis(trace_conn, perf_conn, app_pids: List[int],
-                                        step_id: str = None) -> pd.DataFrame:
+    def get_thread_performance_analysis(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """获取线程性能分析数据
 
         Args:
             trace_conn: trace数据库连接
-            perf_conn: perf数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
 
         Returns:
             pd.DataFrame: 线程性能分析数据

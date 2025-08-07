@@ -32,7 +32,7 @@ class FrameDbBasicAccessor:
     # ==================== 公共数据访问方法 ====================
 
     @staticmethod
-    def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
+    def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取标准化的帧数据，统一管理所有frame_slice数据访问
 
         Args:
@@ -88,7 +88,7 @@ class FrameDbBasicAccessor:
         return frames_df
 
     @staticmethod
-    def get_perf_samples(perf_conn, step_id: str = None) -> pd.DataFrame:
+    def get_perf_samples(perf_conn) -> pd.DataFrame:
         """获取性能采样数据
 
         Args:
@@ -121,7 +121,7 @@ class FrameDbBasicAccessor:
         return perf_df
 
     @staticmethod
-    def get_callchain_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
+    def get_callchain_cache(perf_conn) -> pd.DataFrame:
         """获取调用链缓存数据
 
         Args:
@@ -153,7 +153,7 @@ class FrameDbBasicAccessor:
         return callchain_df
 
     @staticmethod
-    def get_files_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
+    def get_files_cache(perf_conn) -> pd.DataFrame:
         """获取文件缓存数据
 
         Args:
@@ -182,7 +182,7 @@ class FrameDbBasicAccessor:
         return files_df
 
     @staticmethod
-    def get_process_cache(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def get_process_cache(trace_conn) -> pd.DataFrame:
         """获取进程缓存数据
 
         Args:
@@ -215,7 +215,7 @@ class FrameDbBasicAccessor:
         return process_df
 
     @staticmethod
-    def get_callstack_data(trace_conn, step_id: str = None, name_pattern: str = None) -> pd.DataFrame:
+    def get_callstack_data(trace_conn, name_pattern: str = None) -> pd.DataFrame:
         """获取调用栈数据
 
         Args:
@@ -260,7 +260,7 @@ class FrameDbBasicAccessor:
         return callstack_df
 
     @staticmethod
-    def get_thread_data(trace_conn, step_id: str = None, is_main_thread: bool = None) -> pd.DataFrame:
+    def get_thread_data(trace_conn, is_main_thread: bool = None) -> pd.DataFrame:
         """获取线程数据
 
         Args:
@@ -303,7 +303,7 @@ class FrameDbBasicAccessor:
         return thread_df
 
     @staticmethod
-    def get_process_data(trace_conn, step_id: str = None, process_name_pattern: str = None) -> pd.DataFrame:
+    def get_process_data(trace_conn, process_name_pattern: str = None) -> pd.DataFrame:
         """获取进程数据
 
         Args:
@@ -343,7 +343,7 @@ class FrameDbBasicAccessor:
         return process_df
 
     @staticmethod
-    def get_symbol_data(perf_conn, step_id: str = None, symbol_pattern: str = None) -> pd.DataFrame:
+    def get_symbol_data(perf_conn, symbol_pattern: str = None) -> pd.DataFrame:
         """获取符号数据，支持模式匹配
 
         Args:
@@ -382,62 +382,60 @@ class FrameDbBasicAccessor:
     # ==================== 专用过滤方法 ====================
 
     @staticmethod
-    def get_frames_by_filter(trace_conn, step_id: str = None, flag: int = None, type: int = None,
+    def get_frames_by_filter(trace_conn, flag: int = None, frame_type: int = None,
                              app_pids: list = None) -> pd.DataFrame:
         """根据条件过滤帧数据
 
         Args:
             trace_conn: trace数据库连接
-            step_id: 步骤ID，用作缓存key
             flag: 帧标志过滤
-            type: 帧类型过滤
+            frame_type: 帧类型过滤
             app_pids: 应用进程ID列表
 
         Returns:
             pd.DataFrame: 过滤后的帧数据
         """
-        frames_df = FrameDbBasicAccessor.get_frames_data(trace_conn, step_id, app_pids)
+        frames_df = FrameDbBasicAccessor.get_frames_data(trace_conn, app_pids)
 
         if flag is not None:
             frames_df = frames_df[frames_df['flag'] == flag]
 
-        if type is not None:
-            frames_df = frames_df[frames_df['type'] == type]
+        if frame_type is not None:
+            frames_df = frames_df[frames_df['type'] == frame_type]
 
         return frames_df
 
     @staticmethod
-    def get_stuttered_frames(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
+    def get_stuttered_frames(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取卡顿帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, step_id, flag=1, app_pids=app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag=1, app_pids=app_pids)
 
     @staticmethod
-    def get_actual_frames(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
+    def get_actual_frames(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取实际帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, step_id, type=0, app_pids=app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, frame_type=0, app_pids=app_pids)
 
     @staticmethod
-    def get_empty_frames(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
+    def get_empty_frames(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取空帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, step_id, flag=2, app_pids=app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag=2, app_pids=app_pids)
 
     @staticmethod
-    def get_main_threads(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def get_main_threads(trace_conn) -> pd.DataFrame:
         """获取主线程数据"""
-        return FrameDbBasicAccessor.get_thread_data(trace_conn, step_id, is_main_thread=True)
+        return FrameDbBasicAccessor.get_thread_data(trace_conn, is_main_thread=True)
 
     @staticmethod
-    def get_perf_samples_by_thread(perf_conn, step_id: str = None) -> dict:
+    def get_perf_samples_by_thread(perf_conn) -> dict:
         """按线程分组获取性能采样数据
 
         Args:
             perf_conn: perf数据库连接
-            step_id: 步骤ID，用作缓存key
 
         Returns:
             dict: 按线程ID分组的性能采样数据
         """
-        perf_df = FrameDbBasicAccessor.get_perf_samples(perf_conn, step_id)
+        perf_df = FrameDbBasicAccessor.get_perf_samples(perf_conn)
 
         if perf_df.empty:
             return {}
@@ -450,17 +448,16 @@ class FrameDbBasicAccessor:
         return grouped_data
 
     @staticmethod
-    def get_frame_statistics(trace_conn, step_id: str = None) -> dict:
+    def get_frame_statistics(trace_conn) -> dict:
         """获取帧统计信息
 
         Args:
             trace_conn: trace数据库连接
-            step_id: 步骤ID，用作缓存key
 
         Returns:
             dict: 帧统计信息
         """
-        frames_df = FrameDbBasicAccessor.get_frames_data(trace_conn, step_id)
+        frames_df = FrameDbBasicAccessor.get_frames_data(trace_conn)
 
         if frames_df.empty:
             return {
@@ -741,17 +738,16 @@ class FrameDbBasicAccessor:
     @staticmethod
     def _clean_frame_data(frame_data: dict) -> dict:
         """清理帧数据中的NaN值，确保JSON序列化安全"""
-        import pandas as pd
 
         cleaned_data = {}
         for key, value in frame_data.items():
             if key == 'frame_samples':
                 # 跳过frame_samples字段，它会在后续处理中被移除
                 continue
-            elif key == 'index':
+            if key == 'index':
                 # 跳过index字段，它会在后续处理中被移除
                 continue
-            elif pd.isna(value):
+            if pd.isna(value):
                 # 处理NaN值
                 if isinstance(value, (int, float)):
                     cleaned_data[key] = 0

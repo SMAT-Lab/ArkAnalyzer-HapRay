@@ -129,12 +129,11 @@ class FrameTimeUtils:
         """
         if nanoseconds < 1_000:
             return f"{nanoseconds}ns"
-        elif nanoseconds < 1_000_000:
+        if nanoseconds < 1_000_000:
             return f"{nanoseconds / 1_000:.1f}μs"
-        elif nanoseconds < 1_000_000_000:
+        if nanoseconds < 1_000_000_000:
             return f"{nanoseconds / 1_000_000:.1f}ms"
-        else:
-            return f"{nanoseconds / 1_000_000_000:.3f}s"
+        return f"{nanoseconds / 1_000_000_000:.3f}s"
 
     @staticmethod
     def format_timestamp_nanoseconds(nanoseconds: int) -> str:
@@ -152,5 +151,4 @@ class FrameTimeUtils:
 
         if minutes > 0:
             return f"{minutes}m {seconds:.3f}s"
-        else:
-            return f"{seconds:.3f}s"
+        return f"{seconds:.3f}s"
