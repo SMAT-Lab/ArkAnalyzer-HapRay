@@ -30,7 +30,7 @@ class FrameDbAdvancedAccessor:
     """
 
     @staticmethod
-    def get_empty_frames_with_details(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_empty_frames_with_details(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
         """获取空帧详细信息（包含进程、线程、调用栈信息）
 
         Args:
@@ -84,7 +84,7 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_stuttered_frames_with_context(trace_conn, step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_stuttered_frames_with_context(trace_conn, step_id: str = None) -> pd.DataFrame:
         """获取卡顿帧上下文信息
 
         Args:
@@ -236,7 +236,7 @@ class FrameDbAdvancedAccessor:
             }
 
     @staticmethod
-    def get_frame_statistics_by_process(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_frame_statistics_by_process(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
         """按进程获取帧统计信息
 
         Args:

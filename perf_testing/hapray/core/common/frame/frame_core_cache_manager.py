@@ -55,11 +55,14 @@ class FrameCacheManager:
         'first_frame_timestamp': {'hits': 0, 'misses': 0}
     }
 
-        # ==================== 标准化缓存使用模式 ====================
+    # ==================== 标准化缓存使用模式 ====================
 
     @staticmethod
-    def ensure_data_cached(data_type: str, trace_conn=None, perf_conn=None, step_id: str = None,
-                          app_pids: list = None) -> bool:
+    def ensure_data_cached(data_type: str,
+                           trace_conn=None,
+                           perf_conn=None,
+                           step_id: str = None,
+                           app_pids: list = None) -> bool:
         """确保指定类型的数据已缓存，如果没有则获取并缓存
 
         标准化的缓存使用模式，供所有analyzer使用
@@ -475,7 +478,10 @@ class FrameCacheManager:
         return frames_df
 
     @staticmethod
-    def get_frames_by_filter(trace_conn, step_id: str = None, flag: int = None, frame_type: int = None,  # pylint: disable=unused-argument
+    def get_frames_by_filter(trace_conn,
+                             step_id: str = None,
+                             flag: int = None,
+                             frame_type: int = None,
                              app_pids: list = None) -> pd.DataFrame:
         """根据条件过滤帧数据"""
         return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag, frame_type, app_pids)
@@ -563,22 +569,30 @@ class FrameCacheManager:
         return FrameCacheManager._process_cache.get(cache_key, pd.DataFrame())
 
     @staticmethod
-    def get_callstack_data(trace_conn, step_id: str = None, name_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_callstack_data(trace_conn,
+                           step_id: str = None,
+                           name_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取调用栈数据"""
         return FrameDbBasicAccessor.get_callstack_data(trace_conn, name_pattern)
 
     @staticmethod
-    def get_thread_data(trace_conn, step_id: str = None, is_main_thread: bool = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_thread_data(trace_conn,
+                        step_id: str = None,
+                        is_main_thread: bool = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取线程数据"""
         return FrameDbBasicAccessor.get_thread_data(trace_conn, is_main_thread)
 
     @staticmethod
-    def get_process_data(trace_conn, step_id: str = None, process_name_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_process_data(trace_conn,
+                         step_id: str = None,
+                         process_name_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取进程数据"""
         return FrameDbBasicAccessor.get_process_data(trace_conn, process_name_pattern)
 
     @staticmethod
-    def get_symbol_data(perf_conn, step_id: str = None, symbol_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_symbol_data(perf_conn,
+                        step_id: str = None,
+                        symbol_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取符号数据"""
         return FrameDbBasicAccessor.get_symbol_data(perf_conn, symbol_pattern)
 
@@ -612,7 +626,8 @@ class FrameCacheManager:
         return FrameDbAdvancedAccessor.get_frame_timeline_analysis(trace_conn, app_pids, time_window_ms)
 
     @staticmethod
-    def get_perf_samples_with_callchain(perf_conn, step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_perf_samples_with_callchain(perf_conn,
+                                        step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取性能样本及其调用链信息"""
         return FrameDbAdvancedAccessor.get_perf_samples_with_callchain(perf_conn)
 
@@ -846,7 +861,8 @@ class FrameCacheManager:
         return cleaned_data
 
     @staticmethod
-    def _analyze_missing_callchains(step_id: str, frame_ids: list, perf_conn) -> None:  # pylint: disable=unused-argument
+    def _analyze_missing_callchains(step_id: str,
+                                    frame_ids: list, perf_conn) -> None:  # pylint: disable=unused-argument
         """分析缺失的调用链
 
         Args:
