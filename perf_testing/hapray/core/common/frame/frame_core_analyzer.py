@@ -17,15 +17,15 @@ import logging
 import os
 from typing import Dict, Any, List, Optional
 
-# 设置环境变量
-os.environ["PYTHONIOENCODING"] = "utf-8"
-
 # 导入新的模块化组件
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_database_compatibility
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
+
+# 设置环境变量
+os.environ["PYTHONIOENCODING"] = "utf-8"
 
 
 class FrameAnalyzerCore:
@@ -71,12 +71,11 @@ class FrameAnalyzerCore:
         self.stuttered_frame_analyzer = StutteredFrameAnalyzer(debug_vsync_enabled)
 
     def analyze_empty_frames(
-        self,
-        trace_db_path: str,
-        perf_db_path: str,
-        app_pids: list,
-        scene_dir: str = None,
-        step_id: str = None
+            self,
+            trace_db_path: str,
+            perf_db_path: str,
+            step_id: str = None,
+            app_pids: list = None
     ) -> Optional[dict]:
         """分析空帧（flag=2, type=0）的负载情况
 
@@ -91,14 +90,14 @@ class FrameAnalyzerCore:
             dict: 包含分析结果
         """
         return self.empty_frame_analyzer.analyze_empty_frames(
-            trace_db_path, perf_db_path, app_pids, scene_dir, step_id
+            trace_db_path, perf_db_path, app_pids, step_id
         )
 
     def analyze_stuttered_frames(
-        self,
-        db_path: str,
-        perf_db_path: str = None,
-        step_id: str = None
+            self,
+            db_path: str,
+            perf_db_path: str = None,
+            step_id: str = None
     ) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
@@ -115,12 +114,11 @@ class FrameAnalyzerCore:
         )
 
     def analyze_comprehensive_frames(
-        self,
-        trace_db_path: str,
-        perf_db_path: str,
-        app_pids: list,
-        scene_dir: str = None,
-        step_id: str = None
+            self,
+            trace_db_path: str,
+            perf_db_path: str,
+            app_pids: list,
+            step_id: str = None
     ) -> Dict[str, Any]:
         """综合分析空帧和卡顿帧
 
@@ -128,7 +126,6 @@ class FrameAnalyzerCore:
             trace_db_path: trace数据库文件路径
             perf_db_path: perf数据库文件路径
             app_pids: 应用进程ID列表
-            scene_dir: 场景目录路径
             step_id: 步骤ID
 
         Returns:
@@ -144,7 +141,7 @@ class FrameAnalyzerCore:
             # 分析空帧
             logging.info("开始分析空帧...")
             empty_result = self.analyze_empty_frames(
-                trace_db_path, perf_db_path, app_pids, scene_dir, step_id
+                trace_db_path, perf_db_path, step_id, app_pids
             )
             result["empty_frames"] = empty_result
 
@@ -205,11 +202,11 @@ class FrameAnalyzerCore:
         return parse_frame_slice_db(db_path)
 
     def calculate_frame_load_simple(
-        self,
-        frame: Dict[str, Any],
-        perf_df,
-        perf_conn,
-        step_id: str = None
+            self,
+            frame: Dict[str, Any],
+            perf_df,
+            perf_conn,
+            step_id: str = None
     ) -> tuple:
         """简单计算帧负载（保持向后兼容）
 
