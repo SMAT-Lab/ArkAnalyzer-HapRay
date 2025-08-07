@@ -40,7 +40,7 @@ class FrameLoadCalculator:
         """
         self.debug_vsync_enabled = debug_vsync_enabled
 
-    def analyze_perf_callchain(
+    def analyze_perf_callchain(  # pylint: disable=too-many-arguments
             self,
             perf_conn,
             callchain_id: int,
@@ -74,19 +74,19 @@ class FrameLoadCalculator:
             # logging.info("分析调用链: callchain_id=%s, cache_key=%s", callchain_id, cache_key)
 
             # 检查缓存是否为空
-            if (cache_key not in FrameCacheManager._callchain_cache
-                    or FrameCacheManager._callchain_cache[cache_key].empty
-                    or cache_key not in FrameCacheManager._files_cache
-                    or FrameCacheManager._files_cache[cache_key].empty):
+            if (cache_key not in FrameCacheManager._callchain_cache  # pylint: disable=protected-access
+                    or FrameCacheManager._callchain_cache[cache_key].empty  # pylint: disable=protected-access
+                    or cache_key not in FrameCacheManager._files_cache  # pylint: disable=protected-access
+                    or FrameCacheManager._files_cache[cache_key].empty):  # pylint: disable=protected-access
                 logging.warning("缓存数据为空，无法分析调用链: cache_key=%s", cache_key)
-                # logging.info("callchain_cache keys: %s", list(FrameCacheManager._callchain_cache.keys()))
-                # logging.info("files_cache keys: %s", list(FrameCacheManager._files_cache.keys()))
+                # logging.info("callchain_cache keys: %s", list(FrameCacheManager._callchain_cache.keys()))  # pylint: disable=protected-access
+                # logging.info("files_cache keys: %s", list(FrameCacheManager._files_cache.keys()))  # pylint: disable=protected-access
                 return []
 
             # 从缓存中获取callchain数据
             callchain_records = (
-                FrameCacheManager._callchain_cache[cache_key][
-                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id
+                FrameCacheManager._callchain_cache[cache_key][  # pylint: disable=protected-access
+                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id  # pylint: disable=protected-access
                 ]
             )
 
@@ -101,10 +101,10 @@ class FrameLoadCalculator:
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
                 file_mask = (
-                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])
-                    & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])
+                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])  # pylint: disable=protected-access
+                    & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])  # pylint: disable=protected-access
                 )
-                file_info = FrameCacheManager._files_cache[cache_key][file_mask]
+                file_info = FrameCacheManager._files_cache[cache_key][file_mask]  # pylint: disable=protected-access
 
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
@@ -224,7 +224,7 @@ class FrameLoadCalculator:
 
         return frame_load, sample_callchains
 
-    def calculate_frame_load(
+    def calculate_frame_load(  # pylint: disable=too-many-arguments
             self,
             frame: Dict[str, Any],
             perf_df: pd.DataFrame,
@@ -400,7 +400,7 @@ class FrameLoadCalculator:
 
         return False
 
-    def batch_calculate_frame_loads(
+    def batch_calculate_frame_loads(  # pylint: disable=too-many-arguments
             self,
             frames: List[Dict[str, Any]],
             perf_df: pd.DataFrame,

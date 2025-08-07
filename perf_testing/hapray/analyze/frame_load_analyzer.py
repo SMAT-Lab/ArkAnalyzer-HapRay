@@ -65,7 +65,6 @@ class FrameLoadAnalyzer(BaseAnalyzer):
                 trace_db_path=trace_db_path,
                 perf_db_path=perf_db_path,
                 app_pids=app_pids,
-                scene_dir=self.scene_dir,
                 step_id=step_dir
             )
 

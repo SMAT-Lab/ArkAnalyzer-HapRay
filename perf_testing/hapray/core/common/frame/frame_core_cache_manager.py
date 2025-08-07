@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Copyright (c) 2025 Huawei Device Co., Ltd.
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +15,9 @@ limitations under the License.
 """
 
 import logging
-import pandas as pd
 from typing import List, Dict
+
+import pandas as pd
 from .frame_data_basic_accessor import FrameDbBasicAccessor
 from .frame_data_advanced_accessor import FrameDbAdvancedAccessor
 
@@ -53,11 +55,11 @@ class FrameCacheManager:
         'first_frame_timestamp': {'hits': 0, 'misses': 0}
     }
 
-    # ==================== 标准化缓存使用模式 ====================
+        # ==================== 标准化缓存使用模式 ====================
 
     @staticmethod
     def ensure_data_cached(data_type: str, trace_conn=None, perf_conn=None, step_id: str = None,
-                           app_pids: list = None, **kwargs) -> bool:
+                          app_pids: list = None) -> bool:
         """确保指定类型的数据已缓存，如果没有则获取并缓存
 
         标准化的缓存使用模式，供所有analyzer使用
@@ -196,8 +198,8 @@ class FrameCacheManager:
             }
 
         # 计算总体命中率
-        total_hits = sum(stats[dt]['hits'] for dt in stats)
-        total_requests = sum(stats[dt]['total_requests'] for dt in stats)
+        total_hits = sum(data['hits'] for data in stats.values())
+        total_requests = sum(data['total_requests'] for data in stats.values())
         overall_hit_rate = (total_hits / total_requests * 100) if total_requests > 0 else 0.0
 
         stats['overall'] = {
@@ -211,9 +213,9 @@ class FrameCacheManager:
     @staticmethod
     def reset_cache_hit_stats() -> None:
         """重置缓存命中率统计"""
-        for data_type in FrameCacheManager._cache_hit_stats:
-            FrameCacheManager._cache_hit_stats[data_type]['hits'] = 0
-            FrameCacheManager._cache_hit_stats[data_type]['misses'] = 0
+        for _, stats in FrameCacheManager._cache_hit_stats.items():
+            stats['hits'] = 0
+            stats['misses'] = 0
         # logging.info("已重置缓存命中率统计")
 
     # ==================== 缓存管理方法 ====================
@@ -274,14 +276,14 @@ class FrameCacheManager:
 
         # 计算总内存使用量（估算）
         total_memory_estimate = 0
-        for cache_name, cache_dict in [
+        for _cache_name, cache_dict in [
             ('frames', FrameCacheManager._frames_cache),
             ('perf_samples', FrameCacheManager._perf_samples_cache),
             ('callchain', FrameCacheManager._callchain_cache),
             ('files', FrameCacheManager._files_cache),
             ('process', FrameCacheManager._process_cache)
         ]:
-            for key, df in cache_dict.items():
+            for _key, df in cache_dict.items():
                 if not df.empty:
                     # 估算DataFrame内存使用量
                     memory_estimate = int(df.memory_usage(deep=True).sum())  # 确保返回Python原生int类型
@@ -422,7 +424,6 @@ class FrameCacheManager:
         if trace_conn:
             try:
                 # 委托给数据访问层获取基准时间戳
-                from .frame_data_basic_accessor import FrameDbBasicAccessor
                 first_frame_timestamp = FrameDbBasicAccessor.get_benchmark_timestamp(trace_conn)
             except Exception as e:
                 logging.warning("获取trace开始时间失败，使用备选方案: %s", str(e))
@@ -452,14 +453,13 @@ class FrameCacheManager:
             frames_df = FrameCacheManager._frames_cache[cache_key]
             if app_pids is None:
                 return frames_df
-            else:
-                # 确保app_pids是有效的列表，并且过滤掉NaN值
-                if isinstance(app_pids, (list, tuple)) and len(app_pids) > 0:
-                    # 过滤掉NaN值，确保只包含有效的数字
-                    valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
-                    if valid_pids:
-                        return frames_df[frames_df['pid'].isin(valid_pids)]
-                return frames_df
+            # 确保app_pids是有效的列表，并且过滤掉NaN值
+            if isinstance(app_pids, (list, tuple)) and len(app_pids) > 0:
+                # 过滤掉NaN值，确保只包含有效的数字
+                valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
+                if valid_pids:
+                    return frames_df[frames_df['pid'].isin(valid_pids)]
+            return frames_df
 
         # 缓存未命中
         FrameCacheManager._cache_hit_stats['frames']['misses'] += 1
@@ -475,10 +475,10 @@ class FrameCacheManager:
         return frames_df
 
     @staticmethod
-    def get_frames_by_filter(trace_conn, step_id: str = None, flag: int = None, type: int = None,
+    def get_frames_by_filter(trace_conn, step_id: str = None, flag: int = None, frame_type: int = None,  # pylint: disable=unused-argument
                              app_pids: list = None) -> pd.DataFrame:
         """根据条件过滤帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, step_id, flag, type, app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag, frame_type, app_pids)
 
     @staticmethod
     def get_perf_samples(perf_conn, step_id: str = None) -> pd.DataFrame:
@@ -494,14 +494,14 @@ class FrameCacheManager:
 
         # 缓存未命中
         FrameCacheManager._cache_hit_stats['perf_samples']['misses'] += 1
-        perf_df = FrameDbBasicAccessor.get_perf_samples(perf_conn, step_id)
+        perf_df = FrameDbBasicAccessor.get_perf_samples(perf_conn)
         FrameCacheManager._perf_samples_cache[cache_key] = perf_df
         return perf_df
 
     @staticmethod
-    def get_perf_samples_by_thread(perf_conn, step_id: str = None) -> dict:
+    def get_perf_samples_by_thread(perf_conn, step_id: str = None) -> dict:  # pylint: disable=unused-argument
         """按线程分组获取性能采样数据"""
-        return FrameDbBasicAccessor.get_perf_samples_by_thread(perf_conn, step_id)
+        return FrameDbBasicAccessor.get_perf_samples_by_thread(perf_conn)
 
     @staticmethod
     def get_callchain_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
@@ -517,7 +517,7 @@ class FrameCacheManager:
 
         # 缓存未命中
         FrameCacheManager._cache_hit_stats['callchain']['misses'] += 1
-        callchain_df = FrameDbBasicAccessor.get_callchain_cache(perf_conn, step_id)
+        callchain_df = FrameDbBasicAccessor.get_callchain_cache(perf_conn)
         FrameCacheManager._callchain_cache[cache_key] = callchain_df
         return callchain_df
 
@@ -535,7 +535,7 @@ class FrameCacheManager:
 
         # 缓存未命中
         FrameCacheManager._cache_hit_stats['files']['misses'] += 1
-        files_df = FrameDbBasicAccessor.get_files_cache(perf_conn, step_id)
+        files_df = FrameDbBasicAccessor.get_files_cache(perf_conn)
         FrameCacheManager._files_cache[cache_key] = files_df
         return files_df
 
@@ -553,7 +553,7 @@ class FrameCacheManager:
 
         # 缓存未命中
         FrameCacheManager._cache_hit_stats['process']['misses'] += 1
-        process_df = FrameDbBasicAccessor.get_process_cache(trace_conn, step_id)
+        process_df = FrameDbBasicAccessor.get_process_cache(trace_conn)
         FrameCacheManager._process_cache[cache_key] = process_df
         return process_df
 
@@ -563,24 +563,24 @@ class FrameCacheManager:
         return FrameCacheManager._process_cache.get(cache_key, pd.DataFrame())
 
     @staticmethod
-    def get_callstack_data(trace_conn, step_id: str = None, name_pattern: str = None) -> pd.DataFrame:
+    def get_callstack_data(trace_conn, step_id: str = None, name_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取调用栈数据"""
-        return FrameDbBasicAccessor.get_callstack_data(trace_conn, step_id, name_pattern)
+        return FrameDbBasicAccessor.get_callstack_data(trace_conn, name_pattern)
 
     @staticmethod
-    def get_thread_data(trace_conn, step_id: str = None, is_main_thread: bool = None) -> pd.DataFrame:
+    def get_thread_data(trace_conn, step_id: str = None, is_main_thread: bool = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取线程数据"""
-        return FrameDbBasicAccessor.get_thread_data(trace_conn, step_id, is_main_thread)
+        return FrameDbBasicAccessor.get_thread_data(trace_conn, is_main_thread)
 
     @staticmethod
-    def get_process_data(trace_conn, step_id: str = None, process_name_pattern: str = None) -> pd.DataFrame:
+    def get_process_data(trace_conn, step_id: str = None, process_name_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取进程数据"""
-        return FrameDbBasicAccessor.get_process_data(trace_conn, step_id, process_name_pattern)
+        return FrameDbBasicAccessor.get_process_data(trace_conn, process_name_pattern)
 
     @staticmethod
-    def get_symbol_data(perf_conn, step_id: str = None, symbol_pattern: str = None) -> pd.DataFrame:
+    def get_symbol_data(perf_conn, step_id: str = None, symbol_pattern: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取符号数据"""
-        return FrameDbBasicAccessor.get_symbol_data(perf_conn, step_id, symbol_pattern)
+        return FrameDbBasicAccessor.get_symbol_data(perf_conn, symbol_pattern)
 
     # ==================== 复杂联合查询委托方法 ====================
 
@@ -607,20 +607,19 @@ class FrameCacheManager:
 
     @staticmethod
     def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000,
-                                    step_id: str = None) -> pd.DataFrame:
+                                    step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取帧时间线分析数据"""
-        return FrameDbAdvancedAccessor.get_frame_timeline_analysis(trace_conn, app_pids, time_window_ms, step_id)
+        return FrameDbAdvancedAccessor.get_frame_timeline_analysis(trace_conn, app_pids, time_window_ms)
 
     @staticmethod
-    def get_perf_samples_with_callchain(perf_conn, step_id: str = None) -> pd.DataFrame:
+    def get_perf_samples_with_callchain(perf_conn, step_id: str = None) -> pd.DataFrame:  # pylint: disable=unused-argument
         """获取性能样本及其调用链信息"""
-        return FrameDbAdvancedAccessor.get_perf_samples_with_callchain(perf_conn, step_id)
+        return FrameDbAdvancedAccessor.get_perf_samples_with_callchain(perf_conn)
 
     @staticmethod
-    def get_thread_performance_analysis(trace_conn, perf_conn, app_pids: List[int],
-                                        step_id: str = None) -> pd.DataFrame:
+    def get_thread_performance_analysis(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """获取线程性能分析数据"""
-        return FrameDbAdvancedAccessor.get_thread_performance_analysis(trace_conn, perf_conn, app_pids, step_id)
+        return FrameDbAdvancedAccessor.get_thread_performance_analysis(trace_conn, app_pids)
 
     # ==================== 帧负载分析方法 ====================
 
@@ -796,60 +795,58 @@ class FrameCacheManager:
         return len(frame_list)
 
     @staticmethod
-    def _clean_frame_data(frame_data: dict) -> dict:
+    def _clean_frame_data(frame_data: dict) -> dict:  # pylint: disable=too-many-nested-blocks
         """清理帧数据中的NaN值，确保JSON序列化安全"""
-        import pandas as pd
 
         cleaned_data = {}
         for key, value in frame_data.items():
             if key == 'frame_samples':
                 # 跳过frame_samples字段，它会在后续处理中被移除
                 continue
-            elif key == 'index':
+            if key == 'index':
                 # 跳过index字段，它会在后续处理中被移除
                 continue
-            else:
-                # 安全地处理所有类型的值
-                try:
-                    # 首先检查是否是numpy/pandas类型
-                    if hasattr(value, 'dtype') and hasattr(value, 'item'):
-                        # numpy类型或pandas Series
-                        try:
-                            if hasattr(pd.isna(value), 'any'):
-                                # 如果是数组，检查是否有NaN
-                                if pd.isna(value).any():
-                                    cleaned_data[key] = 0
-                                else:
-                                    cleaned_data[key] = value.item()
+            # 安全地处理所有类型的值
+            try:
+                # 首先检查是否是numpy/pandas类型
+                if hasattr(value, 'dtype') and hasattr(value, 'item'):
+                    # numpy类型或pandas Series
+                    try:
+                        if hasattr(pd.isna(value), 'any'):
+                            # 如果是数组，检查是否有NaN
+                            if pd.isna(value).any():
+                                cleaned_data[key] = 0
                             else:
-                                # 如果是标量
-                                if pd.isna(value):
-                                    cleaned_data[key] = 0
-                                else:
-                                    cleaned_data[key] = value.item()
-                        except (ValueError, TypeError):
-                            cleaned_data[key] = None
-                    else:
-                        # 普通类型，安全地检查NaN
-                        try:
+                                cleaned_data[key] = value.item()
+                        else:
+                            # 如果是标量
                             if pd.isna(value):
-                                if isinstance(value, (int, float)):
-                                    cleaned_data[key] = 0
-                                else:
-                                    cleaned_data[key] = None
+                                cleaned_data[key] = 0
                             else:
-                                cleaned_data[key] = value
-                        except (ValueError, TypeError):
-                            # 如果pd.isna()失败，直接使用原值
+                                cleaned_data[key] = value.item()
+                    except (ValueError, TypeError):
+                        cleaned_data[key] = None
+                else:
+                    # 普通类型，安全地检查NaN
+                    try:
+                        if pd.isna(value):
+                            if isinstance(value, (int, float)):
+                                cleaned_data[key] = 0
+                            else:
+                                cleaned_data[key] = None
+                        else:
                             cleaned_data[key] = value
-                except Exception:
-                    # 最后的保护，如果任何处理失败，设为None
-                    cleaned_data[key] = None
+                    except (ValueError, TypeError):
+                        # 如果pd.isna()失败，直接使用原值
+                        cleaned_data[key] = value
+            except Exception:
+                # 最后的保护，如果任何处理失败，设为None
+                cleaned_data[key] = None
 
         return cleaned_data
 
     @staticmethod
-    def _analyze_missing_callchains(step_id: str, frame_ids: list, perf_conn) -> None:
+    def _analyze_missing_callchains(step_id: str, frame_ids: list, perf_conn) -> None:  # pylint: disable=unused-argument
         """分析缺失的调用链
 
         Args:
@@ -886,3 +883,45 @@ class FrameCacheManager:
 
         except Exception as e:
             logging.error("分析缺失调用链失败: %s", str(e))
+
+    # ==================== PID/TID缓存管理方法 ====================
+
+    @staticmethod
+    def get_pid_cache(trace_conn, step_id: str = None) -> list:
+        """获取PID缓存数据
+
+        Args:
+            trace_conn: trace数据库连接
+            step_id: 步骤ID，用作缓存key
+
+        Returns:
+            list: PID列表
+        """
+        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        return FrameCacheManager._pid_cache.get(cache_key, [])
+
+    @staticmethod
+    def get_tid_cache(trace_conn, step_id: str = None) -> list:
+        """获取TID缓存数据
+
+        Args:
+            trace_conn: trace数据库连接
+            step_id: 步骤ID，用作缓存key
+
+        Returns:
+            list: TID列表
+        """
+        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        return FrameCacheManager._tid_cache.get(cache_key, [])
+
+    @staticmethod
+    def update_pid_tid_cache(step_id: str, trace_df: pd.DataFrame) -> None:
+        """根据trace_df中的数据更新PID和TID缓存
+
+        Args:
+            step_id: 步骤ID
+            trace_df: 包含pid和tid信息的DataFrame
+        """
+        pids, tids = FrameDbBasicAccessor.extract_pid_tid_info(trace_df)
+        FrameCacheManager._pid_cache[step_id] = pids
+        FrameCacheManager._tid_cache[step_id] = tids

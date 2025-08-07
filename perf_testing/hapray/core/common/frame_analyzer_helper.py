@@ -133,7 +133,7 @@ def update_one_empty_frame_results(report_dir: str) -> bool:
 
             # 分析空帧数据
             try:
-                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, app_pids, report_dir, step_dir)
+                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, step_dir, app_pids)
                 # 如果有结果，将结果添加到总结果字典中
                 if result is not None:
                     all_results[step_dir] = result

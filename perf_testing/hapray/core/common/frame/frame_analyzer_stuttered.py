@@ -406,10 +406,10 @@ class StutteredFrameAnalyzer:
                 first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
             except Exception:
                 # 如果获取缓存失败，则使用卡顿帧中的最小时间戳作为备选
-                first_frame_time = min([f["ts"] for vsync in data.values() for f in vsync]) if data else 0
+                first_frame_time = min(f["ts"] for vsync in data.values() for f in vsync) if data else 0
         else:
             # 如果无法获取step_id，则使用卡顿帧中的最小时间戳作为备选
-            first_frame_time = min([f["ts"] for vsync in data.values() for f in vsync]) if data else 0
+            first_frame_time = min(f["ts"] for vsync in data.values() for f in vsync) if data else 0
 
         stutter_detail = {
             "vsync": vsync_key,

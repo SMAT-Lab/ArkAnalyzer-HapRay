@@ -74,9 +74,8 @@ class FrameAnalyzerCore:
             self,
             trace_db_path: str,
             perf_db_path: str,
-            app_pids: list,
-            scene_dir: str = None,
-            step_id: str = None
+            step_id: str = None,
+            app_pids: list = None
     ) -> Optional[dict]:
         """分析空帧（flag=2, type=0）的负载情况
 
@@ -91,7 +90,7 @@ class FrameAnalyzerCore:
             dict: 包含分析结果
         """
         return self.empty_frame_analyzer.analyze_empty_frames(
-            trace_db_path, perf_db_path, app_pids, scene_dir, step_id
+            trace_db_path, perf_db_path, app_pids, step_id
         )
 
     def analyze_stuttered_frames(
@@ -119,7 +118,6 @@ class FrameAnalyzerCore:
             trace_db_path: str,
             perf_db_path: str,
             app_pids: list,
-            scene_dir: str = None,
             step_id: str = None
     ) -> Dict[str, Any]:
         """综合分析空帧和卡顿帧
@@ -128,7 +126,6 @@ class FrameAnalyzerCore:
             trace_db_path: trace数据库文件路径
             perf_db_path: perf数据库文件路径
             app_pids: 应用进程ID列表
-            scene_dir: 场景目录路径
             step_id: 步骤ID
 
         Returns:
@@ -144,7 +141,7 @@ class FrameAnalyzerCore:
             # 分析空帧
             logging.info("开始分析空帧...")
             empty_result = self.analyze_empty_frames(
-                trace_db_path, perf_db_path, app_pids, scene_dir, step_id
+                trace_db_path, perf_db_path, step_id, app_pids
             )
             result["empty_frames"] = empty_result
 
