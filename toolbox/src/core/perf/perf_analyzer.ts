@@ -284,6 +284,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 this.callchainsMap.clear();
                 this.threadsMap.clear();
                 this.samples = [];
+                this.hasKmpScheme = false; // 重置KMP方案标记
                 db.close();
             }
         }
@@ -293,7 +294,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // 读取所有线程信息
         this.queryThreads(db);
         // 读取所有文件信息
-        this.queryFiles(db);
+        this.queryFiles(db, packageName);
         // 读取所有符号信息
         this.querySymbols(db);
         // 预处理调用链信息
@@ -386,12 +387,40 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     /**
      * read all files from perf_files table, then use FileClassifier to classify the files.
      * @param db
+     * @param packageName
      * @returns
      */
-    private queryFiles(db: Database): void {
+    private queryFiles(db: Database, packageName: string): void {
         const results = db.exec('SELECT file_id, path FROM perf_files GROUP BY path ORDER BY file_id');
         if (results.length === 0) {
             return;
+        }
+
+        // 先通过SQL查询检测是否存在libkn.so来判断是否采用KMP方案
+        this.hasKmpScheme = false;
+        try {
+            // 首先获取当前包名对应的进程ID
+            const processResults = db.exec(
+                'SELECT DISTINCT process_id FROM perf_thread WHERE thread_name = ?',
+                [packageName]
+            );
+
+            if (processResults.length > 0 && processResults[0].values.length > 0) {
+                const processId = processResults[0].values[0][0] as number;
+
+                // 查询是否存在libkn.so文件
+                const kmpResults = db.exec(
+                    'SELECT * FROM perf_files WHERE path LIKE ?',
+                    [`/proc/${processId}%/bundle/libs/arm64/libkn.so`]
+                );
+
+                if (kmpResults.length > 0 && kmpResults[0].values.length > 0) {
+                    this.hasKmpScheme = true;
+                }
+            }
+        } catch (error) {
+            // 如果SQL查询失败，保持hasKmpScheme为false
+            logger.warn(`Failed to detect KMP scheme: ${error}`);
         }
 
         this.filesClassifyMap.set(-1, {
@@ -401,6 +430,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             subCategoryName: '',
             originKind: OriginKind.UNKNOWN,
         });
+
+        // 然后进行文件分类
         results[0].values.map((row) => {
             let file = row[1] as string;
             // pid 替换成'{pid}, 方便版本间比较

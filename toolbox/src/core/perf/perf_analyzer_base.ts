@@ -160,6 +160,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected symbolsClassifyMap: Map<number, FileClassification>;
     protected symbolsMap: Map<number, string>;
 
+    // KMP方案标记
+    protected hasKmpScheme = false;
+
     protected testSteps: Array<TestStep>;
     protected stepSumMap: Map<number, PerfStepSum>;
     protected details: Array<PerfSymbolDetailData>;
@@ -176,6 +179,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.filesClassifyMap = new Map();
         this.symbolsClassifyMap = new Map();
         this.symbolsMap = new Map();
+        this.hasKmpScheme = false;
 
         this.testSteps = [];
         this.stepSumMap = new Map();
@@ -275,24 +279,74 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
         if (this.fileClassifyCfg.has(file)) {
             let component = this.fileClassifyCfg.get(file)!;
-            fileClassify.category = component.category;
-            fileClassify.categoryName = component.categoryName;
-            if (component.subCategoryName) {
-                fileClassify.subCategoryName = component.subCategoryName;
-            }
 
-            return fileClassify;
-        }
-
-        for (const [key, component] of this.fileRegexClassifyCfg) {
-            let matched = file.match(key);
-            if (matched) {
+            // 特殊处理KMP相关文件
+            if (component.category === ComponentCategory.KMP) {
+                // 只有libkn.so直接归类为KMP
+                if (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libkn\.so$/)) {
+                    fileClassify.category = component.category;
+                    fileClassify.categoryName = component.categoryName;
+                    if (component.subCategoryName) {
+                        fileClassify.subCategoryName = component.subCategoryName;
+                    }
+                    return fileClassify;
+                }
+                // libskia.so和libskikobridge.so只有在存在libkn.so时才归类为KMP
+                else if ((file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
+                         file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/)) &&
+                         this.hasKmpScheme) {
+                    fileClassify.category = component.category;
+                    fileClassify.categoryName = component.categoryName;
+                    if (component.subCategoryName) {
+                        fileClassify.subCategoryName = component.subCategoryName;
+                    }
+                    return fileClassify;
+                }
+                // 如果是KMP相关文件但不满足条件，则跳过此分类，继续后续处理
+            } else {
                 fileClassify.category = component.category;
                 fileClassify.categoryName = component.categoryName;
                 if (component.subCategoryName) {
                     fileClassify.subCategoryName = component.subCategoryName;
                 }
                 return fileClassify;
+            }
+        }
+
+        for (const [key, component] of this.fileRegexClassifyCfg) {
+            let matched = file.match(key);
+            if (matched) {
+                // 特殊处理KMP相关文件
+                if (component.category === ComponentCategory.KMP) {
+                    // 只有libkn.so直接归类为KMP
+                    if (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libkn\.so$/)) {
+                        fileClassify.category = component.category;
+                        fileClassify.categoryName = component.categoryName;
+                        if (component.subCategoryName) {
+                            fileClassify.subCategoryName = component.subCategoryName;
+                        }
+                        return fileClassify;
+                    }
+                    // libskia.so和libskikobridge.so只有在存在libkn.so时才归类为KMP
+                    else if ((file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
+                             file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/)) &&
+                             this.hasKmpScheme) {
+                        fileClassify.category = component.category;
+                        fileClassify.categoryName = component.categoryName;
+                        if (component.subCategoryName) {
+                            fileClassify.subCategoryName = component.subCategoryName;
+                        }
+                        return fileClassify;
+                    }
+                    // 如果是KMP相关文件但不满足条件，则跳过此分类，继续后续处理
+                } else {
+                    fileClassify.category = component.category;
+                    fileClassify.categoryName = component.categoryName;
+                    if (component.subCategoryName) {
+                        fileClassify.subCategoryName = component.subCategoryName;
+                    }
+                    return fileClassify;
+                }
             }
         }
 
@@ -308,6 +362,15 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         ) {
             let name = path.basename(file);
             if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
+                // 特殊处理KMP相关文件
+                if (this.hasKmpScheme &&
+                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
+                     file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
+                    fileClassify.category = ComponentCategory.KMP;
+                    fileClassify.categoryName = 'KMP';
+                    return fileClassify;
+                }
+
                 fileClassify.category = ComponentCategory.APP_SO;
                 return fileClassify;
             }
