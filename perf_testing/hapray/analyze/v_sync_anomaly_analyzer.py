@@ -319,7 +319,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
             if avg_freq > 150 or duration_ms > 50:  # 超过150Hz或持续50ms以上
                 return 'medium'
             return 'low'
-        
+
         # 低频异常：根据平均频率和持续时间判断
         avg_freq = 1_000_000_000 / period['avg_interval']
         duration_ms = period['duration'] / 1_000_000

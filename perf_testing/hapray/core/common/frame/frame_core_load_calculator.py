@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=R0917
 """
 Copyright (c) 2025 Huawei Device Co., Ltd.
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +42,7 @@ class FrameLoadCalculator:
         """
         self.debug_vsync_enabled = debug_vsync_enabled
 
-    def analyze_perf_callchain(  # pylint: disable=too-many-arguments
+    def analyze_perf_callchain(
             self,
             perf_conn,
             callchain_id: int,
@@ -82,10 +84,9 @@ class FrameLoadCalculator:
                 return []
 
             # 从缓存中获取callchain数据
+            callchain_cache = FrameCacheManager._callchain_cache[cache_key]  # pylint: disable=protected-access
             callchain_records = (
-                FrameCacheManager._callchain_cache[cache_key][  # pylint: disable=protected-access
-                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id  # pylint: disable=protected-access
-                ]
+                callchain_cache[callchain_cache['callchain_id'] == callchain_id]  # pylint: disable=protected-access
             )
 
             # logging.info("找到callchain记录数: %s", len(callchain_records))
@@ -223,7 +224,7 @@ class FrameLoadCalculator:
 
         return frame_load, sample_callchains
 
-    def calculate_frame_load(  # pylint: disable=too-many-arguments
+    def calculate_frame_load(
             self,
             frame: Dict[str, Any],
             perf_df: pd.DataFrame,
@@ -399,7 +400,7 @@ class FrameLoadCalculator:
 
         return False
 
-    def batch_calculate_frame_loads(  # pylint: disable=too-many-arguments
+    def batch_calculate_frame_loads(
             self,
             frames: List[Dict[str, Any]],
             perf_df: pd.DataFrame,
