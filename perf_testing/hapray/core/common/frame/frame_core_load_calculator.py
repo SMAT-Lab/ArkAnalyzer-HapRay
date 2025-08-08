@@ -79,14 +79,12 @@ class FrameLoadCalculator:
                     or cache_key not in FrameCacheManager._files_cache  # pylint: disable=protected-access
                     or FrameCacheManager._files_cache[cache_key].empty):  # pylint: disable=protected-access
                 logging.warning("缓存数据为空，无法分析调用链: cache_key=%s", cache_key)
-                # logging.info("callchain_cache keys: %s", list(FrameCacheManager._callchain_cache.keys()))  # pylint: disable=protected-access
-                # logging.info("files_cache keys: %s", list(FrameCacheManager._files_cache.keys()))  # pylint: disable=protected-access
                 return []
 
             # 从缓存中获取callchain数据
             callchain_records = (
                 FrameCacheManager._callchain_cache[cache_key][  # pylint: disable=protected-access
-                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id  # pylint: disable=protected-access
+                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id
                 ]
             )
 
@@ -101,10 +99,10 @@ class FrameLoadCalculator:
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
                 file_mask = (
-                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])  # pylint: disable=protected-access
-                    & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])  # pylint: disable=protected-access
+                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])
+                    & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])
                 )
-                file_info = FrameCacheManager._files_cache[cache_key][file_mask]  # pylint: disable=protected-access
+                file_info = FrameCacheManager._files_cache[cache_key][file_mask]
 
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'

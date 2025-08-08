@@ -216,7 +216,10 @@ class FrameAnalyzer:
         return core.load_calculator.analyze_single_frame(frame, perf_df, perf_conn, step_id)
 
     @staticmethod
-    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None) -> Optional[dict]:
+    def analyze_empty_frames(trace_db_path: str,
+                             perf_db_path: str,
+                             app_pids: list,
+                             step_id: str = None) -> Optional[dict]:
         """分析空帧 - 兼容性包装
 
         Args:
