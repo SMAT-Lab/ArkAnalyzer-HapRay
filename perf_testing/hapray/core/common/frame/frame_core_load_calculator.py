@@ -84,7 +84,7 @@ class FrameLoadCalculator:
             # 从缓存中获取callchain数据
             callchain_records = (
                 FrameCacheManager._callchain_cache[cache_key][  # pylint: disable=protected-access
-                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id
+                    FrameCacheManager._callchain_cache[cache_key]['callchain_id'] == callchain_id  # pylint: disable=protected-access
                 ]
             )
 
@@ -98,11 +98,12 @@ class FrameLoadCalculator:
             callchain_info = []
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
+                files_cache = FrameCacheManager._files_cache[cache_key]  # pylint: disable=protected-access
                 file_mask = (
-                    (FrameCacheManager._files_cache[cache_key]['file_id'] == record['file_id'])
-                    & (FrameCacheManager._files_cache[cache_key]['serial_id'] == record['symbol_id'])
+                    (files_cache['file_id'] == record['file_id'])
+                    & (files_cache['serial_id'] == record['symbol_id'])
                 )
-                file_info = FrameCacheManager._files_cache[cache_key][file_mask]
+                file_info = files_cache[file_mask]  # pylint: disable=protected-access
 
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'

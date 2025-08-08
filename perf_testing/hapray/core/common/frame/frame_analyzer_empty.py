@@ -91,7 +91,7 @@ class EmptyFrameAnalyzer:
                 FrameCacheManager.ensure_data_cached('frame_loads', step_id=step_id)
 
             # 使用复杂查询接口获取空帧详细信息
-            trace_df = FrameCacheManager.get_empty_frames_with_details(trace_conn, app_pids, step_id)
+            trace_df = FrameCacheManager.get_empty_frames_with_details(trace_conn, app_pids)
 
             if trace_df.empty:
                 # logging.info("未找到符合条件的帧")
@@ -140,6 +140,7 @@ class EmptyFrameAnalyzer:
             # 对每个帧进行分析 - 优先使用缓存中的帧负载数据
             for _, frame in trace_df.iterrows():
                 # 检查缓存中是否已有该帧的负载数据
+                # pylint: disable=duplicate-code
                 cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
                 cached_frame = None
 
@@ -180,6 +181,7 @@ class EmptyFrameAnalyzer:
                         frame_load = 0
                         sample_callchains = []
                         logging.warning("执行帧负载分析失败: ts=%s, error=%s", frame['ts'], str(e))
+                # pylint: enable=duplicate-code
 
                 if frame['is_main_thread'] == 1:
                     empty_frame_load += frame_load
@@ -258,8 +260,8 @@ class EmptyFrameAnalyzer:
             perf_df: pd.DataFrame,
             perf_conn,
             step_id: str = None
-    ) -> List[Dict[str, Any]]:
-        """分析多个空帧的负载情况
+    ) -> List[Dict[str, Any]]:  # pylint: disable=duplicate-code
+        """分析空帧负载数据
 
         Args:
             trace_df: 包含空帧信息的DataFrame
@@ -280,6 +282,7 @@ class EmptyFrameAnalyzer:
         # 对每个帧进行分析 - 优先使用缓存中的帧负载数据
         for _, frame in trace_df.iterrows():
             # 检查缓存中是否已有该帧的负载数据
+            # pylint: disable=duplicate-code
             cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
             cached_frame = None
 
@@ -306,6 +309,7 @@ class EmptyFrameAnalyzer:
                     frame_load = 0
                     sample_callchains = []
                     logging.warning("帧负载分析失败: ts=%s, error=%s", frame['ts'], str(e))
+            # pylint: enable=duplicate-code
 
             frame_loads.append({
                 'ts': frame['ts'],

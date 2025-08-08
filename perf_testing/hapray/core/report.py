@@ -69,8 +69,9 @@ class ReportData:
         base64_bytes = base64.b64encode(compressed_bytes)
         return base64_bytes.decode('ascii')
 
-    def _clean_data_for_json(self, data):
+    def _clean_data_for_json(self, data):  # pylint: disable=too-many-return-statements
         """清理数据，将numpy类型和NaN值转换为标准Python类型以确保JSON序列化"""
+        # pylint: disable=duplicate-code
         if isinstance(data, dict):
             return {key: self._clean_data_for_json(value) for key, value in data.items()}
         if isinstance(data, list):
@@ -81,16 +82,14 @@ class ReportData:
                 # 处理NaN值
                 if 'int' in str(data.dtype):
                     return 0
-                elif 'float' in str(data.dtype):
+                if 'float' in str(data.dtype):
                     return 0.0
-                else:
-                    return None
-            elif 'int' in str(data.dtype):
+                return None
+            if 'int' in str(data.dtype):
                 return int(data)
-            elif 'float' in str(data.dtype):
+            if 'float' in str(data.dtype):
                 return float(data)
-            else:
-                return data.item()
+            return data.item()
         if hasattr(data, '__class__') and 'int64' in str(data.__class__):
             # 其他可能的int64类型
             if pd.isna(data):
@@ -102,6 +101,7 @@ class ReportData:
                 return 0
             return None
         return data
+        # pylint: enable=duplicate-code
 
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])

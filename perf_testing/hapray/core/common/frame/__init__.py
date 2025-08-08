@@ -21,6 +21,7 @@ from .frame_data_parser import (
 # 兼容性包装器（保持向后兼容）
 from .frame_compat_analyzer import FrameAnalyzer
 
+# pylint: disable=duplicate-code
 __all__ = [
     # 核心组件
     'FrameAnalyzerCore',
@@ -38,3 +39,4 @@ __all__ = [
     # 兼容性包装器
     'FrameAnalyzer',
 ]
+# pylint: enable=duplicate-code
