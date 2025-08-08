@@ -810,7 +810,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             if key in ['frame_samples', 'index']:
                 # 跳过frame_samples和index字段，它们会在后续处理中被移除
                 continue
-            
+
             cleaned_data[key] = FrameCacheManager._clean_single_value(value)
 
         return cleaned_data
@@ -821,7 +821,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         # 首先检查是否是numpy/pandas类型
         if hasattr(value, 'dtype') and hasattr(value, 'item'):
             return FrameCacheManager._clean_numpy_value(value)
-        
+
         # 普通类型，安全地检查NaN
         return FrameCacheManager._clean_regular_value(value)
 
@@ -834,7 +834,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
                 if pd.isna(value).any():
                     return 0
                 return value.item()
-            
+
             # 如果是标量
             if pd.isna(value):
                 return 0
