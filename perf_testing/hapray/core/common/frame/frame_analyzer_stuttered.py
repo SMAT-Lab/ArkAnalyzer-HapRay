@@ -326,8 +326,17 @@ class StutteredFrameAnalyzer:
             if perf_conn:
                 perf_conn.close()
 
-    def analyze_single_stuttered_frame(self, frame, vsync_key, context):
-        """分析单个卡顿帧，返回分析结果和统计信息"""
+    def analyze_single_stuttered_frame(self, frame, vsync_key, context):  # pylint: disable=duplicate-code
+        """分析单个卡顿帧
+
+        Args:
+            frame: 帧数据
+            vsync_key: VSync键
+            context: 上下文信息
+
+        Returns:
+            tuple: (frame_type, stutter_level, stutter_detail)
+        """
         data = context["data"]
         perf_df = context["perf_df"]
         perf_conn = context["perf_conn"]
@@ -354,6 +363,7 @@ class StutteredFrameAnalyzer:
 
         if perf_df is not None and perf_conn is not None:
             # 检查缓存中是否已有该帧的负载数据
+            # pylint: disable=duplicate-code
             cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
             cached_frame = None
 
@@ -384,6 +394,7 @@ class StutteredFrameAnalyzer:
                     frame, perf_df, perf_conn, step_id
                 )
                 # logging.info("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
+            # pylint: enable=duplicate-code
 
         # 卡顿分级逻辑
         # flag=3 归类为轻微卡顿：进程间异常阈值仅 1ms，远小于轻微卡顿的 33.34ms 阈值

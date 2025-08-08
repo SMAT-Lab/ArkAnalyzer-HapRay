@@ -27,7 +27,7 @@ from .frame_data_parser import parse_frame_slice_db, get_frame_type
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 
-class FrameAnalyzer:
+class FrameAnalyzer:  # pylint: disable=duplicate-code
     """卡顿帧分析器 - 兼容性包装器
 
     这是重构后的兼容性包装器，保持原有接口不变，

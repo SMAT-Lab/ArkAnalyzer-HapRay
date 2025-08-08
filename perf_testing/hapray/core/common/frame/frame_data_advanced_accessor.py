@@ -30,13 +30,12 @@ class FrameDbAdvancedAccessor:
     """
 
     @staticmethod
-    def get_empty_frames_with_details(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_empty_frames_with_details(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """获取空帧详细信息（包含进程、线程、调用栈信息）
 
         Args:
             trace_conn: trace数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
 
         Returns:
             pd.DataFrame: 包含详细信息的空帧数据
@@ -84,12 +83,11 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_stuttered_frames_with_context(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def get_stuttered_frames_with_context(trace_conn) -> pd.DataFrame:
         """获取卡顿帧上下文信息
 
         Args:
             trace_conn: trace数据库连接
-            step_id: 步骤ID，用于缓存
 
         Returns:
             pd.DataFrame: 包含上下文信息的卡顿帧数据
@@ -130,15 +128,13 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int],
-                                     step_id: str = None) -> Dict[str, pd.DataFrame]:  # pylint: disable=unused-argument
+    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int]) -> Dict[str, pd.DataFrame]:
         """获取帧负载分析所需的完整数据
 
         Args:
             trace_conn: trace数据库连接
             perf_conn: perf数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
 
         Returns:
             Dict[str, pd.DataFrame]: 包含各种分析数据的字典
@@ -236,13 +232,12 @@ class FrameDbAdvancedAccessor:
             }
 
     @staticmethod
-    def get_frame_statistics_by_process(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_frame_statistics_by_process(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """按进程获取帧统计信息
 
         Args:
             trace_conn: trace数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
 
         Returns:
             pd.DataFrame: 按进程分组的帧统计信息
