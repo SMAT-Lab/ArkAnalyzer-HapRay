@@ -25,7 +25,7 @@ import { PerfDatabase } from './perf_database';
 import { saveJsonArray } from '../../utils/json_utils';
 import type { SheetData } from 'write-excel-file';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { SoOriginal } from '../../config/types';
+import type { SoOriginal } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -203,7 +203,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.threadClassifyCfg = new Map();
         this.fileClassifyCfg = new Map();
         this.fileRegexClassifyCfg = new Map();
-        this.soOriginsClassifyCfg = getConfig().perf.soOrigins as Map<string, SoOriginal>;
+        this.soOriginsClassifyCfg = getConfig().perf.soOrigins;
         this.symbolsSplitRulesCfg = [];
 
         this.filesClassifyMap = new Map();
@@ -515,7 +515,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         const UNKNOWN = { domain: '其他', subSystem: '其他', component: '其他', isMainApp: false };
         const MAINAPP = { domain: '主应用', subSystem: '主应用', component: '主应用', isMainApp: true };
 
-        if (processName === null || processName === undefined) {
+        if (processName === undefined) {
             return UNKNOWN;
         }
         if (processName === packageName || (packageName.length > 0 && processName.startsWith(packageName))) {
