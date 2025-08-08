@@ -25,6 +25,7 @@ import { PerfDatabase } from './perf_database';
 import { saveJsonArray } from '../../utils/json_utils';
 import type { SheetData } from 'write-excel-file';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import type { SoOriginal } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -47,6 +48,19 @@ export interface TestStepGroup {
     perfReport?: string;
     traceFile?: string;
     perfFile?: string;
+}
+
+export interface ClassifyCategory {
+    category: number; // 组件大类
+    categoryName: string; //组件名
+    subCategoryName?: string; // 小类
+}
+
+export interface ProcessClassifyCategory {
+    isMainApp: boolean; //是否主应用
+    domain: string; //业务领域
+    subSystem: string; //子系统
+    component: string; // 部件
 }
 
 export interface Round {
@@ -113,6 +127,10 @@ export interface PerfSymbolDetailData {
     componentName?: string;
     componentCategory: ComponentCategory;
     originKind?: OriginKind;
+    isMainApp: boolean;
+    sysDomain:string;
+    sysSubSystem:string;
+    sysComponent: string;
 }
 
 export interface PerfStepSum {
@@ -148,10 +166,14 @@ interface SymbolSplitRule {
 }
 
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
+    processClassifyCfg: Map<RegExp, ProcessClassifyCategory>;
+    specialProcessClassifyCfg: Map<RegExp, Map<RegExp, ProcessClassifyCategory>>;
+
     // classify rule
     protected threadClassifyCfg: Map<RegExp, ClassifyCategory>;
     protected fileClassifyCfg: Map<string, ClassifyCategory>;
     protected fileRegexClassifyCfg: Map<RegExp, ClassifyCategory>;
+    protected soOriginsClassifyCfg: Map<string, SoOriginal>;
     protected hapComponents: Map<string, Component>;
     protected symbolsSplitRulesCfg: Array<SymbolSplitRule>;
 
@@ -160,30 +182,48 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected symbolsClassifyMap: Map<number, FileClassification>;
     protected symbolsMap: Map<number, string>;
 
+    // KMP方案标记
+    protected hasKmpScheme = false;
+
     protected testSteps: Array<TestStep>;
     protected stepSumMap: Map<number, PerfStepSum>;
     protected details: Array<PerfSymbolDetailData>;
 
+    protected computeFilesCfg: Set<string>;
+    protected computeFilesRegexCfg: Set<RegExp>;
+    protected dfxSymbolsCfg: Set<string>;
+    protected dfxRegexSymbolsCfg: Set<RegExp>;
+
     constructor(workspace: string) {
         super(workspace);
 
+        this.processClassifyCfg = new Map();
+        this.specialProcessClassifyCfg = new Map();
         this.hapComponents = new Map();
         this.threadClassifyCfg = new Map();
         this.fileClassifyCfg = new Map();
         this.fileRegexClassifyCfg = new Map();
+        this.soOriginsClassifyCfg = getConfig().perf.soOrigins;
         this.symbolsSplitRulesCfg = [];
 
         this.filesClassifyMap = new Map();
         this.symbolsClassifyMap = new Map();
         this.symbolsMap = new Map();
+        this.hasKmpScheme = false;
 
         this.testSteps = [];
         this.stepSumMap = new Map();
         this.details = [];
 
+        this.computeFilesCfg = new Set();
+        this.computeFilesRegexCfg = new Set();
+        this.dfxSymbolsCfg = new Set();
+        this.dfxRegexSymbolsCfg = new Set();
+
         this.loadHapComponents();
         this.loadPerfKindCfg();
         this.loadSymbolSplitCfg();
+        this.loadPerfClassify();
     }
 
     private loadHapComponents(): void {
@@ -252,6 +292,54 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         }
     }
 
+    private loadPerfClassify(): void {
+        this.computeFilesCfg = new Set(getConfig().perf.classify.compute_files);
+        for (const file of getConfig().perf.classify.compute_files) {
+            if (this.hasRegexChart(file)) {
+                this.computeFilesRegexCfg.add(new RegExp(file));
+            }
+        }
+        for (const symbol of getConfig().perf.classify.dfx_symbols) {
+            if (this.hasRegexChart(symbol)) {
+                this.dfxRegexSymbolsCfg.add(new RegExp(symbol));
+            } else {
+                this.dfxSymbolsCfg.add(symbol);
+            }
+        }
+
+        for (const [domain, subSystems] of Object.entries(getConfig().perf.classify.process)) {
+            for (const [subSystem, components] of Object.entries(subSystems)) {
+                for (const [component, cfg] of Object.entries(components)) {
+                    for (const process of cfg.Harmony_Process) {
+                        this.processClassifyCfg.set(new RegExp(process.toLowerCase()), {
+                            isMainApp: false,
+                            domain: domain,
+                            subSystem: subSystem,
+                            component: component,
+                        });
+                    }
+                }
+            }
+        }
+
+        for (const [domain, subSystems] of Object.entries(getConfig().perf.classify.process_special)) {
+            for (const [subSystem, components] of Object.entries(subSystems)) {
+                for (const [component, cfg] of Object.entries(components)) {
+                    let map = new Map<RegExp, ProcessClassifyCategory>();
+                    for (const process of cfg.Harmony_Process) {
+                        map.set(new RegExp(process.toLowerCase()), {
+                            isMainApp: false,
+                            domain: domain,
+                            subSystem: subSystem,
+                            component: component,
+                        });
+                    }
+                    this.specialProcessClassifyCfg.set(new RegExp(cfg.scene), map);
+                }
+            }
+        }
+    }
+
     private hasRegexChart(symbol: string): boolean {
         if (
             symbol.indexOf('$') >= 0 ||
@@ -275,24 +363,27 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
         if (this.fileClassifyCfg.has(file)) {
             let component = this.fileClassifyCfg.get(file)!;
+
             fileClassify.category = component.category;
             fileClassify.categoryName = component.categoryName;
             if (component.subCategoryName) {
                 fileClassify.subCategoryName = component.subCategoryName;
             }
-
             return fileClassify;
+
         }
 
         for (const [key, component] of this.fileRegexClassifyCfg) {
             let matched = file.match(key);
             if (matched) {
+
                 fileClassify.category = component.category;
                 fileClassify.categoryName = component.categoryName;
                 if (component.subCategoryName) {
                     fileClassify.subCategoryName = component.subCategoryName;
                 }
                 return fileClassify;
+
             }
         }
 
@@ -355,6 +446,13 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     subCategoryName: packageName,
                 };
 
+                // 特殊处理compose符号
+                if (packageName === 'compose') {
+                    symbolClassification.category = ComponentCategory.KMP;
+                    symbolClassification.categoryName = 'KMP';
+                    symbolClassification.subCategoryName = 'compose';
+                }
+
                 if (this.hapComponents.has(matches[3])) {
                     symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
                 }
@@ -407,6 +505,77 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         }
 
         return unknown;
+    }
+
+    public classifyProcess(
+        processName: string | undefined,
+        packageName: string,
+        scene: string
+    ): ProcessClassifyCategory {
+        const UNKNOWN = { domain: '其他', subSystem: '其他', component: '其他', isMainApp: false };
+        const MAINAPP = { domain: '主应用', subSystem: '主应用', component: '主应用', isMainApp: true };
+
+        if (processName === undefined) {
+            return UNKNOWN;
+        }
+        if (processName === packageName || (packageName.length > 0 && processName.startsWith(packageName))) {
+            return MAINAPP;
+        }
+
+        for (const [key, rules] of this.specialProcessClassifyCfg) {
+            if (!key.test(scene)) {
+                continue;
+            }
+
+            for (const [regex, domain] of rules) {
+                if (regex.test(processName.toLowerCase()) || regex.test(path.basename(processName.toLowerCase()))) {
+                    return domain;
+                }
+            }
+        }
+
+        for (const [regex, domain] of this.processClassifyCfg) {
+            if (regex.test(processName.toLowerCase()) || regex.test(path.basename(processName.toLowerCase()))) {
+                return domain;
+            }
+        }
+
+        return UNKNOWN;
+    }
+
+    public classifySoOrigins(file: string): { originKind: OriginKind; subCategoryName?: string } | undefined {
+        let name = path.basename(file);
+        if (!this.soOriginsClassifyCfg.has(name)) {
+            return undefined;
+        }
+
+        let soOriginalCfg = this.soOriginsClassifyCfg.get(name)!;
+        let result = {
+            originKind: OriginKind.FIRST_PARTY,
+            subCategoryName: this.soOriginsClassifyCfg.get(name)!.sdk_category,
+        };
+
+        if (soOriginalCfg.broad_category === 'THIRD_PARTY') {
+            result.originKind = OriginKind.THIRD_PARTY;
+        } else if (soOriginalCfg.broad_category === 'OPENSOURCE') {
+            result.originKind = OriginKind.OPEN_SOURCE;
+        } else if (soOriginalCfg.broad_category === 'FIRST_PARTY') {
+            result.originKind = OriginKind.FIRST_PARTY;
+        }
+    }
+
+    public isSkipSymbol(symbol: string): boolean {
+        if (this.dfxSymbolsCfg.has(symbol)) {
+            return true;
+        }
+
+        for (const reg of this.dfxRegexSymbolsCfg) {
+            let matched = symbol.match(reg);
+            if (matched) {
+                return true;
+            }
+        }
+        return false;
     }
 
     protected async saveSqlite(perf: PerfSum, outputFileName: string): Promise<void> {
@@ -516,6 +685,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     componentName: data.componentName,
                     componentCategory: data.componentCategory,
                     originKind: data.originKind,
+                    isMainApp:data.isMainApp,
+                    sysDomain: data.sysDomain,
+                    sysSubSystem: data.sysSubSystem,
+                    sysComponent:data.sysComponent,
                 },
                 {
                     stepIdx: data.stepIdx,
@@ -534,6 +707,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     componentName: data.componentName,
                     componentCategory: data.componentCategory,
                     originKind: data.originKind,
+                    isMainApp:data.isMainApp,
+                    sysDomain: data.sysDomain,
+                    sysSubSystem: data.sysSubSystem,
+                    sysComponent:data.sysComponent,
                 },
             ];
 
@@ -665,7 +842,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         )}:${padStart(date.getMinutes())}:${padStart(date.getSeconds())}`;
     }
 
-    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void|boolean> {
+    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void | boolean> {
         let harMap = new Map<string, { name: string; count: number }>();
         let stepMap = new Map<number, StepJsonData>();
 
@@ -715,7 +892,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         };
         if (getConfig().ut) {
             const jsonString = JSON.stringify([jsonObject], null, 2);
-            return this.isRight(jsonString,outputFileName);
+            return this.isRight(jsonString, outputFileName);
         } else {
             await saveJsonArray([jsonObject], outputFileName);
         }
