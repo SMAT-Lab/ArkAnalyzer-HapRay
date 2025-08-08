@@ -1,0 +1,269 @@
+{
+    "process": {
+        "大桌面": {
+            "桌面": {
+                "大桌面": {
+                    "Android_Process": [
+                        "^com.huawei.android.launcher$",
+                        "^com.android.systemui$",
+                        "^com.huawei.aod$",
+                        "^com.huawei.search$",
+                        "^com.huawei.controlcenter$",
+                        "com.huawei.controlcenter:.+",
+                        "^com.huawei.intelligent$",
+                        "^com.huawei.commonwallpaper$",
+                        "^com.huawei.livewallpaper.paradise$",
+                        "com.huawei.livewallpaper.paradise:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.sceneboard$",
+                        "^com.ohos.sceneboard:workScheduler$"
+                    ],
+                    "IOS_Process": [
+                        "^SpringBoard$",
+                        "^distnoted$",
+                        "^notifyd$"
+                    ]
+                }
+            }
+        },
+        "媒体应用": {
+            "媒体应用": {
+                "图库": {
+                    "Android_Process": [
+                        "^com.huawei.photos$",
+                        "com.huawei.photos:.+",
+                        "^com.huawei.ohos.photos$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.photos$",
+                        "^wei.hmos.photos$",
+                        "com.huawei.hmos.photos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "相机": {
+                    "Android_Process": [
+                        "^com.huawei.camera$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.camera$",
+                        "^wei.hmos.camera$"
+                    ],
+                    "IOS_Process": []
+                },
+                "播控中心": {
+                    "Android_Process": [
+                        "^com.huawei.mediacontroller$",
+                        "com.huawei.mediacontroller:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.mediacontroller$",
+                        "com.huawei.hmos.mediacontroller:.+",
+                        "^mediacontroller$",
+                        "UIExtAbility:.+",
+                        "IExtAbility:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "OS媒体软件": {
+                "华为音频产品管家": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.audioaccessorymanager$",
+                        "^ccessorymanager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "花瓣剪辑": {
+                    "Android_Process": [
+                        "^com.huawei.videoeditor$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.petalclip$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "系统应用": {
+            "系统应用": {
+                "安全隐私中心": {
+                    "Android_Process": [
+                        "^com.huawei.security.privacycenter$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "计算器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.calculator$"
+                    ],
+                    "IOS_Process": []
+                },
+                "健康使用手机-管控服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^parent_control_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "克隆": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.dataclone$",
+                        "com.huawei.hmos.dataclone:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "链接认证管理": {
+                    "Android_Process": [
+                        "^com.android.statementservice$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "录屏": {
+                    "Android_Process": [
+                        "^com.huawei.screenrecorder$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.ohos.screenrecorder$"
+                    ],
+                    "IOS_Process": []
+                },
+                "密码校验": {
+                    "Android_Process": [
+                        "^com.android.keychain$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "权限控制器": {
+                    "Android_Process": [
+                        "^com.android.permissioncontroller$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "设备画像": {
+                    "Android_Process": [
+                        "^com.huawei.profile$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "设置": {
+                    "Android_Process": [
+                        "^com.android.settings$",
+                        "^settings$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.settings$",
+                        "com.huawei.hmos.settings:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "时钟": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.clock$",
+                        "^hmos.clock:form$",
+                        "com.huawei.hmos.clock:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "手机管家": {
+                    "Android_Process": [
+                        "^com.huawei.systemmanager$",
+                        "com.huawei.systemmanager:.+"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "手写悬浮窗": {
+                    "Android_Process": [
+                        "^com.huawei.stylus.floatmenu$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "通知弹框": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.notificationdialog$",
+                        "com.ohos.notificationdialog:EnableNotificationDialog:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "玩机技巧": {
+                    "Android_Process": [
+                        "^com.huawei.android.tips$",
+                        "^com.huawei.hmos.tips.widget$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.tips$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "图形": {
+            "图形图像": {
+                "图形服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^render_service$"
+                    ],
+                    "IOS_Process": [
+                        "^backboardd$"
+                    ]
+                },
+                "图形低功耗服务框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^aps_manager$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "硬工多媒体": {
+            "图形图像": {
+                "触控守护进程": {
+                    "Android_Process": [
+                        "^aptouch_daemon$"
+                    ],
+                    "Harmony_Process": [
+                        "^aptouch_daemon$"
+                    ],
+                    "IOS_Process": [
+                        "^backboardd$"
+                    ]
+                },
+                "显示效果": {
+                    "Android_Process": [
+                        "^displayengineserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^display_engine_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "图形IDL/HDI":{
+            "IDL/HDI":{
+                "图形IDL/HDI":{
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^composer_host$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        }
+    }
+}
