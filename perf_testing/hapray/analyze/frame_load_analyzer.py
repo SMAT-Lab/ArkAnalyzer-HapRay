@@ -111,17 +111,16 @@ class FrameLoadAnalyzer(BaseAnalyzer):
         """清理数据，确保JSON序列化安全"""
         if isinstance(data, dict):
             return {key: self._clean_data_for_json(value) for key, value in data.items()}
-        elif isinstance(data, list):
+        if isinstance(data, list):
             return [self._clean_data_for_json(item) for item in data]
-        elif hasattr(data, 'dtype') and hasattr(data, 'item'):
+        if hasattr(data, 'dtype') and hasattr(data, 'item'):
             # numpy类型
+            ans = data.item()
             if hasattr(data, 'isna') and data.isna():
-                return 0
+                ans = 0
             elif 'int' in str(data.dtype):
-                return int(data)
+                ans = int(data)
             elif 'float' in str(data.dtype):
-                return float(data)
-            else:
-                return data.item()
-        else:
-            return data
+                ans = float(data)
+            return ans
+        return data
