@@ -32,12 +32,11 @@ class FrameDbBasicAccessor:
     # ==================== 公共数据访问方法 ====================
 
     @staticmethod
-    def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
+    def get_frames_data(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取标准化的帧数据，统一管理所有frame_slice数据访问
 
         Args:
             trace_conn: trace数据库连接
-            step_id: 步骤ID，用作缓存key
             app_pids: 应用进程ID列表，如果提供则只返回这些进程的数据
 
         Returns:
@@ -736,7 +735,7 @@ class FrameDbBasicAccessor:
     # ==================== 工具方法 ====================
 
     @staticmethod
-    def _clean_frame_data(frame_data: dict) -> dict:
+    def _clean_frame_data(frame_data: dict) -> dict:  # pylint: disable=duplicate-code
         """清理帧数据中的NaN值，确保JSON序列化安全"""
 
         cleaned_data = {}

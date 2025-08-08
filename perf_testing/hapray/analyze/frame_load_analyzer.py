@@ -107,8 +107,9 @@ class FrameLoadAnalyzer(BaseAnalyzer):
             logging.error("Frame load analysis failed for step %s: %s", step_dir, str(e))
             return None
 
-    def _clean_data_for_json(self, data):
+    def _clean_data_for_json(self, data):  # pylint: disable=duplicate-code
         """清理数据，确保JSON序列化安全"""
+        # pylint: disable=duplicate-code
         if isinstance(data, dict):
             return {key: self._clean_data_for_json(value) for key, value in data.items()}
         if isinstance(data, list):
@@ -124,3 +125,4 @@ class FrameLoadAnalyzer(BaseAnalyzer):
                 ans = float(data)
             return ans
         return data
+        # pylint: enable=duplicate-code

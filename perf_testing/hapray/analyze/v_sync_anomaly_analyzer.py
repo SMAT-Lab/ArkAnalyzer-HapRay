@@ -15,9 +15,10 @@ limitations under the License.
 
 import logging
 import os
-import pandas as pd
-from typing import Dict, Any, Optional, List
 import sqlite3
+from typing import Dict, Any, Optional, List
+
+import pandas as pd
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.frame.frame_core_cache_manager import FrameCacheManager
@@ -130,8 +131,8 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
         # 按vsync分组，计算统计信息
         vsync_groups = valid_frames.groupby('vsync').agg({
             'ts': ['min', 'max', 'count'],
-            'type': lambda x: list(x),
-            'flag': lambda x: list(x),
+            'type': list,
+            'flag': list,
             'dur': 'sum',
             'thread_name': 'first',
             'process_name': 'first'
@@ -315,21 +316,19 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
             if avg_freq > 200 or duration_ms > 100:  # 超过200Hz或持续100ms以上
                 return 'high'
-            elif avg_freq > 150 or duration_ms > 50:  # 超过150Hz或持续50ms以上
+            if avg_freq > 150 or duration_ms > 50:  # 超过150Hz或持续50ms以上
                 return 'medium'
-            else:
-                return 'low'
-        else:
-            # 低频异常：根据平均频率和持续时间判断
-            avg_freq = 1_000_000_000 / period['avg_interval']
-            duration_ms = period['duration'] / 1_000_000
+            return 'low'
+        
+        # 低频异常：根据平均频率和持续时间判断
+        avg_freq = 1_000_000_000 / period['avg_interval']
+        duration_ms = period['duration'] / 1_000_000
 
-            if avg_freq < 15 or duration_ms > 200:  # 低于15Hz或持续200ms以上
-                return 'high'
-            elif avg_freq < 20 or duration_ms > 100:  # 低于20Hz或持续100ms以上
-                return 'medium'
-            else:
-                return 'low'
+        if avg_freq < 15 or duration_ms > 200:  # 低于15Hz或持续200ms以上
+            return 'high'
+        if avg_freq < 20 or duration_ms > 100:  # 低于20Hz或持续100ms以上
+            return 'medium'
+        return 'low'
 
     def _detect_frame_mismatches(self, vsync_groups: pd.DataFrame, first_frame_time: int) -> List[Dict[str, Any]]:
         """检测VSync与帧的不匹配异常"""
@@ -351,7 +350,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                     'thread_name': str(row['thread_name']),
                     'process_name': str(row['process_name'])
                 })
-            elif expect_frames == 0:
+            if expect_frames == 0:
                 mismatches.append({
                     'type': 'no_expect_frame',
                     'vsync': int(row['vsync']),
