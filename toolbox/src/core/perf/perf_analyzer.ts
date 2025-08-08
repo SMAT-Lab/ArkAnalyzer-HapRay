@@ -440,6 +440,16 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
             let fileClassify = this.classifyFile(file);
+
+            // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
+            if (this.hasKmpScheme &&
+                (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
+                 file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
+                fileClassify.category = ComponentCategory.KMP;
+                fileClassify.categoryName = 'KMP';
+                // 保持默认的subCategoryName（文件名）
+            }
+
             this.filesClassifyMap.set(row[0] as number, fileClassify);
         });
     }
@@ -681,6 +691,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             let callchain = this.callchainsMap.get(sample.callchain_id)!;
             let call = callchain.stack[callchain.selfEvent];
+
+            // 优先使用symbolsClassifyMap中的特殊处理结果，如果没有则使用call.classification
+            let finalClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
+
             let data: PerfSymbolDetailData = {
                 stepIdx: groupId,
                 eventType: event,
@@ -690,14 +704,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 tid: thread.threadId,
                 threadEvents: 0,
                 threadName: thread.name,
-                file: call.classification.file,
+                file: finalClassification.file,
                 fileEvents: 0,
                 symbol: this.symbolsMap.get(call.symbolId) ?? '',
                 symbolEvents: sample.event_count,
                 symbolTotalEvents: 0,
-                originKind: call.classification.originKind,
-                componentCategory: call.classification.category,
-                componentName: call.classification.subCategoryName,
+                originKind: finalClassification.originKind,
+                componentCategory: finalClassification.category,
+                componentName: finalClassification.subCategoryName,
             };
 
             let threadEventCount = threadsEventMap.get(this.getThreadKey(data)) ?? 0;
@@ -711,7 +725,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 if (thread.classification.subCategoryName) {
                     data.componentName = thread.classification.subCategoryName;
                 } else {
-                    data.componentName = path.basename(call.classification.file);
+                    data.componentName = path.basename(finalClassification.file);
                 }
 
                 data.componentCategory = thread.classification.category;

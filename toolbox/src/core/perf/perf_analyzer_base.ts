@@ -280,73 +280,26 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         if (this.fileClassifyCfg.has(file)) {
             let component = this.fileClassifyCfg.get(file)!;
 
-            // 特殊处理KMP相关文件
-            if (component.category === ComponentCategory.KMP) {
-                // 只有libkn.so直接归类为KMP
-                if (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libkn\.so$/)) {
-                    fileClassify.category = component.category;
-                    fileClassify.categoryName = component.categoryName;
-                    if (component.subCategoryName) {
-                        fileClassify.subCategoryName = component.subCategoryName;
-                    }
-                    return fileClassify;
-                }
-                // libskia.so和libskikobridge.so只有在存在libkn.so时才归类为KMP
-                else if ((file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
-                         file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/)) &&
-                         this.hasKmpScheme) {
-                    fileClassify.category = component.category;
-                    fileClassify.categoryName = component.categoryName;
-                    if (component.subCategoryName) {
-                        fileClassify.subCategoryName = component.subCategoryName;
-                    }
-                    return fileClassify;
-                }
-                // 如果是KMP相关文件但不满足条件，则跳过此分类，继续后续处理
-            } else {
+            fileClassify.category = component.category;
+            fileClassify.categoryName = component.categoryName;
+            if (component.subCategoryName) {
+                fileClassify.subCategoryName = component.subCategoryName;
+            }
+            return fileClassify;
+
+        }
+
+        for (const [key, component] of this.fileRegexClassifyCfg) {
+            let matched = file.match(key);
+            if (matched) {
+
                 fileClassify.category = component.category;
                 fileClassify.categoryName = component.categoryName;
                 if (component.subCategoryName) {
                     fileClassify.subCategoryName = component.subCategoryName;
                 }
                 return fileClassify;
-            }
-        }
 
-        for (const [key, component] of this.fileRegexClassifyCfg) {
-            let matched = file.match(key);
-            if (matched) {
-                // 特殊处理KMP相关文件
-                if (component.category === ComponentCategory.KMP) {
-                    // 只有libkn.so直接归类为KMP
-                    if (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libkn\.so$/)) {
-                        fileClassify.category = component.category;
-                        fileClassify.categoryName = component.categoryName;
-                        if (component.subCategoryName) {
-                            fileClassify.subCategoryName = component.subCategoryName;
-                        }
-                        return fileClassify;
-                    }
-                    // libskia.so和libskikobridge.so只有在存在libkn.so时才归类为KMP
-                    else if ((file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
-                             file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/)) &&
-                             this.hasKmpScheme) {
-                        fileClassify.category = component.category;
-                        fileClassify.categoryName = component.categoryName;
-                        if (component.subCategoryName) {
-                            fileClassify.subCategoryName = component.subCategoryName;
-                        }
-                        return fileClassify;
-                    }
-                    // 如果是KMP相关文件但不满足条件，则跳过此分类，继续后续处理
-                } else {
-                    fileClassify.category = component.category;
-                    fileClassify.categoryName = component.categoryName;
-                    if (component.subCategoryName) {
-                        fileClassify.subCategoryName = component.subCategoryName;
-                    }
-                    return fileClassify;
-                }
             }
         }
 
@@ -362,15 +315,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         ) {
             let name = path.basename(file);
             if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
-                // 特殊处理KMP相关文件
-                if (this.hasKmpScheme &&
-                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
-                     file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
-                    fileClassify.category = ComponentCategory.KMP;
-                    fileClassify.categoryName = 'KMP';
-                    return fileClassify;
-                }
-
                 fileClassify.category = ComponentCategory.APP_SO;
                 return fileClassify;
             }
@@ -417,6 +361,13 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     categoryName: fileClassification.categoryName,
                     subCategoryName: packageName,
                 };
+
+                // 特殊处理compose符号
+                if (packageName === 'compose') {
+                    symbolClassification.category = ComponentCategory.KMP;
+                    symbolClassification.categoryName = 'KMP';
+                    symbolClassification.subCategoryName = 'compose';
+                }
 
                 if (this.hapComponents.has(matches[3])) {
                     symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
@@ -728,7 +679,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         )}:${padStart(date.getMinutes())}:${padStart(date.getSeconds())}`;
     }
 
-    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void|boolean> {
+    public async saveHiperfJson(testInfo: TestSceneInfo, outputFileName: string): Promise<void | boolean> {
         let harMap = new Map<string, { name: string; count: number }>();
         let stepMap = new Map<number, StepJsonData>();
 
@@ -778,7 +729,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         };
         if (getConfig().ut) {
             const jsonString = JSON.stringify([jsonObject], null, 2);
-            return this.isRight(jsonString,outputFileName);
+            return this.isRight(jsonString, outputFileName);
         } else {
             await saveJsonArray([jsonObject], outputFileName);
         }
