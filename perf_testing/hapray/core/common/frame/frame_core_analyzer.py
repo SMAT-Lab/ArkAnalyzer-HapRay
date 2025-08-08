@@ -28,7 +28,7 @@ from .frame_core_cache_manager import FrameCacheManager
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 
-class FrameAnalyzerCore:
+class FrameAnalyzerCore:  # pylint: disable=duplicate-code
     """重构后的卡顿帧分析器核心
 
     使用模块化组件，职责分离清晰：
