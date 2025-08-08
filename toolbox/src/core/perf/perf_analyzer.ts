@@ -28,7 +28,8 @@ import type {
     PerfSymbolDetailData,
     ProcessClassifyCategory,
     TestSceneInfo,
-    TestStep} from './perf_analyzer_base';
+    TestStep
+} from './perf_analyzer_base';
 import {
     CYCLES_EVENT,
     INSTRUCTION_EVENT,
@@ -294,7 +295,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     private loadStatistics(db: Database, packageName: string, scene: string, groupId: number): number {
         // 读取所有线程信息
-        this.queryThreads(db,packageName,scene);
+        this.queryThreads(db, packageName, scene);
         // 读取所有文件信息
         this.queryFiles(db);
         // 读取所有符号信息
@@ -364,15 +365,15 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @returns
      */
-    private queryThreads(db: Database,packageName:string,scene:string): void {
-        let processesMap:Map<number,ProcessClassifyCategory> = new Map();
+    private queryThreads(db: Database, packageName: string, scene: string): void {
+        let processesMap: Map<number, ProcessClassifyCategory> = new Map();
         let results = db.exec('SELECT process_id, thread_name FROM perf_thread where thread_id = process_id');
-        if(results.length === 0){
+        if (results.length === 0) {
             return;
         }
 
-        results[0].values.map((row)=>{
-            processesMap.set(row[0] as number, this.classifyProcess(row[1] as string, packageName,scene));
+        results[0].values.map((row) => {
+            processesMap.set(row[0] as number, this.classifyProcess(row[1] as string, packageName, scene));
         });
 
         results = db.exec('SELECT thread_id, process_id, thread_name FROM perf_thread');
@@ -427,21 +428,23 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
             let fileClassify = this.classifyFile(file);
-            if(fileClassify.category === ComponentCategory.APP_SO){
+            if (fileClassify.category === ComponentCategory.APP_SO) {
                 let origin = this.classifySoOrigins(file);
-                if (origin){
+                if (origin) {
                     fileClassify.originKind = origin.originKind;
                     fileClassify.subCategoryName = origin.subCategoryName;
                 }
             }
 
-            // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
-            if (this.hasKmpScheme &&
-                (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
-                 file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
-                fileClassify.category = ComponentCategory.KMP;
-                fileClassify.categoryName = 'KMP';
-                // 保持默认的subCategoryName（文件名）
+            if (fileClassify.category === ComponentCategory.APP_SO) {
+                // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
+                if (this.hasKmpScheme &&
+                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
+                        file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
+                    fileClassify.category = ComponentCategory.KMP;
+                    fileClassify.categoryName = 'KMP';
+                    // 保持默认的subCategoryName（文件名）
+                }
             }
 
             this.filesClassifyMap.set(row[0] as number, fileClassify);
@@ -484,7 +487,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             // ets 需要基于symbol 进一步分类
             call.classification = this.classifySymbol(call.symbolId, call.classification);
-            
+
             let callchain = this.callchainsMap.get(row[0] as number) ?? {
                 callchainId: row[0] as number,
                 selfEvent: 0,
@@ -501,7 +504,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      */
     private disassembleCallchainLoad(): void {
         for (const [key, callchain] of this.callchainsMap) {
-            if(this.isSkipSymbol(this.symbolsMap.get(callchain.stack[0].symbolId)||'')){
+            if (this.isSkipSymbol(this.symbolsMap.get(callchain.stack[0].symbolId) ?? '')) {
                 logger.debug(`delete dfx callchain id ${key}`);
                 this.callchainsMap.delete(key);
                 continue;
@@ -675,7 +678,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                     name: UNKNOWN_STR,
                     processId: sample.thread_id,
                     threadId: sample.thread_id,
-                    systemClassifyCategory: this.classifyProcess(undefined,'',''),
+                    systemClassifyCategory: this.classifyProcess(undefined, '', ''),
                     classification: {
                         category: ComponentCategory.UNKNOWN,
                         categoryName: UNKNOWN_STR,
@@ -736,13 +739,13 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 data.componentCategory = thread.classification.category;
             }
 
-            if(data.sysDomain === 'DFX' || data.sysDomain === 'Test'){
+            if (data.sysDomain === 'DFX' || data.sysDomain === 'Test') {
                 skipDfxEvents += sample.event_count;
                 continue;
             }
 
-            if(data.componentCategory === ComponentCategory.SYS_SDK && data.componentName === 'Other'){
-                if(path.basename(data.processName) === path.basename(data.file)){
+            if (data.componentCategory === ComponentCategory.SYS_SDK && data.componentName === 'Other') {
+                if (path.basename(data.processName) === path.basename(data.file)) {
                     data.componentName = data.sysDomain;
                 }
             }
@@ -766,7 +769,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             }
 
             //sum
-            if(data.componentCategory === ComponentCategory.UNKNOWN || data.isMainApp === false){
+            if (data.componentCategory === ComponentCategory.UNKNOWN || data.isMainApp === false) {
                 continue;
             }
         }
