@@ -32,7 +32,7 @@ class FrameDbBasicAccessor:
     # ==================== 公共数据访问方法 ====================
 
     @staticmethod
-    def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:  # pylint: disable=unused-argument
+    def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
         """获取标准化的帧数据，统一管理所有frame_slice数据访问
 
         Args:

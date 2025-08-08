@@ -73,9 +73,9 @@ class ReportData:
         """清理数据，将numpy类型和NaN值转换为标准Python类型以确保JSON序列化"""
         if isinstance(data, dict):
             return {key: self._clean_data_for_json(value) for key, value in data.items()}
-        elif isinstance(data, list):
+        if isinstance(data, list):
             return [self._clean_data_for_json(item) for item in data]
-        elif hasattr(data, 'dtype') and hasattr(data, 'item'):
+        if hasattr(data, 'dtype') and hasattr(data, 'item'):
             # numpy类型
             if pd.isna(data):
                 # 处理NaN值
@@ -91,18 +91,17 @@ class ReportData:
                 return float(data)
             else:
                 return data.item()
-        elif hasattr(data, '__class__') and 'int64' in str(data.__class__):
+        if hasattr(data, '__class__') and 'int64' in str(data.__class__):
             # 其他可能的int64类型
             if pd.isna(data):
                 return 0
             return int(data)
-        elif pd.isna(data):
+        if pd.isna(data):
             # 处理pandas NaN值
             if isinstance(data, (int, float)):
                 return 0
             return None
-        else:
-            return data
+        return data
 
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])

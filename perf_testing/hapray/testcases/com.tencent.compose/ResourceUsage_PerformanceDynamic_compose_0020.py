@@ -25,15 +25,33 @@ class ResourceUsage_PerformanceDynamic_compose_0020(PerfTestCase):
     def process(self):
         self.driver.swipe_to_home()
 
+        # Step('启动被测应用')
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
         def step1():
-            self.touch_by_text('AutoScrollingInfiniteList', 8)
+            self.touch_by_text('Compose 1500Text', 5)
+            self.swipes_up(5, 2)
+            self.swipes_down(5, 2)
+
+        def step2():
+            self.touch_by_text('CApi 1500Text', 5)
+            self.swipes_up(5, 2)
+            self.swipes_down(5, 2)
+
+        def step3():
+            self.touch_by_text('Compose 1500Text CApi', 5)
             self.swipes_up(5, 2)
             self.swipes_down(5, 2)
 
         self.swipes_up(1, 2)
-        self.execute_performance_step("ComposeSample-活动列表测试场景-step1 AutoScrollingInfiniteList", 30, step1,
+
+        self.driver.swipe_to_back()
+        self.execute_performance_step("ComposeSample-1500Text测试场景-step1 Compose 1500Text", 30, step1,
                                       sample_all_processes=False)
         self.driver.swipe_to_back()
+        self.execute_performance_step("ComposeSample-1500Text测试场景-step2 CApi 1500Text", 30, step2,
+                                      sample_all_processes=False)
+        self.driver.swipe_to_back()
+        self.execute_performance_step("ComposeSample-1500Text测试场景-step3 Compose 1500Text CApi", 30, step3,
+                                      sample_all_processes=False)

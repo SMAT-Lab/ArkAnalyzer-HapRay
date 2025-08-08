@@ -67,7 +67,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                 return None
 
             # 分析VSync异常
-            result = self._analyze_vsync_anomalies(frames_df, step_dir, perf_db_path)
+            result = self._analyze_vsync_anomalies(frames_df, step_dir)
 
             if result is None:
                 logging.info("No VSync anomaly data found for step %s", step_dir)
@@ -82,8 +82,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
             if 'trace_conn' in locals():
                 trace_conn.close()
 
-    def _analyze_vsync_anomalies(self, frames_df: pd.DataFrame, step_id: str,
-                                 perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_vsync_anomalies(self, frames_df: pd.DataFrame, step_id: str) -> Optional[Dict[str, Any]]:
         """分析VSync异常"""
 
         try:
@@ -254,7 +253,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
         periods = []
         current_period = None
 
-        for i, interval_data in enumerate(vsync_intervals):
+        for _, interval_data in enumerate(vsync_intervals):
             interval = interval_data['interval']
             frequency = 1_000_000_000 / interval if interval > 0 else 0
 

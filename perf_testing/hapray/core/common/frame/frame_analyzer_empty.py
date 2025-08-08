@@ -82,7 +82,7 @@ class EmptyFrameAnalyzer:
             # 在分析开始前，确保所有需要的数据都已缓存
             if step_id:
                 # 预加载analyzer需要的基础数据
-                preload_result = FrameCacheManager.preload_analyzer_data(  # pylint: disable=unused-variable
+                FrameCacheManager.preload_analyzer_data(
                     trace_conn, perf_conn, step_id, app_pids
                 )
                 # logging.info("预加载数据结果: %s", preload_result)
@@ -139,17 +139,14 @@ class EmptyFrameAnalyzer:
 
             # 对每个帧进行分析 - 优先使用缓存中的帧负载数据
             for _, frame in trace_df.iterrows():
-                # 构建帧标识符用于查找缓存
-                frame_key = f"{frame['ts']}_{frame['dur']}_{frame['tid']}"  # pylint: disable=unused-variable
-
                 # 检查缓存中是否已有该帧的负载数据
                 cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
                 cached_frame = None
 
                 for cached in cached_frame_loads:
-                    if (cached.get('ts') == frame['ts'] and
-                            cached.get('dur') == frame['dur'] and
-                            cached.get('thread_id') == frame['tid']):
+                    if (cached.get('ts') == frame['ts']
+                            and cached.get('dur') == frame['dur']
+                            and cached.get('thread_id') == frame['tid']):
                         cached_frame = cached
                         break
 
@@ -287,9 +284,9 @@ class EmptyFrameAnalyzer:
             cached_frame = None
 
             for cached in cached_frame_loads:
-                if (cached.get('ts') == frame['ts'] and
-                        cached.get('dur') == frame['dur'] and
-                        cached.get('thread_id') == frame['tid']):
+                if (cached.get('ts') == frame['ts']
+                        and cached.get('dur') == frame['dur']
+                        and cached.get('thread_id') == frame['tid']):
                     cached_frame = cached
                     break
 
