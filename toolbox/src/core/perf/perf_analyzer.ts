@@ -672,6 +672,12 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 continue;
             }
 
+            if(!this.callchainsMap.has(sample.callchain_id)){
+                logger.debug('calcSymbolData callchain_id %s not found',sample.callchain_id);
+                skipDfxEvents += sample.event_count;
+                continue;
+            }
+
             let thread = this.threadsMap.get(sample.thread_id);
             if (!thread) {
                 thread = {
