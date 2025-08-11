@@ -18,16 +18,16 @@ from typing import Dict, Any, List, Optional
 
 import pandas as pd
 
-# 设置环境变量
-os.environ["PYTHONIOENCODING"] = "utf-8"
-
 # 导入新的模块化组件
 from .frame_core_analyzer import FrameAnalyzerCore
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
 
+# 设置环境变量
+os.environ["PYTHONIOENCODING"] = "utf-8"
 
-class FrameAnalyzer:
+
+class FrameAnalyzer:  # pylint: disable=duplicate-code
     """卡顿帧分析器 - 兼容性包装器
 
     这是重构后的兼容性包装器，保持原有接口不变，
@@ -49,11 +49,12 @@ class FrameAnalyzer:
 
     # 类变量用于存储缓存 - 委托给FrameCacheManager
     # 这些是类变量，可以直接访问
-    _callchain_cache = FrameCacheManager._callchain_cache
-    _files_cache = FrameCacheManager._files_cache
-    _pid_cache = FrameCacheManager._pid_cache
-    _tid_cache = FrameCacheManager._tid_cache
-    _process_cache = FrameCacheManager._process_cache
+    # 注意：这些是受保护成员，但在兼容性包装器中需要访问
+    _callchain_cache = FrameCacheManager._callchain_cache  # pylint: disable=protected-access
+    _files_cache = FrameCacheManager._files_cache  # pylint: disable=protected-access
+    _pid_cache = FrameCacheManager._pid_cache  # pylint: disable=protected-access
+    _tid_cache = FrameCacheManager._tid_cache  # pylint: disable=protected-access
+    _process_cache = FrameCacheManager._process_cache  # pylint: disable=protected-access
 
     # 调试开关配置
     _debug_vsync_enabled = False  # VSync调试开关，True时正常判断，False时永远不触发VSync条件
@@ -112,7 +113,7 @@ class FrameAnalyzer:
         return FrameCacheManager.get_files_cache(perf_conn, step_id)
 
     @staticmethod
-    def _get_pid_cache(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def _get_pid_cache(trace_conn, step_id: str = None) -> list:
         """获取并缓存trace_pid表的数据 - 兼容性包装
 
         Args:
@@ -120,12 +121,12 @@ class FrameAnalyzer:
             step_id: 步骤ID，用作缓存key
 
         Returns:
-            pd.DataFrame: pid缓存数据
+            list: PID列表
         """
         return FrameCacheManager.get_pid_cache(trace_conn, step_id)
 
     @staticmethod
-    def _get_tid_cache(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def _get_tid_cache(trace_conn, step_id: str = None) -> list:
         """获取并缓存trace_tid表的数据 - 兼容性包装
 
         Args:
@@ -133,7 +134,7 @@ class FrameAnalyzer:
             step_id: 步骤ID，用作缓存key
 
         Returns:
-            pd.DataFrame: tid缓存数据
+            list: TID列表
         """
         return FrameCacheManager.get_tid_cache(trace_conn, step_id)
 
@@ -215,7 +216,9 @@ class FrameAnalyzer:
         return core.load_calculator.analyze_single_frame(frame, perf_df, perf_conn, step_id)
 
     @staticmethod
-    def analyze_empty_frames(trace_db_path: str, perf_db_path: str, app_pids: list, scene_dir: str = None,
+    def analyze_empty_frames(trace_db_path: str,
+                             perf_db_path: str,
+                             app_pids: list,
                              step_id: str = None) -> Optional[dict]:
         """分析空帧 - 兼容性包装
 
@@ -223,14 +226,13 @@ class FrameAnalyzer:
             trace_db_path: trace数据库路径
             perf_db_path: perf数据库路径
             app_pids: 应用进程ID列表
-            scene_dir: 场景目录
             step_id: 步骤ID
 
         Returns:
             dict: 空帧分析结果
         """
         core = FrameAnalyzer._get_core_analyzer()
-        return core.analyze_empty_frames(trace_db_path, perf_db_path, app_pids, scene_dir, step_id)
+        return core.analyze_empty_frames(trace_db_path, perf_db_path, step_id, app_pids)
 
     @staticmethod
     def analyze_single_stuttered_frame(frame, vsync_key, context):

@@ -29,6 +29,7 @@ from .exe_utils import ExeUtils
 from .folder_utils import scan_folders, delete_folder, read_json_arrays_from_dir
 from .excel_utils import ExcelReportSaver
 
+# pylint: disable=duplicate-code
 __all__ = [
     # Frame Analyzer 组件
     'FrameAnalyzerCore',
@@ -51,3 +52,4 @@ __all__ = [
     'read_json_arrays_from_dir',
     'ExcelReportSaver',
 ]
+# pylint: enable=duplicate-code
