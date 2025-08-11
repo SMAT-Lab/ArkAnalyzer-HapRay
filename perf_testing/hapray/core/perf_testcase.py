@@ -215,9 +215,11 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             collection_thread.join()
 
         # dump view tree when end test step
-        self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_end.json'))
-        self._collect_coverage_data(perf_step_dir)
-        self._save_performance_data(output_file, step_id)
+        try:
+            self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_end.json'))
+        finally:
+            self._collect_coverage_data(perf_step_dir)
+            self._save_performance_data(output_file, step_id)
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
