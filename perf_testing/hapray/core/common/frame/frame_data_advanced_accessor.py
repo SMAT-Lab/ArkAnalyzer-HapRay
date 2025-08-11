@@ -14,13 +14,14 @@ limitations under the License.
 """
 
 import logging
+from typing import List, Dict
+
 import pandas as pd
-from typing import List, Dict, Any, Optional
 
 
 class FrameDbAdvancedAccessor:
     """复杂联合查询数据访问层 - 专门处理多表关联的复杂SQL查询
-    
+
     主要职责：
     1. 复杂的多表联合查询
     2. 业务特定的数据过滤和聚合
@@ -29,14 +30,13 @@ class FrameDbAdvancedAccessor:
     """
 
     @staticmethod
-    def get_empty_frames_with_details(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_empty_frames_with_details(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """获取空帧详细信息（包含进程、线程、调用栈信息）
-        
+
         Args:
             trace_conn: trace数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             pd.DataFrame: 包含详细信息的空帧数据
         """
@@ -44,13 +44,13 @@ class FrameDbAdvancedAccessor:
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
             logging.warning("app_pids参数无效，返回空DataFrame")
             return pd.DataFrame()
-        
+
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
             logging.warning("没有有效的PID值，返回空DataFrame")
             return pd.DataFrame()
-        
+
         query = f"""
         WITH filtered_frames AS (
             -- 首先获取符合条件的帧
@@ -73,7 +73,7 @@ class FrameDbAdvancedAccessor:
         LEFT JOIN callstack cs ON pf.callstack_id = cs.id
         ORDER BY pf.ts
         """
-        
+
         try:
             result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取空帧详细信息: %d 条记录", len(result_df))
@@ -83,20 +83,19 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_stuttered_frames_with_context(trace_conn, step_id: str = None) -> pd.DataFrame:
+    def get_stuttered_frames_with_context(trace_conn) -> pd.DataFrame:
         """获取卡顿帧上下文信息
-        
+
         Args:
             trace_conn: trace数据库连接
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             pd.DataFrame: 包含上下文信息的卡顿帧数据
         """
         query = """
         WITH stuttered_frames AS (
             -- 获取卡顿帧
-            SELECT fs.*, 
+            SELECT fs.*,
                    p.name as process_name, p.pid,
                    t.name as thread_name, t.is_main_thread,
                    cs.name as callstack_name
@@ -119,7 +118,7 @@ class FrameDbAdvancedAccessor:
         SELECT * FROM frame_context
         ORDER BY ts
         """
-        
+
         try:
             result_df = pd.read_sql_query(query, trace_conn)
             # logging.info("获取卡顿帧上下文信息: %d 条记录", len(result_df))
@@ -129,15 +128,14 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int], step_id: str = None) -> Dict[str, pd.DataFrame]:
+    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int]) -> Dict[str, pd.DataFrame]:
         """获取帧负载分析所需的完整数据
-        
+
         Args:
             trace_conn: trace数据库连接
             perf_conn: perf数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             Dict[str, pd.DataFrame]: 包含各种分析数据的字典
         """
@@ -150,7 +148,7 @@ class FrameDbAdvancedAccessor:
                 'callchains': pd.DataFrame(),
                 'files': pd.DataFrame()
             }
-        
+
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
@@ -161,13 +159,13 @@ class FrameDbAdvancedAccessor:
                 'callchains': pd.DataFrame(),
                 'files': pd.DataFrame()
             }
-        
+
         try:
             # 获取帧数据
             frames_query = f"""
-            SELECT 
-                fs.ts, fs.dur, fs.ipid, fs.itid, 
-                fs.flag, fs.type, fs.callstack_id, 
+            SELECT
+                fs.ts, fs.dur, fs.ipid, fs.itid,
+                fs.flag, fs.type, fs.callstack_id,
                 fs.vsync, fs.type_desc,
                 t.tid, t.name as thread_name, t.is_main_thread,
                 p.name as process_name, p.pid
@@ -178,52 +176,52 @@ class FrameDbAdvancedAccessor:
             AND p.pid IN ({','.join('?' * len(valid_pids))})
             ORDER BY fs.ts
             """
-            
+
             frames_df = pd.read_sql_query(frames_query, trace_conn, params=valid_pids)
-            
+
             # 获取性能样本数据
             perf_query = """
-            SELECT 
+            SELECT
                 callchain_id, timestamp_trace, thread_id, event_count,
                 event_type_id, cpu_id, thread_state
             FROM perf_sample
             ORDER BY timestamp_trace
             """
-            
+
             perf_df = pd.read_sql_query(perf_query, perf_conn)
-            
+
             # 获取调用链数据
             callchain_query = """
-            SELECT 
+            SELECT
                 callchain_id, depth, ip, vaddr_in_file, file_id, symbol_id, name
             FROM perf_callchain
             ORDER BY callchain_id, depth
             """
-            
+
             callchain_df = pd.read_sql_query(callchain_query, perf_conn)
-            
+
             # 获取文件信息
             files_query = """
-            SELECT 
+            SELECT
                 file_id, serial_id, symbol, path
             FROM perf_files
             ORDER BY file_id, serial_id
             """
-            
+
             files_df = pd.read_sql_query(files_query, perf_conn)
-            
+
             result = {
                 'frames': frames_df,
                 'perf_samples': perf_df,
                 'callchains': callchain_df,
                 'files': files_df
             }
-            
-                    # logging.info("获取帧负载分析数据: frames=%d, perf_samples=%d, callchains=%d, files=%d",
-        #              len(frames_df), len(perf_df), len(callchain_df), len(files_df))
-            
+
+            # logging.info("获取帧负载分析数据: frames=%d, perf_samples=%d, callchains=%d, files=%d",
+            #              len(frames_df), len(perf_df), len(callchain_df), len(files_df))
+
             return result
-            
+
         except Exception as e:
             logging.error("获取帧负载分析数据失败: %s", str(e))
             return {
@@ -234,14 +232,13 @@ class FrameDbAdvancedAccessor:
             }
 
     @staticmethod
-    def get_frame_statistics_by_process(trace_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_frame_statistics_by_process(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """按进程获取帧统计信息
-        
+
         Args:
             trace_conn: trace数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             pd.DataFrame: 按进程分组的帧统计信息
         """
@@ -249,15 +246,15 @@ class FrameDbAdvancedAccessor:
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
             logging.warning("app_pids参数无效，返回空DataFrame")
             return pd.DataFrame()
-        
+
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
             logging.warning("没有有效的PID值，返回空DataFrame")
             return pd.DataFrame()
-        
+
         query = f"""
-        SELECT 
+        SELECT
             p.pid,
             p.name as process_name,
             COUNT(*) as total_frames,
@@ -276,7 +273,7 @@ class FrameDbAdvancedAccessor:
         GROUP BY p.pid, p.name
         ORDER BY total_frames DESC
         """
-        
+
         try:
             result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取进程帧统计信息: %d 个进程", len(result_df))
@@ -286,15 +283,14 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000, step_id: str = None) -> pd.DataFrame:
+    def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000) -> pd.DataFrame:
         """获取帧时间线分析数据
-        
+
         Args:
             trace_conn: trace数据库连接
             app_pids: 应用进程ID列表
             time_window_ms: 时间窗口大小（毫秒）
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             pd.DataFrame: 时间线分析数据
         """
@@ -302,16 +298,16 @@ class FrameDbAdvancedAccessor:
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
             logging.warning("app_pids参数无效，返回空DataFrame")
             return pd.DataFrame()
-        
+
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
             logging.warning("没有有效的PID值，返回空DataFrame")
             return pd.DataFrame()
-        
+
         query = f"""
         WITH frame_windows AS (
-            SELECT 
+            SELECT
                 fs.*,
                 p.name as process_name,
                 t.name as thread_name,
@@ -323,7 +319,7 @@ class FrameDbAdvancedAccessor:
             WHERE p.pid IN ({','.join('?' * len(valid_pids))})
         ),
         window_stats AS (
-            SELECT 
+            SELECT
                 window_id,
                 COUNT(*) as frame_count,
                 SUM(CASE WHEN flag = 1 THEN 1 ELSE 0 END) as stutter_count,
@@ -334,17 +330,17 @@ class FrameDbAdvancedAccessor:
             FROM frame_windows
             GROUP BY window_id
         )
-        SELECT 
+        SELECT
             *,
             (window_end - window_start) / 1000000.0 as window_duration_ms,
-            CASE 
+            CASE
                 WHEN frame_count > 0 THEN (stutter_count * 100.0 / frame_count)
-                ELSE 0 
+                ELSE 0
             END as stutter_percentage
         FROM window_stats
         ORDER BY window_id
         """
-        
+
         try:
             result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取帧时间线分析数据: %d 个时间窗口", len(result_df))
@@ -354,18 +350,17 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_perf_samples_with_callchain(perf_conn, step_id: str = None) -> pd.DataFrame:
+    def get_perf_samples_with_callchain(perf_conn) -> pd.DataFrame:
         """获取性能样本及其调用链信息
-        
+
         Args:
             perf_conn: perf数据库连接
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             pd.DataFrame: 包含调用链信息的性能样本数据
         """
         query = """
-        SELECT 
+        SELECT
             ps.*,
             pc.depth, pc.ip, pc.vaddr_in_file, pc.file_id, pc.symbol_id, pc.name as function_name,
             pf.symbol, pf.path
@@ -374,7 +369,7 @@ class FrameDbAdvancedAccessor:
         LEFT JOIN perf_files pf ON pc.file_id = pf.file_id AND pc.symbol_id = pf.serial_id
         ORDER BY ps.timestamp_trace, pc.depth
         """
-        
+
         try:
             result_df = pd.read_sql_query(query, perf_conn)
             # logging.info("获取性能样本调用链信息: %d 条记录", len(result_df))
@@ -384,15 +379,13 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_thread_performance_analysis(trace_conn, perf_conn, app_pids: List[int], step_id: str = None) -> pd.DataFrame:
+    def get_thread_performance_analysis(trace_conn, app_pids: List[int]) -> pd.DataFrame:
         """获取线程性能分析数据
-        
+
         Args:
             trace_conn: trace数据库连接
-            perf_conn: perf数据库连接
             app_pids: 应用进程ID列表
-            step_id: 步骤ID，用于缓存
-            
+
         Returns:
             pd.DataFrame: 线程性能分析数据
         """
@@ -400,16 +393,16 @@ class FrameDbAdvancedAccessor:
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
             logging.warning("app_pids参数无效，返回空DataFrame")
             return pd.DataFrame()
-        
+
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
             logging.warning("没有有效的PID值，返回空DataFrame")
             return pd.DataFrame()
-        
+
         query = f"""
         WITH thread_frames AS (
-            SELECT 
+            SELECT
                 t.tid, t.name as thread_name, t.is_main_thread,
                 p.pid, p.name as process_name,
                 COUNT(fs.id) as frame_count,
@@ -423,7 +416,7 @@ class FrameDbAdvancedAccessor:
             GROUP BY t.tid, t.name, t.is_main_thread, p.pid, p.name
         ),
         thread_perf AS (
-            SELECT 
+            SELECT
                 thread_id,
                 COUNT(*) as perf_sample_count,
                 AVG(event_count) as avg_event_count,
@@ -431,7 +424,7 @@ class FrameDbAdvancedAccessor:
             FROM perf_sample
             GROUP BY thread_id
         )
-        SELECT 
+        SELECT
             tf.*,
             tp.perf_sample_count,
             tp.avg_event_count,
@@ -440,11 +433,11 @@ class FrameDbAdvancedAccessor:
         LEFT JOIN thread_perf tp ON tf.tid = tp.thread_id
         ORDER BY tf.frame_count DESC
         """
-        
+
         try:
             result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取线程性能分析数据: %d 个线程", len(result_df))
             return result_df
         except Exception as e:
             logging.error("获取线程性能分析数据失败: %s", str(e))
-            return pd.DataFrame() 
+            return pd.DataFrame()

@@ -18,7 +18,7 @@ import sqlite3
 import traceback
 from typing import Dict, Any, List, Optional
 
-import pandas as pd
+# import pandas as pd  # 未使用
 
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
@@ -53,9 +53,9 @@ class StutteredFrameAnalyzer:
     """
 
     # 帧标志常量
-    FLAG_NORMAL = 0      # 实际渲染帧不卡帧
-    FLAG_STUTTER = 1     # 实际渲染帧卡帧
-    FLAG_NO_DRAW = 2     # 数据不需要绘制
+    FLAG_NORMAL = 0  # 实际渲染帧不卡帧
+    FLAG_STUTTER = 1  # 实际渲染帧卡帧
+    FLAG_NO_DRAW = 2  # 数据不需要绘制
     FLAG_PROCESS_ERROR = 3  # rs进程与app进程起止异常
 
     # 卡顿分级阈值常量
@@ -74,13 +74,11 @@ class StutteredFrameAnalyzer:
         """
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
 
-
-
     def analyze_stuttered_frames(
-        self,
-        db_path: str,
-        perf_db_path: str = None,
-        step_id: str = None
+            self,
+            db_path: str,
+            perf_db_path: str = None,
+            step_id: str = None
     ) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
@@ -106,19 +104,19 @@ class StutteredFrameAnalyzer:
             if perf_db_path:
                 try:
                     perf_conn = sqlite3.connect(perf_db_path)
-                    
+
                     # ==================== 标准化缓存检查和使用 ====================
                     # 在分析开始前，确保所有需要的数据都已缓存
                     if step_id:
                         # 预加载analyzer需要的基础数据
-                        preload_result = FrameCacheManager.preload_analyzer_data(
+                        FrameCacheManager.preload_analyzer_data(
                             conn, perf_conn, step_id
                         )
                         # logging.info("预加载数据结果: %s", preload_result)
-                        
+
                         # 确保帧负载数据缓存已初始化
                         FrameCacheManager.ensure_data_cached('frame_loads', step_id=step_id)
-                    
+
                     # 使用缓存管理器获取perf样本数据
                     perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
                 except Exception as e:
@@ -225,8 +223,10 @@ class StutteredFrameAnalyzer:
                             stats["fps_stats"]["low_fps_window_count"] += 1
 
                         # 计算相对于第一帧的时间（纳秒）
-                        start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"], first_frame_time)
-                        end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"], first_frame_time)
+                        start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"],
+                                                                                      first_frame_time)
+                        end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"],
+                                                                                    first_frame_time)
 
                         # 保存当前窗口的fps数据
                         fps_windows.append({
@@ -259,8 +259,10 @@ class StutteredFrameAnalyzer:
                     stats["fps_stats"]["low_fps_window_count"] += 1
 
                 # 计算相对于第一帧的时间（纳秒）
-                start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"], first_frame_time)
-                end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"], first_frame_time)
+                start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"],
+                                                                              first_frame_time)
+                end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"],
+                                                                            first_frame_time)
 
                 fps_windows.append({
                     "start_time": start_offset,
@@ -292,7 +294,8 @@ class StutteredFrameAnalyzer:
                     stats["frame_stats"][process_type]["stutter_rate"] = 0
 
             # 计算总卡顿率
-            total_stutter = int(sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"]))  # 确保返回Python原生int类型
+            total_stutter = int(
+                sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"]))  # 确保返回Python原生int类型
             stats["total_stutter_frames"] = total_stutter
             stats["stutter_rate"] = round(total_stutter / stats["total_frames"], 4)
 
@@ -323,8 +326,17 @@ class StutteredFrameAnalyzer:
             if perf_conn:
                 perf_conn.close()
 
-    def analyze_single_stuttered_frame(self, frame, vsync_key, context):
-        """分析单个卡顿帧，返回分析结果和统计信息"""
+    def analyze_single_stuttered_frame(self, frame, vsync_key, context):  # pylint: disable=duplicate-code
+        """分析单个卡顿帧
+
+        Args:
+            frame: 帧数据
+            vsync_key: VSync键
+            context: 上下文信息
+
+        Returns:
+            tuple: (frame_type, stutter_level, stutter_detail)
+        """
         data = context["data"]
         perf_df = context["perf_df"]
         perf_conn = context["perf_conn"]
@@ -351,22 +363,23 @@ class StutteredFrameAnalyzer:
 
         if perf_df is not None and perf_conn is not None:
             # 检查缓存中是否已有该帧的负载数据
+            # pylint: disable=duplicate-code
             cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
             cached_frame = None
-            
+
             for cached in cached_frame_loads:
-                if (cached.get('ts') == frame['ts'] and 
-                    cached.get('dur') == frame['dur'] and 
-                    cached.get('thread_id') == frame['tid']):
+                if (cached.get('ts') == frame['ts']
+                        and cached.get('dur') == frame['dur']
+                        and cached.get('thread_id') == frame['tid']):
                     cached_frame = cached
                     break
-            
+
             if cached_frame:
                 # 使用缓存中的帧负载数据
                 frame_load = cached_frame.get('frame_load', 0)
                 sample_callchains = cached_frame.get('sample_callchains', [])
                 # logging.info("使用缓存的帧负载数据: ts=%s, load=%s", frame['ts'], frame_load)
-                
+
                 # 如果缓存中没有sample_callchains，尝试补充
                 if not sample_callchains:
                     # logging.info("缓存中缺少sample_callchains，尝试补充: ts=%s", frame['ts'])
@@ -381,6 +394,7 @@ class StutteredFrameAnalyzer:
                     frame, perf_df, perf_conn, step_id
                 )
                 # logging.info("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
+            # pylint: enable=duplicate-code
 
         # 卡顿分级逻辑
         # flag=3 归类为轻微卡顿：进程间异常阈值仅 1ms，远小于轻微卡顿的 33.34ms 阈值
@@ -403,11 +417,11 @@ class StutteredFrameAnalyzer:
                 first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
             except Exception:
                 # 如果获取缓存失败，则使用卡顿帧中的最小时间戳作为备选
-                first_frame_time = min([f["ts"] for vsync in data.values() for f in vsync]) if data else 0
+                first_frame_time = min(f["ts"] for vsync in data.values() for f in vsync) if data else 0
         else:
             # 如果无法获取step_id，则使用卡顿帧中的最小时间戳作为备选
-            first_frame_time = min([f["ts"] for vsync in data.values() for f in vsync]) if data else 0
-        
+            first_frame_time = min(f["ts"] for vsync in data.values() for f in vsync) if data else 0
+
         stutter_detail = {
             "vsync": vsync_key,
             "ts": FrameTimeUtils.convert_to_relative_nanoseconds(frame["ts"], first_frame_time),
@@ -429,7 +443,7 @@ class StutteredFrameAnalyzer:
         """分类卡顿等级
 
         根据卡顿定义进行分级：
-        
+
         帧标志 (flag) 含义：
         - flag = 0: 实际渲染帧不卡帧（正常帧）
         - flag = 1: 实际渲染帧卡帧（expectEndTime < actualEndTime为异常）
@@ -437,14 +451,14 @@ class StutteredFrameAnalyzer:
         - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
 
         卡顿分级逻辑：
-        1. 轻微卡顿 (Level 1): 
+        1. 轻微卡顿 (Level 1):
            - flag=3: 进程间异常（1ms阈值 < 33.34ms轻微卡顿阈值，保守评估）
            - flag=1 且超出帧数 < 2: 实际渲染卡帧但超出时间较少（0-33.34ms）
-        
-        2. 中度卡顿 (Level 2): 
+
+        2. 中度卡顿 (Level 2):
            - flag=1 且超出帧数 2-6: 实际渲染卡帧且超出时间明显（33.34-100ms）
-        
-        3. 严重卡顿 (Level 3): 
+
+        3. 严重卡顿 (Level 3):
            - flag=1 且超出帧数 > 6: 实际渲染卡帧且超出时间严重（>100ms）
 
         Args:
