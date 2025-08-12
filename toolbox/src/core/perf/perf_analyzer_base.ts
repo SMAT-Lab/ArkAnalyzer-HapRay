@@ -128,8 +128,8 @@ export interface PerfSymbolDetailData {
     componentCategory: ComponentCategory;
     originKind?: OriginKind;
     isMainApp: boolean;
-    sysDomain:string;
-    sysSubSystem:string;
+    sysDomain: string;
+    sysSubSystem: string;
     sysComponent: string;
 }
 
@@ -518,9 +518,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         if (processName === undefined) {
             return UNKNOWN;
         }
-        if (processName === packageName || (packageName.length > 0 && processName.startsWith(packageName))) {
-            return MAINAPP;
-        }
 
         for (const [key, rules] of this.specialProcessClassifyCfg) {
             if (!key.test(scene)) {
@@ -529,6 +526,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
             for (const [regex, domain] of rules) {
                 if (regex.test(processName.toLowerCase()) || regex.test(path.basename(processName.toLowerCase()))) {
+                    if (processName === packageName) {
+                        domain.isMainApp = true;
+                    }
                     return domain;
                 }
             }
@@ -536,8 +536,15 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
         for (const [regex, domain] of this.processClassifyCfg) {
             if (regex.test(processName.toLowerCase()) || regex.test(path.basename(processName.toLowerCase()))) {
+                if (processName === packageName) {
+                    domain.isMainApp = true;
+                }
                 return domain;
             }
+        }
+
+        if (processName === packageName || (packageName.length > 0 && processName.startsWith(packageName))) {
+            return MAINAPP;
         }
 
         return UNKNOWN;
@@ -630,6 +637,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             { value: '组件大类' },
             { value: '组件小类' },
             { value: '组件来源' },
+            { value: '是否主应用' },
+            { value: '业务领域' },
+            { value: '子系统' },
+            { value: '部件' },
         ]);
 
         symbolPerfData.push([
@@ -662,6 +673,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             { value: 'component_type' },
             { value: 'component_name' },
             { value: 'origin_kind' },
+            { value: 'is_main_app' },
+            { value: 'sys_domain' },
+            { value: 'sys_subsystem' },
+            { value: 'sys_component' },
         ]);
 
         let symbolDetailsMap = new Map<string, Array<PerfSymbolDetailData>>();
@@ -685,10 +700,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     componentName: data.componentName,
                     componentCategory: data.componentCategory,
                     originKind: data.originKind,
-                    isMainApp:data.isMainApp,
+                    isMainApp: data.isMainApp,
                     sysDomain: data.sysDomain,
                     sysSubSystem: data.sysSubSystem,
-                    sysComponent:data.sysComponent,
+                    sysComponent: data.sysComponent,
                 },
                 {
                     stepIdx: data.stepIdx,
@@ -707,10 +722,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     componentName: data.componentName,
                     componentCategory: data.componentCategory,
                     originKind: data.originKind,
-                    isMainApp:data.isMainApp,
+                    isMainApp: data.isMainApp,
                     sysDomain: data.sysDomain,
                     sysSubSystem: data.sysSubSystem,
-                    sysComponent:data.sysComponent,
+                    sysComponent: data.sysComponent,
                 },
             ];
 
@@ -767,6 +782,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 { value: data[0].componentCategory, type: Number },
                 { value: data[0].componentName, type: String },
                 { value: data[0].originKind, type: Number },
+                { value: data[0].isMainApp, type: Boolean },
+                { value: data[0].sysDomain, type: String },
+                { value: data[0].sysSubSystem, type: String },
+                { value: data[0].sysComponent, type: String },
             ];
 
             symbolPerfData.push(row);
