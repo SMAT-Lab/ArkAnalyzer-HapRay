@@ -103,15 +103,6 @@ FROM
     INNER JOIN perf_sample ON perf_report.id = perf_sample.event_type_id
 WHERE
     perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
-    AND perf_sample.thread_id IN (
-        SELECT
-            child.thread_id
-        FROM
-            perf_thread parent
-            INNER JOIN perf_thread child ON child.process_id = parent.thread_id
-        WHERE
-            parent.thread_id = parent.process_id
-            AND parent.thread_name IN (:appBundleName, :appBundleName|| ':ui', :appBundleName || ':render', :appBundleName || ':background', :appBundleName|| 'service:ui'))
 `;
 const PERF_PROCESS_CALLCHAIN_SQL = `
 SELECT
@@ -161,6 +152,17 @@ FROM
     INNER JOIN perf_report ON perf_report.id = perf_sample.event_type_id
 WHERE
     perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
+`;
+
+const PERF_PROCESS_SWAPPER_SQL = `
+SELECT
+    SUM(perf_sample.event_count)
+FROM
+    perf_sample
+    INNER JOIN perf_report ON perf_report.id = perf_sample.event_type_id
+WHERE
+    perf_report.report_value IN ('hw-instructions', 'instructions', 'raw-instruction-retired', 'hw-cpu-cycles', 'cpu-cycles', 'raw-cpu-cycles')
+    and perf_sample.thread_id = 0
 `;
 
 export class PerfAnalyzer extends PerfAnalyzerBase {
@@ -306,7 +308,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // 读取测试步骤时间戳
         this.queryTestStepTimestamps(db, groupId);
         // 读取样本数据
-        return this.queryProcessSample(db, packageName, groupId);
+        return this.queryProcessSample(db, groupId);
     }
 
     private queryTestStepTimestamps(db: Database, groupId: number): void {
@@ -616,8 +618,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @param appBundleName
      */
-    private queryProcessSample(db: Database, appBundleName: string, groupId: number): number {
-        const results = db.exec(PERF_PROCESS_SAMPLE_SQL, [appBundleName]);
+    private queryProcessSample(db: Database, groupId: number): number {
+        const total = this.queryProcessTotal(db);
+        const swapper = this.queryStepSwapper(db);
+
+        // swapper进程按比例分摊到其他符号
+        const scale = total === swapper ? 1 : 1 + swapper / (total - swapper);
+
+        const results = db.exec(PERF_PROCESS_SAMPLE_SQL);
         if (results.length === 0) {
             return 0;
         }
@@ -632,7 +640,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 id: row[0] as number,
                 callchain_id: row[1] as number,
                 thread_id: row[2] as number,
-                event_count: row[3] as number,
+                event_count: Math.round((row[3] as number) * scale),
                 cpu_id: row[4] as number,
                 event_name: row[5] as string,
                 timestamp: row[6] as number,
@@ -645,6 +653,19 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     private queryProcessTotal(db: Database): number {
         let total = 0;
         const results = db.exec(PERF_PROCESS_TOTAL_SQL);
+        if (results.length === 0) {
+            return total;
+        }
+
+        results[0].values.map((row) => {
+            total += row[0] as number;
+        });
+        return total;
+    }
+
+    private queryStepSwapper(db: Database): number {
+        let total = 0;
+        const results = db.exec(PERF_PROCESS_SWAPPER_SQL);
         if (results.length === 0) {
             return total;
         }
@@ -672,8 +693,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 continue;
             }
 
-            if(!this.callchainsMap.has(sample.callchain_id)){
-                logger.debug('calcSymbolData callchain_id %s not found',sample.callchain_id);
+            if (!this.callchainsMap.has(sample.callchain_id)) {
+                logger.debug('calcSymbolData callchain_id %s not found', sample.callchain_id);
                 skipDfxEvents += sample.event_count;
                 continue;
             }
