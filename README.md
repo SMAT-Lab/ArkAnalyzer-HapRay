@@ -85,10 +85,11 @@ Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
 - `--mode <int>`: Select mode: 0 COMMUNITY, 1 COMPATIBILITY, 2 SIMPLE
-- `--perf <path>`: Perf data path (required for SIMPLE mode)
-- `--trace <path>`: Trace file path (required for SIMPLE mode)
+- `--perfs <path1> <path2> ...`: Multiple perf data paths (required for SIMPLE mode)
+- `--traces <path1> <path2> ...`: Multiple trace file paths (required for SIMPLE mode)
 - `--package-name <package_name>`: Application package name (required for SIMPLE mode)
 - `--pids <N+>`: Process IDs (optional for SIMPLE mode)
+- `--steps <path>`: Path to custom steps.json file (optional for SIMPLE mode)
 
 Example:
 ```bash
@@ -99,8 +100,11 @@ python -m scripts.main update --report_dir reports/20240605120000 --so_dir updat
 # Update reports without changing symbol files
 python -m scripts.main update --report_dir reports/20240605120000
 
-# SIMPLE mode
-python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perf perf.data --trace trace.htrace --package-name com.jd.hm.mall --pids 1 2 3
+# SIMPLE mode - Multiple files (auto-generate steps.json)
+python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perfs perf1.data perf2.data --traces trace1.htrace trace2.htrace --package-name com.jd.hm.mall --pids 1 2 3
+
+# SIMPLE mode - Multiple files with custom steps.json
+python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perfs perf1.data perf2.data --traces trace1.htrace trace2.htrace --package-name com.jd.hm.mall --steps /path/to/custom_steps.json
 
 ```
 
