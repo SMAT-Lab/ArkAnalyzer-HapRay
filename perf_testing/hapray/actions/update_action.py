@@ -63,14 +63,16 @@ class UpdateAction:
                  f"{Mode.SIMPLE} SIMPLE",
         )
         parser.add_argument(
-            "--perf",
-            default="",
-            help="SIMPLE mode need perf path",
+            "--perfs",
+            nargs='+',
+            default=[],
+            help="SIMPLE mode need perf paths (supports multiple files)",
         )
         parser.add_argument(
-            "--trace",
-            default="",
-            help="SIMPLE mode need trace path",
+            "--traces",
+            nargs='+',
+            default=[],
+            help="SIMPLE mode need trace paths (supports multiple files)",
         )
         parser.add_argument(
             "--package-name",
@@ -84,6 +86,11 @@ class UpdateAction:
             default=[],
             help="SIMPLE mode可选填pids（提供整数ID列表，如: --pids 1 2 3）"
         )
+        parser.add_argument(
+            "--steps",
+            default="",
+            help="SIMPLE mode可选填steps.json文件路径，如果提供则使用该文件而不是自动生成"
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -95,12 +102,12 @@ class UpdateAction:
             return
         if Config.get("mode") == Mode.SIMPLE:
             # 简单模式构造目录
-            perf_path = parsed_args.perf
-            trace_path = parsed_args.trace
+            perf_paths = parsed_args.perfs
+            trace_paths = parsed_args.traces
             pids = parsed_args.pids
 
-            if not perf_path or not trace_path:
-                logging.error("SIMPLE mode requires both --perf and --trace parameters")
+            if not perf_paths or not trace_paths:
+                logging.error("SIMPLE mode requires both --perfs and --traces parameters")
                 return
 
             if not parsed_args.package_name:
@@ -108,9 +115,11 @@ class UpdateAction:
                 return
 
             package_name = parsed_args.package_name
+            steps_file_path = parsed_args.steps
             timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             report_dir = os.path.join(report_dir, timestamp)
-            create_simple_mode_structure(report_dir, perf_path, trace_path, package_name, pids)
+            create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_name,
+                                         pids=pids, steps_file_path=steps_file_path)
         logging.info("Updating reports in: %s", report_dir)
         if so_dir:
             logging.info("Using symbolicated .so files from: %s", so_dir)
