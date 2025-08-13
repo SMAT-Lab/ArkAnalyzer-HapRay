@@ -1,0 +1,34 @@
+config:
+  source_screen: [1084, 2412]  # 设计基准分辨率
+  app_package: 'arkanalyzer.hapray.agent' # 应用报名
+  app_name: 'HapRay' # 应用名
+  scene_name: 'PerformanceDynamic_FuncCalls' # 测试场景名
+
+test_case:
+  steps:
+    - name: "start"
+      events:
+        # 启动应用，等待5s
+        - type: "start_app"
+        - type: "wait"
+          duration: 5
+
+        - type: "start_app"
+          package_name: "arkanalyzer.hapray.agent"
+          page_name: "ExecutorAbility"
+          params: "--ps testSuite test_suite --ps testCase FuncCallsTest"
+          wait_time: 2
+
+    - name: "so函数调用-func calls count"
+      performance:
+        duration: 30   # perf/trace采集时间15s
+      events:
+        # 点击5次, 每次等待2s
+        - type: "loop"
+          count: 15
+          events:
+            - type: "touch"
+              target:
+                text: "call10"
+            - type: "wait"
+              duration: 2

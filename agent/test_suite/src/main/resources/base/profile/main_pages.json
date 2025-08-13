@@ -1,5 +1,6 @@
 {
   "src": [
-    "testcases/reusable/pages/ReusablePage"
+    "testcases/reusable/pages/ReusablePage",
+    "testcases/funcalls/pages/CallNativePage"
   ]
 }
