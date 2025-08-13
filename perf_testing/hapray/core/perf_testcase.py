@@ -211,8 +211,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         try:
             # Execute the test action while data collection runs
             action(*args)
-        finally:
-            collection_thread.join()
+        except Exception as e:
+            Log.error(f'execute performance action err {e}')
+
+        collection_thread.join()
 
         # dump view tree when end test step
         try:
@@ -339,8 +341,8 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def _run_perf_command(self, command: str, duration: int):
         """Execute performance collection command on device"""
         Log.info(f'Starting performance collection for {duration}s')
-        self.driver.shell(command, timeout=duration + 30)
-        Log.info('Performance collection completed')
+        result = self.driver.shell(command, timeout=duration + 30)
+        Log.info('Performance collection completed %s', result)
 
     def _save_performance_data(self, device_file: str, step_id: int):
         """Save performance and trace data to report directory"""
@@ -441,9 +443,14 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """Save process information to JSON file"""
         process_ids, process_names = self._get_app_pids()
         info_path = os.path.join(directory, 'pids.json')
+        maps = []
+        for pid in process_ids:
+            result = self.driver.shell(f'cat /proc/{pid}/maps')
+            maps.append(result.split('\n'))
+
         with open(info_path, 'w', encoding='utf-8') as file:
             json.dump(
-                {'pids': process_ids, 'process_names': process_names},
+                {'pids': process_ids, 'process_names': process_names, 'maps': maps},
                 file,
                 indent=4,
                 ensure_ascii=False
