@@ -67,6 +67,7 @@ module.exports = {
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
                 { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
+                { from: '../third-party/xvm', to: 'third-party/xvm' },
                 { from: '../third-party/report.html', to: 'res/hiperf_report_template.html' },
                 {
                     from: '../web/dist/index.html',
