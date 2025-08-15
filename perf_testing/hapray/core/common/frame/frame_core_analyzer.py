@@ -15,6 +15,8 @@ limitations under the License.
 
 import logging
 import os
+import sqlite3
+import time
 from typing import Dict, Any, List, Optional
 
 # 导入新的模块化组件
@@ -23,6 +25,7 @@ from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_da
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
+from .frame_time_utils import FrameTimeUtils
 
 # 设置环境变量
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -163,6 +166,115 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             result["error"] = str(e)
             return result
 
+    def analyze_frame_loads_fast(
+            self,
+            trace_db_path: str,
+            perf_db_path: str,
+            app_pids: list,
+            step_id: str = None
+    ) -> Dict[str, Any]:
+        """快速分析所有帧的负载值（不分析调用链）
+
+        这是FrameLoad阶段的优化版本，只计算负载值，不进行调用链分析
+
+        Args:
+            trace_db_path: trace数据库文件路径
+            perf_db_path: perf数据库文件路径
+            app_pids: 应用进程ID列表
+            step_id: 步骤ID
+
+        Returns:
+            Dict: 帧负载分析结果
+        """
+        start_time = time.time()
+        trace_conn = None
+        perf_conn = None
+        
+        try:
+            # 阶段1：数据库连接
+            db_connect_start = time.time()
+            trace_conn = sqlite3.connect(trace_db_path)
+            perf_conn = sqlite3.connect(perf_db_path)
+            db_connect_time = time.time() - db_connect_start
+            logging.info(f"[{step_id}] 数据库连接耗时: {db_connect_time:.3f}秒")
+
+            # 阶段2：数据预加载
+            preload_start = time.time()
+            if step_id:
+                # FrameCacheManager.preload_analyzer_data(
+                #     trace_conn, perf_conn, step_id, app_pids
+                # )  # 删除预加载以提升性能
+                FrameCacheManager.ensure_data_cached('frame_loads', trace_conn, perf_conn, step_id, app_pids)
+            preload_time = time.time() - preload_start
+            logging.info(f"[{step_id}] 数据预加载耗时: {preload_time:.3f}秒")
+
+            # 阶段3：获取数据
+            data_fetch_start = time.time()
+            trace_df = FrameCacheManager.get_frames_data(trace_conn, step_id, app_pids)
+            perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
+            data_fetch_time = time.time() - data_fetch_start
+            logging.info(f"[{step_id}] 数据获取耗时: {data_fetch_time:.3f}秒")
+            logging.info(f"[{step_id}] 帧数据量: {len(trace_df)}行, 性能数据量: {len(perf_df)}行")
+
+            if trace_df.empty:
+                logging.info("未找到帧数据")
+                return None
+
+            # 阶段4：快速计算帧负载
+            calc_start = time.time()
+            frame_loads = self.load_calculator.calculate_all_frame_loads_fast(trace_df, perf_df)
+            calc_time = time.time() - calc_start
+            logging.info(f"[{step_id}] 帧负载计算耗时: {calc_time:.3f}秒, 计算了{len(frame_loads)}个帧")
+
+            # 阶段5：保存到缓存
+            cache_save_start = time.time()
+            for frame_load in frame_loads:
+                if step_id:
+                    FrameCacheManager.add_frame_load(step_id, frame_load)
+            cache_save_time = time.time() - cache_save_start
+            logging.info(f"[{step_id}] 缓存保存耗时: {cache_save_time:.3f}秒")
+
+            # 阶段6：获取统计信息
+            stats_start = time.time()
+            statistics = FrameCacheManager.get_frame_load_statistics(step_id)
+            top_frames = FrameCacheManager.get_top_frame_loads(step_id, 10)
+            first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
+            stats_time = time.time() - stats_start
+            logging.info(f"[{step_id}] 统计信息获取耗时: {stats_time:.3f}秒")
+
+            # 阶段7：处理Top帧时间戳
+            process_start = time.time()
+            processed_top_frames = []
+            for frame in top_frames:
+                processed_frame = frame.copy()
+                processed_frame['ts'] = FrameTimeUtils.convert_to_relative_nanoseconds(
+                    frame.get('ts', 0), first_frame_time
+                )
+                processed_top_frames.append(processed_frame)
+            process_time = time.time() - process_start
+            logging.info(f"[{step_id}] Top帧处理耗时: {process_time:.3f}秒")
+
+            result = {
+                'statistics': statistics,
+                'top_frames': processed_top_frames,
+                'total_frames': len(frame_loads)
+            }
+
+            total_time = time.time() - start_time
+            logging.info(f"[{step_id}] 快速帧负载分析总耗时: {total_time:.3f}秒")
+            logging.info(f"[{step_id}] 各阶段耗时占比: 连接{db_connect_time/total_time*100:.1f}%, 预加载{preload_time/total_time*100:.1f}%, 获取{data_fetch_time/total_time*100:.1f}%, 计算{calc_time/total_time*100:.1f}%, 缓存{cache_save_time/total_time*100:.1f}%, 统计{stats_time/total_time*100:.1f}%, 处理{process_time/total_time*100:.1f}%")
+
+            return result
+
+        except Exception as e:
+            logging.error("快速帧负载分析失败: %s", str(e))
+            return None
+        finally:
+            if trace_conn:
+                trace_conn.close()
+            if perf_conn:
+                perf_conn.close()
+
     def clear_cache(self, step_id: str = None) -> None:
         """清除缓存数据
 
@@ -219,6 +331,8 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         Returns:
             tuple: (frame_load, sample_callchains)
         """
+        # 注意：这个方法实际上调用的是完整的分析，不是简单计算
+        # 为了保持向后兼容，保留此方法
         return self.load_calculator.analyze_single_frame(
             frame, perf_df, perf_conn, step_id
         )

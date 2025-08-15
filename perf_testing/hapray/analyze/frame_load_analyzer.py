@@ -59,48 +59,20 @@ class FrameLoadAnalyzer(BaseAnalyzer):
             return None
 
         try:
-            # 使用核心分析器进行帧负载分析
-            # 核心分析器负责所有数据库连接和数据处理
-            frame_loads_data = self.core_analyzer.analyze_comprehensive_frames(
+            # 使用优化的快速分析方法（不分析调用链）
+            logging.info("使用快速帧负载分析方法...")
+            result = self.core_analyzer.analyze_frame_loads_fast(
                 trace_db_path=trace_db_path,
                 perf_db_path=perf_db_path,
                 app_pids=app_pids,
                 step_id=step_dir
             )
 
-            if not frame_loads_data:
+            if not result:
                 logging.info("No frame load data found for step %s", step_dir)
                 return None
 
-            # 生成帧负载分析结果
-            logging.debug("Generating frame load analysis result...")
-
-            # 获取帧负载统计信息
-            statistics = FrameCacheManager.get_frame_load_statistics(step_dir)
-
-            # 获取Top帧数据
-            top_frames = FrameCacheManager.get_top_frame_loads(step_dir, self.top_frames_count)
-
-            # 获取第一帧时间戳用于相对时间计算
-            first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_dir)
-
-            # 将top_frames中的ts转换为相对时间戳，与卡顿帧、空刷帧保持一致
-            processed_top_frames = []
-            for frame in top_frames:
-                processed_frame = frame.copy()
-                # 将ts转换为相对时间戳
-                processed_frame['ts'] = FrameTimeUtils.convert_to_relative_nanoseconds(
-                    frame.get('ts', 0), first_frame_time
-                )
-                processed_top_frames.append(processed_frame)
-
-            # 构建最终结果 - 移除load_timeline字段，简化JSON结构
-            result = {
-                'statistics': statistics,
-                'top_frames': processed_top_frames,
-                'total_frames': len(FrameCacheManager.get_frame_loads(step_dir))
-            }
-
+            logging.debug("快速帧负载分析完成")
             return result
 
         except Exception as e:
