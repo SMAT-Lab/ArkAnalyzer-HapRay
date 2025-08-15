@@ -109,9 +109,9 @@ class StutteredFrameAnalyzer:
                     # 在分析开始前，确保所有需要的数据都已缓存
                     if step_id:
                         # 预加载analyzer需要的基础数据
-                        FrameCacheManager.preload_analyzer_data(
-                            conn, perf_conn, step_id
-                        )
+                        # FrameCacheManager.preload_analyzer_data(
+                        #     conn, perf_conn, step_id
+                        # )  # 删除预加载以提升性能
                         # logging.info("预加载数据结果: %s", preload_result)
 
                         # 确保帧负载数据缓存已初始化

@@ -441,3 +441,39 @@ class FrameDbAdvancedAccessor:
         except Exception as e:
             logging.error("获取线程性能分析数据失败: %s", str(e))
             return pd.DataFrame()
+
+    @staticmethod
+    def get_total_load_for_pids(perf_conn, app_pids: List[int]) -> int:
+        """获取指定进程的总负载
+
+        Args:
+            perf_conn: perf数据库连接
+            app_pids: 应用进程ID列表
+
+        Returns:
+            int: 总负载值
+        """
+        # 验证app_pids参数
+        if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
+            logging.warning("app_pids参数无效，返回0")
+            return 0
+
+        # 过滤掉无效的PID值
+        valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
+        if not valid_pids:
+            logging.warning("没有有效的PID值，返回0")
+            return 0
+
+        query = """
+            SELECT SUM(event_count) as total_load
+            FROM perf_sample
+            WHERE thread_id IN ({})
+        """.format(','.join('?' * len(valid_pids)))
+
+        try:
+            result = perf_conn.execute(query, valid_pids).fetchone()
+            total_load = result[0] if result and result[0] else 0
+            return int(total_load)
+        except Exception as e:
+            logging.error("获取总负载失败: %s", str(e))
+            return 0
