@@ -515,7 +515,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         const UNKNOWN = { domain: '其他', subSystem: '其他', component: '其他', isMainApp: false };
         const MAINAPP = { domain: '主应用', subSystem: '主应用', component: '主应用', isMainApp: true };
 
-        if (processName === undefined) {
+        if (processName === undefined || processName === null) {
             return UNKNOWN;
         }
 
