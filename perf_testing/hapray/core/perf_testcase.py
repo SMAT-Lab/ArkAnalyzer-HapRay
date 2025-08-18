@@ -27,6 +27,7 @@ from xdevice import platform_logger
 
 from hapray.core.config.config import Config
 from hapray.core.ui_event_wrapper import UIEventWrapper
+from hapray.core.xvm import XVM
 
 Log = platform_logger("PerfTestCase")
 
@@ -137,6 +138,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self.uitree = UiTree(self.driver)
         self.bundle_info = None
         self.module_name = None
+        self.xvm = XVM(self)
 
     @property
     def steps(self) -> list:
@@ -202,7 +204,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             duration,
             sample_all_processes
         )
-
+        self.xvm.start_trace(duration)
         collection_thread = threading.Thread(
             target=self._run_perf_command,
             args=(cmd, duration)
@@ -211,8 +213,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         try:
             # Execute the test action while data collection runs
             action(*args)
-        finally:
-            collection_thread.join()
+        except Exception as e:
+            Log.error(f'execute performance action err {e}')
+
+        collection_thread.join()
 
         # dump view tree when end test step
         try:
@@ -220,6 +224,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         finally:
             self._collect_coverage_data(perf_step_dir)
             self._save_performance_data(output_file, step_id)
+            self.xvm.stop_trace(perf_step_dir)
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
@@ -339,8 +344,8 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def _run_perf_command(self, command: str, duration: int):
         """Execute performance collection command on device"""
         Log.info(f'Starting performance collection for {duration}s')
-        self.driver.shell(command, timeout=duration + 30)
-        Log.info('Performance collection completed')
+        result = self.driver.shell(command, timeout=duration + 30)
+        Log.info('Performance collection completed %s', result)
 
     def _save_performance_data(self, device_file: str, step_id: int):
         """Save performance and trace data to report directory"""
@@ -413,6 +418,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         except (json.JSONDecodeError, IndexError, KeyError):
             return "Unknown"
 
+    def get_app_process_id(self) -> int:
+        result = self.driver.shell(f'pidof {self.app_package}')
+        return int(result.strip())
+
     def _get_app_pids(self) -> tuple[list[int], list[str]]:
         """Get all PIDs and process names associated with the application"""
         cmd = f"ps -ef | grep {self.app_package}"
@@ -441,9 +450,14 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """Save process information to JSON file"""
         process_ids, process_names = self._get_app_pids()
         info_path = os.path.join(directory, 'pids.json')
+        maps = []
+        for pid in process_ids:
+            result = self.driver.shell(f'cat /proc/{pid}/maps')
+            maps.append(result.split('\n'))
+
         with open(info_path, 'w', encoding='utf-8') as file:
             json.dump(
-                {'pids': process_ids, 'process_names': process_names},
+                {'pids': process_ids, 'process_names': process_names, 'maps': maps},
                 file,
                 indent=4,
                 ensure_ascii=False
@@ -454,18 +468,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         for path in paths:
             os.makedirs(path, exist_ok=True)
 
-    def _verify_remote_files_exist(self, device_file: str) -> bool:
-        """Verify required files exist on device"""
-        perf_result = self.driver.shell(f"ls -l {device_file}")
-        if "No such file" in perf_result:
-            Log.error(f"Performance data missing: {device_file}")
-            return False
-
-        return True
-
     def _transfer_perf_data(self, remote_path: str, local_path: str):
         """Transfer performance data from device to host"""
-        if not self._verify_remote_files_exist(remote_path):
+        if not self.driver.has_file(remote_path):
             Log.error("Not found %s", remote_path)
             return
         self.driver.shell(f"hiperf report -i {remote_path} --json -o {remote_path}.json")
@@ -481,7 +486,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         if not Config.get('trace.enable'):
             return
 
-        if not self._verify_remote_files_exist(f"{remote_path}.htrace"):
+        if not self.driver.has_file(f"{remote_path}.htrace"):
             return
 
         self.driver.pull_file(f"{remote_path}.htrace", local_path)
@@ -494,7 +499,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         if not self._redundant_mode_status:
             return
         remote_path = f'data/app/el2/100/base/{self.app_package}/files/{self.app_package}_redundant_file.txt'
-        if not self._verify_remote_files_exist(remote_path):
+        if not self.driver.has_file(remote_path):
             return
         local_path = os.path.join(trace_step_dir, 'redundant_file.txt')
         self.driver.pull_file(remote_path, local_path)

@@ -6,3 +6,7 @@ run_testcases:
 #  - .*_zhifubao_.*
 #  - .*_Douyin_.*
 #  - ResourceUsage_PerformanceDynamic_taobao_9999
+
+cov:
+  # HAP project path
+  hapProjectPath: 'D:/code/master/agent'
