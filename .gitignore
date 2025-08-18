@@ -10,6 +10,7 @@ package-lock.json
 web/dist/
 toolbox/hapray-toolbox*.zip
 *.tgz
+*.zip
 build
 dist
 
