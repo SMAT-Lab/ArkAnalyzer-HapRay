@@ -18,12 +18,13 @@ import sqlite3
 import traceback
 from typing import Dict, Any, List, Optional
 
-# import pandas as pd  # 未使用
-
+from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import parse_frame_slice_db, get_frame_type
-from .frame_core_cache_manager import FrameCacheManager
 from .frame_time_utils import FrameTimeUtils
+
+
+# import pandas as pd  # 未使用
 
 
 class StutteredFrameAnalyzer:
@@ -109,9 +110,9 @@ class StutteredFrameAnalyzer:
                     # 在分析开始前，确保所有需要的数据都已缓存
                     if step_id:
                         # 预加载analyzer需要的基础数据
-                        FrameCacheManager.preload_analyzer_data(
-                            conn, perf_conn, step_id
-                        )
+                        # FrameCacheManager.preload_analyzer_data(
+                        #     conn, perf_conn, step_id
+                        # )  # 删除预加载以提升性能
                         # logging.info("预加载数据结果: %s", preload_result)
 
                         # 确保帧负载数据缓存已初始化
@@ -259,10 +260,10 @@ class StutteredFrameAnalyzer:
                     stats["fps_stats"]["low_fps_window_count"] += 1
 
                 # 计算相对于第一帧的时间（纳秒）
-                start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"],
-                                                                              first_frame_time)
-                end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"],
-                                                                            first_frame_time)
+                start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
+                    current_window["start_time"], first_frame_time)
+                end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
+                    current_window["end_time"], first_frame_time)
 
                 fps_windows.append({
                     "start_time": start_offset,
