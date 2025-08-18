@@ -157,7 +157,7 @@ class FrameLoadCalculator:
                     "缓存检查%.6f秒, 键生成%.6f秒, "
                     "缓存验证%.6f秒, 记录查找%.6f秒, "
                     "构建%.6f秒, 文件查找%.6f秒",
-                    step_id, cache_check_time, key_time, cache_validate_time, 
+                    step_id, cache_check_time, key_time, cache_validate_time,
                     callchain_lookup_time, build_time, file_lookup_total)
 
             # logging.info("构建的调用链信息: 长度=%s", len(callchain_info))

@@ -34,7 +34,8 @@ class CovAnalyzer(BaseAnalyzer):
         cov_file = os.path.join(os.path.dirname(perf_db_path), 'bjc_cov.json')
         if not os.path.exists(cov_file):
             return None
-        args = ['bjc', '-i', cov_file, '-o', os.path.dirname(perf_db_path), '--project-path', Config.get('cov.hapProjectPath', '')]
+        args = ['bjc', '-i', cov_file, '-o', os.path.dirname(perf_db_path), '--project-path',
+                Config.get('cov.hapProjectPath', '')]
         logging.debug("Running cov analysis with command: %s", ' '.join(args))
         ExeUtils.execute_hapray_cmd(args)
         return None
