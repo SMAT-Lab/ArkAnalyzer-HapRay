@@ -35,6 +35,7 @@ ANALYZER_CLASSES = [
     'ColdStartAnalyzer',
     'GCAnalyzer',
     'FaultTreeAnalyzer',
+    'CovAnalyzer',
     # Add more analyzers here
 ]
 
