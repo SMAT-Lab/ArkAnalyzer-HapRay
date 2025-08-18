@@ -18,8 +18,9 @@ import logging
 from typing import List, Dict
 
 import pandas as pd
-from .frame_data_basic_accessor import FrameDbBasicAccessor
+
 from .frame_data_advanced_accessor import FrameDbAdvancedAccessor
+from .frame_data_basic_accessor import FrameDbBasicAccessor
 
 
 class FrameCacheManager:  # pylint: disable=too-many-public-methods

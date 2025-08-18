@@ -19,3 +19,4 @@ function unzipFile(zipFile, output) {
 
 unzipFile('trace_streamer_binary.zip', 'trace_streamer_binary');
 unzipFile('HiSmartPerf_20250109.zip', 'HiSmartPerf_20250109');
+unzipFile('xvm.zip', 'xvm')
