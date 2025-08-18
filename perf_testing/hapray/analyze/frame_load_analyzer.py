@@ -16,12 +16,12 @@ limitations under the License.
 import logging
 import os
 from typing import Dict, Any, Optional
-# import pandas as pd  # 未使用
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.frame.frame_core_analyzer import FrameAnalyzerCore
-from hapray.core.common.frame.frame_core_cache_manager import FrameCacheManager
-from hapray.core.common.frame.frame_time_utils import FrameTimeUtils
+
+
+# import pandas as pd  # 未使用
 
 
 class FrameLoadAnalyzer(BaseAnalyzer):

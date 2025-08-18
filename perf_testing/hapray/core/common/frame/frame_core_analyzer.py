@@ -19,12 +19,12 @@ import sqlite3
 import time
 from typing import Dict, Any, List, Optional
 
-# 导入新的模块化组件
-from .frame_core_load_calculator import FrameLoadCalculator
-from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_database_compatibility
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
+# 导入新的模块化组件
+from .frame_core_load_calculator import FrameLoadCalculator
+from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_database_compatibility
 from .frame_time_utils import FrameTimeUtils
 
 # 设置环境变量
@@ -189,14 +189,14 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         start_time = time.time()
         trace_conn = None
         perf_conn = None
-        
+
         try:
             # 阶段1：数据库连接
             db_connect_start = time.time()
             trace_conn = sqlite3.connect(trace_db_path)
             perf_conn = sqlite3.connect(perf_db_path)
             db_connect_time = time.time() - db_connect_start
-            logging.info(f"[{step_id}] 数据库连接耗时: {db_connect_time:.3f}秒")
+            logging.info("[%s] 数据库连接耗时: %.3f秒", step_id, db_connect_time)
 
             # 阶段2：数据预加载
             preload_start = time.time()
@@ -206,15 +206,15 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 # )  # 删除预加载以提升性能
                 FrameCacheManager.ensure_data_cached('frame_loads', trace_conn, perf_conn, step_id, app_pids)
             preload_time = time.time() - preload_start
-            logging.info(f"[{step_id}] 数据预加载耗时: {preload_time:.3f}秒")
+            logging.info("[%s] 数据预加载耗时: %.3f秒", step_id, preload_time)
 
             # 阶段3：获取数据
             data_fetch_start = time.time()
             trace_df = FrameCacheManager.get_frames_data(trace_conn, step_id, app_pids)
             perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
             data_fetch_time = time.time() - data_fetch_start
-            logging.info(f"[{step_id}] 数据获取耗时: {data_fetch_time:.3f}秒")
-            logging.info(f"[{step_id}] 帧数据量: {len(trace_df)}行, 性能数据量: {len(perf_df)}行")
+            logging.info("[%s] 数据获取耗时: %.3f秒", step_id, data_fetch_time)
+            logging.info("[%s] 帧数据量: %d行, 性能数据量: %d行", step_id, len(trace_df), len(perf_df))
 
             if trace_df.empty:
                 logging.info("未找到帧数据")
@@ -224,7 +224,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             calc_start = time.time()
             frame_loads = self.load_calculator.calculate_all_frame_loads_fast(trace_df, perf_df)
             calc_time = time.time() - calc_start
-            logging.info(f"[{step_id}] 帧负载计算耗时: {calc_time:.3f}秒, 计算了{len(frame_loads)}个帧")
+            logging.info("[%s] 帧负载计算耗时: %.3f秒, 计算了%d个帧", step_id, calc_time, len(frame_loads))
 
             # 阶段5：保存到缓存
             cache_save_start = time.time()
@@ -232,7 +232,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 if step_id:
                     FrameCacheManager.add_frame_load(step_id, frame_load)
             cache_save_time = time.time() - cache_save_start
-            logging.info(f"[{step_id}] 缓存保存耗时: {cache_save_time:.3f}秒")
+            logging.info("[%s] 缓存保存耗时: %.3f秒", step_id, cache_save_time)
 
             # 阶段6：获取统计信息
             stats_start = time.time()
@@ -240,7 +240,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             top_frames = FrameCacheManager.get_top_frame_loads(step_id, 10)
             first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
             stats_time = time.time() - stats_start
-            logging.info(f"[{step_id}] 统计信息获取耗时: {stats_time:.3f}秒")
+            logging.info("[%s] 统计信息获取耗时: %.3f秒", step_id, stats_time)
 
             # 阶段7：处理Top帧时间戳
             process_start = time.time()
@@ -252,7 +252,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 )
                 processed_top_frames.append(processed_frame)
             process_time = time.time() - process_start
-            logging.info(f"[{step_id}] Top帧处理耗时: {process_time:.3f}秒")
+            logging.info("[%s] Top帧处理耗时: %.3f秒", step_id, process_time)
 
             result = {
                 'statistics': statistics,
@@ -261,8 +261,24 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             }
 
             total_time = time.time() - start_time
-            logging.info(f"[{step_id}] 快速帧负载分析总耗时: {total_time:.3f}秒")
-            logging.info(f"[{step_id}] 各阶段耗时占比: 连接{db_connect_time/total_time*100:.1f}%, 预加载{preload_time/total_time*100:.1f}%, 获取{data_fetch_time/total_time*100:.1f}%, 计算{calc_time/total_time*100:.1f}%, 缓存{cache_save_time/total_time*100:.1f}%, 统计{stats_time/total_time*100:.1f}%, 处理{process_time/total_time*100:.1f}%")
+            logging.info("[%s] 快速帧负载分析总耗时: %.3f秒", step_id, total_time)
+            logging.info(
+                "[%s] 各阶段耗时占比: "
+                "连接%.1f%%, "
+                "预加载%.1f%%, "
+                "获取%.1f%%, "
+                "计算%.1f%%, "
+                "缓存%.1f%%, "
+                "统计%.1f%%, "
+                "处理%.1f%%",
+                step_id,
+                db_connect_time / total_time * 100,
+                preload_time / total_time * 100,
+                data_fetch_time / total_time * 100,
+                calc_time / total_time * 100,
+                cache_save_time / total_time * 100,
+                stats_time / total_time * 100,
+                process_time / total_time * 100)
 
             return result
 
