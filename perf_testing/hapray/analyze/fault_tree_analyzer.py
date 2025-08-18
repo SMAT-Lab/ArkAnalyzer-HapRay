@@ -14,7 +14,7 @@ limitations under the License.
 """
 import re
 import sqlite3
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 
@@ -45,7 +45,16 @@ class FaultTreeAnalyzer(BaseAnalyzer):
                 "AnimateSize": {"nodeSizeSum": 0, "totalAnimationSizeSum": 0}  # RS动画节点数
             },
             "av_codec": {
-                "soft_decoder": False
+                "soft_decoder": False,
+                "BroadcastControlInstructions": 0,  # 播控框架指令数
+                "VideoDecodingInputFrameCount": 0,  # 视频解码输入帧
+                "VideoDecodingConsumptionFrame": 0  # 视频解码消费帧
+            },
+            "Audio": {  # 计算音频线程-应用读写数据的指令数
+                "AudioWriteCB": 0,  # 1、应用进程的OS_AudioWriteCB线程指令数 - RendererInClientInner::OnWriteData函数指令数
+                "AudioReadCB": 0,  # 2、应用进程的OS_AudioReadCB线程指令数 - CapturerInClientInner::OnReadData函数指令数
+                "AudioPlayCb": 0,  # 3、应用进程的OS_AudioPlayCb线程指令数 - AudioProcessInClient::CallClientHandleCurrent函数指令数
+                "AudioRecCb": 0  # 4、应用进程的OS_AudioRecCb线程指令数 - AudioProcessInClient::CallClientHandleCurrent函数指令数
             }
         }
 
@@ -70,6 +79,21 @@ class FaultTreeAnalyzer(BaseAnalyzer):
                 result['RS']['AnimateSize'] = self._collect_rs_animate_nodes(cursor)
 
                 result['av_codec']['soft_decoder'] = self._collect_av_codec_soft_decoder(cursor)
+                result['av_codec']['BroadcastControlInstructions'] = (
+                    self._collect_broadcast_control_instructions(cursor)
+                )
+                result['av_codec']['VideoDecodingInputFrameCount'] = (
+                    self._collect_video_decoding_input_frames(cursor)
+                )
+                result['av_codec']['VideoDecodingConsumptionFrame'] = (
+                    self._collect_video_decoding_consumption_frames(cursor)
+                )
+
+                # 音频分析
+                result['Audio']['AudioWriteCB'] = self._collect_audio_write_cb_instructions(cursor)
+                result['Audio']['AudioReadCB'] = self._collect_audio_read_cb_instructions(cursor)
+                result['Audio']['AudioPlayCb'] = self._collect_audio_play_cb_instructions(cursor)
+                result['Audio']['AudioRecCb'] = self._collect_audio_rec_cb_instructions(cursor)
 
         except sqlite3.Error as e:
             self.logger.error("FaultTreeAnalyzer _analyze_impl Database error: %s", str(e))
@@ -178,3 +202,201 @@ class FaultTreeAnalyzer(BaseAnalyzer):
         except sqlite3.Error as e:
             self.logger.error("FaultTreeAnalyzer av_codec Database error: %s", str(e))
         return False
+
+    def _collect_broadcast_control_instructions(self, cursor) -> int:
+        """
+        4.2 播控框架指令数高
+        统计 av_session 进程中 OS_AVSessionHdl 线程的性能采样事件数
+        """
+        try:
+            cursor.execute("""
+                SELECT sum(event_count)
+                FROM perf_sample
+                WHERE callchain_id IN (
+                    SELECT id
+                    FROM thread
+                    WHERE ipid IN (
+                        SELECT ipid
+                        FROM process
+                        WHERE name LIKE '%av_session%'
+                    )
+                    AND name LIKE '%OS_AVSessionHdl%'
+                )
+            """)
+            rows = cursor.fetchall()
+            result = rows[0][0] if rows and rows[0][0] is not None else 0
+            self.logger.debug("Broadcast control instructions count: %d", result)
+            return result
+        except sqlite3.Error as e:
+            self.logger.error("FaultTreeAnalyzer broadcast_control Database error: %s", str(e))
+            return 0
+
+    def _collect_video_decoding_input_frames(self, cursor) -> int:
+        """
+        4.3 视频解码输入帧
+        统计 av_codec_service 进程中 OnQueueInputBuffer 调用次数
+        """
+        try:
+            cursor.execute("""
+                SELECT count(name)
+                FROM callstack
+                WHERE name LIKE '%OnQueueInputBuffer%'
+                AND callid IN (
+                    SELECT id FROM thread
+                    WHERE ipid IN (
+                        SELECT ipid FROM process
+                        WHERE name LIKE 'av_codec_servic%'
+                    )
+                )
+            """)
+            rows = cursor.fetchall()
+            result = rows[0][0] if rows and rows[0][0] is not None else 0
+            self.logger.debug("Video decoding input frames count: %d", result)
+            return result
+        except sqlite3.Error as e:
+            self.logger.error("FaultTreeAnalyzer video_input_frames Database error: %s", str(e))
+            return 0
+
+    def _collect_video_decoding_consumption_frames(self, cursor) -> int:
+        """
+        4.4 视频解码消费帧
+        统计 av_codec_service 进程中 OnRenderOutputBuffer 和 OnReleaseOutputBuffer 调用次数
+        """
+        try:
+            cursor.execute("""
+                SELECT count(name)
+                FROM callstack
+                WHERE (name LIKE '%OnRenderOutputBuffer%' OR name LIKE '%OnReleaseOutputBuffer%')
+                AND callid IN (
+                    SELECT id FROM thread
+                    WHERE ipid IN (
+                        SELECT ipid FROM process
+                        WHERE name LIKE 'av_codec_servic%'
+                    )
+                )
+            """)
+            rows = cursor.fetchall()
+            result = rows[0][0] if rows and rows[0][0] is not None else 0
+            self.logger.debug("Video decoding consumption frames count: %d", result)
+            return result
+        except sqlite3.Error as e:
+            self.logger.error("FaultTreeAnalyzer video_consumption_frames Database error: %s", str(e))
+            return 0
+
+    # ==================== 公共方法 ====================
+
+    def _collect_thread_event_count(self, cursor, thread_name_pattern: str, description: str = "") -> int:
+        """
+        通用方法：根据线程名模式统计性能采样事件数
+
+        Args:
+            cursor: 数据库游标
+            thread_name_pattern: 线程名匹配模式
+            description: 描述信息，用于日志
+
+        Returns:
+            int: 事件总数
+        """
+        try:
+            cursor.execute("""
+                SELECT sum(event_count)
+                FROM perf_sample
+                WHERE callchain_id IN (
+                    SELECT id
+                    FROM thread
+                    WHERE name LIKE ?
+                )
+            """, (thread_name_pattern,))
+
+            rows = cursor.fetchall()
+            result = rows[0][0] if rows and rows[0][0] is not None else 0
+            self.logger.debug("%s thread event count: %d", description or thread_name_pattern, result)
+            return result
+        except sqlite3.Error as e:
+            self.logger.error("FaultTreeAnalyzer thread_event_count Database error: %s", str(e))
+            return 0
+
+    def _collect_function_event_count(self, cursor, function_name_pattern: str, description: str = "") -> int:
+        """
+        通用方法：根据函数名模式统计性能采样事件数
+
+        Args:
+            cursor: 数据库游标
+            function_name_pattern: 函数名匹配模式
+            description: 描述信息，用于日志
+
+        Returns:
+            int: 事件总数
+        """
+        try:
+            cursor.execute("""
+                SELECT count(event_count)
+                FROM perf_sample
+                WHERE callchain_id IN (
+                    SELECT callchain_id
+                    FROM perf_callchain cc
+                    JOIN data_dict dd ON cc.name = dd.id
+                    WHERE dd.data LIKE ?
+                )
+            """, (function_name_pattern,))
+
+            rows = cursor.fetchall()
+            result = rows[0][0] if rows and rows[0][0] is not None else 0
+            self.logger.debug("%s function event count: %d", description or function_name_pattern, result)
+            return result
+        except sqlite3.Error as e:
+            self.logger.error("FaultTreeAnalyzer function_event_count Database error: %s", str(e))
+            return 0
+
+    # ==================== 音频分析方法 ====================
+
+    def _collect_audio_write_cb_instructions(self, cursor) -> int:
+        """
+        1、应用进程的OS_AudioWriteCB线程指令数 - RendererInClientInner::OnWriteData函数指令数
+        """
+        thread_count = self._collect_thread_event_count(cursor, '%OS_AudioWriteCB%', 'AudioWriteCB thread')
+        function_count = self._collect_function_event_count(
+            cursor, '%RendererInClientInner::OnWriteData%', 'RendererInClientInner::OnWriteData function'
+        )
+
+        # 返回线程事件数，函数事件数作为补充信息记录在日志中
+        self.logger.debug("AudioWriteCB - Thread events: %d, Function events: %d", thread_count, function_count)
+        return thread_count
+
+    def _collect_audio_read_cb_instructions(self, cursor) -> int:
+        """
+        2、应用进程的OS_AudioReadCB线程指令数 - CapturerInClientInner::OnReadData函数指令数
+        """
+        thread_count = self._collect_thread_event_count(cursor, '%OS_AudioReadCB%', 'AudioReadCB thread')
+        function_count = self._collect_function_event_count(
+            cursor, '%CapturerInClientInner::OnReadData%', 'CapturerInClientInner::OnReadData function'
+        )
+
+        self.logger.debug("AudioReadCB - Thread events: %d, Function events: %d", thread_count, function_count)
+        return thread_count
+
+    def _collect_audio_play_cb_instructions(self, cursor) -> int:
+        """
+        3、应用进程的OS_AudioPlayCb线程指令数 - AudioProcessInClient::CallClientHandleCurrent函数指令数
+        """
+        thread_count = self._collect_thread_event_count(cursor, '%OS_AudioPlayCb%', 'AudioPlayCb thread')
+        function_count = self._collect_function_event_count(
+            cursor, '%AudioProcessInClient::CallClientHandleCurrent%',
+            'AudioProcessInClient::CallClientHandleCurrent function'
+        )
+
+        self.logger.debug("AudioPlayCb - Thread events: %d, Function events: %d", thread_count, function_count)
+        return thread_count
+
+    def _collect_audio_rec_cb_instructions(self, cursor) -> int:
+        """
+        4、应用进程的OS_AudioRecCb线程指令数 - AudioProcessInClient::CallClientHandleCurrent函数指令数
+        """
+        thread_count = self._collect_thread_event_count(cursor, '%OS_AudioRecCb%', 'AudioRecCb thread')
+        function_count = self._collect_function_event_count(
+            cursor, '%AudioProcessInClient::CallClientHandleCurrent%',
+            'AudioProcessInClient::CallClientHandleCurrent function'
+        )
+
+        self.logger.debug("AudioRecCb - Thread events: %d, Function events: %d", thread_count, function_count)
+        return thread_count
