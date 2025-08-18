@@ -400,7 +400,7 @@ class FrameDbAdvancedAccessor:
             logging.warning("没有有效的PID值，返回空DataFrame")
             return pd.DataFrame()
 
-        query = f"""
+        query = """
         WITH thread_frames AS (
             SELECT
                 t.tid, t.name as thread_name, t.is_main_thread,
@@ -464,11 +464,11 @@ class FrameDbAdvancedAccessor:
             logging.warning("没有有效的PID值，返回0")
             return 0
 
-        query = """
+        query = f"""
             SELECT SUM(event_count) as total_load
             FROM perf_sample
-            WHERE thread_id IN ({})
-        """.format(','.join('?' * len(valid_pids)))
+            WHERE thread_id IN ({','.join('?' * len(valid_pids))})
+        """
 
         try:
             result = perf_conn.execute(query, valid_pids).fetchone()

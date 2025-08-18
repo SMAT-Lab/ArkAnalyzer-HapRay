@@ -63,9 +63,8 @@ class FrameLoadCalculator:
         Returns:
             List[Dict]: 调用链信息列表，每个元素包含symbol和path信息
         """
-        import time
         callchain_start_time = time.time()
-        
+
         try:
             # 如果没有缓存，先获取缓存
             cache_check_start = time.time()
@@ -107,14 +106,18 @@ class FrameLoadCalculator:
                 # logging.info("未找到callchain_id=%s的记录", callchain_id)
                 total_time = time.time() - callchain_start_time
                 if total_time > 0.01:  # 只记录耗时超过0.01秒的调用链分析
-                    logging.debug(f"[{step_id}] 调用链分析耗时: {total_time:.6f}秒 (无记录), 缓存检查{cache_check_time:.6f}秒, 键生成{key_time:.6f}秒, 缓存验证{cache_validate_time:.6f}秒, 记录查找{callchain_lookup_time:.6f}秒")
+                    logging.debug(
+                        "[%s] 调用链分析耗时: %.6f秒 (无记录), "
+                        "缓存检查%.6f秒, 键生成%.6f秒, "
+                        "缓存验证%.6f秒, 记录查找%.6f秒",
+                        step_id, total_time, cache_check_time, key_time, cache_validate_time, callchain_lookup_time)
                 return []
 
             # 构建调用链信息
             build_start = time.time()
             callchain_info = []
             file_lookup_total = 0
-            
+
             for _, record in callchain_records.iterrows():
                 # 从缓存中获取文件信息
                 file_start = time.time()
@@ -142,11 +145,20 @@ class FrameLoadCalculator:
 
             # 总耗时统计
             total_time = time.time() - callchain_start_time
-            
+
             # 只记录耗时较长的调用链分析（超过0.01秒）
             if total_time > 0.01:
-                logging.debug(f"[{step_id}] 调用链分析耗时: {total_time:.6f}秒, callchain_id: {callchain_id}, 记录数: {len(callchain_records)}")
-                logging.debug(f"[{step_id}] 各阶段耗时: 缓存检查{cache_check_time:.6f}秒, 键生成{key_time:.6f}秒, 缓存验证{cache_validate_time:.6f}秒, 记录查找{callchain_lookup_time:.6f}秒, 构建{build_time:.6f}秒, 文件查找{file_lookup_total:.6f}秒")
+                logging.debug(
+                    "[%s] 调用链分析耗时: %.6f秒, "
+                    "callchain_id: %s, 记录数: %d",
+                    step_id, total_time, callchain_id, len(callchain_records))
+                logging.debug(
+                    "[%s] 各阶段耗时: "
+                    "缓存检查%.6f秒, 键生成%.6f秒, "
+                    "缓存验证%.6f秒, 记录查找%.6f秒, "
+                    "构建%.6f秒, 文件查找%.6f秒",
+                    step_id, cache_check_time, key_time, cache_validate_time, 
+                    callchain_lookup_time, build_time, file_lookup_total)
 
             # logging.info("构建的调用链信息: 长度=%s", len(callchain_info))
             return callchain_info
@@ -160,15 +172,14 @@ class FrameLoadCalculator:
 
         这是从原始FrameAnalyzer.analyze_single_frame方法迁移的代码
         """
-        import time
         frame_start_time = time.time()
-        
+
         # 在函数内部获取缓存
         cache_start = time.time()
         callchain_cache = FrameCacheManager.get_callchain_cache(perf_conn, step_id)
         files_cache = FrameCacheManager.get_files_cache(perf_conn, step_id)
         cache_time = time.time() - cache_start
-        
+
         frame_load = 0
         sample_callchains = []
 
@@ -193,7 +204,10 @@ class FrameLoadCalculator:
             #              frame.get('ts'), frame_start_time_ts, frame_end_time_ts, frame.get('tid'))
             total_time = time.time() - frame_start_time
             if total_time > 0.1:  # 只记录耗时超过0.1秒的帧
-                logging.debug(f"[{step_id}] 空帧分析耗时: {total_time:.6f}秒 (无样本), 缓存{cache_time:.6f}秒, 时间计算{time_calc_time:.6f}秒, 过滤{filter_time:.6f}秒")
+                logging.debug(
+                    "[%s] 空帧分析耗时: %.6f秒 (无样本), "
+                    "缓存%.6f秒, 时间计算%.6f秒, 过滤%.6f秒",
+                    step_id, total_time, cache_time, time_calc_time, filter_time)
             return frame_load, sample_callchains
 
         # logging.info("analyze_single_frame: 找到样本, ts=%s, 时间窗口=[%s, %s], tid=%s, 样本数=%s",
@@ -204,7 +218,7 @@ class FrameLoadCalculator:
         callchain_analysis_total = 0
         vsync_filter_total = 0
         sample_count = 0
-        
+
         for _, sample in frame_samples.iterrows():
             sample_count += 1
             if not pd.notna(sample['callchain_id']):
@@ -288,12 +302,21 @@ class FrameLoadCalculator:
 
         # 总耗时统计
         total_time = time.time() - frame_start_time
-        
+
         # 只记录耗时较长的帧分析（超过0.1秒）
         if total_time > 0.1:
-            logging.debug(f"[{step_id}] 单帧分析耗时: {total_time:.6f}秒, 样本数: {len(frame_samples)}, 有效样本: {sample_count}")
-            logging.debug(f"[{step_id}] 各阶段耗时: 缓存获取{cache_time:.6f}秒, 时间计算{time_calc_time:.6f}秒, 数据过滤{filter_time:.6f}秒, 样本分析{sample_analysis_time:.6f}秒, 缓存保存{cache_save_time:.6f}秒")
-            logging.debug(f"[{step_id}] 样本分析详情: 调用链分析{callchain_analysis_total:.6f}秒, VSync过滤{vsync_filter_total:.6f}秒")
+            logging.debug(
+                "[%s] 单帧分析耗时: %.6f秒, 样本数: %d, 有效样本: %d",
+                step_id, total_time, len(frame_samples), sample_count)
+            logging.debug(
+                "[%s] 各阶段耗时: "
+                "缓存获取%.6f秒, 时间计算%.6f秒, "
+                "数据过滤%.6f秒, 样本分析%.6f秒, "
+                "缓存保存%.6f秒",
+                step_id, cache_time, time_calc_time, filter_time, sample_analysis_time, cache_save_time)
+            logging.debug(
+                "[%s] 样本分析详情: 调用链分析%.6f秒, VSync过滤%.6f秒",
+                step_id, callchain_analysis_total, vsync_filter_total)
 
         return frame_load, sample_callchains
 
@@ -463,12 +486,12 @@ class FrameLoadCalculator:
         """
         start_time = time.time()
         frame_loads = []
-        
+
         # 记录数据量
         total_frames = len(frames)
         total_perf_samples = len(perf_df)
-        logging.info(f"开始快速计算帧负载: 帧数={total_frames}, 性能样本数={total_perf_samples}")
-        
+        logging.info("开始快速计算帧负载: 帧数=%d, 性能样本数=%d", total_frames, total_perf_samples)
+
         # 批量计算开始
         calc_start = time.time()
         for i, (_, frame) in enumerate(frames.iterrows()):
@@ -476,11 +499,12 @@ class FrameLoadCalculator:
             if i % 1000 == 0 and i > 0:
                 elapsed = time.time() - calc_start
                 rate = i / elapsed if elapsed > 0 else 0
-                logging.info(f"帧负载计算进度: {i}/{total_frames} ({i/total_frames*100:.1f}%), 速率: {rate:.1f}帧/秒")
-            
+                logging.info(
+                    "帧负载计算进度: %d/%d (%.1f%%), 速率: %.1f帧/秒", i, total_frames, i / total_frames * 100, rate)
+
             # 使用现有的简单方法，只计算负载值
             frame_load = self.calculate_frame_load_simple(frame, perf_df)
-            
+
             # 确保时间戳字段正确
             frame_loads.append({
                 'ts': int(frame['ts']),  # 确保时间戳是整数
@@ -495,10 +519,10 @@ class FrameLoadCalculator:
                 'is_main_thread': int(frame.get('is_main_thread', 0)),  # 确保主线程标志是整数
                 'sample_callchains': []  # 空列表，不保存调用链
             })
-        
+
         calc_time = time.time() - calc_start
         total_time = time.time() - start_time
-        
+
         # 计算统计信息
         if frame_loads:
             loads = [f['frame_load'] for f in frame_loads]
@@ -507,10 +531,10 @@ class FrameLoadCalculator:
             processing_rate = total_frames / calc_time if calc_time > 0 else 0
         else:
             avg_load = max_load = processing_rate = 0
-        
-        logging.info(f"快速帧负载计算完成: 总耗时={total_time:.3f}秒, 计算耗时={calc_time:.3f}秒")
-        logging.info(f"计算结果: 平均负载={avg_load:.1f}, 最大负载={max_load}, 处理速率={processing_rate:.1f}帧/秒")
-        
+
+        logging.info("快速帧负载计算完成: 总耗时=%.3f秒, 计算耗时=%.3f秒", total_time, calc_time)
+        logging.info("计算结果: 平均负载=%.1f, 最大负载=%d, 处理速率=%.1f帧/秒", avg_load, max_load, processing_rate)
+
         return frame_loads
 
     def identify_frames_for_callchain_analysis(
@@ -527,45 +551,45 @@ class FrameLoadCalculator:
         Returns:
             List[Dict]: 需要分析调用链的帧列表
         """
-        
+
         # 1. 按负载排序，获取前10帧
         sorted_frames = sorted(frame_loads, key=lambda x: x['frame_load'], reverse=True)
         top_10_frames = sorted_frames[:10]
-        
+
         # 2. 卡顿帧（从外部传入）
         stuttered_frame_ids = set()
         if stuttered_frames:
             for frame in stuttered_frames:
                 stuttered_frame_ids.add((frame['ts'], frame['dur'], frame['tid']))
-        
+
         # 3. 空刷帧（type=1的帧）
         empty_frames = [f for f in frame_loads if f.get('type') == 1]
-        
+
         # 4. 合并需要分析的帧
         frames_to_analyze = []
         analyzed_frame_ids = set()
-        
+
         # 添加前10帧
         for frame in top_10_frames:
             frame_id = (frame['ts'], frame['dur'], frame['tid'])
             if frame_id not in analyzed_frame_ids:
                 frames_to_analyze.append(frame)
                 analyzed_frame_ids.add(frame_id)
-        
+
         # 添加卡顿帧
         for frame in frame_loads:
             frame_id = (frame['ts'], frame['dur'], frame['tid'])
             if frame_id in stuttered_frame_ids and frame_id not in analyzed_frame_ids:
                 frames_to_analyze.append(frame)
                 analyzed_frame_ids.add(frame_id)
-        
+
         # 添加空刷帧
         for frame in empty_frames:
             frame_id = (frame['ts'], frame['dur'], frame['tid'])
             if frame_id not in analyzed_frame_ids:
                 frames_to_analyze.append(frame)
                 analyzed_frame_ids.add(frame_id)
-        
+
         return frames_to_analyze
 
     def _is_vsync_chain(self, callchain_info: List[Dict], event_count: int) -> bool:

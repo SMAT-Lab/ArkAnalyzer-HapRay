@@ -13,18 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import time
 import logging
 import sqlite3
+import time
 from typing import Dict, List, Any, Optional
 
 import pandas as pd
 
-from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_core_cache_manager import FrameCacheManager
-from .frame_time_utils import FrameTimeUtils
-from .frame_data_parser import validate_database_compatibility
+from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_advanced_accessor import FrameDbAdvancedAccessor
+from .frame_data_parser import validate_database_compatibility
+from .frame_time_utils import FrameTimeUtils
 
 
 class EmptyFrameAnalyzer:
@@ -71,13 +71,12 @@ class EmptyFrameAnalyzer:
         返回:
         - dict，包含分析结果
         """
-        import time
         total_start_time = time.time()
-        
+
         # 阶段1：数据库兼容性验证
         validate_start = time.time()
         if not validate_database_compatibility(trace_db_path):
-            logging.error(f"[{step_id}] Trace数据库兼容性验证失败")
+            logging.error("[%s] Trace数据库兼容性验证失败", step_id)
             return None
         validate_time = time.time() - validate_start
 
@@ -87,14 +86,15 @@ class EmptyFrameAnalyzer:
             trace_conn = sqlite3.connect(trace_db_path)
             perf_conn = sqlite3.connect(perf_db_path)
         except Exception as e:
-            logging.error(f"[{step_id}] 数据库连接失败: %s", str(e))
+            logging.error("[%s] 数据库连接失败: %s", step_id, str(e))
             return None
         conn_time = time.time() - conn_start
 
         try:
             # 阶段3：缓存检查
             cache_check_start = time.time()
-            cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
+            # 获取缓存数据但不使用，仅用于性能统计
+            _ = FrameCacheManager.get_frame_loads(step_id) if step_id else []
             cache_check_time = time.time() - cache_check_start
 
             # 阶段4：通过数据访问器获取空帧数据
@@ -104,7 +104,7 @@ class EmptyFrameAnalyzer:
             query_time = time.time() - query_start
 
             if trace_df.empty:
-                logging.info(f"[{step_id}] 未找到空帧数据")
+                logging.info("[%s] 未找到空帧数据", step_id)
                 return None
 
             # 阶段5：通过数据访问器获取总负载数据
@@ -129,27 +129,24 @@ class EmptyFrameAnalyzer:
             fast_calc_start = time.time()
             frame_loads = self.load_calculator.calculate_all_frame_loads_fast(trace_df, perf_df)
             fast_calc_time = time.time() - fast_calc_start
-            logging.info(f"[{step_id}] 快速帧负载计算完成: 耗时={fast_calc_time:.3f}秒, 计算了{len(frame_loads)}个帧")
+            logging.info("[%s] 快速帧负载计算完成: 耗时=%.3f秒, 计算了%d个帧", step_id, fast_calc_time, len(frame_loads))
 
             # 阶段9：识别Top帧进行调用链分析
             top_analysis_start = time.time()
             # 按负载排序，获取前10帧进行详细调用链分析
             sorted_frames = sorted(frame_loads, key=lambda x: x['frame_load'], reverse=True)
             top_10_frames = sorted_frames[:10]
-            
+
             # 只对Top 10帧进行调用链分析
             for frame_data in top_10_frames:
                 # 找到对应的原始帧数据
-                original_frame = trace_df[
-                    (trace_df['ts'] == frame_data['ts']) & 
-                    (trace_df['dur'] == frame_data['dur']) & 
-                    (trace_df['tid'] == frame_data['thread_id'])
-                ].iloc[0] if not trace_df[
-                    (trace_df['ts'] == frame_data['ts']) & 
-                    (trace_df['dur'] == frame_data['dur']) & 
-                    (trace_df['tid'] == frame_data['thread_id'])
-                ].empty else None
-                
+                frame_mask = (
+                    (trace_df['ts'] == frame_data['ts'])
+                    & (trace_df['dur'] == frame_data['dur'])
+                    & (trace_df['tid'] == frame_data['thread_id'])
+                )
+                original_frame = trace_df[frame_mask].iloc[0] if not trace_df[frame_mask].empty else None
+
                 if original_frame is not None:
                     try:
                         # 只对Top 10帧进行调用链分析
@@ -157,18 +154,19 @@ class EmptyFrameAnalyzer:
                             original_frame, perf_df, perf_conn, step_id)
                         frame_data['sample_callchains'] = sample_callchains
                     except Exception as e:
-                        logging.warning(f"[{step_id}] 帧调用链分析失败: ts={frame_data['ts']}, error={str(e)}")
+                        logging.warning("[%s] 帧调用链分析失败: ts=%s, error=%s", step_id, frame_data['ts'], str(e))
                         frame_data['sample_callchains'] = []
                 else:
                     frame_data['sample_callchains'] = []
-            
+
             # 对于非Top 10帧，设置空的调用链信息
             for frame_data in frame_loads:
                 if frame_data not in top_10_frames:
                     frame_data['sample_callchains'] = []
-            
+
             top_analysis_time = time.time() - top_analysis_start
-            logging.info(f"[{step_id}] Top帧调用链分析完成: 耗时={top_analysis_time:.3f}秒, 分析了{len(top_10_frames)}个Top帧")
+            logging.info(
+                "[%s] Top帧调用链分析完成: 耗时=%.3f秒, 分析了%d个Top帧", step_id, top_analysis_time, len(top_10_frames))
 
             # 阶段10：结果构建
             result_build_start = time.time()
@@ -176,12 +174,12 @@ class EmptyFrameAnalyzer:
             if not result_df.empty:
                 # 获取第一帧时间戳用于相对时间计算
                 first_frame_time = FrameCacheManager.get_first_frame_timestamp(trace_conn, step_id)
-                
+
                 # 分别获取主线程和后台线程的top5帧，并处理时间戳
-                main_thread_frames = result_df[result_df['is_main_thread'] == 1].sort_values('frame_load',
-                                                                                             ascending=False).head(5)
+                main_thread_frames = (result_df[result_df['is_main_thread'] == 1]
+                                   .sort_values('frame_load', ascending=False).head(5))  # noqa: E128
                 background_thread_frames = (result_df[result_df['is_main_thread'] == 0]
-                                            .sort_values('frame_load', ascending=False).head(5))
+                                          .sort_values('frame_load', ascending=False).head(5))  # noqa: E128
 
                 # 处理主线程帧的时间戳
                 processed_main_thread_frames = []
@@ -198,7 +196,7 @@ class EmptyFrameAnalyzer:
                     processed_main_thread_frames.append(processed_frame)
 
                 # 处理后台线程帧的时间戳
-                processed_background_thread_frames = []
+                processed_bg_thread_frames = []
                 for _, frame in background_thread_frames.iterrows():
                     processed_frame = frame.to_dict()
                     # 使用原始时间戳进行相对时间转换
@@ -209,7 +207,7 @@ class EmptyFrameAnalyzer:
                     )
                     # 保存原始时间戳用于调试
                     processed_frame['original_ts'] = original_ts
-                    processed_background_thread_frames.append(processed_frame)
+                    processed_bg_thread_frames.append(processed_frame)
 
                 # 计算统计信息
                 empty_frame_load = int(sum(f['frame_load'] for f in frame_loads if f.get('is_main_thread') == 1))
@@ -237,23 +235,45 @@ class EmptyFrameAnalyzer:
                     },
                     "top_frames": {
                         "main_thread_empty_frames": processed_main_thread_frames,
-                        "background_thread": processed_background_thread_frames
+                        "background_thread": processed_bg_thread_frames
                     }
                 }
             else:
                 result = None
-                
+
             result_build_time = time.time() - result_build_start
 
             # 总耗时统计
             total_time = time.time() - total_start_time
-            logging.info(f"[{step_id}] 空帧分析总耗时: {total_time:.3f}秒")
-            logging.info(f"[{step_id}] 各阶段耗时占比: 验证{validate_time/total_time*100:.1f}%, 连接{conn_time/total_time*100:.1f}%, 缓存检查{cache_check_time/total_time*100:.1f}%, 查询{query_time/total_time*100:.1f}%, 总负载{total_load_time/total_time*100:.1f}%, 性能样本{perf_time/total_time*100:.1f}%, 预处理{data_prep_time/total_time*100:.1f}%, 快速计算{fast_calc_time/total_time*100:.1f}%, Top帧分析{top_analysis_time/total_time*100:.1f}%, 结果构建{result_build_time/total_time*100:.1f}%")
+            logging.info("[%s] 空帧分析总耗时: %.3f秒", step_id, total_time)
+            logging.info(
+                "[%s] 各阶段耗时占比: "
+                "验证%.1f%%, "
+                "连接%.1f%%, "
+                "缓存检查%.1f%%, "
+                "查询%.1f%%, "
+                "总负载%.1f%%, "
+                "性能样本%.1f%%, "
+                "预处理%.1f%%, "
+                "快速计算%.1f%%, "
+                "Top帧分析%.1f%%, "
+                "结果构建%.1f%%",
+                step_id,
+                validate_time / total_time * 100,
+                conn_time / total_time * 100,
+                cache_check_time / total_time * 100,
+                query_time / total_time * 100,
+                total_load_time / total_time * 100,
+                perf_time / total_time * 100,
+                data_prep_time / total_time * 100,
+                fast_calc_time / total_time * 100,
+                top_analysis_time / total_time * 100,
+                result_build_time / total_time * 100)
 
             return result
 
         except Exception as e:
-            logging.error(f"[{step_id}] 分析空帧时发生异常: %s", str(e))
+            logging.error("[%s] 分析空帧时发生异常: %s", step_id, str(e))
             return None
 
         finally:
