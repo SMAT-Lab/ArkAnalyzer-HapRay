@@ -38,9 +38,6 @@ module.exports = {
     externals: [
         {
             'sql.js': 'commonjs sql.js',
-        },
-        {
-            'bjc': 'commonjs bjc'
         }
     ],
     entry: './src/cli/index.ts',
@@ -64,6 +61,7 @@ module.exports = {
         new CopyPlugin({
             patterns: [
                 { from: 'res', to: 'res' },
+                { from: '../node_modules/bjc/res', to: 'res'},
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
                 { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
@@ -77,11 +75,6 @@ module.exports = {
                     from: 'src/core/elf/demangle-wasm.wasm',
                     to: 'demangle-wasm.wasm'
                 },
-                // bjc
-                { from: '../node_modules/bjc', to: 'node_modules/bjc'},
-                { from: '../node_modules/vue', to: 'node_modules/vue'},
-                { from: '../node_modules/element-plus', to: 'node_modules/element-plus'},
-                { from: '../node_modules/code-prettify', to: 'node_modules/code-prettify'},
                 // sql.js
                 {
                     from: '../node_modules/sql.js/package.json',
