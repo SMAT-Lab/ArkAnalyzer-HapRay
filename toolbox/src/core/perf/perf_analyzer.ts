@@ -124,7 +124,7 @@ WHERE
             INNER JOIN perf_thread child ON child.process_id = parent.thread_id
         WHERE
             parent.thread_id = parent.process_id
-            AND parent.thread_name IN (:appBundleName, :appBundleName|| ':ui', :appBundleName || ':render', :appBundleName || ':background', :appBundleName|| 'service:ui'))
+        )
     )
 ORDER BY callchain_id, depth desc
 `;
@@ -303,7 +303,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // 读取所有符号信息
         this.querySymbols(db);
         // 预处理调用链信息
-        this.queryCallchain(db, packageName);
+        this.queryCallchain(db);
         this.disassembleCallchainLoad();
         // 读取测试步骤时间戳
         this.queryTestStepTimestamps(db, groupId);
@@ -474,8 +474,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param processName
      * @returns
      */
-    private queryCallchain(db: Database, processName: string): void {
-        const results = db.exec(PERF_PROCESS_CALLCHAIN_SQL, [processName]);
+    private queryCallchain(db: Database): void {
+        const results = db.exec(PERF_PROCESS_CALLCHAIN_SQL);
         if (results.length === 0) {
             return;
         }
@@ -624,6 +624,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         // swapper进程按比例分摊到其他符号
         const scale = total === swapper ? 1 : 1 + swapper / (total - swapper);
+        logger.debug('scale:'+scale);
 
         const results = db.exec(PERF_PROCESS_SAMPLE_SQL);
         if (results.length === 0) {
@@ -640,7 +641,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 id: row[0] as number,
                 callchain_id: row[1] as number,
                 thread_id: row[2] as number,
-                event_count: Math.round((row[3] as number) * scale),
+                event_count: row[3] as number,
                 cpu_id: row[4] as number,
                 event_name: row[5] as string,
                 timestamp: row[6] as number,
