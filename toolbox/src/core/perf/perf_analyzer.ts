@@ -624,7 +624,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         // swapper进程按比例分摊到其他符号
         const scale = total === swapper ? 1 : 1 + swapper / (total - swapper);
-        logger.debug('scale:'+scale);
 
         const results = db.exec(PERF_PROCESS_SAMPLE_SQL);
         if (results.length === 0) {
@@ -641,7 +640,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 id: row[0] as number,
                 callchain_id: row[1] as number,
                 thread_id: row[2] as number,
-                event_count: row[3] as number,
+                event_count: Math.round((row[3] as number) * scale),
                 cpu_id: row[4] as number,
                 event_name: row[5] as string,
                 timestamp: row[6] as number,
