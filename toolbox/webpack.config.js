@@ -79,9 +79,6 @@ module.exports = {
                 },
                 // bjc
                 { from: '../node_modules/bjc', to: 'node_modules/bjc'},
-                { from: '../node_modules/vue', to: 'node_modules/vue'},
-                { from: '../node_modules/element-plus', to: 'node_modules/element-plus'},
-                { from: '../node_modules/code-prettify', to: 'node_modules/code-prettify'},
                 // sql.js
                 {
                     from: '../node_modules/sql.js/package.json',

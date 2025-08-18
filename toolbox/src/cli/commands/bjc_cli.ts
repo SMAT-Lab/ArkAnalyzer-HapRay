@@ -22,14 +22,16 @@ const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 interface BjcOptions {
     input: string;
     output: string;
+    projectPath: string;
 }
 
 export const BjcCli = new Command('bjc')
     .requiredOption('-i, --input <string>', 'Hap file path')
     .option('-o, --output <string>', 'output path', './')
+    .option('--project-path <string>', 'project path directory', '')
     .action(async (options: BjcOptions) => {
         logger.info(`generate coverage report ${options.input} ${options.output}`);
-        let report = new Report(options.input);
+        let report = new Report(options.input, options.projectPath);
         report.generateReport();
         report.writeReport(options.output);
     });
