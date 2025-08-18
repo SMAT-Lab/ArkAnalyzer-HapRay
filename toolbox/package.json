@@ -19,7 +19,7 @@
     "@types/sql.js": "^1.4.9",
     "@xmldom/xmldom": "^0.9.8",
     "arkanalyzer": "^1.0.7",
-    "bjc": "^1.0.20",
+    "bjc": "^1.0.21",
     "commander": "^12.1.0",
     "jszip": "^3.10.1",
     "read-excel-file": "^5.8.7",
