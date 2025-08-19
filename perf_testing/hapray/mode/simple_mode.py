@@ -187,8 +187,8 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
     shutil.copy2(perf_path, target_data_file)
     logging.info("Copied %s to %s", perf_path, target_data_file)
 
-    # 转换为数据库文件
-    current_db_file = _convert_perf_to_db(target_data_file, target_db_files)
+    # 检查是否存在对应的.db文件并处理
+    current_db_file = _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files)
 
     # 复制ps_ef.txt文件
     _copy_ps_ef_file(perf_path, hiperf_step_dir)
@@ -205,18 +205,78 @@ def _process_trace_file(trace_path, htrace_step_dir):
     logging.info("Copied %s to %s", trace_path, target_htrace_file)
 
 
-def _convert_perf_to_db(target_data_file, target_db_files):
-    """转换perf文件为数据库文件"""
-    target_db_file = target_data_file.replace(".data", ".db")
-    if not os.path.exists(target_db_file) and os.path.exists(target_data_file):
-        if ExeUtils.convert_data_to_db(target_data_file, target_db_file):
-            target_db_files.append(target_db_file)
-            return target_db_file
-        logging.error("Failed to convert perf to db for %s", target_data_file)
-    elif os.path.exists(target_db_file):
+def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files):
+    """
+    处理perf数据库文件：
+    1. 如果perf_path同目录下存在.db文件，直接复制到目标路径并改名为perf.db
+    2. 如果不存在.db文件，则转换perf.data为perf.db，等待转换完成
+
+    Args:
+        perf_path: 原始perf文件路径
+        hiperf_step_dir: 目标step目录
+        target_data_file: 目标perf.data文件路径
+        target_db_files: 数据库文件列表
+
+    Returns:
+        str: 数据库文件路径，如果失败返回None
+    """
+    # 检查原始perf文件同目录下是否存在对应的.db文件
+    perf_dir = os.path.dirname(perf_path)
+    perf_basename = os.path.splitext(os.path.basename(perf_path))[0]
+    source_db_file = os.path.join(perf_dir, f"{perf_basename}.db")
+
+    target_db_file = os.path.join(hiperf_step_dir, "perf.db")
+
+    if os.path.exists(source_db_file):
+        # 如果存在.db文件，直接复制到目标路径
+        shutil.copy2(source_db_file, target_db_file)
+        logging.info("Copied existing DB file %s to %s", source_db_file, target_db_file)
         target_db_files.append(target_db_file)
         return target_db_file
-    return None
+    else:
+        # 如果不存在.db文件，需要转换perf.data为perf.db
+        logging.info("No existing DB file found, converting %s to %s", target_data_file, target_db_file)
+        return _convert_perf_to_db(target_data_file, target_db_files)
+
+
+def _convert_perf_to_db(target_data_file, target_db_files):
+    """
+    转换perf文件为数据库文件，等待转换完成
+
+    Args:
+        target_data_file: perf.data文件路径
+        target_db_files: 数据库文件列表
+
+    Returns:
+        str: 数据库文件路径，如果失败返回None
+    """
+    target_db_file = target_data_file.replace(".data", ".db")
+
+    if not os.path.exists(target_data_file):
+        logging.error("Source perf.data file not found: %s", target_data_file)
+        return None
+
+    if os.path.exists(target_db_file):
+        # 如果目标.db文件已存在，直接使用
+        logging.info("Target DB file already exists: %s", target_db_file)
+        target_db_files.append(target_db_file)
+        return target_db_file
+
+    # 执行转换，ExeUtils.convert_data_to_db是同步的，会等待转换完成
+    logging.info("Starting conversion from %s to %s", target_data_file, target_db_file)
+
+    if ExeUtils.convert_data_to_db(target_data_file, target_db_file):
+        # 转换成功，验证文件是否真的创建了
+        if os.path.exists(target_db_file):
+            target_db_files.append(target_db_file)
+            logging.info("Successfully converted and verified DB file: %s", target_db_file)
+            return target_db_file
+        else:
+            logging.error("Conversion reported success but DB file not found: %s", target_db_file)
+            return None
+    else:
+        logging.error("Failed to convert perf to db for %s", target_data_file)
+        return None
 
 
 def _copy_ps_ef_file(perf_path, hiperf_step_dir):
