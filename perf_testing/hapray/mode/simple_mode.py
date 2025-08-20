@@ -256,24 +256,15 @@ def _convert_perf_to_db(target_data_file, target_db_files):
         logging.error("Source perf.data file not found: %s", target_data_file)
         return None
 
-    if os.path.exists(target_db_file):
-        # 如果目标.db文件已存在，直接使用
-        logging.info("Target DB file already exists: %s", target_db_file)
-        target_db_files.append(target_db_file)
-        return target_db_file
-
     # 执行转换，ExeUtils.convert_data_to_db是同步的，会等待转换完成
     logging.info("Starting conversion from %s to %s", target_data_file, target_db_file)
 
     if ExeUtils.convert_data_to_db(target_data_file, target_db_file):
-        # 转换成功，验证文件是否真的创建了
-        if os.path.exists(target_db_file):
-            target_db_files.append(target_db_file)
-            logging.info("Successfully converted and verified DB file: %s", target_db_file)
-            return target_db_file
-        else:
-            logging.error("Conversion reported success but DB file not found: %s", target_db_file)
-            return None
+
+        target_db_files.append(target_db_file)
+        logging.info("Successfully converted and verified DB file: %s", target_db_file)
+        return target_db_file
+
     else:
         logging.error("Failed to convert perf to db for %s", target_data_file)
         return None
