@@ -831,10 +831,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 fileEventMaps.set(fileKey, data.symbolEvents);
             }
 
-            //sum
-            if (data.componentCategory === ComponentCategory.UNKNOWN || data.isMainApp === false) {
-                continue;
-            }
         }
 
         for (const [_, data] of resultMaps) {
@@ -936,7 +932,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // 统计负载计数
             count += data.symbolEvents;
 
-            // 判断是否为应用负载：processName 包含 packageName
+            // 判断是否为应用负载：processName 或 threadName 包含 packageName
             if (packageName && data.processName && data.processName.includes(packageName)) {
                 app_count += data.symbolEvents;
             }
