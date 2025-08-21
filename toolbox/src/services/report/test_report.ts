@@ -324,7 +324,7 @@ async function copyStandardFiles(sourceRound: string, inputPath: string): Promis
  * 计算每轮的结果 - 使用并发执行提高效率
  */
 export async function calculateRoundResults(roundFolders: Array<string>, step: Step): Promise<Array<number>> {
-    logger.info(`开始并发分析 ${roundFolders.length} 个轮次，步骤：${step.stepIdx}，并发数：5`);
+    logger.info(`开始并发分析 ${roundFolders.length} 个轮次，步骤：${step.stepIdx}，并发数：1`);
 
     // 使用并发工具函数处理所有轮次
     const results = await executeConcurrentTasks(
@@ -349,7 +349,7 @@ export async function calculateRoundResults(roundFolders: Array<string>, step: S
                 return 0;
             }
         },
-        5
+        1
     );
 
     logger.info(`完成所有轮次分析，共 ${roundFolders.length} 个轮次`);
