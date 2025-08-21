@@ -139,6 +139,8 @@ export interface PerfStepSum {
     categoriesSum: Array<Array<number>>; // 大类统计值
     categoriesTotal: Array<Array<number>>; // 大类Total值
     total: Array<number>; // 总值, 0 circles, 1 instructions
+    count: number; // 总负载数
+    app_count: number; // 应用负载数
 }
 
 export interface PerfSum {
@@ -163,6 +165,39 @@ interface SymbolSplitRule {
     source: RegExp;
     dst: string;
     symbols: Array<RegExp>;
+}
+
+
+// ===================== Summary Info 相关类型定义 =====================
+export interface TestReportInfo {
+    app_id: string;
+    app_name: string;
+    app_version: string;
+    scene: string;
+    timestamp: number;
+    rom_version: string;
+    device_sn: string;
+}
+
+export interface SummaryInfo {
+    rom_version: string;
+    app_version: string;
+    scene: string;
+    step_name: string;
+    step_id: number;
+    count: number;
+    app_count: number;
+}
+
+export interface RoundInfo {
+    step_id: number;
+    round: number;
+    count: number;
+}
+
+export interface Step {
+    stepIdx: number;
+    description: string;
 }
 
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
@@ -866,6 +901,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         let stepMap = new Map<number, StepJsonData>();
 
         for (const data of this.details) {
+            if (!data.processName.includes(testInfo.packageName)) {
+                continue;
+            }
             if (
                 data.componentCategory === ComponentCategory.APP_ABC ||
                 data.componentCategory === ComponentCategory.APP_LIB

@@ -18,43 +18,17 @@ import path from 'path';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { Step } from '../../core/perf/perf_analyzer';
-import { PerfAnalyzer } from '../../core/perf/perf_analyzer';
+import { PerfAnalyzer} from '../../core/perf/perf_analyzer';
 import { getConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
-import { saveJsonArray } from '../../utils/json_utils';
-import type { Round, TestSceneInfo as PerfTestSceneInfo, TestStepGroup } from '../../core/perf/perf_analyzer_base';
+
+import type { Round, TestSceneInfo as PerfTestSceneInfo, TestStepGroup, TestReportInfo, RoundInfo } from '../../core/perf/perf_analyzer_base';
 import type { GlobalConfig } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 // ===================== 类型定义 =====================
-export interface TestReportInfo {
-    app_id: string;
-    app_name: string;
-    app_version: string;
-    scene: string;
-    timestamp: number;
-    rom_version: string;
-    device_sn: string;
-}
-
-export interface SummaryInfo {
-    rom_version: string;
-    app_version: string;
-    scene: string;
-    step_name: string;
-    step_id: number;
-    count: number;
-    round: number;
-}
-
-export interface RoundInfo {
-    step_id: number;
-    round: number;
-    count: number;
-}
-
 export type Steps = Array<Step>;
 
 // ===================== 内部类型定义 =====================
@@ -120,10 +94,8 @@ async function handleChooseRound(input: string, scene: string, config: GlobalCon
     }
 
     const steps = await loadSteps(roundFolders[0]);
-    const roundInfos = await processRoundSelection(roundFolders, steps, input);
-    const testReportInfo = await loadTestReportInfo(input, scene, config);
-
-    await generateSummaryInfoJson(input, testReportInfo, steps, roundInfos);
+    await processRoundSelection(roundFolders, steps, input);
+    logger.info('轮次选择完成，summary_info.json 将在生成报告时创建');
 }
 
 /**
@@ -455,39 +427,6 @@ export async function copySelectedRoundData(sourceRound: string, destPath: strin
 }
 
 // ---- 负载分析/报告生成 ----
-/**
- * 生成 summary_info.json
- */
-export async function generateSummaryInfoJson(
-    input: string,
-    testInfo: TestReportInfo,
-    steps: Steps,
-    roundInfos: Array<RoundInfo>
-): Promise<void> {
-    const outputDir = path.join(input, 'report');
-    let summaryJsonObject: Array<SummaryInfo> = [];
-
-    steps.forEach((step) => {
-        const roundInfo = roundInfos.find((round) => round.step_id === step.stepIdx);
-        if (!roundInfo) {
-            logger.warn(`未找到步骤 ${step.stepIdx} 的轮次信息`);
-            return;
-        }
-
-        const summaryObject: SummaryInfo = {
-            rom_version: testInfo.rom_version,
-            app_version: testInfo.app_version,
-            scene: testInfo.scene,
-            step_name: step.description,
-            step_id: step.stepIdx,
-            count: roundInfo.count,
-            round: roundInfo.round,
-        };
-        summaryJsonObject.push(summaryObject);
-    });
-
-    await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
-}
 
 /**
  * 生成负载分析报告
@@ -516,6 +455,7 @@ export async function generatePerfJson(inputPath: string, testInfo: TestReportIn
     testSceneInfo.rounds.push(round);
     await perfAnalyzer.analyze(testSceneInfo, outputDir);
     await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
+    await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
 }
 
 /**
