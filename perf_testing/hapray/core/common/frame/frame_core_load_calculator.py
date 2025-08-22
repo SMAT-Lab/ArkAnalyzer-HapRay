@@ -399,7 +399,11 @@ class FrameLoadCalculator:
 
                 # 构建样本调用链信息
                 try:
-                    sample_load_percentage = (sample['event_count'] / total_frame_load) * 100
+                    # 防止除零错误
+                    if total_frame_load > 0:
+                        sample_load_percentage = (sample['event_count'] / total_frame_load) * 100
+                    else:
+                        sample_load_percentage = 0.0
                     sample_callchains.append({
                         'timestamp': int(sample['timestamp_trace']),
                         'event_count': int(sample['event_count']),
