@@ -70,7 +70,7 @@ export async function main(input: string): Promise<void> {
     logger.info(`输入目录: ${input}`);
 
     if (config.choose && !config.ut) {
-        await handleChooseRound(input, scene, config);
+        await handleChooseRound(input);
     } else {
         await handleGeneratePerfReport(input, scene, config);
     }
@@ -80,7 +80,7 @@ export async function main(input: string): Promise<void> {
 /**
  * 处理选择轮次（choose round）
  */
-async function handleChooseRound(input: string, scene: string, config: GlobalConfig): Promise<void> {
+async function handleChooseRound(input: string): Promise<void> {
     const roundFolders = getSceneRoundsFolders(input);
     if (roundFolders.length === 0) {
         logger.error(`${input} 没有可用的测试轮次数据，无法生成报告！`);
@@ -229,10 +229,10 @@ function buildTestStepGroup(
  * 并发执行任务，支持批次控制
  */
 async function executeConcurrentTasks<T, R>(
-    items: T[],
+    items: Array<T>,
     taskFn: (item: T, index: number) => Promise<R>,
-    maxConcurrency: number = 4
-): Promise<R[]> {
+    maxConcurrency = 4
+): Promise<Array<R>> {
     const results = new Array<R>(items.length);
 
     for (let i = 0; i < items.length; i += maxConcurrency) {
@@ -355,7 +355,7 @@ async function calculateRoundResultWithFullAnalysis(
 
         // 从分析结果中提取该步骤的汇总值
         const stepSum = perfSum.steps.find(s => s.stepIdx === step.stepIdx);
-        if (stepSum && stepSum.total && stepSum.total.length > 1) {
+        if (stepSum?.total && stepSum.total.length > 1) {
             // total[0] 是周期数 (cycles)，total[1] 是指令数 (instructions)
             // 如果第一个值（cycles）等于0，则获取第二个值（instructions）
             return stepSum.total[0] === 0 ? stepSum.total[1] : stepSum.total[0];
@@ -363,7 +363,7 @@ async function calculateRoundResultWithFullAnalysis(
 
         // 如果没有找到具体步骤的数据，计算所有步骤的总和
         const totalValue = perfSum.steps.reduce((sum, s) => {
-            if (s.total && s.total.length > 1) {
+            if (s.total.length > 1) {
                 // 如果第一个值（cycles）等于0，则使用第二个值（instructions）
                 return sum + (s.total[0] === 0 ? s.total[1] : s.total[0]);
             }

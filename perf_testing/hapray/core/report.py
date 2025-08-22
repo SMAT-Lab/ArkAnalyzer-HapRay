@@ -373,7 +373,7 @@ def create_perf_summary_excel(input_path: str) -> bool:
             logging.info("检测到多个ROM版本: %s", ', '.join(rom_versions))
 
         # 重新组织列结构，将rom_version、app_version、count作为列名
-        result_df = df[['rom_version', 'app_version', 'scene', 'step_id', 'step_name', 'count','app_count']].copy()
+        result_df = df[['rom_version', 'app_version', 'scene', 'step_id', 'step_name', 'count', 'app_count']].copy()
 
         # 按场景、步骤ID、步骤名称排序
         result_df = result_df.sort_values(['scene', 'step_id', 'step_name', 'app_version'])
