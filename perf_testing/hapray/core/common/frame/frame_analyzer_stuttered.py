@@ -298,7 +298,11 @@ class StutteredFrameAnalyzer:
             total_stutter = int(
                 sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"]))  # 确保返回Python原生int类型
             stats["total_stutter_frames"] = total_stutter
-            stats["stutter_rate"] = round(total_stutter / stats["total_frames"], 4)
+            # 防止除零错误
+            if stats["total_frames"] > 0:
+                stats["stutter_rate"] = round(total_stutter / stats["total_frames"], 4)
+            else:
+                stats["stutter_rate"] = 0.0
 
             result = {
                 "runtime": runtime,
