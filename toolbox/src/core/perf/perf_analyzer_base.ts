@@ -139,6 +139,8 @@ export interface PerfStepSum {
     categoriesSum: Array<Array<number>>; // 大类统计值
     categoriesTotal: Array<Array<number>>; // 大类Total值
     total: Array<number>; // 总值, 0 circles, 1 instructions
+    count: number; // 总负载数
+    app_count: number; // 应用负载数
 }
 
 export interface PerfSum {
@@ -163,6 +165,39 @@ interface SymbolSplitRule {
     source: RegExp;
     dst: string;
     symbols: Array<RegExp>;
+}
+
+
+// ===================== Summary Info 相关类型定义 =====================
+export interface TestReportInfo {
+    app_id: string;
+    app_name: string;
+    app_version: string;
+    scene: string;
+    timestamp: number;
+    rom_version: string;
+    device_sn: string;
+}
+
+export interface SummaryInfo {
+    rom_version: string;
+    app_version: string;
+    scene: string;
+    step_name: string;
+    step_id: number;
+    count: number;
+    app_count: number;
+}
+
+export interface RoundInfo {
+    step_id: number;
+    round: number;
+    count: number;
+}
+
+export interface Step {
+    stepIdx: number;
+    description: string;
 }
 
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
@@ -865,7 +900,28 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         let harMap = new Map<string, { name: string; count: number }>();
         let stepMap = new Map<number, StepJsonData>();
 
+        // 首先使用已统计的 stepSumMap 初始化步骤数据，确保统计一致性
+        for (const [stepId, stepSum] of this.stepSumMap) {
+            let step = this.getStepByGroupId(testInfo, stepId);
+            let value: StepJsonData = {
+                step_name: step.groupName,
+                step_id: stepId,
+                count: stepSum.app_count, // 使用已统计的应用负载数，确保与 summary_info.json 一致
+                round: testInfo.chooseRound,
+                perf_data_path: step.dbfile ?? '',
+                data: [],
+            };
+            stepMap.set(stepId, value);
+        }
+
+        // 然后遍历详细数据，收集 HAR 信息和详细数据
         for (const data of this.details) {
+            // 正确逻辑：只有进程名包含包名时才是应用负载
+            if (!data.processName.includes(testInfo.packageName)) {
+                continue;
+            }
+
+            // 统计 HAR 组件数据
             if (
                 data.componentCategory === ComponentCategory.APP_ABC ||
                 data.componentCategory === ComponentCategory.APP_LIB
@@ -878,21 +934,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 }
             }
 
-            if (stepMap.has(data.stepIdx)) {
-                let value = stepMap.get(data.stepIdx)!;
-                value.data.push(data);
-                value.count += data.symbolEvents;
-            } else {
-                let step = this.getStepByGroupId(testInfo, data.stepIdx);
-                let value: StepJsonData = {
-                    step_name: step.groupName,
-                    step_id: data.stepIdx,
-                    count: data.symbolEvents,
-                    round: testInfo.chooseRound,
-                    perf_data_path: step.dbfile ?? '',
-                    data: [data],
-                };
-                stepMap.set(data.stepIdx, value);
+            // 添加详细数据到对应步骤（不重新计算 count）
+            let stepData = stepMap.get(data.stepIdx);
+            if (stepData) {
+                stepData.data.push(data);
             }
         }
 
