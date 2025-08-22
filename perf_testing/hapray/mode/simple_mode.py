@@ -233,10 +233,10 @@ def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db
         logging.info("Copied existing DB file %s to %s", source_db_file, target_db_file)
         target_db_files.append(target_db_file)
         return target_db_file
-    else:
-        # 如果不存在.db文件，需要转换perf.data为perf.db
-        logging.info("No existing DB file found, converting %s to %s", target_data_file, target_db_file)
-        return _convert_perf_to_db(target_data_file, target_db_files)
+
+    # 如果不存在.db文件，需要转换perf.data为perf.db
+    logging.info("No existing DB file found, converting %s to %s", target_data_file, target_db_file)
+    return _convert_perf_to_db(target_data_file, target_db_files)
 
 
 def _convert_perf_to_db(target_data_file, target_db_files):
@@ -265,9 +265,8 @@ def _convert_perf_to_db(target_data_file, target_db_files):
         logging.info("Successfully converted and verified DB file: %s", target_db_file)
         return target_db_file
 
-    else:
-        logging.error("Failed to convert perf to db for %s", target_data_file)
-        return None
+    logging.error("Failed to convert perf to db for %s", target_data_file)
+    return None
 
 
 def _copy_ps_ef_file(perf_path, hiperf_step_dir):

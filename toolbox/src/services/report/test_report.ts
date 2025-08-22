@@ -18,43 +18,17 @@ import path from 'path';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { Step } from '../../core/perf/perf_analyzer';
-import { PerfAnalyzer } from '../../core/perf/perf_analyzer';
+import { PerfAnalyzer} from '../../core/perf/perf_analyzer';
 import { getConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
 import { checkPerfFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
-import { saveJsonArray } from '../../utils/json_utils';
-import type { Round, TestSceneInfo as PerfTestSceneInfo, TestStepGroup } from '../../core/perf/perf_analyzer_base';
+
+import type { Round, TestSceneInfo as PerfTestSceneInfo, TestStepGroup, TestReportInfo, RoundInfo } from '../../core/perf/perf_analyzer_base';
 import type { GlobalConfig } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 // ===================== 类型定义 =====================
-export interface TestReportInfo {
-    app_id: string;
-    app_name: string;
-    app_version: string;
-    scene: string;
-    timestamp: number;
-    rom_version: string;
-    device_sn: string;
-}
-
-export interface SummaryInfo {
-    rom_version: string;
-    app_version: string;
-    scene: string;
-    step_name: string;
-    step_id: number;
-    count: number;
-    round: number;
-}
-
-export interface RoundInfo {
-    step_id: number;
-    round: number;
-    count: number;
-}
-
 export type Steps = Array<Step>;
 
 // ===================== 内部类型定义 =====================
@@ -96,7 +70,7 @@ export async function main(input: string): Promise<void> {
     logger.info(`输入目录: ${input}`);
 
     if (config.choose && !config.ut) {
-        await handleChooseRound(input, scene, config);
+        await handleChooseRound(input);
     } else {
         await handleGeneratePerfReport(input, scene, config);
     }
@@ -106,7 +80,7 @@ export async function main(input: string): Promise<void> {
 /**
  * 处理选择轮次（choose round）
  */
-async function handleChooseRound(input: string, scene: string, config: GlobalConfig): Promise<void> {
+async function handleChooseRound(input: string): Promise<void> {
     const roundFolders = getSceneRoundsFolders(input);
     if (roundFolders.length === 0) {
         logger.error(`${input} 没有可用的测试轮次数据，无法生成报告！`);
@@ -120,10 +94,8 @@ async function handleChooseRound(input: string, scene: string, config: GlobalCon
     }
 
     const steps = await loadSteps(roundFolders[0]);
-    const roundInfos = await processRoundSelection(roundFolders, steps, input);
-    const testReportInfo = await loadTestReportInfo(input, scene, config);
-
-    await generateSummaryInfoJson(input, testReportInfo, steps, roundInfos);
+    await processRoundSelection(roundFolders, steps, input);
+    logger.info('轮次选择完成，summary_info.json 将在生成报告时创建');
 }
 
 /**
@@ -257,10 +229,10 @@ function buildTestStepGroup(
  * 并发执行任务，支持批次控制
  */
 async function executeConcurrentTasks<T, R>(
-    items: T[],
+    items: Array<T>,
     taskFn: (item: T, index: number) => Promise<R>,
-    maxConcurrency: number = 4
-): Promise<R[]> {
+    maxConcurrency = 4
+): Promise<Array<R>> {
     const results = new Array<R>(items.length);
 
     for (let i = 0; i < items.length; i += maxConcurrency) {
@@ -383,7 +355,7 @@ async function calculateRoundResultWithFullAnalysis(
 
         // 从分析结果中提取该步骤的汇总值
         const stepSum = perfSum.steps.find(s => s.stepIdx === step.stepIdx);
-        if (stepSum && stepSum.total && stepSum.total.length > 1) {
+        if (stepSum?.total && stepSum.total.length > 1) {
             // total[0] 是周期数 (cycles)，total[1] 是指令数 (instructions)
             // 如果第一个值（cycles）等于0，则获取第二个值（instructions）
             return stepSum.total[0] === 0 ? stepSum.total[1] : stepSum.total[0];
@@ -391,7 +363,7 @@ async function calculateRoundResultWithFullAnalysis(
 
         // 如果没有找到具体步骤的数据，计算所有步骤的总和
         const totalValue = perfSum.steps.reduce((sum, s) => {
-            if (s.total && s.total.length > 1) {
+            if (s.total.length > 1) {
                 // 如果第一个值（cycles）等于0，则使用第二个值（instructions）
                 return sum + (s.total[0] === 0 ? s.total[1] : s.total[0]);
             }
@@ -455,39 +427,6 @@ export async function copySelectedRoundData(sourceRound: string, destPath: strin
 }
 
 // ---- 负载分析/报告生成 ----
-/**
- * 生成 summary_info.json
- */
-export async function generateSummaryInfoJson(
-    input: string,
-    testInfo: TestReportInfo,
-    steps: Steps,
-    roundInfos: Array<RoundInfo>
-): Promise<void> {
-    const outputDir = path.join(input, 'report');
-    let summaryJsonObject: Array<SummaryInfo> = [];
-
-    steps.forEach((step) => {
-        const roundInfo = roundInfos.find((round) => round.step_id === step.stepIdx);
-        if (!roundInfo) {
-            logger.warn(`未找到步骤 ${step.stepIdx} 的轮次信息`);
-            return;
-        }
-
-        const summaryObject: SummaryInfo = {
-            rom_version: testInfo.rom_version,
-            app_version: testInfo.app_version,
-            scene: testInfo.scene,
-            step_name: step.description,
-            step_id: step.stepIdx,
-            count: roundInfo.count,
-            round: roundInfo.round,
-        };
-        summaryJsonObject.push(summaryObject);
-    });
-
-    await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
-}
 
 /**
  * 生成负载分析报告
@@ -516,6 +455,7 @@ export async function generatePerfJson(inputPath: string, testInfo: TestReportIn
     testSceneInfo.rounds.push(round);
     await perfAnalyzer.analyze(testSceneInfo, outputDir);
     await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
+    await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
 }
 
 /**

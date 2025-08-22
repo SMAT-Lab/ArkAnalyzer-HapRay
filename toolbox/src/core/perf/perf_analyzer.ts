@@ -29,6 +29,8 @@ import type {
     PerfSum,
     PerfSymbolDetailData,
     ProcessClassifyCategory,
+    SummaryInfo,
+    TestReportInfo,
     TestSceneInfo,
     TestStep
 } from './perf_analyzer_base';
@@ -41,6 +43,7 @@ import {
 } from './perf_analyzer_base';
 import { getConfig } from '../../config';
 import type { SheetData } from 'write-excel-file';
+import { saveJsonArray } from '../../utils/json_utils';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -337,7 +340,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // 读取测试步骤时间戳
         this.queryTestStepTimestamps(db, groupId);
         // 读取样本数据
-        return this.queryProcessSample(db, groupId);
+        const sampleCount = this.queryProcessSample(db, groupId);
+        // 计算符号数据并构建 PerfStepSum
+        this.calcSymbolData(groupId, packageName);
+        return sampleCount;
     }
 
     private queryTestStepTimestamps(db: Database, groupId: number): void {
@@ -707,9 +713,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * 计算符号负载
-     * @param classifyThread
+     * @param groupId 组ID
+     * @param packageName 包名，用于区分应用负载
      */
-    public calcSymbolData(groupId: number): number {
+    public calcSymbolData(groupId: number, packageName?: string): number {
         let resultMaps: Map<string, PerfSymbolDetailData> = new Map();
         let fileEventMaps: Map<string, number> = new Map();
         let threadsEventMap: Map<string, number> = new Map(); // 线程统计事件数
@@ -824,10 +831,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 fileEventMaps.set(fileKey, data.symbolEvents);
             }
 
-            //sum
-            if (data.componentCategory === ComponentCategory.UNKNOWN || data.isMainApp === false) {
-                continue;
-            }
         }
 
         for (const [_, data] of resultMaps) {
@@ -858,7 +861,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         this.details.push(...groupData);
 
         // 构建 PerfStepSum 对象
-        const stepSum = this.buildPerfStepSum(groupId, groupData);
+        const stepSum = this.buildPerfStepSum(groupId, groupData, packageName);
         this.stepSumMap.set(groupId, stepSum);
 
         return skipDfxEvents;
@@ -893,7 +896,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     /**
      * 构建 PerfStepSum 对象，统计负载信息
      */
-    private buildPerfStepSum(groupId: number, groupData: Array<PerfSymbolDetailData>): PerfStepSum {
+    private buildPerfStepSum(groupId: number, groupData: Array<PerfSymbolDetailData>, packageName?: string): PerfStepSum {
         // 按组件名称统计负载
         const componentMap = new Map<string, PerfComponent>();
 
@@ -904,10 +907,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // 总值统计 [0] = cycles, [1] = instructions
         const total = [0, 0];
 
+        // 负载计数统计
+        let count = 0; // 总负载数
+        let app_count = 0; // 应用负载数
+
         // 初始化大类统计数组
         // ComponentCategory 枚举值: APP_ABC=0, APP_SO=1, ..., UNKNOWN=-1
         // 我们需要为所有正值和UNKNOWN(-1)创建索引
-        const maxCategoryValue = Math.max(...Object.values(ComponentCategory).filter(v => typeof v === 'number' && v >= 0) as number[]);
+        const maxCategoryValue = Math.max(...Object.values(ComponentCategory).filter(v => typeof v === 'number' && v >= 0) as Array<number>);
         const categoryCount = maxCategoryValue + 2; // +1 for 0-based index, +1 for UNKNOWN
 
         for (let i = 0; i < categoryCount; i++) {
@@ -922,10 +929,18 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // 将 UNKNOWN(-1) 映射到最后一个索引
             const categoryIndex = data.componentCategory >= 0 ? data.componentCategory : categoryCount - 1;
 
+            // 统计负载计数
+            count += data.symbolEvents;
+
+            // 判断是否为应用负载：processName 或 threadName 包含 packageName
+            if (packageName && data.processName.includes(packageName)) {
+                app_count += data.symbolEvents;
+            }
+
             // 统计组件负载
             if (!componentMap.has(componentKey)) {
                 componentMap.set(componentKey, {
-                    name: data.componentName || 'Unknown',
+                    name: data.componentName ?? 'Unknown',
                     cycles: 0,
                     totalCycles: 0,
                     instructions: 0,
@@ -939,7 +954,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             if (eventIndex === PerfEvent.CYCLES_EVENT) {
                 component.cycles += data.symbolEvents;
                 component.totalCycles += data.symbolTotalEvents;
-            } else if (eventIndex === PerfEvent.INSTRUCTION_EVENT) {
+            } else {
+                // Must be INSTRUCTION_EVENT since there are only two enum values
                 component.instructions += data.symbolEvents;
                 component.totalInstructions += data.symbolTotalEvents;
             }
@@ -960,6 +976,43 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             categoriesSum,
             categoriesTotal,
             total,
+            count,
+            app_count,
         };
+    }
+
+    /**
+     * 生成 summary_info.json，使用已统计的 count 和 app_count 值
+     */
+    async generateSummaryInfoJson(
+        input: string,
+        testInfo: TestReportInfo,
+        steps: Array<Step>
+    ): Promise<void> {
+        const outputDir = path.join(input, 'report');
+        let summaryJsonObject: Array<SummaryInfo> = [];
+
+        steps.forEach((step) => {
+            // 从已统计的 stepSumMap 中获取数据
+            const stepSum = this.stepSumMap.get(step.stepIdx);
+            if (!stepSum) {
+                logger.warn(`未找到步骤 ${step.stepIdx} 的统计信息`);
+                return;
+            }
+
+            const summaryObject: SummaryInfo = {
+                rom_version: testInfo.rom_version,
+                app_version: testInfo.app_version,
+                scene: testInfo.scene,
+                step_name: step.description,
+                step_id: step.stepIdx,
+                count: stepSum.count, // 使用已统计的总负载数
+                app_count: stepSum.app_count, // 使用已统计的应用负载数
+            };
+            summaryJsonObject.push(summaryObject);
+        });
+
+        await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
+        logger.info(`已生成 summary_info.json，包含 ${summaryJsonObject.length} 个步骤的汇总信息`);
     }
 }
