@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>多层依赖关系可视化</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;font-family:"Inter",sans-serif;background:#1a202c;color:#e2e8f0}
+  #wrap{flex:1;position:relative}
+
+  .floating-ui-container{position:absolute;top:1rem;left:1rem;display:flex;gap:.5rem;z-index:30;align-items:center;flex-wrap:wrap}
+  .floating-ui-container label{display:flex;gap:.35rem;align-items:center;font-size:12px;color:#e2e8f0;background:rgba(45,55,72,.65);padding:.35rem .5rem;border-radius:.5rem}
+
+  .links line{stroke-width:1.4;transition:opacity .3s}
+  .links line.internal{stroke:#4a5568;stroke-opacity:.35}
+  .links line.file2har{stroke:#a0aec0;stroke-opacity:.75}
+  .links line.har{stroke:#4a5568;stroke-opacity:.35}
+
+  .links line.internal.highlighted{stroke:#63b3ed;stroke-width:2;stroke-opacity:1}
+  .links line.file2har.highlighted{stroke:#38a169;stroke-width:2;stroke-opacity:1}
+  .links line.har.highlighted{stroke:#d69e2e;stroke-width:2;stroke-opacity:.95}
+
+  .arrows path{pointer-events:none;transition:opacity .3s}
+  .arrow-internal{fill:#4a5568;opacity:.7}
+  .arrow-file2har{fill:#a0aec0;opacity:.9}
+  .arrow-har{fill:#4a5568;opacity:.7}
+  .arrows path.highlighted.arrow-internal{fill:#63b3ed;opacity:1}
+  .arrows path.highlighted.arrow-file2har{fill:#38a169;opacity:1}
+  .arrows path.highlighted.arrow-har{fill:#d69e2e;opacity:.95}
+
+  .link-label{font-size:10px;text-anchor:middle;pointer-events:none;fill:#38a169}
+  .link-label.highlighted{font-weight:bold}
+
+  .nodes circle{stroke:#e2e8f0;stroke-width:2;cursor:pointer;transition:opacity .3s}
+  .nodes circle.external-node{stroke-dasharray:4 4;stroke:#a0aec0}
+  .nodes g.highlighted circle{stroke:#63b3ed;stroke-width:3}
+  .nodes text{font-size:10px;pointer-events:none;fill:#e2e8f0;text-shadow:0 0 2px #1a202c,0 0 4px #1a202c}
+
+  .tooltip{position:absolute;background:rgba(45,55,72,.9);padding:8px 10px;font-size:12px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none}
+
+  #info-panel{position:absolute;top:1rem;right:1rem;min-width:240px;max-width:360px;background:rgba(45,55,72,.85);
+    backdrop-filter:blur(4px);border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.45;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+  #info-panel h3{margin:0 0 6px;font-weight:600;font-size:15px;color:#e2e8f0}
+  #info-panel p{margin:4px 0;color:#cbd5e0;word-break:break-all}
+
+  #rank-panel{position:absolute;right:1rem;bottom:1rem;max-height:50vh;width:380px;background:rgba(45,55,72,.9);
+    backdrop-filter:blur(4px);border-radius:10px;padding:10px 12px;overflow:auto;box-shadow:0 6px 16px rgba(0,0,0,.35);display:none}
+  #rank-panel h4{margin:.25rem 0 .5rem;font-size:14px;font-weight:700}
+  #rank-panel ol{margin:0 0 .75rem 1.25rem}
+  #rank-panel li{margin:.15rem 0;color:#e2e8f0}
+  #rank-panel a{color:#90cdf4;text-decoration:none}
+  #rank-panel a:hover{text-decoration:underline}
+  #rank-panel .muted{color:#a0aec0;font-size:12px}
+  #rank-close{position:absolute;top:8px;right:10px;background:#4a5568;border:none;border-radius:6px;color:#fff;font-size:12px;padding:.2rem .45rem;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="flex flex-col h-full">
+    <header class="p-4 bg-gray-800 shadow text-center">
+      <h1 class="text-2xl font-bold">多层依赖关系可视化</h1>
+    </header>
+
+    <div id="wrap">
+      <svg id="main-svg" class="w-full h-full"></svg>
+
+      <div class="floating-ui-container">
+        <button id="home"  class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded shadow">主页</button>
+        <button id="reset" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded shadow">重置视图</button>
+        <label><input id="toggle-nonzero" type="checkbox" /> 仅显示耗时≠0</label>
+        <label title="限制悬停高亮的层数（1-8层）">
+          高亮层级
+          <input id="depth-range" type="range" min="1" max="8" value="3" style="width:120px">
+          <span id="depth-value" style="min-width:1.5em;text-align:center">3</span>
+        </label>
+        <button id="rank-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded shadow">排行榜</button>
+      </div>
+
+      <div id="loading" class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75">
+        <p class="text-gray-400 text-lg">正在加载数据...</p>
+      </div>
+      <div id="tooltip" class="tooltip"></div>
+      <div id="info-panel"><h3>节点信息</h3><p>点击或悬停节点查看详情</p></div>
+
+      <div id="rank-panel">
+        <button id="rank-close">关闭</button>
+        <div id="rank-content"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(async()=>{
+  const last = p=>p.split(/[\\/]/).pop();
+  const label= (d,isHar)=>d.isExternal?d.name:(isHar?d.name:last(d.name));
+  const info = d3.select("#info-panel");
+
+  const svg=d3.select("#main-svg"), g=svg.append("g");
+  const linkG=g.append("g").attr("class","links");
+  const arrowG=g.append("g").attr("class","arrows");
+  const labelG=g.append("g").attr("class","labels");
+  const nodeG=g.append("g").attr("class","nodes");
+
+  let W,H; resize();
+  const zoom=d3.zoom().scaleExtent([.1,8]).on("zoom",e=>g.attr("transform",e.transform));
+  svg.call(zoom);
+
+  let data;
+  try{
+    data = await d3.json("hierarchical_integrated_data.json");
+  }catch(e){
+    d3.select("#loading").html('<p class="text-red-400 text-lg">加载 hierarchical_integrated_data.json 失败</p>');
+    throw e;
+  }
+  const {harGraph,fileGraphs,crossHarDependencies=[]}=data;
+  d3.select("#loading").style("display","none");
+
+  // —— 索引与全局视图状态 ——
+  const allFiles = Object.entries(fileGraphs).flatMap(([har,fg]) =>
+    (fg.nodes||[]).map(n => ({...n, __har: har}))
+  );
+  const harNodeById = new Map(harGraph.nodes.map(n=>[n.id,n]));
+  const fileNodeById = new Map(allFiles.map(n=>[n.id,n]));
+  const harByFileId  = new Map(allFiles.map(n=>[n.id,n.__har]));
+
+  let hideZero=false;
+  let currentView='har';  // 'har' | 'file'
+  let currentHar=null;
+  let highlightDepth = 3; // 悬停时显示的层数
+
+  let currentNodes = []; // 用于定位
+
+  renderHar(true);
+
+  function renderHar(fitOnce=false){
+    currentView='har'; currentHar=null;
+    renderGraph(harGraph.nodes, harGraph.edges, true, fitOnce);
+    info.html('<h3>节点信息</h3><p>点击或悬停节点查看详情</p>');
+  }
+
+  function renderFile(harName, fitOnce=false){
+    const fg=fileGraphs[harName];
+    if(!fg){ alert("无文件依赖"); return; }
+
+    const nodes=[...fg.nodes];
+    const edges=[...fg.edges];
+    const idSet=new Set(nodes.map(n=>n.id));
+
+    crossHarDependencies.forEach(dep=>{
+      if(!idSet.has(dep.sourceId)) return;
+      const tgt=harGraph.nodes.find(h=>h.name===dep.targetHarId);
+      if(!tgt) return;
+      if(!idSet.has(tgt.id)){
+        nodes.push({...tgt,isExternal:true,x:(Math.random()-0.5)*60,y:(Math.random()-0.5)*60});
+        idSet.add(tgt.id);
+      }
+      edges.push({source:dep.sourceId,target:tgt.id,count:dep.count});
+    });
+
+    currentView='file'; currentHar=harName;
+    renderGraph(nodes, edges, false, fitOnce);
+  }
+
+  function idOf(v){ return (v && typeof v === 'object') ? v.id : v; }
+  function normalizeEdges(arr){ return arr.map(e=>({ source:idOf(e.source), target:idOf(e.target), count:(e.count??null) })); }
+
+  function renderGraph(rawNodes, rawEdges, isHar, fitOnce){
+    linkG.selectAll("*").remove(); arrowG.selectAll("*").remove();
+    labelG.selectAll("*").remove(); nodeG.selectAll("*").remove();
+
+    const keep = n => !hideZero || n.timing_cycles != 0 || (!isHar && n.isExternal);
+    const nodes = rawNodes.filter(keep);
+    currentNodes = nodes;
+
+    const idSet = new Set(nodes.map(n=>n.id));
+    const baseEdges = normalizeEdges(rawEdges);
+
+    const edges = hideZero
+      ? reconnect(baseEdges, idSet)
+      : baseEdges.filter(e => idSet.has(e.source) && idSet.has(e.target));
+
+    // ======== 力导参数：HAR 与 File 分开配置 ========
+    let linkForce, charge, collide, radial, compX=null, compY=null;
+
+    if (isHar) {
+      // HAR 视图（较紧凑）
+      linkForce = d3.forceLink(edges).id(d=>d.id).distance(120).strength(0.95);
+      charge    = d3.forceManyBody().strength(-240).distanceMin(20).distanceMax(340);
+      collide   = d3.forceCollide().radius(26);
+      radial    = d3.forceRadial(0, W/2, H/2).strength(0.012);
+    } else {
+      // 文件视图：更疏散 + 连通子图分区（← 调整项）
+      linkForce = d3.forceLink(edges).id(d=>d.id).distance(190).strength(0.95);
+      charge    = d3.forceManyBody().strength(-420).distanceMin(20).distanceMax(1100);
+      collide   = d3.forceCollide().radius(24);
+      radial    = d3.forceRadial(0, W/2, H/2).strength(0.004);
+
+      const compIndexOf = computeComponents(nodes, edges);
+      const centers     = gridCenters(d3.max([...compIndexOf.values()])+1, W, H);
+      compX = d3.forceX(d => centers[compIndexOf.get(d.id)].x).strength(0.22);
+      compY = d3.forceY(d => centers[compIndexOf.get(d.id)].y).strength(0.22);
+    }
+
+    const sim=d3.forceSimulation(nodes)
+      .velocityDecay(0.45)
+      .force("link",linkForce)
+      .force("charge",charge)
+      .force("collide",collide)
+      .force("radial",radial)
+      .force("center",d3.forceCenter(W/2,H/2));
+
+    if (compX && compY){ sim.force("compX", compX).force("compY", compY); }
+
+    // 线
+    const lines=linkG.selectAll("line")
+      .data(edges)
+      .join("line")
+      .attr("class", d=>{
+        if (d.count!=null) return "file2har";
+        return isHar ? "har" : "internal";
+      });
+
+    // 箭头 —— 所有边都画
+    const arrows=arrowG.selectAll("path")
+      .data(edges)
+      .join("path")
+      .attr("d","M0,-3L6,0L0,3Z")
+      .attr("class", d=>{
+        if (d.count!=null) return "arrow-file2har";
+        return isHar ? "arrow-har" : "arrow-internal";
+      });
+
+    // File→HAR 的计数标签
+    const labels=labelG.selectAll("text")
+      .data(edges.filter(d=>d.count!=null))
+      .join("text").attr("class","link-label")
+      .text(d=>d.count);
+
+    // 节点尺寸/颜色
+    const maxT=d3.max(nodes,d=>d.timing_cycles)||1;
+    const r=d3.scaleLinear().domain([0,maxT]).range(isHar?[12,28]:[6,14]);
+    const col=d3.scaleSequential(isHar?d3.interpolateInferno:d3.interpolateTurbo).domain([maxT,0]);
+
+    const ng=nodeG.selectAll("g")
+      .data(nodes, d=>d.id)
+      .join("g")
+      .call(d3.drag()
+        .on("start",(e,d)=>{if(!e.active)sim.alphaTarget(.3).restart();d.fx=d.x;d.fy=d.y;})
+        .on("drag",(e,d)=>{d.fx=e.x;d.fy=e.y;})
+        .on("end",(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;}));
+
+    ng.append("circle")
+      .attr("r",d=>d.isExternal?15:r(d.timing_cycles))
+      .attr("fill",d=>d.isExternal? "#4a5568":col(d.timing_cycles))
+      .attr("class",d=>d.isExternal?"external-node":null);
+
+    ng.append("text")
+      .attr("x",d=>(d.isExternal?15:r(d.timing_cycles))+4)
+      .attr("y",4)
+      .text(d=>label(d,isHar));
+
+    // 点击
+    ng.on("click",(e,d)=>{
+      if(isHar && !d.isExternal){
+        renderFile(d.name, true);
+      }else{
+        showInfo(d,isHar);
+      }
+    });
+
+    // 悬停（按层数的子树）
+    ng.on("mouseover",(e,d)=>{
+      if(isHar && !d.isExternal) showInfo(d,isHar);
+      const set=descendDepth(d,edges,highlightDepth);
+      ng.style("opacity",.08);
+      lines.style("opacity",.08);
+      arrows.style("opacity",.08);
+      labels.style("opacity",.08);
+
+      ng.filter(n=>set.nodes.has(n.id)).style("opacity",1).classed("highlighted",true);
+      lines.filter(l=>set.links.has(l)).style("opacity",1).classed("highlighted",true);
+      arrows.filter(l=>set.links.has(l)).style("opacity",1).classed("highlighted",true);
+      labels.filter(l=>set.links.has(l)).style("opacity",1).classed("highlighted",true);
+    }).on("mouseout",()=>{
+      ng.style("opacity",1).classed("highlighted",false);
+      lines.style("opacity",1).classed("highlighted",false);
+      arrows.style("opacity",1).classed("highlighted",false);
+      labels.style("opacity",1).classed("highlighted",false);
+      if(isHar) info.html('<h3>节点信息</h3><p>点击或悬停节点查看详情</p>');
+    });
+
+    // tick
+    sim.on("tick",()=>{
+      lines
+        .attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+        .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+
+      ng.attr("transform",d=>`translate(${d.x},${d.y})`);
+
+      arrows.attr("transform",d=>{
+        const midX=(d.source.x+d.target.x)/2;
+        const midY=(d.source.y+d.target.y)/2;
+        const angle=Math.atan2(d.target.y-d.source.y,d.target.x-d.source.x)*180/Math.PI;
+        return `translate(${midX},${midY}) rotate(${angle})`;
+      });
+
+      labels
+        .attr("x",d=>(d.source.x+d.target.x)/2)
+        .attr("y",d=>(d.source.y+d.target.y)/2-4);
+    });
+
+    if(fitOnce){
+      sim.on("end",()=> fitGraph(nodes));
+    }
+  }
+
+  // —— 有向 BFS：限制层数 n（根为第0层）——
+  function descendDepth(start,edges,maxDepth){
+    const idStart = start.id;
+    const nSet=new Set([idStart]);
+    const lSet=new Set();
+
+    // 邻接（有向：source -> targets）
+    const adj = new Map();
+    edges.forEach(l=>{
+      const s=idOf(l.source), t=idOf(l.target);
+      if(!adj.has(s)) adj.set(s,[]);
+      adj.get(s).push({edge:l, to:t});
+    });
+
+    const q=[{id:idStart, depth:0}];
+    while(q.length){
+      const {id,depth}=q.shift();
+      if(depth>=maxDepth) continue;
+      const list=adj.get(id); if(!list) continue;
+      for(const {edge,to} of list){
+        lSet.add(edge);
+        if(!nSet.has(to)){
+          nSet.add(to);
+          q.push({id:to, depth:depth+1});
+        }
+      }
+    }
+    return {nodes:nSet, links:lSet};
+  }
+
+  // —— 按当前边（无向）计算连通子图：返回 Map<nodeId, compIdx>
+  function computeComponents(nodes, edges){
+    const idSet = new Set(nodes.map(n=>n.id));
+    const adj = new Map();
+    idSet.forEach(id=>adj.set(id,new Set()));
+    edges.forEach(e=>{
+      const s = idOf(e.source), t = idOf(e.target);
+      if(!idSet.has(s) || !idSet.has(t)) return;
+      adj.get(s).add(t);
+      adj.get(t).add(s);
+    });
+
+    const compIndexOf = new Map();
+    let comp = 0;
+    for(const id of idSet){
+      if(compIndexOf.has(id)) continue;
+      const q=[id]; compIndexOf.set(id,comp);
+      while(q.length){
+        const cur=q.shift();
+        adj.get(cur).forEach(n=>{
+          if(!compIndexOf.has(n)){ compIndexOf.set(n,comp); q.push(n); }
+        });
+      }
+      comp++;
+    }
+    return compIndexOf; // id -> compIdx
+  }
+
+  // —— 生成网格中心（按组件个数分布在画布上）
+  function gridCenters(k, width, height){
+    if(k<=0) return [];
+    const cols = Math.ceil(Math.sqrt(k));
+    const rows = Math.ceil(k / cols);
+    const pad  = 60; // 外边距
+    const cellW = Math.max(1,(width  - pad*2) / cols);
+    const cellH = Math.max(1,(height - pad*2) / rows);
+    const centers = [];
+    for(let i=0;i<k;i++){
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      centers.push({
+        x: pad + cellW*(c + 0.5),
+        y: pad + cellH*(r + 0.5)
+      });
+    }
+    return centers;
+  }
+
+  // —— 非零过滤后的路径重连（保留方向）——
+  function reconnect(edgesIdOnly, keptIdSet){
+    const adj = new Map();
+    edgesIdOnly.forEach(e=>{
+      if(e.count!=null) return; // 跨 HAR 计数边不参与递推
+      const s = e.source, t = e.target;
+      if(!adj.has(s)) adj.set(s,new Set());
+      adj.get(s).add(t);
+    });
+
+    const result = [];
+    edgesIdOnly.forEach(e=>{
+      if(keptIdSet.has(e.source) && keptIdSet.has(e.target)) result.push(e);
+    });
+
+    const MAX_HOPS = 2000;
+    keptIdSet.forEach(src=>{
+      const q=[src];
+      const visited=new Set([src]);
+      let hops=0;
+      while(q.length && hops<MAX_HOPS){
+        const cur=q.shift(); hops++;
+        const nexts = adj.get(cur);
+        if(!nexts) continue;
+        nexts.forEach(t=>{
+          if(visited.has(t)) return;
+          visited.add(t);
+          if(keptIdSet.has(t)){
+            result.push({source:src, target:t, count:null});
+          }else{
+            q.push(t);
+          }
+        });
+      }
+    });
+
+    const seen = new Set();
+    const dedup = [];
+    for(const e of result){
+      const key = `${e.source}->${e.target}|${e.count??'n'}`;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      dedup.push(e);
+    }
+    return dedup;
+  }
+
+  function fitGraph(nodesArr){
+    if(!nodesArr.length) return;
+    const minX=d3.min(nodesArr,d=>d.x), maxX=d3.max(nodesArr,d=>d.x);
+    const minY=d3.min(nodesArr,d=>d.y), maxY=d3.max(nodesArr,d=>d.y);
+    const graphWidth=Math.max(1,maxX-minX), graphHeight=Math.max(1,maxY-minY);
+    const scale=0.9*Math.min(W/graphWidth, H/graphHeight);
+    const tx = (W - scale*(minX+maxX))/2;
+    const ty = (H - scale*(minY+maxY))/2;
+    svg.transition().duration(600)
+      .call(zoom.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
+  }
+
+  function showInfo(d,isHar){
+    const lines = [];
+    lines.push(`<h3>节点信息</h3>`);
+    lines.push(`<p><strong>名称：</strong> ${isHar? d.name : last(d.name)}</p>`);
+    if(!isHar && !d.isExternal){
+      lines.push(`<p><strong>完整路径：</strong> ${d.name}</p>`);
+    }
+    lines.push(`<p><strong>类型：</strong> ${d.isExternal?'外部 HAR 包':(isHar?'HAR 包':'文件')}</p>`);
+    if(d.timing_cycles!=null){
+      lines.push(`<p><strong>耗时：</strong> ${d.timing_cycles} cycles</p>`);
+    }
+    info.html(lines.join(""));
+  }
+
+  /* ====== 排行面板（支持点击定位） ====== */
+  function openRankPanel(){
+    const panel = d3.select("#rank-panel");
+    const box = d3.select("#rank-content");
+    panel.style("display","block");
+
+    const fmt = v => (v==null?'-':v);
+    let html = '';
+
+    if(currentView==='har'){
+      // HAR 包排行
+      const harSorted = [...harGraph.nodes].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,50);
+      html += `<h4>HAR 包排行（Top 50）</h4><ol>`;
+      harSorted.forEach(n=>{
+        html += `<li><a href="#" data-type="har" data-id="${n.id}">${n.name}</a> <span class="muted">— ${fmt(n.timing_cycles)} cycles</span></li>`;
+      });
+      html += `</ol>`;
+
+      // 全部文件排行
+      const fileSorted = [...allFiles].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,50);
+      html += `<h4>全部文件排行（Top 50）</h4><ol>`;
+      fileSorted.forEach(n=>{
+        const har = n.__har || harByFileId.get(n.id) || '';
+        html += `<li><a href="#" data-type="file" data-id="${n.id}" data-har="${har}">${last(n.name)}</a> <span class="muted">— ${fmt(n.timing_cycles)} cycles · ${har}</span></li>`;
+      });
+      html += `</ol>`;
+    }else{
+      const fg=fileGraphs[currentHar]||{nodes:[]};
+      const inner = [...fg.nodes].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,50);
+      html += `<h4>${currentHar} 文件排行（Top 50）</h4><ol>`;
+      inner.forEach(n=>{
+        html += `<li><a href="#" data-type="file" data-id="${n.id}" data-har="${currentHar}">${last(n.name)}</a> <span class="muted">— ${fmt(n.timing_cycles)} cycles</span></li>`;
+      });
+      html += `</ol>`;
+
+      // 附：全部文件 Top 30
+      const fileSorted = [...allFiles].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,30);
+      html += `<h4>全部文件排行（Top 30）</h4><ol>`;
+      fileSorted.forEach(n=>{
+        const har = n.__har || harByFileId.get(n.id) || '';
+        html += `<li><a href="#" data-type="file" data-id="${n.id}" data-har="${har}">${last(n.name)}</a> <span class="muted">— ${fmt(n.timing_cycles)} cycles · ${har}</span></li>`;
+      });
+      html += `</ol>`;
+    }
+    box.html(html);
+  }
+  function closeRankPanel(){ d3.select("#rank-panel").style("display","none"); }
+
+  // 排行面板点击代理：定位&跳转
+  document.getElementById('rank-content').addEventListener('click', async (e)=>{
+    const a = e.target.closest('a[data-type]');
+    if(!a) return;
+    e.preventDefault();
+
+    const type = a.dataset.type;
+    if(type === 'har'){
+      const harId = a.dataset.id;
+      if(currentView!=='har') renderHar(true);
+      const node = harNodeById.get(harId);
+      if(node && hideZero && !node.timing_cycles){
+        hideZero = false;
+        d3.select("#toggle-nonzero").property("checked", false);
+        renderHar(true);
+      }
+      focusWhenReady(harId);
+    }else if(type === 'file'){
+      const fileId = a.dataset.id;
+      const harName = a.dataset.har || harByFileId.get(fileId);
+      const node = fileNodeById.get(fileId);
+      if(node && hideZero && !node.timing_cycles){
+        hideZero = false;
+        d3.select("#toggle-nonzero").property("checked", false);
+      }
+      if(currentView!=='file' || currentHar!==harName){
+        renderFile(harName, true);
+      }
+      focusWhenReady(fileId);
+    }
+  });
+
+  async function focusWhenReady(targetId, tries=20){
+    for(let i=0;i<tries;i++){
+      const ok = focusNode(targetId);
+      if(ok) return;
+      await new Promise(r=>setTimeout(r,120));
+    }
+  }
+
+  function focusNode(targetId){
+    const sel = nodeG.selectAll("g").filter(d=>d.id===targetId);
+    if (!sel.size()) return false;
+    const d = sel.datum();
+    if (d==null || typeof d.x!=='number' || typeof d.y!=='number') return false;
+
+    const scale = 2.0;
+    const tx = W/2 - scale*d.x;
+    const ty = H/2 - scale*d.y;
+    svg.transition().duration(600)
+      .call(zoom.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
+
+    const circ = sel.select("circle");
+    circ.interrupt()
+      .transition().duration(120).attr("stroke","#f6ad55").attr("stroke-width",4)
+      .transition().duration(600).attr("stroke","#e2e8f0").attr("stroke-width",2);
+    return true;
+  }
+
+  // 事件 & 控件
+  d3.select("#home").on("click",()=>{ renderHar(true); closeRankPanel(); });
+  d3.select("#reset").on("click",()=> svg.transition().duration(600).call(zoom.transform,d3.zoomIdentity));
+  d3.select("#rank-btn").on("click",openRankPanel);
+  d3.select("#rank-close").on("click",closeRankPanel);
+
+  d3.select("#toggle-nonzero").on("change", function(){
+    hideZero = this.checked;
+    if(currentView==='har') renderHar(false);
+    else renderFile(currentHar, false);
+  });
+
+  const depthRange = document.getElementById("depth-range");
+  const depthValue = document.getElementById("depth-value");
+  depthRange.addEventListener("input", ()=>{
+    highlightDepth = parseInt(depthRange.value,10) || 1;
+    depthValue.textContent = highlightDepth;
+  });
+
+  window.addEventListener("resize",resize);
+  function resize(){
+    W=document.getElementById("wrap").clientWidth;
+    H=document.getElementById("wrap").clientHeight;
+    svg.attr("width",W).attr("height",H);
+  }
+})();
+</script>
+</body>
+</html>
