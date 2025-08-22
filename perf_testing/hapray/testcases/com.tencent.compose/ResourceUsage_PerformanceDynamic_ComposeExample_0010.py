@@ -35,22 +35,14 @@ class ResourceUsage_PerformanceDynamic_ComposeExample_0010(PerfTestCase):
             self.swipes_down(5, 2)
 
         def step2():
-            self.touch_by_text('CApi 1500View', 5)
-            self.swipes_up(5, 2)
-            self.swipes_down(5, 2)
-
-        def step3():
-            self.touch_by_text('Compose 1500View CApi', 5)
+            self.touch_by_text('Compose Lazy 1500View', 5)
             self.swipes_up(5, 2)
             self.swipes_down(5, 2)
 
         self.swipes_up(1, 2)
-        self.execute_performance_step("ComposeExample-1500View测试场景-step1 Compose 1500View", 30, step1,
+        self.execute_performance_step("ComposeExample-1500View测试场景-step1 ComposeView1500", 30, step1,
                                       sample_all_processes=True)
         self.driver.swipe_to_back()
-        self.execute_performance_step("ComposeExample-1500View测试场景-step2 CApi 1500View", 30, step2,
-                                      sample_all_processes=True)
-        self.driver.swipe_to_back()
-        self.execute_performance_step("ComposeExample-1500View测试场景-step3 Compose 1500View CApi", 30, step3,
+        self.execute_performance_step("ComposeExample-1500View测试场景-step2 ComposeLazyView1500Page", 30, step2,
                                       sample_all_processes=True)
         self.driver.swipe_to_back()
