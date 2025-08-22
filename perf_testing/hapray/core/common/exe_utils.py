@@ -17,9 +17,11 @@ import logging
 import os
 import platform
 import subprocess
+import json
 from typing import List, Tuple, Optional
 
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.config.config import Config
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -81,6 +83,79 @@ class ExeUtils:
 
     # Path to the trace streamer executable
     trace_streamer_path = _get_trace_streamer_path()
+
+    @staticmethod
+    def _get_so_dir_cache_file(output_db: str) -> str:
+        """Get the cache file path for storing so_dir parameter info.
+
+        Args:
+            output_db: Path to the output database file
+
+        Returns:
+            Path to the cache file
+        """
+        cache_dir = os.path.dirname(output_db)
+        db_name = os.path.splitext(os.path.basename(output_db))[0]
+        return os.path.join(cache_dir, f".{db_name}_so_dir_cache.json")
+
+    @staticmethod
+    def _should_regenerate_db(output_db: str, so_dir: Optional[str]) -> bool:
+        """Check if the database should be regenerated based on so_dir changes.
+
+        Args:
+            output_db: Path to the output database file
+            so_dir: Current so_dir parameter value
+
+        Returns:
+            True if database should be regenerated, False otherwise
+        """
+        # If database doesn't exist, always regenerate
+        if not os.path.exists(output_db):
+            return True
+
+        cache_file = ExeUtils._get_so_dir_cache_file(output_db)
+
+        # If cache file doesn't exist, regenerate and create cache
+        if not os.path.exists(cache_file):
+            return True
+
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+                cached_so_dir = cache_data.get('so_dir_value')
+
+            # Normalize paths for comparison
+            current_so_dir = os.path.abspath(so_dir) if so_dir else None
+            cached_so_dir = os.path.abspath(cached_so_dir) if cached_so_dir else None
+
+            # If so_dir changed, regenerate
+            return current_so_dir != cached_so_dir
+
+        except (json.JSONDecodeError, IOError, KeyError):
+            # If cache is corrupted, regenerate
+            return True
+
+    @staticmethod
+    def _update_so_dir_cache(output_db: str, so_dir: Optional[str]):
+        """Update the so_dir cache file with current parameter state.
+
+        Args:
+            output_db: Path to the output database file
+            so_dir: Current so_dir parameter value
+        """
+        cache_file = ExeUtils._get_so_dir_cache_file(output_db)
+
+        cache_data = {
+            'so_dir_value': so_dir,
+            'timestamp': os.path.getmtime(output_db) if os.path.exists(output_db) else None
+        }
+
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, indent=2)
+        except IOError as e:
+            logger.warning("Failed to update so_dir cache: %s", str(e))
 
     @staticmethod
     def build_hapray_cmd(args: List[str]) -> List[str]:
@@ -168,6 +243,7 @@ class ExeUtils:
         """Converts an .htrace file to a SQLite database.
 
         Uses the trace_streamer tool to perform the conversion.
+        Only regenerates the database if the so_dir parameter has changed.
 
         Args:
             data_file: Path to input .htrace/.data file
@@ -177,6 +253,15 @@ class ExeUtils:
             True if conversion was successful, False otherwise
         """
         try:
+            # Get current so_dir configuration
+            so_dir = Config.get('so_dir', None)
+
+            # Check if regeneration is needed
+            if not ExeUtils._should_regenerate_db(output_db, so_dir):
+                logger.info("Database %s is up-to-date with current so_dir configuration, skipping conversion",
+                            output_db)
+                return True
+
             # Ensure output directory exists
             output_dir = os.path.dirname(output_db)
             os.makedirs(output_dir, exist_ok=True)
@@ -189,7 +274,12 @@ class ExeUtils:
                 output_db
             ]
 
-            logger.info("Converting htrace to DB: %s -> %s", data_file, output_db)
+            # Add so_dir parameter if configured
+            if so_dir:
+                cmd.extend(['--So_dir', os.path.abspath(so_dir)])
+                logger.info("Converting htrace to DB with so_dir: %s -> %s (so_dir: %s)", data_file, output_db, so_dir)
+            else:
+                logger.info("Converting htrace to DB: %s -> %s", data_file, output_db)
 
             # Execute conversion
             success, _, stderr = ExeUtils.execute_command(cmd)
@@ -202,6 +292,9 @@ class ExeUtils:
             if not os.path.exists(output_db):
                 logger.error("Output DB file not created: %s", output_db)
                 return False
+
+            # Update cache with current so_dir state
+            ExeUtils._update_so_dir_cache(output_db, so_dir)
 
             logger.info("Successfully converted %s to %s", data_file, output_db)
             return True
