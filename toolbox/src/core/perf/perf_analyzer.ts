@@ -908,13 +908,13 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         const total = [0, 0];
 
         // 负载计数统计
-        let count = 0;      // 总负载数
-        let app_count = 0;  // 应用负载数
+        let count = 0; // 总负载数
+        let app_count = 0; // 应用负载数
 
         // 初始化大类统计数组
         // ComponentCategory 枚举值: APP_ABC=0, APP_SO=1, ..., UNKNOWN=-1
         // 我们需要为所有正值和UNKNOWN(-1)创建索引
-        const maxCategoryValue = Math.max(...Object.values(ComponentCategory).filter(v => typeof v === 'number' && v >= 0) as number[]);
+        const maxCategoryValue = Math.max(...Object.values(ComponentCategory).filter(v => typeof v === 'number' && v >= 0) as Array<number>);
         const categoryCount = maxCategoryValue + 2; // +1 for 0-based index, +1 for UNKNOWN
 
         for (let i = 0; i < categoryCount; i++) {
@@ -933,14 +933,14 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             count += data.symbolEvents;
 
             // 判断是否为应用负载：processName 或 threadName 包含 packageName
-            if (packageName && data.processName && data.processName.includes(packageName)) {
+            if (packageName && data.processName.includes(packageName)) {
                 app_count += data.symbolEvents;
             }
 
             // 统计组件负载
             if (!componentMap.has(componentKey)) {
                 componentMap.set(componentKey, {
-                    name: data.componentName || 'Unknown',
+                    name: data.componentName ?? 'Unknown',
                     cycles: 0,
                     totalCycles: 0,
                     instructions: 0,
@@ -954,7 +954,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             if (eventIndex === PerfEvent.CYCLES_EVENT) {
                 component.cycles += data.symbolEvents;
                 component.totalCycles += data.symbolTotalEvents;
-            } else if (eventIndex === PerfEvent.INSTRUCTION_EVENT) {
+            } else {
+                // Must be INSTRUCTION_EVENT since there are only two enum values
                 component.instructions += data.symbolEvents;
                 component.totalInstructions += data.symbolTotalEvents;
             }
@@ -1005,7 +1006,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 scene: testInfo.scene,
                 step_name: step.description,
                 step_id: step.stepIdx,
-                count: stepSum.count,        // 使用已统计的总负载数
+                count: stepSum.count, // 使用已统计的总负载数
                 app_count: stepSum.app_count, // 使用已统计的应用负载数
             };
             summaryJsonObject.push(summaryObject);
