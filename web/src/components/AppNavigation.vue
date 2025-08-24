@@ -68,6 +68,13 @@
               <span>帧分析</span>
             </el-menu-item>
 
+            <el-menu-item :index="`fault_tree_step_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Warning />
+              </el-icon>
+              <span>故障树分析</span>
+            </el-menu-item>
+
             <el-menu-item :index="`flame_step_${step.id}`" :title="step.step_name">
               <el-icon>
                 <Histogram />
@@ -126,7 +133,8 @@ import {
   Document,
   Monitor,
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Warning
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{
