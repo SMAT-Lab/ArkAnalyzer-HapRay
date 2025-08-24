@@ -56,6 +56,7 @@ class ReportData:
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         data = cls(scene_dir, result)
         data.load_perf_data(perf_data_path)
+        data.load_trace_data(scene_dir)
         return data
 
     def __str__(self):
@@ -118,6 +119,41 @@ class ReportData:
             "scene": first_entry.get("scene", ""),
             "timestamp": first_entry.get("timestamp", 0)
         }
+
+    def load_trace_data(self, scene_dir: str):
+        """加载 trace 相关数据"""
+        report_dir = os.path.join(scene_dir, 'report')
+
+        # 确保 trace 字段存在
+        if 'trace' not in self.result:
+            self.result['trace'] = {}
+
+        # 加载各种 trace 数据
+        trace_files = {
+            'frames': 'trace_frames.json',
+            'emptyFrame': 'trace_emptyFrame.json',
+            'componentReuse': 'trace_componentReuse.json',
+            'coldStart': 'trace_coldStart.json',
+            'gc_thread': 'trace_gc_thread.json',
+            'frameLoads': 'trace_frameLoads.json',
+            'vsyncAnomaly': 'trace_vsyncAnomaly.json',
+            'faultTree': 'trace_fault_tree.json'
+        }
+
+        for key, filename in trace_files.items():
+            file_path = os.path.join(report_dir, filename)
+            data = self._load_json_safe(file_path, default={})
+            if data:  # 只有当数据不为空时才添加
+                self.result['trace'][key] = data
+
+        # 加载火焰图数据
+        if 'more' not in self.result:
+            self.result['more'] = {}
+
+        flame_graph_path = os.path.join(report_dir, 'more_flame_graph.json')
+        flame_graph_data = self._load_json_safe(flame_graph_path, default={})
+        if flame_graph_data:
+            self.result['more']['flame_graph'] = flame_graph_data
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""
