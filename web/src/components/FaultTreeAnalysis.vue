@@ -158,7 +158,8 @@
         <i>🔍</i> 故障诊断建议
       </div>
       <div class="diagnosis-cards">
-        <div v-for="suggestion in getDiagnosisSuggestions()" :key="suggestion.category" 
+        <div
+v-for="suggestion in getDiagnosisSuggestions()" :key="suggestion.category" 
              class="diagnosis-card" :class="suggestion.severity">
           <div class="diagnosis-header">
             <span class="diagnosis-icon">{{ suggestion.icon }}</span>
@@ -178,7 +179,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { useJsonDataStore, getDefaultFaultTreeStepData } from '../stores/jsonDataStore.ts';
 
 const props = defineProps({

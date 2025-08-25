@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-import os, sys, json, shutil, subprocess, logging, datetime
+import os
+import json
+import shutil
+import subprocess
+import logging
 from collections import defaultdict
 from pathlib import Path
+
 LOG = logging.getLogger(__name__)
+
 
 # --------- 基础工具 ---------
 def _run(cmd, cwd=None, env=None):
@@ -16,12 +22,16 @@ def _run(cmd, cwd=None, env=None):
         LOG.debug(res.stdout)
     return res
 
+
 def _ensure_dir(p):
-    os.makedirs(p, exist_ok=True); return p
+    os.makedirs(p, exist_ok=True)
+    return p
+
 
 def _write_json(path, obj):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
+
 
 # --------- Homecheck 执行 ---------
 def run_homecheck(homecheck_root: str, out_dir: str):
@@ -39,11 +49,14 @@ def run_homecheck(homecheck_root: str, out_dir: str):
     ], cwd=homecheck_root)
 
     for name in ("fileDepGraph.json", "moduleDepGraph.json"):
-        src = os.path.join(tmp_dir, name); dst = os.path.join(out_dir, name)
+        src = os.path.join(tmp_dir, name)
+        dst = os.path.join(out_dir, name)
         if not os.path.exists(src):
             raise FileNotFoundError(f"Homecheck missing {name}")
         shutil.copy(src, dst)
         LOG.info("Homecheck -> %s", dst)
+
+
 # --------- reports 目录解析（新增） ---------
 def _has_ts_subdirs(p: Path) -> bool:
     """判断目录下是否存在 14 位纯数字时间戳子目录"""
@@ -53,6 +66,7 @@ def _has_ts_subdirs(p: Path) -> bool:
         if d.is_dir() and d.name.isdigit() and len(d.name) == 14:
             return True
     return False
+
 
 def resolve_reports_root(reports_root: str | None) -> str:
     """
@@ -88,7 +102,9 @@ def resolve_reports_root(reports_root: str | None) -> str:
         "; ".join(str(c) for c in candidates)
     )
 
+
 # --------- 从 HapRay 报告抽取两份文件 ---------
+
 
 def pick_latest_case_dirs(reports_root: str):
     """
@@ -105,6 +121,7 @@ def pick_latest_case_dirs(reports_root: str):
     if not cases:
         raise FileNotFoundError("No case folder found in latest reports/")
     return latest, cases
+
 
 def extract_hapray_outputs(reports_root: str, out_dir: str):
     """
@@ -129,7 +146,7 @@ def extract_hapray_outputs(reports_root: str, out_dir: str):
     har_items = []
     for c in cases:
         info = os.path.join(c, "hiperf", "hiperf_info.json")
-        if not os.path.exists(info): 
+        if not os.path.exists(info):
             continue
         try:
             with open(info, "r", encoding="utf-8") as f:
@@ -148,6 +165,7 @@ def extract_hapray_outputs(reports_root: str, out_dir: str):
     _write_json(os.path.join(out_dir, "component_timings.json"), har_items)
     LOG.info("Wrote component_timings.json (%d items)", len(har_items))
 
+
 # --------- 整合四文件为 hierarchical_integrated_data.json ---------
 def get_hapray_data_list(data: dict):
     try:
@@ -156,11 +174,12 @@ def get_hapray_data_list(data: dict):
         LOG.warning("hapray_report missing perf.steps[0].data")
         return []
 
+
 def integrate_four(in_dir: str, out_path: str):
-    fileDepGraph_data   = json.load(open(os.path.join(in_dir, "fileDepGraph.json"), "r", encoding="utf-8"))
+    fileDepGraph_data = json.load(open(os.path.join(in_dir, "fileDepGraph.json"), "r", encoding="utf-8"))
     moduleDepGraph_data = json.load(open(os.path.join(in_dir, "moduleDepGraph.json"), "r", encoding="utf-8"))
-    hapray_report_data  = json.load(open(os.path.join(in_dir, "hapray_report.json"), "r", encoding="utf-8"))
-    component_timings   = json.load(open(os.path.join(in_dir, "component_timings.json"), "r", encoding="utf-8"))
+    hapray_report_data = json.load(open(os.path.join(in_dir, "hapray_report.json"), "r", encoding="utf-8"))
+    component_timings = json.load(open(os.path.join(in_dir, "component_timings.json"), "r", encoding="utf-8"))
 
     # 1) HAR 耗时映射
     har_timing = {}
@@ -182,11 +201,13 @@ def integrate_four(in_dir: str, out_path: str):
     har_short_names = {os.path.basename(n["name"]) for n in moduleDepGraph_data.get("nodes", [])}
     file_to_har = {}
     for n in fileDepGraph_data.get("nodes", []):
-        fpath = n["name"]; chosen = "无法推断"
+        fpath = n["name"]
+        chosen = "无法推断"
         for part in reversed(os.path.normpath(fpath).split(os.sep)):
             part = part.split('.')[0]
             if part in har_short_names:
-                chosen = part; break
+                chosen = part
+                break
         file_to_har[fpath] = chosen
 
     # 4) 完整路径 → 耗时
@@ -205,7 +226,8 @@ def integrate_four(in_dir: str, out_path: str):
     # HAR 节点
     har_nodes_map = {}
     for n in moduleDepGraph_data.get("nodes", []):
-        short = os.path.basename(n["name"]); n["name"] = short
+        short = os.path.basename(n["name"])
+        n["name"] = short
         n["timing_cycles"] = har_timing.get(short, 0)
         out["harGraph"]["nodes"].append(n)
         har_nodes_map[n["id"]] = short
@@ -213,7 +235,8 @@ def integrate_four(in_dir: str, out_path: str):
     # 文件节点 & 跨包
     file_id_to_har = {}
     for n in fileDepGraph_data.get("nodes", []):
-        f = n["name"]; har = file_to_har.get(f)
+        f = n["name"]
+        har = file_to_har.get(f)
         if har and har != "无法推断":
             n["timing_cycles"] = full_file_timing.get(f, 0)
             out["fileGraphs"][har]["nodes"].append(n)
@@ -223,7 +246,7 @@ def integrate_four(in_dir: str, out_path: str):
     for e in fileDepGraph_data.get("edges", []):
         s, t = e["source"], e["target"]
         hs, ht = file_id_to_har.get(s), file_id_to_har.get(t)
-        if not hs or not ht: 
+        if not hs or not ht:
             continue
         if hs == ht:
             out["fileGraphs"][hs]["edges"].append(e)
@@ -241,6 +264,7 @@ def integrate_four(in_dir: str, out_path: str):
     }
     _write_json(out_path, final)
     LOG.info("Wrote %s", out_path)
+
 
 # --------- 轻量 index.html（可替换为你的完整版） ---------
 INDEX_HTML = """<!DOCTYPE html>
@@ -264,6 +288,7 @@ fetch('hierarchical_integrated_data.json').then(r=>r.json()).then(d=>{
 </body></html>
 """
 
+
 def ensure_index_html(out_dir: str):
     web_dir = os.path.join(os.path.dirname(__file__), "web")
     src = os.path.join(web_dir, "index.html")
@@ -275,6 +300,7 @@ def ensure_index_html(out_dir: str):
         with open(dst, "w", encoding="utf-8") as f:
             f.write(INDEX_HTML)
         LOG.info("Wrote minimal viewer: %s", dst)
+
 
 # --------- 顶层管线 ---------
 def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
@@ -309,4 +335,3 @@ def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
     ensure_index_html(out_dir)
 
     LOG.info("HapFlow is ready: %s", out_dir)
-
