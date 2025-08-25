@@ -270,8 +270,12 @@ class PerfAction:
         parser.add_argument('--round', type=int, default=5, help="Number of test rounds")
         parser.add_argument('--no-trace', action='store_true', help="Disable trace capturing")
         parser.add_argument('--devices', nargs='+', default=None, help='Device serial numbers (e.g., HX1234567890)')
-
+        parser.add_argument("--hapflow", type=str, metavar="HOMECHECK_DIR",
+                    help="Enable HapFlow pipeline and specify Homecheck root directory")
+        
         parsed_args = parser.parse_args(args)
+        if parsed_args.hapflow:
+            parsed_args.circles = True
         root_path = os.getcwd()
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
         reports_path = os.path.join(root_path, 'reports', timestamp)
@@ -289,6 +293,15 @@ class PerfAction:
         action = PerfAction(reports_path, parsed_args.round, devices=parsed_args.devices)
         action.run()
 
+        if parsed_args.hapflow:
+            try:
+                from hapray.ext.hapflow.runner import run_hapflow_pipeline
+                run_hapflow_pipeline(
+                    reports_root=reports_path,               # HapRay 当次输出 reports/<timestamp>
+                    homecheck_root=parsed_args.hapflow       # 你的 Homecheck 根目录
+                )
+            except Exception as e:
+                logging.getLogger().exception("HapFlow pipeline failed: %s", e)
         return reports_path
 
     def run(self):
