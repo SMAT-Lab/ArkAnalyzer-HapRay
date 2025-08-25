@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0170(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -64,22 +61,22 @@ class ResourceUsage_PerformanceDynamic_Douyin_0170(PerfTestCase):
         self.touch_by_text('EDIFIER漫步者官方旗舰店', 2)
 
         # Step1
-        self.execute_performance_step("抖音-直播间操作场景-step1直播间礼物浏览", 20, step1)
+        self.execute_performance_step('抖音-直播间操作场景-step1直播间礼物浏览', 20, step1)
         # 收起礼物界面
         self.touch_by_coordinates(500, 700, 2)
 
         # Step2: 点开小时榜
         self.touch_by_coordinates(173, 341, 2)
-        self.execute_performance_step("抖音-直播间操作场景-step2人气榜/小时榜浏览", 40, step2)
+        self.execute_performance_step('抖音-直播间操作场景-step2人气榜/小时榜浏览', 40, step2)
         # 关闭小时榜
         self.touch_by_coordinates(173, 341, 2)
 
         # Step3: 点开小黄车
-        self.execute_performance_step("抖音-直播间操作场景-step3小黄车商品列表浏览", 35, step3)
+        self.execute_performance_step('抖音-直播间操作场景-step3小黄车商品列表浏览', 35, step3)
 
         # Step4: 商品详情浏览
-        self.execute_performance_step("抖音-直播间操作场景-step4商品详情页浏览", 35, step4)
+        self.execute_performance_step('抖音-直播间操作场景-step4商品详情页浏览', 35, step4)
         self.swipe_to_back()
 
         # Step5: 购物车浏览
-        self.execute_performance_step("抖音-直播间操作场景-step5购物车列表浏览", 35, step5)
+        self.execute_performance_step('抖音-直播间操作场景-step5购物车列表浏览', 35, step5)

@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -79,6 +77,6 @@ class ResourceUsage_PerformanceDynamic_bilibili_0030(PerfTestCase):
         self.touch_by_coordinates(66, 1473, 1)
 
         # 竖屏视频播放30s
-        self.execute_performance_step("哔哩哔哩-竖屏视频播放场景-step1视频播放", 30, step1)
-        self.execute_performance_step("哔哩哔哩-竖屏视频播放场景-step2全屏播放", 40, step2)
-        self.execute_performance_step("哔哩哔哩-竖屏视频播放场景-step3关闭弹幕", 40, step3)
+        self.execute_performance_step('哔哩哔哩-竖屏视频播放场景-step1视频播放', 30, step1)
+        self.execute_performance_step('哔哩哔哩-竖屏视频播放场景-step2全屏播放', 40, step2)
+        self.execute_performance_step('哔哩哔哩-竖屏视频播放场景-step3关闭弹幕', 40, step3)

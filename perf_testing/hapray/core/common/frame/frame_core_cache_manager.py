@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Copyright (c) 2025 Huawei Device Co., Ltd.
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@ limitations under the License.
 """
 
 import logging
-from typing import List, Dict
 
 import pandas as pd
 
@@ -53,17 +51,15 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         'callchain': {'hits': 0, 'misses': 0},
         'files': {'hits': 0, 'misses': 0},
         'process': {'hits': 0, 'misses': 0},
-        'first_frame_timestamp': {'hits': 0, 'misses': 0}
+        'first_frame_timestamp': {'hits': 0, 'misses': 0},
     }
 
     # ==================== 标准化缓存使用模式 ====================
 
     @staticmethod
-    def ensure_data_cached(data_type: str,
-                           trace_conn=None,
-                           perf_conn=None,
-                           step_id: str = None,
-                           app_pids: list = None) -> bool:
+    def ensure_data_cached(
+        data_type: str, trace_conn=None, perf_conn=None, step_id: str = None, app_pids: list = None
+    ) -> bool:
         """确保指定类型的数据已缓存，如果没有则获取并缓存
 
         标准化的缓存使用模式，供所有analyzer使用
@@ -87,45 +83,51 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             bool: 是否成功确保数据已缓存
         """
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(trace_conn or perf_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(trace_conn or perf_conn)}'
 
         try:
             if data_type == 'frames':
                 # 检查帧数据缓存
                 if cache_key not in FrameCacheManager._frames_cache or FrameCacheManager._frames_cache[cache_key].empty:
                     if trace_conn is None:
-                        raise ValueError("获取帧数据需要trace_conn")
+                        raise ValueError('获取帧数据需要trace_conn')
                     FrameCacheManager.get_frames_data(trace_conn, step_id, app_pids)
 
             elif data_type == 'perf_samples':
                 # 检查性能采样数据缓存
-                if (cache_key not in FrameCacheManager._perf_samples_cache
-                        or FrameCacheManager._perf_samples_cache[cache_key].empty):
+                if (
+                    cache_key not in FrameCacheManager._perf_samples_cache
+                    or FrameCacheManager._perf_samples_cache[cache_key].empty
+                ):
                     if perf_conn is None:
-                        raise ValueError("获取性能采样数据需要perf_conn")
+                        raise ValueError('获取性能采样数据需要perf_conn')
                     FrameCacheManager.get_perf_samples(perf_conn, step_id)
 
             elif data_type == 'callchain':
                 # 检查调用链数据缓存
-                if (cache_key not in FrameCacheManager._callchain_cache
-                        or FrameCacheManager._callchain_cache[cache_key].empty):
+                if (
+                    cache_key not in FrameCacheManager._callchain_cache
+                    or FrameCacheManager._callchain_cache[cache_key].empty
+                ):
                     if perf_conn is None:
-                        raise ValueError("获取调用链数据需要perf_conn")
+                        raise ValueError('获取调用链数据需要perf_conn')
                     FrameCacheManager.get_callchain_cache(perf_conn, step_id)
 
             elif data_type == 'files':
                 # 检查文件数据缓存
                 if cache_key not in FrameCacheManager._files_cache or FrameCacheManager._files_cache[cache_key].empty:
                     if perf_conn is None:
-                        raise ValueError("获取文件数据需要perf_conn")
+                        raise ValueError('获取文件数据需要perf_conn')
                     FrameCacheManager.get_files_cache(perf_conn, step_id)
 
             elif data_type == 'process':
                 # 检查进程数据缓存
-                if (cache_key not in FrameCacheManager._process_cache
-                        or FrameCacheManager._process_cache[cache_key].empty):
+                if (
+                    cache_key not in FrameCacheManager._process_cache
+                    or FrameCacheManager._process_cache[cache_key].empty
+                ):
                     if trace_conn is None:
-                        raise ValueError("获取进程数据需要trace_conn")
+                        raise ValueError('获取进程数据需要trace_conn')
                     FrameCacheManager.get_process_cache(trace_conn, step_id)
 
             elif data_type == 'frame_loads':
@@ -135,14 +137,14 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
                     FrameCacheManager._frame_loads_cache[cache_key] = []
 
             else:
-                logging.warning("未知的数据类型: %s", data_type)
+                logging.warning('未知的数据类型: %s', data_type)
                 return False
 
             # logging.debug("确保数据已缓存: type=%s, cache_key=%s", data_type, cache_key)
             return True
 
         except Exception as e:
-            logging.error("确保数据缓存失败: type=%s, cache_key=%s, error=%s", data_type, cache_key, str(e))
+            logging.error('确保数据缓存失败: type=%s, cache_key=%s, error=%s', data_type, cache_key, str(e))
             return False
 
     @staticmethod
@@ -168,16 +170,15 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             else:
                 failed_types.append(data_type)
 
-        result = {
+        return {
             'total_types': len(required_data_types),
             'success_count': success_count,
             'failed_count': len(failed_types),
             'failed_types': failed_types,
-            'step_id': step_id
+            'step_id': step_id,
         }
 
         # logging.info("预加载analyzer数据完成: %s", result)
-        return result
 
     @staticmethod
     def get_cache_hit_stats() -> dict:
@@ -189,16 +190,13 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         stats = {}
         for data_type, hit_stats in FrameCacheManager._cache_hit_stats.items():
             total_requests = hit_stats['hits'] + hit_stats['misses']
-            if total_requests > 0:
-                hit_rate = (hit_stats['hits'] / total_requests) * 100
-            else:
-                hit_rate = 0.0
+            hit_rate = hit_stats['hits'] / total_requests * 100 if total_requests > 0 else 0.0
 
             stats[data_type] = {
                 'hits': hit_stats['hits'],
                 'misses': hit_stats['misses'],
                 'total_requests': total_requests,
-                'hit_rate_percent': round(hit_rate, 2)
+                'hit_rate_percent': round(hit_rate, 2),
             }
 
         # 计算总体命中率
@@ -209,7 +207,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         stats['overall'] = {
             'total_hits': total_hits,
             'total_requests': total_requests,
-            'hit_rate_percent': round(overall_hit_rate, 2)
+            'hit_rate_percent': round(overall_hit_rate, 2),
         }
 
         return stats
@@ -275,7 +273,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             'tid_cache_size': len(FrameCacheManager._tid_cache),
             'frame_loads_cache_size': len(FrameCacheManager._frame_loads_cache),
             'first_frame_timestamp_cache_size': len(FrameCacheManager._first_frame_timestamp_cache),
-            'cache_hit_stats': FrameCacheManager.get_cache_hit_stats()
+            'cache_hit_stats': FrameCacheManager.get_cache_hit_stats(),
         }
 
         # 计算总内存使用量（估算）
@@ -285,7 +283,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             ('perf_samples', FrameCacheManager._perf_samples_cache),
             ('callchain', FrameCacheManager._callchain_cache),
             ('files', FrameCacheManager._files_cache),
-            ('process', FrameCacheManager._process_cache)
+            ('process', FrameCacheManager._process_cache),
         ]:
             for _key, df in cache_dict.items():
                 if not df.empty:
@@ -312,7 +310,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             dict: 预加载结果统计
         """
         if not step_id:
-            logging.warning("预加载缓存需要指定step_id")
+            logging.warning('预加载缓存需要指定step_id')
             return {}
 
         # logging.info("开始预加载步骤 %s 的所有缓存", step_id)
@@ -343,7 +341,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             # logging.info("步骤 %s 缓存预加载完成: %s", step_id, preload_stats)
 
         except Exception as e:
-            logging.error("预加载缓存失败: %s", str(e))
+            logging.error('预加载缓存失败: %s', str(e))
             preload_stats['error'] = str(e)
 
         return preload_stats
@@ -369,7 +367,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
                 'process_cached': step_id in FrameCacheManager._process_cache,
                 'pid_cached': step_id in FrameCacheManager._pid_cache,
                 'tid_cached': step_id in FrameCacheManager._tid_cache,
-                'frame_loads_cached': step_id in FrameCacheManager._frame_loads_cache
+                'frame_loads_cached': step_id in FrameCacheManager._frame_loads_cache,
             }
 
             # 添加数据量信息
@@ -394,7 +392,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             # 检查所有缓存状态
             status = {
                 'total_cached_steps': len(FrameCacheManager._frames_cache),
-                'cache_stats': FrameCacheManager.get_cache_stats()
+                'cache_stats': FrameCacheManager.get_cache_stats(),
             }
 
         return status
@@ -413,7 +411,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             int: 第一帧的时间戳（纳秒）
         """
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(trace_conn)}'
 
         if cache_key in FrameCacheManager._first_frame_timestamp_cache:
             # 缓存命中
@@ -430,7 +428,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
                 # 委托给数据访问层获取基准时间戳
                 first_frame_timestamp = FrameDbBasicAccessor.get_benchmark_timestamp(trace_conn)
             except Exception as e:
-                logging.warning("获取trace开始时间失败，使用备选方案: %s", str(e))
+                logging.warning('获取trace开始时间失败，使用备选方案: %s', str(e))
                 # 备选方案：从缓存中获取所有帧数据并计算最小时间戳
                 frames_df = FrameCacheManager.get_frames_data(trace_conn, step_id)
                 if not frames_df.empty:
@@ -449,7 +447,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
     def get_frames_data(trace_conn, step_id: str = None, app_pids: list = None) -> pd.DataFrame:
         """获取帧数据（带缓存）"""
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(trace_conn)}'
 
         if cache_key in FrameCacheManager._frames_cache and not FrameCacheManager._frames_cache[cache_key].empty:
             # 缓存命中
@@ -479,10 +477,9 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         return frames_df
 
     @staticmethod
-    def get_frames_by_filter(trace_conn,
-                             flag: int = None,
-                             frame_type: int = None,
-                             app_pids: list = None) -> pd.DataFrame:
+    def get_frames_by_filter(
+        trace_conn, flag: int = None, frame_type: int = None, app_pids: list = None
+    ) -> pd.DataFrame:
         """根据条件过滤帧数据"""
         return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag, frame_type, app_pids)
 
@@ -490,10 +487,12 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
     def get_perf_samples(perf_conn, step_id: str = None) -> pd.DataFrame:
         """获取性能采样数据（带缓存）"""
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(perf_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(perf_conn)}'
 
-        if (cache_key in FrameCacheManager._perf_samples_cache
-                and not FrameCacheManager._perf_samples_cache[cache_key].empty):
+        if (
+            cache_key in FrameCacheManager._perf_samples_cache
+            and not FrameCacheManager._perf_samples_cache[cache_key].empty
+        ):
             # 缓存命中
             FrameCacheManager._cache_hit_stats['perf_samples']['hits'] += 1
             return FrameCacheManager._perf_samples_cache[cache_key]
@@ -513,10 +512,9 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
     def get_callchain_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
         """获取调用链缓存数据（带缓存）"""
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(perf_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(perf_conn)}'
 
-        if (cache_key in FrameCacheManager._callchain_cache
-                and not FrameCacheManager._callchain_cache[cache_key].empty):
+        if cache_key in FrameCacheManager._callchain_cache and not FrameCacheManager._callchain_cache[cache_key].empty:
             # 缓存命中
             FrameCacheManager._cache_hit_stats['callchain']['hits'] += 1
             return FrameCacheManager._callchain_cache[cache_key]
@@ -531,10 +529,9 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
     def get_files_cache(perf_conn, step_id: str = None) -> pd.DataFrame:
         """获取文件缓存数据（带缓存）"""
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(perf_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(perf_conn)}'
 
-        if (cache_key in FrameCacheManager._files_cache
-                and not FrameCacheManager._files_cache[cache_key].empty):
+        if cache_key in FrameCacheManager._files_cache and not FrameCacheManager._files_cache[cache_key].empty:
             # 缓存命中
             FrameCacheManager._cache_hit_stats['files']['hits'] += 1
             return FrameCacheManager._files_cache[cache_key]
@@ -549,10 +546,9 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
     def get_process_cache(trace_conn, step_id: str = None) -> pd.DataFrame:
         """获取进程缓存数据（带缓存）"""
         # 统一使用step_id作为缓存键，如果没有step_id则使用连接对象ID
-        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(trace_conn)}'
 
-        if (cache_key in FrameCacheManager._process_cache
-                and not FrameCacheManager._process_cache[cache_key].empty):
+        if cache_key in FrameCacheManager._process_cache and not FrameCacheManager._process_cache[cache_key].empty:
             # 缓存命中
             FrameCacheManager._cache_hit_stats['process']['hits'] += 1
             return FrameCacheManager._process_cache[cache_key]
@@ -569,33 +565,29 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         return FrameCacheManager._process_cache.get(cache_key, pd.DataFrame())
 
     @staticmethod
-    def get_callstack_data(trace_conn,
-                           name_pattern: str = None) -> pd.DataFrame:
+    def get_callstack_data(trace_conn, name_pattern: str = None) -> pd.DataFrame:
         """获取调用栈数据"""
         return FrameDbBasicAccessor.get_callstack_data(trace_conn, name_pattern)
 
     @staticmethod
-    def get_thread_data(trace_conn,
-                        is_main_thread: bool = None) -> pd.DataFrame:
+    def get_thread_data(trace_conn, is_main_thread: bool = None) -> pd.DataFrame:
         """获取线程数据"""
         return FrameDbBasicAccessor.get_thread_data(trace_conn, is_main_thread)
 
     @staticmethod
-    def get_process_data(trace_conn,
-                         process_name_pattern: str = None) -> pd.DataFrame:
+    def get_process_data(trace_conn, process_name_pattern: str = None) -> pd.DataFrame:
         """获取进程数据"""
         return FrameDbBasicAccessor.get_process_data(trace_conn, process_name_pattern)
 
     @staticmethod
-    def get_symbol_data(perf_conn,
-                        symbol_pattern: str = None) -> pd.DataFrame:
+    def get_symbol_data(perf_conn, symbol_pattern: str = None) -> pd.DataFrame:
         """获取符号数据"""
         return FrameDbBasicAccessor.get_symbol_data(perf_conn, symbol_pattern)
 
     # ==================== 复杂联合查询委托方法 ====================
 
     @staticmethod
-    def get_empty_frames_with_details(trace_conn, app_pids: List[int]) -> pd.DataFrame:
+    def get_empty_frames_with_details(trace_conn, app_pids: list[int]) -> pd.DataFrame:
         """获取空帧详细信息（包含进程、线程、调用栈信息）"""
         return FrameDbAdvancedAccessor.get_empty_frames_with_details(trace_conn, app_pids)
 
@@ -605,17 +597,17 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         return FrameDbAdvancedAccessor.get_stuttered_frames_with_context(trace_conn)
 
     @staticmethod
-    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int]) -> Dict[str, pd.DataFrame]:
+    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: list[int]) -> dict[str, pd.DataFrame]:
         """获取帧负载分析所需的完整数据"""
         return FrameDbAdvancedAccessor.get_frame_load_analysis_data(trace_conn, perf_conn, app_pids)
 
     @staticmethod
-    def get_frame_statistics_by_process(trace_conn, app_pids: List[int]) -> pd.DataFrame:
+    def get_frame_statistics_by_process(trace_conn, app_pids: list[int]) -> pd.DataFrame:
         """按进程获取帧统计信息"""
         return FrameDbAdvancedAccessor.get_frame_statistics_by_process(trace_conn, app_pids)
 
     @staticmethod
-    def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000) -> pd.DataFrame:
+    def get_frame_timeline_analysis(trace_conn, app_pids: list[int], time_window_ms: int = 1000) -> pd.DataFrame:
         """获取帧时间线分析数据"""
         return FrameDbAdvancedAccessor.get_frame_timeline_analysis(trace_conn, app_pids, time_window_ms)
 
@@ -625,7 +617,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         return FrameDbAdvancedAccessor.get_perf_samples_with_callchain(perf_conn)
 
     @staticmethod
-    def get_thread_performance_analysis(trace_conn, app_pids: List[int]) -> pd.DataFrame:
+    def get_thread_performance_analysis(trace_conn, app_pids: list[int]) -> pd.DataFrame:
         """获取线程性能分析数据"""
         return FrameDbAdvancedAccessor.get_thread_performance_analysis(trace_conn, app_pids)
 
@@ -647,10 +639,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
 
         # 按帧负载值排序插入
         frame_load = cleaned_data.get('frame_load', 0)
-        insert_pos = FrameCacheManager._find_insert_position(
-            FrameCacheManager._frame_loads_cache[step_id],
-            frame_load
-        )
+        insert_pos = FrameCacheManager._find_insert_position(FrameCacheManager._frame_loads_cache[step_id], frame_load)
 
         FrameCacheManager._frame_loads_cache[step_id].insert(insert_pos, cleaned_data)
 
@@ -702,23 +691,21 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
                 'avg_frame_load': 0,
                 'max_frame_load': 0,
                 'min_frame_load': 0,
-                'high_load_frames': 0
+                'high_load_frames': 0,
             }
 
         frame_load_values = [item.get('frame_load', 0) for item in frame_loads]
         total_load = int(sum(frame_load_values))  # 确保返回Python原生int类型
 
-        stats = {
+        return {
             'total_frames': len(frame_loads),
             'total_load': total_load,
             'average_load': float(total_load / len(frame_load_values)) if frame_load_values else 0.0,
             # 确保返回Python原生float类型
             'max_load': int(max(frame_load_values)) if frame_load_values else 0,  # 确保返回Python原生int类型
             'min_load': int(min(frame_load_values)) if frame_load_values else 0,  # 确保返回Python原生int类型
-            'high_load_frames': len([x for x in frame_load_values if x > 80])  # 高负载帧（>80%）
+            'high_load_frames': len([x for x in frame_load_values if x > 80]),  # 高负载帧（>80%）
         }
-
-        return stats
 
     @staticmethod
     def analyze_frame_callchains(step_id: str, frame_ids: list, perf_conn) -> bool:
@@ -737,7 +724,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
 
             if perf_df.empty:
-                logging.warning("步骤 %s 没有性能采样数据", step_id)
+                logging.warning('步骤 %s 没有性能采样数据', step_id)
                 return False
 
             # 分析缺失的调用链
@@ -747,7 +734,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             return True
 
         except Exception as e:
-            logging.error("分析帧调用链失败: %s", str(e))
+            logging.error('分析帧调用链失败: %s', str(e))
             return False
 
     @staticmethod
@@ -767,21 +754,21 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             top_frames = FrameCacheManager.get_top_frame_loads(step_id, top_count)
 
             if not top_frames:
-                logging.warning("步骤 %s 没有帧负载数据", step_id)
+                logging.warning('步骤 %s 没有帧负载数据', step_id)
                 return False
 
             # 提取帧ID
             frame_ids = [frame.get('frame_id') for frame in top_frames if frame.get('frame_id')]
 
             if not frame_ids:
-                logging.warning("步骤 %s 的帧负载数据中没有有效的帧ID", step_id)
+                logging.warning('步骤 %s 的帧负载数据中没有有效的帧ID', step_id)
                 return False
 
             # 分析调用链
             return FrameCacheManager.analyze_frame_callchains(step_id, frame_ids, perf_conn)
 
         except Exception as e:
-            logging.error("分析前N个帧调用链失败: %s", str(e))
+            logging.error('分析前N个帧调用链失败: %s', str(e))
             return False
 
     # ==================== 工具方法 ====================
@@ -857,8 +844,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             return value
 
     @staticmethod
-    def _analyze_missing_callchains(step_id: str,
-                                    frame_ids: list, perf_conn) -> None:  # pylint: disable=unused-argument
+    def _analyze_missing_callchains(step_id: str, frame_ids: list, perf_conn) -> None:  # pylint: disable=unused-argument
         """分析缺失的调用链
 
         Args:
@@ -871,15 +857,14 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
             perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
 
             if perf_df.empty:
-                logging.warning("步骤 %s 没有性能采样数据，无法分析调用链", step_id)
+                logging.warning('步骤 %s 没有性能采样数据，无法分析调用链', step_id)
                 return
 
             # 统计缺失的调用链
             missing_callchains = perf_df[perf_df['callchain_id'].isna() | (perf_df['callchain_id'] == 0)]
 
             if not missing_callchains.empty:
-                logging.warning("步骤 %s 发现 %d 个缺失调用链的采样点",
-                                step_id, len(missing_callchains))
+                logging.warning('步骤 %s 发现 %d 个缺失调用链的采样点', step_id, len(missing_callchains))
 
                 # 按线程分组统计（已注释，避免未使用变量警告）
                 # _thread_missing = missing_callchains.groupby('thread_id').size()
@@ -894,7 +879,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
                 pass
 
         except Exception as e:
-            logging.error("分析缺失调用链失败: %s", str(e))
+            logging.error('分析缺失调用链失败: %s', str(e))
 
     # ==================== PID/TID缓存管理方法 ====================
 
@@ -909,7 +894,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         Returns:
             list: PID列表
         """
-        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(trace_conn)}'
         return FrameCacheManager._pid_cache.get(cache_key, [])
 
     @staticmethod
@@ -923,7 +908,7 @@ class FrameCacheManager:  # pylint: disable=too-many-public-methods
         Returns:
             list: TID列表
         """
-        cache_key = step_id if step_id else f"conn_{id(trace_conn)}"
+        cache_key = step_id if step_id else f'conn_{id(trace_conn)}'
         return FrameCacheManager._tid_cache.get(cache_key, [])
 
     @staticmethod

@@ -14,17 +14,17 @@ limitations under the License.
 """
 
 import os
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
 import pandas as pd
 
 # 导入新的模块化组件
 from .frame_core_analyzer import FrameAnalyzerCore
 from .frame_core_cache_manager import FrameCacheManager
-from .frame_data_parser import parse_frame_slice_db, get_frame_type
+from .frame_data_parser import get_frame_type, parse_frame_slice_db
 
 # 设置环境变量
-os.environ["PYTHONIOENCODING"] = "utf-8"
+os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 
 class FrameAnalyzer:  # pylint: disable=duplicate-code
@@ -177,8 +177,13 @@ class FrameAnalyzer:  # pylint: disable=duplicate-code
         return FrameCacheManager.get_process_cache(trace_conn, step_id)
 
     @staticmethod
-    def _analyze_perf_callchain(perf_conn, callchain_id: int, callchain_cache: pd.DataFrame = None,
-                                files_cache: pd.DataFrame = None, step_id: str = None) -> list:
+    def _analyze_perf_callchain(
+        perf_conn,
+        callchain_id: int,
+        callchain_cache: pd.DataFrame = None,
+        files_cache: pd.DataFrame = None,
+        step_id: str = None,
+    ) -> list:
         """分析perf callchain - 兼容性包装
 
         Args:
@@ -193,11 +198,8 @@ class FrameAnalyzer:  # pylint: disable=duplicate-code
         """
         core = FrameAnalyzer._get_core_analyzer()
         return core.load_calculator.analyze_perf_callchain(
-            perf_conn,
-            callchain_id,
-            callchain_cache,
-            files_cache,
-            step_id)
+            perf_conn, callchain_id, callchain_cache, files_cache, step_id
+        )
 
     @staticmethod
     def analyze_single_frame(frame, perf_df, perf_conn, step_id):
@@ -216,10 +218,9 @@ class FrameAnalyzer:  # pylint: disable=duplicate-code
         return core.load_calculator.analyze_single_frame(frame, perf_df, perf_conn, step_id)
 
     @staticmethod
-    def analyze_empty_frames(trace_db_path: str,
-                             perf_db_path: str,
-                             app_pids: list,
-                             step_id: str = None) -> Optional[dict]:
+    def analyze_empty_frames(
+        trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None
+    ) -> Optional[dict]:
         """分析空帧 - 兼容性包装
 
         Args:
@@ -265,7 +266,7 @@ class FrameAnalyzer:  # pylint: disable=duplicate-code
         return core.analyze_stuttered_frames(db_path, perf_db_path, step_id)
 
     @staticmethod
-    def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
+    def parse_frame_slice_db(db_path: str) -> dict[int, list[dict[str, Any]]]:
         """解析frame_slice数据库 - 兼容性包装
 
         Args:

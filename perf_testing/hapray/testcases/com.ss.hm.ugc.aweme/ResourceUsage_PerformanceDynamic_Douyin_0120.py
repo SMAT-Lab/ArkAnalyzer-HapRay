@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0120(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -42,5 +40,5 @@ class ResourceUsage_PerformanceDynamic_Douyin_0120(PerfTestCase):
             # 直播间上滑切换5次，间隔10s
             self.swipes_up(5, 10, 300)
 
-        self.execute_performance_step("抖音-直播间场景-step1直播间观看/退出", 20, step1)
-        self.execute_performance_step("抖音-直播间场景-step2直播间切换浏览", 60, step2)
+        self.execute_performance_step('抖音-直播间场景-step1直播间观看/退出', 20, step1)
+        self.execute_performance_step('抖音-直播间场景-step2直播间切换浏览', 60, step2)

@@ -16,13 +16,12 @@ limitations under the License.
 import logging
 import sqlite3
 import traceback
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
-from .frame_data_parser import parse_frame_slice_db, get_frame_type
+from .frame_data_parser import get_frame_type, parse_frame_slice_db
 from .frame_time_utils import FrameTimeUtils
-
 
 # import pandas as pd  # 未使用
 
@@ -75,12 +74,7 @@ class StutteredFrameAnalyzer:
         """
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
 
-    def analyze_stuttered_frames(
-            self,
-            db_path: str,
-            perf_db_path: str = None,
-            step_id: str = None
-    ) -> Optional[dict]:
+    def analyze_stuttered_frames(self, db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
         Args:
@@ -121,7 +115,7 @@ class StutteredFrameAnalyzer:
                     # 使用缓存管理器获取perf样本数据
                     perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
                 except Exception as e:
-                    logging.warning("无法连接perf数据库或获取数据: %s", str(e))
+                    logging.warning('无法连接perf数据库或获取数据: %s', str(e))
                     perf_df = None
             else:
                 perf_df = None
@@ -132,7 +126,7 @@ class StutteredFrameAnalyzer:
                 runtime_result = cursor.fetchone()
                 runtime = runtime_result[0] if runtime_result else None
             except sqlite3.DatabaseError:
-                logging.warning("Failed to get runtime from database, setting to None")
+                logging.warning('Failed to get runtime from database, setting to None')
                 runtime = None
 
             data = parse_frame_slice_db(db_path)
@@ -148,180 +142,186 @@ class StutteredFrameAnalyzer:
             first_frame_time = None
 
             stats = {
-                "total_frames": 0,
-                "frame_stats": {
-                    "ui": {"total": 0, "stutter": 0},
-                    "render": {"total": 0, "stutter": 0},
-                    "sceneboard": {"total": 0, "stutter": 0}
+                'total_frames': 0,
+                'frame_stats': {
+                    'ui': {'total': 0, 'stutter': 0},
+                    'render': {'total': 0, 'stutter': 0},
+                    'sceneboard': {'total': 0, 'stutter': 0},
                 },
-                "stutter_levels": {"level_1": 0, "level_2": 0, "level_3": 0},
-                "stutter_details": {
-                    "ui_stutter": [],
-                    "render_stutter": [],
-                    "sceneboard_stutter": []
+                'stutter_levels': {'level_1': 0, 'level_2': 0, 'level_3': 0},
+                'stutter_details': {'ui_stutter': [], 'render_stutter': [], 'sceneboard_stutter': []},
+                'fps_stats': {
+                    'average_fps': 0,
+                    'min_fps': 0,
+                    'max_fps': 0,
+                    'low_fps_window_count': 0,
+                    'low_fps_threshold': LOW_FPS_THRESHOLD,
+                    'fps_windows': [],
                 },
-                "fps_stats": {
-                    "average_fps": 0,
-                    "min_fps": 0,
-                    "max_fps": 0,
-                    "low_fps_window_count": 0,
-                    "low_fps_threshold": LOW_FPS_THRESHOLD,
-                    "fps_windows": []
-                }
             }
 
             fps_windows = []
             current_window = {
-                "start_time": None,
-                "end_time": None,
-                "frame_count": 0,
-                "frames": set()  # 使用集合来跟踪已处理的帧
+                'start_time': None,
+                'end_time': None,
+                'frame_count': 0,
+                'frames': set(),  # 使用集合来跟踪已处理的帧
             }
 
             vsync_keys = sorted(data.keys())
 
             context = {
-                "data": data,
-                "perf_df": perf_df,
-                "perf_conn": perf_conn,
-                "step_id": step_id,
-                "cursor": cursor  # 添加cursor到context中
+                'data': data,
+                'perf_df': perf_df,
+                'perf_conn': perf_conn,
+                'step_id': step_id,
+                'cursor': cursor,  # 添加cursor到context中
             }
 
             for vsync_key in vsync_keys:
                 for frame in data[vsync_key]:
-                    if frame["type"] == 1 or frame["flag"] == 2:
+                    if frame['type'] == 1 or frame['flag'] == 2:
                         continue
 
                     frame_type, stutter_level, stutter_detail = self.analyze_single_stuttered_frame(
-                        frame, vsync_key, context)
+                        frame, vsync_key, context
+                    )
 
-                    stats["frame_stats"][frame_type]["total"] += 1
-                    stats["total_frames"] += 1
+                    stats['frame_stats'][frame_type]['total'] += 1
+                    stats['total_frames'] += 1
 
                     if stutter_level:
-                        stats["stutter_levels"][f"level_{stutter_level}"] += 1
-                        stats["frame_stats"][frame_type]["stutter"] += 1
-                        stutter_type = f"{frame_type}_stutter"
-                        stats["stutter_details"][stutter_type].append(stutter_detail)
+                        stats['stutter_levels'][f'level_{stutter_level}'] += 1
+                        stats['frame_stats'][frame_type]['stutter'] += 1
+                        stutter_type = f'{frame_type}_stutter'
+                        stats['stutter_details'][stutter_type].append(stutter_detail)
 
-                    frame_time = frame["ts"]
-                    frame_id = f"{vsync_key}_{frame_time}"  # 创建唯一帧标识符
+                    frame_time = frame['ts']
+                    frame_id = f'{vsync_key}_{frame_time}'  # 创建唯一帧标识符
 
                     # 初始化窗口
-                    if current_window["start_time"] is None:
-                        current_window["start_time"] = frame_time
-                        current_window["end_time"] = frame_time + self.WINDOW_SIZE_MS * self.NS_TO_MS
+                    if current_window['start_time'] is None:
+                        current_window['start_time'] = frame_time
+                        current_window['end_time'] = frame_time + self.WINDOW_SIZE_MS * self.NS_TO_MS
                         first_frame_time = frame_time
 
                     # 处理跨多个窗口的情况
-                    while frame_time >= current_window["end_time"]:
+                    while frame_time >= current_window['end_time']:
                         # 计算当前窗口的fps
                         window_duration_ms = max(
-                            (current_window["end_time"] - current_window["start_time"]) / self.NS_TO_MS, 1)
-                        window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
+                            (current_window['end_time'] - current_window['start_time']) / self.NS_TO_MS, 1
+                        )
+                        window_fps = (current_window['frame_count'] / window_duration_ms) * 1000
                         if window_fps < LOW_FPS_THRESHOLD:
-                            stats["fps_stats"]["low_fps_window_count"] += 1
+                            stats['fps_stats']['low_fps_window_count'] += 1
 
                         # 计算相对于第一帧的时间（纳秒）
-                        start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["start_time"],
-                                                                                      first_frame_time)
-                        end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(current_window["end_time"],
-                                                                                    first_frame_time)
+                        start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
+                            current_window['start_time'], first_frame_time
+                        )
+                        end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
+                            current_window['end_time'], first_frame_time
+                        )
 
                         # 保存当前窗口的fps数据
-                        fps_windows.append({
-                            "start_time": start_offset,
-                            "end_time": end_offset,
-                            "start_time_ts": int(current_window["start_time"]),  # 确保返回Python原生int类型
-                            "end_time_ts": int(current_window["end_time"]),  # 确保返回Python原生int类型
-                            "frame_count": current_window["frame_count"],
-                            "fps": window_fps
-                        })
+                        fps_windows.append(
+                            {
+                                'start_time': start_offset,
+                                'end_time': end_offset,
+                                'start_time_ts': int(current_window['start_time']),  # 确保返回Python原生int类型
+                                'end_time_ts': int(current_window['end_time']),  # 确保返回Python原生int类型
+                                'frame_count': current_window['frame_count'],
+                                'fps': window_fps,
+                            }
+                        )
 
                         # 新窗口推进 - 使用固定窗口大小
-                        current_window["start_time"] = current_window["end_time"]
-                        current_window["end_time"] = (
-                            current_window["start_time"] + self.WINDOW_SIZE_MS * self.NS_TO_MS)
-                        current_window["frame_count"] = 0
-                        current_window["frames"] = set()
+                        current_window['start_time'] = current_window['end_time']
+                        current_window['end_time'] = current_window['start_time'] + self.WINDOW_SIZE_MS * self.NS_TO_MS
+                        current_window['frame_count'] = 0
+                        current_window['frames'] = set()
 
                     # 当前窗口更新 - 只计算时间戳在窗口范围内的帧
-                    if (current_window["start_time"] <= frame_time < current_window["end_time"]
-                            and frame_id not in current_window["frames"]):
-                        current_window["frame_count"] += 1
-                        current_window["frames"].add(frame_id)
+                    if (
+                        current_window['start_time'] <= frame_time < current_window['end_time']
+                        and frame_id not in current_window['frames']
+                    ):
+                        current_window['frame_count'] += 1
+                        current_window['frames'].add(frame_id)
 
             # 处理最后一个窗口
-            if current_window["frame_count"] > 0:
-                window_duration_ms = max((current_window["end_time"] - current_window["start_time"]) / self.NS_TO_MS, 1)
-                window_fps = (current_window["frame_count"] / window_duration_ms) * 1000
+            if current_window['frame_count'] > 0:
+                window_duration_ms = max((current_window['end_time'] - current_window['start_time']) / self.NS_TO_MS, 1)
+                window_fps = (current_window['frame_count'] / window_duration_ms) * 1000
                 if window_fps < LOW_FPS_THRESHOLD:
-                    stats["fps_stats"]["low_fps_window_count"] += 1
+                    stats['fps_stats']['low_fps_window_count'] += 1
 
                 # 计算相对于第一帧的时间（纳秒）
                 start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
-                    current_window["start_time"], first_frame_time)
+                    current_window['start_time'], first_frame_time
+                )
                 end_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
-                    current_window["end_time"], first_frame_time)
+                    current_window['end_time'], first_frame_time
+                )
 
-                fps_windows.append({
-                    "start_time": start_offset,
-                    "end_time": end_offset,
-                    "start_time_ts": int(current_window["start_time"]),  # 确保返回Python原生int类型
-                    "end_time_ts": int(current_window["end_time"]),  # 确保返回Python原生int类型
-                    "frame_count": current_window["frame_count"],
-                    "fps": window_fps
-                })
+                fps_windows.append(
+                    {
+                        'start_time': start_offset,
+                        'end_time': end_offset,
+                        'start_time_ts': int(current_window['start_time']),  # 确保返回Python原生int类型
+                        'end_time_ts': int(current_window['end_time']),  # 确保返回Python原生int类型
+                        'frame_count': current_window['frame_count'],
+                        'fps': window_fps,
+                    }
+                )
 
             # 计算 FPS 概览
             if fps_windows:
-                fps_values = [w["fps"] for w in fps_windows]
-                stats["fps_stats"]["fps_windows"] = fps_windows
-                stats["fps_stats"]["average_fps"] = sum(fps_values) / len(fps_values)
-                stats["fps_stats"]["min_fps"] = min(fps_values)
-                stats["fps_stats"]["max_fps"] = max(fps_values)
-                stats["fps_stats"]["low_fps_window_count"] = stats["fps_stats"]["low_fps_window_count"]
-                del stats["fps_stats"]["low_fps_window_count"]
-                del stats["fps_stats"]["low_fps_threshold"]
+                fps_values = [w['fps'] for w in fps_windows]
+                stats['fps_stats']['fps_windows'] = fps_windows
+                stats['fps_stats']['average_fps'] = sum(fps_values) / len(fps_values)
+                stats['fps_stats']['min_fps'] = min(fps_values)
+                stats['fps_stats']['max_fps'] = max(fps_values)
+                stats['fps_stats']['low_fps_window_count'] = stats['fps_stats']['low_fps_window_count']
+                del stats['fps_stats']['low_fps_window_count']
+                del stats['fps_stats']['low_fps_threshold']
 
             # 计算各进程的卡顿率
-            for process_type in stats["frame_stats"]:
-                total = stats["frame_stats"][process_type]["total"]
-                stutter = stats["frame_stats"][process_type]["stutter"]
+            for process_type in stats['frame_stats']:
+                total = stats['frame_stats'][process_type]['total']
+                stutter = stats['frame_stats'][process_type]['stutter']
                 if total > 0:
-                    stats["frame_stats"][process_type]["stutter_rate"] = round(stutter / total, 4)
+                    stats['frame_stats'][process_type]['stutter_rate'] = round(stutter / total, 4)
                 else:
-                    stats["frame_stats"][process_type]["stutter_rate"] = 0
+                    stats['frame_stats'][process_type]['stutter_rate'] = 0
 
             # 计算总卡顿率
             total_stutter = int(
-                sum(stats["frame_stats"][p]["stutter"] for p in stats["frame_stats"]))  # 确保返回Python原生int类型
-            stats["total_stutter_frames"] = total_stutter
+                sum(stats['frame_stats'][p]['stutter'] for p in stats['frame_stats'])
+            )  # 确保返回Python原生int类型
+            stats['total_stutter_frames'] = total_stutter
             # 防止除零错误
-            if stats["total_frames"] > 0:
-                stats["stutter_rate"] = round(total_stutter / stats["total_frames"], 4)
+            if stats['total_frames'] > 0:
+                stats['stutter_rate'] = round(total_stutter / stats['total_frames'], 4)
             else:
-                stats["stutter_rate"] = 0.0
+                stats['stutter_rate'] = 0.0
 
-            result = {
-                "runtime": runtime,
-                "statistics": {
-                    "total_frames": stats["total_frames"],
-                    "frame_stats": stats["frame_stats"],
-                    "total_stutter_frames": stats["total_stutter_frames"],
-                    "stutter_rate": stats["stutter_rate"],
-                    "stutter_levels": stats["stutter_levels"]
+            return {
+                'runtime': runtime,
+                'statistics': {
+                    'total_frames': stats['total_frames'],
+                    'frame_stats': stats['frame_stats'],
+                    'total_stutter_frames': stats['total_stutter_frames'],
+                    'stutter_rate': stats['stutter_rate'],
+                    'stutter_levels': stats['stutter_levels'],
                 },
-                "stutter_details": stats["stutter_details"],
-                "fps_stats": stats["fps_stats"]
+                'stutter_details': stats['stutter_details'],
+                'fps_stats': stats['fps_stats'],
             }
 
-            return result
-
         except Exception as e:
-            logging.error("分析卡顿帧时发生异常: %s", str(e))
-            logging.error("异常堆栈跟踪:\n%s", traceback.format_exc())
+            logging.error('分析卡顿帧时发生异常: %s', str(e))
+            logging.error('异常堆栈跟踪:\n%s', traceback.format_exc())
             return None
 
         finally:
@@ -342,11 +342,11 @@ class StutteredFrameAnalyzer:
         Returns:
             tuple: (frame_type, stutter_level, stutter_detail)
         """
-        data = context["data"]
-        perf_df = context["perf_df"]
-        perf_conn = context["perf_conn"]
-        step_id = context["step_id"]
-        cursor = context.get("cursor")  # 从context中获取cursor
+        data = context['data']
+        perf_df = context['perf_df']
+        perf_conn = context['perf_conn']
+        step_id = context['step_id']
+        cursor = context.get('cursor')  # 从context中获取cursor
 
         frame_type = get_frame_type(frame, cursor, step_id=step_id)
         stutter_detail = None
@@ -355,14 +355,14 @@ class StutteredFrameAnalyzer:
         frame_load = 0
         sample_callchains = []
 
-        if frame.get("flag") != 1:
+        if frame.get('flag') != 1:
             return frame_type, stutter_level, stutter_detail
 
-        expected_frame = next((f for f in data[vsync_key] if f["type"] == 1), None)
+        expected_frame = next((f for f in data[vsync_key] if f['type'] == 1), None)
         if expected_frame is None:
             return frame_type, stutter_level, stutter_detail
 
-        exceed_time_ns = frame["dur"] - expected_frame["dur"]
+        exceed_time_ns = frame['dur'] - expected_frame['dur']
         exceed_time = exceed_time_ns / self.NS_TO_MS
         exceed_frames = exceed_time / self.FRAME_DURATION
 
@@ -373,9 +373,11 @@ class StutteredFrameAnalyzer:
             cached_frame = None
 
             for cached in cached_frame_loads:
-                if (cached.get('ts') == frame['ts']
-                        and cached.get('dur') == frame['dur']
-                        and cached.get('thread_id') == frame['tid']):
+                if (
+                    cached.get('ts') == frame['ts']
+                    and cached.get('dur') == frame['dur']
+                    and cached.get('thread_id') == frame['tid']
+                ):
                     cached_frame = cached
                     break
 
@@ -390,7 +392,8 @@ class StutteredFrameAnalyzer:
                     # logging.info("缓存中缺少sample_callchains，尝试补充: ts=%s", frame['ts'])
                     # 重新分析获取调用链
                     frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
-                        frame, perf_df, perf_conn, step_id)
+                        frame, perf_df, perf_conn, step_id
+                    )
                     # logging.info("重新分析获取调用链: ts=%s, load=%s", frame['ts'], frame_load)
             else:
                 # 缓存中没有，执行帧负载分析
@@ -403,15 +406,15 @@ class StutteredFrameAnalyzer:
 
         # 卡顿分级逻辑
         # flag=3 归类为轻微卡顿：进程间异常阈值仅 1ms，远小于轻微卡顿的 33.34ms 阈值
-        if frame.get("flag") == 3 or exceed_frames < self.STUTTER_LEVEL_1_FRAMES:
+        if frame.get('flag') == 3 or exceed_frames < self.STUTTER_LEVEL_1_FRAMES:
             stutter_level = 1
-            level_desc = "轻微卡顿"
+            level_desc = '轻微卡顿'
         elif exceed_frames < self.STUTTER_LEVEL_2_FRAMES:
             stutter_level = 2
-            level_desc = "中度卡顿"
+            level_desc = '中度卡顿'
         else:
             stutter_level = 3
-            level_desc = "严重卡顿"
+            level_desc = '严重卡顿'
 
         # 获取第一帧时间戳用于相对时间计算
         # 从缓存中获取第一帧时间戳
@@ -422,24 +425,24 @@ class StutteredFrameAnalyzer:
                 first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
             except Exception:
                 # 如果获取缓存失败，则使用卡顿帧中的最小时间戳作为备选
-                first_frame_time = min(f["ts"] for vsync in data.values() for f in vsync) if data else 0
+                first_frame_time = min(f['ts'] for vsync in data.values() for f in vsync) if data else 0
         else:
             # 如果无法获取step_id，则使用卡顿帧中的最小时间戳作为备选
-            first_frame_time = min(f["ts"] for vsync in data.values() for f in vsync) if data else 0
+            first_frame_time = min(f['ts'] for vsync in data.values() for f in vsync) if data else 0
 
         stutter_detail = {
-            "vsync": vsync_key,
-            "ts": FrameTimeUtils.convert_to_relative_nanoseconds(frame["ts"], first_frame_time),
-            "actual_duration": frame["dur"],
-            "expected_duration": expected_frame["dur"],
-            "exceed_time": exceed_time,
-            "exceed_frames": exceed_frames,
-            "stutter_level": stutter_level,
-            "level_description": level_desc,
-            "src": frame.get("src"),
-            "dst": frame.get("dst"),
-            "frame_load": int(frame_load),
-            "sample_callchains": sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)
+            'vsync': vsync_key,
+            'ts': FrameTimeUtils.convert_to_relative_nanoseconds(frame['ts'], first_frame_time),
+            'actual_duration': frame['dur'],
+            'expected_duration': expected_frame['dur'],
+            'exceed_time': exceed_time,
+            'exceed_frames': exceed_frames,
+            'stutter_level': stutter_level,
+            'level_description': level_desc,
+            'src': frame.get('src'),
+            'dst': frame.get('dst'),
+            'frame_load': int(frame_load),
+            'sample_callchains': sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True),
         }
 
         return frame_type, stutter_level, stutter_detail
@@ -478,12 +481,12 @@ class StutteredFrameAnalyzer:
         # 2. 异常性质：进程间协调异常对用户体验影响较小
         # 3. 保守评估：避免将轻微异常误判为严重问题
         if flag == 3 or exceed_frames < self.STUTTER_LEVEL_1_FRAMES:
-            return 1, "轻微卡顿"
+            return 1, '轻微卡顿'
         if exceed_frames < self.STUTTER_LEVEL_2_FRAMES:
-            return 2, "中度卡顿"
-        return 3, "严重卡顿"
+            return 2, '中度卡顿'
+        return 3, '严重卡顿'
 
-    def calculate_fps_statistics(self, fps_windows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def calculate_fps_statistics(self, fps_windows: list[dict[str, Any]]) -> dict[str, Any]:
         """计算FPS统计信息
 
         Args:
@@ -493,18 +496,13 @@ class StutteredFrameAnalyzer:
             Dict: FPS统计信息
         """
         if not fps_windows:
-            return {
-                "average_fps": 0,
-                "min_fps": 0,
-                "max_fps": 0,
-                "fps_windows": []
-            }
+            return {'average_fps': 0, 'min_fps': 0, 'max_fps': 0, 'fps_windows': []}
 
-        fps_values = [w["fps"] for w in fps_windows]
+        fps_values = [w['fps'] for w in fps_windows]
 
         return {
-            "average_fps": sum(fps_values) / len(fps_values),
-            "min_fps": min(fps_values),
-            "max_fps": max(fps_values),
-            "fps_windows": fps_windows
+            'average_fps': sum(fps_values) / len(fps_values),
+            'min_fps': min(fps_values),
+            'max_fps': max(fps_values),
+            'fps_windows': fps_windows,
         }

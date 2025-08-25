@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -70,11 +68,11 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
                 self.touch_by_coordinates(630, 338, 1)
 
         start()
-        self.execute_performance_step("抖音-短视频浏览评论场景-step1点击观看历史", 10, step1)
+        self.execute_performance_step('抖音-短视频浏览评论场景-step1点击观看历史', 10, step1)
         # 暂停播放视频
         self.touch_by_id('MAIN_SHELL_ID', 1)
 
-        self.execute_performance_step("抖音-短视频浏览评论场景-step2评论界面弹出/收起", 10, step2)
+        self.execute_performance_step('抖音-短视频浏览评论场景-step2评论界面弹出/收起', 10, step2)
 
         # 点击评论图标，弹出评论界面, 预先上滑/下滑一轮后再抓取
         self.touch_by_text('2.4万', 2)
@@ -82,7 +80,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0030(PerfTestCase):
         self.swipes_down(10, 1)
 
         self.touch_by_text('2.4万', 2)
-        self.execute_performance_step("抖音-短视频浏览评论场景-step3评论内容浏览", 40, step3)
+        self.execute_performance_step('抖音-短视频浏览评论场景-step3评论内容浏览', 40, step3)
 
         self.touch_by_text('2.4万', 2)
-        self.execute_performance_step("抖音-短视频浏览评论场景-step4输入框弹出/收起", 35, step4)
+        self.execute_performance_step('抖音-短视频浏览评论场景-step4输入框弹出/收起', 35, step4)
