@@ -18,8 +18,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from importlib.resources import files
-from typing import Any
-from typing import Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import yaml
 from hypium import BY
@@ -32,25 +31,28 @@ from hapray.core.perf_testcase import PerfTestCase
 @dataclass
 class ComponentSelector:
     """表示 UI 组件的选择器"""
+
     text: Optional[str] = None
     key: Optional[str] = None
     type: Optional[str] = None
     xpath: Optional[str] = None
-    relations: List[Dict] = field(default_factory=list)
-    pos: Optional[List[float]] = None
+    relations: list[dict] = field(default_factory=list)
+    pos: Optional[list[float]] = None
 
 
 @dataclass
 class UIEvent:
     """表示 UI 事件的基础类"""
+
     event_type: str
 
 
 @dataclass
 class TouchEvent(UIEvent):
     """表示触摸事件"""
+
     target: ComponentSelector
-    mode: str = "normal"
+    mode: str = 'normal'
     scroll_target: Optional[ComponentSelector] = None
     wait_time: float = 0.1
 
@@ -58,17 +60,19 @@ class TouchEvent(UIEvent):
 @dataclass
 class SwipeEvent(UIEvent):
     """表示滑动事件"""
+
     direction: str
     distance: int = 60
     area: Optional[ComponentSelector] = None
     side: Optional[str] = None
-    start_point: Optional[List[float]] = None
+    start_point: Optional[list[float]] = None
     swipe_time: float = 0.3
 
 
 @dataclass
 class InputEvent(UIEvent):
     """表示输入事件"""
+
     component: ComponentSelector
     text: str
 
@@ -76,27 +80,31 @@ class InputEvent(UIEvent):
 @dataclass
 class WaitEvent(UIEvent):
     """表示等待事件"""
+
     duration: int
 
 
 @dataclass
 class LoopEvent(UIEvent):
     """表示循环事件"""
+
     count: int
-    events: List["UIEvent"]
+    events: list['UIEvent']
 
 
 @dataclass
 class KeyEvent(UIEvent):
     """表示按键事件"""
+
     key_code: Union[str, int]
     key_code2: Optional[Union[str, int]] = None
-    mode: str = "normal"
+    mode: str = 'normal'
 
 
 @dataclass
 class StartAppEvent(UIEvent):
     """表示启动应用事件"""
+
     package_name: Optional[str] = None
     page_name: Optional[str] = None
     params: Optional[str] = None
@@ -106,6 +114,7 @@ class StartAppEvent(UIEvent):
 @dataclass
 class StopAppEvent(UIEvent):
     """表示停止应用事件"""
+
     package_name: Optional[str] = None
     wait_time: float = 0.5
 
@@ -113,26 +122,29 @@ class StopAppEvent(UIEvent):
 @dataclass
 class TestStep:
     """表示测试步骤"""
+
     name: str
-    events: List[UIEvent]
-    performance: Optional[Dict] = None
+    events: list[UIEvent]
+    performance: Optional[dict] = None
 
 
 @dataclass
 class TestCase:
     """表示测试用例"""
-    steps: List[TestStep]
-    setup: List[UIEvent] = field(default_factory=list)
-    cleanup: List[UIEvent] = field(default_factory=list)
+
+    steps: list[TestStep]
+    setup: list[UIEvent] = field(default_factory=list)
+    cleanup: list[UIEvent] = field(default_factory=list)
 
 
 @dataclass
 class TestConfig:
     """表示测试配置"""
+
     app_package: str
     app_name: str
     scene_name: str
-    source_screen: List[int]
+    source_screen: list[int]
     test_case: TestCase
 
 
@@ -151,7 +163,7 @@ class DSLTestRunner(PerfTestCase):
 
     @staticmethod
     def run_testcase(dsl_file: str, output: str, device_id: str):
-        device = f"-sn {device_id}" if device_id else ""
+        device = f'-sn {device_id}' if device_id else ''
         command = f'run -l dsl_test_runner {device} -tcpath {os.path.dirname(__file__)} -rp {output} -ta dsl:{dsl_file}'
         main_process(command)
 
@@ -172,24 +184,23 @@ class DSLTestRunner(PerfTestCase):
             if step.performance is None:
                 self._process_step(step)
             else:
-                self.execute_performance_step(step.name, step.performance.get('duration'), self._process_step,
-                                              step)
+                self.execute_performance_step(step.name, step.performance.get('duration'), self._process_step, step)
 
     def _process_step(self, step: TestStep):
-        logging.info("Running test case: %s", step.name)
+        logging.info('Running test case: %s', step.name)
         for event in step.events:
             self._execute_event(event)
-        logging.info("Completed test case: %s", step.name)
+        logging.info('Completed test case: %s', step.name)
 
-    def _load_config(self, path: str) -> Dict[str, Any]:
+    def _load_config(self, path: str) -> dict[str, Any]:
         """加载YAML配置文件"""
         if not os.path.exists(path) or not os.path.exists(self.schema_path):
             raise FileNotFoundError(path)
-        with open(path, 'r', encoding='UTF-8') as f:
+        with open(path, encoding='UTF-8') as f:
             config = yaml.safe_load(f)
 
         # 加载Schema
-        with open(self.schema_path, 'r', encoding='UTF-8') as f:
+        with open(self.schema_path, encoding='UTF-8') as f:
             schema = yaml.safe_load(f)
 
         validate(instance=config, schema=schema)
@@ -216,7 +227,7 @@ class DSLTestRunner(PerfTestCase):
             for rel_data in selector_data['relations']:
                 relation = {
                     'relation': rel_data['relation'],
-                    'target': self._parse_component_selector(rel_data['target'])
+                    'target': self._parse_component_selector(rel_data['target']),
                 }
                 selector.relations.append(relation)
 
@@ -226,50 +237,50 @@ class DSLTestRunner(PerfTestCase):
         """解析单个事件"""
         event_type = event_data['type']
         handlers = {
-            "touch": self._handle_touch_event,
-            "swipe": self._handle_swipe_event,
-            "input_text": self._handle_input_event,
-            "wait": self._handle_wait_event,
-            "loop": self._handle_loop_event,
-            "press_key": self._handle_key_event,
-            "start_app": self._handle_start_app_event,
-            "stop_app": self._handle_stop_app_event,
+            'touch': self._handle_touch_event,
+            'swipe': self._handle_swipe_event,
+            'input_text': self._handle_input_event,
+            'wait': self._handle_wait_event,
+            'loop': self._handle_loop_event,
+            'press_key': self._handle_key_event,
+            'start_app': self._handle_start_app_event,
+            'stop_app': self._handle_stop_app_event,
         }
 
         handlers = {
-            "touch": self._handle_touch_event,
-            "swipe": self._handle_swipe_event,
-            "input_text": self._handle_input_event,
-            "wait": self._handle_wait_event,
-            "loop": self._handle_loop_event,
-            "press_key": self._handle_key_event,
-            "start_app": self._handle_start_app_event,
-            "stop_app": self._handle_stop_app_event,
+            'touch': self._handle_touch_event,
+            'swipe': self._handle_swipe_event,
+            'input_text': self._handle_input_event,
+            'wait': self._handle_wait_event,
+            'loop': self._handle_loop_event,
+            'press_key': self._handle_key_event,
+            'start_app': self._handle_start_app_event,
+            'stop_app': self._handle_stop_app_event,
         }
 
         handler = handlers.get(event_type)
         if handler:
             return handler(event_data)
 
-        raise ValueError(f"未知的事件类型: {event_type}")
+        raise ValueError(f'未知的事件类型: {event_type}')
 
     def _handle_touch_event(self, event_data: dict) -> TouchEvent:
         return TouchEvent(
-            event_type="touch",
+            event_type='touch',
             target=self._parse_component_selector(event_data['target']),
             mode=event_data.get('mode', 'normal'),
             scroll_target=self._parse_component_selector(event_data['scroll_target'])
-            if 'scroll_target' in event_data else None,
+            if 'scroll_target' in event_data
+            else None,
             wait_time=event_data.get('wait_time', 0.1),
         )
 
     def _handle_swipe_event(self, event_data: dict) -> SwipeEvent:
         return SwipeEvent(
-            event_type="swipe",
+            event_type='swipe',
             direction=event_data['direction'],
             distance=event_data.get('distance', 60),
-            area=self._parse_component_selector(event_data['area'])
-            if 'area' in event_data else None,
+            area=self._parse_component_selector(event_data['area']) if 'area' in event_data else None,
             side=event_data.get('side'),
             start_point=event_data.get('start_point'),
             swipe_time=event_data.get('swipe_time', 0.3),
@@ -277,27 +288,27 @@ class DSLTestRunner(PerfTestCase):
 
     def _handle_input_event(self, event_data: dict) -> InputEvent:
         return InputEvent(
-            event_type="input_text",
+            event_type='input_text',
             component=self._parse_component_selector(event_data['component']),
             text=event_data['text'],
         )
 
     def _handle_wait_event(self, event_data: dict) -> WaitEvent:
         return WaitEvent(
-            event_type="wait",
+            event_type='wait',
             duration=event_data['duration'],
         )
 
     def _handle_loop_event(self, event_data: dict) -> LoopEvent:
         return LoopEvent(
-            event_type="loop",
+            event_type='loop',
             count=event_data['count'],
             events=[self._parse_event(e) for e in event_data['events']],
         )
 
     def _handle_key_event(self, event_data: dict) -> KeyEvent:
         return KeyEvent(
-            event_type="press_key",
+            event_type='press_key',
             key_code=event_data['key_code'],
             key_code2=event_data.get('key_code2'),
             mode=event_data.get('mode', 'normal'),
@@ -305,7 +316,7 @@ class DSLTestRunner(PerfTestCase):
 
     def _handle_start_app_event(self, event_data: dict) -> StartAppEvent:
         return StartAppEvent(
-            event_type="start_app",
+            event_type='start_app',
             package_name=event_data.get('package_name'),
             page_name=event_data.get('page_name'),
             params=event_data.get('params'),
@@ -314,7 +325,7 @@ class DSLTestRunner(PerfTestCase):
 
     def _handle_stop_app_event(self, event_data: dict) -> StopAppEvent:
         return StopAppEvent(
-            event_type="stop_app",
+            event_type='stop_app',
             package_name=event_data.get('package_name'),
             wait_time=event_data.get('wait_time', 0.5),
         )
@@ -324,7 +335,7 @@ class DSLTestRunner(PerfTestCase):
         return TestStep(
             name=step_data['name'],
             events=[self._parse_event(e) for e in step_data['events']],
-            performance=step_data.get('performance')
+            performance=step_data.get('performance'),
         )
 
     def _parse_config(self) -> TestConfig:
@@ -335,7 +346,7 @@ class DSLTestRunner(PerfTestCase):
         test_case = TestCase(
             setup=[self._parse_event(e) for e in test_case_data.get('setup', [])],
             cleanup=[self._parse_event(e) for e in test_case_data.get('cleanup', [])],
-            steps=[self._parse_step(s) for s in test_case_data['steps']]
+            steps=[self._parse_step(s) for s in test_case_data['steps']],
         )
 
         return TestConfig(
@@ -343,7 +354,7 @@ class DSLTestRunner(PerfTestCase):
             app_name=config_data['app_name'],
             scene_name=config_data['scene_name'],
             source_screen=config_data['source_screen'],
-            test_case=test_case
+            test_case=test_case,
         )
 
     def _execute_event(self, event: UIEvent):
@@ -373,15 +384,15 @@ class DSLTestRunner(PerfTestCase):
                 self.stop_app(event.package_name, event.wait_time)
 
             else:
-                logging.warning("Unknown step type: %s", event.event_type)
+                logging.warning('Unknown step type: %s', event.event_type)
 
         except Exception as e:
-            logging.error("Failed to execute step: %s - Error: %s", event.event_type, str(e))
+            logging.error('Failed to execute step: %s - Error: %s', event.event_type, str(e))
             raise
 
     @staticmethod
     def _process_wait(event: WaitEvent):
-        logging.info("Waiting for %dms", event.duration)
+        logging.info('Waiting for %dms', event.duration)
         time.sleep(event.duration)
 
     def _process_press_key(self, event: KeyEvent):
@@ -389,7 +400,7 @@ class DSLTestRunner(PerfTestCase):
 
     def _process_loop(self, event: LoopEvent):
         for i in range(event.count):
-            logging.info("Loop iteration %d/%d", i + 1, event.count)
+            logging.info('Loop iteration %d/%d', i + 1, event.count)
             for sub_event in event.events:
                 self._execute_event(sub_event)
 
@@ -399,12 +410,7 @@ class DSLTestRunner(PerfTestCase):
         target = self._convert_selector(event.target)
         scroll_target = self._convert_selector(event.scroll_target) if event.scroll_target else None
         # 执行触摸操作
-        self.driver.touch(
-            target=target,
-            mode=event.mode,
-            scroll_target=scroll_target,
-            wait_time=event.wait_time
-        )
+        self.driver.touch(target=target, mode=event.mode, scroll_target=scroll_target, wait_time=event.wait_time)
 
     def _process_swipe(self, event: SwipeEvent):
         """处理滑动事件"""
@@ -416,8 +422,10 @@ class DSLTestRunner(PerfTestCase):
         if event.start_point:
             if all(0 <= coord <= 1 for coord in event.start_point):
                 # 比例坐标转绝对坐标
-                start_point = (event.start_point[0] * self.source_screen_width,
-                               event.start_point[1] * self.source_screen_height)
+                start_point = (
+                    event.start_point[0] * self.source_screen_width,
+                    event.start_point[1] * self.source_screen_height,
+                )
             else:
                 start_point = tuple(event.start_point)
 
@@ -428,9 +436,9 @@ class DSLTestRunner(PerfTestCase):
             area=area,
             side=event.side,
             start_point=start_point,
-            swipe_time=event.swipe_time
+            swipe_time=event.swipe_time,
         )
-        logging.info("Swiped: %s direction, distance=%f", event.direction, event.distance)
+        logging.info('Swiped: %s direction, distance=%f', event.direction, event.distance)
 
     def _process_input_text(self, event: InputEvent):
         """处理文本输入事件"""
@@ -438,11 +446,8 @@ class DSLTestRunner(PerfTestCase):
         component = self._convert_selector(event.component)
 
         # 执行文本输入
-        self.driver.input_text(
-            component=component,
-            text=event.text
-        )
-        logging.info("Input text: %s", event.text)
+        self.driver.input_text(component=component, text=event.text)
+        logging.info('Input text: %s', event.text)
 
     def _convert_selector(self, selector: ComponentSelector):
         """
@@ -452,8 +457,7 @@ class DSLTestRunner(PerfTestCase):
         # 如果选择器包含坐标，直接返回坐标元组
         if selector.pos:
             if all(0 <= coord <= 1 for coord in selector.pos):
-                return (selector.pos[0] * self.source_screen_width,
-                        selector.pos[1] * self.source_screen_height)
+                return (selector.pos[0] * self.source_screen_width, selector.pos[1] * self.source_screen_height)
             return self.convert_coordinate(selector.pos[0], selector.pos[1])
 
         # 根据属性构建选择器
@@ -466,23 +470,23 @@ class DSLTestRunner(PerfTestCase):
         elif selector.xpath:
             selector_obj = BY.xpath(selector.xpath)
         else:
-            raise ValueError("Selector must have at least one property")
+            raise ValueError('Selector must have at least one property')
 
         # 添加关系约束
         for relation in selector.relations:
-            rel_type = relation["relation"]
-            target = self._convert_selector(relation["target"])
+            rel_type = relation['relation']
+            target = self._convert_selector(relation['target'])
 
-            if rel_type == "isAfter":
+            if rel_type == 'isAfter':
                 selector_obj = selector_obj.isAfter(target)
-            elif rel_type == "isBefore":
+            elif rel_type == 'isBefore':
                 selector_obj = selector_obj.isBefore(target)
-            elif rel_type == "within":
+            elif rel_type == 'within':
                 selector_obj = selector_obj.within(target)
-            elif rel_type == "inWindow":
+            elif rel_type == 'inWindow':
                 selector_obj = selector_obj.inWindow(target)
             else:
-                raise ValueError(f"Unsupported relation type: {rel_type}")
+                raise ValueError(f'Unsupported relation type: {rel_type}')
 
         return selector_obj
 

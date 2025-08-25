@@ -13,12 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
 import os
 import platform
 import subprocess
-import json
-from typing import List, Tuple, Optional
+from typing import Optional
 
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.config.config import Config
@@ -49,20 +49,14 @@ def _get_trace_streamer_path() -> str:
     elif system == 'linux':
         executable = 'trace_streamer_linux'
     else:
-        raise OSError(f"Unsupported operating system: {system}")
+        raise OSError(f'Unsupported operating system: {system}')
 
     # Construct full path to the executable
-    tool_path = os.path.join(
-        project_root,
-        'hapray-toolbox',
-        'third-party',
-        'trace_streamer_binary',
-        executable
-    )
+    tool_path = os.path.join(project_root, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', executable)
 
     # Validate executable exists
     if not os.path.exists(tool_path):
-        raise FileNotFoundError(f"Trace streamer executable not found at: {tool_path}")
+        raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
 
     # Set execute permissions for Unix-like systems
     if system in ('darwin', 'linux'):
@@ -75,11 +69,7 @@ class ExeUtils:
     """Utility class for executing external commands and tools"""
 
     # Path to the hapray-cmd.js script
-    hapray_cmd_path = os.path.abspath(os.path.join(
-        CommonUtils.get_project_root(),
-        'hapray-toolbox',
-        'hapray-cmd.js'
-    ))
+    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'hapray-cmd.js'))
 
     # Path to the trace streamer executable
     trace_streamer_path = _get_trace_streamer_path()
@@ -96,7 +86,7 @@ class ExeUtils:
         """
         cache_dir = os.path.dirname(output_db)
         db_name = os.path.splitext(os.path.basename(output_db))[0]
-        return os.path.join(cache_dir, f".{db_name}_so_dir_cache.json")
+        return os.path.join(cache_dir, f'.{db_name}_so_dir_cache.json')
 
     @staticmethod
     def _should_regenerate_db(output_db: str, so_dir: Optional[str]) -> bool:
@@ -120,7 +110,7 @@ class ExeUtils:
             return True
 
         try:
-            with open(cache_file, 'r', encoding='utf-8') as f:
+            with open(cache_file, encoding='utf-8') as f:
                 cache_data = json.load(f)
                 cached_so_dir = cache_data.get('so_dir_value')
 
@@ -131,7 +121,7 @@ class ExeUtils:
             # If so_dir changed, regenerate
             return current_so_dir != cached_so_dir
 
-        except (json.JSONDecodeError, IOError, KeyError):
+        except (OSError, json.JSONDecodeError, KeyError):
             # If cache is corrupted, regenerate
             return True
 
@@ -147,18 +137,18 @@ class ExeUtils:
 
         cache_data = {
             'so_dir_value': so_dir,
-            'timestamp': os.path.getmtime(output_db) if os.path.exists(output_db) else None
+            'timestamp': os.path.getmtime(output_db) if os.path.exists(output_db) else None,
         }
 
         try:
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, indent=2)
-        except IOError as e:
-            logger.warning("Failed to update so_dir cache: %s", str(e))
+        except OSError as e:
+            logger.warning('Failed to update so_dir cache: %s', str(e))
 
     @staticmethod
-    def build_hapray_cmd(args: List[str]) -> List[str]:
+    def build_hapray_cmd(args: list[str]) -> list[str]:
         """Constructs a command for executing hapray-cmd.js.
 
         Args:
@@ -182,7 +172,7 @@ class ExeUtils:
         return ret
 
     @staticmethod
-    def execute_command(cmd: List[str]) -> Tuple[bool, Optional[str], Optional[str]]:
+    def execute_command(cmd: list[str]) -> tuple[bool, Optional[str], Optional[str]]:
         """Executes a shell command and captures its output.
 
         Args:
@@ -192,40 +182,33 @@ class ExeUtils:
             Tuple (success, stdout, stderr)
         """
         try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
             # Log output appropriately
             if result.stdout:
-                logger.debug("Command output [%s]:\n%s", ' '.join(cmd), result.stdout)
+                logger.debug('Command output [%s]:\n%s', ' '.join(cmd), result.stdout)
             if result.stderr:
-                logger.warning("Command warnings [%s]:\n%s", ' '.join(cmd), result.stderr)
+                logger.warning('Command warnings [%s]:\n%s', ' '.join(cmd), result.stderr)
 
-            logger.info("Command executed successfully: %s", ' '.join(cmd))
+            logger.info('Command executed successfully: %s', ' '.join(cmd))
             return True, result.stdout, result.stderr
 
         except subprocess.CalledProcessError as e:
             logger.error(
-                "Command failed with code %d: %s\nSTDOUT: %s\nSTDERR: %s",
+                'Command failed with code %d: %s\nSTDOUT: %s\nSTDERR: %s',
                 e.returncode,
                 ' '.join(cmd),
                 e.stdout,
-                e.stderr
+                e.stderr,
             )
             return False, e.stdout, e.stderr
 
         except FileNotFoundError:
-            logger.error("Command not found: %s", ' '.join(cmd))
+            logger.error('Command not found: %s', ' '.join(cmd))
             return False, None, None
 
     @staticmethod
-    def execute_hapray_cmd(args: List[str]) -> bool:
+    def execute_hapray_cmd(args: list[str]) -> bool:
         """Executes a hapray command.
 
         Args:
@@ -258,8 +241,9 @@ class ExeUtils:
 
             # Check if regeneration is needed
             if not ExeUtils._should_regenerate_db(output_db, so_dir):
-                logger.info("Database %s is up-to-date with current so_dir configuration, skipping conversion",
-                            output_db)
+                logger.info(
+                    'Database %s is up-to-date with current so_dir configuration, skipping conversion', output_db
+                )
                 return True
 
             # Ensure output directory exists
@@ -267,38 +251,33 @@ class ExeUtils:
             os.makedirs(output_dir, exist_ok=True)
 
             # Prepare conversion command
-            cmd = [
-                ExeUtils.trace_streamer_path,
-                data_file,
-                '-e',
-                output_db
-            ]
+            cmd = [ExeUtils.trace_streamer_path, data_file, '-e', output_db]
 
             # Add so_dir parameter if configured
             if so_dir:
                 cmd.extend(['--So_dir', os.path.abspath(so_dir)])
-                logger.info("Converting htrace to DB with so_dir: %s -> %s (so_dir: %s)", data_file, output_db, so_dir)
+                logger.info('Converting htrace to DB with so_dir: %s -> %s (so_dir: %s)', data_file, output_db, so_dir)
             else:
-                logger.info("Converting htrace to DB: %s -> %s", data_file, output_db)
+                logger.info('Converting htrace to DB: %s -> %s', data_file, output_db)
 
             # Execute conversion
             success, _, stderr = ExeUtils.execute_command(cmd)
 
             if not success:
-                logger.error("Conversion failed for %s: %s", data_file, stderr)
+                logger.error('Conversion failed for %s: %s', data_file, stderr)
                 return False
 
             # Verify output file was created
             if not os.path.exists(output_db):
-                logger.error("Output DB file not created: %s", output_db)
+                logger.error('Output DB file not created: %s', output_db)
                 return False
 
             # Update cache with current so_dir state
             ExeUtils._update_so_dir_cache(output_db, so_dir)
 
-            logger.info("Successfully converted %s to %s", data_file, output_db)
+            logger.info('Successfully converted %s to %s', data_file, output_db)
             return True
 
         except Exception as e:
-            logger.exception("Unexpected error during conversion: %s", str(e))
+            logger.exception('Unexpected error during conversion: %s', str(e))
             return False

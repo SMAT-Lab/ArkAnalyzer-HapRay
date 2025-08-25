@@ -16,12 +16,12 @@ limitations under the License.
 import logging
 import sqlite3
 import traceback
-from typing import Dict, Any, List
+from typing import Any
 
 from .frame_core_cache_manager import FrameCacheManager
 
 
-def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
+def parse_frame_slice_db(db_path: str) -> dict[int, list[dict[str, Any]]]:
     """解析数据库文件，按vsync值分组数据
 
     结果按vsync值（key）从小到大排序
@@ -56,7 +56,7 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         columns = [description[0] for description in cursor.description]
 
         # 按vsync值分组
-        vsync_groups: Dict[int, List[Dict[str, Any]]] = {}
+        vsync_groups: dict[int, list[dict[str, Any]]] = {}
         total_frames = 0
 
         # 遍历所有行，将数据转换为字典并按vsync分组
@@ -86,9 +86,9 @@ def parse_frame_slice_db(db_path: str) -> Dict[int, List[Dict[str, Any]]]:
         return dict(sorted(vsync_groups.items()))
 
     except sqlite3.Error as e:
-        raise RuntimeError(f"数据库操作错误: {str(e)}\n{traceback.format_exc()}") from e
+        raise RuntimeError(f'数据库操作错误: {str(e)}\n{traceback.format_exc()}') from e
     except Exception as e:
-        raise RuntimeError(f"处理过程中发生错误: {str(e)}\n{traceback.format_exc()}") from e
+        raise RuntimeError(f'处理过程中发生错误: {str(e)}\n{traceback.format_exc()}') from e
 
 
 def get_frame_type(frame: dict, cursor, step_id: str = None) -> str:
@@ -102,9 +102,9 @@ def get_frame_type(frame: dict, cursor, step_id: str = None) -> str:
     返回:
         str: 'ui'/'render'/'sceneboard'
     """
-    ipid = frame.get("ipid")
+    ipid = frame.get('ipid')
     if ipid is None or cursor is None:
-        return "ui"
+        return 'ui'
 
     # 确定缓存key
     cache_key = step_id if step_id else str(cursor.connection)
@@ -118,23 +118,23 @@ def get_frame_type(frame: dict, cursor, step_id: str = None) -> str:
         # 再次获取缓存
         process_cache_data = FrameCacheManager.get_process_cache_by_key(cache_key)
         if process_cache_data.empty:
-            logging.warning("process缓存为空，无法获取进程类型")
-            return "ui"
+            logging.warning('process缓存为空，无法获取进程类型')
+            return 'ui'
 
     # 从缓存中查找进程名
     process_info = process_cache_data[process_cache_data['ipid'] == ipid]
 
     if process_info.empty:
-        return "ui"
+        return 'ui'
 
     process_name = process_info['name'].iloc[0]
 
     # 根据进程名返回类型
-    if process_name == "render_service":
-        return "render"
-    if process_name == "ohos.sceneboard":
-        return "sceneboard"
-    return "ui"
+    if process_name == 'render_service':
+        return 'render'
+    if process_name == 'ohos.sceneboard':
+        return 'sceneboard'
+    return 'ui'
 
 
 def validate_database_compatibility(db_path: str) -> bool:
@@ -151,11 +151,11 @@ def validate_database_compatibility(db_path: str) -> bool:
         cursor = conn.cursor()
 
         # 检查SQLite版本是否支持WITH子句
-        cursor.execute("SELECT sqlite_version()")
+        cursor.execute('SELECT sqlite_version()')
         version = cursor.fetchone()[0]
         version_parts = [int(x) for x in version.split('.')]
         if version_parts[0] < 3 or (version_parts[0] == 3 and version_parts[1] < 8):
-            logging.error("SQLite版本 %s 不支持WITH子句，需要3.8.3或更高版本", version)
+            logging.error('SQLite版本 %s 不支持WITH子句，需要3.8.3或更高版本', version)
             conn.close()
             return False
 
@@ -164,7 +164,7 @@ def validate_database_compatibility(db_path: str) -> bool:
         tables = [row[0] for row in cursor.fetchall()]
         required_tables = ['frame_slice', 'process', 'thread', 'callstack']
         if not all(table in tables for table in required_tables):
-            logging.error("数据库中缺少必要的表，需要: %s", required_tables)
+            logging.error('数据库中缺少必要的表，需要: %s', required_tables)
             conn.close()
             return False
 
@@ -172,11 +172,11 @@ def validate_database_compatibility(db_path: str) -> bool:
         return True
 
     except Exception as e:
-        logging.error("验证数据库兼容性失败: %s", str(e))
+        logging.error('验证数据库兼容性失败: %s', str(e))
         return False
 
 
-def get_database_metadata(db_path: str) -> Dict[str, Any]:
+def get_database_metadata(db_path: str) -> dict[str, Any]:
     """获取数据库元数据信息
 
     Args:
@@ -197,7 +197,7 @@ def get_database_metadata(db_path: str) -> Dict[str, Any]:
             runtime_result = cursor.fetchone()
             metadata['runtime'] = runtime_result[0] if runtime_result else None
         except sqlite3.DatabaseError:
-            logging.warning("Failed to get runtime from database, setting to None")
+            logging.warning('Failed to get runtime from database, setting to None')
             metadata['runtime'] = None
 
         # 获取表信息
@@ -206,18 +206,18 @@ def get_database_metadata(db_path: str) -> Dict[str, Any]:
         metadata['tables'] = tables
 
         # 获取SQLite版本
-        cursor.execute("SELECT sqlite_version()")
+        cursor.execute('SELECT sqlite_version()')
         metadata['sqlite_version'] = cursor.fetchone()[0]
 
         conn.close()
         return metadata
 
     except Exception as e:
-        logging.error("获取数据库元数据失败: %s", str(e))
+        logging.error('获取数据库元数据失败: %s', str(e))
         return {}
 
 
-def extract_frame_statistics(db_path: str) -> Dict[str, Any]:
+def extract_frame_statistics(db_path: str) -> dict[str, Any]:
     """提取帧统计信息
 
     Args:
@@ -233,30 +233,30 @@ def extract_frame_statistics(db_path: str) -> Dict[str, Any]:
         stats = {}
 
         # 总帧数
-        cursor.execute("SELECT COUNT(*) FROM frame_slice")
+        cursor.execute('SELECT COUNT(*) FROM frame_slice')
         stats['total_frames'] = cursor.fetchone()[0]
 
         # 按flag分组的帧数
-        cursor.execute("SELECT flag, COUNT(*) FROM frame_slice GROUP BY flag")
+        cursor.execute('SELECT flag, COUNT(*) FROM frame_slice GROUP BY flag')
         flag_stats = dict(cursor.fetchall())
         stats['frames_by_flag'] = flag_stats
 
         # 按type分组的帧数
-        cursor.execute("SELECT type, COUNT(*) FROM frame_slice GROUP BY type")
+        cursor.execute('SELECT type, COUNT(*) FROM frame_slice GROUP BY type')
         type_stats = dict(cursor.fetchall())
         stats['frames_by_type'] = type_stats
 
         # 进程数量
-        cursor.execute("SELECT COUNT(*) FROM process")
+        cursor.execute('SELECT COUNT(*) FROM process')
         stats['process_count'] = cursor.fetchone()[0]
 
         # 线程数量
-        cursor.execute("SELECT COUNT(*) FROM thread")
+        cursor.execute('SELECT COUNT(*) FROM thread')
         stats['thread_count'] = cursor.fetchone()[0]
 
         conn.close()
         return stats
 
     except Exception as e:
-        logging.error("提取帧统计信息失败: %s", str(e))
+        logging.error('提取帧统计信息失败: %s', str(e))
         return {}

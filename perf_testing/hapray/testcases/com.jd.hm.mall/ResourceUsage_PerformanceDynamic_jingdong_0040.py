@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -44,7 +42,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0040(PerfTestCase):
             self.driver.touch(self.convert_coordinate(994, 2361))
             time.sleep(2)
 
-        self.execute_performance_step("京东-购物车结算场景-step1选择购物车商品去结算", 15, step1)
+        self.execute_performance_step('京东-购物车结算场景-step1选择购物车商品去结算', 15, step1)
 
         # 返回购物车
         self.driver.swipe_to_back()

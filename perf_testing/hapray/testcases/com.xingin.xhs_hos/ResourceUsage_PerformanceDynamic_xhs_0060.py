@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -36,7 +34,7 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
             # 1. 点击顶部隐藏tab页进入直播页，等待2s
             self.touch_by_text('直播', 2)
 
-            for i in range(5):
+            for _i in range(5):
                 # 2. 点击进入左上角第一个直播间，等待2s
                 self.touch_by_coordinates(350, 1010, 2)
 
@@ -44,4 +42,4 @@ class ResourceUsage_PerformanceDynamic_xhs_0060(PerfTestCase):
                 self.driver.swipe_to_back()
                 time.sleep(2)
 
-        self.execute_performance_step("小红书-浏览直播场景-step1直播间观看/退出", 30, step1)
+        self.execute_performance_step('小红书-浏览直播场景-step1直播间观看/退出', 30, step1)

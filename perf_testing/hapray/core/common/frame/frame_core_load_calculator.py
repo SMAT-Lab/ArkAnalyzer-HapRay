@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # pylint: disable=R0917
 """
 Copyright (c) 2025 Huawei Device Co., Ltd.
@@ -17,7 +16,7 @@ limitations under the License.
 
 import logging
 import time
-from typing import Dict, List, Tuple, Any
+from typing import Any
 
 import pandas as pd
 
@@ -44,13 +43,13 @@ class FrameLoadCalculator:
         self.debug_vsync_enabled = debug_vsync_enabled
 
     def analyze_perf_callchain(
-            self,
-            perf_conn,
-            callchain_id: int,
-            callchain_cache: pd.DataFrame = None,
-            files_cache: pd.DataFrame = None,
-            step_id: str = None
-    ) -> List[Dict[str, Any]]:
+        self,
+        perf_conn,
+        callchain_id: int,
+        callchain_cache: pd.DataFrame = None,
+        files_cache: pd.DataFrame = None,
+        step_id: str = None,
+    ) -> list[dict[str, Any]]:
         """分析perf样本的调用链信息
 
         Args:
@@ -84,11 +83,13 @@ class FrameLoadCalculator:
 
             # 检查缓存是否为空
             cache_validate_start = time.time()
-            if (cache_key not in FrameCacheManager._callchain_cache  # pylint: disable=protected-access
-                    or FrameCacheManager._callchain_cache[cache_key].empty  # pylint: disable=protected-access
-                    or cache_key not in FrameCacheManager._files_cache  # pylint: disable=protected-access
-                    or FrameCacheManager._files_cache[cache_key].empty):  # pylint: disable=protected-access
-                logging.warning("缓存数据为空，无法分析调用链: cache_key=%s", cache_key)
+            if (
+                cache_key not in FrameCacheManager._callchain_cache  # pylint: disable=protected-access
+                or FrameCacheManager._callchain_cache[cache_key].empty  # pylint: disable=protected-access
+                or cache_key not in FrameCacheManager._files_cache  # pylint: disable=protected-access
+                or FrameCacheManager._files_cache[cache_key].empty
+            ):  # pylint: disable=protected-access
+                logging.warning('缓存数据为空，无法分析调用链: cache_key=%s', cache_key)
                 return []
             cache_validate_time = time.time() - cache_validate_start
 
@@ -107,10 +108,16 @@ class FrameLoadCalculator:
                 total_time = time.time() - callchain_start_time
                 if total_time > 0.01:  # 只记录耗时超过0.01秒的调用链分析
                     logging.debug(
-                        "[%s] 调用链分析耗时: %.6f秒 (无记录), "
-                        "缓存检查%.6f秒, 键生成%.6f秒, "
-                        "缓存验证%.6f秒, 记录查找%.6f秒",
-                        step_id, total_time, cache_check_time, key_time, cache_validate_time, callchain_lookup_time)
+                        '[%s] 调用链分析耗时: %.6f秒 (无记录), '
+                        '缓存检查%.6f秒, 键生成%.6f秒, '
+                        '缓存验证%.6f秒, 记录查找%.6f秒',
+                        step_id,
+                        total_time,
+                        cache_check_time,
+                        key_time,
+                        cache_validate_time,
+                        callchain_lookup_time,
+                    )
                 return []
 
             # 构建调用链信息
@@ -122,9 +129,8 @@ class FrameLoadCalculator:
                 # 从缓存中获取文件信息
                 file_start = time.time()
                 files_cache = FrameCacheManager._files_cache[cache_key]  # pylint: disable=protected-access
-                file_mask = (
-                    (files_cache['file_id'] == record['file_id'])
-                    & (files_cache['serial_id'] == record['symbol_id'])
+                file_mask = (files_cache['file_id'] == record['file_id']) & (
+                    files_cache['serial_id'] == record['symbol_id']
                 )
                 file_info = files_cache[file_mask]  # pylint: disable=protected-access
                 file_time = time.time() - file_start
@@ -133,13 +139,15 @@ class FrameLoadCalculator:
                 symbol = file_info['symbol'].iloc[0] if not file_info.empty else 'unknown'
                 path = file_info['path'].iloc[0] if not file_info.empty else 'unknown'
 
-                callchain_info.append({
-                    'depth': int(record['depth']),
-                    'file_id': int(record['file_id']),
-                    'path': str(path),
-                    'symbol_id': int(record['symbol_id']),
-                    'symbol': str(symbol)
-                })
+                callchain_info.append(
+                    {
+                        'depth': int(record['depth']),
+                        'file_id': int(record['file_id']),
+                        'path': str(path),
+                        'symbol_id': int(record['symbol_id']),
+                        'symbol': str(symbol),
+                    }
+                )
 
             build_time = time.time() - build_start
 
@@ -149,22 +157,31 @@ class FrameLoadCalculator:
             # 只记录耗时较长的调用链分析（超过0.01秒）
             if total_time > 0.01:
                 logging.debug(
-                    "[%s] 调用链分析耗时: %.6f秒, "
-                    "callchain_id: %s, 记录数: %d",
-                    step_id, total_time, callchain_id, len(callchain_records))
+                    '[%s] 调用链分析耗时: %.6f秒, callchain_id: %s, 记录数: %d',
+                    step_id,
+                    total_time,
+                    callchain_id,
+                    len(callchain_records),
+                )
                 logging.debug(
-                    "[%s] 各阶段耗时: "
-                    "缓存检查%.6f秒, 键生成%.6f秒, "
-                    "缓存验证%.6f秒, 记录查找%.6f秒, "
-                    "构建%.6f秒, 文件查找%.6f秒",
-                    step_id, cache_check_time, key_time, cache_validate_time,
-                    callchain_lookup_time, build_time, file_lookup_total)
+                    '[%s] 各阶段耗时: '
+                    '缓存检查%.6f秒, 键生成%.6f秒, '
+                    '缓存验证%.6f秒, 记录查找%.6f秒, '
+                    '构建%.6f秒, 文件查找%.6f秒',
+                    step_id,
+                    cache_check_time,
+                    key_time,
+                    cache_validate_time,
+                    callchain_lookup_time,
+                    build_time,
+                    file_lookup_total,
+                )
 
             # logging.info("构建的调用链信息: 长度=%s", len(callchain_info))
             return callchain_info
 
         except Exception as e:
-            logging.error("分析调用链失败: %s", str(e))
+            logging.error('分析调用链失败: %s', str(e))
             return []
 
     def analyze_single_frame(self, frame, perf_df, perf_conn, step_id):
@@ -205,9 +222,13 @@ class FrameLoadCalculator:
             total_time = time.time() - frame_start_time
             if total_time > 0.1:  # 只记录耗时超过0.1秒的帧
                 logging.debug(
-                    "[%s] 空帧分析耗时: %.6f秒 (无样本), "
-                    "缓存%.6f秒, 时间计算%.6f秒, 过滤%.6f秒",
-                    step_id, total_time, cache_time, time_calc_time, filter_time)
+                    '[%s] 空帧分析耗时: %.6f秒 (无样本), 缓存%.6f秒, 时间计算%.6f秒, 过滤%.6f秒',
+                    step_id,
+                    total_time,
+                    cache_time,
+                    time_calc_time,
+                    filter_time,
+                )
             return frame_load, sample_callchains
 
         # logging.info("analyze_single_frame: 找到样本, ts=%s, 时间窗口=[%s, %s], tid=%s, 样本数=%s",
@@ -228,11 +249,7 @@ class FrameLoadCalculator:
                 # 调用链分析
                 callchain_start = time.time()
                 callchain_info = self.analyze_perf_callchain(
-                    perf_conn,
-                    int(sample['callchain_id']),
-                    callchain_cache,
-                    files_cache,
-                    step_id
+                    perf_conn, int(sample['callchain_id']), callchain_cache, files_cache, step_id
                 )
                 callchain_time = time.time() - callchain_start
                 callchain_analysis_total += callchain_time
@@ -250,9 +267,9 @@ class FrameLoadCalculator:
                             continue
 
                         if self.debug_vsync_enabled and (
-                                'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
-                                and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
-                                and event_count < 2000000
+                            'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
+                            and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
+                            and event_count < 2000000
                         ):
                             is_vsync_chain = True
                             break
@@ -263,21 +280,22 @@ class FrameLoadCalculator:
                         frame_load += sample['event_count']
                         try:
                             sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                            sample_callchains.append({
-                                'timestamp': int(sample['timestamp_trace']),
-                                'event_count': int(sample['event_count']),
-                                'load_percentage': float(sample_load_percentage),
-                                'callchain': callchain_info
-                            })
+                            sample_callchains.append(
+                                {
+                                    'timestamp': int(sample['timestamp_trace']),
+                                    'event_count': int(sample['event_count']),
+                                    'load_percentage': float(sample_load_percentage),
+                                    'callchain': callchain_info,
+                                }
+                            )
                         except Exception as e:
                             logging.error(
-                                "处理样本时出错: %s, sample: %s, frame_load: %s",
-                                str(e), sample.to_dict(), frame_load
+                                '处理样本时出错: %s, sample: %s, frame_load: %s', str(e), sample.to_dict(), frame_load
                             )
                             continue
 
             except Exception as e:
-                logging.error("分析调用链时出错: %s", str(e))
+                logging.error('分析调用链时出错: %s', str(e))
                 continue
 
         sample_analysis_time = time.time() - sample_analysis_start
@@ -295,7 +313,7 @@ class FrameLoadCalculator:
                 'type': frame.get('type', 0),
                 'vsync': frame.get('vsync', 'unknown'),
                 'flag': frame.get('flag'),
-                'sample_callchains': sample_callchains
+                'sample_callchains': sample_callchains,
             }
             FrameCacheManager.add_frame_load(step_id, frame_load_data)
         cache_save_time = time.time() - cache_save_start
@@ -306,30 +324,40 @@ class FrameLoadCalculator:
         # 只记录耗时较长的帧分析（超过0.1秒）
         if total_time > 0.1:
             logging.debug(
-                "[%s] 单帧分析耗时: %.6f秒, 样本数: %d, 有效样本: %d",
-                step_id, total_time, len(frame_samples), sample_count)
+                '[%s] 单帧分析耗时: %.6f秒, 样本数: %d, 有效样本: %d',
+                step_id,
+                total_time,
+                len(frame_samples),
+                sample_count,
+            )
             logging.debug(
-                "[%s] 各阶段耗时: "
-                "缓存获取%.6f秒, 时间计算%.6f秒, "
-                "数据过滤%.6f秒, 样本分析%.6f秒, "
-                "缓存保存%.6f秒",
-                step_id, cache_time, time_calc_time, filter_time, sample_analysis_time, cache_save_time)
+                '[%s] 各阶段耗时: 缓存获取%.6f秒, 时间计算%.6f秒, 数据过滤%.6f秒, 样本分析%.6f秒, 缓存保存%.6f秒',
+                step_id,
+                cache_time,
+                time_calc_time,
+                filter_time,
+                sample_analysis_time,
+                cache_save_time,
+            )
             logging.debug(
-                "[%s] 样本分析详情: 调用链分析%.6f秒, VSync过滤%.6f秒",
-                step_id, callchain_analysis_total, vsync_filter_total)
+                '[%s] 样本分析详情: 调用链分析%.6f秒, VSync过滤%.6f秒',
+                step_id,
+                callchain_analysis_total,
+                vsync_filter_total,
+            )
 
         return frame_load, sample_callchains
 
     def calculate_frame_load(
-            self,
-            frame: Dict[str, Any],
-            perf_df: pd.DataFrame,
-            perf_conn,
-            step_id: str = None,
-            callchain_cache: pd.DataFrame = None,
-            files_cache: pd.DataFrame = None,
-            include_vsync_filter: bool = True
-    ) -> Tuple[int, List[Dict[str, Any]]]:
+        self,
+        frame: dict[str, Any],
+        perf_df: pd.DataFrame,
+        perf_conn,
+        step_id: str = None,
+        callchain_cache: pd.DataFrame = None,
+        files_cache: pd.DataFrame = None,
+        include_vsync_filter: bool = True,
+    ) -> tuple[int, list[dict[str, Any]]]:
         """计算单个帧的负载和调用链
 
         Args:
@@ -377,11 +405,7 @@ class FrameLoadCalculator:
             try:
                 # 分析调用链
                 callchain_info = self.analyze_perf_callchain(
-                    perf_conn,
-                    int(sample['callchain_id']),
-                    callchain_cache,
-                    files_cache,
-                    step_id
+                    perf_conn, int(sample['callchain_id']), callchain_cache, files_cache, step_id
                 )
 
                 if not callchain_info or len(callchain_info) == 0:
@@ -404,23 +428,27 @@ class FrameLoadCalculator:
                         sample_load_percentage = (sample['event_count'] / total_frame_load) * 100
                     else:
                         sample_load_percentage = 0.0
-                    sample_callchains.append({
-                        'timestamp': int(sample['timestamp_trace']),
-                        'event_count': int(sample['event_count']),
-                        'load_percentage': float(sample_load_percentage),
-                        'callchain': callchain_info
-                    })
+                    sample_callchains.append(
+                        {
+                            'timestamp': int(sample['timestamp_trace']),
+                            'event_count': int(sample['event_count']),
+                            'load_percentage': float(sample_load_percentage),
+                            'callchain': callchain_info,
+                        }
+                    )
                     # logging.info("成功添加调用链: callchain_id=%s, event_count=%s, 调用链长度=%s",
                     #              sample['callchain_id'], sample['event_count'], len(callchain_info))
                 except Exception as e:
                     logging.error(
-                        "处理样本时出错: %s, sample: %s, total_frame_load: %s",
-                        str(e), sample.to_dict(), total_frame_load
+                        '处理样本时出错: %s, sample: %s, total_frame_load: %s',
+                        str(e),
+                        sample.to_dict(),
+                        total_frame_load,
                     )
                     continue
 
             except Exception as e:
-                logging.error("分析调用链时出错: %s", str(e))
+                logging.error('分析调用链时出错: %s', str(e))
                 continue
 
         # logging.info("帧分析完成: ts=%s, frame_load=%s, sample_callchains数量=%s",
@@ -438,17 +466,13 @@ class FrameLoadCalculator:
                 'type': frame.get('type', 0),  # 修正：使用type字段
                 'vsync': frame.get('vsync', 'unknown'),
                 'flag': frame.get('flag'),
-                'sample_callchains': sample_callchains
+                'sample_callchains': sample_callchains,
             }
             FrameCacheManager.add_frame_load(step_id, frame_load_data)
 
         return frame_load, sample_callchains
 
-    def calculate_frame_load_simple(
-            self,
-            frame: Dict[str, Any],
-            perf_df: pd.DataFrame
-    ) -> int:
+    def calculate_frame_load_simple(self, frame: dict[str, Any], perf_df: pd.DataFrame) -> int:
         """简单计算帧负载（不包含调用链分析）
 
         Args:
@@ -458,8 +482,8 @@ class FrameLoadCalculator:
         Returns:
             int: 帧负载
         """
-        frame_start_time = frame["ts"]
-        frame_end_time = frame["ts"] + frame["dur"]
+        frame_start_time = frame['ts']
+        frame_end_time = frame['ts'] + frame['dur']
 
         # 使用向量化操作进行过滤
         mask = (
@@ -474,11 +498,7 @@ class FrameLoadCalculator:
 
         return int(frame_samples['event_count'].sum())
 
-    def calculate_all_frame_loads_fast(
-            self,
-            frames: pd.DataFrame,
-            perf_df: pd.DataFrame
-    ) -> List[Dict[str, Any]]:
+    def calculate_all_frame_loads_fast(self, frames: pd.DataFrame, perf_df: pd.DataFrame) -> list[dict[str, Any]]:
         """快速计算所有帧的负载值，不分析调用链
 
         Args:
@@ -494,7 +514,7 @@ class FrameLoadCalculator:
         # 记录数据量
         total_frames = len(frames)
         total_perf_samples = len(perf_df)
-        logging.info("开始快速计算帧负载: 帧数=%d, 性能样本数=%d", total_frames, total_perf_samples)
+        logging.info('开始快速计算帧负载: 帧数=%d, 性能样本数=%d', total_frames, total_perf_samples)
 
         # 批量计算开始
         calc_start = time.time()
@@ -504,25 +524,28 @@ class FrameLoadCalculator:
                 elapsed = time.time() - calc_start
                 rate = i / elapsed if elapsed > 0 else 0
                 logging.info(
-                    "帧负载计算进度: %d/%d (%.1f%%), 速率: %.1f帧/秒", i, total_frames, i / total_frames * 100, rate)
+                    '帧负载计算进度: %d/%d (%.1f%%), 速率: %.1f帧/秒', i, total_frames, i / total_frames * 100, rate
+                )
 
             # 使用现有的简单方法，只计算负载值
             frame_load = self.calculate_frame_load_simple(frame, perf_df)
 
             # 确保时间戳字段正确
-            frame_loads.append({
-                'ts': int(frame['ts']),  # 确保时间戳是整数
-                'dur': int(frame['dur']),  # 确保持续时间是整数
-                'frame_load': frame_load,
-                'thread_id': int(frame['tid']),  # 确保线程ID是整数
-                'thread_name': frame.get('thread_name', 'unknown'),
-                'process_name': frame.get('process_name', 'unknown'),
-                'type': int(frame.get('type', 0)),  # 确保类型是整数
-                'vsync': frame.get('vsync', 'unknown'),
-                'flag': int(frame.get('flag', 0)) if pd.notna(frame.get('flag')) else 0,  # 确保flag是整数
-                'is_main_thread': int(frame.get('is_main_thread', 0)),  # 确保主线程标志是整数
-                'sample_callchains': []  # 空列表，不保存调用链
-            })
+            frame_loads.append(
+                {
+                    'ts': int(frame['ts']),  # 确保时间戳是整数
+                    'dur': int(frame['dur']),  # 确保持续时间是整数
+                    'frame_load': frame_load,
+                    'thread_id': int(frame['tid']),  # 确保线程ID是整数
+                    'thread_name': frame.get('thread_name', 'unknown'),
+                    'process_name': frame.get('process_name', 'unknown'),
+                    'type': int(frame.get('type', 0)),  # 确保类型是整数
+                    'vsync': frame.get('vsync', 'unknown'),
+                    'flag': int(frame.get('flag', 0)) if pd.notna(frame.get('flag')) else 0,  # 确保flag是整数
+                    'is_main_thread': int(frame.get('is_main_thread', 0)),  # 确保主线程标志是整数
+                    'sample_callchains': [],  # 空列表，不保存调用链
+                }
+            )
 
         calc_time = time.time() - calc_start
         total_time = time.time() - start_time
@@ -536,16 +559,14 @@ class FrameLoadCalculator:
         else:
             avg_load = max_load = processing_rate = 0
 
-        logging.info("快速帧负载计算完成: 总耗时=%.3f秒, 计算耗时=%.3f秒", total_time, calc_time)
-        logging.info("计算结果: 平均负载=%.1f, 最大负载=%d, 处理速率=%.1f帧/秒", avg_load, max_load, processing_rate)
+        logging.info('快速帧负载计算完成: 总耗时=%.3f秒, 计算耗时=%.3f秒', total_time, calc_time)
+        logging.info('计算结果: 平均负载=%.1f, 最大负载=%d, 处理速率=%.1f帧/秒', avg_load, max_load, processing_rate)
 
         return frame_loads
 
     def identify_frames_for_callchain_analysis(
-            self,
-            frame_loads: List[Dict[str, Any]],
-            stuttered_frames: List[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+        self, frame_loads: list[dict[str, Any]], stuttered_frames: list[dict[str, Any]] = None
+    ) -> list[dict[str, Any]]:
         """识别需要调用链分析的帧（用于前10帧分析）
 
         Args:
@@ -596,7 +617,7 @@ class FrameLoadCalculator:
 
         return frames_to_analyze
 
-    def _is_vsync_chain(self, callchain_info: List[Dict], event_count: int) -> bool:
+    def _is_vsync_chain(self, callchain_info: list[dict], event_count: int) -> bool:
         """判断是否为VSync调用链
 
         Args:
@@ -616,23 +637,25 @@ class FrameLoadCalculator:
             if not current_symbol or not next_symbol:
                 continue
 
-            if ('OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
-                    and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
-                    and event_count < 2000000):
+            if (
+                'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
+                and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
+                and event_count < 2000000
+            ):
                 return True
 
         return False
 
     def batch_calculate_frame_loads(
-            self,
-            frames: List[Dict[str, Any]],
-            perf_df: pd.DataFrame,
-            perf_conn,
-            step_id: str = None,
-            callchain_cache: pd.DataFrame = None,
-            files_cache: pd.DataFrame = None,
-            include_vsync_filter: bool = True
-    ) -> List[Tuple[int, List[Dict[str, Any]]]]:
+        self,
+        frames: list[dict[str, Any]],
+        perf_df: pd.DataFrame,
+        perf_conn,
+        step_id: str = None,
+        callchain_cache: pd.DataFrame = None,
+        files_cache: pd.DataFrame = None,
+        include_vsync_filter: bool = True,
+    ) -> list[tuple[int, list[dict[str, Any]]]]:
         """批量计算多个帧的负载
 
         Args:
@@ -650,8 +673,7 @@ class FrameLoadCalculator:
         results = []
         for frame in frames:
             load, callchains = self.calculate_frame_load(
-                frame, perf_df, perf_conn, step_id,
-                callchain_cache, files_cache, include_vsync_filter
+                frame, perf_df, perf_conn, step_id, callchain_cache, files_cache, include_vsync_filter
             )
             results.append((load, callchains))
         return results
