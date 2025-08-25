@@ -302,6 +302,51 @@ interface VSyncAnomalyStepData {
 
 export type VSyncAnomalyData = Record<string, VSyncAnomalyStepData>;
 
+// 故障树分析数据结构
+interface FaultTreeArkUIData {
+  animator: number;
+  HandleOnAreaChangeEvent: number;
+  HandleVisibleAreaChangeEvent: number;
+  GetDefaultDisplay: number;
+  MarshRSTransactionData: number;
+}
+
+interface FaultTreeRSData {
+  ProcessedNodes: {
+    ts: number;
+    count: number;
+  };
+  DisplayNodeSkipTimes: number;
+  UnMarshRSTransactionData: number;
+  AnimateSize: {
+    nodeSizeSum: number;
+    totalAnimationSizeSum: number;
+  };
+}
+
+interface FaultTreeAVCodecData {
+  soft_decoder: boolean;
+  BroadcastControlInstructions: number;
+  VideoDecodingInputFrameCount: number;
+  VideoDecodingConsumptionFrame: number;
+}
+
+interface FaultTreeAudioData {
+  AudioWriteCB: number;
+  AudioReadCB: number;
+  AudioPlayCb: number;
+  AudioRecCb: number;
+}
+
+interface FaultTreeStepData {
+  arkui: FaultTreeArkUIData;
+  RS: FaultTreeRSData;
+  av_codec: FaultTreeAVCodecData;
+  Audio: FaultTreeAudioData;
+}
+
+export type FaultTreeData = Record<string, FaultTreeStepData>;
+
 interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
@@ -310,6 +355,7 @@ interface TraceData {
   gc_thread?: GcThreadData;
   frameLoads?: FrameLoadsData;
   vsyncAnomaly?: VSyncAnomalyData;
+  faultTree?: FaultTreeData;
 }
 
 interface MoreData {
@@ -652,6 +698,74 @@ export function safeProcessVSyncAnomalyData(data: VSyncAnomalyData | null | unde
   return result;
 }
 
+/** 获取默认的故障树步骤数据 */
+export function getDefaultFaultTreeStepData(): FaultTreeStepData {
+  return {
+    arkui: {
+      animator: 0,
+      HandleOnAreaChangeEvent: 0,
+      HandleVisibleAreaChangeEvent: 0,
+      GetDefaultDisplay: 0,
+      MarshRSTransactionData: 0
+    },
+    RS: {
+      ProcessedNodes: {
+        ts: 0.0,
+        count: 0
+      },
+      DisplayNodeSkipTimes: 0,
+      UnMarshRSTransactionData: 0,
+      AnimateSize: {
+        nodeSizeSum: 0,
+        totalAnimationSizeSum: 0
+      }
+    },
+    av_codec: {
+      soft_decoder: false,
+      BroadcastControlInstructions: 0,
+      VideoDecodingInputFrameCount: 0,
+      VideoDecodingConsumptionFrame: 0
+    },
+    Audio: {
+      AudioWriteCB: 0,
+      AudioReadCB: 0,
+      AudioPlayCb: 0,
+      AudioRecCb: 0
+    }
+  };
+}
+
+/** 获取默认的故障树数据（包含一个默认步骤） */
+export function getDefaultFaultTreeData(): FaultTreeData {
+  return {
+    step1: getDefaultFaultTreeStepData()
+  };
+}
+
+/**
+ * 安全处理故障树数据 - 替换无效值为默认结构
+ * @param data 原始故障树数据
+ * @returns 处理后的有效故障树数据
+ */
+export function safeProcessFaultTreeData(data: FaultTreeData | null | undefined): FaultTreeData {
+  if (!data) return getDefaultFaultTreeData();
+
+  const result: FaultTreeData = {};
+
+  // 遍历所有步骤，确保每个步骤都有有效数据
+  for (const [stepName, stepData] of Object.entries(data)) {
+    // 如果步骤数据无效，使用默认结构替换
+    result[stepName] = stepData ?? getDefaultFaultTreeStepData();
+  }
+
+  // 确保至少有一个步骤
+  if (Object.keys(result).length === 0) {
+    result.step1 = getDefaultFaultTreeStepData();
+  }
+
+  return result;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
   version: string | null;
@@ -666,6 +780,7 @@ interface JsonDataState {
   gcThreadData: GcThreadData | null;
   frameLoadsData: FrameLoadsData | null;
   vsyncAnomalyData: VSyncAnomalyData | null;
+  faultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
   flameGraph: Record<string, string> | null;
@@ -751,6 +866,7 @@ export const useJsonDataStore = defineStore('config', {
     gcThreadData: null,
     frameLoadsData: null,
     vsyncAnomalyData: null,
+    faultTreeData: null,
     baseMark: null,
     compareMark: null,
     flameGraph: null,
@@ -774,6 +890,7 @@ export const useJsonDataStore = defineStore('config', {
         this.gcThreadData = safeProcessGcThreadData(jsonData.trace.gc_thread);
         this.frameLoadsData = safeProcessFrameLoadsData(jsonData.trace.frameLoads);
         this.vsyncAnomalyData = safeProcessVSyncAnomalyData(jsonData.trace.vsyncAnomaly);
+        this.faultTreeData = safeProcessFaultTreeData(jsonData.trace.faultTree);
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
@@ -783,6 +900,7 @@ export const useJsonDataStore = defineStore('config', {
         this.gcThreadData = getDefaultGcThreadData();
         this.frameLoadsData = getDefaultFrameLoadsData();
         this.vsyncAnomalyData = getDefaultVSyncAnomalyData();
+        this.faultTreeData = getDefaultFaultTreeData();
       }
       if (jsonData.more) {
         // 火焰图

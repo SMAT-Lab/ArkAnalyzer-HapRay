@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -103,11 +101,11 @@ class ResourceUsage_PerformanceDynamic_bilibili_0020(PerfTestCase):
         self.touch_by_coordinates(66, 637, 1)
 
         # 视频播放30s
-        self.execute_performance_step("哔哩哔哩-横屏视频播放场景-step1视频播放", 30, step1)
+        self.execute_performance_step('哔哩哔哩-横屏视频播放场景-step1视频播放', 30, step1)
         # 点击评论
         self.driver.touch(BY.text('评论'))
         time.sleep(3)
-        self.execute_performance_step("哔哩哔哩-横屏视频播放场景-step2评论区滑动", 60, step2)
-        self.execute_performance_step("哔哩哔哩-横屏视频播放场景-step3全屏播放", 40, step3)
-        self.execute_performance_step("哔哩哔哩-横屏视频播放场景-step4关闭弹幕", 40, step4)
-        self.execute_performance_step("哔哩哔哩-横屏视频播放场景-step5倍速播放", 30, step5)
+        self.execute_performance_step('哔哩哔哩-横屏视频播放场景-step2评论区滑动', 60, step2)
+        self.execute_performance_step('哔哩哔哩-横屏视频播放场景-step3全屏播放', 40, step3)
+        self.execute_performance_step('哔哩哔哩-横屏视频播放场景-step4关闭弹幕', 40, step4)
+        self.execute_performance_step('哔哩哔哩-横屏视频播放场景-step5倍速播放', 30, step5)

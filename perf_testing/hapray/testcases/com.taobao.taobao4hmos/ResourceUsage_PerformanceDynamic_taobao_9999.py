@@ -1,14 +1,12 @@
-# coding: utf-8
 import time
 from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -98,9 +96,9 @@ class ResourceUsage_PerformanceDynamic_taobao_9999(PerfTestCase):
                 except Exception as e:
                     Log.error(f'Error in step3: {str(e)}')
 
-            self.execute_performance_step("淘宝-首页浏览-step1首页上下滑5次，间隔2s", 30, step1)
-            self.execute_performance_step("淘宝-首页浏览-step2点击关注按钮并滑动几次", 10, step2)
-            self.execute_performance_step("淘宝-首页浏览-step3点击上新标签并等待", 10, step3)
+            self.execute_performance_step('淘宝-首页浏览-step1首页上下滑5次，间隔2s', 30, step1)
+            self.execute_performance_step('淘宝-首页浏览-step2点击关注按钮并滑动几次', 10, step2)
+            self.execute_performance_step('淘宝-首页浏览-step3点击上新标签并等待', 10, step3)
 
         except Exception as e:
             Log.error(f'Error in process: {str(e)}')

@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerformanceDynamic_FuncCalls(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -29,11 +26,12 @@ class PerformanceDynamic_FuncCalls(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-        self.driver.start_app(self.app_package, "ExecutorAbility",
-                              "--ps testSuite test_suite --ps testCase FuncCallsTest")
+        self.driver.start_app(
+            self.app_package, 'ExecutorAbility', '--ps testSuite test_suite --ps testCase FuncCallsTest'
+        )
 
         def step1():
             for _ in range(15):
                 self.touch_by_text('call10', 2)
 
-        self.execute_performance_step("so函数调用-func calls count", 30, step1)
+        self.execute_performance_step('so函数调用-func calls count', 30, step1)

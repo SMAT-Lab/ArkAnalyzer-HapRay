@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -45,9 +43,9 @@ class ResourceUsage_PerformanceDynamic_Douyin_0090(PerfTestCase):
                 self.touch_by_coordinates(658, 2307, 15)
 
         self.start_app()
-        self.execute_performance_step("抖音-发布抖音操作场景-step1点击+号", 10, step1)
-        self.execute_performance_step("抖音-发布抖音操作场景-step2点击滤镜高清", 10, step2)
+        self.execute_performance_step('抖音-发布抖音操作场景-step1点击+号', 10, step1)
+        self.execute_performance_step('抖音-发布抖音操作场景-step2点击滤镜高清', 10, step2)
         self.touch_by_coordinates(600, 600, 2)
-        self.execute_performance_step("抖音-发布抖音操作场景-step3点击拍摄", 20, step3)
+        self.execute_performance_step('抖音-发布抖音操作场景-step3点击拍摄', 20, step3)
         self.touch_by_coordinates(600, 600, 2)
         self.swipe_to_back()

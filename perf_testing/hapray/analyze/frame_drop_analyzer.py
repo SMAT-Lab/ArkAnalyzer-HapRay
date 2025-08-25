@@ -15,7 +15,7 @@ limitations under the License.
 
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.frame import FrameAnalyzerCore
@@ -36,11 +36,9 @@ class FrameDropAnalyzer(BaseAnalyzer):
         # 初始化核心分析器
         self.core_analyzer = FrameAnalyzerCore()
 
-    def _analyze_impl(self,
-                      step_dir: str,
-                      trace_db_path: str,
-                      perf_db_path: str,
-                      app_pids: list) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         """分析卡顿帧数据
 
         Args:
@@ -53,24 +51,22 @@ class FrameDropAnalyzer(BaseAnalyzer):
             Dictionary containing frame drop analysis result for this step, or None if no data
         """
         if not os.path.exists(trace_db_path):
-            logging.warning("Trace database not found: %s", trace_db_path)
+            logging.warning('Trace database not found: %s', trace_db_path)
             return None
 
         try:
             # 使用核心分析器进行卡顿帧分析
             # 核心分析器负责所有数据库连接和数据处理
             result = self.core_analyzer.analyze_stuttered_frames(
-                db_path=trace_db_path,
-                perf_db_path=perf_db_path,
-                step_id=step_dir
+                db_path=trace_db_path, perf_db_path=perf_db_path, step_id=step_dir
             )
 
             if result is None:
-                logging.info("No frame drop data found for step %s", step_dir)
+                logging.info('No frame drop data found for step %s', step_dir)
                 return None
 
             return result
 
         except Exception as e:
-            logging.error("Frame drop analysis failed for step %s: %s", step_dir, str(e))
+            logging.error('Frame drop analysis failed for step %s: %s', step_dir, str(e))
             return None

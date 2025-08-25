@@ -56,6 +56,7 @@
           <PerfLoadOverview v-else-if="showPage === 'perf_load_overview'" @page-change="changeContent" />
           <PerfStepLoad v-else-if="showPage.startsWith('perf_step_')" :step-id="getStepId(showPage)" />
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
+          <FaultTreeAnalysis v-else-if="showPage.startsWith('fault_tree_step_')" :step="getFaultTreeStepId(showPage)" />
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
@@ -85,6 +86,11 @@
                 <div class="card-icon">🎬</div>
                 <h3>帧分析</h3>
                 <p>分析特定步骤的帧率和渲染情况</p>
+              </div>
+              <div class="feature-card" @click="changeContent('fault_tree_step_1')">
+                <div class="card-icon">⚠️</div>
+                <h3>故障树分析</h3>
+                <p>诊断特定步骤的性能问题和故障原因</p>
               </div>
               <div class="feature-card" @click="changeContent('flame_step_1')">
                 <div class="card-icon">🔥</div>
@@ -117,6 +123,7 @@ import PerfLoadOverview from '@/components/PerfLoadOverview.vue';
 import PerfStepLoad from '@/components/PerfStepLoad.vue';
 import PerfLoadAnalysis from '@/components/PerfLoadAnalysis.vue';
 import PerfFrameAnalysis from '@/components/PerfFrameAnalysis.vue';
+import FaultTreeAnalysis from '@/components/FaultTreeAnalysis.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
@@ -190,6 +197,12 @@ const getFrameStepId = (pageId: string): number => {
   return match ? parseInt(match[1]) : 1;
 };
 
+// 从故障树页面ID中提取步骤ID
+const getFaultTreeStepId = (pageId: string): number => {
+  const match = pageId.match(/fault_tree_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
 // 从火焰图页面ID中提取步骤ID
 const getFlameStepId = (pageId: string): number => {
   const match = pageId.match(/flame_step_(\d+)/);
@@ -220,6 +233,18 @@ const getFrameStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / 帧分析`;
 };
 
+// 动态获取故障树步骤页面标题
+const getFaultTreeStepPageTitle = (pageId: string): string => {
+  const stepId = getFaultTreeStepId(pageId);
+  return `步骤${stepId}故障树分析`;
+};
+
+// 动态获取故障树步骤页面面包屑
+const getFaultTreeStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getFaultTreeStepId(pageId);
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 故障树分析`;
+};
+
 // 动态获取火焰图步骤页面标题
 const getFlameStepPageTitle = (pageId: string): string => {
   const stepId = getFlameStepId(pageId);
@@ -239,6 +264,9 @@ const getPageTitle = () => {
   if (showPage.value.startsWith('frame_step_')) {
     return getFrameStepPageTitle(showPage.value);
   }
+  if (showPage.value.startsWith('fault_tree_step_')) {
+    return getFaultTreeStepPageTitle(showPage.value);
+  }
   if (showPage.value.startsWith('flame_step_')) {
     return getFlameStepPageTitle(showPage.value);
   }
@@ -251,6 +279,9 @@ const getBreadcrumb = () => {
   }
   if (showPage.value.startsWith('frame_step_')) {
     return getFrameStepPageBreadcrumb(showPage.value);
+  }
+  if (showPage.value.startsWith('fault_tree_step_')) {
+    return getFaultTreeStepPageBreadcrumb(showPage.value);
   }
   if (showPage.value.startsWith('flame_step_')) {
     return getFlameStepPageBreadcrumb(showPage.value);
@@ -277,6 +308,7 @@ const shouldShowSteps = () => {
   return pagesWithSteps.includes(showPage.value) ||
          showPage.value.startsWith('perf_step_') ||
          showPage.value.startsWith('frame_step_') ||
+         showPage.value.startsWith('fault_tree_step_') ||
          showPage.value.startsWith('flame_step_');
 };
 
@@ -288,6 +320,8 @@ const currentStepInfo = computed(() => {
     currentStepId = getStepId(showPage.value);
   } else if (showPage.value.startsWith('frame_step_')) {
     currentStepId = getFrameStepId(showPage.value);
+  } else if (showPage.value.startsWith('fault_tree_step_')) {
+    currentStepId = getFaultTreeStepId(showPage.value);
   } else if (showPage.value.startsWith('flame_step_')) {
     currentStepId = getFlameStepId(showPage.value);
   }

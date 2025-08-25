@@ -12,11 +12,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import logging
 import time
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 
-from hypium import UiDriver, BY
+from hypium import BY, UiDriver
 
 from hapray.core.common.coordinate_adapter import CoordinateAdapter
 from hapray.core.common.exe_utils import ExeUtils
@@ -33,7 +34,7 @@ class UIEventWrapper(ABC):
     def app_package(self) -> str:
         """Package identifier of the application under test"""
 
-    def start_app(self, package_name: str = None, page_name: str = None, params: str = "", wait_time: float = 5):
+    def start_app(self, package_name: str = None, page_name: str = None, params: str = '', wait_time: float = 5):
         """通用应用启动方法"""
         if package_name is None:
             package_name = self.app_package
@@ -50,11 +51,7 @@ class UIEventWrapper(ABC):
 
     def convert_coordinate(self, x, y) -> tuple:
         return CoordinateAdapter.convert_coordinate(
-            self.driver,
-            x=x,
-            y=y,
-            source_width=self.source_screen_width,
-            source_height=self.source_screen_height
+            self.driver, x=x, y=y, source_width=self.source_screen_width, source_height=self.source_screen_height
         )
 
     def touch_by_coordinates(self, x, y, wait_seconds=2) -> bool:
@@ -131,4 +128,5 @@ class UIEventWrapper(ABC):
 
     def _swipe(self, x1, y1, x2, y2, _time=300):
         ExeUtils.execute_command_check_output(
-            f'hdc -t {self.driver.device_sn} shell uinput -T -m {str(x1)} {str(y1)} {str(x2)} {str(y2)} {str(_time)} ')
+            f'hdc -t {self.driver.device_sn} shell uinput -T -m {str(x1)} {str(y1)} {str(x2)} {str(y2)} {str(_time)} '
+        )

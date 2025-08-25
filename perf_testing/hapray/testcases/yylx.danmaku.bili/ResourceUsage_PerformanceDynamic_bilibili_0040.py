@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -91,7 +89,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0040(PerfTestCase):
         time.sleep(2)
 
         # 搜索框输入“航拍中国“ （键盘输入15次，每0.5s点击一次，15s），并且点击”航拍中国“（1s），点击搜索（1s）
-        self.execute_performance_step("哔哩哔哩-视频搜索场景-step1视频搜索", 20, step1)
+        self.execute_performance_step('哔哩哔哩-视频搜索场景-step1视频搜索', 20, step1)
 
         # 搜索结果页上滑3次
         self.swipes_up(swip_num=3, sleep=2)
