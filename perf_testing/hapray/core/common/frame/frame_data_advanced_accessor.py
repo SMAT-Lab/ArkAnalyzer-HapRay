@@ -14,7 +14,6 @@ limitations under the License.
 """
 
 import logging
-from typing import List, Dict
 
 import pandas as pd
 
@@ -30,7 +29,7 @@ class FrameDbAdvancedAccessor:
     """
 
     @staticmethod
-    def get_empty_frames_with_details(trace_conn, app_pids: List[int]) -> pd.DataFrame:
+    def get_empty_frames_with_details(trace_conn, app_pids: list[int]) -> pd.DataFrame:
         """获取空帧详细信息（包含进程、线程、调用栈信息）
 
         Args:
@@ -42,13 +41,13 @@ class FrameDbAdvancedAccessor:
         """
         # 验证app_pids参数
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
-            logging.warning("app_pids参数无效，返回空DataFrame")
+            logging.warning('app_pids参数无效，返回空DataFrame')
             return pd.DataFrame()
 
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
-            logging.warning("没有有效的PID值，返回空DataFrame")
+            logging.warning('没有有效的PID值，返回空DataFrame')
             return pd.DataFrame()
 
         query = f"""
@@ -75,11 +74,10 @@ class FrameDbAdvancedAccessor:
         """
 
         try:
-            result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
+            return pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取空帧详细信息: %d 条记录", len(result_df))
-            return result_df
         except Exception as e:
-            logging.error("获取空帧详细信息失败: %s", str(e))
+            logging.error('获取空帧详细信息失败: %s', str(e))
             return pd.DataFrame()
 
     @staticmethod
@@ -120,15 +118,14 @@ class FrameDbAdvancedAccessor:
         """
 
         try:
-            result_df = pd.read_sql_query(query, trace_conn)
+            return pd.read_sql_query(query, trace_conn)
             # logging.info("获取卡顿帧上下文信息: %d 条记录", len(result_df))
-            return result_df
         except Exception as e:
-            logging.error("获取卡顿帧上下文信息失败: %s", str(e))
+            logging.error('获取卡顿帧上下文信息失败: %s', str(e))
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: List[int]) -> Dict[str, pd.DataFrame]:
+    def get_frame_load_analysis_data(trace_conn, perf_conn, app_pids: list[int]) -> dict[str, pd.DataFrame]:
         """获取帧负载分析所需的完整数据
 
         Args:
@@ -141,23 +138,23 @@ class FrameDbAdvancedAccessor:
         """
         # 验证app_pids参数
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
-            logging.warning("app_pids参数无效，返回空数据")
+            logging.warning('app_pids参数无效，返回空数据')
             return {
                 'frames': pd.DataFrame(),
                 'perf_samples': pd.DataFrame(),
                 'callchains': pd.DataFrame(),
-                'files': pd.DataFrame()
+                'files': pd.DataFrame(),
             }
 
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
-            logging.warning("没有有效的PID值，返回空数据")
+            logging.warning('没有有效的PID值，返回空数据')
             return {
                 'frames': pd.DataFrame(),
                 'perf_samples': pd.DataFrame(),
                 'callchains': pd.DataFrame(),
-                'files': pd.DataFrame()
+                'files': pd.DataFrame(),
             }
 
         try:
@@ -210,29 +207,22 @@ class FrameDbAdvancedAccessor:
 
             files_df = pd.read_sql_query(files_query, perf_conn)
 
-            result = {
-                'frames': frames_df,
-                'perf_samples': perf_df,
-                'callchains': callchain_df,
-                'files': files_df
-            }
+            return {'frames': frames_df, 'perf_samples': perf_df, 'callchains': callchain_df, 'files': files_df}
 
             # logging.info("获取帧负载分析数据: frames=%d, perf_samples=%d, callchains=%d, files=%d",
             #              len(frames_df), len(perf_df), len(callchain_df), len(files_df))
 
-            return result
-
         except Exception as e:
-            logging.error("获取帧负载分析数据失败: %s", str(e))
+            logging.error('获取帧负载分析数据失败: %s', str(e))
             return {
                 'frames': pd.DataFrame(),
                 'perf_samples': pd.DataFrame(),
                 'callchains': pd.DataFrame(),
-                'files': pd.DataFrame()
+                'files': pd.DataFrame(),
             }
 
     @staticmethod
-    def get_frame_statistics_by_process(trace_conn, app_pids: List[int]) -> pd.DataFrame:
+    def get_frame_statistics_by_process(trace_conn, app_pids: list[int]) -> pd.DataFrame:
         """按进程获取帧统计信息
 
         Args:
@@ -244,13 +234,13 @@ class FrameDbAdvancedAccessor:
         """
         # 验证app_pids参数
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
-            logging.warning("app_pids参数无效，返回空DataFrame")
+            logging.warning('app_pids参数无效，返回空DataFrame')
             return pd.DataFrame()
 
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
-            logging.warning("没有有效的PID值，返回空DataFrame")
+            logging.warning('没有有效的PID值，返回空DataFrame')
             return pd.DataFrame()
 
         query = f"""
@@ -275,15 +265,14 @@ class FrameDbAdvancedAccessor:
         """
 
         try:
-            result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
+            return pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取进程帧统计信息: %d 个进程", len(result_df))
-            return result_df
         except Exception as e:
-            logging.error("获取进程帧统计信息失败: %s", str(e))
+            logging.error('获取进程帧统计信息失败: %s', str(e))
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_timeline_analysis(trace_conn, app_pids: List[int], time_window_ms: int = 1000) -> pd.DataFrame:
+    def get_frame_timeline_analysis(trace_conn, app_pids: list[int], time_window_ms: int = 1000) -> pd.DataFrame:
         """获取帧时间线分析数据
 
         Args:
@@ -296,13 +285,13 @@ class FrameDbAdvancedAccessor:
         """
         # 验证app_pids参数
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
-            logging.warning("app_pids参数无效，返回空DataFrame")
+            logging.warning('app_pids参数无效，返回空DataFrame')
             return pd.DataFrame()
 
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
-            logging.warning("没有有效的PID值，返回空DataFrame")
+            logging.warning('没有有效的PID值，返回空DataFrame')
             return pd.DataFrame()
 
         query = f"""
@@ -342,11 +331,10 @@ class FrameDbAdvancedAccessor:
         """
 
         try:
-            result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
+            return pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取帧时间线分析数据: %d 个时间窗口", len(result_df))
-            return result_df
         except Exception as e:
-            logging.error("获取帧时间线分析数据失败: %s", str(e))
+            logging.error('获取帧时间线分析数据失败: %s', str(e))
             return pd.DataFrame()
 
     @staticmethod
@@ -371,15 +359,14 @@ class FrameDbAdvancedAccessor:
         """
 
         try:
-            result_df = pd.read_sql_query(query, perf_conn)
+            return pd.read_sql_query(query, perf_conn)
             # logging.info("获取性能样本调用链信息: %d 条记录", len(result_df))
-            return result_df
         except Exception as e:
-            logging.error("获取性能样本调用链信息失败: %s", str(e))
+            logging.error('获取性能样本调用链信息失败: %s', str(e))
             return pd.DataFrame()
 
     @staticmethod
-    def get_thread_performance_analysis(trace_conn, app_pids: List[int]) -> pd.DataFrame:
+    def get_thread_performance_analysis(trace_conn, app_pids: list[int]) -> pd.DataFrame:
         """获取线程性能分析数据
 
         Args:
@@ -391,13 +378,13 @@ class FrameDbAdvancedAccessor:
         """
         # 验证app_pids参数
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
-            logging.warning("app_pids参数无效，返回空DataFrame")
+            logging.warning('app_pids参数无效，返回空DataFrame')
             return pd.DataFrame()
 
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
-            logging.warning("没有有效的PID值，返回空DataFrame")
+            logging.warning('没有有效的PID值，返回空DataFrame')
             return pd.DataFrame()
 
         query = """
@@ -435,15 +422,14 @@ class FrameDbAdvancedAccessor:
         """
 
         try:
-            result_df = pd.read_sql_query(query, trace_conn, params=valid_pids)
+            return pd.read_sql_query(query, trace_conn, params=valid_pids)
             # logging.info("获取线程性能分析数据: %d 个线程", len(result_df))
-            return result_df
         except Exception as e:
-            logging.error("获取线程性能分析数据失败: %s", str(e))
+            logging.error('获取线程性能分析数据失败: %s', str(e))
             return pd.DataFrame()
 
     @staticmethod
-    def get_total_load_for_pids(perf_conn, app_pids: List[int]) -> int:
+    def get_total_load_for_pids(perf_conn, app_pids: list[int]) -> int:
         """获取指定进程的总负载
 
         Args:
@@ -455,13 +441,13 @@ class FrameDbAdvancedAccessor:
         """
         # 验证app_pids参数
         if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
-            logging.warning("app_pids参数无效，返回0")
+            logging.warning('app_pids参数无效，返回0')
             return 0
 
         # 过滤掉无效的PID值
         valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
         if not valid_pids:
-            logging.warning("没有有效的PID值，返回0")
+            logging.warning('没有有效的PID值，返回0')
             return 0
 
         query = f"""
@@ -475,5 +461,5 @@ class FrameDbAdvancedAccessor:
             total_load = result[0] if result and result[0] else 0
             return int(total_load)
         except Exception as e:
-            logging.error("获取总负载失败: %s", str(e))
+            logging.error('获取总负载失败: %s', str(e))
             return 0

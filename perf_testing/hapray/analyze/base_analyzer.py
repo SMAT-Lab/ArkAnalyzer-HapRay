@@ -18,7 +18,7 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 
 class BaseAnalyzer(ABC):
@@ -33,7 +33,7 @@ class BaseAnalyzer(ABC):
             scene_dir: Root directory of the scene
             report_path: report path of result dict
         """
-        self.results: Dict[str, Any] = {}
+        self.results: dict[str, Any] = {}
         self.scene_dir = scene_dir
         self.report_path = report_path
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -53,18 +53,19 @@ class BaseAnalyzer(ABC):
             if result:
                 self.results[step_dir] = result
             self.logger.info(
-                "Analysis completed for step %s in %.2f seconds [%s]", step_dir, time.time() - start_time,
-                self.report_path)
+                'Analysis completed for step %s in %.2f seconds [%s]',
+                step_dir,
+                time.time() - start_time,
+                self.report_path,
+            )
         except Exception as e:
-            self.logger.error("Analysis failed for step %s: %s [%s]", step_dir, str(e), self.report_path)
-            self.results[step_dir] = {"error": str(e)}
+            self.logger.error('Analysis failed for step %s: %s [%s]', step_dir, str(e), self.report_path)
+            self.results[step_dir] = {'error': str(e)}
 
     @abstractmethod
-    def _analyze_impl(self,
-                      step_dir: str,
-                      trace_db_path: str,
-                      perf_db_path: str,
-                      app_pids: list) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         """Implementation of the analysis logic.
 
         Args:
@@ -79,17 +80,17 @@ class BaseAnalyzer(ABC):
     def write_report(self, result: dict):
         """Write analysis results to JSON report."""
         if not self.results:
-            self.logger.warning("No results to write. Skipping report generation for %s", self.report_path)
+            self.logger.warning('No results to write. Skipping report generation for %s', self.report_path)
             return
 
         try:
             file_path = os.path.join(self.scene_dir, 'report', self.report_path.replace('/', '_') + '.json')
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.results, f, ensure_ascii=False)
-            self.logger.info("Report successfully written to %s", file_path)
+                json.dump(sorted(self.results.items()), f, ensure_ascii=False)
+            self.logger.info('Report successfully written to %s', file_path)
         except Exception as e:
-            self.logger.exception("Failed to write report: %s", str(e))
+            self.logger.exception('Failed to write report: %s', str(e))
 
         dict_path = self.report_path.split('/')
         v = result
@@ -119,7 +120,7 @@ class AnalyzerHelper:
         # 检查缓存
         cache_key = f'{scene_dir}-{step_id}'
         if cache_key in AnalyzerHelper._pid_cache:
-            logging.debug("使用已缓存的PID数据: %s", cache_key)
+            logging.debug('使用已缓存的PID数据: %s', cache_key)
             return AnalyzerHelper._pid_cache[cache_key]
 
         try:
@@ -130,11 +131,11 @@ class AnalyzerHelper:
             pids_json_path = os.path.join(scene_dir, 'hiperf', f'step{step_number}', 'pids.json')
 
             if not os.path.exists(pids_json_path):
-                logging.warning("No pids.json found at %s", pids_json_path)
+                logging.warning('No pids.json found at %s', pids_json_path)
                 return []
 
             # 读取JSON文件
-            with open(pids_json_path, 'r', encoding='utf-8') as f:
+            with open(pids_json_path, encoding='utf-8') as f:
                 pids_data = json.load(f)
 
             # 提取pids和process_names
@@ -142,14 +143,17 @@ class AnalyzerHelper:
             process_names = pids_data.get('process_names', [])
 
             if not pids or not process_names:
-                logging.warning("No valid pids or process_names found in %s", pids_json_path)
+                logging.warning('No valid pids or process_names found in %s', pids_json_path)
                 return []
 
             # 确保pids和process_names长度一致
             if len(pids) != len(process_names):
                 logging.warning(
-                    "Mismatch between pids (%s) and process_names (%s) in %s",
-                    len(pids), len(process_names), pids_json_path)
+                    'Mismatch between pids (%s) and process_names (%s) in %s',
+                    len(pids),
+                    len(process_names),
+                    pids_json_path,
+                )
                 # 取较短的长度
                 min_length = min(len(pids), len(process_names))
                 pids = pids[:min_length]
@@ -158,9 +162,9 @@ class AnalyzerHelper:
             # 缓存PID数据
             AnalyzerHelper._pid_cache[cache_key] = pids
 
-            logging.debug("缓存PID数据: %s, PIDs: %s", step_id, len(pids))
+            logging.debug('缓存PID数据: %s, PIDs: %s', step_id, len(pids))
             return pids
 
         except Exception as e:
-            logging.error("Failed to get app PIDs: %s", str(e))
+            logging.error('Failed to get app PIDs: %s', str(e))
             return []

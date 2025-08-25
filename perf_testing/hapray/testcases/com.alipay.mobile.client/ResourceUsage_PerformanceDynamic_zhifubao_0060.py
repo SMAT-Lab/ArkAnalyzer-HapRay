@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from devicetest.core.test_case import Step
@@ -8,7 +7,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -52,4 +50,4 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0060(PerfTestCase):
         self.driver.touch(BY.type('Text').text('首页'))
         time.sleep(2)
 
-        self.execute_performance_step("支付宝-理财基金浏览场景-step1基金页面浏览", 20, step1)
+        self.execute_performance_step('支付宝-理财基金浏览场景-step1基金页面浏览', 20, step1)

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Copyright (c) 2025 Huawei Device Co., Ltd.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -77,13 +77,11 @@ class FrameDbBasicAccessor:
         frames_df = FrameDbBasicAccessor._standardize_frames_data(frames_df)
 
         # 如果指定了app_pids，返回过滤后的数据
-        if app_pids is not None:
-            # 确保app_pids是有效的列表，并且过滤掉NaN值
-            if isinstance(app_pids, (list, tuple)) and len(app_pids) > 0:
-                # 过滤掉NaN值，确保只包含有效的数字
-                valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
-                if valid_pids:
-                    return frames_df[frames_df['pid'].isin(valid_pids)]
+        if app_pids is not None and isinstance(app_pids, list | tuple) and len(app_pids) > 0:
+            # 过滤掉NaN值，确保只包含有效的数字
+            valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, int | float)]
+            if valid_pids:
+                return frames_df[frames_df['pid'].isin(valid_pids)]
 
         return frames_df
 
@@ -116,9 +114,7 @@ class FrameDbBasicAccessor:
         perf_df = pd.read_sql_query(query, perf_conn)
 
         # 标准化字段
-        perf_df = FrameDbBasicAccessor._standardize_perf_sample_data(perf_df)
-
-        return perf_df
+        return FrameDbBasicAccessor._standardize_perf_sample_data(perf_df)
 
     @staticmethod
     def get_callchain_cache(perf_conn) -> pd.DataFrame:
@@ -148,9 +144,7 @@ class FrameDbBasicAccessor:
         callchain_df = pd.read_sql_query(query, perf_conn)
 
         # 标准化字段
-        callchain_df = FrameDbBasicAccessor._standardize_perf_callchain_data(callchain_df)
-
-        return callchain_df
+        return FrameDbBasicAccessor._standardize_perf_callchain_data(callchain_df)
 
     @staticmethod
     def get_files_cache(perf_conn) -> pd.DataFrame:
@@ -177,9 +171,7 @@ class FrameDbBasicAccessor:
         files_df = pd.read_sql_query(query, perf_conn)
 
         # 标准化字段
-        files_df = FrameDbBasicAccessor._standardize_perf_files_data(files_df)
-
-        return files_df
+        return FrameDbBasicAccessor._standardize_perf_files_data(files_df)
 
     @staticmethod
     def get_process_cache(trace_conn) -> pd.DataFrame:
@@ -210,9 +202,7 @@ class FrameDbBasicAccessor:
         process_df = pd.read_sql_query(query, trace_conn)
 
         # 标准化字段
-        process_df = FrameDbBasicAccessor._standardize_process_data(process_df)
-
-        return process_df
+        return FrameDbBasicAccessor._standardize_process_data(process_df)
 
     @staticmethod
     def get_callstack_data(trace_conn, name_pattern: str = None) -> pd.DataFrame:
@@ -247,17 +237,15 @@ class FrameDbBasicAccessor:
         params = []
 
         if name_pattern:
-            query += " WHERE callstack.name LIKE ?"
+            query += ' WHERE callstack.name LIKE ?'
             params.append(name_pattern)
 
-        query += " ORDER BY callstack.ts"
+        query += ' ORDER BY callstack.ts'
 
         callstack_df = pd.read_sql_query(query, trace_conn, params=params)
 
         # 标准化字段
-        callstack_df = FrameDbBasicAccessor._standardize_callstack_data(callstack_df)
-
-        return callstack_df
+        return FrameDbBasicAccessor._standardize_callstack_data(callstack_df)
 
     @staticmethod
     def get_thread_data(trace_conn, is_main_thread: bool = None) -> pd.DataFrame:
@@ -290,17 +278,15 @@ class FrameDbBasicAccessor:
         params = []
 
         if is_main_thread is not None:
-            query += " WHERE thread.is_main_thread = ?"
+            query += ' WHERE thread.is_main_thread = ?'
             params.append(1 if is_main_thread else 0)
 
-        query += " ORDER BY thread.id"
+        query += ' ORDER BY thread.id'
 
         thread_df = pd.read_sql_query(query, trace_conn, params=params)
 
         # 标准化字段
-        thread_df = FrameDbBasicAccessor._standardize_thread_data(thread_df)
-
-        return thread_df
+        return FrameDbBasicAccessor._standardize_thread_data(thread_df)
 
     @staticmethod
     def get_process_data(trace_conn, process_name_pattern: str = None) -> pd.DataFrame:
@@ -330,17 +316,15 @@ class FrameDbBasicAccessor:
         params = []
 
         if process_name_pattern:
-            query += " WHERE process.name LIKE ?"
+            query += ' WHERE process.name LIKE ?'
             params.append(process_name_pattern)
 
-        query += " ORDER BY process.id"
+        query += ' ORDER BY process.id'
 
         process_df = pd.read_sql_query(query, trace_conn, params=params)
 
         # 标准化字段
-        process_df = FrameDbBasicAccessor._standardize_process_data(process_df)
-
-        return process_df
+        return FrameDbBasicAccessor._standardize_process_data(process_df)
 
     @staticmethod
     def get_symbol_data(perf_conn, symbol_pattern: str = None) -> pd.DataFrame:
@@ -367,23 +351,22 @@ class FrameDbBasicAccessor:
         params = []
 
         if symbol_pattern:
-            query += " WHERE perf_files.symbol LIKE ?"
+            query += ' WHERE perf_files.symbol LIKE ?'
             params.append(symbol_pattern)
 
-        query += " ORDER BY perf_files.symbol"
+        query += ' ORDER BY perf_files.symbol'
 
         symbol_df = pd.read_sql_query(query, perf_conn, params=params)
 
         # 标准化字段
-        symbol_df = FrameDbBasicAccessor._standardize_perf_files_data(symbol_df)
-
-        return symbol_df
+        return FrameDbBasicAccessor._standardize_perf_files_data(symbol_df)
 
     # ==================== 专用过滤方法 ====================
 
     @staticmethod
-    def get_frames_by_filter(trace_conn, flag: int = None, frame_type: int = None,
-                             app_pids: list = None) -> pd.DataFrame:
+    def get_frames_by_filter(
+        trace_conn, flag: int = None, frame_type: int = None, app_pids: list = None
+    ) -> pd.DataFrame:
         """根据条件过滤帧数据
 
         Args:
@@ -466,19 +449,17 @@ class FrameDbBasicAccessor:
                 'expect_frames': 0,
                 'stuttered_frames': 0,
                 'empty_frames': 0,
-                'normal_frames': 0
+                'normal_frames': 0,
             }
 
-        stats = {
+        return {
             'total_frames': len(frames_df),
             'actual_frames': len(frames_df[frames_df['type'] == 0]),
             'expect_frames': len(frames_df[frames_df['type'] == 1]),
             'stuttered_frames': len(frames_df[frames_df['flag'] == 1]),
             'empty_frames': len(frames_df[frames_df['flag'] == 2]),
-            'normal_frames': len(frames_df[frames_df['flag'] == 0])
+            'normal_frames': len(frames_df[frames_df['flag'] == 0]),
         }
-
-        return stats
 
     # ==================== 数据标准化方法 ====================
 
@@ -494,8 +475,20 @@ class FrameDbBasicAccessor:
         """
         # 处理数值字段的NaN值
         numeric_fields = [
-            'ts', 'dur', 'ipid', 'itid', 'flag', 'type', 'callstack_id',
-            'vsync', 'tid', 'pid', 'src', 'dst', 'depth', 'frame_no'
+            'ts',
+            'dur',
+            'ipid',
+            'itid',
+            'flag',
+            'type',
+            'callstack_id',
+            'vsync',
+            'tid',
+            'pid',
+            'src',
+            'dst',
+            'depth',
+            'frame_no',
         ]
         for field in numeric_fields:
             if field in frames_df.columns:
@@ -556,7 +549,8 @@ class FrameDbBasicAccessor:
         callstack_df['is_async_call'] = (callstack_df['cookie'].notna() & (callstack_df['cookie'] != 0)).astype(int)
         callstack_df['is_sync_call'] = (callstack_df['cookie'].isna() | (callstack_df['cookie'] == 0)).astype(int)
         callstack_df['is_distributed_call'] = (
-            callstack_df['chainId'].notna() & (callstack_df['chainId'] != '')).astype(int)
+            callstack_df['chainId'].notna() & (callstack_df['chainId'] != '')
+        ).astype(int)
         callstack_df['is_sender'] = (callstack_df['flag'] == 'C').astype(int)
         callstack_df['is_receiver'] = (callstack_df['flag'] == 'S').astype(int)
 
@@ -574,38 +568,46 @@ class FrameDbBasicAccessor:
         """
         # 检查DataFrame是否为空
         if perf_df.empty:
-            logging.warning("perf_df为空，返回空的DataFrame")
+            logging.warning('perf_df为空，返回空的DataFrame')
             return perf_df
 
         # 处理数值字段的NaN值
-        numeric_fields = ['id', 'callchain_id', 'timestamp_trace', 'thread_id', 'event_count', 'event_type_id',
-                          'cpu_id']
+        numeric_fields = [
+            'id',
+            'callchain_id',
+            'timestamp_trace',
+            'thread_id',
+            'event_count',
+            'event_type_id',
+            'cpu_id',
+        ]
         for field in numeric_fields:
             if field in perf_df.columns:
                 perf_df[field] = pd.to_numeric(perf_df[field], errors='coerce').fillna(0)
             else:
-                logging.warning("perf_df中缺少字段: %s", field)
+                logging.warning('perf_df中缺少字段: %s', field)
                 perf_df[field] = 0
 
         # 处理字符串字段的NaN值
         if 'thread_state' in perf_df.columns:
             perf_df['thread_state'] = perf_df['thread_state'].fillna('-')
         else:
-            logging.warning("perf_df中缺少thread_state字段")
+            logging.warning('perf_df中缺少thread_state字段')
             perf_df['thread_state'] = '-'
 
         # 添加计算字段（使用timestamp_trace作为主要时间字段）
         if 'timestamp_trace' in perf_df.columns:
             perf_df['time_sync_diff'] = 0  # 如果只有timestamp_trace，时间差设为0
         else:
-            logging.warning("perf_df中缺少timestamp_trace字段")
+            logging.warning('perf_df中缺少timestamp_trace字段')
             perf_df['time_sync_diff'] = 0
 
         # 添加线程状态标识字段
         perf_df['is_running'] = (perf_df['thread_state'] == 'Running').astype(int)
         perf_df['is_suspended'] = (perf_df['thread_state'] == 'Suspend').astype(int)
         perf_df['is_other_state'] = (
-            (perf_df['thread_state'] != 'Running') & (perf_df['thread_state'] != 'Suspend')).astype(int)
+            (perf_df['thread_state'] != 'Running') & (perf_df['thread_state'] != 'Suspend')
+        ).astype(int)
 
         return perf_df
 
@@ -635,7 +637,8 @@ class FrameDbBasicAccessor:
         # 添加调用栈层级标识字段
         callchain_df['is_top_level'] = (callchain_df['depth'] == 0).astype(int)
         callchain_df['is_leaf_level'] = (
-            callchain_df['depth'] == callchain_df.groupby('callchain_id')['depth'].transform('max')).astype(int)
+            callchain_df['depth'] == callchain_df.groupby('callchain_id')['depth'].transform('max')
+        ).astype(int)
 
         return callchain_df
 
@@ -780,26 +783,26 @@ class FrameDbBasicAccessor:
         try:
             cursor = trace_conn.cursor()
             # 优先从trace_range表获取start_ts作为基准时间戳（与HiSmartPerf工具一致）
-            cursor.execute("SELECT start_ts FROM trace_range LIMIT 1")
+            cursor.execute('SELECT start_ts FROM trace_range LIMIT 1')
             result = cursor.fetchone()
             if result and result[0] is not None:
                 return int(result[0])
 
             # 如果trace_range表中没有数据，尝试获取frame_slice表的最小时间戳
-            cursor.execute("SELECT MIN(ts) FROM frame_slice WHERE ts IS NOT NULL")
+            cursor.execute('SELECT MIN(ts) FROM frame_slice WHERE ts IS NOT NULL')
             result = cursor.fetchone()
             if result and result[0] is not None:
                 return int(result[0])
 
             # 如果frame_slice表中也没有数据，尝试从perf_sample表获取
-            cursor.execute("SELECT MIN(timestamp_trace) FROM perf_sample WHERE timestamp_trace IS NOT NULL")
+            cursor.execute('SELECT MIN(timestamp_trace) FROM perf_sample WHERE timestamp_trace IS NOT NULL')
             result = cursor.fetchone()
             if result and result[0] is not None:
                 return int(result[0])
 
             return 0
         except Exception as e:
-            logging.warning("获取基准时间戳失败: %s", str(e))
+            logging.warning('获取基准时间戳失败: %s', str(e))
             return 0
 
     @staticmethod
@@ -825,5 +828,5 @@ class FrameDbBasicAccessor:
             return list(unique_pids), list(unique_tids)
 
         except Exception as e:
-            logging.error("提取PID/TID信息失败: %s", str(e))
+            logging.error('提取PID/TID信息失败: %s', str(e))
             return [], []

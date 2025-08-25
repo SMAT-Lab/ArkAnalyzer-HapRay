@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -47,11 +45,11 @@ class ResourceUsage_PerformanceDynamic_xhs_0070(PerfTestCase):
             self.touch_by_coordinates(1152, 1031, 1)
 
             # 上滑退出小红书，再启动，操作5次，观察启动/退出动效是否流畅
-            for i in range(5):
+            for _i in range(5):
                 self.driver.swipe_to_home()
                 time.sleep(2)
 
-                self.driver.touch(BY.key("AppIcon_Image_com.xingin.xhs_hosEntryAbilityredbook0_undefined"))
+                self.driver.touch(BY.key('AppIcon_Image_com.xingin.xhs_hosEntryAbilityredbook0_undefined'))
                 time.sleep(2)
 
-        self.execute_performance_step("小红书-动态图片启动退出场景-step1动态图片启动退出", 30, step1)
+        self.execute_performance_step('小红书-动态图片启动退出场景-step1动态图片启动退出', 30, step1)

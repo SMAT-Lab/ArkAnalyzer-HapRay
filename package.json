@@ -13,6 +13,7 @@
     "build": "npm run build --ws",
     "release": "npm pack --ws",
     "lint": "npm run lint --ws",
+    "lint:fix": "npm run lint:fix --ws",
     "test": "npm run test -w perf_testing"
   },
   "repository": {

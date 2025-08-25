@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -33,4 +30,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_1000(PerfTestCase):
             self.start_app()
             self.swipe_to_home()
 
-        self.execute_performance_step("京东-冷启动场景-step1应用冷启动", 10, step1, sample_all_processes=True)
+        self.execute_performance_step('京东-冷启动场景-step1应用冷启动', 10, step1, sample_all_processes=True)
