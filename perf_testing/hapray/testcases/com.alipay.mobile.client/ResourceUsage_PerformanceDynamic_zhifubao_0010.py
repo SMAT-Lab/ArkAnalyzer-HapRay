@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -59,7 +57,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0010(PerfTestCase):
             self.driver.touch(BY.type('Text').text('首页'))
             time.sleep(5)
 
-        self.execute_performance_step("支付宝-首页及Tab页浏览-step1首页浏览", 30, step1)
+        self.execute_performance_step('支付宝-首页及Tab页浏览-step1首页浏览', 30, step1)
         time.sleep(10)
         without_perf_after_step1()
-        self.execute_performance_step("支付宝-首页及Tab页浏览-step2TAB页切换", 30, step2)
+        self.execute_performance_step('支付宝-首页及Tab页浏览-step2TAB页切换', 30, step2)

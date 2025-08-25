@@ -1,12 +1,9 @@
-# coding: utf-8
-
 from hypium import BY
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_FlutterExample_0030(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -36,24 +33,28 @@ class ResourceUsage_PerformanceDynamic_FlutterExample_0030(PerfTestCase):
 
         self.touch_by_text('NestedLayer', 2)
         self.driver.input_text(BY.type('TextInput'), '10')
-        self.execute_performance_step("FlutterExample-组件嵌套测试场景-step1 10layers", 10, step,
-                                      sample_all_processes=True)
+        self.execute_performance_step(
+            'FlutterExample-组件嵌套测试场景-step1 10layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
 
         self.touch_by_text('NestedLayer', 2)
         self.driver.input_text(BY.type('TextInput'), '50')
-        self.execute_performance_step("FlutterExample-组件嵌套测试场景-step2 50layers", 10, step,
-                                      sample_all_processes=True)
+        self.execute_performance_step(
+            'FlutterExample-组件嵌套测试场景-step2 50layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
 
         self.touch_by_text('NestedLayer', 2)
         self.driver.input_text(BY.type('TextInput'), '100')
-        self.execute_performance_step("FlutterExample-组件嵌套测试场景-step3 100layers", 10, step,
-                                      sample_all_processes=True)
+        self.execute_performance_step(
+            'FlutterExample-组件嵌套测试场景-step3 100layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
 
         self.touch_by_text('NestedLayer', 2)
         self.driver.input_text(BY.type('TextInput'), '500')
-        self.execute_performance_step("FlutterExample-组件嵌套测试场景-step4 500layers", 10, step,
-                                      sample_all_processes=True)
+        self.execute_performance_step(
+            'FlutterExample-组件嵌套测试场景-step4 500layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()

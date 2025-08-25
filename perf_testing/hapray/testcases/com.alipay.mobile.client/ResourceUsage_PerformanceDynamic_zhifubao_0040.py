@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0040(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -48,7 +46,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0040(PerfTestCase):
         self.driver.touch(BY.type('Text').text('视频'))
         time.sleep(2)
 
-        self.execute_performance_step("支付宝-视频播放场景-step1视频直播滑动浏览", 35, step1)
+        self.execute_performance_step('支付宝-视频播放场景-step1视频直播滑动浏览', 35, step1)
         # 退出直播进入短剧
         self.touch_by_coordinates(671, 968, 1)
         self.driver.touch(BY.key('close-closeBtn'))
@@ -57,4 +55,4 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0040(PerfTestCase):
         self.swipes_up(7, 2)
         self.swipes_down(7, 2)
 
-        self.execute_performance_step("支付宝-视频播放场景-step2短剧页面浏览", 40, step2)
+        self.execute_performance_step('支付宝-视频播放场景-step2短剧页面浏览', 40, step2)

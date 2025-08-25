@@ -1,11 +1,9 @@
-# coding: utf-8
 from hypium import BY
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -43,4 +41,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0050(PerfTestCase):
             # Step('京东直播下滑操作')
             self.swipes_down(swip_num=3, sleep=2)
 
-        self.execute_performance_step("京东-观看直播场景-step1直播页面上下滑动", 20, step1)
+        self.execute_performance_step('京东-观看直播场景-step1直播页面上下滑动', 20, step1)

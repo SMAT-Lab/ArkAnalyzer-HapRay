@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -34,11 +32,14 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
             # 点击右上角搜索，停留1s
             self.touch_by_coordinates(1169, 195, 1)
 
-            for i in range(3):
-                self.driver.input_text(self.convert_coordinate(
-                    x=300,  # 原始x坐标
-                    y=200  # 原始y坐标
-                ), '穿搭图片')
+            for _i in range(3):
+                self.driver.input_text(
+                    self.convert_coordinate(
+                        x=300,  # 原始x坐标
+                        y=200,  # 原始y坐标
+                    ),
+                    '穿搭图片',
+                )
                 time.sleep(1)
 
                 self.touch_by_text('搜索', 2)
@@ -49,13 +50,16 @@ class ResourceUsage_PerformanceDynamic_xhs_0020(PerfTestCase):
             self.swipes_up(3, 3, 300)
             self.swipes_down(3, 3, 300)
 
-        self.execute_performance_step("小红书-搜索操作场景-step1搜索/返回", 30, step1)
+        self.execute_performance_step('小红书-搜索操作场景-step1搜索/返回', 30, step1)
 
-        self.driver.input_text(self.convert_coordinate(
-            x=300,  # 原始x坐标
-            y=200  # 原始y坐标
-        ), '穿搭图片')
+        self.driver.input_text(
+            self.convert_coordinate(
+                x=300,  # 原始x坐标
+                y=200,  # 原始y坐标
+            ),
+            '穿搭图片',
+        )
         time.sleep(1)
         self.touch_by_text('搜索', 1)
 
-        self.execute_performance_step("小红书-搜索操作场景-step2搜索结果页浏览", 25, step2)
+        self.execute_performance_step('小红书-搜索操作场景-step2搜索结果页浏览', 25, step2)
