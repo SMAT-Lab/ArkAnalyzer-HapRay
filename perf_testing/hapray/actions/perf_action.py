@@ -271,8 +271,7 @@ class PerfAction:
         parser.add_argument('--no-trace', action='store_true', help="Disable trace capturing")
         parser.add_argument('--devices', nargs='+', default=None, help='Device serial numbers (e.g., HX1234567890)')
         parser.add_argument("--hapflow", type=str, metavar="HOMECHECK_DIR",
-                    help="Enable HapFlow pipeline and specify Homecheck root directory")
-        
+                            help="Enable HapFlow pipeline and specify Homecheck root directory")
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
             parsed_args.circles = True
