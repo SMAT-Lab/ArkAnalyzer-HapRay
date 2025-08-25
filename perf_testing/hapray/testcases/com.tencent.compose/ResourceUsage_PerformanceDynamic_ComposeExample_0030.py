@@ -1,12 +1,9 @@
-# coding: utf-8
-
 from hypium import BY
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
-class ResourceUsage_PerformanceDynamic_compose_0050(PerfTestCase):
-
+class ResourceUsage_PerformanceDynamic_ComposeExample_0030(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -32,22 +29,25 @@ class ResourceUsage_PerformanceDynamic_compose_0050(PerfTestCase):
 
         def step():
             self.touch_by_text('生成 layers', 1)
+            self.driver.wait(8)
 
         self.swipes_up(1, 2)
         self.touch_by_text('组件嵌套 Demo', 2)
         self.driver.touch(BY.type('TextInput'))
         self.touch_by_coordinates(320, 1695, 1)  # 1
         self.touch_by_coordinates(540, 2190, 1)  # 0
-        self.execute_performance_step("ComposeSample-组件嵌套测试场景-step1 10layers", 5, step,
-                                      sample_all_processes=False)
+        self.execute_performance_step(
+            'ComposeSample-组件嵌套测试场景-step1 10layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
 
         self.touch_by_text('组件嵌套 Demo', 2)
         self.driver.touch(BY.type('TextInput'))
         self.touch_by_coordinates(540, 1862, 1)  # 5
         self.touch_by_coordinates(540, 2190, 1)  # 0
-        self.execute_performance_step("ComposeSample-组件嵌套测试场景-step2 50layers", 5, step,
-                                      sample_all_processes=False)
+        self.execute_performance_step(
+            'ComposeSample-组件嵌套测试场景-step2 50layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
 
         self.touch_by_text('组件嵌套 Demo', 2)
@@ -55,8 +55,9 @@ class ResourceUsage_PerformanceDynamic_compose_0050(PerfTestCase):
         self.touch_by_coordinates(320, 1695, 1)  # 1
         self.touch_by_coordinates(540, 2190, 1)  # 0
         self.touch_by_coordinates(540, 2190, 1)  # 0
-        self.execute_performance_step("ComposeSample-组件嵌套测试场景-step3 100layers", 5, step,
-                                      sample_all_processes=False)
+        self.execute_performance_step(
+            'ComposeSample-组件嵌套测试场景-step3 100layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
 
         self.touch_by_text('组件嵌套 Demo', 2)
@@ -64,6 +65,7 @@ class ResourceUsage_PerformanceDynamic_compose_0050(PerfTestCase):
         self.touch_by_coordinates(540, 1862, 1)  # 5
         self.touch_by_coordinates(540, 2190, 1)  # 0
         self.touch_by_coordinates(540, 2190, 1)  # 0
-        self.execute_performance_step("ComposeSample-组件嵌套测试场景-step4 500layers", 5, step,
-                                      sample_all_processes=False)
+        self.execute_performance_step(
+            'ComposeSample-组件嵌套测试场景-step4 500layers', 10, step, sample_all_processes=True
+        )
         self.driver.swipe_to_back()

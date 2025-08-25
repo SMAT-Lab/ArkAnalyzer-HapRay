@@ -1,15 +1,12 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
-class ResourceUsage_PerformanceDynamic_compose_0040(PerfTestCase):
-
+class ResourceUsage_PerformanceDynamic_ArkTsExample_0020(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
-        self._app_package = 'com.tencent.compose'
-        self._app_name = 'ComposeSample'
+        self._app_package = 'com.ovcompose.test'
+        self._app_name = 'ArkTsExample'
         # 原始采集设备的屏幕尺寸（Nova 14）
         self.source_screen_width = 1084
         self.source_screen_height = 2412
@@ -25,7 +22,7 @@ class ResourceUsage_PerformanceDynamic_compose_0040(PerfTestCase):
     def process(self):
         self.driver.swipe_to_home()
 
-        self.driver.start_app(self.app_package)
+        self.driver.start_app(self.app_package, page_name='EntryAbility')
         self.driver.wait(5)
 
         def step1():
@@ -33,7 +30,7 @@ class ResourceUsage_PerformanceDynamic_compose_0040(PerfTestCase):
             self.swipes_up(5, 2)
             self.swipes_down(5, 2)
 
-        self.swipes_up(1, 2)
-        self.execute_performance_step("ComposeSample-活动列表测试场景-step1 AutoScrollingInfiniteList", 30, step1,
-                                      sample_all_processes=False)
+        self.execute_performance_step(
+            'ArkTsExample-活动列表测试场景-step1 AutoScrollingInfiniteList', 30, step1, sample_all_processes=True
+        )
         self.driver.swipe_to_back()

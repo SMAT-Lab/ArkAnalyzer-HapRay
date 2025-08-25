@@ -9,7 +9,7 @@
     "driver": {
         "type": "DeviceTest",
         "py_file": [
-            "ResourceUsage_PerformanceDynamic_ArkTsCompose_0050.py"
+            "ResourceUsage_PerformanceDynamic_ComposeExample_0020.py"
         ]
     },
     "kits":[

@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0200(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -31,7 +29,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0200(PerfTestCase):
         self.start_app()
 
         # 2. 左滑进入‘经验’ tab页
-        self.driver.swipe('RIGHT', 60, area=BY.id("topTabsMiddleSlot"))
+        self.driver.swipe('RIGHT', 60, area=BY.id('topTabsMiddleSlot'))
         time.sleep(3)
         self.touch_by_text('经验', 5)
 
@@ -43,4 +41,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0200(PerfTestCase):
             self.swipes_up(5, 2, 100)
             self.swipes_down(5, 2, 100)
 
-        self.execute_performance_step("抖音-经验页面浏览场景-step1经验页浏览", 30, step1)
+        self.execute_performance_step('抖音-经验页面浏览场景-step1经验页浏览', 30, step1)

@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -47,4 +45,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0150(PerfTestCase):
             self.swipes_down(10, 1, 300)
 
         start()
-        self.execute_performance_step("抖音-搜索列表滑动场景-step1搜索列表浏览", 35, step1)
+        self.execute_performance_step('抖音-搜索列表滑动场景-step1搜索列表浏览', 35, step1)

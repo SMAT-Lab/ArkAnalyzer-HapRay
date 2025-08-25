@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -42,7 +40,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             # Step('京东新品页下滑操作')
             self.swipes_down(swip_num=5, sleep=2)
 
-        self.execute_performance_step("京东-新品页滑动浏览场景-step1新品页上下滑动", 30, step1)
+        self.execute_performance_step('京东-新品页滑动浏览场景-step1新品页上下滑动', 30, step1)
 
         # 点击我的
         self.driver.touch(BY.text('我的'))
@@ -60,4 +58,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0020(PerfTestCase):
             # Step('京东收藏页上滑操作')
             self.swipes_up(swip_num=3, sleep=2)
 
-        self.execute_performance_step("京东-新品页滑动浏览场景-step2商品详情页上下滑动", 10, step2)
+        self.execute_performance_step('京东-新品页滑动浏览场景-step2商品详情页上下滑动', 10, step2)

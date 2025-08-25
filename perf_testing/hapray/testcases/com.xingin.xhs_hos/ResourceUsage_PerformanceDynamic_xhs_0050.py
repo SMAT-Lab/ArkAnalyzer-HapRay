@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -54,4 +51,4 @@ class ResourceUsage_PerformanceDynamic_xhs_0050(PerfTestCase):
 
             self.touch_by_text('下一步', 1)
 
-        self.execute_performance_step("小红书-查看图片及发布笔记场景-step1图片浏览&发布笔记", 45, step1)
+        self.execute_performance_step('小红书-查看图片及发布笔记场景-step1图片浏览&发布笔记', 45, step1)

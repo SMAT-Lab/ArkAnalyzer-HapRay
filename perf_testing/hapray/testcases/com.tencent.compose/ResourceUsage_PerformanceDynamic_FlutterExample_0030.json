@@ -9,7 +9,7 @@
     "driver": {
         "type": "DeviceTest",
         "py_file": [
-            "ResourceUsage_PerformanceDynamic_compose_0040.py"
+            "ResourceUsage_PerformanceDynamic_FlutterExample_0030.py"
         ]
     },
     "kits":[

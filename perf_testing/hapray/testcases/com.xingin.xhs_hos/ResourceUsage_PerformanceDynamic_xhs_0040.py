@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -45,5 +43,5 @@ class ResourceUsage_PerformanceDynamic_xhs_0040(PerfTestCase):
             time.sleep(5)
 
         self.find_by_text_up(video_tag)
-        self.execute_performance_step("小红书-观看长视频场景-step1收藏视频观看", 20, step1)
-        self.execute_performance_step("小红书-观看长视频场景-step2横竖屏切换", 20, step2)
+        self.execute_performance_step('小红书-观看长视频场景-step1收藏视频观看', 20, step1)
+        self.execute_performance_step('小红书-观看长视频场景-step2横竖屏切换', 20, step2)

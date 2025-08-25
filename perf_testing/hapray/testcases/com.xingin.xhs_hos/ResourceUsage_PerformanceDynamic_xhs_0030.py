@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -47,21 +45,21 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
             # 双指捏合放大、缩小2次
             p1 = self.convert_coordinate(
                 x=820,  # 原始x坐标
-                y=1040  # 原始y坐标
+                y=1040,  # 原始y坐标
             )
             p2 = self.convert_coordinate(
                 x=480,  # 原始x坐标
-                y=1450  # 原始y坐标
+                y=1450,  # 原始y坐标
             )
             p3 = self.convert_coordinate(
                 x=1130,  # 原始x坐标
-                y=720  # 原始y坐标
+                y=720,  # 原始y坐标
             )
             p4 = self.convert_coordinate(
                 x=180,  # 原始x坐标
                 y=1850,  # 原始y坐标
             )
-            for i in range(2):
+            for _i in range(2):
                 self.driver._two_finger_swipe(p1, p2, p3, p4)
                 time.sleep(1)
                 self.driver._two_finger_swipe(p3, p4, p1, p2)
@@ -82,9 +80,9 @@ class ResourceUsage_PerformanceDynamic_xhs_0030(PerfTestCase):
             self.swipes_up(3, 2, 300)
             self.swipes_down(3, 2, 300)
 
-        self.execute_performance_step("小红书-浏览图文详情及评论场景-step1收藏图片浏览", 20, step1)
-        self.execute_performance_step("小红书-浏览图文详情及评论场景-step2双指捏合放大/缩小", 15, step2)
-        self.execute_performance_step("小红书-浏览图文详情及评论场景-step3评论页浏览", 25, step3)
+        self.execute_performance_step('小红书-浏览图文详情及评论场景-step1收藏图片浏览', 20, step1)
+        self.execute_performance_step('小红书-浏览图文详情及评论场景-step2双指捏合放大/缩小', 15, step2)
+        self.execute_performance_step('小红书-浏览图文详情及评论场景-step3评论页浏览', 25, step3)
         self.driver.swipe_to_back()
         self.touch_by_text('漫步上海佛罗伦萨小镇｜快乐不止一点点', 2)
-        self.execute_performance_step("小红书-浏览图文详情及评论场景-step4长文笔记浏览", 25, step4)
+        self.execute_performance_step('小红书-浏览图文详情及评论场景-step4长文笔记浏览', 25, step4)

@@ -52,13 +52,15 @@ export class AnalyzerProjectBase {
     }
 
     public saveProject(): void {
-        fs.writeFileSync(path.join(this.projectRoot, PROJECT_FILE), JSON.stringify(this.project));
+        // 禁用项目文件保存，避免创建 .arkanalyzer 文件夹
+        // fs.writeFileSync(path.join(this.projectRoot, PROJECT_FILE), JSON.stringify(this.project));
     }
 
     private loadProject(): void {
-        if (!fs.existsSync(this.projectRoot)) {
-            fs.mkdirSync(this.projectRoot, { recursive: true });
-        }
+        // 禁用 .arkanalyzer 文件夹创建
+        // if (!fs.existsSync(this.projectRoot)) {
+        //     fs.mkdirSync(this.projectRoot, { recursive: true });
+        // }
 
         const projectFile = path.join(this.projectRoot, PROJECT_FILE);
         if (fs.existsSync(projectFile)) {
