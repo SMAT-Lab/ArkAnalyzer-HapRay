@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import logging
 import os
 
@@ -44,7 +45,7 @@ class ExcelReportSaver:
     def save(self):
         """Save all added DataFrames to Excel file"""
         if not self.sheets:
-            logging.warning("Warning: No sheets to save")
+            logging.warning('Warning: No sheets to save')
             return
 
         # Create directory if it doesn't exist
@@ -56,7 +57,7 @@ class ExcelReportSaver:
                 df.to_excel(writer, sheet_name=sheet_name)
                 ExcelReportSaver._auto_adjust_columns(writer, sheet_name, df)
 
-        logging.info("Excel report saved to: %s", self.output_path)
+        logging.info('Excel report saved to: %s', self.output_path)
 
     @staticmethod
     def _auto_adjust_columns(writer, sheet_name, df):
@@ -66,6 +67,6 @@ class ExcelReportSaver:
         for idx, col in enumerate(df.columns):
             max_len = max(
                 len(str(col)),  # column name len
-                df[col].astype(str).map(len).max()  # max data len
+                df[col].astype(str).map(len).max(),  # max data len
             )
             worksheet.column_dimensions[chr(65 + idx + 1)].width = max_len + 2

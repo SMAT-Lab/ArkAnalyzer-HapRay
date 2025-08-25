@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_FlutterExample_0010(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -39,9 +36,11 @@ class ResourceUsage_PerformanceDynamic_FlutterExample_0010(PerfTestCase):
             self.swipes_up(5, 2)
             self.swipes_down(5, 2)
 
-        self.execute_performance_step("FlutterExample-1500View测试场景-step1 ComposeView1500", 30, step1,
-                                      sample_all_processes=True)
+        self.execute_performance_step(
+            'FlutterExample-1500View测试场景-step1 ComposeView1500', 30, step1, sample_all_processes=True
+        )
         self.driver.swipe_to_back()
-        self.execute_performance_step("FlutterExample-1500View测试场景-step2 ComposeLazyView1500Page", 30, step2,
-                                      sample_all_processes=True)
+        self.execute_performance_step(
+            'FlutterExample-1500View测试场景-step2 ComposeLazyView1500Page', 30, step2, sample_all_processes=True
+        )
         self.driver.swipe_to_back()

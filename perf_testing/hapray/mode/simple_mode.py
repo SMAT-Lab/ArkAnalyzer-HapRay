@@ -1,8 +1,8 @@
-import os
+import glob
 import json
 import logging
+import os
 import re
-import glob
 import shutil
 import sqlite3
 
@@ -26,33 +26,33 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
             steps_file_path: 可选的steps.json文件路径，如果提供则使用该文件
     """
     pids = kwargs.get('pids', [])
-    steps_file_path = kwargs.get('steps_file_path', "")
+    steps_file_path = kwargs.get('steps_file_path', '')
     # 检查输入文件是否存在
     for perf_path in perf_paths:
         if not os.path.exists(perf_path):
-            raise FileNotFoundError(f"Performance data file not found: {perf_path}")
+            raise FileNotFoundError(f'Performance data file not found: {perf_path}')
     for trace_path in trace_paths:
         if not os.path.exists(trace_path):
-            raise FileNotFoundError(f"Trace file not found: {trace_path}")
+            raise FileNotFoundError(f'Trace file not found: {trace_path}')
 
     # 确保perf和trace文件数量一致
     max_files = max(len(perf_paths), len(trace_paths))
 
     # 创建基础目录
-    report_report_dir = os.path.join(report_dir, "report")
+    report_report_dir = os.path.join(report_dir, 'report')
     target_db_files = []
 
     # 创建基础目录结构
-    hiperf_base_dir = os.path.join(report_dir, "hiperf")
-    htrace_base_dir = os.path.join(report_dir, "htrace")
+    hiperf_base_dir = os.path.join(report_dir, 'hiperf')
+    htrace_base_dir = os.path.join(report_dir, 'htrace')
 
     _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir)
 
     # 处理多个文件，每个文件对应一个step目录
     for i in range(max_files):
         step_num = i + 1
-        hiperf_step_dir = os.path.join(hiperf_base_dir, f"step{step_num}")
-        htrace_step_dir = os.path.join(htrace_base_dir, f"step{step_num}")
+        hiperf_step_dir = os.path.join(hiperf_base_dir, f'step{step_num}')
+        htrace_step_dir = os.path.join(htrace_base_dir, f'step{step_num}')
 
         # 创建step目录
         os.makedirs(hiperf_step_dir, exist_ok=True)
@@ -68,46 +68,42 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
 
         # 创建testInfo.json
         test_info = {
-            "app_id": package_name,
-            "app_name": "",
-            "app_version": "",
-            "scene": "",
-            "device": {
-                "sn": "",
-                "model": "",
-                "type": "",
-                "platform": "HarmonyOS NEXT",
-                "version": "",
-                "others": {},
+            'app_id': package_name,
+            'app_name': '',
+            'app_version': '',
+            'scene': '',
+            'device': {
+                'sn': '',
+                'model': '',
+                'type': '',
+                'platform': 'HarmonyOS NEXT',
+                'version': '',
+                'others': {},
             },
-            "timestamp": 0,
+            'timestamp': 0,
         }
-        with open(os.path.join(report_dir, "testInfo.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(report_dir, 'testInfo.json'), 'w', encoding='utf-8') as f:
             json.dump(test_info, f)
-        logging.info(
-            "testInfo.json create success: %s", os.path.join(report_dir, 'testInfo.json')
-        )
+        logging.info('testInfo.json create success: %s', os.path.join(report_dir, 'testInfo.json'))
 
         # 处理steps.json文件
-        target_steps_file = os.path.join(hiperf_base_dir, "steps.json")
+        target_steps_file = os.path.join(hiperf_base_dir, 'steps.json')
         if steps_file_path and os.path.exists(steps_file_path):
             # 如果提供了steps.json文件路径，则复制该文件
             shutil.copy2(steps_file_path, target_steps_file)
-            logging.info("Copied existing steps.json from %s to %s", steps_file_path, target_steps_file)
+            logging.info('Copied existing steps.json from %s to %s', steps_file_path, target_steps_file)
         else:
             # 否则根据文件数量动态生成步骤
             steps_json = []
-            for i in range(max_files):
-                step_num = i + 1
-                steps_json.append({
-                    "name": f"step{step_num}",
-                    "description": f"{step_num}.临时步骤{step_num}",
-                    "stepIdx": step_num
-                })
+            for j in range(max_files):
+                step_num = j + 1
+                steps_json.append(
+                    {'name': f'step{step_num}', 'description': f'{step_num}.临时步骤{step_num}', 'stepIdx': step_num}
+                )
 
-            with open(target_steps_file, "w", encoding="utf-8") as f:
+            with open(target_steps_file, 'w', encoding='utf-8') as f:
                 json.dump(steps_json, f)
-            logging.info("Auto-generated steps.json create success: %s", target_steps_file)
+            logging.info('Auto-generated steps.json create success: %s', target_steps_file)
 
 
 def parse_processes(target_db_file: str, file_path: str, package_name: str, pids: list):
@@ -120,31 +116,29 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
     :return: dict { 'pids': List[int], 'process_names': List[str] }
     """
     if not package_name:
-        raise ValueError("包名不能为空")
-    result = {"pids": [], "process_names": []}
+        raise ValueError('包名不能为空')
+    result = {'pids': [], 'process_names': []}
     if os.path.exists(target_db_file) and target_db_file:
         # 连接trace数据库
         perf_conn = sqlite3.connect(target_db_file)
         try:
             # 获取所有perf样本
-            perf_query = "SELECT DISTINCT process_id, thread_name FROM perf_thread WHERE thread_name LIKE ?"
-            params = (f"%{package_name}%",)
+            perf_query = 'SELECT DISTINCT process_id, thread_name FROM perf_thread WHERE thread_name LIKE ?'
+            params = (f'%{package_name}%',)
             perf_pids = pd.read_sql_query(perf_query, perf_conn, params=params)
             for _, row in perf_pids.iterrows():
-                result["pids"].append(row['process_id'])
-                result["process_names"].append(row['thread_name'])
+                result['pids'].append(row['process_id'])
+                result['process_names'].append(row['thread_name'])
         except Exception as e:
-            logging.error("从db中获取pids时发生异常: %s", str(e))
+            logging.error('从db中获取pids时发生异常: %s', str(e))
         finally:
             perf_conn.close()
     if os.path.exists(file_path):
-        result = {"pids": [], "process_names": []}
+        result = {'pids': [], 'process_names': []}
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding='utf-8') as f:
                 lines = [line.strip() for line in f if line.strip()]
-            process_regex = re.compile(
-                r"^\s*(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$"
-            )
+            process_regex = re.compile(r'^\s*(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$')
             for line in lines[1:]:
                 match = process_regex.match(line)
                 if not match:
@@ -152,17 +146,17 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
                 pid = int(match.group(2))
                 cmd = match.group(8)
                 if package_name in cmd:
-                    process_name = cmd[5:] if cmd.startswith("init ") else cmd
-                    result["pids"].append(pid)
-                    result["process_names"].append(process_name)
+                    process_name = cmd[5:] if cmd.startswith('init ') else cmd
+                    result['pids'].append(pid)
+                    result['process_names'].append(process_name)
         except Exception as err:
-            logging.error("处理文件失败: %s", err)
+            logging.error('处理文件失败: %s', err)
     if pids != []:
         process_names = []
-        for pid in pids:
+        for _ in pids:
             process_names.append(package_name)
-        result["pids"] = pids
-        result["process_names"] = process_names
+        result['pids'] = pids
+        result['process_names'] = process_names
 
     return result
 
@@ -173,19 +167,19 @@ def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir
         os.makedirs(report_report_dir)
         os.makedirs(hiperf_base_dir)
         os.makedirs(htrace_base_dir)
-        logging.info("Base directories created: %s, %s, %s", hiperf_base_dir, htrace_base_dir, report_report_dir)
+        logging.info('Base directories created: %s, %s, %s', hiperf_base_dir, htrace_base_dir, report_report_dir)
 
 
 def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name, pids):
     """处理单个perf文件"""
     if not os.path.exists(perf_path):
-        logging.warning("Perf file not found: %s", perf_path)
+        logging.warning('Perf file not found: %s', perf_path)
         return
 
     # 复制perf文件
-    target_data_file = os.path.join(hiperf_step_dir, "perf.data")
+    target_data_file = os.path.join(hiperf_step_dir, 'perf.data')
     shutil.copy2(perf_path, target_data_file)
-    logging.info("Copied %s to %s", perf_path, target_data_file)
+    logging.info('Copied %s to %s', perf_path, target_data_file)
 
     # 检查是否存在对应的.db文件并处理
     current_db_file = _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files)
@@ -200,9 +194,9 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
 
 def _process_trace_file(trace_path, htrace_step_dir):
     """处理单个trace文件"""
-    target_htrace_file = os.path.join(htrace_step_dir, "trace.htrace")
+    target_htrace_file = os.path.join(htrace_step_dir, 'trace.htrace')
     shutil.copy2(trace_path, target_htrace_file)
-    logging.info("Copied %s to %s", trace_path, target_htrace_file)
+    logging.info('Copied %s to %s', trace_path, target_htrace_file)
 
 
 def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files):
@@ -223,19 +217,19 @@ def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db
     # 检查原始perf文件同目录下是否存在对应的.db文件
     perf_dir = os.path.dirname(perf_path)
     perf_basename = os.path.splitext(os.path.basename(perf_path))[0]
-    source_db_file = os.path.join(perf_dir, f"{perf_basename}.db")
+    source_db_file = os.path.join(perf_dir, f'{perf_basename}.db')
 
-    target_db_file = os.path.join(hiperf_step_dir, "perf.db")
+    target_db_file = os.path.join(hiperf_step_dir, 'perf.db')
 
     if os.path.exists(source_db_file):
         # 如果存在.db文件，直接复制到目标路径
         shutil.copy2(source_db_file, target_db_file)
-        logging.info("Copied existing DB file %s to %s", source_db_file, target_db_file)
+        logging.info('Copied existing DB file %s to %s', source_db_file, target_db_file)
         target_db_files.append(target_db_file)
         return target_db_file
 
     # 如果不存在.db文件，需要转换perf.data为perf.db
-    logging.info("No existing DB file found, converting %s to %s", target_data_file, target_db_file)
+    logging.info('No existing DB file found, converting %s to %s', target_data_file, target_db_file)
     return _convert_perf_to_db(target_data_file, target_db_files)
 
 
@@ -250,39 +244,38 @@ def _convert_perf_to_db(target_data_file, target_db_files):
     Returns:
         str: 数据库文件路径，如果失败返回None
     """
-    target_db_file = target_data_file.replace(".data", ".db")
+    target_db_file = target_data_file.replace('.data', '.db')
 
     if not os.path.exists(target_data_file):
-        logging.error("Source perf.data file not found: %s", target_data_file)
+        logging.error('Source perf.data file not found: %s', target_data_file)
         return None
 
     # 执行转换，ExeUtils.convert_data_to_db是同步的，会等待转换完成
-    logging.info("Starting conversion from %s to %s", target_data_file, target_db_file)
+    logging.info('Starting conversion from %s to %s', target_data_file, target_db_file)
 
     if ExeUtils.convert_data_to_db(target_data_file, target_db_file):
-
         target_db_files.append(target_db_file)
-        logging.info("Successfully converted and verified DB file: %s", target_db_file)
+        logging.info('Successfully converted and verified DB file: %s', target_db_file)
         return target_db_file
 
-    logging.error("Failed to convert perf to db for %s", target_data_file)
+    logging.error('Failed to convert perf to db for %s', target_data_file)
     return None
 
 
 def _copy_ps_ef_file(perf_path, hiperf_step_dir):
     """复制ps_ef.txt文件"""
-    ps_ef_files = glob.glob(os.path.join(os.path.dirname(perf_path), "ps_ef.txt"))
+    ps_ef_files = glob.glob(os.path.join(os.path.dirname(perf_path), 'ps_ef.txt'))
     if ps_ef_files:
         source_ps_ef_file = ps_ef_files[0]
-        target_ps_ef_file = os.path.join(hiperf_step_dir, "ps_ef.txt")
+        target_ps_ef_file = os.path.join(hiperf_step_dir, 'ps_ef.txt')
         shutil.copy2(source_ps_ef_file, target_ps_ef_file)
-        logging.info("Copied %s to %s", source_ps_ef_file, target_ps_ef_file)
+        logging.info('Copied %s to %s', source_ps_ef_file, target_ps_ef_file)
 
 
 def _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids):
     """创建pids.json文件"""
-    ps_ef_file_path = os.path.join(hiperf_step_dir, "ps_ef.txt")
+    ps_ef_file_path = os.path.join(hiperf_step_dir, 'ps_ef.txt')
     pids_json = parse_processes(current_db_file, ps_ef_file_path, package_name, pids)
-    with open(os.path.join(hiperf_step_dir, "pids.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(hiperf_step_dir, 'pids.json'), 'w', encoding='utf-8') as f:
         json.dump(pids_json, f)
-    logging.info("pids.json create success: %s", os.path.join(hiperf_step_dir, 'pids.json'))
+    logging.info('pids.json create success: %s', os.path.join(hiperf_step_dir, 'pids.json'))

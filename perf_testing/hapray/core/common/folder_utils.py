@@ -17,11 +17,11 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 from xdevice import platform_logger
 
-Log = platform_logger("FolderUtils")
+Log = platform_logger('FolderUtils')
 
 """
 扫描ResourceUsage_PerformanceDynamic_jingdong_0020_round0/hiperf
@@ -38,14 +38,11 @@ def scan_folders(root_dir):
     perf_data_num = 0
     for item in os.listdir(root_dir):
         item_path = os.path.join(root_dir, item)
-        if os.path.isdir(item_path):
-            if (Path(item_path) / 'perf.data').exists():
-                perf_data_num = perf_data_num + 1
+        if os.path.isdir(item_path) and (Path(item_path) / 'perf.data').exists():
+            perf_data_num = perf_data_num + 1
 
     perf_data_percent = perf_data_num / len(steps_json) * 100
-    if perf_data_percent > 50:
-        return True
-    return False
+    return perf_data_percent > 50
 
 
 def delete_folder(folder_path):
@@ -59,20 +56,18 @@ def delete_folder(folder_path):
         return False
 
     try:
-        print(f"正在删除目录: {folder_path}")
+        print(f'正在删除目录: {folder_path}')
         shutil.rmtree(folder_path)
-        print("操作完成: 目录已被完全删除")
+        print('操作完成: 目录已被完全删除')
         return True
     except Exception as e:
-        print(f"错误: 删除过程中发生异常: {e}")
+        print(f'错误: 删除过程中发生异常: {e}')
         return False
 
 
 def read_json_arrays_from_dir(
-        directory: str,
-        filename_pattern: str = "steps.json",
-        encoding: str = "utf-8"
-) -> List[Dict[str, Any]]:
+    directory: str, filename_pattern: str = 'steps.json', encoding: str = 'utf-8'
+) -> list[dict[str, Any]]:
     """
     读取指定目录下所有匹配的 JSON 文件并解析其中的 JSON 数组
 
@@ -88,7 +83,7 @@ def read_json_arrays_from_dir(
 
     # 检查目录是否存在
     if not os.path.exists(directory):
-        Log.info(f"目录不存在: {directory}")
+        Log.info(f'目录不存在: {directory}')
         return all_objects
 
     # 遍历目录中的所有文件
@@ -99,20 +94,20 @@ def read_json_arrays_from_dir(
 
             try:
                 # 读取文件内容
-                with open(file_path, "r", encoding=encoding) as f:
+                with open(file_path, encoding=encoding) as f:
                     # 解析 JSON 数组
                     data = json.load(f)
 
                     # 验证是否为数组类型
                     if isinstance(data, list):
                         all_objects.extend(data)
-                        Log.info(f"成功读取 {len(data)} 个对象 from {filename}")
+                        Log.info(f'成功读取 {len(data)} 个对象 from {filename}')
                     else:
-                        Log.info(f"警告: 文件 {filename} 不包含 JSON 数组，跳过")
+                        Log.info(f'警告: 文件 {filename} 不包含 JSON 数组，跳过')
 
             except json.JSONDecodeError as e:
-                Log.info(f"错误: 无法解析文件 {filename}: {e}")
+                Log.info(f'错误: 无法解析文件 {filename}: {e}')
             except Exception as e:
-                Log.info(f"错误: 读取文件 {filename} 时发生意外错误: {e}")
+                Log.info(f'错误: 读取文件 {filename} 时发生意外错误: {e}')
 
     return all_objects

@@ -1,5 +1,3 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 """
@@ -47,7 +45,7 @@ class ResourceUsage_PerformanceDynamic_Launcher_0020(PerfTestCase):
             self.swipes_right(3, 2, 300)
 
         self.execute_performance_step(
-            "桌面-滑动场景",
+            '桌面-滑动场景',
             30,  # 性能数据采集将持续 30 秒
-            desktop_swipe_action  # 实际执行滑动操作的函数
+            desktop_swipe_action,  # 实际执行滑动操作的函数
         )

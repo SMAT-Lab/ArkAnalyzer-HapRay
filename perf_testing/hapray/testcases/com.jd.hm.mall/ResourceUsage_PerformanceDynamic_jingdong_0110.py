@@ -1,11 +1,9 @@
-# coding: utf-8
 import time
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -32,4 +30,4 @@ class ResourceUsage_PerformanceDynamic_jingdong_0110(PerfTestCase):
             # 点击直播
             time.sleep(30)
 
-        self.execute_performance_step("京东-首页静置场景-step1首页静置", 30, step1)
+        self.execute_performance_step('京东-首页静置场景-step1首页静置', 30, step1)
