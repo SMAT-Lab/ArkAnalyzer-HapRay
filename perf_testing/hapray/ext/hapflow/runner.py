@@ -242,39 +242,8 @@ def integrate_four(in_dir: str, out_path: str):
     _write_json(out_path, final)
     LOG.info("Wrote %s", out_path)
 
-# --------- 轻量 index.html（可替换为你的完整版） ---------
-INDEX_HTML = """<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"/>
-<title>HapFlow 可视化</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<style>body{font-family:sans-serif;background:#111;color:#eee;padding:16px}</style>
-</head><body>
-<h2>HapFlow 可视化（简版）</h2>
-<p>此页面从同目录读取 <code>hierarchical_integrated_data.json</code>。你可以替换为你的完整版 <code>index.html</code>。</p>
-<pre id="out" style="white-space:pre-wrap;background:#222;padding:12px;border-radius:6px"></pre>
-<script>
-fetch('hierarchical_integrated_data.json').then(r=>r.json()).then(d=>{
-  const keys = Object.keys(d);
-  document.getElementById('out').textContent =
-    '已加载字段：\\n' + JSON.stringify(keys, null, 2) +
-    '\\n\\nHAR 节点数：' + (d.harGraph?.nodes?.length || 0) +
-    '\\n跨包依赖：' + (d.crossHarDependencies?.length || 0);
-}).catch(e=>{document.getElementById('out').textContent='加载失败: '+e});
-</script>
-</body></html>
-"""
 
-def ensure_index_html(out_dir: str):
-    web_dir = os.path.join(os.path.dirname(__file__), "web")
-    src = os.path.join(web_dir, "index.html")
-    dst = os.path.join(out_dir, "index.html")
-    if os.path.exists(src):
-        shutil.copy(src, dst)
-        LOG.info("Copied viewer: %s", dst)
-    else:
-        with open(dst, "w", encoding="utf-8") as f:
-            f.write(INDEX_HTML)
-        LOG.info("Wrote minimal viewer: %s", dst)
+
 
 # --------- 顶层管线 ---------
 def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
@@ -306,7 +275,6 @@ def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
     integrate_four(out_dir, os.path.join(out_dir, "hierarchical_integrated_data.json"))
 
     LOG.info("=== HapFlow: prepare viewer ===")
-    ensure_index_html(out_dir)
 
     LOG.info("HapFlow is ready: %s", out_dir)
 

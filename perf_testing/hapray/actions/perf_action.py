@@ -297,8 +297,8 @@ class PerfAction:
             try:
                 from hapray.ext.hapflow.runner import run_hapflow_pipeline
                 run_hapflow_pipeline(
-                    reports_root=reports_path,               # HapRay 当次输出 reports/<timestamp>
-                    homecheck_root=parsed_args.hapflow       # 你的 Homecheck 根目录
+                    reports_root=reports_path,               
+                    homecheck_root=parsed_args.hapflow       
                 )
             except Exception as e:
                 logging.getLogger().exception("HapFlow pipeline failed: %s", e)
