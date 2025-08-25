@@ -1,12 +1,9 @@
-# coding: utf-8
-
 from devicetest.core.test_case import Step
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -48,4 +45,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0110(PerfTestCase):
                 self.swipe_to_back(1)
 
         start()
-        self.execute_performance_step("抖音-视频评论区操作场景-step1评论区图片放大/缩小", 20, step1)
+        self.execute_performance_step('抖音-视频评论区操作场景-step1评论区图片放大/缩小', 20, step1)

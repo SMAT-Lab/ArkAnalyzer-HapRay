@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0010(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -49,7 +47,7 @@ class ResourceUsage_PerformanceDynamic_bilibili_0010(PerfTestCase):
         # 启动被测应用
         self.start_app()
 
-        self.execute_performance_step("哔哩哔哩-首页浏览场景-step1首页滑动", 60, step1)
+        self.execute_performance_step('哔哩哔哩-首页浏览场景-step1首页滑动', 60, step1)
 
         # 点击哔哩哔哩“热门”页面，停留3秒
         self.driver.touch(BY.text('热门'))
@@ -58,4 +56,4 @@ class ResourceUsage_PerformanceDynamic_bilibili_0010(PerfTestCase):
         # 哔哩哔哩“热门”页面，上滑3次
         self.swipes_up(swip_num=3, sleep=2)
 
-        self.execute_performance_step("哔哩哔哩-首页浏览场景-step2页面点击", 30, step2)
+        self.execute_performance_step('哔哩哔哩-首页浏览场景-step2页面点击', 30, step2)

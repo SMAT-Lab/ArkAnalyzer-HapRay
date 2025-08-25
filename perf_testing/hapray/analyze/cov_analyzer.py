@@ -15,7 +15,7 @@ limitations under the License.
 
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 from hapray.analyze import BaseAnalyzer
 from hapray.core.common.exe_utils import ExeUtils
@@ -26,16 +26,21 @@ class CovAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'coverage')
 
-    def _analyze_impl(self,
-                      step_dir: str,
-                      trace_db_path: str,
-                      perf_db_path: str,
-                      app_pids: list) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         cov_file = os.path.join(os.path.dirname(perf_db_path), 'bjc_cov.json')
         if not os.path.exists(cov_file):
             return None
-        args = ['bjc', '-i', cov_file, '-o', os.path.dirname(perf_db_path), '--project-path',
-                Config.get('cov.hapProjectPath', '')]
-        logging.debug("Running cov analysis with command: %s", ' '.join(args))
+        args = [
+            'bjc',
+            '-i',
+            cov_file,
+            '-o',
+            os.path.dirname(perf_db_path),
+            '--project-path',
+            Config.get('cov.hapProjectPath', ''),
+        ]
+        logging.debug('Running cov analysis with command: %s', ' '.join(args))
         ExeUtils.execute_hapray_cmd(args)
         return None

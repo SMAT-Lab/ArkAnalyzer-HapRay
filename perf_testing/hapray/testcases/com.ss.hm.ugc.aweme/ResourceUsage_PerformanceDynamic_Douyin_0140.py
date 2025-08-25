@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -8,7 +7,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -33,8 +31,9 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
             self.start_app()
 
             component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
-            self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1),
-                              swipe_time=0.4)
+            self.driver.swipe(
+                UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4
+            )
             time.sleep(2)
             self.touch_by_id('home-top-tab-text-homepage_pad_hot', 5)
 
@@ -53,7 +52,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0140(PerfTestCase):
                 self.touch_by_coordinates(1196, 2621, 10)
 
         start()
-        self.execute_performance_step("抖音-热榜浏览场景-step1热榜页签切换", 30, step1)
+        self.execute_performance_step('抖音-热榜浏览场景-step1热榜页签切换', 30, step1)
         self.driver.swipe_to_back()
         time.sleep(5)
-        self.execute_performance_step("抖音-热榜浏览场景-step2热榜视频跳转", 60, step2)
+        self.execute_performance_step('抖音-热榜浏览场景-step2热榜视频跳转', 60, step2)

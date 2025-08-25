@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -35,4 +33,4 @@ class ResourceUsage_PerformanceDynamic_bilibili_0050(PerfTestCase):
         self.driver.touch(BY.text('哔哩哔哩王者荣耀赛事'))
         time.sleep(2)
 
-        self.execute_performance_step("哔哩哔哩-直播播放场景-step1直播播放", 60, step1)
+        self.execute_performance_step('哔哩哔哩-直播播放场景-step1直播播放', 60, step1)

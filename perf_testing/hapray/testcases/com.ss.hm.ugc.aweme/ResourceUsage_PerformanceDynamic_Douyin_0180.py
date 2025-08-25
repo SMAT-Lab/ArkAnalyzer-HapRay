@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0180(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -40,4 +37,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0180(PerfTestCase):
             self.swipes_up(10, 2, 100)
             self.swipes_down(10, 2, 100)
 
-        self.execute_performance_step("抖音-关注页面浏览场景-step1关注页浏览", 50, step1)
+        self.execute_performance_step('抖音-关注页面浏览场景-step1关注页浏览', 50, step1)

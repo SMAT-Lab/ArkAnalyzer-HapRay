@@ -15,11 +15,10 @@ limitations under the License.
 
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.core.common.frame.frame_core_analyzer import FrameAnalyzerCore
-
 
 # import pandas as pd  # 未使用
 
@@ -47,36 +46,31 @@ class FrameLoadAnalyzer(BaseAnalyzer):
         # 初始化核心分析器
         self.core_analyzer = FrameAnalyzerCore()
 
-    def _analyze_impl(self,
-                      step_dir: str,
-                      trace_db_path: str,
-                      perf_db_path: str,
-                      app_pids: list) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         """实现帧负载分析逻辑"""
 
         if not os.path.exists(trace_db_path) or not os.path.exists(perf_db_path):
-            logging.warning("数据库文件不存在，跳过帧负载分析")
+            logging.warning('数据库文件不存在，跳过帧负载分析')
             return None
 
         try:
             # 使用优化的快速分析方法（不分析调用链）
-            logging.info("使用快速帧负载分析方法...")
+            logging.info('使用快速帧负载分析方法...')
             result = self.core_analyzer.analyze_frame_loads_fast(
-                trace_db_path=trace_db_path,
-                perf_db_path=perf_db_path,
-                app_pids=app_pids,
-                step_id=step_dir
+                trace_db_path=trace_db_path, perf_db_path=perf_db_path, app_pids=app_pids, step_id=step_dir
             )
 
             if not result:
-                logging.info("No frame load data found for step %s", step_dir)
+                logging.info('No frame load data found for step %s', step_dir)
                 return None
 
-            logging.debug("快速帧负载分析完成")
+            logging.debug('快速帧负载分析完成')
             return result
 
         except Exception as e:
-            logging.error("Frame load analysis failed for step %s: %s", step_dir, str(e))
+            logging.error('Frame load analysis failed for step %s: %s', step_dir, str(e))
             return None
 
     def _clean_data_for_json(self, data):  # pylint: disable=duplicate-code

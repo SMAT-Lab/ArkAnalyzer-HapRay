@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0190(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -46,7 +44,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0190(PerfTestCase):
             # 商品详情页上滑5次，间隔2s
             self.swipes_up(5, 2, 300)
 
-        self.execute_performance_step("抖音-商城浏览场景-step1商城页浏览", 35, step1)
+        self.execute_performance_step('抖音-商城浏览场景-step1商城页浏览', 35, step1)
 
         # 点击搜索按钮，输入“华为P80PRO官方旗舰店”，点击搜索，选择第一个商品
         self.touch_by_coordinates(450, 286)
@@ -54,4 +52,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0190(PerfTestCase):
         time.sleep(1)
         self.touch_by_text('搜索', 3)
         self.touch_by_coordinates(858, 681, 1)
-        self.execute_performance_step("抖音-商城浏览场景-step2商品详情页浏览", 30, step2)
+        self.execute_performance_step('抖音-商城浏览场景-step2商品详情页浏览', 30, step2)
