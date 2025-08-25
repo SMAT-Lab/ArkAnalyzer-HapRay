@@ -1,12 +1,9 @@
-# coding: utf-8
-
 from hypium import BY
 
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -64,7 +61,7 @@ class ResourceUsage_PerformanceDynamic_jingdong_0030(PerfTestCase):
             self.driver.touch(self.convert_coordinate(1002, 956))
             self.driver.wait(2)
 
-        self.execute_performance_step("京东-超市购物场景-step1浏览商品后加购", 45, step1)
+        self.execute_performance_step('京东-超市购物场景-step1浏览商品后加购', 45, step1)
 
         # 从购物车移除第一个商品
         self.driver.touch(self.convert_coordinate(866, 956))

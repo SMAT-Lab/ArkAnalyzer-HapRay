@@ -12,10 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import os.path
 import re
 import sqlite3
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 
@@ -30,11 +31,9 @@ class GCAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'trace/gc_thread')
 
-    def _analyze_impl(self,
-                      step_dir: str,
-                      trace_db_path: str,
-                      perf_db_path: str,
-                      app_pids: list) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         if not os.path.exists(trace_db_path) or not os.path.exists(perf_db_path):
             return None
 
@@ -42,7 +41,7 @@ class GCAnalyzer(BaseAnalyzer):
         result['perf_percentage'] = self._calc_gc_perf(perf_db_path, app_pids)
         # GC线程负载 > 15%，则判定GC异常
         if result['perf_percentage'] > 0.15:
-            result["GCStatus"] = "Too many GC"
+            result['GCStatus'] = 'Too many GC'
 
         return result
 
@@ -84,7 +83,7 @@ class GCAnalyzer(BaseAnalyzer):
                 return gc_perf * 1.0 / total_perf
 
         except sqlite3.Error as e:
-            self.logger.error("GCAnalyzer _calc_gc_perf Database error: %s", str(e))
+            self.logger.error('GCAnalyzer _calc_gc_perf Database error: %s', str(e))
         return 0.0
 
     def _calc_gc_invoke_times(self, trace_db_path: str, app_pids: list) -> dict:
@@ -93,13 +92,14 @@ class GCAnalyzer(BaseAnalyzer):
                 _conn.row_factory = sqlite3.Row
                 cursor = _conn.cursor()
 
-                cursor.execute("SELECT max(ts) as end, min(ts) as start FROM callstack")
+                cursor.execute('SELECT max(ts) as end, min(ts) as start FROM callstack')
                 row = cursor.fetchall()[0]
                 start_time = row['start']
                 end_time = row['end']
-                result = {"FullGC": 0, "SharedFullGC": 0, "SharedGC": 0, "PartialGC": 0}
+                result = {'FullGC': 0, 'SharedFullGC': 0, 'SharedGC': 0, 'PartialGC': 0}
                 # Get total component builds
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT * FROM callstack
                     WHERE
                     (name LIKE '%H:FullGC::RunPhases%'
@@ -113,22 +113,24 @@ class GCAnalyzer(BaseAnalyzer):
                                 SELECT ipid FROM process where pid in ({','.join('?' * len(app_pids))})
                                 )
                         )
-                """, app_pids)
+                """,
+                    app_pids,
+                )
 
                 _sum = 0
                 for row in cursor.fetchall():
-                    gc_type = self._extract_gc_type(row["name"])
+                    gc_type = self._extract_gc_type(row['name'])
                     result[gc_type] += 1
                     _sum += 1
                 # 调用次数大于10次且频率>1次/s，则判定GC异常
                 gc_frequency = (end_time - start_time) / 1e9
                 if _sum > gc_frequency and _sum > 10:
-                    result["GCStatus"] = "Too many GC"
+                    result['GCStatus'] = 'Too many GC'
                 else:
-                    result["GCStatus"] = "OK"
+                    result['GCStatus'] = 'OK'
 
         except sqlite3.Error as e:
-            self.logger.error("GCAnalyzer _calc_gc_invoke_times Database error: %s", str(e))
+            self.logger.error('GCAnalyzer _calc_gc_invoke_times Database error: %s', str(e))
 
         return result
 

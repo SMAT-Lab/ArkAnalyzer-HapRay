@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0080(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -46,6 +43,6 @@ class ResourceUsage_PerformanceDynamic_xhs_0080(PerfTestCase):
             self.touch_by_coordinates(884, 2257, 2)
             self.swipes_up(5, 2, 300)
 
-        self.execute_performance_step("小红书-视频及评论浏览-step1视频切换浏览", 40, step1)
+        self.execute_performance_step('小红书-视频及评论浏览-step1视频切换浏览', 40, step1)
         self.swipes_up(1, 2)
-        self.execute_performance_step("小红书-视频及评论浏览-step2评论区浏览", 20, step2)
+        self.execute_performance_step('小红书-视频及评论浏览-step2评论区浏览', 20, step2)

@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from devicetest.core.test_case import Step
@@ -9,7 +8,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -34,8 +32,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
 
         # 2. 点击热点，等待5s
         component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
-        self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1),
-                          swipe_time=0.4)
+        self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
         time.sleep(2)
         self.touch_by_id('home-top-tab-text-homepage_pad_hot', 5)
 
@@ -56,7 +53,7 @@ class ResourceUsage_PerformanceDynamic_Douyin_0080(PerfTestCase):
             # 点击长视频
             self.touch_by_id('home-top-tab-text-homepage_mediumvideo')
 
-        self.execute_performance_step("抖音-热榜浏览-step1点击热榜", 10, step1)
-        self.execute_performance_step("抖音-热榜浏览-step2滑动浏览", 20, step2)
-        self.execute_performance_step("抖音-热榜浏览-step3侧滑返回", 10, step3)
-        self.execute_performance_step("抖音-热榜浏览-step4点击长视频", 30, step4)
+        self.execute_performance_step('抖音-热榜浏览-step1点击热榜', 10, step1)
+        self.execute_performance_step('抖音-热榜浏览-step2滑动浏览', 20, step2)
+        self.execute_performance_step('抖音-热榜浏览-step3侧滑返回', 10, step3)
+        self.execute_performance_step('抖音-热榜浏览-step4点击长视频', 30, step4)

@@ -17,18 +17,19 @@ import logging
 import os
 import sqlite3
 import time
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
+
 # 导入新的模块化组件
 from .frame_core_load_calculator import FrameLoadCalculator
-from .frame_data_parser import parse_frame_slice_db, get_frame_type, validate_database_compatibility
+from .frame_data_parser import get_frame_type, parse_frame_slice_db, validate_database_compatibility
 from .frame_time_utils import FrameTimeUtils
 
 # 设置环境变量
-os.environ["PYTHONIOENCODING"] = "utf-8"
+os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 
 class FrameAnalyzerCore:  # pylint: disable=duplicate-code
@@ -74,11 +75,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         self.stuttered_frame_analyzer = StutteredFrameAnalyzer(debug_vsync_enabled)
 
     def analyze_empty_frames(
-            self,
-            trace_db_path: str,
-            perf_db_path: str,
-            step_id: str = None,
-            app_pids: list = None
+        self, trace_db_path: str, perf_db_path: str, step_id: str = None, app_pids: list = None
     ) -> Optional[dict]:
         """分析空帧（flag=2, type=0）的负载情况
 
@@ -92,16 +89,9 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         Returns:
             dict: 包含分析结果
         """
-        return self.empty_frame_analyzer.analyze_empty_frames(
-            trace_db_path, perf_db_path, app_pids, step_id
-        )
+        return self.empty_frame_analyzer.analyze_empty_frames(trace_db_path, perf_db_path, app_pids, step_id)
 
-    def analyze_stuttered_frames(
-            self,
-            db_path: str,
-            perf_db_path: str = None,
-            step_id: str = None
-    ) -> Optional[dict]:
+    def analyze_stuttered_frames(self, db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
         Args:
@@ -112,17 +102,11 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         Returns:
             dict | None: 分析结果数据，如果没有数据或分析失败则返回None
         """
-        return self.stuttered_frame_analyzer.analyze_stuttered_frames(
-            db_path, perf_db_path, step_id
-        )
+        return self.stuttered_frame_analyzer.analyze_stuttered_frames(db_path, perf_db_path, step_id)
 
     def analyze_comprehensive_frames(
-            self,
-            trace_db_path: str,
-            perf_db_path: str,
-            app_pids: list,
-            step_id: str = None
-    ) -> Dict[str, Any]:
+        self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None
+    ) -> dict[str, Any]:
         """综合分析空帧和卡顿帧
 
         Args:
@@ -134,45 +118,33 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         Returns:
             Dict: 综合分析结果
         """
-        result = {
-            "empty_frames": None,
-            "stuttered_frames": None,
-            "cache_stats": None
-        }
+        result = {'empty_frames': None, 'stuttered_frames': None, 'cache_stats': None}
 
         try:
             # 分析空帧
-            logging.info("开始分析空帧...")
-            empty_result = self.analyze_empty_frames(
-                trace_db_path, perf_db_path, step_id, app_pids
-            )
-            result["empty_frames"] = empty_result
+            logging.info('开始分析空帧...')
+            empty_result = self.analyze_empty_frames(trace_db_path, perf_db_path, step_id, app_pids)
+            result['empty_frames'] = empty_result
 
             # 分析卡顿帧
-            logging.info("开始分析卡顿帧...")
-            stuttered_result = self.analyze_stuttered_frames(
-                trace_db_path, perf_db_path, step_id
-            )
-            result["stuttered_frames"] = stuttered_result
+            logging.info('开始分析卡顿帧...')
+            stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id)
+            result['stuttered_frames'] = stuttered_result
 
             # 获取缓存统计
-            result["cache_stats"] = FrameCacheManager.get_cache_stats()
+            result['cache_stats'] = FrameCacheManager.get_cache_stats()
 
             # logging.info("综合分析完成")
             return result
 
         except Exception as e:
-            logging.error("综合分析失败: %s", str(e))
-            result["error"] = str(e)
+            logging.error('综合分析失败: %s', str(e))
+            result['error'] = str(e)
             return result
 
     def analyze_frame_loads_fast(
-            self,
-            trace_db_path: str,
-            perf_db_path: str,
-            app_pids: list,
-            step_id: str = None
-    ) -> Dict[str, Any]:
+        self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None
+    ) -> dict[str, Any]:
         """快速分析所有帧的负载值（不分析调用链）
 
         这是FrameLoad阶段的优化版本，只计算负载值，不进行调用链分析
@@ -196,7 +168,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             trace_conn = sqlite3.connect(trace_db_path)
             perf_conn = sqlite3.connect(perf_db_path)
             db_connect_time = time.time() - db_connect_start
-            logging.info("[%s] 数据库连接耗时: %.3f秒", step_id, db_connect_time)
+            logging.info('[%s] 数据库连接耗时: %.3f秒', step_id, db_connect_time)
 
             # 阶段2：数据预加载
             preload_start = time.time()
@@ -206,25 +178,25 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 # )  # 删除预加载以提升性能
                 FrameCacheManager.ensure_data_cached('frame_loads', trace_conn, perf_conn, step_id, app_pids)
             preload_time = time.time() - preload_start
-            logging.info("[%s] 数据预加载耗时: %.3f秒", step_id, preload_time)
+            logging.info('[%s] 数据预加载耗时: %.3f秒', step_id, preload_time)
 
             # 阶段3：获取数据
             data_fetch_start = time.time()
             trace_df = FrameCacheManager.get_frames_data(trace_conn, step_id, app_pids)
             perf_df = FrameCacheManager.get_perf_samples(perf_conn, step_id)
             data_fetch_time = time.time() - data_fetch_start
-            logging.info("[%s] 数据获取耗时: %.3f秒", step_id, data_fetch_time)
-            logging.info("[%s] 帧数据量: %d行, 性能数据量: %d行", step_id, len(trace_df), len(perf_df))
+            logging.info('[%s] 数据获取耗时: %.3f秒', step_id, data_fetch_time)
+            logging.info('[%s] 帧数据量: %d行, 性能数据量: %d行', step_id, len(trace_df), len(perf_df))
 
             if trace_df.empty:
-                logging.info("未找到帧数据")
+                logging.info('未找到帧数据')
                 return None
 
             # 阶段4：快速计算帧负载
             calc_start = time.time()
             frame_loads = self.load_calculator.calculate_all_frame_loads_fast(trace_df, perf_df)
             calc_time = time.time() - calc_start
-            logging.info("[%s] 帧负载计算耗时: %.3f秒, 计算了%d个帧", step_id, calc_time, len(frame_loads))
+            logging.info('[%s] 帧负载计算耗时: %.3f秒, 计算了%d个帧', step_id, calc_time, len(frame_loads))
 
             # 阶段5：保存到缓存
             cache_save_start = time.time()
@@ -232,7 +204,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 if step_id:
                     FrameCacheManager.add_frame_load(step_id, frame_load)
             cache_save_time = time.time() - cache_save_start
-            logging.info("[%s] 缓存保存耗时: %.3f秒", step_id, cache_save_time)
+            logging.info('[%s] 缓存保存耗时: %.3f秒', step_id, cache_save_time)
 
             # 阶段6：获取统计信息
             stats_start = time.time()
@@ -240,7 +212,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             top_frames = FrameCacheManager.get_top_frame_loads(step_id, 10)
             first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
             stats_time = time.time() - stats_start
-            logging.info("[%s] 统计信息获取耗时: %.3f秒", step_id, stats_time)
+            logging.info('[%s] 统计信息获取耗时: %.3f秒', step_id, stats_time)
 
             # 阶段7：处理Top帧时间戳
             process_start = time.time()
@@ -252,25 +224,21 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 )
                 processed_top_frames.append(processed_frame)
             process_time = time.time() - process_start
-            logging.info("[%s] Top帧处理耗时: %.3f秒", step_id, process_time)
+            logging.info('[%s] Top帧处理耗时: %.3f秒', step_id, process_time)
 
-            result = {
-                'statistics': statistics,
-                'top_frames': processed_top_frames,
-                'total_frames': len(frame_loads)
-            }
+            result = {'statistics': statistics, 'top_frames': processed_top_frames, 'total_frames': len(frame_loads)}
 
             total_time = time.time() - start_time
-            logging.info("[%s] 快速帧负载分析总耗时: %.3f秒", step_id, total_time)
+            logging.info('[%s] 快速帧负载分析总耗时: %.3f秒', step_id, total_time)
             logging.info(
-                "[%s] 各阶段耗时占比: "
-                "连接%.1f%%, "
-                "预加载%.1f%%, "
-                "获取%.1f%%, "
-                "计算%.1f%%, "
-                "缓存%.1f%%, "
-                "统计%.1f%%, "
-                "处理%.1f%%",
+                '[%s] 各阶段耗时占比: '
+                '连接%.1f%%, '
+                '预加载%.1f%%, '
+                '获取%.1f%%, '
+                '计算%.1f%%, '
+                '缓存%.1f%%, '
+                '统计%.1f%%, '
+                '处理%.1f%%',
                 step_id,
                 db_connect_time / total_time * 100,
                 preload_time / total_time * 100,
@@ -278,12 +246,13 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 calc_time / total_time * 100,
                 cache_save_time / total_time * 100,
                 stats_time / total_time * 100,
-                process_time / total_time * 100)
+                process_time / total_time * 100,
+            )
 
             return result
 
         except Exception as e:
-            logging.error("快速帧负载分析失败: %s", str(e))
+            logging.error('快速帧负载分析失败: %s', str(e))
             return None
         finally:
             if trace_conn:
@@ -299,7 +268,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         """
         FrameCacheManager.clear_cache(step_id)
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """获取缓存统计信息
 
         Returns:
@@ -318,7 +287,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         """
         return validate_database_compatibility(db_path)
 
-    def parse_frame_data(self, db_path: str) -> Dict[int, List[Dict[str, Any]]]:
+    def parse_frame_data(self, db_path: str) -> dict[int, list[dict[str, Any]]]:
         """解析帧数据
 
         Args:
@@ -329,13 +298,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         """
         return parse_frame_slice_db(db_path)
 
-    def calculate_frame_load_simple(
-            self,
-            frame: Dict[str, Any],
-            perf_df,
-            perf_conn,
-            step_id: str = None
-    ) -> tuple:
+    def calculate_frame_load_simple(self, frame: dict[str, Any], perf_df, perf_conn, step_id: str = None) -> tuple:
         """简单计算帧负载（保持向后兼容）
 
         Args:
@@ -349,9 +312,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         """
         # 注意：这个方法实际上调用的是完整的分析，不是简单计算
         # 为了保持向后兼容，保留此方法
-        return self.load_calculator.analyze_single_frame(
-            frame, perf_df, perf_conn, step_id
-        )
+        return self.load_calculator.analyze_single_frame(frame, perf_df, perf_conn, step_id)
 
     def get_frame_type(self, frame: dict, cursor, step_id: str = None) -> str:
         """获取帧类型（保持向后兼容）
@@ -377,26 +338,26 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         self.empty_frame_analyzer.load_calculator.debug_vsync_enabled = enabled
         self.stuttered_frame_analyzer.load_calculator.debug_vsync_enabled = enabled
 
-    def get_analyzer_info(self) -> Dict[str, Any]:
+    def get_analyzer_info(self) -> dict[str, Any]:
         """获取分析器信息
 
         Returns:
             Dict: 分析器信息
         """
         return {
-            "core_version": "2.0.0",
-            "debug_vsync_enabled": self._debug_vsync_enabled,
-            "modules": {
-                "cache_manager": "FrameCacheManager",
-                "load_calculator": "FrameLoadCalculator",
-                "empty_frame_analyzer": "EmptyFrameAnalyzer",
-                "stuttered_frame_analyzer": "StutteredFrameAnalyzer"
+            'core_version': '2.0.0',
+            'debug_vsync_enabled': self._debug_vsync_enabled,
+            'modules': {
+                'cache_manager': 'FrameCacheManager',
+                'load_calculator': 'FrameLoadCalculator',
+                'empty_frame_analyzer': 'EmptyFrameAnalyzer',
+                'stuttered_frame_analyzer': 'StutteredFrameAnalyzer',
             },
-            "constants": {
-                "FRAME_DURATION": self.FRAME_DURATION,
-                "STUTTER_LEVEL_1_FRAMES": self.STUTTER_LEVEL_1_FRAMES,
-                "STUTTER_LEVEL_2_FRAMES": self.STUTTER_LEVEL_2_FRAMES,
-                "NS_TO_MS": self.NS_TO_MS,
-                "WINDOW_SIZE_MS": self.WINDOW_SIZE_MS
-            }
+            'constants': {
+                'FRAME_DURATION': self.FRAME_DURATION,
+                'STUTTER_LEVEL_1_FRAMES': self.STUTTER_LEVEL_1_FRAMES,
+                'STUTTER_LEVEL_2_FRAMES': self.STUTTER_LEVEL_2_FRAMES,
+                'NS_TO_MS': self.NS_TO_MS,
+                'WINDOW_SIZE_MS': self.WINDOW_SIZE_MS,
+            },
         }

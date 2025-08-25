@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0050(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -84,16 +82,16 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0050(PerfTestCase):
             self.swipes_up(3, 2)
             self.swipes_down(3, 2)
 
-        self.execute_performance_step("支付宝-蚂蚁庄园场景-step1蚂蚁庄园领饲料", 25, step1)
+        self.execute_performance_step('支付宝-蚂蚁庄园场景-step1蚂蚁庄园领饲料', 25, step1)
         time.sleep(10)
 
-        self.execute_performance_step("支付宝-蚂蚁庄园场景-step2蚂蚁庄园捐蛋", 15, step2)
+        self.execute_performance_step('支付宝-蚂蚁庄园场景-step2蚂蚁庄园捐蛋', 15, step2)
         time.sleep(10)
 
         # 点左边树苗，跳转芭芭农场
         self.driver.touch(self.convert_coordinate(56, 1515))
         time.sleep(5)
-        self.execute_performance_step("支付宝-蚂蚁庄园场景-step3芭芭农场领肥料", 25, step3)
+        self.execute_performance_step('支付宝-蚂蚁庄园场景-step3芭芭农场领肥料', 25, step3)
         time.sleep(10)
         # 点击右上角
         self.driver.touch(self.convert_coordinate(1175, 197))
@@ -106,6 +104,6 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0050(PerfTestCase):
         self.driver.touch(self.convert_coordinate(910, 1198))
         time.sleep(3)
 
-        self.execute_performance_step("支付宝-蚂蚁庄园场景-step4蚂蚁森林页面浏览", 25, step4)
+        self.execute_performance_step('支付宝-蚂蚁庄园场景-step4蚂蚁森林页面浏览', 25, step4)
         # 上滑返回桌面
         self.driver.swipe_to_home()
