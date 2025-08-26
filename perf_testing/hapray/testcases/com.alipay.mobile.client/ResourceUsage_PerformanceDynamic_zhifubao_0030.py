@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0030(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -57,4 +55,4 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0030(PerfTestCase):
         self.swipe_to_back()
         time.sleep(1)
 
-        self.execute_performance_step("支付宝-出行场景-step1出行页浏览", 30, step1)
+        self.execute_performance_step('支付宝-出行场景-step1出行页浏览', 30, step1)

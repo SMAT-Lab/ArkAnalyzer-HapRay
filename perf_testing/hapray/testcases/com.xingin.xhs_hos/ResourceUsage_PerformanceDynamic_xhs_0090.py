@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0090(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -49,17 +47,17 @@ class ResourceUsage_PerformanceDynamic_xhs_0090(PerfTestCase):
             self.touch_by_coordinates(988, 2290, 1)
 
             # 直播间商品列表上滑下滑
-            for i in range(5):
+            for _i in range(5):
                 # 2. 直播间商品列表上滑，等待2s
                 self.swipes_up(1, 2, 300)
 
                 # 3. 直播间商品列表下滑，等待2s
                 self.swipes_down(1, 2, 300)
 
-        self.execute_performance_step("小红书-直播购物场景-step1观看直播", 35, step1)
+        self.execute_performance_step('小红书-直播购物场景-step1观看直播', 35, step1)
 
         self.touch_by_text('说点什么...', 2)
         self.driver.swipe_to_back()
 
-        self.execute_performance_step("小红书-直播购物场景-step2互动发送", 15, step2)
-        self.execute_performance_step("小红书-直播购物场景-step3直播间购物车商品列表页浏览", 35, step3)
+        self.execute_performance_step('小红书-直播购物场景-step2互动发送', 15, step2)
+        self.execute_performance_step('小红书-直播购物场景-step3直播间购物车商品列表页浏览', 35, step3)

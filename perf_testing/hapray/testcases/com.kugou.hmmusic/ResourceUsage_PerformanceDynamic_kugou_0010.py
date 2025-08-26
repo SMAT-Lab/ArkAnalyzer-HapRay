@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_kugou_0010(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -53,5 +50,5 @@ class ResourceUsage_PerformanceDynamic_kugou_0010(PerfTestCase):
             for _ in range(5):
                 self.touch_by_coordinates(812, 2119, 6)
 
-        self.execute_performance_step("酷狗-首页浏览场景-step1首页切换", 10, step1)
-        self.execute_performance_step("酷狗-首页浏览场景-step2音乐浏览", 40, step2)
+        self.execute_performance_step('酷狗-首页浏览场景-step1首页切换', 10, step1)
+        self.execute_performance_step('酷狗-首页浏览场景-step2音乐浏览', 40, step2)

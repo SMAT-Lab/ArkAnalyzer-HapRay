@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -8,7 +7,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -33,8 +31,9 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
         # 抖音-热点、关注、朋友tab页切换场景
         component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
         for _ in range(3):
-            self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1),
-                              swipe_time=0.4)
+            self.driver.swipe(
+                UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4
+            )
             time.sleep(2)
             component_hotspots = self.driver.find_component(BY.id('home-top-tab-text-homepage_pad_hot'))
             if component_hotspots:
@@ -58,4 +57,4 @@ class ResourceUsage_PerformanceDynamic_Douyin_0060(PerfTestCase):
             # 6. 朋友页面上滑3次，间隔2秒
             self.swipes_up(3, 2, 300)
 
-        self.execute_performance_step("抖音-热点、关注、朋友tab页切换场景-step1页签切换浏览", 35, step1)
+        self.execute_performance_step('抖音-热点、关注、朋友tab页切换场景-step1页签切换浏览', 35, step1)
