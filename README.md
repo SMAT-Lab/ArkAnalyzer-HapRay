@@ -90,6 +90,7 @@ Options:
 - `--package-name <package_name>`: Application package name (required for SIMPLE mode)
 - `--pids <N+>`: Process IDs (optional for SIMPLE mode)
 - `--steps <path>`: Path to custom steps.json file (optional for SIMPLE mode)
+- `--hapflow <homecheck path>`: Run HapFlow post-processing using the exact Homecheck project root you provide (no auto-search).
 
 Example:
 ```bash
