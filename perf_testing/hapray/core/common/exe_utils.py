@@ -172,17 +172,26 @@ class ExeUtils:
         return ret
 
     @staticmethod
-    def execute_command(cmd: list[str]) -> tuple[bool, Optional[str], Optional[str]]:
+    def execute_command(cmd: list[str], timeout: int = 1800) -> tuple[bool, Optional[str], Optional[str]]:
         """Executes a shell command and captures its output.
 
         Args:
             cmd: Command to execute as a list of strings
+            timeout: Maximum time to wait for command completion in seconds (default: 30 minutes)
 
         Returns:
             Tuple (success, stdout, stderr)
         """
         try:
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=timeout
+            )
 
             # Log output appropriately
             if result.stdout:
@@ -192,6 +201,16 @@ class ExeUtils:
 
             logger.info('Command executed successfully: %s', ' '.join(cmd))
             return True, result.stdout, result.stderr
+
+        except subprocess.TimeoutExpired as e:
+            logger.error(
+                'Command timed out after %d seconds: %s\nSTDOUT: %s\nSTDERR: %s',
+                timeout,
+                ' '.join(cmd),
+                e.stdout,
+                e.stderr,
+            )
+            return False, e.stdout, e.stderr
 
         except subprocess.CalledProcessError as e:
             logger.error(
@@ -208,17 +227,18 @@ class ExeUtils:
             return False, None, None
 
     @staticmethod
-    def execute_hapray_cmd(args: list[str]) -> bool:
+    def execute_hapray_cmd(args: list[str], timeout: int = 1800) -> bool:
         """Executes a hapray command.
 
         Args:
             args: Arguments to pass to the hapray command
+            timeout: Maximum time to wait for command completion in seconds (default: 30 minutes)
 
         Returns:
             True if execution was successful, False otherwise
         """
         cmd = ExeUtils.build_hapray_cmd(args)
-        success, _, _ = ExeUtils.execute_command(cmd)
+        success, _, _ = ExeUtils.execute_command(cmd, timeout=timeout)
         return success
 
     @staticmethod
@@ -260,8 +280,8 @@ class ExeUtils:
             else:
                 logger.info('Converting htrace to DB: %s -> %s', data_file, output_db)
 
-            # Execute conversion
-            success, _, stderr = ExeUtils.execute_command(cmd)
+            # Execute conversion with extended timeout for large data files
+            success, _, stderr = ExeUtils.execute_command(cmd, timeout=3600)  # 1 hour timeout
 
             if not success:
                 logger.error('Conversion failed for %s: %s', data_file, stderr)

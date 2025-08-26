@@ -96,6 +96,26 @@ class FrameDbBasicAccessor:
         Returns:
             pd.DataFrame: 标准化的性能采样数据
         """
+        import time
+
+        start_time = time.time()
+        logging.info("开始加载性能采样数据...")
+
+        # 先检查数据量
+        try:
+            count_query = "SELECT COUNT(*) as total FROM perf_sample"
+            total_records = pd.read_sql_query(count_query, perf_conn)['total'].iloc[0]
+            logging.info("性能数据库记录总数: %d", total_records)
+
+            if total_records > 1000000:  # 超过100万条记录
+                logging.warning("性能数据量较大 (%d 条记录)，预计需要较长时间处理", total_records)
+            elif total_records > 5000000:  # 超过500万条记录
+                logging.error("性能数据量过大 (%d 条记录)，可能导致内存不足", total_records)
+
+        except Exception as e:
+            logging.warning("无法获取记录总数: %s", str(e))
+            total_records = 0
+
         query = """
         SELECT
             perf_sample.id,                    -- 唯一标识
@@ -111,10 +131,24 @@ class FrameDbBasicAccessor:
         ORDER BY perf_sample.timeStamp
         """
 
-        perf_df = pd.read_sql_query(query, perf_conn)
+        try:
+            logging.info("执行性能数据查询...")
+            perf_df = pd.read_sql_query(query, perf_conn)
 
-        # 标准化字段
-        return FrameDbBasicAccessor._standardize_perf_sample_data(perf_df)
+            elapsed_time = time.time() - start_time
+            logging.info("性能数据加载完成！耗时: %.2f秒，实际记录数: %d",
+                        elapsed_time, len(perf_df))
+
+            if elapsed_time > 30:  # 超过30秒
+                logging.warning("性能数据加载耗时较长: %.2f秒", elapsed_time)
+
+            # 标准化字段
+            return FrameDbBasicAccessor._standardize_perf_sample_data(perf_df)
+
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            logging.error("性能数据加载失败！耗时: %.2f秒，错误: %s", elapsed_time, str(e))
+            return pd.DataFrame()
 
     @staticmethod
     def get_callchain_cache(perf_conn) -> pd.DataFrame:

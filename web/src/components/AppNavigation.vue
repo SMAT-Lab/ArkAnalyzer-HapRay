@@ -86,7 +86,7 @@
       </el-sub-menu>
 
       <!-- 版本对比 -->
-      <el-sub-menu index="compare" v-if="hasCompareData">
+      <el-sub-menu index="compare">
         <template #title>
           <el-icon><Switch /></el-icon>
           <span>版本对比</span>
@@ -102,8 +102,8 @@
           </el-menu-item>
         </el-tooltip>
 
-        <!-- 步骤选择子菜单 -->
-        <el-sub-menu index="compare-step-selection">
+        <!-- 步骤选择子菜单 - 只有在有对比数据时才显示 -->
+        <el-sub-menu index="compare-step-selection" v-if="hasCompareData">
           <template #title>
             <el-icon>
               <List />
@@ -150,6 +150,14 @@
             </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
+
+        <!-- 无数据时的提示菜单项 -->
+        <el-menu-item index="compare_no_data" v-if="!hasCompareData" disabled>
+          <el-icon>
+            <Upload />
+          </el-icon>
+          <span>请先上传对比数据</span>
+        </el-menu-item>
       </el-sub-menu>
 
       <el-tooltip effect="dark" content="多版本趋势" placement="right" :disabled="!isCollapsed">
@@ -194,7 +202,8 @@ import {
   Warning,
   DataBoard,
   CirclePlus,
-  Trophy
+  Trophy,
+  Upload
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{
