@@ -188,7 +188,7 @@ const compareSceneLineChartData = computed(() => {
   if (!perfData.steps.length || !comparePerfData.steps.length) {
     return { steps: [] };
   }
-  return mergeJSONData(perfData, comparePerfData, 0);
+  return mergeJSONData(perfData, comparePerfData);
 });
 
 // 场景负载差异
@@ -199,7 +199,7 @@ const sceneDiff = computed(() =>
 );
 
 // 合并数据函数
-function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_id: number): PerfData {
+function mergeJSONData(baselineData: PerfData, compareData: PerfData): PerfData {
   if (!baselineData || !compareData || !baselineData.steps.length || !compareData.steps.length) {
     return { steps: [] };
   }

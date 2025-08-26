@@ -19,17 +19,6 @@
           WEB => 三方框架ArkWeb</p>
       </div>
 
-      <!-- 步骤信息 -->
-      <div class="step-info">
-        <div class="step-header">
-          <h2>步骤{{ stepId }}负载对比分析</h2>
-          <div class="step-details">
-            <span class="step-name">{{ currentStep?.step_name || '未知步骤' }}</span>
-            <span class="step-count">指令数：{{ formatNumber(currentStep?.count || 0) }}</span>
-          </div>
-        </div>
-      </div>
-
       <!-- 当前步骤负载饼图对比 -->
       <el-row :gutter="20" style="margin-bottom: 20px;">
         <el-col :span="12">
@@ -193,10 +182,7 @@ const hasCompareData = computed(() => {
 // 当前步骤ID
 const stepId = computed(() => props.step);
 
-// 当前步骤信息
-const currentStep = computed(() => {
-  return perfData.steps.find((step, index) => index + 1 === stepId.value);
-});
+
 
 // 图表数据
 const pieChartTitle = computed(() => 
@@ -243,15 +229,7 @@ const navigateToOverview = () => {
   emit('navigate', 'compare_overview');
 };
 
-// 格式化数字
-const formatNumber = (num: number) => {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  } else if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return num.toString();
-};
+
 
 // 合并数据函数
 function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_id: number): PerfData {

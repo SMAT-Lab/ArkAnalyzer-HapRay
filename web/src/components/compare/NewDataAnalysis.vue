@@ -23,13 +23,55 @@
     <div class="step-selector">
       <el-select v-model="currentStepIndex" placeholder="选择步骤" style="width: 200px;">
         <el-option label="全部步骤" :value="0" />
-        <el-option 
-          v-for="step in testSteps" 
-          :key="step.id"
-          :label="`步骤${step.id}: ${step.step_name}`" 
-          :value="step.id" />
+        <el-option
+          v-for="stepItem in testSteps"
+          :key="stepItem.id"
+          :label="`步骤${stepItem.id}: ${stepItem.step_name}`"
+          :value="stepItem.id" />
       </el-select>
     </div>
+
+    <!-- 新增数据统计卡片 -->
+    <el-row :gutter="20" style="margin-bottom: 20px;">
+      <el-col :span="24">
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>新增数据统计概览</span>
+          </h3>
+          <div class="stats-container">
+            <div class="stat-card">
+              <div class="stat-icon">📁</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ newFilesCount }}</div>
+                <div class="stat-label">新增文件数量</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">⚡</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ formatNumber(newFilesLoad) }}</div>
+                <div class="stat-label">新增文件总负载</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🔧</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ newSymbolsCount }}</div>
+                <div class="stat-label">新增符号数量</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🚀</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ formatNumber(newSymbolsLoad) }}</div>
+                <div class="stat-label">新增符号总负载</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
 
     <!-- 新增文件负载分析 -->
     <el-row :gutter="20" style="margin-bottom: 20px;">
@@ -103,47 +145,6 @@
       </el-col>
     </el-row>
 
-    <!-- 新增数据统计卡片 -->
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <el-icon><DataAnalysis /></el-icon>
-            <span>新增数据统计概览</span>
-          </h3>
-          <div class="stats-container">
-            <div class="stat-card">
-              <div class="stat-icon">📁</div>
-              <div class="stat-content">
-                <div class="stat-value">{{ newFilesCount }}</div>
-                <div class="stat-label">新增文件数量</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon">⚡</div>
-              <div class="stat-content">
-                <div class="stat-value">{{ formatNumber(newFilesLoad) }}</div>
-                <div class="stat-label">新增文件总负载</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon">🔧</div>
-              <div class="stat-content">
-                <div class="stat-value">{{ newSymbolsCount }}</div>
-                <div class="stat-label">新增符号数量</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon">🚀</div>
-              <div class="stat-content">
-                <div class="stat-value">{{ formatNumber(newSymbolsLoad) }}</div>
-                <div class="stat-label">新增符号总负载</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </el-col>
-    </el-row>
     </template>
   </div>
 </template>

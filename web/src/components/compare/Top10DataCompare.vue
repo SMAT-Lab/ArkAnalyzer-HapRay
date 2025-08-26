@@ -23,11 +23,11 @@
     <div class="step-selector">
       <el-select v-model="currentStepIndex" placeholder="选择步骤" style="width: 200px;">
         <el-option label="全部步骤" :value="0" />
-        <el-option 
-          v-for="step in testSteps" 
-          :key="step.id"
-          :label="`步骤${step.id}: ${step.step_name}`" 
-          :value="step.id" />
+        <el-option
+          v-for="stepItem in testSteps"
+          :key="stepItem.id"
+          :label="`步骤${stepItem.id}: ${stepItem.step_name}`"
+          :value="stepItem.id" />
       </el-select>
     </div>
 
