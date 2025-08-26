@@ -103,7 +103,7 @@
         </el-tooltip>
 
         <!-- 步骤选择子菜单 - 只有在有对比数据时才显示 -->
-        <el-sub-menu index="compare-step-selection" v-if="hasCompareData">
+        <el-sub-menu v-if="hasCompareData" index="compare-step-selection">
           <template #title>
             <el-icon>
               <List />
@@ -148,11 +148,18 @@
               </el-icon>
               <span>Top10对比</span>
             </el-menu-item>
+
+            <el-menu-item :index="`compare_step_fault_tree_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Share />
+              </el-icon>
+              <span>故障树对比</span>
+            </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
 
         <!-- 无数据时的提示菜单项 -->
-        <el-menu-item index="compare_no_data" v-if="!hasCompareData" disabled>
+        <el-menu-item v-if="!hasCompareData" index="compare_no_data" disabled>
           <el-icon>
             <Upload />
           </el-icon>
@@ -203,7 +210,8 @@ import {
   DataBoard,
   CirclePlus,
   Trophy,
-  Upload
+  Upload,
+  Share
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{

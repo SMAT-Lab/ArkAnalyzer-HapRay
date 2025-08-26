@@ -184,13 +184,7 @@ class ExeUtils:
         """
         try:
             result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=timeout
+                cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout
             )
 
             # Log output appropriately

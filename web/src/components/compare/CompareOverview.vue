@@ -153,6 +153,7 @@
                     <div class="nav-card-actions">
                       <el-button size="small" @click.stop="navigateToStepLoad(step.id)">负载对比</el-button>
                       <el-button size="small" @click.stop="navigateToStepDetail(step.id)">详细对比</el-button>
+                      <el-button size="small" @click.stop="navigateToStepFaultTree(step.id)">故障树对比</el-button>
                     </div>
                   </div>
                 </div>
@@ -254,7 +255,7 @@ const compareSceneLineChartData = computed(() => {
   if (!perfData.steps.length || !comparePerfData.steps.length) {
     return { steps: [] };
   }
-  return mergeJSONData(perfData, comparePerfData, 0);
+  return mergeJSONData(perfData, comparePerfData);
 });
 
 // 场景负载差异
@@ -279,6 +280,10 @@ const navigateToStepDetail = (stepId: number) => {
   emit('navigate', `compare_step_detail_${stepId}`);
 };
 
+const navigateToStepFaultTree = (stepId: number) => {
+  emit('navigate', `compare_step_fault_tree_${stepId}`);
+};
+
 // 格式化数字
 const formatNumber = (num: number) => {
   if (num >= 1000000) {
@@ -290,7 +295,7 @@ const formatNumber = (num: number) => {
 };
 
 // 合并数据函数
-function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_id: number): PerfData {
+function mergeJSONData(baselineData: PerfData, compareData: PerfData): PerfData {
   if (!baselineData || !compareData || !baselineData.steps.length || !compareData.steps.length) {
     return { steps: [] };
   }

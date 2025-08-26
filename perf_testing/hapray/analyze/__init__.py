@@ -66,8 +66,7 @@ def analyze_data(scene_dir: str) -> dict:
     init_start_time = time.time()
     analyzers = _initialize_analyzers(scene_dir)
     init_time = time.time() - init_start_time
-    logging.info('Phase 1: Analyzer initialization completed in %.2f seconds (%d analyzers)',
-                init_time, len(analyzers))
+    logging.info('Phase 1: Analyzer initialization completed in %.2f seconds (%d analyzers)', init_time, len(analyzers))
 
     if not analyzers:
         logging.error('No analyzers initialized. Aborting analysis.')
@@ -104,9 +103,12 @@ def analyze_data(scene_dir: str) -> dict:
     # Overall summary
     total_time = time.time() - total_start_time
     logging.info('=== Data analysis pipeline completed in %.2f seconds ===', total_time)
-    logging.info('Phase breakdown: Init=%.2fs, Processing=%.2fs, Finalization=%.2fs',
-                init_time, processing_time if 'processing_time' in locals() else 0,
-                finalize_time if 'finalize_time' in locals() else 0)
+    logging.info(
+        'Phase breakdown: Init=%.2fs, Processing=%.2fs, Finalization=%.2fs',
+        init_time,
+        processing_time if 'processing_time' in locals() else 0,
+        finalize_time if 'finalize_time' in locals() else 0,
+    )
 
     return result
 
@@ -241,8 +243,13 @@ def _process_single_step(step_dir: str, scene_dir: str, analyzers: list[BaseAnal
     analysis_time = time.time() - analysis_start_time
 
     step_total_time = time.time() - step_start_time
-    logging.info('Step %s processing completed in %.2f seconds (conversion: %.2f, analysis: %.2f)',
-                step_dir, step_total_time, conversion_total_time, analysis_time)
+    logging.info(
+        'Step %s processing completed in %.2f seconds (conversion: %.2f, analysis: %.2f)',
+        step_dir,
+        step_total_time,
+        conversion_total_time,
+        analysis_time,
+    )
 
 
 def _run_analyzers(analyzers: list[BaseAnalyzer], step_dir: str, trace_db: str, perf_db: str):
@@ -270,15 +277,28 @@ def _run_analyzers(analyzers: list[BaseAnalyzer], step_dir: str, trace_db: str, 
             elapsed_time = time.time() - start_time
             analyzer_times.append((analyzer_name, elapsed_time))
 
-            logging.info('[%d/%d] Completed %s for step %s in %.2f seconds',
-                        i, len(analyzers), analyzer_name, step_dir, elapsed_time)
+            logging.info(
+                '[%d/%d] Completed %s for step %s in %.2f seconds',
+                i,
+                len(analyzers),
+                analyzer_name,
+                step_dir,
+                elapsed_time,
+            )
 
         except Exception as e:
             elapsed_time = time.time() - start_time
             analyzer_times.append((analyzer_name, elapsed_time))
 
-            logging.error('[%d/%d] Analyzer %s failed on %s after %.2f seconds: %s',
-                         i, len(analyzers), analyzer_name, step_dir, elapsed_time, str(e))
+            logging.error(
+                '[%d/%d] Analyzer %s failed on %s after %.2f seconds: %s',
+                i,
+                len(analyzers),
+                analyzer_name,
+                step_dir,
+                elapsed_time,
+                str(e),
+            )
 
     total_elapsed = time.time() - total_start_time
 
@@ -312,15 +332,22 @@ def _finalize_analyzers(analyzers: list[BaseAnalyzer]) -> dict:
             elapsed_time = time.time() - start_time
             report_times.append((analyzer_name, elapsed_time))
 
-            logging.info('[%d/%d] Report generated for %s in %.2f seconds',
-                        i, len(analyzers), analyzer_name, elapsed_time)
+            logging.info(
+                '[%d/%d] Report generated for %s in %.2f seconds', i, len(analyzers), analyzer_name, elapsed_time
+            )
 
         except Exception as e:
             elapsed_time = time.time() - start_time
             report_times.append((analyzer_name, elapsed_time))
 
-            logging.error('[%d/%d] Failed to generate report for %s after %.2f seconds: %s',
-                         i, len(analyzers), analyzer_name, elapsed_time, str(e))
+            logging.error(
+                '[%d/%d] Failed to generate report for %s after %.2f seconds: %s',
+                i,
+                len(analyzers),
+                analyzer_name,
+                elapsed_time,
+                str(e),
+            )
 
     total_elapsed = time.time() - total_start_time
 

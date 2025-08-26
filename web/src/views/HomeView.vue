@@ -65,6 +65,7 @@
           <DetailDataCompare v-else-if="showPage.startsWith('compare_step_detail_')" :step="getCompareStepId(showPage)" />
           <NewDataAnalysis v-else-if="showPage.startsWith('compare_step_new_')" :step="getCompareStepId(showPage)" />
           <Top10DataCompare v-else-if="showPage.startsWith('compare_step_top10_')" :step="getCompareStepId(showPage)" />
+          <FaultTreeCompare v-else-if="showPage.startsWith('compare_step_fault_tree_')" :step="getCompareStepId(showPage)" />
           <SceneLoadCompare v-else-if="showPage === 'compare_scene_load'" />
           <StepLoadCompare v-else-if="showPage === 'compare_step_load'" />
           <DetailDataCompare v-else-if="showPage === 'compare_detail_data'" />
@@ -140,6 +141,7 @@ import StepLoadCompare from '@/components/compare/StepLoadCompare.vue';
 import DetailDataCompare from '@/components/compare/DetailDataCompare.vue';
 import NewDataAnalysis from '@/components/compare/NewDataAnalysis.vue';
 import Top10DataCompare from '@/components/compare/Top10DataCompare.vue';
+import FaultTreeCompare from '@/components/compare/FaultTreeCompare.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
@@ -233,7 +235,7 @@ const getFaultTreeStepId = (pageId: string): number => {
 
 // 从版本对比页面ID中提取步骤ID
 const getCompareStepId = (pageId: string): number => {
-  const match = pageId.match(/compare_step_(?:load|detail|new|top10)_(\d+)/);
+  const match = pageId.match(/compare_step_(?:load|detail|new|top10|fault_tree)_(\d+)/);
   return match ? parseInt(match[1]) : 1;
 };
 
@@ -290,6 +292,8 @@ const getCompareStepPageTitle = (pageId: string): string => {
     return `步骤${stepId}新增分析`;
   } else if (pageId.includes('compare_step_top10_')) {
     return `步骤${stepId}Top10对比`;
+  } else if (pageId.includes('compare_step_fault_tree_')) {
+    return `步骤${stepId}故障树对比`;
   }
   return `步骤${stepId}对比分析`;
 };
@@ -305,6 +309,8 @@ const getCompareStepPageBreadcrumb = (pageId: string): string => {
     return `版本对比 / 步骤选择 / 步骤${stepId} / 新增分析`;
   } else if (pageId.includes('compare_step_top10_')) {
     return `版本对比 / 步骤选择 / 步骤${stepId} / Top10对比`;
+  } else if (pageId.includes('compare_step_fault_tree_')) {
+    return `版本对比 / 步骤选择 / 步骤${stepId} / 故障树对比`;
   }
   return `版本对比 / 步骤选择 / 步骤${stepId}`;
 };
