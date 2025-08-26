@@ -1,10 +1,7 @@
-# coding: utf-8
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_xhs_0100(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -43,11 +40,11 @@ class ResourceUsage_PerformanceDynamic_xhs_0100(PerfTestCase):
             self.swipes_up(5, 2, 300)
             self.swipes_down(5, 2, 300)
 
-        self.execute_performance_step("小红书-购物浏览场景-step1购物页浏览", 45, step1)
-        self.execute_performance_step("小红书-购物浏览场景-step2购物车列表浏览", 45, step2)
+        self.execute_performance_step('小红书-购物浏览场景-step1购物页浏览', 45, step1)
+        self.execute_performance_step('小红书-购物浏览场景-step2购物车列表浏览', 45, step2)
 
         self.swipes_down(1, 1, 300)
         # 点击进入美的生活小家电旗舰店
         self.touch_by_text('美的生活小家电旗舰店', 2)
         self.find_by_text_up(' 美的 · 电压力锅鸳鸯内胆家用多功能智能4L大容量蒸煮一体高压锅推荐')
-        self.execute_performance_step("小红书-购物浏览场景-step3商品详情页浏览", 35, step3)
+        self.execute_performance_step('小红书-购物浏览场景-step3商品详情页浏览', 35, step3)

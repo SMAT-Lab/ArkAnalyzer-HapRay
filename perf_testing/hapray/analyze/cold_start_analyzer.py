@@ -16,7 +16,7 @@ limitations under the License.
 import logging
 import os
 import re
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 
@@ -27,11 +27,9 @@ class ColdStartAnalyzer(BaseAnalyzer):
     def __init__(self, scene_dir: str):
         super().__init__(scene_dir, 'trace/coldStart')
 
-    def _analyze_impl(self,
-                      step_dir: str,
-                      trace_db_path: str,
-                      perf_db_path: str,
-                      app_pids: list) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         """Analyze cold start redundant file for a single step.
 
         Args:
@@ -45,24 +43,24 @@ class ColdStartAnalyzer(BaseAnalyzer):
         # 构建redundant file路径 - 在scene_dir/result/目录下
         redundant_file_path = os.path.join(os.path.dirname(trace_db_path), 'redundant_file.txt')
         if not os.path.exists(redundant_file_path):
-            logging.warning("Redundant file not found: %s", redundant_file_path)
+            logging.warning('Redundant file not found: %s', redundant_file_path)
             return None
 
         try:
-            logging.info("Analyzing cold start redundant file for %s...", step_dir)
+            logging.info('Analyzing cold start redundant file for %s...', step_dir)
             result = self._parse_redundant_file(redundant_file_path)
 
             if result is None:
-                logging.info("No cold start data found for step %s", step_dir)
+                logging.info('No cold start data found for step %s', step_dir)
                 return None
 
             return result
 
         except Exception as e:
-            logging.error("Cold start analysis failed: %s", str(e))
+            logging.error('Cold start analysis failed: %s', str(e))
             return None
 
-    def _parse_redundant_file(self, file_path: str) -> Optional[Dict[str, Any]]:
+    def _parse_redundant_file(self, file_path: str) -> Optional[dict[str, Any]]:
         """Parse the redundant file and extract summary and top 10 data.
 
         Args:
@@ -72,7 +70,7 @@ class ColdStartAnalyzer(BaseAnalyzer):
             Dictionary containing parsed data, or None if parsing fails
         """
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 content = f.read()
 
             result = {}
@@ -86,7 +84,8 @@ class ColdStartAnalyzer(BaseAnalyzer):
                 r'\s*cost time:\s*(\d+)ms,'
                 r'\s*and unused file:\s*(\d+),'
                 r'\s*cost time:\s*(\d+)ms',
-                content)
+                content,
+            )
 
             if summary_match:
                 result['summary'] = {
@@ -95,7 +94,7 @@ class ColdStartAnalyzer(BaseAnalyzer):
                     'used_file_count': int(summary_match.group(3)),
                     'used_file_time_ms': int(summary_match.group(4)),
                     'unused_file_count': int(summary_match.group(5)),
-                    'unused_file_time_ms': int(summary_match.group(6))
+                    'unused_file_time_ms': int(summary_match.group(6)),
                 }
 
             # 解析used file前10
@@ -109,10 +108,10 @@ class ColdStartAnalyzer(BaseAnalyzer):
             return result
 
         except Exception as e:
-            logging.error("Failed to parse redundant file: %s", str(e))
+            logging.error('Failed to parse redundant file: %s', str(e))
             return None
 
-    def _extract_file_list(self, content: str, file_type: str, top_n: int) -> List[Dict[str, Any]]:
+    def _extract_file_list(self, content: str, file_type: str, top_n: int) -> list[dict[str, Any]]:
         """Extract top N files of specified type.
 
         Args:
@@ -134,11 +133,7 @@ class ColdStartAnalyzer(BaseAnalyzer):
         matches = re.findall(pattern, content)
 
         for i, match in enumerate(matches[:top_n]):
-            file_info = {
-                'rank': int(match[0]),
-                'file_name': match[1].strip(),
-                'cost_time_ms': float(match[2])
-            }
+            file_info = {'rank': int(match[0]), 'file_name': match[1].strip(), 'cost_time_ms': float(match[2])}
 
             # 尝试提取parent module信息
             parent_pattern = r'parentModule (\d+):\s*([^&]+)'

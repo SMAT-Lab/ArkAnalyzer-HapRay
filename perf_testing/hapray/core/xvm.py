@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 import threading
 
 from hapray.core.common import CommonUtils
@@ -30,7 +30,7 @@ class XVM:
         # Wait for trace thread to complete with timeout
         self.trace_thread.join(timeout=Config.get('xvm.duration', 5) + 2)
         if self.trace_thread.is_alive():
-            logging.warning("XVM trace thread did not complete within timeout")
+            logging.warning('XVM trace thread did not complete within timeout')
         # Save results only if thread completed successfully
         self.save_xvm_result(os.path.join(perf_step_dir, 'xvmtrace_result.txt'))
         self.trace_thread = None
@@ -52,15 +52,15 @@ class XVM:
         def run_trace():
             try:
                 cmd = f'nsenter -t {pid} -m -- {xvm_cmd}'
-                logging.info("Starting XVM trace with command: %s", cmd)
+                logging.info('Starting XVM trace with command: %s', cmd)
                 trace_output = self.driver.shell(cmd)
-                logging.info("XVM trace completed. Output: %s", trace_output)
+                logging.info('XVM trace completed. Output: %s', trace_output)
             except Exception as e:
-                logging.error("XVM trace thread failed: %s", str(e))
+                logging.error('XVM trace thread failed: %s', str(e))
             finally:
                 self.trace_complete.set()
 
-        self.trace_thread = threading.Thread(target=run_trace, name="XvmTracer")
+        self.trace_thread = threading.Thread(target=run_trace, name='XvmTracer')
         self.trace_thread.daemon = True
         self.trace_thread.start()
 
@@ -68,7 +68,7 @@ class XVM:
         remote_path = f'/data/app/el1/bundle/public/{self.testcase.app_package}/xvm/{output_file}'
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         self.driver.pull_file(remote_path, local_path)
-        logging.info("Saved XVM trace result to %s", local_path)
+        logging.info('Saved XVM trace result to %s', local_path)
 
     def _has_install_xvm(self) -> bool:
         xvm_root = f'/data/app/el1/bundle/public/{self.testcase.app_package}/xvm'

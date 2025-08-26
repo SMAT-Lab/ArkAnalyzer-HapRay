@@ -1,4 +1,3 @@
-# coding: utf-8
 import time
 
 from hypium import BY
@@ -7,7 +6,6 @@ from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
@@ -74,7 +72,7 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
             self.driver.swipe_to_home()
             time.sleep(2)
 
-        self.execute_performance_step("支付宝-扫一扫场景-step1首付款码展示", 15, step1)
+        self.execute_performance_step('支付宝-扫一扫场景-step1首付款码展示', 15, step1)
         without_perf_after_step1()
-        self.execute_performance_step("支付宝-扫一扫场景-step2扫一扫识别收款码", 25, step2)
+        self.execute_performance_step('支付宝-扫一扫场景-step2扫一扫识别收款码', 25, step2)
         finish()

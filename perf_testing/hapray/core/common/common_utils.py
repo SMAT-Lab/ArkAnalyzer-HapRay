@@ -20,11 +20,10 @@ from pathlib import Path
 
 
 class CommonUtils:
-
     @staticmethod
     def load_all_testcases() -> dict:
         all_testcases = dict({})
-        testcases_path = files("hapray.testcases")
+        testcases_path = files('hapray.testcases')
         for second_dir in os.listdir(testcases_path):
             second_path = os.path.join(testcases_path, second_dir)
 

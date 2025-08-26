@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 帧分析时间工具类
 
@@ -7,7 +6,6 @@
 """
 
 import logging
-
 
 # from typing import Optional  # 未使用
 
@@ -93,7 +91,7 @@ class FrameTimeUtils:
         return int(seconds * 1_000_000_000)
 
     @staticmethod
-    def validate_timestamp(timestamp_ns: int, name: str = "timestamp") -> bool:
+    def validate_timestamp(timestamp_ns: int, name: str = 'timestamp') -> bool:
         """验证时间戳的有效性
 
         Args:
@@ -104,15 +102,15 @@ class FrameTimeUtils:
             bool: 是否有效
         """
         if timestamp_ns is None:
-            logging.warning("%s 时间戳为 None", name)
+            logging.warning('%s 时间戳为 None', name)
             return False
 
         if timestamp_ns < 0:
-            logging.warning("%s 时间戳为负数: %d", name, timestamp_ns)
+            logging.warning('%s 时间戳为负数: %d', name, timestamp_ns)
             return False
 
         if timestamp_ns > 1_000_000_000_000_000:  # 约31年
-            logging.warning("%s 时间戳过大: %d", name, timestamp_ns)
+            logging.warning('%s 时间戳过大: %d', name, timestamp_ns)
             return False
 
         return True
@@ -128,12 +126,12 @@ class FrameTimeUtils:
             str: 格式化的时长字符串
         """
         if nanoseconds < 1_000:
-            return f"{nanoseconds}ns"
+            return f'{nanoseconds}ns'
         if nanoseconds < 1_000_000:
-            return f"{nanoseconds / 1_000:.1f}μs"
+            return f'{nanoseconds / 1_000:.1f}μs'
         if nanoseconds < 1_000_000_000:
-            return f"{nanoseconds / 1_000_000:.1f}ms"
-        return f"{nanoseconds / 1_000_000_000:.3f}s"
+            return f'{nanoseconds / 1_000_000:.1f}ms'
+        return f'{nanoseconds / 1_000_000_000:.3f}s'
 
     @staticmethod
     def format_timestamp_nanoseconds(nanoseconds: int) -> str:
@@ -150,5 +148,5 @@ class FrameTimeUtils:
         seconds = seconds % 60
 
         if minutes > 0:
-            return f"{minutes}m {seconds:.3f}s"
-        return f"{seconds:.3f}s"
+            return f'{minutes}m {seconds:.3f}s'
+        return f'{seconds:.3f}s'
