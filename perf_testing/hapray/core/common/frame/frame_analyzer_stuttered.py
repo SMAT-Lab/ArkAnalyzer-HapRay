@@ -14,7 +14,9 @@ limitations under the License.
 """
 
 import logging
+import os
 import sqlite3
+import time
 import traceback
 from typing import Any, Optional
 
@@ -85,6 +87,25 @@ class StutteredFrameAnalyzer:
         Returns:
             dict | None: 分析结果数据，如果没有数据或分析失败则返回None
         """
+        analysis_start_time = time.time()
+        logging.info("=== 开始卡顿帧分析 ===")
+        logging.info("Step ID: %s", step_id)
+        logging.info("Trace DB: %s", db_path)
+        logging.info("Perf DB: %s", perf_db_path)
+
+        # 检查数据库文件大小
+        if perf_db_path and os.path.exists(perf_db_path):
+            try:
+                perf_file_size = os.path.getsize(perf_db_path) / (1024 * 1024)  # MB
+                logging.info("性能数据库大小: %.1f MB", perf_file_size)
+
+                if perf_file_size > 500:
+                    logging.warning("性能数据库较大 (%.1f MB)，处理可能需要较长时间", perf_file_size)
+                elif perf_file_size > 1000:
+                    logging.error("性能数据库过大 (%.1f MB)，可能导致内存不足或处理超时", perf_file_size)
+            except Exception as e:
+                logging.warning("无法检查性能数据库文件大小: %s", str(e))
+
         # 连接数据库
         conn = None
         perf_conn = None
@@ -306,6 +327,17 @@ class StutteredFrameAnalyzer:
             else:
                 stats['stutter_rate'] = 0.0
 
+            # 分析完成，记录总结信息
+            analysis_total_time = time.time() - analysis_start_time
+            logging.info("=== 卡顿帧分析完成 ===")
+            logging.info("总耗时: %.2f秒", analysis_total_time)
+            logging.info("分析结果: 总帧数=%d, 卡顿帧数=%d, 卡顿率=%.2f%%",
+                        stats['total_frames'], stats['total_stutter_frames'],
+                        stats['stutter_rate'] * 100)
+
+            if analysis_total_time > 60:  # 超过1分钟
+                logging.warning("卡顿帧分析耗时较长: %.2f秒", analysis_total_time)
+
             return {
                 'runtime': runtime,
                 'statistics': {
@@ -320,7 +352,10 @@ class StutteredFrameAnalyzer:
             }
 
         except Exception as e:
-            logging.error('分析卡顿帧时发生异常: %s', str(e))
+            analysis_error_time = time.time() - analysis_start_time
+            logging.error('=== 卡顿帧分析失败 ===')
+            logging.error('失败耗时: %.2f秒', analysis_error_time)
+            logging.error('异常信息: %s', str(e))
             logging.error('异常堆栈跟踪:\n%s', traceback.format_exc())
             return None
 
