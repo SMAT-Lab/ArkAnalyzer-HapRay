@@ -92,6 +92,12 @@ export interface Step {
     description: string;
 }
 
+// 定义时间范围接口
+export interface TimeRange {
+    startTime: number;
+    endTime: number;
+}
+
 export const DEFAULT_PERF_DB = 'perf.db';
 // 应用相关进程存在5种场景 :appBundleName, :appBundleName|| ':ui', :appBundleName || ':render', :appBundleName || ':background', :appBundleName|| 'service:ui'
 const PERF_PROCESS_SAMPLE_SQL = `
@@ -215,8 +221,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * 纯分析方法，不产生输出文件，用于轮次选择等场景
+     * @param testInfo 测试场景信息
+     * @param timeRange 可选的时间范围过滤，格式为 {startTime: number, endTime: number}
      */
-    async analyzeOnly(testInfo: TestSceneInfo): Promise<PerfSum> {
+    async analyzeOnly(testInfo: TestSceneInfo, timeRange?: TimeRange): Promise<PerfSum> {
         let hash = createHash('sha256');
         testInfo.rounds[testInfo.chooseRound].steps.map((value) => {
             if (value.dbfile) {
@@ -231,7 +239,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         }
 
         // 读取数据并统计
-        await this.loadDbAndStatisticsOnly(testInfo, testInfo.packageName);
+        await this.loadDbAndStatisticsOnly(testInfo, testInfo.packageName, timeRange);
         let perfPath = '';
         let isFirstPerfPath = true;
         for (const step of testInfo.rounds[testInfo.chooseRound].steps) {
@@ -258,10 +266,13 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
     /**
      * 完整分析方法，包含输出文件生成
+     * @param testInfo 测试场景信息
+     * @param output 输出路径
+     * @param timeRange 可选的时间范围过滤，格式为 {startTime: number, endTime: number}
      */
-    async analyze(testInfo: TestSceneInfo, output: string): Promise<PerfSum> {
+    async analyze(testInfo: TestSceneInfo, output: string, timeRange?: TimeRange): Promise<PerfSum> {
         // 先执行纯分析
-        const perf = await this.analyzeOnly(testInfo);
+        const perf = await this.analyzeOnly(testInfo, timeRange);
 
         // 然后生成输出文件
         await this.generateOutputFiles(testInfo, perf, output);
@@ -300,7 +311,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     /**
      * 仅加载数据库和统计信息，不产生输出文件
      */
-    private async loadDbAndStatisticsOnly(testInfo: TestSceneInfo, packageName: string): Promise<void> {
+    private async loadDbAndStatisticsOnly(testInfo: TestSceneInfo, packageName: string, timeRange?: TimeRange): Promise<void> {
         let SQL = await initSqlJs();
         for (const stepGroup of testInfo.rounds[testInfo.chooseRound].steps) {
             logger.info(`loadDbAndStatisticsOnly groupId=${stepGroup.groupId} parse dbfile ${stepGroup.dbfile}`);
@@ -308,7 +319,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             try {
                 // 统计信息
-                this.loadStatistics(db, packageName, testInfo.scene, stepGroup.groupId);
+                this.loadStatistics(db, packageName, testInfo.scene, stepGroup.groupId, timeRange);
             } catch (error) {
                 let err = error as Error;
                 logger.error(`loadDbAndStatisticsOnly ${err}, ${err.stack} ${stepGroup.dbfile}`);
@@ -327,7 +338,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         }
     }
 
-    private loadStatistics(db: Database, packageName: string, scene: string, groupId: number): number {
+    private loadStatistics(db: Database, packageName: string, scene: string, groupId: number, timeRange?: TimeRange): number {
         // 读取所有线程信息
         this.queryThreads(db, packageName, scene);
         // 读取所有文件信息
@@ -340,7 +351,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         // 读取测试步骤时间戳
         this.queryTestStepTimestamps(db, groupId);
         // 读取样本数据
-        const sampleCount = this.queryProcessSample(db, groupId);
+        const sampleCount = this.queryProcessSample(db, groupId, timeRange);
         // 计算符号数据并构建 PerfStepSum
         this.calcSymbolData(groupId, packageName);
         return sampleCount;
@@ -653,14 +664,20 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * @param db
      * @param appBundleName
      */
-    private queryProcessSample(db: Database, groupId: number): number {
+    private queryProcessSample(db: Database, groupId: number, timeRange?: TimeRange): number {
         const total = this.queryProcessTotal(db);
         const swapper = this.queryStepSwapper(db);
 
         // swapper进程按比例分摊到其他符号
         const scale = total === swapper ? 1 : 1 + swapper / (total - swapper);
 
-        const results = db.exec(PERF_PROCESS_SAMPLE_SQL);
+        // 构建带时间过滤的 SQL 查询
+        let sql = PERF_PROCESS_SAMPLE_SQL;
+        if (timeRange) {
+            sql += ` AND perf_sample.timestamp_trace >= ${timeRange.startTime} AND perf_sample.timestamp_trace <= ${timeRange.endTime}`;
+        }
+
+        const results = db.exec(sql);
         if (results.length === 0) {
             return 0;
         }
@@ -685,9 +702,16 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return this.calcSymbolData(groupId);
     }
 
-    private queryProcessTotal(db: Database): number {
+    private queryProcessTotal(db: Database, timeRange?: TimeRange): number {
         let total = 0;
-        const results = db.exec(PERF_PROCESS_TOTAL_SQL);
+
+        // 构建带时间过滤的 SQL 查询
+        let sql = PERF_PROCESS_TOTAL_SQL;
+        if (timeRange) {
+            sql += ` AND perf_sample.timestamp_trace >= ${timeRange.startTime} AND perf_sample.timestamp_trace <= ${timeRange.endTime}`;
+        }
+
+        const results = db.exec(sql);
         if (results.length === 0) {
             return total;
         }
@@ -698,9 +722,16 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         return total;
     }
 
-    private queryStepSwapper(db: Database): number {
+    private queryStepSwapper(db: Database, timeRange?: TimeRange): number {
         let total = 0;
-        const results = db.exec(PERF_PROCESS_SWAPPER_SQL);
+
+        // 构建带时间过滤的 SQL 查询
+        let sql = PERF_PROCESS_SWAPPER_SQL;
+        if (timeRange) {
+            sql += ` AND perf_sample.timestamp_trace >= ${timeRange.startTime} AND perf_sample.timestamp_trace <= ${timeRange.endTime}`;
+        }
+
+        const results = db.exec(sql);
         if (results.length === 0) {
             return total;
         }

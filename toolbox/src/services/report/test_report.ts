@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import { DOMParser } from '@xmldom/xmldom';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import type { Step } from '../../core/perf/perf_analyzer';
+import type { Step, TimeRange } from '../../core/perf/perf_analyzer';
 import { PerfAnalyzer} from '../../core/perf/perf_analyzer';
 import { getConfig } from '../../config';
 import { traceStreamerCmd } from '../../services/external/trace_streamer';
@@ -61,7 +61,7 @@ interface StepPaths {
 /**
  * 入口主函数
  */
-export async function main(input: string): Promise<void> {
+export async function main(input: string, timeRanges?: Array<TimeRange>): Promise<void> {
     const config = getConfig();
     const scene = path.basename(input);
     if (config.ut === true) {
@@ -72,7 +72,7 @@ export async function main(input: string): Promise<void> {
     if (config.choose && !config.ut) {
         await handleChooseRound(input);
     } else {
-        await handleGeneratePerfReport(input, scene, config);
+        await handleGeneratePerfReport(input, scene, config, timeRanges);
     }
 }
 
@@ -101,7 +101,7 @@ async function handleChooseRound(input: string): Promise<void> {
 /**
  * 处理生成报告（Generate PerfReport）
  */
-async function handleGeneratePerfReport(input: string, scene: string, config: GlobalConfig): Promise<void> {
+async function handleGeneratePerfReport(input: string, scene: string, config: GlobalConfig, timeRanges?: Array<TimeRange>): Promise<void> {
     const steps = await loadSteps(input);
 
     if (!(await checkPerfFiles(input, steps.length))) {
@@ -110,7 +110,7 @@ async function handleGeneratePerfReport(input: string, scene: string, config: Gl
     }
 
     const testReportInfo = await loadTestReportInfo(input, scene, config);
-    await generatePerfJson(input, testReportInfo, steps);
+    await generatePerfJson(input, testReportInfo, steps, timeRanges);
 }
 
 // ===================== 数据加载函数 =====================
@@ -431,7 +431,7 @@ export async function copySelectedRoundData(sourceRound: string, destPath: strin
 /**
  * 生成负载分析报告
  */
-export async function generatePerfJson(inputPath: string, testInfo: TestReportInfo, steps: Steps): Promise<void> {
+export async function generatePerfJson(inputPath: string, testInfo: TestReportInfo, steps: Steps, timeRanges?: Array<TimeRange>): Promise<void> {
     const outputDir = path.join(inputPath, 'report');
     const perfDataPaths = getPerfDataPaths(inputPath, steps);
     const perfDbPaths = await getPerfDbPaths(inputPath, steps);
@@ -453,7 +453,14 @@ export async function generatePerfJson(inputPath: string, testInfo: TestReportIn
     }
 
     testSceneInfo.rounds.push(round);
-    await perfAnalyzer.analyze(testSceneInfo, outputDir);
+
+    // 如果有时间范围过滤，使用第一个时间范围（支持多个时间范围的功能可以后续扩展）
+    const timeRange = timeRanges && timeRanges.length > 0 ? timeRanges[0] : undefined;
+    if (timeRange) {
+        logger.info(`Using time range filter: ${timeRange.startTime} - ${timeRange.endTime} nanoseconds`);
+    }
+
+    await perfAnalyzer.analyze(testSceneInfo, outputDir, timeRange);
     await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
     await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
 }
