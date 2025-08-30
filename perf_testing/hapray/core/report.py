@@ -191,15 +191,24 @@ class ReportGenerator:
     def __init__(self):
         self.perf_testing_dir = CommonUtils.get_project_root()
 
-    def update_report(self, scene_dir: str) -> bool:
-        """Update an existing performance report"""
-        return self._generate_report(scene_dirs=[scene_dir], scene_dir=scene_dir, skip_round_selection=True)
+    def update_report(self, scene_dir: str, time_ranges: list[dict] = None) -> bool:
+        """Update an existing performance report
 
-    def generate_report(self, scene_dirs: list[str], scene_dir: str) -> bool:
+        Args:
+            scene_dir: Directory containing the scene data
+            time_ranges: Optional list of time range filters
+        """
+        return self._generate_report(
+            scene_dirs=[scene_dir], scene_dir=scene_dir, skip_round_selection=True, time_ranges=time_ranges
+        )
+
+    def generate_report(self, scene_dirs: list[str], scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Generate a new performance analysis report"""
-        return self._generate_report(scene_dirs, scene_dir, skip_round_selection=False)
+        return self._generate_report(scene_dirs, scene_dir, skip_round_selection=False, time_ranges=time_ranges)
 
-    def _generate_report(self, scene_dirs: list[str], scene_dir: str, skip_round_selection: bool) -> bool:
+    def _generate_report(
+        self, scene_dirs: list[str], scene_dir: str, skip_round_selection: bool, time_ranges: list[dict] = None
+    ) -> bool:
         """Core method for report generation and updating"""
         # Step 1: Select round (only for new reports)
         if not skip_round_selection and not self._select_round(scene_dirs, scene_dir):
@@ -207,7 +216,7 @@ class ReportGenerator:
             return False
 
         # Step 2: Analyze data (includes empty frames and frame drops analysis)
-        result = analyze_data(scene_dir)
+        result = analyze_data(scene_dir, time_ranges)
 
         # Step 3: Generate HTML report
         self._create_html_report(scene_dir, result)

@@ -17,6 +17,50 @@ import { Command } from 'commander';
 import type { GlobalConfig } from '../../config/types';
 import { initConfig, updateKindConfig } from '../../config';
 import { main } from '../../services/report/test_report';
+import type { TimeRange } from '../../core/perf/perf_analyzer';
+import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+
+const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
+
+/**
+ * Parse time range strings into TimeRange objects
+ */
+function parseTimeRanges(timeRangeStrings?: Array<string>): Array<TimeRange> | undefined {
+    if (!timeRangeStrings || timeRangeStrings.length === 0) {
+        return undefined;
+    }
+
+    const timeRanges: Array<TimeRange> = [];
+    for (const timeRangeStr of timeRangeStrings) {
+        try {
+            if (!timeRangeStr.includes('-')) {
+                logger.error(`Invalid time range format: ${timeRangeStr}. Expected format: "startTime-endTime"`);
+                continue;
+            }
+
+            const [startStr, endStr] = timeRangeStr.split('-', 2);
+            const startTime = parseInt(startStr.trim(), 10);
+            const endTime = parseInt(endStr.trim(), 10);
+
+            if (isNaN(startTime) || isNaN(endTime)) {
+                logger.error(`Invalid time range numbers: ${timeRangeStr}`);
+                continue;
+            }
+
+            if (startTime >= endTime) {
+                logger.error(`Invalid time range: start time (${startTime}) must be less than end time (${endTime})`);
+                continue;
+            }
+
+            timeRanges.push({ startTime, endTime });
+        } catch (error) {
+            logger.error(`Failed to parse time range "${timeRangeStr}": ${error}`);
+            continue;
+        }
+    }
+
+    return timeRanges.length > 0 ? timeRanges : undefined;
+}
 
 interface HapAnalyzerOptions {
     input: string;
@@ -26,6 +70,7 @@ interface HapAnalyzerOptions {
     kindConfig?: string;
     compatibility: boolean;
     ut: boolean;
+    timeRanges?: Array<string>;
 }
 
 export const DbtoolsCli = new Command('dbtools')
@@ -36,6 +81,7 @@ export const DbtoolsCli = new Command('dbtools')
     .option('-k, --kind-config <string>', 'custom kind configuration in JSON format')
     .option('--compatibility', 'start compatibility mode', false)
     .option('--ut', 'ut mode', false)
+    .option('--time-ranges <ranges...>', 'optional time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges')
     .action(async (options: HapAnalyzerOptions) => {
         let cliArgs: Partial<GlobalConfig> = { ...options };
         initConfig(cliArgs, (config) => {
@@ -48,5 +94,14 @@ export const DbtoolsCli = new Command('dbtools')
             config.ut = options.ut;
         });
 
-        await main(options.input);
+        // Parse time ranges
+        const timeRanges = parseTimeRanges(options.timeRanges);
+        if (timeRanges) {
+            logger.log(`Using ${timeRanges.length} time range filter(s):`);
+            timeRanges.forEach((tr, i) => {
+                logger.log(`  Range ${i + 1}: ${tr.startTime} - ${tr.endTime} nanoseconds`);
+            });
+        }
+
+        await main(options.input, timeRanges);
     });

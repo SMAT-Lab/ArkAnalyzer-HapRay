@@ -51,11 +51,12 @@ def camel_to_snake(name: str) -> str:
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-def analyze_data(scene_dir: str) -> dict:
+def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
     """Main entry point for data analysis pipeline.
 
     Args:
         scene_dir: Root directory containing scene data
+        time_ranges: Optional list of time range filters, each containing 'startTime' and 'endTime' in nanoseconds
     """
     total_start_time = time.time()
     logging.info('=== Starting data analysis pipeline for %s ===', scene_dir)
