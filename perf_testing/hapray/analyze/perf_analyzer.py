@@ -28,8 +28,9 @@ from hapray.core.config.config import Config
 
 
 class PerfAnalyzer(BaseAnalyzer):
-    def __init__(self, scene_dir: str):
+    def __init__(self, scene_dir: str, time_ranges: list[dict] = None):
         super().__init__(scene_dir, 'more/flame_graph')
+        self.time_ranges = time_ranges
 
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
@@ -46,6 +47,15 @@ class PerfAnalyzer(BaseAnalyzer):
             kind = self.convert_kind_to_json()
             if len(kind) > 0:
                 args.extend(['-k', kind])
+
+            # Add time ranges if provided
+            if self.time_ranges:
+                time_range_strings = []
+                for tr in self.time_ranges:
+                    time_range_str = f'{tr["startTime"]}-{tr["endTime"]}'
+                    time_range_strings.append(time_range_str)
+                args.extend(['--time-ranges'] + time_range_strings)
+                logging.info('Adding time ranges to dbtools command: %s', time_range_strings)
 
             logging.debug('Running perf analysis with command: %s', ' '.join(args))
             ExeUtils.execute_hapray_cmd(args)
