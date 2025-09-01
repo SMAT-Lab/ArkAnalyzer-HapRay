@@ -781,6 +781,7 @@ interface JsonDataState {
   frameLoadsData: FrameLoadsData | null;
   vsyncAnomalyData: VSyncAnomalyData | null;
   faultTreeData: FaultTreeData | null;
+  compareFaultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
   flameGraph: Record<string, string> | null;
@@ -867,6 +868,7 @@ export const useJsonDataStore = defineStore('config', {
     frameLoadsData: null,
     vsyncAnomalyData: null,
     faultTreeData: null,
+    compareFaultTreeData: null,
     baseMark: null,
     compareMark: null,
     flameGraph: null,
@@ -909,9 +911,18 @@ export const useJsonDataStore = defineStore('config', {
 
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         window.initialPage = 'perf';
+        this.compareFaultTreeData = null;
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
         this.comparePerfData = compareJsonData.perf;
+
+        // 处理对比版本的故障树数据
+        if (compareJsonData.trace && compareJsonData.trace.faultTree) {
+          this.compareFaultTreeData = safeProcessFaultTreeData(compareJsonData.trace.faultTree);
+        } else {
+          this.compareFaultTreeData = getDefaultFaultTreeData();
+        }
+
         window.initialPage = 'perf_compare';
       }
     },
