@@ -97,9 +97,9 @@ export const DbtoolsCli = new Command('dbtools')
         // Parse time ranges
         const timeRanges = parseTimeRanges(options.timeRanges);
         if (timeRanges) {
-            logger.log(`Using ${timeRanges.length} time range filter(s):`);
+            logger.info(`Using ${timeRanges.length} time range filter(s):`);
             timeRanges.forEach((tr, i) => {
-                logger.log(`  Range ${i + 1}: ${tr.startTime} - ${tr.endTime} nanoseconds`);
+                logger.info(`  Range ${i + 1}: ${tr.startTime} - ${tr.endTime} nanoseconds`);
             });
         }
 
