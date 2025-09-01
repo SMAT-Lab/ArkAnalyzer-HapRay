@@ -116,7 +116,6 @@
   const {harGraph,fileGraphs,crossHarDependencies=[]}=data;
   d3.select("#loading").style("display","none");
 
-  // —— 索引与全局视图状态 ——
   const allFiles = Object.entries(fileGraphs).flatMap(([har,fg]) =>
     (fg.nodes||[]).map(n => ({...n, __har: har}))
   );
@@ -125,11 +124,11 @@
   const harByFileId  = new Map(allFiles.map(n=>[n.id,n.__har]));
 
   let hideZero=false;
-  let currentView='har';  // 'har' | 'file'
+  let currentView='har';  
   let currentHar=null;
-  let highlightDepth = 3; // 悬停时显示的层数
+  let highlightDepth = 3; 
 
-  let currentNodes = []; // 用于定位
+  let currentNodes = []; 
 
   renderHar(true);
 
@@ -180,17 +179,14 @@
       ? reconnect(baseEdges, idSet)
       : baseEdges.filter(e => idSet.has(e.source) && idSet.has(e.target));
 
-    // ======== 力导参数：HAR 与 File 分开配置 ========
     let linkForce, charge, collide, radial, compX=null, compY=null;
 
     if (isHar) {
-      // HAR 视图（较紧凑）
       linkForce = d3.forceLink(edges).id(d=>d.id).distance(120).strength(0.95);
       charge    = d3.forceManyBody().strength(-240).distanceMin(20).distanceMax(340);
       collide   = d3.forceCollide().radius(26);
       radial    = d3.forceRadial(0, W/2, H/2).strength(0.012);
     } else {
-      // 文件视图：更疏散 + 连通子图分区（← 调整项）
       linkForce = d3.forceLink(edges).id(d=>d.id).distance(190).strength(0.95);
       charge    = d3.forceManyBody().strength(-420).distanceMin(20).distanceMax(1100);
       collide   = d3.forceCollide().radius(24);
@@ -212,7 +208,6 @@
 
     if (compX && compY){ sim.force("compX", compX).force("compY", compY); }
 
-    // 线
     const lines=linkG.selectAll("line")
       .data(edges)
       .join("line")
@@ -221,7 +216,6 @@
         return isHar ? "har" : "internal";
       });
 
-    // 箭头 —— 所有边都画
     const arrows=arrowG.selectAll("path")
       .data(edges)
       .join("path")
@@ -231,13 +225,11 @@
         return isHar ? "arrow-har" : "arrow-internal";
       });
 
-    // File→HAR 的计数标签
     const labels=labelG.selectAll("text")
       .data(edges.filter(d=>d.count!=null))
       .join("text").attr("class","link-label")
       .text(d=>d.count);
 
-    // 节点尺寸/颜色
     const maxT=d3.max(nodes,d=>d.timing_cycles)||1;
     const r=d3.scaleLinear().domain([0,maxT]).range(isHar?[12,28]:[6,14]);
     const col=d3.scaleSequential(isHar?d3.interpolateInferno:d3.interpolateTurbo).domain([maxT,0]);
@@ -260,7 +252,6 @@
       .attr("y",4)
       .text(d=>label(d,isHar));
 
-    // 点击
     ng.on("click",(e,d)=>{
       if(isHar && !d.isExternal){
         renderFile(d.name, true);
@@ -269,7 +260,6 @@
       }
     });
 
-    // 悬停（按层数的子树）
     ng.on("mouseover",(e,d)=>{
       if(isHar && !d.isExternal) showInfo(d,isHar);
       const set=descendDepth(d,edges,highlightDepth);
@@ -290,7 +280,6 @@
       if(isHar) info.html('<h3>节点信息</h3><p>点击或悬停节点查看详情</p>');
     });
 
-    // tick
     sim.on("tick",()=>{
       lines
         .attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
@@ -315,13 +304,10 @@
     }
   }
 
-  // —— 有向 BFS：限制层数 n（根为第0层）——
   function descendDepth(start,edges,maxDepth){
     const idStart = start.id;
     const nSet=new Set([idStart]);
     const lSet=new Set();
-
-    // 邻接（有向：source -> targets）
     const adj = new Map();
     edges.forEach(l=>{
       const s=idOf(l.source), t=idOf(l.target);
@@ -345,7 +331,6 @@
     return {nodes:nSet, links:lSet};
   }
 
-  // —— 按当前边（无向）计算连通子图：返回 Map<nodeId, compIdx>
   function computeComponents(nodes, edges){
     const idSet = new Set(nodes.map(n=>n.id));
     const adj = new Map();
@@ -373,7 +358,6 @@
     return compIndexOf; // id -> compIdx
   }
 
-  // —— 生成网格中心（按组件个数分布在画布上）
   function gridCenters(k, width, height){
     if(k<=0) return [];
     const cols = Math.ceil(Math.sqrt(k));
@@ -393,7 +377,6 @@
     return centers;
   }
 
-  // —— 非零过滤后的路径重连（保留方向）——
   function reconnect(edgesIdOnly, keptIdSet){
     const adj = new Map();
     edgesIdOnly.forEach(e=>{
@@ -466,7 +449,6 @@
     info.html(lines.join(""));
   }
 
-  /* ====== 排行面板（支持点击定位） ====== */
   function openRankPanel(){
     const panel = d3.select("#rank-panel");
     const box = d3.select("#rank-content");
@@ -476,7 +458,6 @@
     let html = '';
 
     if(currentView==='har'){
-      // HAR 包排行
       const harSorted = [...harGraph.nodes].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,50);
       html += `<h4>HAR 包排行（Top 50）</h4><ol>`;
       harSorted.forEach(n=>{
@@ -484,7 +465,6 @@
       });
       html += `</ol>`;
 
-      // 全部文件排行
       const fileSorted = [...allFiles].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,50);
       html += `<h4>全部文件排行（Top 50）</h4><ol>`;
       fileSorted.forEach(n=>{
@@ -501,7 +481,6 @@
       });
       html += `</ol>`;
 
-      // 附：全部文件 Top 30
       const fileSorted = [...allFiles].sort((a,b)=>(b.timing_cycles||0)-(a.timing_cycles||0)).slice(0,30);
       html += `<h4>全部文件排行（Top 30）</h4><ol>`;
       fileSorted.forEach(n=>{
@@ -514,7 +493,6 @@
   }
   function closeRankPanel(){ d3.select("#rank-panel").style("display","none"); }
 
-  // 排行面板点击代理：定位&跳转
   document.getElementById('rank-content').addEventListener('click', async (e)=>{
     const a = e.target.closest('a[data-type]');
     if(!a) return;
@@ -573,7 +551,6 @@
     return true;
   }
 
-  // 事件 & 控件
   d3.select("#home").on("click",()=>{ renderHar(true); closeRankPanel(); });
   d3.select("#reset").on("click",()=> svg.transition().duration(600).call(zoom.transform,d3.zoomIdentity));
   d3.select("#rank-btn").on("click",openRankPanel);

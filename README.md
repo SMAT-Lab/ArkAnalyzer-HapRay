@@ -91,6 +91,8 @@ Options:
 - `--pids <N+>`: Process IDs (optional for SIMPLE mode)
 - `--steps <path>`: Path to custom steps.json file (optional for SIMPLE mode)
 - `--time-ranges <range1> <range2> ...`: Time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges (optional)
+- `--hapflow <homecheck path>`: Run HapFlow post-processing using the exact Homecheck project root you provide (no auto-search).
+
 
 Example:
 ```bash
