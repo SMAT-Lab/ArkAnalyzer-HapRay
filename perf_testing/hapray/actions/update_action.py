@@ -80,6 +80,12 @@ class UpdateAction:
         parser.add_argument(
             '--steps', default='', help='SIMPLE mode可选填steps.json文件路径，如果提供则使用该文件而不是自动生成'
         )
+        parser.add_argument(
+            '--time-ranges',
+            nargs='*',
+            default=[],
+            help='可选的时间范围过滤，格式为 "startTime-endTime"（纳秒），支持多个时间范围，如: --time-ranges "1000000000-2000000000" "3000000000-4000000000"',
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -120,8 +126,15 @@ class UpdateAction:
             logging.error('No valid test case reports found')
             return
 
+        # Parse time ranges
+        time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
+        if time_ranges:
+            logging.info('Using %d time range filters', len(time_ranges))
+            for i, tr in enumerate(time_ranges):
+                logging.info('Time range %d: %d - %d nanoseconds', i + 1, tr['startTime'], tr['endTime'])
+
         logging.info('Found %d test case reports for updating', len(testcase_dirs))
-        UpdateAction.process_reports(testcase_dirs, report_dir)
+        UpdateAction.process_reports(testcase_dirs, report_dir, time_ranges)
 
     @staticmethod
     def find_testcase_dirs(report_dir):
@@ -147,7 +160,42 @@ class UpdateAction:
         return testcase_dirs
 
     @staticmethod
-    def process_reports(testcase_dirs, report_dir):
+    def parse_time_ranges(time_range_strings: list[str]) -> list[dict]:
+        """Parse time range strings into structured format.
+
+        Args:
+            time_range_strings: List of time range strings in format "startTime-endTime"
+
+        Returns:
+            List of time range dictionaries with 'startTime' and 'endTime' keys
+        """
+        time_ranges = []
+        for time_range_str in time_range_strings:
+            try:
+                if '-' not in time_range_str:
+                    logging.error('Invalid time range format: %s. Expected format: "startTime-endTime"', time_range_str)
+                    continue
+
+                start_str, end_str = time_range_str.split('-', 1)
+                start_time = int(start_str.strip())
+                end_time = int(end_str.strip())
+
+                if start_time >= end_time:
+                    logging.error(
+                        'Invalid time range: start time (%d) must be less than end time (%d)', start_time, end_time
+                    )
+                    continue
+
+                time_ranges.append({'startTime': start_time, 'endTime': end_time})
+
+            except ValueError as e:
+                logging.error('Failed to parse time range "%s": %s', time_range_str, str(e))
+                continue
+
+        return time_ranges
+
+    @staticmethod
+    def process_reports(testcase_dirs, report_dir, time_ranges: list[dict] = None):
         """Processes reports using parallel execution."""
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
@@ -156,7 +204,9 @@ class UpdateAction:
             for case_dir in testcase_dirs:
                 scene_name = os.path.basename(case_dir)
                 logging.info('Updating report: %s', scene_name)
-                future = executor.submit(report_generator.update_report, case_dir)
+                if time_ranges:
+                    logging.info('Using time ranges for %s: %s', scene_name, time_ranges)
+                future = executor.submit(report_generator.update_report, case_dir, time_ranges)
                 futures.append(future)
 
             # Monitor completion status

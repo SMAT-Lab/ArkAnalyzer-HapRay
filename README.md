@@ -90,6 +90,9 @@ Options:
 - `--package-name <package_name>`: Application package name (required for SIMPLE mode)
 - `--pids <N+>`: Process IDs (optional for SIMPLE mode)
 - `--steps <path>`: Path to custom steps.json file (optional for SIMPLE mode)
+- `--time-ranges <range1> <range2> ...`: Time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges (optional)
+- `--hapflow <homecheck path>`: Run HapFlow post-processing using the exact Homecheck project root you provide (no auto-search).
+
 
 Example:
 ```bash
@@ -105,6 +108,9 @@ python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --per
 
 # SIMPLE mode - Multiple files with custom steps.json
 python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perfs perf1.data perf2.data --traces trace1.htrace trace2.htrace --package-name com.jd.hm.mall --steps /path/to/custom_steps.json
+
+# SIMPLE mode with time range filtering
+python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perfs perf.data --traces trace.htrace --package-name com.jd.hm.mall --time-ranges "12835982205508-12843345730507"
 
 ```
 
