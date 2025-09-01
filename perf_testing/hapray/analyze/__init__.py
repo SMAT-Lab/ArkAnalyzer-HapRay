@@ -65,7 +65,7 @@ def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
 
     # Phase 1: Initialize analyzers
     init_start_time = time.time()
-    analyzers = _initialize_analyzers(scene_dir)
+    analyzers = _initialize_analyzers(scene_dir, time_ranges)
     init_time = time.time() - init_start_time
     logging.info('Phase 1: Analyzer initialization completed in %.2f seconds (%d analyzers)', init_time, len(analyzers))
 
@@ -114,8 +114,12 @@ def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
     return result
 
 
-def _initialize_analyzers(scene_dir: str) -> list[BaseAnalyzer]:
+def _initialize_analyzers(scene_dir: str, time_ranges: list[dict] = None) -> list[BaseAnalyzer]:
     """Initialize all registered analyzers.
+
+    Args:
+        scene_dir: Scene directory path
+        time_ranges: Optional list of time range filters
 
     Returns:
         List of initialized analyzer instances
@@ -126,8 +130,14 @@ def _initialize_analyzers(scene_dir: str) -> list[BaseAnalyzer]:
             module_name = camel_to_snake(analyzer_class)
             module = __import__(f'hapray.analyze.{module_name}', fromlist=[analyzer_class])
             cls = getattr(module, analyzer_class)
-            analyzers.append(cls(scene_dir))
-            logging.info('Initialized analyzer: %s', analyzer_class)
+
+            # Check if this analyzer supports time ranges (specifically PerfAnalyzer)
+            if analyzer_class == 'PerfAnalyzer' and time_ranges:
+                analyzers.append(cls(scene_dir, time_ranges))
+                logging.info('Initialized analyzer: %s with %d time ranges', analyzer_class, len(time_ranges))
+            else:
+                analyzers.append(cls(scene_dir))
+                logging.info('Initialized analyzer: %s', analyzer_class)
         except (ImportError, AttributeError) as e:
             logging.error('Failed to initialize %s: %s', analyzer_class, str(e))
     return analyzers
