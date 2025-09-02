@@ -131,6 +131,8 @@ class FileCollector:
                 file_infos.append(FileInfo(input_path))
             elif input_path.endswith(('.hap', '.hsp')):
                 file_infos.extend(self._extract_hap_file(input_path))
+            elif input_path.endswith('.apk'):
+                file_infos.extend(self._extract_apk_file(input_path))
         elif os.path.isdir(input_path):
             for root, _, _files in os.walk(input_path):
                 for file in _files:
@@ -140,6 +142,8 @@ class FileCollector:
                         file_infos.append(FileInfo(file_path, logical_path))
                     elif file.endswith(('.hap', '.hsp')):
                         file_infos.extend(self._extract_hap_file(file_path))
+                    elif file.endswith('.apk'):
+                        file_infos.extend(self._extract_apk_file(file_path))
         return file_infos
 
     def _extract_hap_file(self, hap_path: str) -> list[FileInfo]:
@@ -160,4 +164,33 @@ class FileCollector:
                         extracted_files.append(file_info)
         except Exception as e:
             logging.error('Failed to extract HAP file %s: %s', hap_path, e)
+        return extracted_files
+
+    def _extract_apk_file(self, apk_path: str) -> list[FileInfo]:
+        """Extract SO files from APK archives and return FileInfo objects"""
+        extracted_files = []
+        temp_dir = tempfile.mkdtemp()
+        self.temp_dirs.append(temp_dir)
+
+        try:
+            with zipfile.ZipFile(apk_path, 'r') as zip_ref:
+                for file in zip_ref.namelist():
+                    # APK files typically store native libraries in lib/ directory
+                    # Support multiple architectures: arm64-v8a, armeabi-v7a, x86, x86_64
+                    if (
+                        file.startswith('lib/')
+                        and file.endswith('.so')
+                        and any(arch in file for arch in ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'])
+                    ):
+                        # Extract relative path after 'lib/'
+                        relative_path = file[4:]  # Remove 'lib/' prefix
+                        output_path = os.path.join(temp_dir, relative_path)
+                        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                        with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
+                            dest.write(src.read())
+                        file_info = FileInfo(absolute_path=output_path, logical_path=f'{apk_path}/{file}')
+                        extracted_files.append(file_info)
+                        logging.info('Extracted SO file from APK: %s -> %s', file, output_path)
+        except Exception as e:
+            logging.error('Failed to extract APK file %s: %s', apk_path, e)
         return extracted_files
