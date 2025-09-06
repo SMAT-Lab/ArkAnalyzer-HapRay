@@ -9,7 +9,7 @@
     "driver": {
         "type": "DeviceTest",
         "py_file": [
-            "ResourceUsage_PerformanceDynamic_Douyin_0000.py"
+            "ResourceUsage_PerformanceDynamic_jingdong_0000.py"
         ]
     },
     "kits":[
