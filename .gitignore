@@ -33,5 +33,3 @@ perf_testing/files_results_cache/
 # Performance Testing Reports
 perf_testing/scripts/reports/
 
-# IDE Configuration
-.idea/
