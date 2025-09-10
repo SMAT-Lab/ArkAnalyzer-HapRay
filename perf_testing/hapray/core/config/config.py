@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 import yaml
 
+from .frame_analysis_config import config as frame_config
+
 
 class ConfigError(Exception):
     """自定义配置异常"""
@@ -164,3 +166,64 @@ class Config:
         for key in keys[:-1]:
             obj = getattr(obj, key)
         setattr(obj, keys[-1], value)
+
+    # 注：为保持向后兼容性，不再定义实例方法和类方法版本的get_top_n_analysis
+    # 所有调用应通过模块级别函数或FrameAnalysisConfig直接访问
+
+
+# 模块级别的配置函数，用于兼容从模块级别调用的情况
+def get_top_n_analysis() -> int:
+    """模块级别版本的get_top_n_analysis，用于兼容错误的导入路径"""
+    try:
+        return frame_config.get_top_n_analysis()
+    except ImportError:
+        return 10  # 默认值
+
+
+def is_lightweight_mode_enabled() -> bool:
+    """模块级别版本的is_lightweight_mode_enabled，用于兼容错误的导入路径"""
+    try:
+        return frame_config.is_lightweight_mode_enabled()
+    except ImportError:
+        return False  # 默认值
+
+
+def is_optimization_logs_enabled() -> bool:
+    """模块级别版本的is_optimization_logs_enabled，用于兼容错误的导入路径"""
+    try:
+        return frame_config.is_optimization_logs_enabled()
+    except ImportError:
+        return False  # 默认值
+
+
+def is_performance_logs_enabled() -> bool:
+    """模块级别版本的is_performance_logs_enabled，用于兼容错误的导入路径"""
+    try:
+        return frame_config.is_performance_logs_enabled()
+    except ImportError:
+        return False  # 默认值
+
+
+def get_large_database_threshold() -> int:
+    """模块级别版本的get_large_database_threshold，用于兼容错误的导入路径"""
+    try:
+        return frame_config.get_large_database_threshold()
+    except ImportError:
+        return 200  # 默认值 (MB)
+
+
+def get_severity_weights() -> dict:
+    """模块级别版本的get_severity_weights，用于兼容错误的导入路径"""
+    try:
+        return frame_config.get_severity_weights()
+    except ImportError:
+        # 默认权重配置
+        return {'severe': 3, 'high': 2, 'medium': 1, 'low': 0.5}
+
+
+def get_default_mode() -> str:
+    """模块级别版本的get_default_mode，用于兼容错误的导入路径"""
+    try:
+        return frame_config.get_default_mode()
+    except ImportError:
+        return 'optimization'  # 默认模式
