@@ -15,6 +15,7 @@ limitations under the License.
 
 import os
 import threading
+from importlib.resources import files
 from typing import Any, Optional
 
 import yaml
@@ -49,7 +50,7 @@ def deep_merge(default: dict, custom: dict) -> dict:
 class Config:
     _instance = None  # 单例实例
     _lock = threading.Lock()  # 线程安全锁
-    _default_config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')  # 默认配置文件路径
+    _default_config_path = files('hapray.core.config').joinpath('config.yaml')  # 默认配置文件路径
     _user_config_path = None  # 用户自定义配置文件路径
     _data = None  # 配置数据
     _initialized = False  # 是否已初始化标志

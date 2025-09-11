@@ -19,7 +19,7 @@ import sqlite3
 import time
 from typing import Any, Optional
 
-from ...config import Config
+from ...config.config import Config
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
