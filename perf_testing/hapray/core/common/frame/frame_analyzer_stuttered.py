@@ -20,7 +20,7 @@ import time
 import traceback
 from typing import Any, Optional
 
-from ...config import Config
+from ...config.config import Config
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import get_frame_type, parse_frame_slice_db
