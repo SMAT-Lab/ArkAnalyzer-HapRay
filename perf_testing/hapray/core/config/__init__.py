@@ -1,5 +1,5 @@
 """Configuration module for hapray.core"""
 
-from .frame_analysis_config import FrameAnalysisConfig, config
+from .config import Config
 
-__all__ = ['FrameAnalysisConfig', 'config']
+__all__ = ['Config']

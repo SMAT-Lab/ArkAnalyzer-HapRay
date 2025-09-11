@@ -19,7 +19,7 @@ import sqlite3
 import time
 from typing import Any, Optional
 
-from ...config import config  # 修正导入路径
+from ...config import Config
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
@@ -133,12 +133,9 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
 
             # 分析卡顿帧
 
-            actual_top_n = top_n_analysis if top_n_analysis is not None else config.get_top_n_analysis()
+            actual_top_n = top_n_analysis if top_n_analysis is not None else Config.get('frame_analysis.top_n_analysis', 10)
 
-            if config.is_optimization_logs_enabled():
-                logging.info('开始分析卡顿帧（TOP %d 优化）...', actual_top_n)
-            else:
-                logging.info('开始分析卡顿帧...')
+            logging.info('开始分析卡顿帧（TOP %d 优化）...', actual_top_n)
             stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id, top_n_analysis)
             result['stuttered_frames'] = stuttered_result
 

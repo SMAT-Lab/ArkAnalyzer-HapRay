@@ -20,7 +20,7 @@ import time
 import traceback
 from typing import Any, Optional
 
-from ...config import config
+from ...config import Config
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import get_frame_type, parse_frame_slice_db
@@ -93,35 +93,25 @@ class StutteredFrameAnalyzer:
         """
         # 从配置获取参数
         if top_n_analysis is None:
-            top_n_analysis = config.get_top_n_analysis()
-
-        lightweight_mode_enabled = config.is_lightweight_mode_enabled()
+            top_n_analysis = Config.get('frame_analysis.top_n_analysis', 10)
 
         analysis_start_time = time.time()
 
-        # 根据配置决定是否记录优化日志
-        if config.is_optimization_logs_enabled():
-            logging.info('=== 开始卡顿帧分析（优化模式） ===')
-            logging.info('Step ID: %s', step_id)
-            logging.info('Trace DB: %s', db_path)
-            logging.info('Perf DB: %s', perf_db_path)
-            logging.info('TOP N分析: %d', top_n_analysis)
-            logging.info('轻量级模式: %s', lightweight_mode_enabled)
-        else:
-            logging.info('=== 开始卡顿帧分析 ===')
-            logging.info('Step ID: %s', step_id)
-            logging.info('Trace DB: %s', db_path)
-            logging.info('Perf DB: %s', perf_db_path)
+        # 记录分析日志
+        logging.info('=== 开始卡顿帧分析（优化模式） ===')
+        logging.info('Step ID: %s', step_id)
+        logging.info('Trace DB: %s', db_path)
+        logging.info('Perf DB: %s', perf_db_path)
+        logging.info('TOP N分析: %d', top_n_analysis)
 
         # 检查数据库文件大小
         if perf_db_path and os.path.exists(perf_db_path):
             try:
                 perf_file_size = os.path.getsize(perf_db_path) / (1024 * 1024)  # MB
-                if config.is_performance_logs_enabled():
-                    logging.info('性能数据库大小: %.1f MB', perf_file_size)
+                logging.info('性能数据库大小: %.1f MB', perf_file_size)
 
-                large_threshold = config.get_large_database_threshold()
-                huge_threshold = large_threshold * 2  # 从配置获取大文件阈值
+                large_threshold = 500  # 默认500MB阈值
+                huge_threshold = large_threshold * 2  # 1000MB阈值
 
                 if perf_file_size > huge_threshold:
                     logging.error('性能数据库过大 (%.1f MB)，可能导致内存不足或处理超时', perf_file_size)
@@ -216,8 +206,7 @@ class StutteredFrameAnalyzer:
             vsync_keys = sorted(data.keys())
 
             # 第一阶段：快速收集所有卡顿帧信息（不进行调用链分析）
-            if config.is_optimization_logs_enabled():
-                logging.info('阶段1：快速收集卡顿帧信息...')
+            logging.info('阶段1：快速收集卡顿帧信息...')
             all_stutter_frames = []
 
             context = {
@@ -233,8 +222,8 @@ class StutteredFrameAnalyzer:
                     if frame['type'] == 1 or frame['flag'] == 2:
                         continue
 
-                    # 根据配置决定是否使用轻量级模式
-                    use_lightweight = lightweight_mode_enabled and top_n_analysis > 0
+                    # 使用轻量级模式
+                    use_lightweight = top_n_analysis > 0
                     frame_type, stutter_level, stutter_detail = self.analyze_single_stuttered_frame(
                         frame, vsync_key, context, lightweight=use_lightweight
                     )
@@ -307,21 +296,19 @@ class StutteredFrameAnalyzer:
 
             # 第二阶段：对TOP N卡顿帧进行深度分析
             if top_n_analysis > 0 and all_stutter_frames:
-                if config.is_optimization_logs_enabled():
-                    logging.info('阶段2：对TOP %d卡顿帧进行深度分析...', top_n_analysis)
+                logging.info('阶段2：对TOP %d卡顿帧进行深度分析...', top_n_analysis)
 
                 # 按严重程度排序，选择TOP N
                 all_stutter_frames.sort(key=lambda x: x['severity_score'], reverse=True)
                 top_stutter_frames = all_stutter_frames[:top_n_analysis]
                 remaining_frames = all_stutter_frames[top_n_analysis:]
 
-                if config.is_optimization_logs_enabled():
-                    logging.info(
-                        '总卡顿帧数: %d, 深度分析: %d, 简化记录: %d',
-                        len(all_stutter_frames),
-                        len(top_stutter_frames),
-                        len(remaining_frames),
-                    )
+                logging.info(
+                    '总卡顿帧数: %d, 深度分析: %d, 简化记录: %d',
+                    len(all_stutter_frames),
+                    len(top_stutter_frames),
+                    len(remaining_frames),
+                )
 
                 # 深度分析TOP N卡顿帧（包含调用链分析）
                 for stutter_info in top_stutter_frames:
@@ -354,8 +341,7 @@ class StutteredFrameAnalyzer:
                     stats['stutter_details'][stutter_type].append(simplified_detail)
             else:
                 # 传统模式或top_n_analysis=0时，处理所有卡顿帧
-                if config.is_optimization_logs_enabled():
-                    logging.info('使用传统模式：分析所有 %d 个卡顿帧', len(all_stutter_frames))
+                logging.info('使用传统模式：分析所有 %d 个卡顿帧', len(all_stutter_frames))
 
                 for stutter_info in all_stutter_frames:
                     frame_type = stutter_info['frame_type']
@@ -590,8 +576,8 @@ class StutteredFrameAnalyzer:
         if not stutter_detail:
             return 0.0
 
-        # 从配置获取权重
-        weights = config.get_severity_weights()
+        # 使用默认权重
+        weights = {'level_1': 10, 'level_2': 50, 'level_3': 100, 'exceed_frames_weight': 5.0, 'exceed_time_weight': 0.1}
 
         # 基础分数：根据卡顿等级
         stutter_level = stutter_detail.get('stutter_level', 1)
