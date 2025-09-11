@@ -78,31 +78,33 @@ class PrepareAction:
     @staticmethod
     def find_0000_cases(all_testcases: dict) -> list[str]:
         """Find all test cases ending with _0000"""
-        return [case_name for case_name in all_testcases.keys() if case_name.endswith('_0000')]
+        return [case_name for case_name in all_testcases if case_name.endswith('_0000')]
 
     def execute_testcase(self, case_name: str, all_testcases: dict) -> bool:
         """Execute a single test case without complex folder structure"""
         try:
             case_dir, file_extension = all_testcases[case_name]
-            
+
             # Create a temporary output directory for this execution
             with tempfile.TemporaryDirectory(prefix=f'prepare_{case_name}_') as temp_output:
                 logging.info('Executing test case: %s', case_name)
                 logging.info('Temporary output: %s', temp_output)
-                
+
                 device_arg = f'-sn {self.device_sn}' if self.device_sn else ''
                 command = f'run -l {case_name} {device_arg} -tcpath {case_dir} -rp {temp_output}'
-                
+
                 if file_extension == '.py':
                     # Execute Python test case
                     main_process(command)
                 else:
                     # Execute DSL test case (YAML)
-                    DSLTestRunner.run_testcase(f'{case_dir}/{case_name}{file_extension}', temp_output, device_id=self.device_sn)
-                
+                    DSLTestRunner.run_testcase(
+                        f'{case_dir}/{case_name}{file_extension}', temp_output, device_id=self.device_sn
+                    )
+
                 logging.info('✅ Test case completed: %s', case_name)
                 return True
-                
+
         except Exception as e:
             logging.error('❌ Test case failed: %s | Error: %s', case_name, str(e))
             return False
@@ -110,7 +112,7 @@ class PrepareAction:
     def run(self, run_testcases: Optional[list[str]] = None, run_all_0000: bool = False):
         """Main execution flow for preparation testing"""
         all_testcases = CommonUtils.load_all_testcases()
-        
+
         if run_all_0000:
             # Execute all _0000 test cases
             matched_cases = self.find_0000_cases(all_testcases)
@@ -127,7 +129,7 @@ class PrepareAction:
             return
 
         logging.info('Starting execution | Device: %s | Cases: %d', self.device_sn or 'default', len(matched_cases))
-        
+
         # Execute test cases sequentially
         success_count = 0
         for case_name in matched_cases:
@@ -148,8 +150,7 @@ class PrepareAction:
             return False
 
         parser = argparse.ArgumentParser(
-            description='Simplified Test Execution for Preparation', 
-            prog='ArkAnalyzer-HapRay prepare'
+            description='Simplified Test Execution for Preparation', prog='ArkAnalyzer-HapRay prepare'
         )
 
         parser.add_argument(
@@ -161,24 +162,12 @@ class PrepareAction:
         )
 
         parser.add_argument(
-            '--run_testcases', 
-            nargs='+', 
-            default=None, 
-            help='Test cases to execute (regex patterns supported)'
+            '--run_testcases', nargs='+', default=None, help='Test cases to execute (regex patterns supported)'
         )
-        
-        parser.add_argument(
-            '--all_0000', 
-            action='store_true', 
-            help='Execute all test cases ending with _0000'
-        )
-        
-        parser.add_argument(
-            '--device', 
-            type=str, 
-            default=None, 
-            help='Device serial number (e.g., HX1234567890)'
-        )
+
+        parser.add_argument('--all_0000', action='store_true', help='Execute all test cases ending with _0000')
+
+        parser.add_argument('--device', type=str, default=None, help='Device serial number (e.g., HX1234567890)')
 
         parsed_args = parser.parse_args(args)
 
@@ -192,15 +181,13 @@ class PrepareAction:
             Config.set('run_testcases', parsed_args.run_testcases)
 
         action = PrepareAction(device_sn=parsed_args.device)
-        action.run(
-            run_testcases=parsed_args.run_testcases,
-            run_all_0000=parsed_args.all_0000
-        )
-        
+        action.run(run_testcases=parsed_args.run_testcases, run_all_0000=parsed_args.all_0000)
+
         return True
 
 
 if __name__ == '__main__':
     import sys
+
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     PrepareAction.execute(sys.argv[1:])

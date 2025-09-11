@@ -20,6 +20,7 @@ import time
 import traceback
 from typing import Any, Optional
 
+from ...config.config import Config
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import get_frame_type, parse_frame_slice_db
@@ -76,22 +77,32 @@ class StutteredFrameAnalyzer:
         """
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
 
-    def analyze_stuttered_frames(self, db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
+    def analyze_stuttered_frames(
+        self, db_path: str, perf_db_path: str = None, step_id: str = None, top_n_analysis: int = None
+    ) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
         Args:
             db_path: 数据库文件路径
             perf_db_path: perf数据库文件路径，用于调用链分析
             step_id: 步骤ID，用于缓存key
+            top_n_analysis: 进行深度分析的top卡顿帧数量，为None时使用配置文件的值
 
         Returns:
             dict | None: 分析结果数据，如果没有数据或分析失败则返回None
         """
+        # 从配置获取参数
+        if top_n_analysis is None:
+            top_n_analysis = Config.get('frame_analysis.top_n_analysis', 10)
+
         analysis_start_time = time.time()
-        logging.info('=== 开始卡顿帧分析 ===')
+
+        # 记录分析日志
+        logging.info('=== 开始卡顿帧分析（轻量模式） ===')
         logging.info('Step ID: %s', step_id)
         logging.info('Trace DB: %s', db_path)
         logging.info('Perf DB: %s', perf_db_path)
+        logging.info('TOP N分析: %d', top_n_analysis)
 
         # 检查数据库文件大小
         if perf_db_path and os.path.exists(perf_db_path):
@@ -99,10 +110,13 @@ class StutteredFrameAnalyzer:
                 perf_file_size = os.path.getsize(perf_db_path) / (1024 * 1024)  # MB
                 logging.info('性能数据库大小: %.1f MB', perf_file_size)
 
-                if perf_file_size > 500:
-                    logging.warning('性能数据库较大 (%.1f MB)，处理可能需要较长时间', perf_file_size)
-                elif perf_file_size > 1000:
+                large_threshold = 500  # 默认500MB阈值
+                huge_threshold = large_threshold * 2  # 1000MB阈值
+
+                if perf_file_size > huge_threshold:
                     logging.error('性能数据库过大 (%.1f MB)，可能导致内存不足或处理超时', perf_file_size)
+                elif perf_file_size > large_threshold:
+                    logging.warning('性能数据库较大 (%.1f MB)，处理可能需要较长时间', perf_file_size)
             except Exception as e:
                 logging.warning('无法检查性能数据库文件大小: %s', str(e))
 
@@ -191,12 +205,16 @@ class StutteredFrameAnalyzer:
 
             vsync_keys = sorted(data.keys())
 
+            # 轻量模式：快速收集所有卡顿帧信息（不进行调用链分析）
+            logging.info('轻量模式：快速收集卡顿帧信息...')
+            all_stutter_frames = []
+
             context = {
                 'data': data,
                 'perf_df': perf_df,
                 'perf_conn': perf_conn,
                 'step_id': step_id,
-                'cursor': cursor,  # 添加cursor到context中
+                'cursor': cursor,
             }
 
             for vsync_key in vsync_keys:
@@ -204,8 +222,9 @@ class StutteredFrameAnalyzer:
                     if frame['type'] == 1 or frame['flag'] == 2:
                         continue
 
+                    # 始终使用轻量级模式进行初步分析
                     frame_type, stutter_level, stutter_detail = self.analyze_single_stuttered_frame(
-                        frame, vsync_key, context
+                        frame, vsync_key, context, lightweight=True
                     )
 
                     stats['frame_stats'][frame_type]['total'] += 1
@@ -214,21 +233,29 @@ class StutteredFrameAnalyzer:
                     if stutter_level:
                         stats['stutter_levels'][f'level_{stutter_level}'] += 1
                         stats['frame_stats'][frame_type]['stutter'] += 1
-                        stutter_type = f'{frame_type}_stutter'
-                        stats['stutter_details'][stutter_type].append(stutter_detail)
 
+                        # 收集卡顿帧信息用于排序
+                        all_stutter_frames.append(
+                            {
+                                'frame': frame,
+                                'vsync_key': vsync_key,
+                                'frame_type': frame_type,
+                                'stutter_level': stutter_level,
+                                'stutter_detail': stutter_detail,
+                                'severity_score': self._calculate_severity_score(stutter_detail),
+                            }
+                        )
+
+                    # FPS计算逻辑保持不变
                     frame_time = frame['ts']
-                    frame_id = f'{vsync_key}_{frame_time}'  # 创建唯一帧标识符
+                    frame_id = f'{vsync_key}_{frame_time}'
 
-                    # 初始化窗口
                     if current_window['start_time'] is None:
                         current_window['start_time'] = frame_time
                         current_window['end_time'] = frame_time + self.WINDOW_SIZE_MS * self.NS_TO_MS
                         first_frame_time = frame_time
 
-                    # 处理跨多个窗口的情况
                     while frame_time >= current_window['end_time']:
-                        # 计算当前窗口的fps
                         window_duration_ms = max(
                             (current_window['end_time'] - current_window['start_time']) / self.NS_TO_MS, 1
                         )
@@ -236,7 +263,6 @@ class StutteredFrameAnalyzer:
                         if window_fps < LOW_FPS_THRESHOLD:
                             stats['fps_stats']['low_fps_window_count'] += 1
 
-                        # 计算相对于第一帧的时间（纳秒）
                         start_offset = FrameTimeUtils.convert_to_relative_nanoseconds(
                             current_window['start_time'], first_frame_time
                         )
@@ -244,31 +270,74 @@ class StutteredFrameAnalyzer:
                             current_window['end_time'], first_frame_time
                         )
 
-                        # 保存当前窗口的fps数据
                         fps_windows.append(
                             {
                                 'start_time': start_offset,
                                 'end_time': end_offset,
-                                'start_time_ts': int(current_window['start_time']),  # 确保返回Python原生int类型
-                                'end_time_ts': int(current_window['end_time']),  # 确保返回Python原生int类型
+                                'start_time_ts': int(current_window['start_time']),
+                                'end_time_ts': int(current_window['end_time']),
                                 'frame_count': current_window['frame_count'],
                                 'fps': window_fps,
                             }
                         )
 
-                        # 新窗口推进 - 使用固定窗口大小
                         current_window['start_time'] = current_window['end_time']
                         current_window['end_time'] = current_window['start_time'] + self.WINDOW_SIZE_MS * self.NS_TO_MS
                         current_window['frame_count'] = 0
                         current_window['frames'] = set()
 
-                    # 当前窗口更新 - 只计算时间戳在窗口范围内的帧
                     if (
                         current_window['start_time'] <= frame_time < current_window['end_time']
                         and frame_id not in current_window['frames']
                     ):
                         current_window['frame_count'] += 1
                         current_window['frames'].add(frame_id)
+
+            # 轻量模式：只对TOP N卡顿帧进行深度分析
+            if all_stutter_frames:
+                logging.info('轻量模式：对TOP %d卡顿帧进行深度分析...', top_n_analysis)
+
+                # 按严重程度排序，选择TOP N
+                all_stutter_frames.sort(key=lambda x: x['severity_score'], reverse=True)
+                top_stutter_frames = all_stutter_frames[:top_n_analysis]
+                remaining_frames = all_stutter_frames[top_n_analysis:]
+
+                logging.info(
+                    '总卡顿帧数: %d, 深度分析: %d, 简化记录: %d',
+                    len(all_stutter_frames),
+                    len(top_stutter_frames),
+                    len(remaining_frames),
+                )
+
+                # 深度分析TOP N卡顿帧（包含调用链分析）
+                for stutter_info in top_stutter_frames:
+                    frame = stutter_info['frame']
+                    vsync_key = stutter_info['vsync_key']
+                    frame_type = stutter_info['frame_type']
+
+                    # 重新分析，包含调用链
+                    _, _, detailed_stutter = self.analyze_single_stuttered_frame(
+                        frame,
+                        vsync_key,
+                        context,
+                        lightweight=False,  # 完整模式
+                    )
+
+                    stutter_type = f'{frame_type}_stutter'
+                    stats['stutter_details'][stutter_type].append(detailed_stutter)
+
+                # 简化记录其余卡顿帧（不包含调用链分析）
+                for stutter_info in remaining_frames:
+                    frame_type = stutter_info['frame_type']
+                    stutter_detail = stutter_info['stutter_detail']
+
+                    # 移除调用链信息以节省内存
+                    simplified_detail = stutter_detail.copy()
+                    simplified_detail['sample_callchains'] = []  # 清空调用链
+                    simplified_detail['frame_load'] = 0  # 清空帧负载
+
+                    stutter_type = f'{frame_type}_stutter'
+                    stats['stutter_details'][stutter_type].append(simplified_detail)
 
             # 处理最后一个窗口
             if current_window['frame_count'] > 0:
@@ -369,13 +438,14 @@ class StutteredFrameAnalyzer:
             if perf_conn:
                 perf_conn.close()
 
-    def analyze_single_stuttered_frame(self, frame, vsync_key, context):  # pylint: disable=duplicate-code
+    def analyze_single_stuttered_frame(self, frame, vsync_key, context, lightweight=False):  # pylint: disable=duplicate-code
         """分析单个卡顿帧
 
         Args:
             frame: 帧数据
             vsync_key: VSync键
             context: 上下文信息
+            lightweight: 是否使用轻量级模式（不进行调用链分析）
 
         Returns:
             tuple: (frame_type, stutter_level, stutter_detail)
@@ -404,7 +474,8 @@ class StutteredFrameAnalyzer:
         exceed_time = exceed_time_ns / self.NS_TO_MS
         exceed_frames = exceed_time / self.FRAME_DURATION
 
-        if perf_df is not None and perf_conn is not None:
+        # 轻量级模式：跳过调用链分析
+        if not lightweight and perf_df is not None and perf_conn is not None:
             # 检查缓存中是否已有该帧的负载数据
             # pylint: disable=duplicate-code
             cached_frame_loads = FrameCacheManager.get_frame_loads(step_id) if step_id else []
@@ -423,23 +494,19 @@ class StutteredFrameAnalyzer:
                 # 使用缓存中的帧负载数据
                 frame_load = cached_frame.get('frame_load', 0)
                 sample_callchains = cached_frame.get('sample_callchains', [])
-                # logging.info("使用缓存的帧负载数据: ts=%s, load=%s", frame['ts'], frame_load)
 
                 # 如果缓存中没有sample_callchains，尝试补充
                 if not sample_callchains:
-                    # logging.info("缓存中缺少sample_callchains，尝试补充: ts=%s", frame['ts'])
                     # 重新分析获取调用链
                     frame_load, sample_callchains = self.load_calculator.analyze_single_frame(
                         frame, perf_df, perf_conn, step_id
                     )
-                    # logging.info("重新分析获取调用链: ts=%s, load=%s", frame['ts'], frame_load)
             else:
                 # 缓存中没有，执行帧负载分析
                 # 使用统一的帧负载计算方法
                 frame_load, sample_callchains = self.load_calculator.calculate_frame_load(
                     frame, perf_df, perf_conn, step_id
                 )
-                # logging.info("执行帧负载分析: ts=%s, load=%s", frame['ts'], frame_load)
             # pylint: enable=duplicate-code
 
         # 卡顿分级逻辑
@@ -484,6 +551,38 @@ class StutteredFrameAnalyzer:
         }
 
         return frame_type, stutter_level, stutter_detail
+
+    def _calculate_severity_score(self, stutter_detail: dict) -> float:
+        """计算卡顿严重程度评分，用于排序
+
+        使用配置文件中的权重进行评分计算
+
+        Args:
+            stutter_detail: 卡顿详情
+
+        Returns:
+            float: 严重程度评分，分数越高越严重
+        """
+        if not stutter_detail:
+            return 0.0
+
+        # 使用默认权重
+        weights = {'level_1': 10, 'level_2': 50, 'level_3': 100, 'exceed_frames_weight': 5.0, 'exceed_time_weight': 0.1}
+
+        # 基础分数：根据卡顿等级
+        stutter_level = stutter_detail.get('stutter_level', 1)
+        level_key = f'level_{stutter_level}'
+        base_score = weights.get(level_key, weights.get('level_1', 10))
+
+        # 超出帧数权重
+        exceed_frames = stutter_detail.get('exceed_frames', 0)
+        frame_score = exceed_frames * weights.get('exceed_frames_weight', 5.0)
+
+        # 超出时间权重（毫秒）
+        exceed_time = stutter_detail.get('exceed_time', 0)
+        time_score = exceed_time * weights.get('exceed_time_weight', 0.1)
+
+        return base_score + frame_score + time_score
 
     def classify_stutter_level(self, exceed_frames: float, flag: int = None) -> tuple:
         """分类卡顿等级

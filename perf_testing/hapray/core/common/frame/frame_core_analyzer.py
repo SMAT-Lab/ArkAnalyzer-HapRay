@@ -19,6 +19,7 @@ import sqlite3
 import time
 from typing import Any, Optional
 
+from ...config.config import Config
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
@@ -91,21 +92,24 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         """
         return self.empty_frame_analyzer.analyze_empty_frames(trace_db_path, perf_db_path, app_pids, step_id)
 
-    def analyze_stuttered_frames(self, db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
+    def analyze_stuttered_frames(
+        self, db_path: str, perf_db_path: str = None, step_id: str = None, top_n_analysis: int = None
+    ) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
         Args:
             db_path: 数据库文件路径
             perf_db_path: perf数据库文件路径，用于调用链分析
             step_id: 步骤ID，用于缓存key
+            top_n_analysis: 进行深度分析的top卡顿帧数量，为None时使用配置文件的值
 
         Returns:
             dict | None: 分析结果数据，如果没有数据或分析失败则返回None
         """
-        return self.stuttered_frame_analyzer.analyze_stuttered_frames(db_path, perf_db_path, step_id)
+        return self.stuttered_frame_analyzer.analyze_stuttered_frames(db_path, perf_db_path, step_id, top_n_analysis)
 
     def analyze_comprehensive_frames(
-        self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None
+        self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None, top_n_analysis: int = None
     ) -> dict[str, Any]:
         """综合分析空帧和卡顿帧
 
@@ -114,6 +118,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             perf_db_path: perf数据库文件路径
             app_pids: 应用进程ID列表
             step_id: 步骤ID
+            top_n_analysis: 进行深度分析的top卡顿帧数量，为None时使用配置文件的值
 
         Returns:
             Dict: 综合分析结果
@@ -127,8 +132,13 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             result['empty_frames'] = empty_result
 
             # 分析卡顿帧
-            logging.info('开始分析卡顿帧...')
-            stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id)
+
+            actual_top_n = (
+                top_n_analysis if top_n_analysis is not None else Config.get('frame_analysis.top_n_analysis', 10)
+            )
+
+            logging.info('开始分析卡顿帧（轻量模式 TOP %d）...', actual_top_n)
+            stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id, top_n_analysis)
             result['stuttered_frames'] = stuttered_result
 
             # 获取缓存统计
