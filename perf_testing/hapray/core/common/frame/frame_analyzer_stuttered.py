@@ -98,7 +98,7 @@ class StutteredFrameAnalyzer:
         analysis_start_time = time.time()
 
         # 记录分析日志
-        logging.info('=== 开始卡顿帧分析（优化模式） ===')
+        logging.info('=== 开始卡顿帧分析（轻量模式） ===')
         logging.info('Step ID: %s', step_id)
         logging.info('Trace DB: %s', db_path)
         logging.info('Perf DB: %s', perf_db_path)
@@ -205,8 +205,8 @@ class StutteredFrameAnalyzer:
 
             vsync_keys = sorted(data.keys())
 
-            # 第一阶段：快速收集所有卡顿帧信息（不进行调用链分析）
-            logging.info('阶段1：快速收集卡顿帧信息...')
+            # 轻量模式：快速收集所有卡顿帧信息（不进行调用链分析）
+            logging.info('轻量模式：快速收集卡顿帧信息...')
             all_stutter_frames = []
 
             context = {
@@ -222,10 +222,9 @@ class StutteredFrameAnalyzer:
                     if frame['type'] == 1 or frame['flag'] == 2:
                         continue
 
-                    # 使用轻量级模式
-                    use_lightweight = top_n_analysis > 0
+                    # 始终使用轻量级模式进行初步分析
                     frame_type, stutter_level, stutter_detail = self.analyze_single_stuttered_frame(
-                        frame, vsync_key, context, lightweight=use_lightweight
+                        frame, vsync_key, context, lightweight=True
                     )
 
                     stats['frame_stats'][frame_type]['total'] += 1
@@ -294,9 +293,9 @@ class StutteredFrameAnalyzer:
                         current_window['frame_count'] += 1
                         current_window['frames'].add(frame_id)
 
-            # 第二阶段：对TOP N卡顿帧进行深度分析
-            if top_n_analysis > 0 and all_stutter_frames:
-                logging.info('阶段2：对TOP %d卡顿帧进行深度分析...', top_n_analysis)
+            # 轻量模式：只对TOP N卡顿帧进行深度分析
+            if all_stutter_frames:
+                logging.info('轻量模式：对TOP %d卡顿帧进行深度分析...', top_n_analysis)
 
                 # 按严重程度排序，选择TOP N
                 all_stutter_frames.sort(key=lambda x: x['severity_score'], reverse=True)
@@ -339,15 +338,6 @@ class StutteredFrameAnalyzer:
 
                     stutter_type = f'{frame_type}_stutter'
                     stats['stutter_details'][stutter_type].append(simplified_detail)
-            else:
-                # 传统模式或top_n_analysis=0时，处理所有卡顿帧
-                logging.info('使用传统模式：分析所有 %d 个卡顿帧', len(all_stutter_frames))
-
-                for stutter_info in all_stutter_frames:
-                    frame_type = stutter_info['frame_type']
-                    stutter_detail = stutter_info['stutter_detail']
-                    stutter_type = f'{frame_type}_stutter'
-                    stats['stutter_details'][stutter_type].append(stutter_detail)
 
             # 处理最后一个窗口
             if current_window['frame_count'] > 0:
