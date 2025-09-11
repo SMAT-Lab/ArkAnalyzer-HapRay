@@ -77,12 +77,11 @@ class OptimizationDetector:
             return None
 
         sequences = []
-        while data:
-            seq = data[:features]
+        for counter in range(0, len(data), features):
+            seq = data[counter : counter + features]
             if len(seq) < features:
                 seq = np.pad(seq, (0, features - len(seq)), 'constant')
             sequences.append(seq)
-            data = data[features:]
         return sequences
 
         # return np.array(sequences, dtype=np.uint8)
