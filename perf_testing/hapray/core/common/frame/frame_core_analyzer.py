@@ -133,9 +133,11 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
 
             # 分析卡顿帧
 
-            actual_top_n = top_n_analysis if top_n_analysis is not None else Config.get('frame_analysis.top_n_analysis', 10)
+            actual_top_n = (
+                top_n_analysis if top_n_analysis is not None else Config.get('frame_analysis.top_n_analysis', 10)
+            )
 
-            logging.info('开始分析卡顿帧（TOP %d 优化）...', actual_top_n)
+            logging.info('开始分析卡顿帧（轻量模式 TOP %d）...', actual_top_n)
             stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id, top_n_analysis)
             result['stuttered_frames'] = stuttered_result
 

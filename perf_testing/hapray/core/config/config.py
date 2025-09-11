@@ -163,5 +163,3 @@ class Config:
         for key in keys[:-1]:
             obj = getattr(obj, key)
         setattr(obj, keys[-1], value)
-
-
