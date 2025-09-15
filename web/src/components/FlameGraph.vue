@@ -44,6 +44,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
 //import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 import flameTemplateHtml from '../../../third-party/report.html?raw';
+import pako from 'pako';
 
 // 定义props
 const props = defineProps<{
@@ -100,11 +101,40 @@ watch(() => props.step, (newStep) => {
 //     return `指令数：${milliseconds}`;
 // };
 
+// 解压缩火焰图数据
+const decompressFlameGraphData = (compressedData: string): string => {
+    try {
+        // Base64解码
+        const binaryString = atob(compressedData);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        // 使用pako解压缩
+        const decompressed = pako.inflate(bytes, { to: 'string' });
+        return decompressed;
+    } catch (error) {
+        console.error('解压缩火焰图数据失败:', error);
+        return '';
+    }
+};
+
 // 根据当前步骤生成HTML内容
 const htmlContent = computed(() => {
     const stepId = currentStepIndex.value;
-    if (jsonDataStore.flameGraph && jsonDataStore.flameGraph['step' + stepId]) {
-        return flameTemplateHtml + script_start + jsonDataStore.flameGraph['step' + stepId] + script_end;
+    const stepKey = 'step' + stepId;
+
+    if (jsonDataStore.flameGraph && jsonDataStore.flameGraph[stepKey]) {
+        // 检查数据是否已经是解压缩的JSON字符串
+        let flameData = jsonDataStore.flameGraph[stepKey];
+
+        // 如果数据看起来是压缩的base64字符串，则解压缩
+        if (typeof flameData === 'string' && !flameData.startsWith('{')) {
+            flameData = decompressFlameGraphData(flameData);
+        }
+
+        return flameTemplateHtml + script_start + flameData + script_end;
     } else {
         return flameTemplateHtml + script_start + script_end;
     }
