@@ -141,7 +141,10 @@ class ReportData:
                     compression_ratio = (1 - compressed_size / original_size) * 100
                     logging.info(
                         '火焰图数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
-                        step_key, original_size, compressed_size, compression_ratio
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
                     )
                 except Exception as e:
                     logging.warning('压缩火焰图数据失败 %s: %s', step_key, str(e))
