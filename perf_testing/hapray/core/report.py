@@ -66,6 +66,10 @@ class ReportData:
         # 路径1: Base64编码的gzip压缩JSON
         # 清理数据中的NaN值以确保JSON序列化安全
         cleaned_result = self._clean_data_for_json(self.result)
+
+        # 特殊处理火焰图数据：按步骤单独压缩
+        cleaned_result = self._compress_flame_graph_by_steps(cleaned_result)
+
         json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
             f.write(json_str)
@@ -106,6 +110,53 @@ class ReportData:
             return None
         return data
         # pylint: enable=duplicate-code
+
+    def _compress_flame_graph_by_steps(self, data):
+        """按步骤压缩火焰图数据，避免字符串过长"""
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有火焰图数据
+        if 'more' not in data or 'flame_graph' not in data['more']:
+            return data
+
+        flame_graph_data = data['more']['flame_graph']
+        if not isinstance(flame_graph_data, dict):
+            return data
+
+        # 按步骤压缩火焰图数据
+        compressed_flame_graph = {}
+
+        for step_key, step_data in flame_graph_data.items():
+            if isinstance(step_data, str) and step_data:
+                try:
+                    # 压缩单个步骤的数据
+                    compressed_bytes = zlib.compress(step_data.encode('utf-8'), level=9)
+                    base64_bytes = base64.b64encode(compressed_bytes)
+                    compressed_flame_graph[step_key] = base64_bytes.decode('ascii')
+
+                    # 记录压缩效果
+                    original_size = len(step_data)
+                    compressed_size = len(compressed_flame_graph[step_key])
+                    compression_ratio = (1 - compressed_size / original_size) * 100
+                    logging.info(
+                        '火焰图数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
+                    )
+                except Exception as e:
+                    logging.warning('压缩火焰图数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_flame_graph[step_key] = step_data
+            else:
+                # 非字符串数据或空数据保持不变
+                compressed_flame_graph[step_key] = step_data
+
+        # 更新数据结构
+        data['more']['flame_graph'] = compressed_flame_graph
+        return data
 
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])
