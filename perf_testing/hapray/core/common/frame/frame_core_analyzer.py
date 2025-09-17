@@ -93,7 +93,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
         return self.empty_frame_analyzer.analyze_empty_frames(trace_db_path, perf_db_path, app_pids, step_id)
 
     def analyze_stuttered_frames(
-        self, db_path: str, perf_db_path: str = None, step_id: str = None, top_n_analysis: int = None
+        self, db_path: str, perf_db_path: str = None, step_id: str = None, top_n_analysis: int = None, app_pids: list = None
     ) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
@@ -102,11 +102,12 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             perf_db_path: perf数据库文件路径，用于调用链分析
             step_id: 步骤ID，用于缓存key
             top_n_analysis: 进行深度分析的top卡顿帧数量，为None时使用配置文件的值
+            app_pids: 应用进程ID列表，用于过滤应用相关的帧数据
 
         Returns:
             dict | None: 分析结果数据，如果没有数据或分析失败则返回None
         """
-        return self.stuttered_frame_analyzer.analyze_stuttered_frames(db_path, perf_db_path, step_id, top_n_analysis)
+        return self.stuttered_frame_analyzer.analyze_stuttered_frames(db_path, perf_db_path, step_id, top_n_analysis, app_pids)
 
     def analyze_comprehensive_frames(
         self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None, top_n_analysis: int = None
@@ -138,7 +139,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             )
 
             logging.info('开始分析卡顿帧（轻量模式 TOP %d）...', actual_top_n)
-            stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id, top_n_analysis)
+            stuttered_result = self.analyze_stuttered_frames(trace_db_path, perf_db_path, step_id, top_n_analysis, app_pids)
             result['stuttered_frames'] = stuttered_result
 
             # 获取缓存统计
