@@ -58,7 +58,7 @@ class FrameDropAnalyzer(BaseAnalyzer):
             # 使用核心分析器进行卡顿帧分析
             # 核心分析器负责所有数据库连接和数据处理
             result = self.core_analyzer.analyze_stuttered_frames(
-                db_path=trace_db_path, perf_db_path=perf_db_path, step_id=step_dir
+                db_path=trace_db_path, perf_db_path=perf_db_path, step_id=step_dir, app_pids=app_pids
             )
 
             if result is None:

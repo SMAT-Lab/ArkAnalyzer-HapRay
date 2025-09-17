@@ -85,15 +85,87 @@
         </el-sub-menu>
       </el-sub-menu>
 
-      <!-- 其他负载分析菜单项 -->
-      <el-tooltip effect="dark" content="版本对比" placement="right" :disabled="!isCollapsed">
-        <el-menu-item index="perf_compare">
-          <el-icon>
-            <Switch />
-          </el-icon>
+      <!-- 版本对比 -->
+      <el-sub-menu index="compare">
+        <template #title>
+          <el-icon><Switch /></el-icon>
           <span>版本对比</span>
+        </template>
+
+        <!-- 总览对比 -->
+        <el-tooltip effect="dark" content="总览对比" placement="right" :disabled="!isCollapsed">
+          <el-menu-item index="compare_overview">
+            <el-icon>
+              <PieChart />
+            </el-icon>
+            <span>总览对比</span>
+          </el-menu-item>
+        </el-tooltip>
+
+        <!-- 步骤选择子菜单 - 只有在有对比数据时才显示 -->
+        <el-sub-menu v-if="hasCompareData" index="compare-step-selection">
+          <template #title>
+            <el-icon>
+              <List />
+            </el-icon>
+            <span>步骤选择</span>
+          </template>
+
+          <!-- 动态生成步骤菜单 -->
+          <el-sub-menu v-for="step in testSteps" :key="step.id" :index="`compare_step_${step.id}`">
+            <template #title>
+              <el-icon>
+                <Document />
+              </el-icon>
+              <span :title="step.step_name">步骤{{ step.id }}</span>
+            </template>
+
+            <!-- 步骤下的对比分析类型子菜单 -->
+            <el-menu-item :index="`compare_step_load_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Monitor />
+              </el-icon>
+              <span>负载对比</span>
+            </el-menu-item>
+
+            <el-menu-item :index="`compare_step_detail_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <DataBoard />
+              </el-icon>
+              <span>详细对比</span>
+            </el-menu-item>
+
+            <el-menu-item :index="`compare_step_new_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <CirclePlus />
+              </el-icon>
+              <span>新增分析</span>
+            </el-menu-item>
+
+            <el-menu-item :index="`compare_step_top10_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Trophy />
+              </el-icon>
+              <span>Top10对比</span>
+            </el-menu-item>
+
+            <el-menu-item :index="`compare_step_fault_tree_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Share />
+              </el-icon>
+              <span>故障树对比</span>
+            </el-menu-item>
+          </el-sub-menu>
+        </el-sub-menu>
+
+        <!-- 无数据时的提示菜单项 -->
+        <el-menu-item v-if="!hasCompareData" index="compare_no_data" disabled>
+          <el-icon>
+            <Upload />
+          </el-icon>
+          <span>请先上传对比数据</span>
         </el-menu-item>
-      </el-tooltip>
+      </el-sub-menu>
 
       <el-tooltip effect="dark" content="多版本趋势" placement="right" :disabled="!isCollapsed">
         <el-menu-item index="perf_multi">
@@ -134,7 +206,12 @@ import {
   Monitor,
   ArrowLeft,
   ArrowRight,
-  Warning
+  Warning,
+  DataBoard,
+  CirclePlus,
+  Trophy,
+  Upload,
+  Share
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{
@@ -181,6 +258,11 @@ const testSteps = computed(() => {
     round: step.round,
     perf_data_path: step.perf_data_path,
   }));
+});
+
+// 检查是否有对比数据
+const hasCompareData = computed(() => {
+  return jsonDataStore.comparePerfData && jsonDataStore.comparePerfData.steps.length > 0;
 });
 
 // 从 jsonDataStore 读取版本号，提供响应式和默认值

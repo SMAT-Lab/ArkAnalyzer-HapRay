@@ -359,7 +359,7 @@ interface TraceData {
 }
 
 interface MoreData {
-  flame_graph: Record<string, string>;
+  flame_graph: Record<string, string>; // 按步骤组织的火焰图数据，每个步骤的数据已单独压缩
 }
 
 export interface JSONData {
@@ -781,9 +781,10 @@ interface JsonDataState {
   frameLoadsData: FrameLoadsData | null;
   vsyncAnomalyData: VSyncAnomalyData | null;
   faultTreeData: FaultTreeData | null;
+  compareFaultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
-  flameGraph: Record<string, string> | null;
+  flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
 }
 
 /**
@@ -867,6 +868,7 @@ export const useJsonDataStore = defineStore('config', {
     frameLoadsData: null,
     vsyncAnomalyData: null,
     faultTreeData: null,
+    compareFaultTreeData: null,
     baseMark: null,
     compareMark: null,
     flameGraph: null,
@@ -903,15 +905,24 @@ export const useJsonDataStore = defineStore('config', {
         this.faultTreeData = getDefaultFaultTreeData();
       }
       if (jsonData.more) {
-        // 火焰图
-        this.flameGraph = jsonData.more.flame_graph;
+        // 火焰图 - 按步骤组织的数据，每个步骤已单独压缩
+        this.flameGraph = jsonData.more.flame_graph || null;
       }
 
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         window.initialPage = 'perf';
+        this.compareFaultTreeData = null;
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
         this.comparePerfData = compareJsonData.perf;
+
+        // 处理对比版本的故障树数据
+        if (compareJsonData.trace && compareJsonData.trace.faultTree) {
+          this.compareFaultTreeData = safeProcessFaultTreeData(compareJsonData.trace.faultTree);
+        } else {
+          this.compareFaultTreeData = getDefaultFaultTreeData();
+        }
+
         window.initialPage = 'perf_compare';
       }
     },

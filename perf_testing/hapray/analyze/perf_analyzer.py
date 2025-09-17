@@ -28,8 +28,9 @@ from hapray.core.config.config import Config
 
 
 class PerfAnalyzer(BaseAnalyzer):
-    def __init__(self, scene_dir: str):
+    def __init__(self, scene_dir: str, time_ranges: list[dict] = None):
         super().__init__(scene_dir, 'more/flame_graph')
+        self.time_ranges = time_ranges
 
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
@@ -46,6 +47,15 @@ class PerfAnalyzer(BaseAnalyzer):
             kind = self.convert_kind_to_json()
             if len(kind) > 0:
                 args.extend(['-k', kind])
+
+            # Add time ranges if provided
+            if self.time_ranges:
+                time_range_strings = []
+                for tr in self.time_ranges:
+                    time_range_str = f'{tr["startTime"]}-{tr["endTime"]}'
+                    time_range_strings.append(time_range_str)
+                args.extend(['--time-ranges'] + time_range_strings)
+                logging.info('Adding time ranges to dbtools command: %s', time_range_strings)
 
             logging.debug('Running perf analysis with command: %s', ' '.join(args))
             ExeUtils.execute_hapray_cmd(args)
@@ -70,7 +80,8 @@ class PerfAnalyzer(BaseAnalyzer):
         return json.dumps([kind_entry])
 
     @staticmethod
-    def generate_hiperf_report(perf_path: str) -> Optional[dict[str, Any]]:
+    def generate_hiperf_report(perf_path: str) -> Optional[str]:
+        """生成火焰图报告，返回原始JSON字符串"""
         report_file = os.path.join(os.path.dirname(perf_path), 'hiperf_report.html')
         template_file = os.path.join(
             CommonUtils.get_project_root(), 'hapray-toolbox', 'res', 'hiperf_report_template.html'
@@ -86,14 +97,19 @@ class PerfAnalyzer(BaseAnalyzer):
         script_start = '<script id="record_data" type="application/gzip+json;base64">'
         script_end = '</script></body></html>'
         all_json = PerfAnalyzer.apply_symbol_split_rules(perf_json_file)
+
+        # 为HTML报告压缩数据
         compressed_bytes = zlib.compress(all_json.encode('utf-8'), level=9)
         base64_bytes = base64.b64encode(compressed_bytes)
         base64_all_json_str = base64_bytes.decode('ascii')
+
         with open(template_file, encoding='utf-8') as html_file:
             html_str = html_file.read()
         with open(report_file, 'w', encoding='utf-8') as report_html_file:
             report_html_file.write(html_str)
             report_html_file.write(script_start + base64_all_json_str + script_end)
+
+        # 返回原始JSON字符串，供后续处理
         return all_json
 
     @staticmethod

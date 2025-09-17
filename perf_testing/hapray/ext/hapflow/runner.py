@@ -44,7 +44,7 @@ def run_homecheck(homecheck_root: str, out_dir: str):
     _run(
         [
             'node',
-            '--max-old-space-size=1684',
+            '--max-old-space-size=16384',
             tool,
             f'--projectConfigPath={proj_cfg}',
             f'--depGraphOutputDir={tmp_dir}',
@@ -63,32 +63,19 @@ def run_homecheck(homecheck_root: str, out_dir: str):
 
 # --------- reports 目录解析（新增） ---------
 def _has_ts_subdirs(p: Path) -> bool:
-    """判断目录下是否存在 14 位纯数字时间戳子目录"""
     if not p.is_dir():
         return False
     return any(d.is_dir() and d.name.isdigit() and len(d.name) == 14 for d in p.iterdir())
 
 
 def resolve_reports_root(reports_root: str) -> str:
-    """
-    尝试解析出正确的 reports 根目录。
-    优先使用传入的路径；不符合则依次尝试：
-      - <repo>/perf_testing/reports     （基于本文件位置上溯）
-      - <cwd>/reports                   （当前工作目录）
-      - <repo>/hapray/reports           （兜底）
-    找到后返回其字符串路径；若找不到，抛出与原来一致的异常信息。
-    """
     candidates = []
-
-    # 传入参数
     if reports_root:
         candidates.append(Path(reports_root))
-
     here = Path(__file__).resolve()
-    # .../perf_testing/hapray/ext/hapflow/runner.py → parents[3] == perf_testing
     candidates.append(here.parents[3] / 'reports')
     candidates.append(Path.cwd() / 'reports')
-    candidates.append(here.parents[2] / 'reports')  # hapray/reports（少见，但兜底）
+    candidates.append(here.parents[2] / 'reports')
 
     for p in candidates:
         try:
@@ -101,13 +88,7 @@ def resolve_reports_root(reports_root: str) -> str:
     raise FileNotFoundError('No timestamp folder in reports/ (tried: {})'.format('; '.join(str(c) for c in candidates)))
 
 
-# --------- 从 HapRay 报告抽取两份文件 ---------
-
-
 def pick_latest_case_dirs(reports_root: str):
-    """
-    返回最新一轮 reports/<timestamp> 下的所有 case 目录（排除 *_round）。
-    """
     ts_list = [
         d
         for d in os.listdir(reports_root)
@@ -128,14 +109,7 @@ def pick_latest_case_dirs(reports_root: str):
 
 
 def extract_hapray_outputs(reports_root: str, out_dir: str):
-    """
-    复制/聚合 hapray_report.json 与 component_timings.json 到 out_dir。
-    - hapray_report.json：采用最后一个 case 的
-    - component_timings.json：从 hiperf/hiperf_info.json 聚合 'har' 列表并降序
-    """
     latest_ts, cases = pick_latest_case_dirs(reports_root)
-
-    # hapray_report.json
     chosen = None
     for c in cases:
         p = os.path.join(c, 'report', 'hapray_report.json')
@@ -146,7 +120,6 @@ def extract_hapray_outputs(reports_root: str, out_dir: str):
     shutil.copy(chosen, os.path.join(out_dir, 'hapray_report.json'))
     LOG.info('Copied hapray_report.json from %s', chosen)
 
-    # component_timings.json
     har_items = []
     for c in cases:
         info = os.path.join(c, 'hiperf', 'hiperf_info.json')
@@ -170,7 +143,6 @@ def extract_hapray_outputs(reports_root: str, out_dir: str):
     LOG.info('Wrote component_timings.json (%d items)', len(har_items))
 
 
-# --------- 整合四文件为 hierarchical_integrated_data.json ---------
 def get_hapray_data_list(data: dict):
     try:
         return data['perf']['steps'][0]['data']
@@ -189,7 +161,6 @@ def integrate_four(in_dir: str, out_path: str):
     with open(os.path.join(in_dir, 'component_timings.json'), encoding='utf-8') as f:
         component_timings = json.load(f)
 
-    # 1) HAR 耗时映射
     har_timing = {}
     for it in component_timings:
         if 'name' in it:
@@ -197,11 +168,8 @@ def integrate_four(in_dir: str, out_path: str):
             if name.startswith('@ohos/'):
                 name = name.split('/')[1]
             har_timing[name] = it.get('count', 0)
-
-    # 2) 文件耗时（按文件名聚合）
     hap_data = get_hapray_data_list(hapray_report_data)
     file_timing_by_name = {os.path.basename(it['file']): it.get('fileEvents', 0) for it in hap_data if 'file' in it}
-
     # 3) 文件→HAR 映射
     har_short_names = {os.path.basename(n['name']) for n in moduleDepGraph_data.get('nodes', [])}
     file_to_har = {}
@@ -215,20 +183,17 @@ def integrate_four(in_dir: str, out_path: str):
                 break
         file_to_har[fpath] = chosen
 
-    # 4) 完整路径 → 耗时
     full_file_timing = {}
     for n in fileDepGraph_data.get('nodes', []):
         fname = os.path.basename(n['name'])
         full_file_timing[n['name']] = file_timing_by_name.get(fname, 0)
 
-    # 输出结构
     out = {
         'harGraph': {'nodes': [], 'edges': moduleDepGraph_data.get('edges', [])},
         'fileGraphs': defaultdict(lambda: {'nodes': [], 'edges': []}),
         'crossHarDependencies': [],
     }
 
-    # HAR 节点
     har_nodes_map = {}
     for n in moduleDepGraph_data.get('nodes', []):
         short = os.path.basename(n['name'])
@@ -237,7 +202,6 @@ def integrate_four(in_dir: str, out_path: str):
         out['harGraph']['nodes'].append(n)
         har_nodes_map[n['id']] = short
 
-    # 文件节点 & 跨包
     file_id_to_har = {}
     for n in fileDepGraph_data.get('nodes', []):
         f = n['name']
@@ -271,54 +235,11 @@ def integrate_four(in_dir: str, out_path: str):
     LOG.info('Wrote %s', out_path)
 
 
-# --------- 轻量 index.html（可替换为你的完整版） ---------
-INDEX_HTML = """<!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"/>
-<title>HapFlow 可视化</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<style>body{font-family:sans-serif;background:#111;color:#eee;padding:16px}</style>
-</head><body>
-<h2>HapFlow 可视化（简版）</h2>
-<p>此页面从同目录读取 <code>hierarchical_integrated_data.json</code>。你可以替换为你的完整版 <code>index.html</code>。</p>
-<pre id="out" style="white-space:pre-wrap;background:#222;padding:12px;border-radius:6px"></pre>
-<script>
-fetch('hierarchical_integrated_data.json').then(r=>r.json()).then(d=>{
-  const keys = Object.keys(d);
-  document.getElementById('out').textContent =
-    '已加载字段：\\n' + JSON.stringify(keys, null, 2) +
-    '\\n\\nHAR 节点数：' + (d.harGraph?.nodes?.length || 0) +
-    '\\n跨包依赖：' + (d.crossHarDependencies?.length || 0);
-}).catch(e=>{document.getElementById('out').textContent='加载失败: '+e});
-</script>
-</body></html>
-"""
-
-
-def ensure_index_html(out_dir: str):
-    web_dir = os.path.join(os.path.dirname(__file__), 'web')
-    src = os.path.join(web_dir, 'index.html')
-    dst = os.path.join(out_dir, 'index.html')
-    if os.path.exists(src):
-        shutil.copy(src, dst)
-        LOG.info('Copied viewer: %s', dst)
-    else:
-        with open(dst, 'w', encoding='utf-8') as f:
-            f.write(INDEX_HTML)
-        LOG.info('Wrote minimal viewer: %s', dst)
-
-
-# --------- 顶层管线 ---------
 def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
-    """
-    在 HapRay 的 reports/<timestamp> 下追加 hapflow/ 输出目录，并生成可视化文件。
-    """
-    # ① 解析出真实的 reports 根目录（关键改动）
     reports_root = resolve_reports_root(reports_root)
-
     latest_ts, _ = pick_latest_case_dirs(reports_root)
     out_dir = _ensure_dir(os.path.join(latest_ts, 'hapflow'))
 
-    # ② Homecheck: 打印一行是否执行，并在工具缺失时直接跳过（按你需求只输出一行，不额外扩展功能）
     tool = os.path.join(homecheck_root, 'node_modules', 'homecheck', 'lib', 'tools', 'toolRun.js')
     proj_cfg = os.path.join(homecheck_root, 'config', 'projectConfig.json')
     do_homecheck = os.path.isfile(tool) and os.path.isfile(proj_cfg)
@@ -329,14 +250,9 @@ def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
         run_homecheck(homecheck_root, out_dir)
     else:
         LOG.info('[Homecheck] SKIP (missing tool/config under %s)', homecheck_root)
-
     LOG.info('=== HapFlow: extract HapRay outputs ===')
     extract_hapray_outputs(reports_root, out_dir)
-
     LOG.info('=== HapFlow: integrate four files ===')
     integrate_four(out_dir, os.path.join(out_dir, 'hierarchical_integrated_data.json'))
-
     LOG.info('=== HapFlow: prepare viewer ===')
-    ensure_index_html(out_dir)
-
     LOG.info('HapFlow is ready: %s', out_dir)
