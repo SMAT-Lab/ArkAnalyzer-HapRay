@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import hashlib
 import logging
 import time
 from typing import Any
@@ -346,7 +347,10 @@ class FrameLoadCalculator:
                 vsync_filter_total,
             )
 
-        return frame_load, sample_callchains
+        # 对调用链进行去重和优化处理
+        optimized_callchains = self._optimize_callchains(sample_callchains, step_id)
+
+        return frame_load, optimized_callchains
 
     def calculate_frame_load(
         self,
@@ -454,6 +458,9 @@ class FrameLoadCalculator:
         # logging.info("帧分析完成: ts=%s, frame_load=%s, sample_callchains数量=%s",
         #              frame.get('ts'), frame_load, len(sample_callchains))
 
+        # 对调用链进行去重和优化处理
+        optimized_callchains = self._optimize_callchains(sample_callchains, step_id)
+
         # 保存帧负载数据到缓存
         if step_id:
             frame_load_data = {
@@ -466,11 +473,11 @@ class FrameLoadCalculator:
                 'type': frame.get('type', 0),  # 修正：使用type字段
                 'vsync': frame.get('vsync', 'unknown'),
                 'flag': frame.get('flag'),
-                'sample_callchains': sample_callchains,
+                'sample_callchains': optimized_callchains,
             }
             FrameCacheManager.add_frame_load(step_id, frame_load_data)
 
-        return frame_load, sample_callchains
+        return frame_load, optimized_callchains
 
     def calculate_frame_load_simple(self, frame: dict[str, Any], perf_df: pd.DataFrame) -> int:
         """简单计算帧负载（不包含调用链分析）
@@ -677,3 +684,122 @@ class FrameLoadCalculator:
             )
             results.append((load, callchains))
         return results
+
+    def _optimize_callchains(
+        self, sample_callchains: list[dict[str, Any]], step_id: str = None
+    ) -> list[dict[str, Any]]:
+        """优化调用链数据，进行去重和限制处理
+
+        Args:
+            sample_callchains: 原始调用链列表
+            step_id: 步骤ID，用于日志
+
+        Returns:
+            List[Dict]: 优化后的调用链列表
+        """
+        if not sample_callchains:
+            return sample_callchains
+
+        # 从配置获取优化参数
+        from hapray.core.config.config import Config
+        max_callchains_per_frame = Config.get('frame_analysis.max_callchains_per_frame', 100)
+        enable_callchain_dedup = Config.get('frame_analysis.enable_callchain_dedup', True)
+
+        original_count = len(sample_callchains)
+
+        # 1. 调用链去重合并
+        if enable_callchain_dedup:
+            sample_callchains = self._deduplicate_callchains(sample_callchains)
+            dedup_count = len(sample_callchains)
+
+            if step_id and original_count != dedup_count:
+                logging.debug(
+                    '[%s] 调用链去重: %d -> %d (减少 %.1f%%)',
+                    step_id, original_count, dedup_count,
+                    (1 - dedup_count/original_count) * 100
+                )
+
+        # 2. 限制调用链数量
+        if len(sample_callchains) > max_callchains_per_frame:
+            # 按负载百分比排序，取TOP N
+            sample_callchains = sorted(
+                sample_callchains,
+                key=lambda x: x.get('load_percentage', 0),
+                reverse=True
+            )[:max_callchains_per_frame]
+
+            if step_id:
+                logging.debug(
+                    '[%s] 调用链限制: %d -> %d (保留TOP %d)',
+                    step_id, dedup_count if enable_callchain_dedup else original_count,
+                    len(sample_callchains), max_callchains_per_frame
+                )
+
+        final_count = len(sample_callchains)
+        if step_id and original_count != final_count:
+            logging.info(
+                '[%s] 调用链优化完成: %d -> %d (减少 %.1f%%)',
+                step_id, original_count, final_count,
+                (1 - final_count/original_count) * 100
+            )
+
+        return sample_callchains
+
+    def _deduplicate_callchains(self, sample_callchains: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """调用链去重合并
+
+        Args:
+            sample_callchains: 原始调用链列表
+
+        Returns:
+            List[Dict]: 去重后的调用链列表
+        """
+        callchain_groups = {}
+
+        for chain in sample_callchains:
+            if 'callchain' not in chain or not chain['callchain']:
+                continue
+
+            # 生成调用栈的哈希值作为去重key
+            stack_signature = self._generate_callchain_signature(chain['callchain'])
+
+            if stack_signature not in callchain_groups:
+                # 第一次遇到这个调用栈，直接保存
+                callchain_groups[stack_signature] = chain.copy()
+            else:
+                # 合并相同调用栈的数据
+                existing_chain = callchain_groups[stack_signature]
+
+                # 累加event_count
+                existing_chain['event_count'] += chain.get('event_count', 0)
+
+                # 重新计算load_percentage（基于累加的event_count）
+                # 注意：这里的百分比可能会超过100%，但这是合理的，因为是多个样本的累加
+                existing_chain['load_percentage'] += chain.get('load_percentage', 0)
+
+                # 保留最早的时间戳
+                if chain.get('timestamp', float('inf')) < existing_chain.get('timestamp', float('inf')):
+                    existing_chain['timestamp'] = chain['timestamp']
+
+        return list(callchain_groups.values())
+
+    def _generate_callchain_signature(self, callchain: list[dict[str, Any]]) -> str:
+        """生成调用链的签名，用于去重
+
+        Args:
+            callchain: 调用链数据
+
+        Returns:
+            str: 调用链签名
+        """
+        # 使用符号和路径的组合作为签名
+        signature_parts = []
+        for frame in callchain:
+            symbol = frame.get('symbol', 'unknown')
+            path = frame.get('path', 'unknown')
+            # 只保留关键信息，忽略depth等可能变化的字段
+            signature_parts.append(f"{symbol}@{path}")
+
+        # 生成哈希值以节省内存
+        signature_str = '|'.join(signature_parts)
+        return hashlib.md5(signature_str.encode('utf-8')).hexdigest()
