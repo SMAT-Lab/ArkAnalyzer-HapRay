@@ -32,7 +32,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides four main commands: `perf` for performance testing, `opt` for optimization detection, `update` for updating existing reports, and `compare` for report comparison.
+The tool provides five main commands: `perf` for performance testing, `opt` for optimization detection, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -58,12 +58,43 @@ python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir 
 python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
 ```
 
+#### Simplified Test Execution (`prepare`)
+```bash
+python -m scripts.main prepare [options]
+```
+Options:
+- `--run_testcases <regex_patterns...>`: Run test cases matching specified regex patterns
+- `--all_0000`: Execute all test cases ending with _0000
+- `--device <device_serial>`: Device serial number (e.g., HX1234567890)
+
+Features:
+- **Simplified execution**: No complex folder structure or report generation
+- **Quick testing**: Focus on test script logic execution only
+- **No retry mechanism**: Avoid unnecessary repeated execution
+- **Temporary output**: Uses temporary directories, auto-cleanup after execution
+- **One-click execution**: Support for running all _0000 test cases
+
+Example:
+```bash
+# Execute specific test case
+python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0000
+
+# Execute all _0000 test cases
+python -m scripts.main prepare --all_0000
+
+# Execute test cases with regex patterns
+python -m scripts.main prepare --run_testcases .*_jingdong_0000* .*_Douyin_0000* .*_bilibili_0000*
+
+# Execute on specific device
+python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0000 --device HX1234567890
+```
+
 #### Optimization Detection (`opt`)
 ```bash
 python -m scripts.main opt -i <input> -o <output> [options]
 ```
 Options:
-- `-i/--input <path>`: Directory/file containing binaries (.hap/.hsp/.so/.a)
+- `-i/--input <path>`: Directory/file containing binaries (.hap/.hsp/.apk/.so/.a)
 - `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
 - `-j/--jobs <N>`: Number of parallel jobs (default: 1)
 - `-r/--report_dir <path>`: Directory containing reports to analye invoked symbols (optional)
@@ -72,8 +103,15 @@ Example:
 ```bash
 # Analyze binaries with 4 parallel jobs
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
-# Analyze binaries and analye invoked symbols
+
+# Analyze binaries and analyze invoked symbols
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
+
+# Analyze APK file
+python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx
+
+# Analyze multiple APK files in a directory
+python -m scripts.main opt -i apk_files/ -o multi_apk_report.xlsx -j4
 ```
 For more detailed information about Optimization Detection, please refer to [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md)
 
@@ -90,6 +128,9 @@ Options:
 - `--package-name <package_name>`: Application package name (required for SIMPLE mode)
 - `--pids <N+>`: Process IDs (optional for SIMPLE mode)
 - `--steps <path>`: Path to custom steps.json file (optional for SIMPLE mode)
+- `--time-ranges <range1> <range2> ...`: Time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges (optional)
+- `--hapflow <homecheck path>`: Run HapFlow post-processing using the exact Homecheck project root you provide (no auto-search).
+
 
 Example:
 ```bash
@@ -105,6 +146,9 @@ python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --per
 
 # SIMPLE mode - Multiple files with custom steps.json
 python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perfs perf1.data perf2.data --traces trace1.htrace trace2.htrace --package-name com.jd.hm.mall --steps /path/to/custom_steps.json
+
+# SIMPLE mode with time range filtering
+python -m scripts.main update --report_dir reports/20240605120000 --mode 2 --perfs perf.data --traces trace.htrace --package-name com.jd.hm.mall --time-ranges "12835982205508-12843345730507"
 
 ```
 
