@@ -87,7 +87,7 @@ class BaseAnalyzer(ABC):
             file_path = os.path.join(self.scene_dir, 'report', self.report_path.replace('/', '_') + '.json')
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(sorted(self.results.items()), f, ensure_ascii=False)
+                json.dump(self.results, f, ensure_ascii=False)
             self.logger.info('Report successfully written to %s', file_path)
         except Exception as e:
             self.logger.exception('Failed to write report: %s', str(e))

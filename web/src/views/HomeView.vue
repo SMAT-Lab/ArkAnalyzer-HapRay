@@ -52,7 +52,7 @@
 
       <div class="content-body">
         <keep-alive>
-          <PerfCompare v-if="showPage === 'perf_compare'" />
+          <CompareOverview v-if="showPage === 'perf_compare'" @navigate="changeContent" />
           <PerfLoadOverview v-else-if="showPage === 'perf_load_overview'" @page-change="changeContent" />
           <PerfStepLoad v-else-if="showPage.startsWith('perf_step_')" :step-id="getStepId(showPage)" />
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
@@ -60,6 +60,17 @@
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
+          <CompareOverview v-else-if="showPage === 'compare_overview'" @navigate="changeContent" />
+          <CompareStepLoad v-else-if="showPage.startsWith('compare_step_load_')" :step="getCompareStepId(showPage)" @navigate="changeContent" />
+          <DetailDataCompare v-else-if="showPage.startsWith('compare_step_detail_')" :step="getCompareStepId(showPage)" />
+          <NewDataAnalysis v-else-if="showPage.startsWith('compare_step_new_')" :step="getCompareStepId(showPage)" />
+          <Top10DataCompare v-else-if="showPage.startsWith('compare_step_top10_')" :step="getCompareStepId(showPage)" />
+          <FaultTreeCompare v-else-if="showPage.startsWith('compare_step_fault_tree_')" :step="getCompareStepId(showPage)" />
+          <SceneLoadCompare v-else-if="showPage === 'compare_scene_load'" />
+          <StepLoadCompare v-else-if="showPage === 'compare_step_load'" />
+          <DetailDataCompare v-else-if="showPage === 'compare_detail_data'" />
+          <NewDataAnalysis v-else-if="showPage === 'compare_new_data'" />
+          <Top10DataCompare v-else-if="showPage === 'compare_top10_data'" />
           <PerfSingle v-else-if="showPage === 'perf'" />
           <PerfMulti v-else-if="showPage === 'perf_multi'" />
           <FlameGraph v-else-if="showPage === 'perf_flame'" />
@@ -97,7 +108,7 @@
                 <h3>火焰图分析</h3>
                 <p>可视化特定步骤的负载热点和调用栈</p>
               </div>
-              <div class="feature-card" @click="changeContent('perf_compare')">
+              <div class="feature-card" @click="changeContent('compare_overview')">
                 <div class="card-icon">⇋</div>
                 <h3>版本对比</h3>
                 <p>对比不同版本间的负载差异</p>
@@ -118,12 +129,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import AppNavigation from '@/components/AppNavigation.vue';
-import PerfCompare from '@/components/PerfCompare.vue';
 import PerfLoadOverview from '@/components/PerfLoadOverview.vue';
 import PerfStepLoad from '@/components/PerfStepLoad.vue';
 import PerfLoadAnalysis from '@/components/PerfLoadAnalysis.vue';
 import PerfFrameAnalysis from '@/components/PerfFrameAnalysis.vue';
 import FaultTreeAnalysis from '@/components/FaultTreeAnalysis.vue';
+import CompareOverview from '@/components/compare/CompareOverview.vue';
+import CompareStepLoad from '@/components/compare/CompareStepLoad.vue';
+import SceneLoadCompare from '@/components/compare/SceneLoadCompare.vue';
+import StepLoadCompare from '@/components/compare/StepLoadCompare.vue';
+import DetailDataCompare from '@/components/compare/DetailDataCompare.vue';
+import NewDataAnalysis from '@/components/compare/NewDataAnalysis.vue';
+import Top10DataCompare from '@/components/compare/Top10DataCompare.vue';
+import FaultTreeCompare from '@/components/compare/FaultTreeCompare.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
@@ -172,6 +190,12 @@ const pageTitles: Record<string, string> = {
   'perf_load': '负载分析',
   'perf_load_overview': '负载总览',
   'perf_frame': '帧分析',
+  'compare_overview': '版本对比总览',
+  'compare_scene_load': '场景负载对比',
+  'compare_step_load': '步骤负载对比',
+  'compare_detail_data': '详细数据对比',
+  'compare_new_data': '新增数据分析',
+  'compare_top10_data': 'Top10数据对比',
   'perf_compare': '版本对比分析',
   'perf_multi': '多版本趋势分析',
   'perf_flame': '火焰图分析'
@@ -181,6 +205,12 @@ const pageTitles: Record<string, string> = {
 const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
   'perf_load_overview': '单版本分析 / 负载总览',
+  'compare_overview': '版本对比 / 总览对比',
+  'compare_scene_load': '版本对比 / 场景负载对比',
+  'compare_step_load': '版本对比 / 步骤负载对比',
+  'compare_detail_data': '版本对比 / 详细数据对比',
+  'compare_new_data': '版本对比 / 新增数据分析',
+  'compare_top10_data': '版本对比 / Top10数据对比',
   'perf_compare': '版本对比',
   'perf_multi': '多版本趋势'
 };
@@ -200,6 +230,12 @@ const getFrameStepId = (pageId: string): number => {
 // 从故障树页面ID中提取步骤ID
 const getFaultTreeStepId = (pageId: string): number => {
   const match = pageId.match(/fault_tree_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
+// 从版本对比页面ID中提取步骤ID
+const getCompareStepId = (pageId: string): number => {
+  const match = pageId.match(/compare_step_(?:load|detail|new|top10|fault_tree)_(\d+)/);
   return match ? parseInt(match[1]) : 1;
 };
 
@@ -245,6 +281,40 @@ const getFaultTreeStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / 故障树分析`;
 };
 
+// 动态获取版本对比步骤页面标题
+const getCompareStepPageTitle = (pageId: string): string => {
+  const stepId = getCompareStepId(pageId);
+  if (pageId.includes('compare_step_load_')) {
+    return `步骤${stepId}负载对比`;
+  } else if (pageId.includes('compare_step_detail_')) {
+    return `步骤${stepId}详细对比`;
+  } else if (pageId.includes('compare_step_new_')) {
+    return `步骤${stepId}新增分析`;
+  } else if (pageId.includes('compare_step_top10_')) {
+    return `步骤${stepId}Top10对比`;
+  } else if (pageId.includes('compare_step_fault_tree_')) {
+    return `步骤${stepId}故障树对比`;
+  }
+  return `步骤${stepId}对比分析`;
+};
+
+// 动态获取版本对比步骤页面面包屑
+const getCompareStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getCompareStepId(pageId);
+  if (pageId.includes('compare_step_load_')) {
+    return `版本对比 / 步骤选择 / 步骤${stepId} / 负载对比`;
+  } else if (pageId.includes('compare_step_detail_')) {
+    return `版本对比 / 步骤选择 / 步骤${stepId} / 详细对比`;
+  } else if (pageId.includes('compare_step_new_')) {
+    return `版本对比 / 步骤选择 / 步骤${stepId} / 新增分析`;
+  } else if (pageId.includes('compare_step_top10_')) {
+    return `版本对比 / 步骤选择 / 步骤${stepId} / Top10对比`;
+  } else if (pageId.includes('compare_step_fault_tree_')) {
+    return `版本对比 / 步骤选择 / 步骤${stepId} / 故障树对比`;
+  }
+  return `版本对比 / 步骤选择 / 步骤${stepId}`;
+};
+
 // 动态获取火焰图步骤页面标题
 const getFlameStepPageTitle = (pageId: string): string => {
   const stepId = getFlameStepId(pageId);
@@ -267,6 +337,9 @@ const getPageTitle = () => {
   if (showPage.value.startsWith('fault_tree_step_')) {
     return getFaultTreeStepPageTitle(showPage.value);
   }
+  if (showPage.value.startsWith('compare_step_')) {
+    return getCompareStepPageTitle(showPage.value);
+  }
   if (showPage.value.startsWith('flame_step_')) {
     return getFlameStepPageTitle(showPage.value);
   }
@@ -282,6 +355,9 @@ const getBreadcrumb = () => {
   }
   if (showPage.value.startsWith('fault_tree_step_')) {
     return getFaultTreeStepPageBreadcrumb(showPage.value);
+  }
+  if (showPage.value.startsWith('compare_step_')) {
+    return getCompareStepPageBreadcrumb(showPage.value);
   }
   if (showPage.value.startsWith('flame_step_')) {
     return getFlameStepPageBreadcrumb(showPage.value);
@@ -309,6 +385,7 @@ const shouldShowSteps = () => {
          showPage.value.startsWith('perf_step_') ||
          showPage.value.startsWith('frame_step_') ||
          showPage.value.startsWith('fault_tree_step_') ||
+         showPage.value.startsWith('compare_step_') ||
          showPage.value.startsWith('flame_step_');
 };
 
@@ -322,6 +399,8 @@ const currentStepInfo = computed(() => {
     currentStepId = getFrameStepId(showPage.value);
   } else if (showPage.value.startsWith('fault_tree_step_')) {
     currentStepId = getFaultTreeStepId(showPage.value);
+  } else if (showPage.value.startsWith('compare_step_')) {
+    currentStepId = getCompareStepId(showPage.value);
   } else if (showPage.value.startsWith('flame_step_')) {
     currentStepId = getFlameStepId(showPage.value);
   }
