@@ -12,3 +12,4 @@ frame_analysis:
   # 进行深度分析的TOP N卡顿帧数量
   # 建议值: 5-20，根据性能需求调整
   top_n_analysis: 10
+

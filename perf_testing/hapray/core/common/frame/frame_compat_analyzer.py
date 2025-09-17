@@ -251,19 +251,20 @@ class FrameAnalyzer:  # pylint: disable=duplicate-code
         return core.stuttered_frame_analyzer.analyze_single_stuttered_frame(frame, vsync_key, context)
 
     @staticmethod
-    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None) -> Optional[dict]:
+    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None, app_pids: list = None) -> Optional[dict]:
         """分析卡顿帧 - 兼容性包装
 
         Args:
             db_path: 数据库路径
             perf_db_path: perf数据库路径
             step_id: 步骤ID
+            app_pids: 应用进程ID列表
 
         Returns:
             dict: 卡顿帧分析结果
         """
         core = FrameAnalyzer._get_core_analyzer()
-        return core.analyze_stuttered_frames(db_path, perf_db_path, step_id)
+        return core.analyze_stuttered_frames(db_path, perf_db_path, step_id, None, app_pids)
 
     @staticmethod
     def parse_frame_slice_db(db_path: str) -> dict[int, list[dict[str, Any]]]:
