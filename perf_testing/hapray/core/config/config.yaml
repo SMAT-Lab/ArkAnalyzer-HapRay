@@ -12,3 +12,8 @@ frame_analysis:
   # 进行深度分析的TOP N卡顿帧数量
   # 建议值: 5-20，根据性能需求调整
   top_n_analysis: 10
+
+  # 是否启用调用链去重合并
+  # true: 合并相同调用栈的样本，减少数据量
+  # false: 保留所有原始样本
+  enable_callchain_dedup: true
