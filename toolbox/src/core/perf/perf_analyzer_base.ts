@@ -26,6 +26,7 @@ import { saveJsonArray } from '../../utils/json_utils';
 import type { SheetData } from 'write-excel-file';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { SoOriginal } from '../../config/types';
+import { PackageMatcher } from './package_matcher';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -167,7 +168,6 @@ interface SymbolSplitRule {
     symbols: Array<RegExp>;
 }
 
-
 // ===================== Summary Info 相关类型定义 =====================
 export interface TestReportInfo {
     app_id: string;
@@ -200,6 +200,12 @@ export interface Step {
     description: string;
 }
 
+interface ParsedSymbol {
+    packageName: string;
+    className: string;
+    fullFunctionName: string;
+}
+
 export class PerfAnalyzerBase extends AnalyzerProjectBase {
     processClassifyCfg: Map<RegExp, ProcessClassifyCategory>;
     specialProcessClassifyCfg: Map<RegExp, Map<RegExp, ProcessClassifyCategory>>;
@@ -228,6 +234,8 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected computeFilesRegexCfg: Set<RegExp>;
     protected dfxSymbolsCfg: Set<string>;
     protected dfxRegexSymbolsCfg: Set<RegExp>;
+
+    protected packageMatcher: PackageMatcher;
 
     constructor(workspace: string) {
         super(workspace);
@@ -259,6 +267,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.loadPerfKindCfg();
         this.loadSymbolSplitCfg();
         this.loadPerfClassify();
+        this.packageMatcher = new PackageMatcher(getConfig().perf.kotlinModules);
     }
 
     private loadHapComponents(): void {
@@ -405,20 +414,17 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 fileClassify.subCategoryName = component.subCategoryName;
             }
             return fileClassify;
-
         }
 
         for (const [key, component] of this.fileRegexClassifyCfg) {
             let matched = file.match(key);
             if (matched) {
-
                 fileClassify.category = component.category;
                 fileClassify.categoryName = component.categoryName;
                 if (component.subCategoryName) {
                     fileClassify.subCategoryName = component.subCategoryName;
                 }
                 return fileClassify;
-
             }
         }
 
@@ -495,6 +501,19 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 this.symbolsClassifyMap.set(symbolId, symbolClassification);
                 return symbolClassification;
             }
+        } else if (fileClassification.category === ComponentCategory.KMP && symbol.startsWith('kfun')) {
+            let kmpSymbol = this.parseKmpSymbol(symbol);
+            this.symbolsMap.set(symbolId, kmpSymbol.fullFunctionName);
+            let symbolClassification: FileClassification = {
+                file: `${kmpSymbol.packageName}.${kmpSymbol.className}`,
+                originKind: fileClassification.originKind,
+                category: fileClassification.category,
+                categoryName: fileClassification.categoryName,
+                subCategoryName: kmpSymbol.packageName,
+            };
+
+            this.symbolsClassifyMap.set(symbolId, symbolClassification);
+            return symbolClassification;
         }
 
         for (const rule of this.symbolsSplitRulesCfg) {
@@ -960,7 +979,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         } else {
             await saveJsonArray([jsonObject], outputFileName);
         }
-
     }
 
     private getStepByGroupId(testInfo: TestSceneInfo, groupId: number): TestStepGroup {
@@ -991,5 +1009,40 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             logger.error(`Error reading expect file: ${error}`);
         }
         return false;
+    }
+
+    /**
+     * 解析符号字符串，提取包名、类名和函数符号
+     * @param symbol 输入的符号字符串，如"kfun:androidx.compose.ui.node.LayoutNodeLayoutDelegate#<get-measurePassDelegate>(){}androidx.compose.ui.node.LayoutNodeLayoutDelegate.MeasurePassDelegate"
+     * @returns 解析后的对象，包含包名、类名和函数符号
+     */
+    parseKmpSymbol(symbol: string): ParsedSymbol {
+        // 移除前缀"kfun:"
+        const withoutPrefix = symbol.replace(/^kfun:/, '');
+
+        // 分割类路径和函数部分
+        const [classPath, _] = withoutPrefix.split('#');
+
+        // 提取包名和类名
+        const lastDotIndex = classPath.lastIndexOf('.');
+        let packageName = lastDotIndex > 0 ? classPath : 'kotlin';
+        if (lastDotIndex > 0) {
+            let match = this.packageMatcher.findMostSpecificModule(classPath);
+            if (match) {
+                packageName = match;
+            } else {
+                packageName = classPath.split('.').slice(0, 4).join('.');
+            }
+        } else {
+            packageName = 'kotlin';
+        }
+
+        const className = lastDotIndex > 0 ? classPath.substring(lastDotIndex + 1) : classPath;
+        const fullFunctionName = symbol;
+        return {
+            packageName,
+            className,
+            fullFunctionName,
+        };
     }
 }

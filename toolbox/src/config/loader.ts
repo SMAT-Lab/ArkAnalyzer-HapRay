@@ -16,7 +16,15 @@
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
-import type { ComponentConfig, GlobalConfig, Ohpm, ProcessClassify, SoOriginal, SymbolSplit } from './types';
+import type {
+    ComponentConfig,
+    GlobalConfig,
+    KotlinModule,
+    Ohpm,
+    ProcessClassify,
+    SoOriginal,
+    SymbolSplit,
+} from './types';
 
 const ConfigSchema = z.object({
     analysis: z.object({
@@ -111,6 +119,14 @@ const ConfigSchema = z.object({
                 )
                 .default({}),
         }),
+        kotlinModules: z
+            .array(
+                z.object({
+                    name: z.string(),
+                    namespace: z.string(),
+                })
+            )
+            .default([]),
     }),
     save: z.object({
         callchain: z.boolean().default(false),
@@ -165,6 +181,7 @@ function loadResCfg(): Partial<GlobalConfig> {
                 dfx_symbols: [],
                 compute_files: [],
             },
+            kotlinModules: [],
         },
         save: {
             callchain: false,
@@ -180,10 +197,13 @@ function loadResCfg(): Partial<GlobalConfig> {
         choose: false,
         checkTraceDb: false,
         compatibility: false,
-        ut: false
+        ut: false,
     };
     let perfKind = path.join(res, 'perf/kind.json');
     config.perf.kinds = JSON.parse(fs.readFileSync(perfKind, { encoding: 'utf-8' })) as Array<ComponentConfig>;
+    config.perf.kotlinModules = JSON.parse(
+        fs.readFileSync(path.join(res, 'perf/kotlin.json'), { encoding: 'utf-8' })
+    ) as Array<KotlinModule>;
     config.perf.symbolSplitRules = JSON.parse(
         fs.readFileSync(path.join(res, 'perf/symbol_split.json'), { encoding: 'utf-8' })
     ) as Array<SymbolSplit>;
