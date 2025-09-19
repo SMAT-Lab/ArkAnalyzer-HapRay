@@ -251,7 +251,9 @@ class FrameAnalyzer:  # pylint: disable=duplicate-code
         return core.stuttered_frame_analyzer.analyze_single_stuttered_frame(frame, vsync_key, context)
 
     @staticmethod
-    def analyze_stuttered_frames(db_path: str, perf_db_path: str = None, step_id: str = None, app_pids: list = None) -> Optional[dict]:
+    def analyze_stuttered_frames(
+        db_path: str, perf_db_path: str = None, step_id: str = None, app_pids: list = None
+    ) -> Optional[dict]:
         """分析卡顿帧 - 兼容性包装
 
         Args:
