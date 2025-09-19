@@ -278,8 +278,16 @@ class PerfAction:
             Config.set('so_dir', parsed_args.so_dir)
         Config.set('trace.enable', not parsed_args.no_trace)
 
+        so_dir = Config.get('so_dir', None)
+        if so_dir is not None:
+            # hiperf report will use so_dir path to find symbols.
+            os.system(f'hdc file send {so_dir} /data/local/tmp/so_dir')
+
         action = PerfAction(reports_path, parsed_args.round, devices=parsed_args.devices)
         action.run()
+
+        if so_dir is not None:
+            os.system('hdc shell rm -rf /data/local/tmp/so_dir')
 
         if parsed_args.hapflow:
             try:

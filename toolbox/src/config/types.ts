@@ -37,6 +37,11 @@ export interface Ohpm {
     filesSet?: Set<string>;
 }
 
+export interface KotlinModule {
+    name: string;
+    namespace: string;
+}
+
 export interface SubComponentConfig {
     name?: string;
     files: Array<string>;
@@ -114,6 +119,7 @@ export interface GlobalConfig {
         symbolSplitRules: Array<SymbolSplit>;
         soOrigins: Map<string, SoOriginal>;
         classify: ProcessClassify;
+        kotlinModules: Array<KotlinModule>;
     };
 
     save: {
