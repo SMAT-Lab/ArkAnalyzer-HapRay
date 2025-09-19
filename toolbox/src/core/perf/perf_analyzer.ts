@@ -421,7 +421,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         }
 
         results[0].values.map((row) => {
-            processesMap.set(row[0] as number, this.classifyProcess(row[1] as string, packageName, scene));
+            let processName = row[1] as string || null;
+            processesMap.set(row[0] as number, this.classifyProcess(processName ?? undefined, packageName, scene));
         });
 
         results = db.exec('SELECT thread_id, process_id, thread_name FROM perf_thread');

@@ -359,7 +359,7 @@ interface TraceData {
 }
 
 interface MoreData {
-  flame_graph: Record<string, string>;
+  flame_graph: Record<string, string>; // 按步骤组织的火焰图数据，每个步骤的数据已单独压缩
 }
 
 export interface JSONData {
@@ -784,7 +784,7 @@ interface JsonDataState {
   compareFaultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
-  flameGraph: Record<string, string> | null;
+  flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
 }
 
 /**
@@ -905,8 +905,8 @@ export const useJsonDataStore = defineStore('config', {
         this.faultTreeData = getDefaultFaultTreeData();
       }
       if (jsonData.more) {
-        // 火焰图
-        this.flameGraph = jsonData.more.flame_graph;
+        // 火焰图 - 按步骤组织的数据，每个步骤已单独压缩
+        this.flameGraph = jsonData.more.flame_graph || null;
       }
 
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {

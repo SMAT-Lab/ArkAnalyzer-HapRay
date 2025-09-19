@@ -8,6 +8,7 @@ from pathlib import Path
 
 LOG = logging.getLogger(__name__)
 
+
 # --------- 基础工具 ---------
 def _run(cmd, cwd=None, env=None):
     LOG.info('Run: %s', ' '.join(cmd))
@@ -21,13 +22,16 @@ def _run(cmd, cwd=None, env=None):
         LOG.debug(res.stdout)
     return res
 
+
 def _ensure_dir(p):
     os.makedirs(p, exist_ok=True)
     return p
 
+
 def _write_json(path, obj):
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(obj, f, ensure_ascii=False, indent=2)
+
 
 # --------- Homecheck 执行 ---------
 def run_homecheck(homecheck_root: str, out_dir: str):
@@ -56,20 +60,22 @@ def run_homecheck(homecheck_root: str, out_dir: str):
         shutil.copy(src, dst)
         LOG.info('Homecheck -> %s', dst)
 
+
 # --------- reports 目录解析（新增） ---------
 def _has_ts_subdirs(p: Path) -> bool:
     if not p.is_dir():
         return False
     return any(d.is_dir() and d.name.isdigit() and len(d.name) == 14 for d in p.iterdir())
 
+
 def resolve_reports_root(reports_root: str) -> str:
     candidates = []
     if reports_root:
         candidates.append(Path(reports_root))
     here = Path(__file__).resolve()
-    candidates.append(here.parents[3] / "reports")
-    candidates.append(Path.cwd() / "reports")
-    candidates.append(here.parents[2] / "reports") 
+    candidates.append(here.parents[3] / 'reports')
+    candidates.append(Path.cwd() / 'reports')
+    candidates.append(here.parents[2] / 'reports')
 
     for p in candidates:
         try:
@@ -80,6 +86,7 @@ def resolve_reports_root(reports_root: str) -> str:
             pass
 
     raise FileNotFoundError('No timestamp folder in reports/ (tried: {})'.format('; '.join(str(c) for c in candidates)))
+
 
 def pick_latest_case_dirs(reports_root: str):
     ts_list = [
@@ -99,6 +106,7 @@ def pick_latest_case_dirs(reports_root: str):
     if not cases:
         raise FileNotFoundError('No case folder found in latest reports/')
     return latest, cases
+
 
 def extract_hapray_outputs(reports_root: str, out_dir: str):
     latest_ts, cases = pick_latest_case_dirs(reports_root)
@@ -134,12 +142,14 @@ def extract_hapray_outputs(reports_root: str, out_dir: str):
     _write_json(os.path.join(out_dir, 'component_timings.json'), har_items)
     LOG.info('Wrote component_timings.json (%d items)', len(har_items))
 
+
 def get_hapray_data_list(data: dict):
     try:
         return data['perf']['steps'][0]['data']
     except (KeyError, IndexError):
         LOG.warning('hapray_report missing perf.steps[0].data')
         return []
+
 
 def integrate_four(in_dir: str, out_path: str):
     with open(os.path.join(in_dir, 'fileDepGraph.json'), encoding='utf-8') as f:
@@ -224,6 +234,7 @@ def integrate_four(in_dir: str, out_path: str):
     _write_json(out_path, final)
     LOG.info('Wrote %s', out_path)
 
+
 def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
     reports_root = resolve_reports_root(reports_root)
     latest_ts, _ = pick_latest_case_dirs(reports_root)
@@ -243,5 +254,5 @@ def run_hapflow_pipeline(reports_root: str, homecheck_root: str):
     extract_hapray_outputs(reports_root, out_dir)
     LOG.info('=== HapFlow: integrate four files ===')
     integrate_four(out_dir, os.path.join(out_dir, 'hierarchical_integrated_data.json'))
-    LOG.info("=== HapFlow: prepare viewer ===")
+    LOG.info('=== HapFlow: prepare viewer ===')
     LOG.info('HapFlow is ready: %s', out_dir)

@@ -6,3 +6,10 @@ hiperf: # 性能采样相关
   event: raw-instruction-retired # 默认采集指令数，可配置为raw-cpu-cycles采集cycles
 trace:
   enable: True
+
+# 帧分析配置
+frame_analysis:
+  # 进行深度分析的TOP N卡顿帧数量
+  # 建议值: 5-20，根据性能需求调整
+  top_n_analysis: 10
+

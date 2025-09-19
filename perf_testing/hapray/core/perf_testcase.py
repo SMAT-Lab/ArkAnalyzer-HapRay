@@ -417,7 +417,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         if not self.driver.has_file(remote_path):
             Log.error('Not found %s', remote_path)
             return
-        self.driver.shell(f'hiperf report -i {remote_path} --json -o {remote_path}.json')
+        self.driver.shell(
+            f'hiperf report -i {remote_path} --json -o {remote_path}.json --symbol-dir /data/local/tmp/so_dir'
+        )
         self.driver.pull_file(remote_path, local_path)
         self.driver.pull_file(f'{remote_path}.json', os.path.join(os.path.dirname(local_path), 'perf.json'))
         if os.path.exists(local_path):

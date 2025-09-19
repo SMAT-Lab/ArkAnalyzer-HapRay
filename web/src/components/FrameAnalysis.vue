@@ -831,10 +831,15 @@ const filteredStutters = computed(() => {
         ...performanceData.value.stutter_details.render_stutter
     ];
 
-    if (activeFilter.value === 'all') return allStutters;
+    // 只保留有调用链的条目
+    const stuttersWithCallchain = allStutters.filter(stutter => 
+        stutter.sample_callchains && stutter.sample_callchains.length > 0
+    );
+
+    if (activeFilter.value === 'all') return stuttersWithCallchain;
 
     const level = parseInt(activeFilter.value.split('_')[1]);
-    return allStutters.filter(stutter => stutter.stutter_level === level);
+    return stuttersWithCallchain.filter(stutter => stutter.stutter_level === level);
 });
 
 // 卡顿级别颜色
@@ -871,10 +876,7 @@ const initCharts = () => {
 
         // 收集卡顿点
         const stutterPoints = [];
-        [
-            ...performanceData.value.stutter_details.ui_stutter,
-            ...performanceData.value.stutter_details.render_stutter
-        ].forEach(stutter => {
+        filteredStutters.value.forEach(stutter => {
             const timeMs = stutter.ts / 1000000; // 转换为毫秒
             allTimestamps.push(timeMs);
 

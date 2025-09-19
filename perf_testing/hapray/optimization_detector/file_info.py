@@ -129,7 +129,7 @@ class FileCollector:
         if os.path.isfile(input_path):
             if input_path.endswith(('.so', '.a')):
                 file_infos.append(FileInfo(input_path))
-            elif input_path.endswith(('.hap', '.hsp')):
+            elif input_path.endswith(('.hap', '.hsp', '.apk')):
                 file_infos.extend(self._extract_hap_file(input_path))
         elif os.path.isdir(input_path):
             for root, _, _files in os.walk(input_path):
@@ -138,12 +138,12 @@ class FileCollector:
                     if file.endswith(('.so', '.a')):
                         logical_path = os.path.relpath(file_path, input_path)
                         file_infos.append(FileInfo(file_path, logical_path))
-                    elif file.endswith(('.hap', '.hsp')):
+                    elif file.endswith(('.hap', '.hsp', '.apk')):
                         file_infos.extend(self._extract_hap_file(file_path))
         return file_infos
 
     def _extract_hap_file(self, hap_path: str) -> list[FileInfo]:
-        """Extract SO files from HAP/HSP archives and return FileInfo objects"""
+        """Extract SO files from HAP/HSP/APK archives and return FileInfo objects"""
         extracted_files = []
         temp_dir = tempfile.mkdtemp()
         self.temp_dirs.append(temp_dir)
@@ -151,7 +151,7 @@ class FileCollector:
         try:
             with zipfile.ZipFile(hap_path, 'r') as zip_ref:
                 for file in zip_ref.namelist():
-                    if file.startswith('libs/arm64') and file.endswith('.so'):
+                    if (file.startswith('libs/arm64') or file.startswith('lib/arm64')) and file.endswith('.so'):
                         output_path = os.path.join(temp_dir, file[5:])
                         os.makedirs(os.path.dirname(output_path), exist_ok=True)
                         with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
