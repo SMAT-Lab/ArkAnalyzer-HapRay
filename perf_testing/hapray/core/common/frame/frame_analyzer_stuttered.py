@@ -79,7 +79,12 @@ class StutteredFrameAnalyzer:
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
 
     def analyze_stuttered_frames(
-        self, db_path: str, perf_db_path: str = None, step_id: str = None, top_n_analysis: int = None, app_pids: list = None
+        self,
+        db_path: str,
+        perf_db_path: str = None,
+        step_id: str = None,
+        top_n_analysis: int = None,
+        app_pids: list = None,
     ) -> Optional[dict]:
         """分析卡顿帧数据并计算FPS
 
@@ -172,7 +177,7 @@ class StutteredFrameAnalyzer:
                 frames_df = FrameDbBasicAccessor.get_frames_data(conn, app_pids)
 
                 if frames_df.empty:
-                    logging.info("未找到应用相关的帧数据")
+                    logging.info('未找到应用相关的帧数据')
                     return None
 
                 # 将DataFrame转换为按vsync分组的字典格式（保持兼容性）
@@ -183,7 +188,7 @@ class StutteredFrameAnalyzer:
 
             # 检查是否有有效数据
             if not data:
-                logging.info("未找到任何帧数据")
+                logging.info('未找到任何帧数据')
                 return None
 
             LOW_FPS_THRESHOLD = 45  # 低FPS阈值
