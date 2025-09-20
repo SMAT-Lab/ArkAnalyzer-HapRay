@@ -1,0 +1,15 @@
+{
+  "description": "",
+  "environment": [
+    {
+      "type": "device",
+      "label": "phone"
+    }
+  ],
+  "driver": {
+    "type": "DeviceTest",
+    "py_file": [
+      "ResourceUsage_PerformanceDynamic_zdh_0010.py"
+    ]
+  }
+}
