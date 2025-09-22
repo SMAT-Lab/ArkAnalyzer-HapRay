@@ -86,7 +86,7 @@ const ConfigSchema = z.object({
             .default(new Map()),
         classify: z.object({
             dfx_symbols: z.array(z.string()).default([]),
-            compute_files: z.array(z.string()).default([]),
+            compute_files: z.array(z.tuple([z.string(), z.string()])).default([]),
             process: z.record(
                 z.string(),
                 z.record(
