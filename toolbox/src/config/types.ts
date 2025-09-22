@@ -72,7 +72,7 @@ export interface SymbolSplit {
 
 export interface ProcessClassify {
     dfx_symbols: Array<string>;
-    compute_files: Array<string>;
+    compute_files: Array<[string, string]>;
     process: Record<
         string, // domain
         Record<

@@ -582,21 +582,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     }
 
     private isPureCompute(call: PerfCall): boolean {
-        const pureComputingSet = new Set<string>([
-            '/system/lib64/module/arkcompiler/stub.an',
-            '/system/lib64/platformsdk/libark_jsruntime.so',
-            '/system/lib64/platformsdk/libace_napi.z.so',
-            '/system/lib64/libark_jsoptimizer.so',
-            '/system/lib64/libc++.so',
-            '/system/lib64/libdfmalloc.z.so',
-            '/system/lib/ld-musl-aarch64.so.1',
-            '/system/etc/abc/framework/stateMgmt.abc',
-            'sysmgr.elf',
-            '[kernel.kallsyms]',
-        ]);
-
         return (
-            pureComputingSet.has(call.classification.file) || call.classification.category === ComponentCategory.UNKNOWN
+            this.isPureComputeSymbol(call.classification.file, this.symbolsMap.get(call.symbolId) ?? '') || call.classification.category === ComponentCategory.UNKNOWN
         );
     }
 
