@@ -155,6 +155,7 @@
         "kind": 8,
         "components": [
             {
+                "name": "KMP Runtime",
                 "files": [
                     "/proc/.*/bundle/libs/arm64/libkn.so"
                 ]
