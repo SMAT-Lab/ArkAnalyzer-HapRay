@@ -24,6 +24,7 @@ from hapray.actions.compare_action import CompareAction
 from hapray.actions.opt_action import OptAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
+from hapray.actions.static_action import StaticAction
 from hapray.actions.update_action import UpdateAction
 from hapray.core.config.config import Config
 
@@ -59,6 +60,7 @@ class HapRayCmd:
         actions = {
             'perf': PerfAction,
             'opt': OptAction,
+            'static': StaticAction,
             'update': UpdateAction,
             'compare': CompareAction,
             'prepare': PrepareAction,
@@ -75,7 +77,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, opt: so optimization detection, prepare: simplified test execution)',
+            help='Action to perform (perf: performance testing, opt: so optimization detection, static: HAP static analysis, prepare: simplified test execution)',
         )
         # Parse action
         action_args = []
