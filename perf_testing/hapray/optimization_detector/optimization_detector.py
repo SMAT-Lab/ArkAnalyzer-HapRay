@@ -19,6 +19,7 @@ class OptimizationDetector:
         self.parallel = workers > 1
         self.workers = min(workers, multiprocessing.cpu_count() - 1)
         self.model = None
+        self.flags_model = files('hapray.optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> dict[str, dict]:
@@ -69,41 +70,54 @@ class OptimizationDetector:
         return [('optimization', self._collect_results(flags, file_infos))]
 
     @staticmethod
-    def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[np.ndarray]:
+    def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[list[int]]:
         data = file_info.extract_dot_text()
         if not data or len(data) == 0:
             return None
 
         sequences = []
-        while data:
-            seq = data[:features]
+        for counter in range(0, len(data), features):
+            seq = data[counter : counter + features]
             if len(seq) < features:
                 seq = np.pad(seq, (0, features - len(seq)), 'constant')
             sequences.append(seq)
-            data = data[features:]
-        return np.array(sequences, dtype=np.uint8)
+        return sequences
 
-    def _run_inference(self, file_info: FileInfo, model, features: int = 2048) -> list[tuple[int, float]]:
+    @staticmethod
+    def apply_model(data, model):
+        if not data.size:
+            return None
+        return model.predict(data, batch_size=256)
+
+    def _run_inference(self, file_info: FileInfo, features: int = 2048) -> list[tuple[int, float]]:
         features_array = self._extract_features(file_info, features)
-        if features_array is None or not features_array.size:
+        if features_array is None or not len(features_array):
             return []
 
-        y_predict = model.predict(features_array, batch_size=256)
+        def chunkify(lst, n):
+            return [lst[i::n] for i in range(n)]
+
+        nped_features_array = list(map(partial(np.array, dtype=np.uint8), chunkify(features_array, self.workers * 10)))
+        with multiprocessing.Pool(self.workers) as pool:
+            y_predict_list = pool.map(partial(OptimizationDetector.apply_model, model=self.model), nped_features_array)
         results = []
-        for _predict in y_predict:
-            prediction = np.argmax(_predict)
-            confidence = _predict[prediction]
-            results.append((prediction, confidence))
+
+        for y_predict in y_predict_list:
+            if y_predict is None:
+                continue
+            for _predict in y_predict:
+                prediction = np.argmax(_predict)
+                confidence = _predict[prediction]
+                results.append((prediction, confidence))
         return results
 
     def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]]]:
         """Run optimization flag detection on a single file"""
         # Lazy load model
         if self.model is None:
-            flags_model = files('hapray.optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
-            self.model = tf.keras.models.load_model(str(flags_model))
-
-        return file_info, self._run_inference(file_info, self.model)
+            self.model = tf.keras.models.load_model(str(self.flags_model))
+            self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
+        return file_info, self._run_inference(file_info)
 
     def _analyze_files(self, file_infos: list[FileInfo]) -> tuple[int, int, dict]:
         # Filter out analyzed files
@@ -124,14 +138,13 @@ class OptimizationDetector:
             process_func = partial(self._run_analysis)
             if self.parallel and len(remaining_files) > 1:
                 logging.info('Using %d parallel workers', self.workers)
-                with multiprocessing.Pool(self.workers) as pool:
-                    results = list(
-                        tqdm(
-                            pool.imap(process_func, remaining_files),
-                            total=len(remaining_files),
-                            desc='Analyzing binaries optimization',
-                        )
+                results = list(
+                    tqdm(
+                        map(process_func, remaining_files),
+                        total=len(remaining_files),
+                        desc='Analyzing binaries optimization',
                     )
+                )
             else:
                 results = [process_func(fi) for fi in tqdm(remaining_files, desc='Analyzing binaries optimization')]
 
