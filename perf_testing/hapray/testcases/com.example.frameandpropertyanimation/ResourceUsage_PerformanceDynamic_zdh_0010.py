@@ -41,7 +41,6 @@ class ResourceUsage_PerformanceDynamic_zdh_0010(PerfTestCase):
             self.driver.touch(BY.text('停止动画'))
             self.driver.wait(0.5)
 
-
         def step2():
             # 根据条件点击控件
             self.driver.touch(BY.text('属性动画'))

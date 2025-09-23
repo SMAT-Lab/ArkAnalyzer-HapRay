@@ -17,10 +17,10 @@ import argparse
 import logging
 import os
 import subprocess
-from pathlib import Path
 from typing import Optional
 
 from hapray import VERSION
+from hapray.core.common.common_utils import CommonUtils
 
 
 class StaticAction:
@@ -68,13 +68,14 @@ class StaticAction:
             logging.error(f'Input file must be a HAP file: {parsed_args.input}')
             return 1
 
-        # 获取hapray-staticanalyzer路径
-        script_dir = Path(__file__).parent.parent.parent
-        static_analyzer_path = script_dir / 'hapray-staticanalyzer' / 'hapray-static.js'
+        # 获取hapray-staticanalyzer路径，支持exe环境
+        project_root = CommonUtils.get_project_root()
+        static_analyzer_path = project_root / 'hapray-staticanalyzer' / 'hapray-static.js'
 
         if not static_analyzer_path.exists():
             logging.error(f'Static analyzer not found: {static_analyzer_path}')
             logging.error('Please ensure hapray-staticanalyzer is properly installed')
+            logging.error(f'Project root: {project_root}')
             return 1
 
         # 构建命令
@@ -100,7 +101,13 @@ class StaticAction:
 
             # 执行静态分析
             result = subprocess.run(
-                cmd, check=False, capture_output=True, text=True, encoding='utf-8', errors='ignore', cwd=str(script_dir)
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='ignore',
+                cwd=str(project_root),
             )
 
             if result.returncode == 0:
