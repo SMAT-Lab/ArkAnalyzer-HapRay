@@ -491,11 +491,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             if (fileClassify.category === ComponentCategory.APP_SO) {
                 // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
                 if (hasKmpScheme &&
-                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
-                        file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
+                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/))) {
                     fileClassify.category = ComponentCategory.KMP;
                     fileClassify.categoryName = 'KMP';
-                    // 保持默认的subCategoryName（文件名）
+                    fileClassify.subCategoryName = 'CMP';
                 }
             }
 

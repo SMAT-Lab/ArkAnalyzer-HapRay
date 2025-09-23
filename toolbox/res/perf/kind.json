@@ -159,6 +159,12 @@
                 "files": [
                     "/proc/.*/bundle/libs/arm64/libkn.so"
                 ]
+            },
+            {
+                "name": "CMP",
+                "files": [
+                    "/proc/.*/bundle/libs/arm64/libskikobridge.so"
+                ]
             }
         ]
     }

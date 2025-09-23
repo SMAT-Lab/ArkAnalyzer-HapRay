@@ -482,7 +482,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 if (packageName === 'compose') {
                     symbolClassification.category = ComponentCategory.KMP;
                     symbolClassification.categoryName = 'KMP';
-                    symbolClassification.subCategoryName = 'compose';
+                    symbolClassification.subCategoryName = 'CMP';
                 }
 
                 if (this.hapComponents.has(matches[3])) {
