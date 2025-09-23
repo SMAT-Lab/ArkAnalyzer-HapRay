@@ -1,0 +1,44 @@
+{
+  "name": "hapray-staticanalyzer",
+  "version": "1.0.0",
+  "description": "Static analyzer for HAP packages - analyzing SO files and resources",
+  "main": "lib/index.js",
+  "bin": {
+    "hapray-static": "lib/cli.js"
+  },
+  "files": [
+    "lib",
+    "res"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:webpack": "tsc && webpack --config webpack.config.js",
+    "lint": "eslint --ext .ts src",
+    "lint:fix": "eslint --ext .ts src --fix",
+    "prepack": "npm run build",
+    "test": "vitest",
+    "test:cli": "npm run build && vitest test/cli.test.ts",
+    "demo": "npm run build && node lib/cli.js -i test-app.hap -o demo-output -f json -v",
+    "demo:html": "npm run build && node lib/cli.js -i test-app.hap -o demo-output -f html -v",
+    "demo:excel": "npm run build && node lib/cli.js -i test-app.hap -o demo-output -f excel -v",
+    "demo:all": "npm run build && npx ts-node demo/output-formats-demo.ts",
+    "create-test-hap": "node create-test-hap.js"
+  },
+  "dependencies": {
+    "@types/node": "^22.10.2",
+    "arkanalyzer": "^1.0.7",
+    "commander": "^12.1.0",
+    "exceljs": "^4.4.0",
+    "handlebars": "^4.7.8",
+    "jszip": "^3.10.1",
+    "write-excel-file": "^2.3.2"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.35.0",
+    "@typescript-eslint/parser": "^8.35.0",
+    "eslint": "^9.30.0",
+    "globals": "^16.2.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.2.4"
+  }
+}
