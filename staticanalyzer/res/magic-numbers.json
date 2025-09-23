@@ -1,0 +1,86 @@
+{
+  "magicNumbers": [
+    {
+      "type": "ZIP",
+      "signature": [80, 75],
+      "offset": 0,
+      "description": "ZIP archive"
+    },
+    {
+      "type": "HERMES_BYTECODE",
+      "signature": [194, 31, 240, 159],
+      "offset": 0,
+      "description": "Hermes bytecode file (.hbc/.jsbundle)"
+    },
+    {
+      "type": "PNG",
+      "signature": [137, 80, 78, 71, 13, 10, 26, 10],
+      "offset": 0,
+      "description": "PNG image"
+    },
+    {
+      "type": "JPG",
+      "signature": [255, 216, 255],
+      "offset": 0,
+      "description": "JPEG image"
+    },
+    {
+      "type": "WEBP",
+      "signature": [82, 73, 70, 70],
+      "offset": 0,
+      "description": "WebP image (RIFF header)"
+    },
+    {
+      "type": "SO",
+      "signature": [127, 69, 76, 70],
+      "offset": 0,
+      "description": "ELF executable/shared object"
+    },
+    {
+      "type": "WASM",
+      "signature": [0, 97, 115, 109],
+      "offset": 0,
+      "description": "WebAssembly binary module"
+    }
+  ],
+  "fileExtensions": {
+    "js": "JS",
+    "mjs": "JS",
+    "jsx": "JS",
+    "json": "JSON",
+    "xml": "XML",
+    "html": "XML",
+    "htm": "XML",
+    "png": "PNG",
+    "jpg": "JPG",
+    "jpeg": "JPG",
+    "webp": "WEBP",
+    "so": "SO",
+    "zip": "ZIP",
+    "jar": "ZIP",
+    "war": "ZIP",
+    "hbc": "HERMES_BYTECODE",
+    "jsbundle": "HERMES_BYTECODE",
+    "wasm": "WASM"
+  },
+  "mimeTypes": {
+    ".js": "application/javascript",
+    ".json": "application/json",
+    ".xml": "application/xml",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".css": "text/css",
+    ".txt": "text/plain",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".zip": "application/zip",
+    ".so": "application/x-sharedlib",
+    ".hbc": "application/octet-stream",
+    ".jsbundle": "application/javascript",
+    ".wasm": "application/wasm"
+  }
+}
