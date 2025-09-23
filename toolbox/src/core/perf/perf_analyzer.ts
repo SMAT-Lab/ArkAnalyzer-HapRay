@@ -477,6 +477,11 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
             let fileClassify = this.classifyFile(file);
+
+            if (fileClassify.category === ComponentCategory.KMP) {
+                this.hasKmpScheme = true;
+            }
+
             if (fileClassify.category === ComponentCategory.APP_SO) {
                 let origin = this.classifySoOrigins(file);
                 if (origin) {
