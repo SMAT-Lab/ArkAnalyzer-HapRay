@@ -223,15 +223,11 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected symbolsClassifyMap: Map<number, FileClassification>;
     protected symbolsMap: Map<number, string>;
 
-    // KMP方案标记
-    protected hasKmpScheme = false;
-
     protected testSteps: Array<TestStep>;
     protected stepSumMap: Map<number, PerfStepSum>;
     protected details: Array<PerfSymbolDetailData>;
 
-    protected computeFilesCfg: Set<string>;
-    protected computeFilesRegexCfg: Set<RegExp>;
+    protected computeFilesRegexCfg: Map<RegExp, RegExp>;
     protected dfxSymbolsCfg: Set<string>;
     protected dfxRegexSymbolsCfg: Set<RegExp>;
 
@@ -252,14 +248,12 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.filesClassifyMap = new Map();
         this.symbolsClassifyMap = new Map();
         this.symbolsMap = new Map();
-        this.hasKmpScheme = false;
 
         this.testSteps = [];
         this.stepSumMap = new Map();
         this.details = [];
 
-        this.computeFilesCfg = new Set();
-        this.computeFilesRegexCfg = new Set();
+        this.computeFilesRegexCfg = new Map();
         this.dfxSymbolsCfg = new Set();
         this.dfxRegexSymbolsCfg = new Set();
 
@@ -337,11 +331,8 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     }
 
     private loadPerfClassify(): void {
-        this.computeFilesCfg = new Set(getConfig().perf.classify.compute_files);
         for (const file of getConfig().perf.classify.compute_files) {
-            if (this.hasRegexChart(file)) {
-                this.computeFilesRegexCfg.add(new RegExp(file));
-            }
+            this.computeFilesRegexCfg.set(new RegExp(file[0]), new RegExp(file[1]));
         }
         for (const symbol of getConfig().perf.classify.dfx_symbols) {
             if (this.hasRegexChart(symbol)) {
@@ -491,7 +482,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 if (packageName === 'compose') {
                     symbolClassification.category = ComponentCategory.KMP;
                     symbolClassification.categoryName = 'KMP';
-                    symbolClassification.subCategoryName = 'compose';
+                    symbolClassification.subCategoryName = 'CMP';
                 }
 
                 if (this.hapComponents.has(matches[3])) {
@@ -1044,5 +1035,15 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             className,
             fullFunctionName,
         };
+    }
+
+    protected isPureComputeSymbol(file: string, symbol: string): boolean {
+        for (const [fileRegex, symbolRegex] of this.computeFilesRegexCfg) {
+            if (file.match(fileRegex) && symbol.match(symbolRegex)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

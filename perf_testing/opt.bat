@@ -21,5 +21,6 @@ set /a count+=1
 goto loop
 :outer
 echo %candidate%
-start cmd /c "cd %~dp0 & .\.venv\Scripts\python.exe -Wignore -m scripts.main opt -i %1 -o %result_dir%\%candidate% -j4 3> warning.log & pause"
+set "welcome_msg=Simple GUI interface for optimization tool. For more fine-grained control, please use the command line (instructions in README.md)"
+start cmd /c "echo %welcome_msg% & cd %~dp0 & .\.venv\Scripts\python.exe -Wignore -m scripts.main opt -i %1 -o %result_dir%\%candidate% -j4 3> warning.log & pause"
 :: (for /L %%a in (1,1,10) do echo %%a)

@@ -332,7 +332,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 this.callchainsMap.clear();
                 this.threadsMap.clear();
                 this.samples = [];
-                this.hasKmpScheme = false; // 重置KMP方案标记
                 db.close();
             }
         }
@@ -468,6 +467,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             originKind: OriginKind.UNKNOWN,
         });
 
+        // 先检查是否存在KMP方案标识文件
+        const hasKmpScheme = this.checkKmpScheme(db);
+
         // 然后进行文件分类
         results[0].values.map((row) => {
             let file = row[1] as string;
@@ -477,6 +479,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
             let fileClassify = this.classifyFile(file);
+
             if (fileClassify.category === ComponentCategory.APP_SO) {
                 let origin = this.classifySoOrigins(file);
                 if (origin) {
@@ -487,17 +490,28 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             if (fileClassify.category === ComponentCategory.APP_SO) {
                 // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
-                if (this.hasKmpScheme &&
-                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
-                        file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
+                if (hasKmpScheme &&
+                    (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/))) {
                     fileClassify.category = ComponentCategory.KMP;
                     fileClassify.categoryName = 'KMP';
-                    // 保持默认的subCategoryName（文件名）
+                    fileClassify.subCategoryName = 'CMP';
                 }
             }
 
             this.filesClassifyMap.set(row[0] as number, fileClassify);
         });
+    }
+
+    /**
+     * 检查是否存在KMP方案标识文件
+     */
+    private checkKmpScheme(db: Database): boolean {
+        const results = db.exec("SELECT COUNT(*) as count FROM perf_files WHERE path LIKE '%/proc/%/bundle/libs/arm64/libkn.so'");
+        if (results.length > 0 && results[0].values.length > 0) {
+            const count = results[0].values[0][0] as number;
+            return count > 0;
+        }
+        return false;
     }
 
     /**
@@ -582,21 +596,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
     }
 
     private isPureCompute(call: PerfCall): boolean {
-        const pureComputingSet = new Set<string>([
-            '/system/lib64/module/arkcompiler/stub.an',
-            '/system/lib64/platformsdk/libark_jsruntime.so',
-            '/system/lib64/platformsdk/libace_napi.z.so',
-            '/system/lib64/libark_jsoptimizer.so',
-            '/system/lib64/libc++.so',
-            '/system/lib64/libdfmalloc.z.so',
-            '/system/lib/ld-musl-aarch64.so.1',
-            '/system/etc/abc/framework/stateMgmt.abc',
-            'sysmgr.elf',
-            '[kernel.kallsyms]',
-        ]);
-
         return (
-            pureComputingSet.has(call.classification.file) || call.classification.category === ComponentCategory.UNKNOWN
+            this.isPureComputeSymbol(call.classification.file, this.symbolsMap.get(call.symbolId) ?? '') || call.classification.category === ComponentCategory.UNKNOWN
         );
     }
 

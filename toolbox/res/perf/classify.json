@@ -4578,19 +4578,22 @@
         "actv_switch_perf_hook"
     ],
     "compute_files": [
-        "/system/lib64/module/arkcompiler/stub.an",
-        "/system/lib64/platformsdk/libark_jsruntime.so",
-        "/system/lib64/platformsdk/libace_napi.z.so",
-        "/system/lib64/libark_jsoptimizer.so",
-        "/system/lib64/libc++.so",
-        "/system/lib/ld-musl-aarch64.so.1",
-        "/system/etc/abc/framework/stateMgmt.abc",
-        "/lib/libhmulibs.so.0.1",
-        "/lib/libdh-lnxbase.so.1.0",
-        "/lib/libdh-linux.so",
-        "/lib/libdh.so.0.1",
-        "/lib/libc-sys.so",
-        "^(?!\\[anon:ArkTS[^\\]]*\\])\\[.*\\]",
-        "^(?!.*devhost\\.elf$).*\\.elf$"
+        ["/system/lib64/module/arkcompiler/stub.an", ".*"],
+        ["/system/lib64/platformsdk/libark_jsruntime.so", ".*"],
+        ["/system/lib64/platformsdk/libace_napi.z.so", ".*"],
+        ["/system/lib64/libark_jsoptimizer.so", ".*"],
+        ["/system/lib64/libc\\+\\+.so", ".*"],
+        ["/system/lib64/libdfmalloc.z.so", ".*"],
+        ["/system/lib/ld-musl-aarch64.so.1", ".*"],
+        ["/system/etc/abc/framework/stateMgmt.abc", ".*"],
+        ["/lib/libhmulibs.so.0.1", ".*"],
+        ["/lib/libdh-lnxbase.so.1.0", ".*"],
+        ["/lib/libdh-linux.so", ".*"],
+        ["/lib/libdh.so.0.1", ".*"],
+        ["/lib/libc-sys.so", ".*"],
+        ["^(?!\\[anon:ArkTS[^\\]]*\\])\\[.*\\]", ".*"],
+        ["^(?!.*devhost\\.elf$).*\\.elf$", ".*"],
+        ["/proc/.*/bundle/libs/arm64/libkn.so", "EnterFrame"],
+        ["/proc/.*/bundle/libs/arm64/libkn.so", "LeaveFrame"]
     ]
 }
