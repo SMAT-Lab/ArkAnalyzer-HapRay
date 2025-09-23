@@ -1,5 +1,5 @@
 {
-  "name": "hapray-staticanalyzer",
+  "name": "hapray-sa",
   "version": "1.0.0",
   "description": "Static analyzer for HAP packages - analyzing SO files and resources",
   "main": "lib/index.js",

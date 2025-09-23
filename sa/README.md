@@ -21,7 +21,7 @@ HAP Static Analyzer 是一个专业的 HAP (HarmonyOS Application Package) 包�
 ### 核心组件结构
 
 ```
-staticanalyzer/
+sa/
 ├── src/                          # 源代码目录
 │   ├── analyzers/               # 分析器模块
 │   │   ├── so-analyzer.ts       # SO文件分析器 - 框架识别核心

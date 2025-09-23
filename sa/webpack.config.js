@@ -7,12 +7,12 @@ const version = require('./package.json').version;
 class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
-            let dist = path.resolve(__dirname, '../perf_testing/hapray-staticanalyzer');
+            let dist = path.resolve(__dirname, '../perf_testing/hapray-sa');
             if (!fs.existsSync(dist)) {
                 return;
             }
 
-            const outputName = path.resolve(__dirname, `hapray-staticanalyzer_v${version}.zip`);
+            const outputName = path.resolve(__dirname, `hapray-sa_v${version}.zip`);
             const outputZipStream = fs.createWriteStream(outputName);
             const archive = archiver('zip');
             archive.pipe(outputZipStream);
@@ -49,7 +49,7 @@ module.exports = {
     },
     output: {
         filename: 'hapray-static.js',
-        path: path.resolve(__dirname, '../perf_testing/hapray-staticanalyzer'),
+        path: path.resolve(__dirname, '../perf_testing/hapray-sa'),
     },
     plugins: [
         new CopyPlugin({

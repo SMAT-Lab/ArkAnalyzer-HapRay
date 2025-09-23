@@ -68,13 +68,13 @@ class StaticAction:
             logging.error(f'Input file must be a HAP file: {parsed_args.input}')
             return 1
 
-        # 获取hapray-staticanalyzer路径，支持exe环境
+        # 获取hapray-sa路径，支持exe环境
         project_root = CommonUtils.get_project_root()
-        static_analyzer_path = project_root / 'hapray-staticanalyzer' / 'hapray-static.js'
+        static_analyzer_path = project_root / 'hapray-sa' / 'hapray-static.js'
 
         if not static_analyzer_path.exists():
             logging.error(f'Static analyzer not found: {static_analyzer_path}')
-            logging.error('Please ensure hapray-staticanalyzer is properly installed')
+            logging.error('Please ensure hapray-sa is properly installed')
             logging.error(f'Project root: {project_root}')
             return 1
 

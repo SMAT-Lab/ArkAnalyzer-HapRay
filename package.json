@@ -7,7 +7,7 @@
   "workspaces": [
     "web",
     "toolbox",
-    "staticanalyzer",
+    "sa",
     "perf_testing"
   ],
   "scripts": {
