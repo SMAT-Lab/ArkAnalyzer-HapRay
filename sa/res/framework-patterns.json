@@ -1,0 +1,158 @@
+{
+  "frameworks": {
+    "RN": {
+      "name": "React Native",
+      "description": "React Native framework",
+      "patterns": [
+        "libreact_.*.so",
+        "librnoh.so",
+        "librnoh_.*.so"
+      ]
+    },
+    "Flutter": {
+      "name": "Flutter",
+      "description": "Flutter framework",
+      "patterns": [
+        "libflutter.so"
+      ]
+    },
+    "Hermes": {
+      "name": "Hermes",
+      "description": "Hermes JavaScript engine",
+      "patterns": [
+        "libhermes.so"
+      ]
+    },
+    "KMP": {
+      "name": "Kotlin Multiplatform",
+      "description": "Kotlin Multiplatform framework",
+      "patterns": [
+        "libkn.so"
+      ]
+    },
+    "CMP": {
+      "name": "Compose Multiplatform",
+      "description": "Compose Multiplatform framework",
+      "patterns": [
+        "libskikobridge.so"
+      ]
+    },
+    "Lynx": {
+      "name": "Lynx",
+      "description": "Lynx framework",
+      "patterns": [
+        "liblynx.so",
+        "liblynx_.*.so"
+      ]
+    },
+    "Qt": {
+      "name": "Qt",
+      "description": "Qt framework",
+      "patterns": [
+        "libQt.*.so"
+      ]
+    },
+    "Unity": {
+      "name": "Unity",
+      "description": "Unity game engine",
+      "patterns": [
+        "libunity.so",
+        "libil2cpp.so"
+      ]
+    },
+    "System": {
+      "name": "System",
+      "description": "System libraries",
+      "patterns": []
+    },
+    "Unknown": {
+      "name": "Unknown",
+      "description": "Unknown framework",
+      "patterns": []
+    }
+  },
+  "systemLibraries": [
+    "libc.so",
+    "libm.so",
+    "libdl.so",
+    "liblog.so",
+    "libz.so",
+    "libssl.so",
+    "libcrypto.so",
+    "libpthread.so",
+    "librt.so",
+    "libstdc++.so",
+    "libc++_shared.so",
+    "libgcc_s.so",
+    "libnative_*.so",
+    "libace_*.so",
+    "libhilog_*.so"
+  ],
+  "fileTypes": {
+    "ZIP": {
+      "name": "ZIP Archive",
+      "description": "ZIP compressed archive",
+      "category": "archive"
+    },
+    "JS": {
+      "name": "JavaScript",
+      "description": "JavaScript source file",
+      "category": "code"
+    },
+    "JSON": {
+      "name": "JSON",
+      "description": "JSON data file",
+      "category": "data"
+    },
+    "XML": {
+      "name": "XML",
+      "description": "XML markup file",
+      "category": "markup"
+    },
+    "PNG": {
+      "name": "PNG Image",
+      "description": "PNG image file",
+      "category": "image"
+    },
+    "JPG": {
+      "name": "JPEG Image",
+      "description": "JPEG image file",
+      "category": "image"
+    },
+    "WEBP": {
+      "name": "WebP Image",
+      "description": "WebP image file",
+      "category": "image"
+    },
+    "SO": {
+      "name": "Shared Object",
+      "description": "Shared object library",
+      "category": "library"
+    },
+    "HERMES_BYTECODE": {
+      "name": "Hermes Bytecode",
+      "description": "Hermes JavaScript bytecode",
+      "category": "bytecode"
+    },
+    "BINARY": {
+      "name": "Binary",
+      "description": "Binary file",
+      "category": "binary"
+    },
+    "TEXT": {
+      "name": "Text",
+      "description": "Plain text file",
+      "category": "text"
+    },
+    "Unknown": {
+      "name": "Unknown",
+      "description": "Unknown file type",
+      "category": "unknown"
+    },
+    "WASM": {
+      "name": "WebAssembly",
+      "description": "WebAssembly binary file",
+      "category": "bytecode"
+    }
+  }
+}

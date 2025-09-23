@@ -12,6 +12,7 @@ For more detailed information, please refer to the following documents:
 - [用例执行预置条件](docs/用例执行预置条件.md) - Test Case Prerequisites
 - [鸿蒙应用覆盖率](docs/鸿蒙应用覆盖率.md) - ArkTs Coverage Analysis
 - [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md) - SO Optimization Detection
+- [HAP静态分析器](staticanalyzer/README.md) - HAP Static Analysis Tool
 
 ## Build
 ```
@@ -32,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides five main commands: `perf` for performance testing, `opt` for optimization detection, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
+The tool provides six main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -114,6 +115,39 @@ python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx
 python -m scripts.main opt -i apk_files/ -o multi_apk_report.xlsx -j4
 ```
 For more detailed information about Optimization Detection, please refer to [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md)
+
+#### Static Analysis (`static`)
+```bash
+python -m scripts.main static -i <hap_file> [-o <output_directory>] [options]
+```
+Options:
+- `-i/--input <path>`: HAP file path to analyze (required)
+- `-o/--output <path>`: Output directory for analysis results (default: ./static-output)
+- `-f/--format <format>`: Output format: json, html, excel, all (default: json)
+- `--include-details`: Include detailed analysis information
+
+Features:
+- **Framework Detection**: Automatically identifies technology stacks (React Native, Flutter, Unity, etc.)
+- **SO File Analysis**: Deep analysis of native libraries and their optimization opportunities
+- **Resource Analysis**: Comprehensive scanning of JavaScript, images, and other resources
+- **Multiple Output Formats**: JSON for programmatic use, HTML for visual reports, Excel for data analysis
+- **Hermes Bytecode Detection**: Specialized detection for React Native Hermes engine bytecode
+- **Nested Archive Support**: Recursive analysis of compressed files within HAP packages
+
+Example:
+```bash
+# Basic JSON analysis
+python -m scripts.main static -i app.hap -o ./static-output
+
+# Generate HTML report with detailed information
+python -m scripts.main static -i app.hap -o ./static-output -f html --include-details
+
+# Generate all output formats
+python -m scripts.main static -i app.hap -o ./static-output -f all
+
+# Analyze specific HAP with custom output directory
+python -m scripts.main static -i /path/to/my-app.hap -o /path/to/analysis-results -f excel
+```
 
 #### Update Reports (`update`)
 ```bash
