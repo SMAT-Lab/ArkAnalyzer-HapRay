@@ -332,7 +332,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 this.callchainsMap.clear();
                 this.threadsMap.clear();
                 this.samples = [];
-                this.hasKmpScheme = false; // 重置KMP方案标记
                 db.close();
             }
         }
@@ -468,6 +467,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             originKind: OriginKind.UNKNOWN,
         });
 
+        // 先检查是否存在KMP方案标识文件
+        const hasKmpScheme = this.checkKmpScheme(db);
+
         // 然后进行文件分类
         results[0].values.map((row) => {
             let file = row[1] as string;
@@ -477,10 +479,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
             let fileClassify = this.classifyFile(file);
-
-            if (fileClassify.category === ComponentCategory.KMP) {
-                this.hasKmpScheme = true;
-            }
 
             if (fileClassify.category === ComponentCategory.APP_SO) {
                 let origin = this.classifySoOrigins(file);
@@ -492,7 +490,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             if (fileClassify.category === ComponentCategory.APP_SO) {
                 // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
-                if (this.hasKmpScheme &&
+                if (hasKmpScheme &&
                     (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/) ||
                         file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskikobridge\.so$/))) {
                     fileClassify.category = ComponentCategory.KMP;
@@ -503,6 +501,18 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
             this.filesClassifyMap.set(row[0] as number, fileClassify);
         });
+    }
+
+    /**
+     * 检查是否存在KMP方案标识文件
+     */
+    private checkKmpScheme(db: Database): boolean {
+        const results = db.exec("SELECT COUNT(*) as count FROM perf_files WHERE path LIKE '%/proc/%/bundle/libs/arm64/libkn.so'");
+        if (results.length > 0 && results[0].values.length > 0) {
+            const count = results[0].values[0][0] as number;
+            return count > 0;
+        }
+        return false;
     }
 
     /**

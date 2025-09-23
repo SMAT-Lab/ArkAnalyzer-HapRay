@@ -223,9 +223,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     protected symbolsClassifyMap: Map<number, FileClassification>;
     protected symbolsMap: Map<number, string>;
 
-    // KMP方案标记
-    protected hasKmpScheme = false;
-
     protected testSteps: Array<TestStep>;
     protected stepSumMap: Map<number, PerfStepSum>;
     protected details: Array<PerfSymbolDetailData>;
@@ -252,7 +249,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.filesClassifyMap = new Map();
         this.symbolsClassifyMap = new Map();
         this.symbolsMap = new Map();
-        this.hasKmpScheme = false;
 
         this.testSteps = [];
         this.stepSumMap = new Map();
