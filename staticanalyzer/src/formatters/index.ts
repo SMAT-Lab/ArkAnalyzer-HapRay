@@ -126,18 +126,30 @@ export abstract class BaseFormatter {
      * 获取文件类型统计
      */
     protected getFileTypeStats(result: HapStaticAnalysisResult) {
-        const stats: Array<{type: string, count: number, percentage: string}> = [];
+        const stats: Array<{type: string, count: number, percentage: string, barWidth: number}> = [];
         const total = result.resourceAnalysis.totalFiles;
 
         for (const [fileType, files] of result.resourceAnalysis.filesByType) {
             stats.push({
                 type: fileType,
                 count: files.length,
-                percentage: this.calculatePercentage(files.length, total)
+                percentage: this.calculatePercentage(files.length, total),
+                barWidth: 0 // 临时值，稍后计算
             });
         }
 
-        return stats.sort((a, b) => b.count - a.count);
+        // 按数量排序
+        const sortedStats = stats.sort((a, b) => b.count - a.count);
+
+        // 计算条状图宽度（基于最大值的相对百分比）
+        if (sortedStats.length > 0) {
+            const maxCount = sortedStats[0].count;
+            sortedStats.forEach(stat => {
+                stat.barWidth = maxCount > 0 ? Math.max(10, (stat.count / maxCount) * 100) : 10;
+            });
+        }
+
+        return sortedStats;
     }
 
     /**

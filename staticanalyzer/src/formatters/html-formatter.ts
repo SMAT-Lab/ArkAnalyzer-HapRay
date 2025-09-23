@@ -112,6 +112,8 @@ export class HtmlFormatter extends BaseFormatter {
     private buildTemplateData(result: HapStaticAnalysisResult) {
         const fileTypeStats = this.getFileTypeStats(result);
         const frameworkStats = this.getFrameworkStats(result);
+        const allFiles = this.buildAllFilesList(result);
+        const dynamicFilterButtons = this.generateDynamicFilterButtons(result);
 
         return {
             metadata: {
@@ -187,10 +189,14 @@ export class HtmlFormatter extends BaseFormatter {
                     hasNestedFiles: (archiveFile.nestedFiles?.length || 0) > 0,
                     hasNestedArchives: (archiveFile.nestedArchives?.length || 0) > 0
                 })),
-                allFiles: this.buildAllFilesList(result),
+                allFiles: allFiles,
                 hasJsFiles: result.resourceAnalysis.jsFiles.length > 0,
                 hasHermesFiles: result.resourceAnalysis.hermesFiles.length > 0,
                 hasArchiveFiles: result.resourceAnalysis.archiveFiles.length > 0
+            },
+            filters: {
+                archiveFilterButtons: dynamicFilterButtons.archiveButtons,
+                allFilesFilterButtons: dynamicFilterButtons.allFilesButtons
             },
             options: {
                 includeDetails: this.options.includeDetails !== false
@@ -252,6 +258,82 @@ export class HtmlFormatter extends BaseFormatter {
         // 如果是嵌套文件，返回父级路径
         const parentParts = parts.slice(0, -1);
         return parentParts.join('/');
+    }
+
+    /**
+     * 生成动态过滤按钮
+     */
+    private generateDynamicFilterButtons(result: HapStaticAnalysisResult) {
+        // 收集所有文件类型
+        const fileTypes = new Set<string>();
+        for (const [fileType] of result.resourceAnalysis.filesByType) {
+            fileTypes.add(fileType);
+        }
+
+        // 生成压缩包分析的过滤按钮
+        const archiveButtons = [
+            { type: 'all', label: '全部', active: true },
+            { type: 'extracted', label: '已解压', active: false },
+            { type: 'not-extracted', label: '未解压', active: false }
+        ];
+
+        // 添加文件类型按钮
+        for (const fileType of Array.from(fileTypes).sort()) {
+            archiveButtons.push({
+                type: fileType,
+                label: this.getFileTypeDisplayName(fileType),
+                active: false
+            });
+        }
+
+        // 生成所有文件详情的过滤按钮
+        const allFilesButtons = [
+            { type: 'all', label: '全部', active: true },
+            { type: 'nested', label: '嵌套文件', active: false }
+        ];
+
+        // 添加文件类型按钮
+        for (const fileType of Array.from(fileTypes).sort()) {
+            allFilesButtons.push({
+                type: fileType,
+                label: this.getFileTypeDisplayName(fileType),
+                active: false
+            });
+        }
+
+        return {
+            archiveButtons,
+            allFilesButtons
+        };
+    }
+
+    /**
+     * 获取文件类型的显示名称
+     */
+    private getFileTypeDisplayName(fileType: string): string {
+        const displayNames: Record<string, string> = {
+            'JS': 'JavaScript',
+            'JSON': 'JSON',
+            'XML': 'XML',
+            'PNG': '图片',
+            'JPG': '图片',
+            'JPEG': '图片',
+            'GIF': '图片',
+            'SVG': '图片',
+            'ZIP': '压缩包',
+            'JAR': '压缩包',
+            'SO': '动态库',
+            'TXT': '文本',
+            'MD': '文档',
+            'CSS': '样式',
+            'HTML': '网页',
+            'WOFF': '字体',
+            'TTF': '字体',
+            'OTF': '字体',
+            'HERMES_BYTECODE': 'Hermes字节码',
+            'UNKNOWN': '未知类型'
+        };
+        return displayNames[fileType] || fileType;
     }
 
     /**
@@ -324,9 +406,38 @@ export class HtmlFormatter extends BaseFormatter {
 
         /* 统计图表样式 */
         .chart-container { margin: 20px 0; }
-        .chart-bar { height: 20px; background: linear-gradient(90deg, #3498db, #2980b9); margin: 5px 0; border-radius: 10px; position: relative; }
-        .chart-label { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: white; font-weight: bold; font-size: 0.9em; }
-        .chart-value { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: white; font-size: 0.8em; }
+        .chart-item { margin: 8px 0; }
+        .chart-bar {
+            height: 30px;
+            background: linear-gradient(90deg, #3498db, #2980b9);
+            border-radius: 10px;
+            position: relative;
+            min-width: 120px;
+            transition: all 0.3s ease;
+        }
+        .chart-bar:hover {
+            background: linear-gradient(90deg, #2980b9, #1f4e79);
+            transform: translateX(5px);
+        }
+        .chart-label {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-weight: bold;
+            font-size: 0.9em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .chart-value {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-size: 0.8em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
 
         /* 响应式设计 */
         @media (max-width: 768px) {
@@ -422,9 +533,11 @@ export class HtmlFormatter extends BaseFormatter {
             <h2>📁 文件类型统计</h2>
             <div class="chart-container">
                 {{#each statistics.fileTypes}}
-                <div class="chart-bar" style="width: {{percentage}};">
-                    <span class="chart-label">{{type}}</span>
-                    <span class="chart-value">{{count}} ({{percentage}})</span>
+                <div class="chart-item">
+                    <div class="chart-bar" style="width: {{barWidth}}%;">
+                        <span class="chart-label">{{type}}</span>
+                        <span class="chart-value">{{count}} ({{percentage}})</span>
+                    </div>
                 </div>
                 {{/each}}
             </div>
@@ -484,12 +597,9 @@ export class HtmlFormatter extends BaseFormatter {
             <div class="search-container">
                 <input type="text" class="search-box" placeholder="🔍 搜索文件名、路径或类型..." onkeyup="searchFiles(this.value)">
                 <div class="filter-buttons">
-                    <button class="filter-btn active" onclick="filterFiles('all')">全部</button>
-                    <button class="filter-btn" onclick="filterFiles('JS')">JavaScript</button>
-                    <button class="filter-btn" onclick="filterFiles('JSON')">JSON</button>
-                    <button class="filter-btn" onclick="filterFiles('ZIP')">压缩包</button>
-                    <button class="filter-btn" onclick="filterFiles('extracted')">已解压</button>
-                    <button class="filter-btn" onclick="filterFiles('not-extracted')">未解压</button>
+                    {{#each filters.archiveFilterButtons}}
+                    <button class="filter-btn {{#if active}}active{{/if}}" onclick="filterFiles('{{type}}')">{{label}}</button>
+                    {{/each}}
                 </div>
             </div>
             <div class="archive-tree">
@@ -588,12 +698,9 @@ export class HtmlFormatter extends BaseFormatter {
             <div class="search-container">
                 <input type="text" class="search-box" placeholder="🔍 搜索所有文件..." onkeyup="searchAllFiles(this.value)">
                 <div class="filter-buttons">
-                    <button class="filter-btn active" onclick="filterAllFiles('all')">全部</button>
-                    <button class="filter-btn" onclick="filterAllFiles('JS')">JavaScript</button>
-                    <button class="filter-btn" onclick="filterAllFiles('JSON')">JSON</button>
-                    <button class="filter-btn" onclick="filterAllFiles('PNG')">图片</button>
-                    <button class="filter-btn" onclick="filterAllFiles('ZIP')">压缩包</button>
-                    <button class="filter-btn" onclick="filterAllFiles('nested')">嵌套文件</button>
+                    {{#each filters.allFilesFilterButtons}}
+                    <button class="filter-btn {{#if active}}active{{/if}}" onclick="filterAllFiles('{{type}}')">{{label}}</button>
+                    {{/each}}
                 </div>
             </div>
             <table class="table" id="all-files-table">
