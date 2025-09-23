@@ -34,6 +34,6 @@ perf_testing/files_results_cache/
 perf_testing/scripts/reports/
 
 # staticanalyzer
-staticanalyzer/lib
-hapray-staticanalyzer
+sa/lib
+hapray-sa
 
