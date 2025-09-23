@@ -155,8 +155,15 @@
         "kind": 8,
         "components": [
             {
+                "name": "KMP Runtime",
                 "files": [
                     "/proc/.*/bundle/libs/arm64/libkn.so"
+                ]
+            },
+            {
+                "name": "CMP",
+                "files": [
+                    "/proc/.*/bundle/libs/arm64/libskikobridge.so"
                 ]
             }
         ]
