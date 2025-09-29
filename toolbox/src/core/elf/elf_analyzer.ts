@@ -15,6 +15,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import * as readline from 'readline';
 import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
 import type { ELF } from './elfy';
 import { parseELF } from './elfy';
@@ -122,5 +123,50 @@ export class ElfAnalyzer {
         }
 
         return result;
+    }
+
+    public async strings(filePath: string, pattern?: string | RegExp): Promise<Array<string>> {
+        return new Promise((resolve, reject) => {
+            if (!fs.existsSync(filePath)) {
+                reject(new Error(`File is not exists: ${filePath}`));
+                return;
+            }
+
+            const lines: Array<string> = [];
+            let regex = new RegExp(pattern ?? /.*$/);
+            let currentString = '';
+
+            const stream = fs.createReadStream(filePath);
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity,
+            });
+
+            rl.on('line', (line) => {
+                // 处理每一行的字节数据
+                for (let i = 0; i < line.length; i++) {
+                    const charCode = line.charCodeAt(i);
+                    if (charCode >= 32 && charCode <= 126) {
+                        currentString += line[i];
+                    } else {
+                        if (currentString.length >= 4 && regex.test(currentString)) {
+                            lines.push(currentString);
+                        }
+                        currentString = '';
+                    }
+                }
+            });
+
+            rl.on('close', () => {
+                // 处理最后一个字符串
+                if (currentString.length >= 4 && regex.test(currentString)) {
+                    lines.push(currentString);
+                }
+                resolve(lines);
+            });
+
+            rl.on('error', reject);
+            stream.on('error', reject);
+        });
     }
 }
