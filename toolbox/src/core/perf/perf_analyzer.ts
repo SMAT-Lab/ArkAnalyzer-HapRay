@@ -701,7 +701,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             });
         });
 
-        return this.calcSymbolData(groupId);
+        return results[0].values.length;
     }
 
     private queryProcessTotal(db: Database, timeRange?: TimeRange): number {
