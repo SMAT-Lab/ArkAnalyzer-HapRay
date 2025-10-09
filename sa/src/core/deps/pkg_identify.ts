@@ -19,7 +19,7 @@ import { spawnSync } from 'child_process';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { Ohpm } from '../../config/types';
 import { getConfig } from '../../config';
-import type { Component } from '../component';
+import type { Component } from '../../types/component';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

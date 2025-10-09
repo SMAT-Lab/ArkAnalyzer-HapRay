@@ -66,3 +66,26 @@ export function getAllFiles(
     });
     return filenameArr;
 }
+
+/**
+ * 检查文件是否存在
+ * @param filePath 文件路径
+ * @returns 文件是否存在
+ */
+export function fileExists(filePath: string): boolean {
+    try {
+        return fs.existsSync(filePath);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * 确保目录存在
+ * @param dirPath 目录路径
+ */
+export function ensureDirectoryExists(dirPath: string): void {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}

@@ -17,10 +17,10 @@ import fs from 'fs';
 import type { HapStaticAnalysisResult } from './types';
 import { SoAnalyzer } from './analyzers/so-analyzer';
 import { ResourceAnalyzer } from './analyzers/resource-analyzer';
-import { fileExists } from './utils/file-utils';
-import type { EnhancedJSZipAdapter } from './utils/zip-adapter';
-import { createEnhancedZipAdapter } from './utils/zip-adapter';
+import type { EnhancedJSZipAdapter } from '../utils/zip-adapter';
+import { createEnhancedZipAdapter } from '../utils/zip-adapter';
 import { ErrorFactory, ErrorUtils } from './errors';
+import { fileExists } from '../utils/file_utils';
 
 /**
  * HAP包静态分析器主类

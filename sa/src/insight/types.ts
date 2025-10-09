@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { createFrameworkTypeEnum, createFileTypeEnum } from './config/types-config';
+import { createFrameworkTypeEnum, createFileTypeEnum } from '../config/types-config';
 
 /**
  * 技术栈框架类型 - 从配置文件动态生成

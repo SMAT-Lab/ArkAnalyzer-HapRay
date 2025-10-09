@@ -22,19 +22,10 @@ export { ResourceAnalyzer } from './analyzers/resource-analyzer';
 
 // 类型定义
 export * from './types';
-export * from './types/zip-types';
 
 // 错误类
 export * from './errors';
 
-// 配置
-export * from './config/framework-patterns';
-export * from './config/magic-numbers';
-export * from './config/types-config';
-
-// 工具函数
-export * from './utils/file-utils';
-export * from './utils/zip-adapter';
 
 // 格式化器
 export * from './formatters';

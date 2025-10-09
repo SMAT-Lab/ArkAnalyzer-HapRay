@@ -16,7 +16,7 @@
 import { Command, program } from 'commander';
 import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { HapAnalyzerCli } from './commands/hap_analyzer_cli';
-import { DbtoolsCli } from './commands/hapray_cli';
+import { PerfCli } from './commands/perf_cli';
 import { ElfAnalyzerCli } from './commands/elf_analyzer_cli';
 import { BjcCli } from './commands/bjc_cli';
 import { SaCli } from './commands/sa_cli';
@@ -27,7 +27,7 @@ const VERSION = '1.1.0';
 
 const HaprayCli = new Command('hapray').version(VERSION);
 HaprayCli.addCommand(HapAnalyzerCli);
-HaprayCli.addCommand(DbtoolsCli);
+HaprayCli.addCommand(PerfCli);
 HaprayCli.addCommand(ElfAnalyzerCli);
 HaprayCli.addCommand(BjcCli);
 HaprayCli.addCommand(SaCli);

@@ -15,8 +15,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { MagicNumber } from '../types';
-import { FileType } from '../types';
+import type { MagicNumber } from '../insight/types';
+import { FileType } from '../insight/types';
 import { isValidFileType } from './types-config';
 
 interface MagicNumbersConfig {
