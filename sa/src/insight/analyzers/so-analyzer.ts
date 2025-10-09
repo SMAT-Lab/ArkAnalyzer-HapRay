@@ -15,12 +15,12 @@
 
 import path from 'path';
 import type { FrameworkTypeKey, SoAnalysisResult } from '../types';
-import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../config/framework-patterns';
+import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../../config/framework-patterns';
 import type {
     ZipInstance,
     ZipEntry,
     FileSizeLimits
-} from '../types/zip-types';
+} from '../../types/zip-types';
 import {
     isValidZipEntry,
     getSafeFileSize,
@@ -29,7 +29,7 @@ import {
     ZipEntryFilters,
     MemoryMonitor,
     DEFAULT_FILE_SIZE_LIMITS
-} from '../types/zip-types';
+} from '../../types/zip-types';
 import {
     ErrorFactory,
     ErrorUtils

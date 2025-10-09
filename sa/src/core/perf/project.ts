@@ -13,7 +13,6 @@
  * limitations under the License.
  */
 
-import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 
@@ -25,7 +24,6 @@ export interface Project {
 }
 
 export const PROJECT_ROOT = '.arkanalyzer';
-const PROJECT_FILE = 'project.json';
 
 export class AnalyzerProjectBase {
     protected workspace: string;
@@ -36,7 +34,6 @@ export class AnalyzerProjectBase {
         this.workspace = workspace;
         this.projectRoot = path.join(workspace, PROJECT_ROOT);
         this.project = { bundleName: '', scenes: [], versionId: '', versionName: '' };
-        this.loadProject();
     }
 
     public getWorkspace(): string {
@@ -49,23 +46,6 @@ export class AnalyzerProjectBase {
 
     public getProjectRoot(): string {
         return this.projectRoot;
-    }
-
-    public saveProject(): void {
-        // 禁用项目文件保存，避免创建 .arkanalyzer 文件夹
-        // fs.writeFileSync(path.join(this.projectRoot, PROJECT_FILE), JSON.stringify(this.project));
-    }
-
-    private loadProject(): void {
-        // 禁用 .arkanalyzer 文件夹创建
-        // if (!fs.existsSync(this.projectRoot)) {
-        //     fs.mkdirSync(this.projectRoot, { recursive: true });
-        // }
-
-        const projectFile = path.join(this.projectRoot, PROJECT_FILE);
-        if (fs.existsSync(projectFile)) {
-            this.project = JSON.parse(fs.readFileSync(projectFile, { encoding: 'utf-8' })) as Project;
-        }
     }
 
     public setProjectInfo(bundleName: string, version: string): void {
