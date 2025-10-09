@@ -281,7 +281,7 @@ class ReportGenerator:
             logging.error('No scene directories provided for round selection')
             return False
 
-        args = ['dbtools', '--choose', '-i', scene_dir]
+        args = ['perf', '--choose', '-i', scene_dir]
 
         logging.debug('Selecting round with command: %s', ' '.join(args))
         return ExeUtils.execute_hapray_cmd(args)

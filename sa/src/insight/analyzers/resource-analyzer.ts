@@ -16,13 +16,13 @@
 import path from 'path';
 import type { ResourceFileInfo, ResourceAnalysisResult, ArchiveFileInfo, JsFileInfo, HermesFileInfo } from '../types';
 import { FileType } from '../types';
-import { detectFileTypeByExtension, detectFileTypeByMagic, getMimeType } from '../config/magic-numbers';
-import { createZipAdapter } from '../utils/zip-adapter';
+import { detectFileTypeByExtension, detectFileTypeByMagic, getMimeType } from '../../config/magic-numbers';
+import { createZipAdapter } from '../../utils/zip-adapter';
 import type {
     ZipInstance,
     ZipEntry,
     FileSizeLimits
-} from '../types/zip-types';
+} from '../../types/zip-types';
 import {
     isValidZipEntry,
     isFileEntry,
@@ -31,7 +31,7 @@ import {
     isFileSizeExceeded,
     MemoryMonitor,
     DEFAULT_FILE_SIZE_LIMITS
-} from '../types/zip-types';
+} from '../../types/zip-types';
 import {
     ErrorFactory,
     ErrorUtils
