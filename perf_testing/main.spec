@@ -14,8 +14,7 @@ venv_packages.append('xml.etree.ElementTree')
 
 datas = [
     ('hapray', 'hapray'),
-    ('hapray-toolbox', 'hapray-toolbox'),
-    ('hapray-sa', 'hapray-sa'),
+    ('sa-cmd', 'sa-cmd'),
     ]
 site_packages_dir = sys.path[-1]
 for item in os.listdir(site_packages_dir):
