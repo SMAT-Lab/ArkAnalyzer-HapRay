@@ -52,7 +52,7 @@ def _get_trace_streamer_path() -> str:
         raise OSError(f'Unsupported operating system: {system}')
 
     # Construct full path to the executable
-    tool_path = os.path.join(project_root, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', executable)
+    tool_path = os.path.join(project_root, 'sa-cmd', 'third-party', 'trace_streamer_binary', executable)
 
     # Validate executable exists
     if not os.path.exists(tool_path):
@@ -68,8 +68,8 @@ def _get_trace_streamer_path() -> str:
 class ExeUtils:
     """Utility class for executing external commands and tools"""
 
-    # Path to the hapray-cmd.js script
-    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'hapray-cmd.js'))
+    # Path to the hapray-sa-cmd script
+    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'hapray-sa-cmd'))
 
     # Path to the trace streamer executable
     trace_streamer_path = _get_trace_streamer_path()
@@ -149,7 +149,7 @@ class ExeUtils:
 
     @staticmethod
     def build_hapray_cmd(args: list[str]) -> list[str]:
-        """Constructs a command for executing hapray-cmd.js.
+        """Constructs a command for executing hapray-sa-cmd.
 
         Args:
             args: Arguments to pass to the hapray command
