@@ -46,16 +46,16 @@ hapray = [
 ]
 
 [tool.setuptools.data-files]
-"hapray-toolbox" = [
-    "hapray-toolbox/*.js",
-    "hapray-toolbox/config/*.json",
-    "hapray-toolbox/node_modules/sql.js/dist/*.js",
-    "hapray-toolbox/node_modules/sql.js/dist/*.wasm",
-    "hapray-toolbox/node_modules/sql.js/*.json",
-    "hapray-toolbox/res/*.html",
-    "hapray-toolbox/res/**/*.json",
-    "hapray-toolbox/third-party/trace_streamer_binary/lib/*.dylib",
-    "hapray-toolbox/third-party/trace_streamer_binary/trace_streamer_*"
+"sa-cmd" = [
+    "sa-cmd/*.js",
+    "sa-cmd/config/*.json",
+    "sa-cmd/node_modules/sql.js/dist/*.js",
+    "sa-cmd/node_modules/sql.js/dist/*.wasm",
+    "sa-cmd/node_modules/sql.js/*.json",
+    "sa-cmd/res/*.html",
+    "sa-cmd/res/**/*.json",
+    "sa-cmd/third-party/trace_streamer_binary/lib/*.dylib",
+    "sa-cmd/third-party/trace_streamer_binary/trace_streamer_*"
 ]
 
 # ruff.toml 或 pyproject.toml 的 [tool.ruff] 部分

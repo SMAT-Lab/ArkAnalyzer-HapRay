@@ -291,7 +291,7 @@ class ReportGenerator:
         try:
             json_data_str = self._build_json_data(scene_dir, result)
 
-            template_path = os.path.join(self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html')
+            template_path = os.path.join(self.perf_testing_dir, 'sa-cmd', 'res', 'report_template.html')
             output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
 
             # Create directory structure if needed
