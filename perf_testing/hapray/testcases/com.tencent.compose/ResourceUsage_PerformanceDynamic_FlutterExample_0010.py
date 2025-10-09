@@ -37,10 +37,10 @@ class ResourceUsage_PerformanceDynamic_FlutterExample_0010(PerfTestCase):
             self.swipes_down(5, 2)
 
         self.execute_performance_step(
-            'FlutterExample-1500View测试场景-step1 ComposeView1500', 30, step1, sample_all_processes=True
+            'FlutterExample-1500View测试场景-step1 ComposeView1500', 30, step1, sample_all_processes=False
         )
         self.driver.swipe_to_back()
         self.execute_performance_step(
-            'FlutterExample-1500View测试场景-step2 ComposeLazyView1500Page', 30, step2, sample_all_processes=True
+            'FlutterExample-1500View测试场景-step2 ComposeLazyView1500Page', 30, step2, sample_all_processes=False
         )
         self.driver.swipe_to_back()

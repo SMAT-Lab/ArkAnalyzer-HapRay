@@ -2,20 +2,21 @@ const path = require('path');
 const fs = require('fs');
 const CopyPlugin = require('copy-webpack-plugin');
 const archiver = require('archiver');
+const { arch } = require('os');
 const version = require('./package.json').version;
 
 class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
-            let dist = path.resolve(__dirname, '../perf_testing/hapray-sa');
+            let dist = path.resolve(__dirname, '../perf_testing/sa-cmd');
             if (!fs.existsSync(dist)) {
                 return;
             }
 
             const outputName = path.resolve(__dirname, `hapray-sa_v${version}.zip`);
-            const outputZipStream = fs.createWriteStream(outputName);
+            const outpuZipStream = fs.createWriteStream(outputName);
             const archive = archiver('zip');
-            archive.pipe(outputZipStream);
+            archive.pipe(outpuZipStream);
 
             fs.readdirSync(dist).forEach((filename) => {
                 const realFile = path.resolve(dist, filename);
@@ -34,7 +35,12 @@ class PackPlugin {
 module.exports = {
     target: 'node',
     mode: 'production',
-    entry: './src/cli.ts',
+    externals: [
+        {
+            'sql.js': 'commonjs sql.js',
+        }
+    ],
+    entry: './src/cli/index.ts',
     module: {
         rules: [
             {
@@ -48,40 +54,47 @@ module.exports = {
         extensions: ['.tsx', '.ts', '.js'],
     },
     output: {
-        filename: 'hapray-static.js',
-        path: path.resolve(__dirname, '../perf_testing/hapray-sa'),
+        filename: 'hapray-sa-cmd.js',
+        path: path.resolve(__dirname, '../perf_testing/sa-cmd'),
     },
     plugins: [
         new CopyPlugin({
             patterns: [
-                // 复制资源文件
                 { from: 'res', to: 'res' },
-                // 复制基本文件
+                { from: '../node_modules/bjc/res', to: 'res'},
+                { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
-                { from: 'package.json', to: 'package.json' },
-                // 复制必要的node_modules依赖
+                { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
+                { from: '../third-party/xvm', to: 'third-party/xvm' },
+                { from: '../third-party/report.html', to: 'res/hiperf_report_template.html' },
                 {
-                    from: '../node_modules/handlebars',
-                    to: 'node_modules/handlebars',
+                    from: '../web/dist/index.html',
+                    to: 'res/report_template.html',
                 },
                 {
-                    from: '../node_modules/jszip',
-                    to: 'node_modules/jszip',
+                    from: 'src/core/elf/demangle-wasm.wasm',
+                    to: 'demangle-wasm.wasm'
+                },
+                // sql.js
+                {
+                    from: '../node_modules/sql.js/package.json',
+                    to: 'node_modules/sql.js/package.json',
                 },
                 {
-                    from: '../node_modules/exceljs',
-                    to: 'node_modules/exceljs',
+                    from: '../node_modules/sql.js/dist/sql-wasm.js',
+                    to: 'node_modules/sql.js/dist/sql-wasm.js',
                 },
                 {
-                    from: '../node_modules/commander',
-                    to: 'node_modules/commander',
+                    from: '../node_modules/sql.js/dist/sql-wasm.wasm',
+                    to: 'node_modules/sql.js/dist/sql-wasm.wasm',
                 },
                 {
-                    from: '../node_modules/@types/node',
-                    to: 'node_modules/@types/node',
+                    from: '../node_modules/sql.js/dist/worker.sql-wasm.js',
+                    to: 'node_modules/sql.js/dist/worker.sql-wasm.js',
                 },
             ],
         }),
+
         new PackPlugin(),
     ],
 };
