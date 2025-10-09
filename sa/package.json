@@ -1,50 +1,49 @@
 {
-  "name": "hapray-sa",
-  "version": "1.0.0",
-  "description": "Static analyzer for HAP packages - analyzing SO files and resources",
-  "main": "lib/index.js",
-  "bin": {
-    "hapray-static": "lib/cli.js"
-  },
+  "name": "sa",
+  "version": "1.0.9",
+  "main": "index.js",
   "files": [
-    "lib",
-    "res"
+    "lib"
   ],
   "scripts": {
+    "postinstall": "node unzip_third-party.js",
     "build": "tsc && webpack --config webpack.config.js",
-    "build:tsc": "tsc",
-    "build:webpack": "tsc && webpack --config webpack.config.js",
     "lint": "eslint --ext .ts src",
     "lint:fix": "eslint --ext .ts src --fix",
     "prepack": "npm run build",
     "test": "vitest",
-    "create-test-hap": "node test/create-test-hap.js",
-    "demo": "npm run build:tsc && node lib/cli.js -i test/test-app.hap -o demo-output -f json",
-    "demo:html": "npm run build:tsc && node lib/cli.js -i test/test-app.hap -o demo-output -f html",
-    "demo:excel": "npm run build:tsc && node lib/cli.js -i test/test-app.hap -o demo-output -f excel",
-    "demo:all": "npm run demo && npm run demo:html && npm run demo:excel"
+    "hapray": "node -r ts-node/register src/cli/index.ts hapray dbtools -i D:\\test\\ArkAnalyzer-HapRay-win32-x64\\ArkAnalyzer-HapRay-1.0.5\\reports\\20250801084506\\ResourceUsage_PerformanceDynamic_Douyin_0010_round0",
+    "unittest": "node -r ts-node/register src/cli/index.ts hapray dbtools -i a --ut true"
   },
   "dependencies": {
-    "@types/node": "^22.10.2",
+    "@babel/runtime": "^7.26.9",
+    "@types/sql.js": "^1.4.9",
+    "@xmldom/xmldom": "^0.9.8",
     "arkanalyzer": "^1.0.7",
+    "bjc": "^1.0.22",
     "commander": "^12.1.0",
-    "exceljs": "^4.4.0",
-    "handlebars": "^4.7.8",
     "jszip": "^3.10.1",
-    "write-excel-file": "^2.3.2"
+    "read-excel-file": "^5.8.7",
+    "sql.js": "^1.13.0",
+    "write-excel-file": "^2.3.2",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.35.0",
     "@typescript-eslint/parser": "^8.35.0",
+    "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
+    "axios": "^1.12.2",
+    "axios-https-proxy-fix": "^0.17.1",
     "copy-webpack-plugin": "^12.0.2",
     "eslint": "^9.30.0",
     "globals": "^16.2.0",
+    "tar": "^7.4.3",
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.0.0",
     "vitest": "^3.2.4",
-    "webpack": "^5.96.1",
+    "webpack": "^5.97.1",
     "webpack-cli": "^5.1.4"
   }
 }

@@ -6,7 +6,6 @@
   "files": [],
   "workspaces": [
     "web",
-    "toolbox",
     "sa",
     "perf_testing"
   ],

@@ -84,7 +84,7 @@ class PerfAnalyzer(BaseAnalyzer):
         """生成火焰图报告，返回原始JSON字符串"""
         report_file = os.path.join(os.path.dirname(perf_path), 'hiperf_report.html')
         template_file = os.path.join(
-            CommonUtils.get_project_root(), 'hapray-toolbox', 'res', 'hiperf_report_template.html'
+            CommonUtils.get_project_root(), 'sa-cmd', 'res', 'hiperf_report_template.html'
         )
         if not os.path.exists(template_file):
             logging.warning('Not found file %s', template_file)
@@ -238,7 +238,7 @@ class PerfAnalyzer(BaseAnalyzer):
         with open(perf_json_file, errors='ignore', encoding='UTF-8') as json_file:
             data = json.load(json_file)
         rules = []
-        config_file = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'res', 'perf', 'symbol_split.json')
+        config_file = os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'res', 'perf', 'symbol_split.json')
         # 1. 从配置文件加载规则
         if config_file and os.path.exists(config_file):
             with open(config_file, encoding='UTF-8') as f:
