@@ -18,7 +18,7 @@ import sqlJs from 'sql.js';
 import type { PerfSymbolDetailData, TestStep } from './perf_analyzer_base';
 import { PerfEvent } from './perf_analyzer_base';
 import { Readable } from 'stream';
-import { ComponentCategory } from '../component';
+import { ComponentCategory } from '../../types/component';
 
 export interface Instruction {
     name: string;

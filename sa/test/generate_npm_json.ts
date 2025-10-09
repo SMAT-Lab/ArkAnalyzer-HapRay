@@ -1,4 +1,4 @@
-import { ComponentCategory } from '../src/core/component';
+import { ComponentCategory } from '../src/types/component';
 import { PkgIdentify } from '../src/core/deps/pkg_identify';
 
 const pkgNames = [

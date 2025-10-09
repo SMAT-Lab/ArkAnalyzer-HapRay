@@ -20,7 +20,7 @@ import initSqlJs from 'sql.js';
 import writeXlsxFile from 'write-excel-file/node';
 import { createHash } from 'crypto';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { ComponentCategory, OriginKind, getComponentCategories } from '../component';
+import { ComponentCategory, OriginKind, getComponentCategories } from '../../types/component';
 import type {
     ClassifyCategory,
     FileClassification,

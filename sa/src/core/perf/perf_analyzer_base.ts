@@ -16,9 +16,9 @@
 import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
-import type { Component, ComponentCategoryType } from '../component';
-import { ComponentCategory, OriginKind } from '../component';
-import { AnalyzerProjectBase, PROJECT_ROOT } from '../project';
+import type { Component, ComponentCategoryType } from '../../types/component';
+import { ComponentCategory, OriginKind } from '../../types/component';
+import { AnalyzerProjectBase, PROJECT_ROOT } from './project';
 import { getConfig } from '../../config';
 import writeXlsxFile from 'write-excel-file/node';
 import { PerfDatabase } from './perf_database';

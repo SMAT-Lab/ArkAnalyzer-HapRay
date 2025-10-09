@@ -16,9 +16,9 @@
 import { Command } from 'commander';
 import type { GlobalConfig } from '../../config/types';
 import { initConfig, updateKindConfig } from '../../config';
-import { main } from '../../services/report/test_report';
 import type { TimeRange } from '../../core/perf/perf_analyzer';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import { PerfAnalysisService } from '../../services/analysis/perf_analysis';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -73,7 +73,7 @@ interface HapAnalyzerOptions {
     timeRanges?: Array<string>;
 }
 
-export const DbtoolsCli = new Command('dbtools')
+export const PerfCli = new Command('perf')
     .requiredOption('-i, --input <string>', 'scene test report path')
     .option('--choose', 'choose one from rounds', false)
     .option('--disable-dbtools', 'disable dbtools', false)
@@ -103,5 +103,10 @@ export const DbtoolsCli = new Command('dbtools')
             });
         }
 
-        await main(options.input, timeRanges);
+        const perfAnalysisService = new PerfAnalysisService();
+        if (options.choose) {
+            await perfAnalysisService.chooseRound(options.input);
+        } else {
+            await perfAnalysisService.generatePerfReport(options.input, timeRanges);
+        }
     });
