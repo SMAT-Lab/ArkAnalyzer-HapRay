@@ -61,7 +61,7 @@ export * from '../utils/file_utils';
 export * from '../utils/zip-adapter';
 
 // 格式化器
-export * from '../formatters';
+export * from '../services/report';
 
 import { HapAnalysisService } from '../services/analysis/hap_analysis';
 

@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, FileType, ResourceFileInfo } from '../config/types';
+import type { HapStaticAnalysisResult, FileType, ResourceFileInfo } from '../../config/types';
 
 interface JsonReport {
     metadata: {

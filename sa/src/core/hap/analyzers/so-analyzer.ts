@@ -371,40 +371,53 @@ export class SoAnalyzer {
      */
     private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
         try {
-            // 查找libapp.so和libflutter.so
-            let libappSoPath: string | null = null;
+            // 所有Flutter相关的SO文件都进行完整分析（包信息+版本信息）
+            return await this.performFlutterFullAnalysis(fileName, zip);
+        } catch (error) {
+            this.logger.error(`Flutter analysis failed: ${(error as Error).message}`);
+            return null;
+        }
+    }
+
+    /**
+     * 执行完整的Flutter分析（分析当前SO文件的包信息和版本信息）
+     */
+    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
+        try {
+            // 查找当前SO文件和libflutter.so
+            let currentSoPath: string | null = null;
             let libflutterSoPath: string | null = null;
 
             for (const [filePath] of Object.entries(zip.files)) {
                 const basename = path.basename(filePath);
-                if (basename === 'libapp.so') {
-                    libappSoPath = filePath;
+                if (basename === fileName) {
+                    currentSoPath = filePath;
                 } else if (basename === 'libflutter.so') {
                     libflutterSoPath = filePath;
                 }
             }
 
-            if (!libappSoPath) {
-                this.logger.warn('libapp.so not found for Flutter analysis');
+            if (!currentSoPath) {
+                this.logger.warn(`${fileName} not found for Flutter analysis`);
                 return null;
             }
 
             // 创建临时文件进行分析
             const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'flutter-analysis-'));
-            let libappTempPath: string | null = null;
+            let currentSoTempPath: string | null = null;
             let libflutterTempPath: string | null = null;
 
             try {
-                // 提取libapp.so到临时文件
-                const libappEntry = zip.files[libappSoPath];
-                if (libappEntry) {
-                    const libappData = await safeReadZipEntry(libappEntry, this.fileSizeLimits);
-                    libappTempPath = path.join(tempDir, 'libapp.so');
-                    fs.writeFileSync(libappTempPath, libappData);
+                // 提取当前SO文件到临时文件
+                const currentSoEntry = zip.files[currentSoPath];
+                if (currentSoEntry) {
+                    const currentSoData = await safeReadZipEntry(currentSoEntry, this.fileSizeLimits);
+                    currentSoTempPath = path.join(tempDir, fileName);
+                    fs.writeFileSync(currentSoTempPath, currentSoData);
                 }
 
-                // 提取libflutter.so到临时文件（如果存在）
-                if (libflutterSoPath) {
+                // 提取libflutter.so到临时文件（如果存在且不是当前文件）
+                if (libflutterSoPath && fileName !== 'libflutter.so') {
                     const libflutterEntry = zip.files[libflutterSoPath];
                     if (libflutterEntry) {
                         const libflutterData = await safeReadZipEntry(libflutterEntry, this.fileSizeLimits);
@@ -415,11 +428,11 @@ export class SoAnalyzer {
 
                 // 执行Flutter分析
                 const analysisResult = await this.flutterAnalyzer.analyzeFlutter(
-                    libappTempPath!,
-                    libflutterTempPath || undefined
+                    currentSoTempPath!,
+                    (fileName === 'libflutter.so' ? currentSoTempPath : libflutterTempPath) || undefined
                 );
 
-                this.logger.info(`Flutter analysis completed: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 || 'unknown'}`);
+                this.logger.info(`Flutter analysis completed for ${fileName}: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 || 'unknown'}`);
 
                 return analysisResult;
 
@@ -435,8 +448,10 @@ export class SoAnalyzer {
             }
 
         } catch (error) {
-            this.logger.error(`Flutter analysis failed: ${(error as Error).message}`);
+            this.logger.error(`Flutter full analysis failed: ${(error as Error).message}`);
             return null;
         }
     }
+
+
 }

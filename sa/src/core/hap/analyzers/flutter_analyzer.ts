@@ -51,12 +51,12 @@ export class FlutterAnalyzer {
 
     /**
      * 分析Flutter应用
-     * @param libappSoPath libapp.so文件路径
-     * @param libflutterSoPath libflutter.so文件路径（可选）
+     * @param soPath 当前SO文件路径（可为libapp.so或libflutter.so或其他Flutter相关SO）
+     * @param libflutterSoPath libflutter.so文件路径（可选；若当前文件即为libflutter.so，可传同一路径）
      * @returns Flutter分析结果
      */
     public async analyzeFlutter(
-        libappSoPath: string,
+        soPath: string,
         libflutterSoPath?: string
     ): Promise<FlutterAnalysisResult> {
         const result: FlutterAnalysisResult = {
@@ -65,14 +65,14 @@ export class FlutterAnalyzer {
         };
 
         try {
-            // 1. 检查libapp.so是否存在
-            if (!fs.existsSync(libappSoPath)) {
-                logger.warn(`libapp.so not found: ${libappSoPath}`);
+            // 1. 检查当前SO是否存在
+            if (!fs.existsSync(soPath)) {
+                logger.warn(`SO not found: ${soPath}`);
                 return result;
             }
 
-            // 2. 分析Dart包
-            const dartPackages = await this.analyzeDartPackages(libappSoPath);
+            // 2. 分析Dart包（对当前SO进行分析）
+            const dartPackages = await this.analyzeDartPackages(soPath);
             result.dartPackages = dartPackages;
 
             // 3. 如果有自研包，则认为是Flutter应用
@@ -84,7 +84,7 @@ export class FlutterAnalyzer {
                 logger.info(`Detected Flutter app with ${customPackages.length} custom packages`);
             }
 
-            // 4. 分析Flutter版本（如果提供了libflutter.so）
+            // 4. 分析Flutter版本（如果提供了libflutter.so；若当前即为libflutter.so，可传当前路径）
             if (libflutterSoPath && fs.existsSync(libflutterSoPath)) {
                 const flutterVersion = await this.analyzeFlutterVersion(libflutterSoPath);
                 if (flutterVersion) {
@@ -101,14 +101,14 @@ export class FlutterAnalyzer {
     }
 
     /**
-     * 从libapp.so中分析Dart包
-     * @param libappSoPath libapp.so文件路径
+     * 从给定SO中分析Dart包（可为libapp.so / libflutter.so / 其他Flutter相关SO）
+     * @param soPath SO文件路径
      * @returns Dart包列表
      */
-    private async analyzeDartPackages(libappSoPath: string): Promise<DartPackage[]> {
+    private async analyzeDartPackages(soPath: string): Promise<DartPackage[]> {
         try {
             // 使用ELF分析器的strings方法提取字符串
-            const strings = await this.elfAnalyzer.strings(libappSoPath);
+            const strings = await this.elfAnalyzer.strings(soPath);
             
             // 匹配package字符串的正则表达式
             const packageRegex = /package:([a-zA-Z0-9_]+)(?:@([0-9]+\.[0-9]+\.[0-9]+))?/g;
@@ -129,11 +129,14 @@ export class FlutterAnalyzer {
                             name: packageName,
                             version: version
                         });
+                        logger.debug(`Found Dart package: ${packageName}@${version || 'unknown'} from string: ${str.substring(0, 100)}...`);
+                    } else {
+                        logger.debug(`Duplicate Dart package skipped: ${packageName}@${version || 'unknown'} from string: ${str.substring(0, 100)}...`);
                     }
                 }
             }
 
-            logger.info(`Found ${packages.length} Dart packages in ${path.basename(libappSoPath)}`);
+            logger.info(`Found ${packages.length} Dart packages in ${path.basename(soPath)}`);
             return packages;
         } catch (error) {
             logger.error(`Failed to analyze Dart packages: ${(error as Error).message}`);
@@ -146,7 +149,7 @@ export class FlutterAnalyzer {
      * @param libflutterSoPath libflutter.so文件路径
      * @returns Flutter版本信息
      */
-    private async analyzeFlutterVersion(libflutterSoPath: string): Promise<FlutterVersionInfo | null> {
+    public async analyzeFlutterVersion(libflutterSoPath: string): Promise<FlutterVersionInfo | null> {
         try {
             // 使用ELF分析器的strings方法提取字符串
             const strings = await this.elfAnalyzer.strings(libflutterSoPath);
