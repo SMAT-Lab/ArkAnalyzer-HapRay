@@ -76,9 +76,7 @@ export class SoAnalyzer {
         soFiles: Array<SoAnalysisResult>;
         totalSoFiles: number;
     }> {
-        if (!zip?.files) {
-            throw ErrorFactory.createSoAnalysisError('Invalid ZIP instance provided');
-        }
+        // zip.files is always present on a valid adapter
 
         // 重置内存监控器
         this.memoryMonitor.reset();
@@ -314,17 +312,13 @@ export class SoAnalyzer {
      * @param zip ZIP实例
      * @returns 是否为真正的KMP框架
      */
-    private async verifyKmpFramework(zipEntry: ZipEntry, zip: ZipInstance): Promise<boolean> {
+    private async verifyKmpFramework(zipEntry: ZipEntry, _zip: ZipInstance): Promise<boolean> {
         try {
             // 读取SO文件内容
             const soBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
-            if (!soBuffer) {
-                this.logger.warn('Failed to read SO file for KMP verification');
-                return false;
-            }
 
             // 创建临时文件用于ELF分析
-            const tempDir = require('os').tmpdir();
+            const tempDir = (await import('os')).tmpdir();
             const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.so`);
             
             try {
@@ -369,7 +363,7 @@ export class SoAnalyzer {
      * @param zip ZIP实例
      * @returns Flutter分析结果
      */
-    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
+    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<import('../../../config/types').FlutterAnalysisResult | null> {
         try {
             // 所有Flutter相关的SO文件都进行完整分析（包信息+版本信息）
             return await this.performFlutterFullAnalysis(fileName, zip);
@@ -382,7 +376,7 @@ export class SoAnalyzer {
     /**
      * 执行完整的Flutter分析（分析当前SO文件的包信息和版本信息）
      */
-    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
+    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<import('../../../config/types').FlutterAnalysisResult | null> {
         try {
             // 查找当前SO文件和libflutter.so
             let currentSoPath: string | null = null;
@@ -403,36 +397,34 @@ export class SoAnalyzer {
             }
 
             // 创建临时文件进行分析
-            const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'flutter-analysis-'));
+            const tempDir = fs.mkdtempSync(path.join((await import('os')).tmpdir(), 'flutter-analysis-'));
             let currentSoTempPath: string | null = null;
             let libflutterTempPath: string | null = null;
 
             try {
                 // 提取当前SO文件到临时文件
                 const currentSoEntry = zip.files[currentSoPath];
-                if (currentSoEntry) {
-                    const currentSoData = await safeReadZipEntry(currentSoEntry, this.fileSizeLimits);
-                    currentSoTempPath = path.join(tempDir, fileName);
-                    fs.writeFileSync(currentSoTempPath, currentSoData);
-                }
+                const currentSoData = await safeReadZipEntry(currentSoEntry, this.fileSizeLimits);
+                currentSoTempPath = path.join(tempDir, fileName);
+                fs.writeFileSync(currentSoTempPath, currentSoData);
 
                 // 提取libflutter.so到临时文件（如果存在且不是当前文件）
                 if (libflutterSoPath && fileName !== 'libflutter.so') {
                     const libflutterEntry = zip.files[libflutterSoPath];
-                    if (libflutterEntry) {
-                        const libflutterData = await safeReadZipEntry(libflutterEntry, this.fileSizeLimits);
-                        libflutterTempPath = path.join(tempDir, 'libflutter.so');
-                        fs.writeFileSync(libflutterTempPath, libflutterData);
-                    }
+                    const libflutterData = await safeReadZipEntry(libflutterEntry, this.fileSizeLimits);
+                    libflutterTempPath = path.join(tempDir, 'libflutter.so');
+                    fs.writeFileSync(libflutterTempPath, libflutterData);
                 }
 
                 // 执行Flutter分析
-                const analysisResult = await this.flutterAnalyzer.analyzeFlutter(
-                    currentSoTempPath!,
-                    (fileName === 'libflutter.so' ? currentSoTempPath : libflutterTempPath) || undefined
-                );
+                if (!currentSoTempPath) {
+                    this.logger.warn('Temp path for current SO not prepared');
+                    return null;
+                }
+                const libflutterPath = (fileName === 'libflutter.so' ? currentSoTempPath : libflutterTempPath) ?? undefined;
+                const analysisResult = await this.flutterAnalyzer.analyzeFlutter(currentSoTempPath, libflutterPath);
 
-                this.logger.info(`Flutter analysis completed for ${fileName}: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 || 'unknown'}`);
+                this.logger.info(`Flutter analysis completed for ${fileName}: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 ?? 'unknown'}`);
 
                 return analysisResult;
 

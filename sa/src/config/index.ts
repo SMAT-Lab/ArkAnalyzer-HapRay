@@ -74,7 +74,7 @@ import { HapAnalysisService } from '../services/analysis/hap_analysis';
 export async function analyzeHap(
     hapFilePath: string,
     verbose = false
-) {
+): Promise<unknown> {
     const analyzer = new HapAnalysisService({ verbose });
     return await analyzer.analyzeHap(hapFilePath);
 }

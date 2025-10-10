@@ -32,7 +32,7 @@ export interface FlutterVersionInfo {
 
 export interface FlutterAnalysisResult {
     isFlutter: boolean;
-    dartPackages: DartPackage[];
+    dartPackages: Array<DartPackage>;
     flutterVersion?: FlutterVersionInfo;
 }
 
@@ -105,14 +105,14 @@ export class FlutterAnalyzer {
      * @param soPath SO文件路径
      * @returns Dart包列表
      */
-    private async analyzeDartPackages(soPath: string): Promise<DartPackage[]> {
+    private async analyzeDartPackages(soPath: string): Promise<Array<DartPackage>> {
         try {
             // 使用ELF分析器的strings方法提取字符串
             const strings = await this.elfAnalyzer.strings(soPath);
             
             // 匹配package字符串的正则表达式
             const packageRegex = /package:([a-zA-Z0-9_]+)(?:@([0-9]+\.[0-9]+\.[0-9]+))?/g;
-            const packages: DartPackage[] = [];
+            const packages: Array<DartPackage> = [];
             const seenPackages = new Set<string>();
 
             for (const str of strings) {
@@ -156,7 +156,7 @@ export class FlutterAnalyzer {
             
             // 匹配40位Hex字符串的正则表达式
             const hex40Regex = /^[0-9a-fA-F]{40}$/;
-            const hex40Strings: string[] = [];
+            const hex40Strings: Array<string> = [];
 
             for (const str of strings) {
                 if (hex40Regex.test(str)) {
@@ -218,7 +218,7 @@ export class FlutterAnalyzer {
             const resPath = path.join(__dirname, '../../../../res/pub_dev_packages.json');
             if (fs.existsSync(resPath)) {
                 const data = fs.readFileSync(resPath, 'utf-8');
-                const packages = JSON.parse(data) as string[];
+                const packages = JSON.parse(data) as Array<string>;
                 this.pubDevPackages = new Set(packages);
                 logger.info(`Loaded ${packages.length} packages from local resource file`);
                 return this.pubDevPackages;

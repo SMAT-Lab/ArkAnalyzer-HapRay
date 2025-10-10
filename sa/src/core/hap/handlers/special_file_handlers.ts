@@ -1,9 +1,11 @@
 import { HandlerRegistry, type FileHandler, type FileProcessorContext } from '../registry';
+import type { ArchiveFileInfo, ResourceFileInfo, JsFileInfo, HermesFileInfo } from '../../../config/types';
 import path from 'path';
 import { getMimeType } from '../../../config/magic-numbers';
 import type { ZipEntry, ZipInstance } from '../../../types/zip-types';
-import { isValidZipEntry, getSafeFileSize, safeReadZipEntry, isFileSizeExceeded, MemoryMonitor } from '../../../types/zip-types';
-import { FileType } from '../../../config/types';
+import { isValidZipEntry, getSafeFileSize, safeReadZipEntry, isFileSizeExceeded } from '../../../types/zip-types';
+import type { MemoryMonitor } from '../../../types/zip-types';
+// import type { FileType } from '../../../config/types';
 import { createZipAdapter } from '../../../utils/zip-adapter';
 import { ErrorFactory, ErrorUtils } from '../../../errors';
 import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../../../config/framework-patterns';
@@ -33,7 +35,7 @@ export class SoFileHandler implements FileHandler {
             try {
                 fileSize = await getFileSizeWithMemoryCheck(zipEntry, filePath, context.getMemoryMonitor(), limits);
             } catch (error) {
-                if ((error as any)?.code === 'FILE_SIZE_LIMIT_ERROR') {
+                if ((error as Error & { code?: string }).code === 'FILE_SIZE_LIMIT_ERROR') {
                     fileSize = zipEntry.compressedSize;
                 } else {
                     throw error;
@@ -57,7 +59,7 @@ export class SoFileHandler implements FileHandler {
         context.addSoResult({ 
             filePath, 
             fileName, 
-            frameworks: frameworks as unknown as Array<any>, 
+            frameworks: frameworks as unknown as Array<string>, 
             fileSize, 
             isSystemLib,
             flutterAnalysis: flutterAnalysisResult
@@ -71,7 +73,7 @@ export class SoFileHandler implements FileHandler {
      * @param zip ZIP实例
      * @returns Flutter分析结果
      */
-    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
+    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<import('../../../config/types').FlutterAnalysisResult | null> {
         try {
             // 所有Flutter相关的SO文件都进行完整分析（包信息+版本信息）
             return await this.performFlutterFullAnalysis(fileName, zip);
@@ -84,7 +86,7 @@ export class SoFileHandler implements FileHandler {
     /**
      * 执行完整的Flutter分析（分析当前SO文件的包信息和版本信息）
      */
-    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
+    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<import('../../../config/types').FlutterAnalysisResult | null> {
         try {
             // 查找当前SO文件和libflutter.so
             let currentSoPath: string | null = null;
@@ -105,8 +107,8 @@ export class SoFileHandler implements FileHandler {
             }
 
             // 创建临时文件进行分析
-            const tempDir = require('os').tmpdir();
-            const fs = require('fs');
+            const tempDir = (await import('os')).tmpdir();
+            const fs = require('fs') as typeof import('fs');
             const tempAnalysisDir = fs.mkdtempSync(path.join(tempDir, 'flutter-analysis-'));
             let currentSoTempPath: string | null = null;
             let libflutterTempPath: string | null = null;
@@ -114,29 +116,27 @@ export class SoFileHandler implements FileHandler {
             try {
                 // 提取当前SO文件到临时文件
                 const currentSoEntry = zip.files[currentSoPath];
-                if (currentSoEntry) {
-                    const currentSoData = await safeReadZipEntry(currentSoEntry, { maxFileSize: 100 * 1024 * 1024, maxMemoryUsage: 200 * 1024 * 1024, largeFileThreshold: 10 * 1024 * 1024 });
-                    currentSoTempPath = path.join(tempAnalysisDir, fileName);
-                    fs.writeFileSync(currentSoTempPath, currentSoData);
-                }
+                const currentSoData = await safeReadZipEntry(currentSoEntry, { maxFileSize: 100 * 1024 * 1024, maxMemoryUsage: 200 * 1024 * 1024, largeFileThreshold: 10 * 1024 * 1024 });
+                currentSoTempPath = path.join(tempAnalysisDir, fileName);
+                fs.writeFileSync(currentSoTempPath, currentSoData);
 
                 // 提取libflutter.so到临时文件（如果存在且不是当前文件）
                 if (libflutterSoPath && fileName !== 'libflutter.so') {
                     const libflutterEntry = zip.files[libflutterSoPath];
-                    if (libflutterEntry) {
-                        const libflutterData = await safeReadZipEntry(libflutterEntry, { maxFileSize: 100 * 1024 * 1024, maxMemoryUsage: 200 * 1024 * 1024, largeFileThreshold: 10 * 1024 * 1024 });
-                        libflutterTempPath = path.join(tempAnalysisDir, 'libflutter.so');
-                        fs.writeFileSync(libflutterTempPath, libflutterData);
-                    }
+                    const libflutterData = await safeReadZipEntry(libflutterEntry, { maxFileSize: 100 * 1024 * 1024, maxMemoryUsage: 200 * 1024 * 1024, largeFileThreshold: 10 * 1024 * 1024 });
+                    libflutterTempPath = path.join(tempAnalysisDir, 'libflutter.so');
+                    fs.writeFileSync(libflutterTempPath, libflutterData);
                 }
 
                 // 执行Flutter分析
-                const analysisResult = await this.flutterAnalyzer.analyzeFlutter(
-                    currentSoTempPath!,
-                    (fileName === 'libflutter.so' ? currentSoTempPath : libflutterTempPath) || undefined
-                );
+                if (!currentSoTempPath) {
+                    console.warn('Temp path for current SO not prepared');
+                    return null;
+                }
+                const libflutterPath = (fileName === 'libflutter.so' ? currentSoTempPath : libflutterTempPath) ?? undefined;
+                const analysisResult = await this.flutterAnalyzer.analyzeFlutter(currentSoTempPath, libflutterPath);
 
-                console.log(`Flutter analysis completed for ${fileName}: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 || 'unknown'}`);
+                console.warn(`Flutter analysis completed for ${fileName}: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 ?? 'unknown'}`);
 
                 return analysisResult;
 
@@ -199,7 +199,7 @@ async function processResourceFile(filePath: string, zipEntry: ZipEntry, context
         try {
             fileSize = await getFileSizeWithMemoryCheck(zipEntry, filePath, context.getMemoryMonitor(), limits);
         } catch (error) {
-            if ((error as any)?.code === 'FILE_SIZE_LIMIT_ERROR') {
+            if ((error as Error & { code?: string }).code === 'FILE_SIZE_LIMIT_ERROR') {
                 fileSize = zipEntry.compressedSize;
             } else {
                 throw error;
@@ -207,26 +207,26 @@ async function processResourceFile(filePath: string, zipEntry: ZipEntry, context
         }
     }
     if (fileSize === 0) { return; }
-    const fileType = HandlerRegistry.getInstance().detectByAll(fileName) as unknown as keyof typeof FileType;
+    const fileType = HandlerRegistry.getInstance().detectByAll(fileName);
     const mimeType = getMimeType(fileName);
-    const base = { filePath, fileName, fileType: fileType as any, fileSize, mimeType, isTextFile: isLikelyTextFile(fileType as any) };
+    const base = { filePath, fileName, fileType, fileSize, mimeType, isTextFile: isLikelyTextFile(fileType) };
     context.increaseTotalFiles(1);
     context.increaseTotalSize(fileSize);
     context.addResourceFile(base);
-    if (fileType === (FileType as any).JS) {
+    if (fileType === 'JS') {
         const jsInfo = { ...base, isMinified: isMinifiedJs(fileName), estimatedLines: estimateJsLines(fileSize) };
         context.addJsFile(jsInfo);
     }
-    if ((fileType as any) === (FileType as any).HERMES_BYTECODE) {
+    if (fileType === 'HERMES_BYTECODE') {
         const hermesInfo = { ...base, version: undefined, isValidHermes: true };
         context.addHermesFile(hermesInfo);
     }
-    if (isArchive && (fileType as any) === (FileType as any).ZIP) {
-        const archiveInfo: any = { ...base, entryCount: 0, extracted: false, extractionDepth: 0, nestedFiles: [], nestedArchives: [] };
+    if (isArchive && fileType === 'ZIP') {
+        const archiveInfo: Record<string, unknown> = { ...base, entryCount: 0, extracted: false, extractionDepth: 0, nestedFiles: [], nestedArchives: [] };
         try {
             // 对超大ZIP同样容错：若超过限制，不解压，记录为未解压，仍计入统计
             const limits = context.getFileSizeLimits();
-            const metaUncompressed = (zipEntry.uncompressedSize ?? getSafeFileSize(zipEntry)) || 0;
+            const metaUncompressed = zipEntry.uncompressedSize ?? (getSafeFileSize(zipEntry) || 0);
             if (metaUncompressed > limits.maxFileSize) {
                 archiveInfo.extracted = false;
             } else {
@@ -239,13 +239,13 @@ async function processResourceFile(filePath: string, zipEntry: ZipEntry, context
             if (ErrorUtils.isMemoryError(error)) { throw error; }
             archiveInfo.extracted = false;
         }
-        context.addArchiveFile(archiveInfo);
+        context.addArchiveFile(archiveInfo as unknown as ArchiveFileInfo);
     }
 }
 
-function isLikelyTextFile(fileType: keyof typeof FileType): boolean {
-    const textTypes: Array<any> = [(FileType as any).JS, (FileType as any).JSON, (FileType as any).XML, (FileType as any).TEXT];
-    return textTypes.includes(fileType as any);
+function isLikelyTextFile(fileType: string): boolean {
+    const textTypes: Array<string> = ['JS', 'JSON', 'XML', 'TEXT'];
+    return textTypes.includes(fileType);
 }
 
 function isMinifiedJs(fileName: string): boolean {
@@ -295,7 +295,7 @@ function identifyFrameworks(fileName: string): Array<string> {
     }
 }
 
-async function extractAndAnalyzeNestedArchive(nestedZip: import('../../../utils/zip-adapter').JSZipAdapter, archiveInfo: any, depth: number, context: FileProcessorContext): Promise<void> {
+async function extractAndAnalyzeNestedArchive(nestedZip: import('../../../utils/zip-adapter').JSZipAdapter, archiveInfo: Record<string, unknown>, depth: number, context: FileProcessorContext): Promise<void> {
     const MAX_DEPTH = 5;
     const nextDepth = depth + 1;
     archiveInfo.extractionDepth = nextDepth;
@@ -303,34 +303,34 @@ async function extractAndAnalyzeNestedArchive(nestedZip: import('../../../utils/
     const entries = Object.entries(nestedZip.files);
     let nestedFilesCount = 0;
     for (const [nestedPath, nestedEntry] of entries) {
-        if ((nestedEntry as any).dir) { continue; }
+        if ((nestedEntry as unknown as Record<string, unknown>).dir) { continue; }
         nestedFilesCount++;
         const fileName = path.basename(nestedPath);
-        const size = (nestedEntry as any).uncompressedSize ?? (nestedEntry as any).compressedSize ?? 0;
-        const fileType = HandlerRegistry.getInstance().detectByAll(fileName) as unknown as keyof typeof FileType;
-        const info: any = {
+        const size = (nestedEntry as unknown as Record<string, unknown>).uncompressedSize as number || (nestedEntry as unknown as Record<string, unknown>).compressedSize as number || 0;
+        const fileType = HandlerRegistry.getInstance().detectByAll(fileName);
+        const info: Record<string, unknown> = {
             filePath: nestedPath,
             fileName,
-            fileType: fileType as any,
+            fileType,
             fileSize: size,
             mimeType: getMimeType(fileName),
-            isTextFile: isLikelyTextFile(fileType as any)
+            isTextFile: isLikelyTextFile(fileType)
         };
-        archiveInfo.nestedFiles.push(info);
-        context.addResourceFile(info);
+        (archiveInfo.nestedFiles as Array<unknown>).push(info);
+        context.addResourceFile(info as unknown as ResourceFileInfo);
         context.increaseTotalFiles(1);
         context.increaseTotalSize(size);
-        if ((fileType as any) === (FileType as any).JS) {
-            context.addJsFile({ ...info, isMinified: isMinifiedJs(fileName), estimatedLines: estimateJsLines(size) });
+        if (fileType === 'JS') {
+            context.addJsFile({ ...info, isMinified: isMinifiedJs(fileName), estimatedLines: estimateJsLines(size) } as unknown as JsFileInfo);
         }
-        if ((fileType as any) === (FileType as any).HERMES_BYTECODE) {
-            context.addHermesFile({ ...info, version: undefined, isValidHermes: true });
+        if (fileType === 'HERMES_BYTECODE') {
+            context.addHermesFile({ ...info, version: undefined, isValidHermes: true } as unknown as HermesFileInfo);
         }
         if (nextDepth < MAX_DEPTH && fileName.toLowerCase().endsWith('.zip')) {
             try {
-                const buf = await (nestedEntry as any).async('nodebuffer');
+                const buf = await (nestedEntry as unknown as { async: (format: string) => Promise<Buffer> }).async('nodebuffer');
                 const deeperZip = await createZipAdapter(Buffer.from(buf));
-                const childArchive: any = {
+                const childArchive: Record<string, unknown> = {
                     ...info,
                     entryCount: 0,
                     extracted: false,
@@ -340,7 +340,7 @@ async function extractAndAnalyzeNestedArchive(nestedZip: import('../../../utils/
                 };
                 await extractAndAnalyzeNestedArchive(deeperZip, childArchive, nextDepth, context);
                 childArchive.extracted = true;
-                archiveInfo.nestedArchives.push(childArchive);
+                (archiveInfo.nestedArchives as Array<unknown>).push(childArchive);
                 context.increaseExtractedArchiveCount();
             } catch (e) {
                 if (ErrorUtils.isMemoryError(e)) { throw e; }

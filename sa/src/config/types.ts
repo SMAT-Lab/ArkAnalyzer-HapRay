@@ -167,7 +167,7 @@ export interface SoAnalysisResult {
     /** 是否为系统库 */
     isSystemLib: boolean;
     /** Flutter分析结果（可选） */
-    flutterAnalysis?: any;
+    flutterAnalysis?: FlutterAnalysisResult | null;
 }
 
 /**
@@ -243,6 +243,25 @@ export interface HermesFileInfo extends ResourceFileInfo {
     version?: string;
     /** 是否为有效的Hermes字节码 */
     isValidHermes: boolean;
+}
+
+/**
+ * Flutter 分析结果
+ */
+export interface FlutterVersionInfo {
+    hex40?: string;
+    lastModified?: string;
+}
+
+export interface FlutterPackageInfo {
+    name: string;
+    version?: string;
+}
+
+export interface FlutterAnalysisResult {
+    isFlutter: boolean;
+    dartPackages: Array<FlutterPackageInfo>;
+    flutterVersion?: FlutterVersionInfo;
 }
 
 /**
