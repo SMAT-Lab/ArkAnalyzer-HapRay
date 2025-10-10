@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import type { HapStaticAnalysisResult } from '../types';
+import type { HapStaticAnalysisResult } from '../config/types';
 
 /**
  * 支持的输出格式

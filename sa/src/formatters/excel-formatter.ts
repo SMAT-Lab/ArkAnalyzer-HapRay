@@ -18,7 +18,7 @@ import path from 'path';
 import Excel from 'exceljs';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult } from '../types';
+import type { HapStaticAnalysisResult, ResourceFileInfo } from '../config/types';
 
 /**
  * Excel格式化器
@@ -197,7 +197,7 @@ export class ExcelFormatter extends BaseFormatter {
         const totalFiles = result.resourceAnalysis.totalFiles;
         for (const [fileType, files] of result.resourceAnalysis.filesByType) {
             const count = files.length;
-            const totalSize = files.reduce((sum, file) => sum + file.fileSize, 0);
+            const totalSize = files.reduce((sum: number, file: ResourceFileInfo) => sum + file.fileSize, 0);
             const avgSize = count > 0 ? totalSize / count : 0;
             const percentage = totalFiles > 0 ? ((count / totalFiles) * 100).toFixed(1) + '%' : '0%';
 

@@ -14,15 +14,15 @@
  */
 
 import path from 'path';
-import type { ResourceFileInfo, ResourceAnalysisResult, ArchiveFileInfo, JsFileInfo, HermesFileInfo } from '../types';
-import { FileType } from '../types';
-import { detectFileTypeByExtension, detectFileTypeByMagic, getMimeType } from '../../config/magic-numbers';
-import { createZipAdapter } from '../../utils/zip-adapter';
+import type { ResourceFileInfo, ResourceAnalysisResult, ArchiveFileInfo, JsFileInfo, HermesFileInfo } from '../../../config/types';
+import { FileType } from '../../../config/types';
+import { getMimeType } from '../../../config/magic-numbers';
+import { createZipAdapter } from '../../../utils/zip-adapter';
 import type {
     ZipInstance,
     ZipEntry,
     FileSizeLimits
-} from '../../types/zip-types';
+} from '../../../types/zip-types';
 import {
     isValidZipEntry,
     isFileEntry,
@@ -31,11 +31,12 @@ import {
     isFileSizeExceeded,
     MemoryMonitor,
     DEFAULT_FILE_SIZE_LIMITS
-} from '../../types/zip-types';
+} from '../../../types/zip-types';
 import {
     ErrorFactory,
     ErrorUtils
-} from '../errors';
+} from '../../../errors';
+import { HandlerRegistry } from '../registry';
 
 /**
  * 分析上下文接口
@@ -345,13 +346,7 @@ export class ResourceAnalyzer {
      * 检测文件类型
      */
     private detectFileType(fileName: string): FileType {
-        // 优先使用扩展名检测
-        const typeByExt = detectFileTypeByExtension(fileName);
-        if (typeByExt !== FileType.Unknown) {
-            return typeByExt;
-        }
-
-        return FileType.Unknown;
+        return HandlerRegistry.getInstance().detectByAll(fileName);
     }
 
     /**
@@ -391,7 +386,7 @@ export class ResourceAnalyzer {
             const archiveBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
 
             // 检测文件类型
-            const detectedType = detectFileTypeByMagic(archiveBuffer);
+            const detectedType = HandlerRegistry.getInstance().detectByMagic(archiveBuffer);
             if (detectedType !== FileType.ZIP) {
                 // 不是ZIP文件，跳过
                 return;
@@ -422,18 +417,12 @@ export class ResourceAnalyzer {
             archiveInfo.nestedFiles = [];
             archiveInfo.nestedArchives = nestedContext.archiveFiles;
 
-            // 收集嵌套文件到主上下文
-            for (const [fileType, files] of nestedContext.filesByType) {
-                if (!context.filesByType.has(fileType)) {
-                    context.filesByType.set(fileType, []);
-                }
-                context.filesByType.get(fileType)!.push(...files);
+            // 收集嵌套文件到archiveInfo（不重复添加到主上下文）
+            for (const [, files] of nestedContext.filesByType) {
                 archiveInfo.nestedFiles.push(...files);
             }
 
-            // 合并统计信息
-            context.totalFiles += nestedContext.totalFiles;
-            context.totalSize += nestedContext.totalSize;
+            // 注意：不重复计算嵌套文件的统计信息，因为它们已经在主ZIP中被计算过了
             context.jsFiles.push(...nestedContext.jsFiles);
             context.hermesFiles.push(...nestedContext.hermesFiles);
             context.extractedArchiveCount++;

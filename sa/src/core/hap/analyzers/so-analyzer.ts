@@ -14,13 +14,14 @@
  */
 
 import path from 'path';
-import type { FrameworkTypeKey, SoAnalysisResult } from '../types';
-import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../../config/framework-patterns';
+import fs from 'fs';
+import type { FrameworkTypeKey, SoAnalysisResult } from '../../../config/types';
+import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../../../config/framework-patterns';
 import type {
     ZipInstance,
     ZipEntry,
     FileSizeLimits
-} from '../../types/zip-types';
+} from '../../../types/zip-types';
 import {
     isValidZipEntry,
     getSafeFileSize,
@@ -29,11 +30,14 @@ import {
     ZipEntryFilters,
     MemoryMonitor,
     DEFAULT_FILE_SIZE_LIMITS
-} from '../../types/zip-types';
+} from '../../../types/zip-types';
 import {
     ErrorFactory,
     ErrorUtils
-} from '../errors';
+} from '../../../errors';
+import { ElfAnalyzer } from '../../elf/elf_analyzer';
+import { FlutterAnalyzer } from './flutter_analyzer';
+import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 
 /**
  * SO文件分析器 - 支持类型安全的ZIP分析，包含内存管理和错误处理
@@ -42,10 +46,13 @@ export class SoAnalyzer {
     private readonly fileSizeLimits: FileSizeLimits;
     private readonly memoryMonitor: MemoryMonitor;
     private readonly supportedArchitectures: Array<string>;
+    private readonly logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
+    private readonly flutterAnalyzer: FlutterAnalyzer;
 
     constructor(fileSizeLimits: FileSizeLimits = DEFAULT_FILE_SIZE_LIMITS) {
         this.fileSizeLimits = fileSizeLimits;
         this.memoryMonitor = new MemoryMonitor(fileSizeLimits.maxMemoryUsage);
+        this.flutterAnalyzer = FlutterAnalyzer.getInstance();
         // this.supportedArchitectures = [
         //     'libs/arm64-v8a/',
         //     'libs/arm64/',
@@ -96,7 +103,7 @@ export class SoAnalyzer {
                         continue;
                     }
 
-                    const soResult = await this.processSoFile(filePath, zipEntry);
+                    const soResult = await this.processSoFile(filePath, zipEntry, zip);
                     if (soResult) {
                         soFiles.push(soResult);
 
@@ -155,7 +162,7 @@ export class SoAnalyzer {
     /**
      * 处理单个SO文件
      */
-    private async processSoFile(filePath: string, zipEntry: ZipEntry): Promise<SoAnalysisResult | null> {
+    private async processSoFile(filePath: string, zipEntry: ZipEntry, zip: ZipInstance): Promise<SoAnalysisResult | null> {
         try {
             // 检查是否在支持的架构目录下
             const isInSupportedArch = this.supportedArchitectures.some(arch =>
@@ -174,15 +181,26 @@ export class SoAnalyzer {
             }
 
             // 检测框架
-            const frameworks = this.identifyFrameworks(fileName);
+            const frameworks = await this.identifyFrameworks(fileName, zipEntry, zip);
             const isSystemLib = isSystemSo(fileName);
+
+            // 如果是Flutter相关的SO文件，进行详细分析
+            let flutterAnalysisResult = null;
+            if (frameworks.includes('Flutter')) {
+                try {
+                    flutterAnalysisResult = await this.performFlutterAnalysis(fileName, zip);
+                } catch (error) {
+                    this.logger.warn(`Failed to perform Flutter analysis for ${fileName}: ${(error as Error).message}`);
+                }
+            }
 
             return {
                 filePath,
                 fileName,
                 frameworks,
                 fileSize,
-                isSystemLib
+                isSystemLib,
+                flutterAnalysis: flutterAnalysisResult
             };
         } catch (error) {
             throw ErrorFactory.createSoAnalysisError(
@@ -243,9 +261,11 @@ export class SoAnalyzer {
     /**
      * 根据SO文件名识别框架类型
      * @param fileName SO文件名
+     * @param zipEntry SO文件的ZIP条目（用于KMP框架的细化检测）
+     * @param zip ZIP实例（用于KMP框架的细化检测）
      * @returns 识别到的框架类型数组
      */
-    private identifyFrameworks(fileName: string): Array<FrameworkTypeKey> {
+    private async identifyFrameworks(fileName: string, zipEntry?: ZipEntry, zip?: ZipInstance): Promise<Array<FrameworkTypeKey>> {
         try {
             // 首先检查是否是系统库
             if (isSystemSo(fileName)) {
@@ -260,8 +280,21 @@ export class SoAnalyzer {
                 for (const pattern of patterns) {
                     if (matchSoPattern(fileName, pattern)) {
                         const framework = frameworkType;
-                        if (!detectedFrameworks.includes(framework)) {
-                            detectedFrameworks.push(framework);
+                        
+                        // 对于KMP框架，需要进一步验证
+                        if (framework === 'KMP' && zipEntry && zip) {
+                            const isKmpConfirmed = await this.verifyKmpFramework(zipEntry, zip);
+                            if (isKmpConfirmed) {
+                                if (!detectedFrameworks.includes(framework)) {
+                                    detectedFrameworks.push(framework);
+                                }
+                            } else {
+                                this.logger.debug(`KMP framework verification failed for ${fileName}, treating as Unknown`);
+                            }
+                        } else {
+                            if (!detectedFrameworks.includes(framework)) {
+                                detectedFrameworks.push(framework);
+                            }
                         }
                         break; // 找到匹配就跳出内层循环
                     }
@@ -270,8 +303,140 @@ export class SoAnalyzer {
 
             return detectedFrameworks.length > 0 ? detectedFrameworks : ['Unknown'];
         } catch (error) {
-            console.warn(`Failed to identify frameworks for ${fileName}:`, error);
+            this.logger.warn(`Failed to identify frameworks for ${fileName}:`, error);
             return ['Unknown'];
+        }
+    }
+
+    /**
+     * 验证KMP框架的细化检测
+     * @param zipEntry SO文件的ZIP条目
+     * @param zip ZIP实例
+     * @returns 是否为真正的KMP框架
+     */
+    private async verifyKmpFramework(zipEntry: ZipEntry, zip: ZipInstance): Promise<boolean> {
+        try {
+            // 读取SO文件内容
+            const soBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
+            if (!soBuffer) {
+                this.logger.warn('Failed to read SO file for KMP verification');
+                return false;
+            }
+
+            // 创建临时文件用于ELF分析
+            const tempDir = require('os').tmpdir();
+            const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.so`);
+            
+            try {
+                // 写入临时文件
+                fs.writeFileSync(tempFilePath, soBuffer);
+                
+                // 使用ElfAnalyzer获取符号
+                const elfAnalyzer = ElfAnalyzer.getInstance();
+                const symbols = await elfAnalyzer.getSymbols(tempFilePath);
+                
+                // 检查导出符号中是否包含Kotlin相关字符串
+                const allSymbols = [...symbols.exports, ...symbols.imports];
+                const kotlinSymbols = allSymbols.filter(symbol => 
+                    symbol.includes('Kotlin') || 
+                    symbol.includes('KOTLIN_NATIVE_AVAILABLE_PROCESSORS')
+                );
+                
+                this.logger.debug(`KMP verification: found ${kotlinSymbols.length} Kotlin-related symbols out of ${allSymbols.length} total symbols`);
+                
+                // 如果找到Kotlin相关符号，则确认为KMP框架
+                return kotlinSymbols.length > 0;
+                
+            } finally {
+                // 清理临时文件
+                try {
+                    if (fs.existsSync(tempFilePath)) {
+                        fs.unlinkSync(tempFilePath);
+                    }
+                } catch (cleanupError) {
+                    this.logger.warn(`Failed to cleanup temp file ${tempFilePath}:`, cleanupError);
+                }
+            }
+        } catch (error) {
+            this.logger.warn('KMP framework verification failed:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 执行Flutter详细分析
+     * @param fileName SO文件名
+     * @param zip ZIP实例
+     * @returns Flutter分析结果
+     */
+    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<any> {
+        try {
+            // 查找libapp.so和libflutter.so
+            let libappSoPath: string | null = null;
+            let libflutterSoPath: string | null = null;
+
+            for (const [filePath] of Object.entries(zip.files)) {
+                const basename = path.basename(filePath);
+                if (basename === 'libapp.so') {
+                    libappSoPath = filePath;
+                } else if (basename === 'libflutter.so') {
+                    libflutterSoPath = filePath;
+                }
+            }
+
+            if (!libappSoPath) {
+                this.logger.warn('libapp.so not found for Flutter analysis');
+                return null;
+            }
+
+            // 创建临时文件进行分析
+            const tempDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'flutter-analysis-'));
+            let libappTempPath: string | null = null;
+            let libflutterTempPath: string | null = null;
+
+            try {
+                // 提取libapp.so到临时文件
+                const libappEntry = zip.files[libappSoPath];
+                if (libappEntry) {
+                    const libappData = await safeReadZipEntry(libappEntry, this.fileSizeLimits);
+                    libappTempPath = path.join(tempDir, 'libapp.so');
+                    fs.writeFileSync(libappTempPath, libappData);
+                }
+
+                // 提取libflutter.so到临时文件（如果存在）
+                if (libflutterSoPath) {
+                    const libflutterEntry = zip.files[libflutterSoPath];
+                    if (libflutterEntry) {
+                        const libflutterData = await safeReadZipEntry(libflutterEntry, this.fileSizeLimits);
+                        libflutterTempPath = path.join(tempDir, 'libflutter.so');
+                        fs.writeFileSync(libflutterTempPath, libflutterData);
+                    }
+                }
+
+                // 执行Flutter分析
+                const analysisResult = await this.flutterAnalyzer.analyzeFlutter(
+                    libappTempPath!,
+                    libflutterTempPath || undefined
+                );
+
+                this.logger.info(`Flutter analysis completed: isFlutter=${analysisResult.isFlutter}, packages=${analysisResult.dartPackages.length}, version=${analysisResult.flutterVersion?.hex40 || 'unknown'}`);
+
+                return analysisResult;
+
+            } finally {
+                // 清理临时文件
+                try {
+                    if (fs.existsSync(tempDir)) {
+                        fs.rmSync(tempDir, { recursive: true, force: true });
+                    }
+                } catch (cleanupError) {
+                    this.logger.warn(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+                }
+            }
+
+        } catch (error) {
+            this.logger.error(`Flutter analysis failed: ${(error as Error).message}`);
+            return null;
         }
     }
 }
