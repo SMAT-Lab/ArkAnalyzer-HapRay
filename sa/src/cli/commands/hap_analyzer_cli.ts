@@ -17,8 +17,8 @@ import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
 import { HapAnalysisService } from '../../services/analysis/hap_analysis';
-import type { FormatOptions } from '../../formatters';
-import { FormatterFactory, OutputFormat } from '../../formatters';
+import type { FormatOptions } from '../../services/report';
+import { FormatterFactory, OutputFormat } from '../../services/report';
 import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
 import { ensureDirectoryExists, getAllFiles } from '../../utils/file_utils';
 

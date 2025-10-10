@@ -59,40 +59,47 @@ async function updatePubDevPackages() {
 async function updateFlutterVersions() {
     return new Promise((resolve, reject) => {
         console.log('正在获取Flutter版本映射...');
-        
+
         https.get('https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com/', (response) => {
             let data = '';
-            
+
             response.on('data', (chunk) => {
                 data += chunk;
             });
-            
+
             response.on('end', () => {
                 try {
                     const versions = {};
-                    
-                    // 解析XML内容
-                    const keyRegex = /<Key>flutter_infra_release\/flutter\/([0-9a-fA-F]{40})\/ohos-arm64-release\/artifacts\.zip<\/Key>/g;
-                    const lastModifiedRegex = /<LastModified>([^<]+)<\/LastModified>/g;
-                    
-                    let keyMatch;
-                    const keys = [];
-                    while ((keyMatch = keyRegex.exec(data)) !== null) {
-                        keys.push(keyMatch[1]);
+
+                    // 逐个Contents块解析，避免Key与LastModified错位
+                    const contentsRegex = /<Contents>([\s\S]*?)<\/Contents>/g;
+                    let contentMatch;
+                    while ((contentMatch = contentsRegex.exec(data)) !== null) {
+                        const block = contentMatch[1];
+                        const keyMatch = block.match(/<Key>([^<]+)<\/Key>/);
+                        const lastModifiedMatch = block.match(/<LastModified>([^<]+)<\/LastModified>/);
+                        if (!keyMatch || !lastModifiedMatch) {
+                            continue;
+                        }
+                        const key = keyMatch[1];
+                        const lastModified = lastModifiedMatch[1];
+
+                        // 捕获flutter/<40hex>/... 的任意组合，优先保留最新时间
+                        const hexMatch = key.match(/flutter\/(?:[^\n<>/]*\/)?([0-9a-fA-F]{40})\//) || key.match(/flutter\/([0-9a-fA-F]{40})\//);
+                        if (!hexMatch) {
+                            continue;
+                        }
+                        const hex40 = hexMatch[1];
+
+                        // 可选：仅选取与ohos相关的制品，如果你想严格限定，可开启以下判断
+                        // if (!key.includes('ohos')) continue;
+
+                        // 若已有记录，则保留最新的LastModified（ISO时间字符串可直接比较）
+                        if (!versions[hex40] || (versions[hex40].lastModified < lastModified)) {
+                            versions[hex40] = { lastModified };
+                        }
                     }
-                    
-                    let lastModifiedMatch;
-                    const lastModifieds = [];
-                    while ((lastModifiedMatch = lastModifiedRegex.exec(data)) !== null) {
-                        lastModifieds.push(lastModifiedMatch[1]);
-                    }
-                    
-                    // 假设Key和LastModified是成对出现的
-                    const minLength = Math.min(keys.length, lastModifieds.length);
-                    for (let i = 0; i < minLength; i++) {
-                        versions[keys[i]] = { lastModified: lastModifieds[i] };
-                    }
-                    
+
                     const outputPath = path.join(__dirname, '../res/flutter_versions.json');
                     fs.writeFileSync(outputPath, JSON.stringify(versions, null, 2), 'utf-8');
                     console.log(`✅ 成功更新Flutter版本映射，共 ${Object.keys(versions).length} 个版本`);

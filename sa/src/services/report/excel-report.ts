@@ -18,7 +18,7 @@ import path from 'path';
 import Excel from 'exceljs';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, ResourceFileInfo } from '../config/types';
+import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
 
 /**
  * Excel格式化器
