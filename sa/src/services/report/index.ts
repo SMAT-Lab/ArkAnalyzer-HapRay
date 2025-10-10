@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import type { HapStaticAnalysisResult } from '../config/types';
+import type { HapStaticAnalysisResult } from '../../config/types';
 
 /**
  * 支持的输出格式
@@ -217,8 +217,8 @@ export class FormatterFactory {
 }
 
 // 导入具体的格式化器实现
-import { JsonFormatter } from './json-formatter';
-import { HtmlFormatter } from './html-formatter';
-import { ExcelFormatter } from './excel-formatter';
+import { JsonFormatter } from './json-report';
+import { HtmlFormatter } from './html-report';
+import { ExcelFormatter } from './excel-report';
 
 export { JsonFormatter, HtmlFormatter, ExcelFormatter };

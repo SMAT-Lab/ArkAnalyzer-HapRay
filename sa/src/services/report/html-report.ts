@@ -18,7 +18,7 @@ import path from 'path';
 import Handlebars from 'handlebars';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, ResourceFileInfo } from '../config/types';
+import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
 
 /**
  * 扩展的文件信息，用于HTML展示
@@ -114,7 +114,7 @@ export class HtmlFormatter extends BaseFormatter {
         const fileTypeStats = this.getFileTypeStats(result);
         const frameworkStats = this.getFrameworkStats(result);
         const allFiles = this.buildAllFilesList(result);
-        const dynamicFilterButtons = this.generateFrameworkFilterButtons(result);
+        const dynamicFilterButtons = this.generateFrameworkFilterButtons(result, allFiles);
 
         return {
             metadata: {
@@ -316,30 +316,42 @@ export class HtmlFormatter extends BaseFormatter {
     /**
      * 生成动态过滤按钮
      */
-    private generateFrameworkFilterButtons(result: HapStaticAnalysisResult) {
-        // 收集框架标签（来自 SO 分析）
-        const frameworks = new Set<string>(result.soAnalysis.detectedFrameworks);
+    private generateFrameworkFilterButtons(
+        result: HapStaticAnalysisResult,
+        allFiles: Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }>
+    ) {
+        // 压缩包分析按钮：仅展示存在的数据类型
+        const anyExtracted = result.resourceAnalysis.archiveFiles.some(a => a.extracted);
+        const anyNotExtracted = result.resourceAnalysis.archiveFiles.some(a => !a.extracted);
 
-        // 生成压缩包分析的过滤按钮（保持不变）
         const archiveButtons = [
-            { type: 'all', label: '全部', active: true },
-            { type: 'extracted', label: '已解压', active: false },
-            { type: 'not-extracted', label: '未解压', active: false }
+            { type: 'all', label: '全部', active: true }
         ];
-
-        // 添加框架按钮
-        for (const fw of Array.from(frameworks).sort()) {
-            archiveButtons.push({ type: fw, label: fw, active: false });
+        if (anyExtracted) {
+            archiveButtons.push({ type: 'extracted', label: '已解压', active: false });
+        }
+        if (anyNotExtracted) {
+            archiveButtons.push({ type: 'not-extracted', label: '未解压', active: false });
         }
 
-        // 生成所有文件详情的过滤按钮
+        // 所有文件详情按钮：仅展示实际存在的框架与嵌套项
         const allFilesButtons = [
-            { type: 'all', label: '全部', active: true },
-            { type: 'nested', label: '嵌套文件', active: false }
+            { type: 'all', label: '全部', active: true }
         ];
 
-        // 添加框架按钮
-        for (const fw of Array.from(frameworks).sort()) {
+        const hasNested = allFiles.some(f => f.isNested);
+        if (hasNested) {
+            allFilesButtons.push({ type: 'nested', label: '嵌套文件', active: false });
+        }
+
+        const presentFrameworks = new Set<string>();
+        for (const file of allFiles) {
+            const parts = file.frameworksText.split(',').map(s => s.trim()).filter(Boolean);
+            for (const fw of parts) {
+                presentFrameworks.add(fw);
+            }
+        }
+        for (const fw of Array.from(presentFrameworks).sort()) {
             allFilesButtons.push({ type: fw, label: fw, active: false });
         }
 
@@ -374,17 +386,18 @@ export class HtmlFormatter extends BaseFormatter {
         .summary-item { text-align: center; padding: 20px; background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; border-radius: 8px; }
         .summary-item .number { font-size: 2.5em; font-weight: bold; display: block; }
         .summary-item .label { font-size: 1.1em; opacity: 0.9; }
-        .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; }
+        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
         .table th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
         .table tr:hover { background: #f8f9fa; }
+        code { white-space: normal; word-break: break-all; overflow-wrap: anywhere; }
         .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 500; }
         .badge-primary { background: #3498db; color: white; }
         .badge-success { background: #27ae60; color: white; }
         .badge-warning { background: #f39c12; color: white; }
         .badge-danger { background: #e74c3c; color: white; }
         .frameworks { margin: 15px 0; }
-        .framework-tag { display: inline-block; margin: 3px; padding: 6px 12px; background: #3498db; color: white; border-radius: 20px; font-size: 0.9em; }
+        .framework-tag { display: inline-block; margin: 3px; padding: 6px 12px; background: #3498db; color: white; border-radius: 20px; font-size: 0.9em; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
         .flutter-analysis { font-size: 0.9em; }
         .flutter-analysis ul { margin: 5px 0; padding-left: 20px; }
         .flutter-analysis li { margin: 2px 0; }
@@ -394,20 +407,20 @@ export class HtmlFormatter extends BaseFormatter {
 
         /* 递归压缩包样式 */
         .archive-tree { margin: 10px 0; }
-        .archive-item { margin: 8px 0; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; }
+        .archive-item { margin: 8px 0; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; word-break: break-word; overflow-wrap: anywhere; }
         .archive-header { display: flex; align-items: center; margin-bottom: 8px; }
         .archive-icon { margin-right: 8px; font-size: 1.2em; }
-        .archive-name { font-weight: bold; color: #2c3e50; }
+        .archive-name { font-weight: bold; color: #2c3e50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .archive-info { margin-left: auto; font-size: 0.9em; color: #7f8c8d; }
         .archive-stats { margin: 8px 0; font-size: 0.9em; color: #555; }
         .nested-files { margin-left: 20px; margin-top: 10px; }
-        .nested-file { padding: 6px 10px; margin: 3px 0; background: white; border-left: 3px solid #3498db; border-radius: 3px; font-size: 0.9em; }
+        .nested-file { padding: 6px 10px; margin: 3px 0; background: white; border-left: 3px solid #3498db; border-radius: 3px; font-size: 0.9em; word-break: break-word; overflow-wrap: anywhere; }
         .nested-archive { margin-left: 20px; margin-top: 10px; border-left: 2px solid #e74c3c; padding-left: 15px; }
         .depth-indicator { display: inline-block; padding: 2px 6px; background: #e74c3c; color: white; border-radius: 10px; font-size: 0.8em; margin-left: 8px; }
         .extraction-status { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.8em; margin-left: 8px; }
         .extracted { background: #27ae60; color: white; }
         .not-extracted { background: #e74c3c; color: white; }
-        .file-type-tag { display: inline-block; padding: 2px 6px; background: #95a5a6; color: white; border-radius: 3px; font-size: 0.8em; margin-right: 4px; }
+        .file-type-tag { display: inline-block; padding: 2px 6px; background: #95a5a6; color: white; border-radius: 3px; font-size: 0.8em; margin-right: 4px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
         .collapsible { cursor: pointer; user-select: none; }
         .collapsible:hover { background: #f0f0f0; }
         .collapsible::before { content: '▼ '; color: #3498db; font-weight: bold; }
@@ -449,6 +462,10 @@ export class HtmlFormatter extends BaseFormatter {
             font-weight: bold;
             font-size: 0.9em;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            right: 70px;
         }
         .chart-value {
             position: absolute;
@@ -458,15 +475,17 @@ export class HtmlFormatter extends BaseFormatter {
             color: white;
             font-size: 0.8em;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            white-space: nowrap;
         }
 
         /* 响应式设计 */
         @media (max-width: 768px) {
             .container { padding: 10px; }
             .summary-grid { grid-template-columns: repeat(2, 1fr); }
-            .table { font-size: 0.9em; }
+            .table { font-size: 0.9em; table-layout: fixed; }
             .nested-files { margin-left: 10px; }
             .nested-archive { margin-left: 10px; }
+            .framework-tag, .file-type-tag { max-width: 160px; }
         }
 
         .no-data { text-align: center; color: #7f8c8d; font-style: italic; padding: 40px; }
