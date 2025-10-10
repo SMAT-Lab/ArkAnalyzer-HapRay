@@ -73,9 +73,6 @@ export class ResourceAnalyzer {
      * @returns 资源文件分析结果
      */
     public async analyzeResourcesFromZip(zip: ZipInstance): Promise<ResourceAnalysisResult> {
-        if (!zip?.files) {
-            throw ErrorFactory.createResourceAnalysisError('Invalid ZIP instance provided');
-        }
 
         // 重置内存监控器
         this.memoryMonitor.reset();

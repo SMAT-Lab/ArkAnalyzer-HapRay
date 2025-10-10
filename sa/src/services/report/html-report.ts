@@ -20,6 +20,17 @@ import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
 import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
 
+interface FilterButton {
+    type: string;
+    label: string;
+    active: boolean;
+}
+
+interface FrameworkFilterButtons {
+    archiveButtons: Array<FilterButton>;
+    allFilesButtons: Array<FilterButton>;
+}
+
 /**
  * 扩展的文件信息，用于HTML展示
  */
@@ -110,7 +121,7 @@ export class HtmlFormatter extends BaseFormatter {
     /**
      * 构建模板数据
      */
-    private buildTemplateData(result: HapStaticAnalysisResult) {
+    private buildTemplateData(result: HapStaticAnalysisResult): Record<string, unknown> {
         const fileTypeStats = this.getFileTypeStats(result);
         const frameworkStats = this.getFrameworkStats(result);
         const allFiles = this.buildAllFilesList(result);
@@ -149,9 +160,9 @@ export class HtmlFormatter extends BaseFormatter {
                     ...soFile,
                     fileSizeFormatted: this.formatFileSize(soFile.fileSize),
                     frameworksText: soFile.frameworks.join(', '),
-                    isLibFlutter: soFile.fileName?.toLowerCase() === 'libflutter.so',
-                    flutterHex40: soFile.flutterAnalysis?.flutterVersion?.hex40 || '',
-                    flutterLastModified: soFile.flutterAnalysis?.flutterVersion?.lastModified || '',
+                    isLibFlutter: soFile.fileName.toLowerCase() === 'libflutter.so',
+                    flutterHex40: soFile.flutterAnalysis?.flutterVersion?.hex40 ?? '',
+                    flutterLastModified: soFile.flutterAnalysis?.flutterVersion?.lastModified ?? '',
                     flutterAnalysis: soFile.flutterAnalysis ? {
                         isFlutter: soFile.flutterAnalysis.isFlutter,
                         dartPackages: soFile.flutterAnalysis.dartPackages,
@@ -184,7 +195,7 @@ export class HtmlFormatter extends BaseFormatter {
                         fileSizeFormatted: this.formatFileSize(nestedFile.fileSize),
                         isNested: true,
                         parentArchive: archiveFile.fileName
-                    })) || [],
+                    })) ?? [],
                     nestedArchives: archiveFile.nestedArchives?.map(nestedArchive => ({
                         ...nestedArchive,
                         fileSizeFormatted: this.formatFileSize(nestedArchive.fileSize),
@@ -195,11 +206,11 @@ export class HtmlFormatter extends BaseFormatter {
                             fileSizeFormatted: this.formatFileSize(deepFile.fileSize),
                             isNested: true,
                             parentArchive: `${archiveFile.fileName}/${nestedArchive.fileName}`
-                        })) || [],
-                        hasNestedFiles: (nestedArchive.nestedFiles?.length || 0) > 0
-                    })) || [],
-                    hasNestedFiles: (archiveFile.nestedFiles?.length || 0) > 0,
-                    hasNestedArchives: (archiveFile.nestedArchives?.length || 0) > 0
+                        })) ?? [],
+                        hasNestedFiles: (nestedArchive.nestedFiles?.length ?? 0) > 0
+                    })) ?? [],
+                    hasNestedFiles: (archiveFile.nestedFiles?.length ?? 0) > 0,
+                    hasNestedArchives: (archiveFile.nestedArchives?.length ?? 0) > 0
                 })),
                 allFiles: allFiles,
                 hasJsFiles: result.resourceAnalysis.jsFiles.length > 0,
@@ -322,12 +333,12 @@ export class HtmlFormatter extends BaseFormatter {
     private generateFrameworkFilterButtons(
         result: HapStaticAnalysisResult,
         allFiles: Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }>
-    ) {
+    ): FrameworkFilterButtons {
         // 压缩包分析按钮：仅展示存在的数据类型
         const anyExtracted = result.resourceAnalysis.archiveFiles.some(a => a.extracted);
         const anyNotExtracted = result.resourceAnalysis.archiveFiles.some(a => !a.extracted);
 
-        const archiveButtons = [
+        const archiveButtons: Array<FilterButton> = [
             { type: 'all', label: '全部', active: true }
         ];
         if (anyExtracted) {
@@ -338,7 +349,7 @@ export class HtmlFormatter extends BaseFormatter {
         }
 
         // 所有文件详情按钮：仅展示实际存在的框架与嵌套项
-        const allFilesButtons = [
+        const allFilesButtons: Array<FilterButton> = [
             { type: 'all', label: '全部', active: true }
         ];
 

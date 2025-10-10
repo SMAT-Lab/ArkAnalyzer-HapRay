@@ -65,8 +65,9 @@ function loadMergedConfig(): MergedConfig {
     }
 
     const configData = fs.readFileSync(configPath, 'utf-8');
-    mergedConfig = JSON.parse(configData);
-    return mergedConfig!;
+    const parsed = JSON.parse(configData) as unknown as MergedConfig;
+    mergedConfig = parsed;
+    return parsed;
 }
 
 /**

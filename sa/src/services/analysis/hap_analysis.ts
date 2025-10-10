@@ -39,7 +39,7 @@ export interface HapAnalyzerPluginResult {
 
 export interface HapAnalyzerPlugin {
     name: string;
-    analyze(zip: ZipInstance): Promise<HapAnalyzerPluginResult>;
+    analyze: (zip: ZipInstance) => Promise<HapAnalyzerPluginResult>;
 }
 
 // ===================== 内部类型定义 =====================
@@ -60,9 +60,7 @@ class LocalAnalyzerRegistry {
     private analyzers: Array<HapAnalyzerPlugin> = [];
     
     static getInstance(): LocalAnalyzerRegistry {
-        if (!this.instance) { 
-            this.instance = new LocalAnalyzerRegistry(); 
-        }
+        this.instance ??= new LocalAnalyzerRegistry();
         return this.instance;
     }
     
@@ -84,7 +82,7 @@ export class HapAnalysisService {
     private analyzerRegistry: LocalAnalyzerRegistry;
 
     constructor(options: HapAnalysisOptions = {}) {
-        this.verbose = options.verbose || false;
+        this.verbose = options.verbose ?? false;
         this.analyzerRegistry = LocalAnalyzerRegistry.getInstance();
         
         // 初始化注册表和处理器
@@ -262,17 +260,8 @@ export class HapAnalysisService {
         // 默认兜底，确保结果结构完整
         return {
             hapPath: sourceLabel,
-            soAnalysis: soAnalysis ?? { detectedFrameworks: [], soFiles: [], totalSoFiles: 0 },
-            resourceAnalysis: resourceAnalysis ?? {
-                totalFiles: 0,
-                filesByType: new Map(),
-                archiveFiles: [],
-                jsFiles: [],
-                hermesFiles: [],
-                totalSize: 0,
-                maxExtractionDepth: 0,
-                extractedArchiveCount: 0
-            },
+            soAnalysis: soAnalysis,
+            resourceAnalysis: resourceAnalysis,
             timestamp: new Date(),
         };
     }
@@ -379,7 +368,7 @@ export class HapAnalysisService {
                     if (archive.nestedFiles && archive.nestedFiles.length > 0) {
                         const nestedByType = new Map<string, number>();
                         for (const file of archive.nestedFiles) {
-                            nestedByType.set(file.fileType, (nestedByType.get(file.fileType) || 0) + 1);
+                            nestedByType.set(file.fileType, (nestedByType.get(file.fileType) ?? 0) + 1);
                         }
                         logger.info(
                             `    └─ 嵌套文件：${Array.from(nestedByType.entries())
@@ -399,7 +388,7 @@ export class HapAnalysisService {
      * 记录分析摘要
      */
     private logAnalysisSummary(hapFilePath: string, processingTime: number, result: HapStaticAnalysisResult): void {
-        logger.info(`\n=== HAP 分析摘要 ===`);
+        logger.info('\n=== HAP 分析摘要 ===');
         logger.info(`文件：${hapFilePath}`);
         logger.info(`处理时间：${processingTime}ms`);
         logger.info(`SO文件：${result.soAnalysis.totalSoFiles}`);

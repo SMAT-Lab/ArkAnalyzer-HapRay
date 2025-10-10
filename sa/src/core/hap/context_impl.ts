@@ -6,9 +6,11 @@ import type {
     HermesFileInfo,
     HapStaticAnalysisResult,
 } from '../../config/types';
-import { FileType } from '../../config/types';
+import type { FileType } from '../../config/types';
 import type { FileProcessorContext } from './registry';
-import { MemoryMonitor, DEFAULT_FILE_SIZE_LIMITS, type FileSizeLimits } from '../../types/zip-types';
+import type { FileSizeLimits } from '../../types/zip-types';
+import { DEFAULT_FILE_SIZE_LIMITS } from '../../types/zip-types';
+import { MemoryMonitor } from '../../types/zip-types';
 
 /**
  * FileProcessorContext 的默认实现，聚合各 Handler 产生的数据，便于最终产出分析结果。
@@ -39,13 +41,17 @@ export class FileProcessorContextImpl implements FileProcessorContext {
         this.soFiles.push(result);
     }
     addDetectedFramework(framework: string): void {
-        if (framework) this.detectedFrameworks.add(framework);
+        if (framework) {
+            this.detectedFrameworks.add(framework);
+        }
     }
 
     // Resource
     addResourceFile(file: ResourceFileInfo): void {
         const key = file.fileType as unknown as keyof typeof FileType;
-        if (!this.filesByType.has(key)) this.filesByType.set(key, []);
+        if (!this.filesByType.has(key)) {
+            this.filesByType.set(key, []);
+        }
         this.filesByType.get(key)!.push(file);
     }
     addArchiveFile(file: ArchiveFileInfo): void { this.archiveFiles.push(file); }

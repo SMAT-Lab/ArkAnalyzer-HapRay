@@ -53,8 +53,9 @@ function loadMagicConfig(): MagicNumbersConfig {
     }
 
     const configData = fs.readFileSync(configPath, 'utf-8');
-    magicConfig = JSON.parse(configData);
-    return magicConfig!;
+    const parsed = JSON.parse(configData) as unknown as MagicNumbersConfig;
+    magicConfig = parsed;
+    return parsed;
 }
 
 /**

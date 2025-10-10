@@ -7,46 +7,46 @@ import type { FileType, SoAnalysisResult, ResourceFileInfo, ArchiveFileInfo, JsF
 import type { ZipEntry, ZipInstance, FileSizeLimits } from '../../types/zip-types';
 
 export interface ExtensionHandler {
-    canHandle(fileName: string): boolean;
-    detect(fileName: string): FileType;
+    canHandle: (fileName: string) => boolean;
+    detect: (fileName: string) => FileType;
 }
 
 export interface MagicHandler {
-    canHandle(buffer: Uint8Array): boolean;
-    detect(buffer: Uint8Array): FileType;
+    canHandle: (buffer: Uint8Array) => boolean;
+    detect: (buffer: Uint8Array) => FileType;
 }
 
 export interface FolderHandler {
-    canHandle(filePath: string): boolean;
-    detect(filePath: string): FileType;
+    canHandle: (filePath: string) => boolean;
+    detect: (filePath: string) => FileType;
 }
 
 export interface FileProcessorContext {
     // SO accumulation
-    addSoResult(result: SoAnalysisResult): void;
-    addDetectedFramework(framework: string): void;
+    addSoResult: (result: SoAnalysisResult) => void;
+    addDetectedFramework: (framework: string) => void;
     // Resource accumulation
-    addResourceFile(file: ResourceFileInfo): void;
-    addArchiveFile(file: ArchiveFileInfo): void;
-    addJsFile(file: JsFileInfo): void;
-    addHermesFile(file: HermesFileInfo): void;
-    increaseTotalFiles(count: number): void;
-    increaseTotalSize(size: number): void;
-    updateMaxExtractionDepth(depth: number): void;
-    increaseExtractedArchiveCount(): void;
+    addResourceFile: (file: ResourceFileInfo) => void;
+    addArchiveFile: (file: ArchiveFileInfo) => void;
+    addJsFile: (file: JsFileInfo) => void;
+    addHermesFile: (file: HermesFileInfo) => void;
+    increaseTotalFiles: (count: number) => void;
+    increaseTotalSize: (size: number) => void;
+    updateMaxExtractionDepth: (depth: number) => void;
+    increaseExtractedArchiveCount: () => void;
     // Utilities
-    getFileSizeLimits(): FileSizeLimits;
-    getMemoryMonitor(): import('../../types/zip-types').MemoryMonitor;
+    getFileSizeLimits: () => FileSizeLimits;
+    getMemoryMonitor: () => import('../../types/zip-types').MemoryMonitor;
 }
 
 export interface FileHandler {
-    canHandle(filePath: string): boolean;
-    handle(filePath: string, zipEntry: ZipEntry, zip: ZipInstance, context: FileProcessorContext): Promise<void> | void;
+    canHandle: (filePath: string) => boolean;
+    handle: (filePath: string, zipEntry: ZipEntry, zip: ZipInstance, context: FileProcessorContext) => Promise<void> | void;
 }
 
 export interface DirectoryHandler {
-    canHandle(dirPath: string): boolean;
-    handle(dirPath: string, context: FileProcessorContext): Promise<void> | void;
+    canHandle: (dirPath: string) => boolean;
+    handle: (dirPath: string, context: FileProcessorContext) => Promise<void> | void;
 }
 
 export class HandlerRegistry {
@@ -60,9 +60,7 @@ export class HandlerRegistry {
     private constructor() {}
 
     public static getInstance(): HandlerRegistry {
-        if (!HandlerRegistry.instance) {
-            HandlerRegistry.instance = new HandlerRegistry();
-        }
+        HandlerRegistry.instance ??= new HandlerRegistry();
         return HandlerRegistry.instance;
     }
 
