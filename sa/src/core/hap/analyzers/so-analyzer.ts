@@ -131,6 +131,9 @@ export class SoAnalyzer {
                 }
             }
 
+            // 对unknown框架的SO文件进行额外检测
+            await this.analyzeUnknownSoFiles(soFiles, zip);
+
             const result = {
                 detectedFrameworks: Array.from(detectedFrameworks),
                 soFiles,
@@ -445,5 +448,121 @@ export class SoAnalyzer {
         }
     }
 
+    /**
+     * 对unknown框架的SO文件进行额外检测，识别Flutter和KMP框架
+     * @param soFiles SO文件分析结果数组
+     * @param zip ZIP实例
+     */
+    private async analyzeUnknownSoFiles(soFiles: Array<SoAnalysisResult>, zip: ZipInstance): Promise<void> {
+        try {
+            // 筛选出unknown框架的SO文件
+            const unknownSoFiles = soFiles.filter(so => 
+                so.frameworks.includes('Unknown') && !so.frameworks.includes('System')
+            );
 
+            if (unknownSoFiles.length === 0) {
+                this.logger.debug('No unknown SO files found for additional analysis');
+                return;
+            }
+
+            this.logger.info(`Analyzing ${unknownSoFiles.length} unknown SO files for Flutter and KMP frameworks`);
+
+            for (const soFile of unknownSoFiles) {
+                try {
+                    // 检测Flutter框架
+                    const isFlutter = await this.detectFlutterFramework(soFile, zip);
+                    if (isFlutter) {
+                        soFile.frameworks = soFile.frameworks.filter(f => f !== 'Unknown');
+                        soFile.frameworks.push('Flutter');
+                        this.logger.info(`Detected Flutter framework in unknown SO: ${soFile.fileName}`);
+                        
+                        // 进行Flutter详细分析
+                        try {
+                            soFile.flutterAnalysis = await this.performFlutterAnalysis(soFile.fileName, zip);
+                        } catch (error) {
+                            this.logger.warn(`Failed to perform Flutter analysis for ${soFile.fileName}: ${(error as Error).message}`);
+                        }
+                        continue;
+                    }
+
+                    // 检测KMP框架
+                    const isKmp = await this.detectKmpFramework(soFile, zip);
+                    if (isKmp) {
+                        soFile.frameworks = soFile.frameworks.filter(f => f !== 'Unknown');
+                        soFile.frameworks.push('KMP');
+                        this.logger.info(`Detected KMP framework in unknown SO: ${soFile.fileName}`);
+                    }
+
+                } catch (error) {
+                    this.logger.warn(`Failed to analyze unknown SO file ${soFile.fileName}: ${(error as Error).message}`);
+                }
+            }
+
+        } catch (error) {
+            this.logger.error(`Failed to analyze unknown SO files: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * 检测SO文件是否为Flutter框架
+     * @param soFile SO文件分析结果
+     * @param zip ZIP实例
+     * @returns 是否为Flutter框架
+     */
+    private async detectFlutterFramework(soFile: SoAnalysisResult, zip: ZipInstance): Promise<boolean> {
+        try {
+            // 获取SO文件对应的ZIP条目
+            const zipEntry = zip.files[soFile.filePath];
+
+            // 读取SO文件内容
+            const soBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
+
+            // 创建临时文件用于ELF分析
+            const tempDir = (await import('os')).tmpdir();
+            const tempFilePath = path.join(tempDir, `temp_flutter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.so`);
+            
+            try {
+                // 写入临时文件
+                fs.writeFileSync(tempFilePath, soBuffer);
+                
+                // 使用FlutterAnalyzer进行检测
+                const flutterResult = await this.flutterAnalyzer.analyzeFlutter(tempFilePath);
+                
+                // 如果检测到Flutter特征，则确认为Flutter框架
+                return flutterResult.isFlutter || flutterResult.dartPackages.length > 0;
+                
+            } finally {
+                // 清理临时文件
+                try {
+                    if (fs.existsSync(tempFilePath)) {
+                        fs.unlinkSync(tempFilePath);
+                    }
+                } catch (cleanupError) {
+                    this.logger.warn(`Failed to cleanup temp file ${tempFilePath}:`, cleanupError);
+                }
+            }
+        } catch (error) {
+            this.logger.warn(`Flutter framework detection failed for ${soFile.fileName}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * 检测SO文件是否为KMP框架
+     * @param soFile SO文件分析结果
+     * @param zip ZIP实例
+     * @returns 是否为KMP框架
+     */
+    private async detectKmpFramework(soFile: SoAnalysisResult, zip: ZipInstance): Promise<boolean> {
+        try {
+            // 获取SO文件对应的ZIP条目
+            const zipEntry = zip.files[soFile.filePath];
+
+            // 使用现有的KMP验证方法
+            return await this.verifyKmpFramework(zipEntry, zip);
+        } catch (error) {
+            this.logger.warn(`KMP framework detection failed for ${soFile.fileName}:`, error);
+            return false;
+        }
+    }
 }
