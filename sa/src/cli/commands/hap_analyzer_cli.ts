@@ -80,7 +80,7 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
         // 确定并发数量
-        const maxConcurrency = concurrency === 'auto' ? os.cpus().length : parseInt(String(concurrency || '4'), 10);
+        const maxConcurrency = concurrency === 'auto' ? os.cpus().length : parseInt(String(concurrency ?? '4'), 10);
         logger.info(`开始并行分析 ${targets.length} 个HAP包，并发数：${maxConcurrency}...`);
         
         // 使用并发控制
@@ -133,7 +133,7 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
         const failed = analysisResults.filter(r => !r.success).length;
         const totalDuration = analysisResults.reduce((sum, r) => sum + r.duration, 0);
         
-        logger.info(`\n=== 分析完成统计 ===`);
+        logger.info('\n=== 分析完成统计 ===');
         logger.info(`总目标数：${targets.length}`);
         logger.info(`成功：${successful}`);
         logger.info(`失败：${failed}`);
@@ -246,11 +246,11 @@ async function collectAnalysisTargets(inputPath: string): Promise<Array<{ label:
  * @returns Promise数组
  */
 async function runWithConcurrency<T, R>(
-    items: T[],
+    items: Array<T>,
     concurrency: number,
     processor: (item: T) => Promise<R>
-): Promise<R[]> {
-    const results: R[] = [];
+): Promise<Array<R>> {
+    const results: Array<R> = [];
     
     for (let i = 0; i < items.length; i += concurrency) {
         const batch = items.slice(i, i + concurrency);
