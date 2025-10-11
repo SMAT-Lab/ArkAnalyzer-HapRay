@@ -166,7 +166,7 @@ async function generateReport(
     });
 
     const fileExtension = formatter.getFileExtension();
-    const outputFile = path.join(output, `${baseName}_${timestamp}${fileExtension}`);
+    const outputFile = path.join(output, `${timestamp}${fileExtension}`);
 
     const formatOptions: FormatOptions = {
         format: format,
