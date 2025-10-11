@@ -15,6 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { Command } from 'commander';
 import { HapAnalysisService } from '../../services/analysis/hap_analysis';
 import type { FormatOptions } from '../../services/report';
@@ -28,6 +29,7 @@ interface AnalyzeOptions {
     input: string;
     output: string;
     format: string;
+    concurrency?: string;
 }
 
 const VERSION = '1.0.0';
@@ -38,12 +40,13 @@ export const HapAnalyzerCli = new Command('analyzer')
     .requiredOption('-i, --input <path>', '分析输入路径（HAP/ZIP 文件或目录）')
     .option('-o, --output <path>', '输出目录', './output')
     .option('-f, --format <format>', '输出格式：json, html, excel, all', 'all')
+    .option('-c, --concurrency <number>', '并发分析数量，默认为CPU核心数', 'auto')
     .action(async (options: AnalyzeOptions) => {
         await analyzeHap(options);
     });
 
 async function analyzeHap(options: AnalyzeOptions): Promise<void> {
-    const { input, output, format } = options;
+    const { input, output, format, concurrency } = options;
 
     const verbose = true;
     const details = true;
@@ -76,33 +79,69 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
-        for (const t of targets) {
+        // 确定并发数量
+        const maxConcurrency = concurrency === 'auto' ? os.cpus().length : parseInt(String(concurrency || '4'), 10);
+        logger.info(`开始并行分析 ${targets.length} 个HAP包，并发数：${maxConcurrency}...`);
+        
+        // 使用并发控制
+        let completedCount = 0;
+        const analysisPromises = runWithConcurrency(targets, maxConcurrency, async (t) => {
             const startTime = Date.now();
-            const result = await analyzer.analyzeHap(t.label);
-            const duration = Date.now() - startTime;
+            try {
+                const result = await analyzer.analyzeHap(t.label);
+                const duration = Date.now() - startTime;
+                completedCount++;
 
-            logger.info(`分析完成：${t.label} 用时 ${duration}ms`);
-            logger.info('分析概要:');
-            logger.info(`  框架类型：${result.soAnalysis.detectedFrameworks.join(', ') || '无'}`);
-            logger.info(`  SO 文件：${result.soAnalysis.totalSoFiles}`);
-            logger.info(`  资源文件：${result.resourceAnalysis.totalFiles}`);
-            logger.info(`  JS 文件：${result.resourceAnalysis.jsFiles.length}`);
-            logger.info(`  Hermes 文件：${result.resourceAnalysis.hermesFiles.length}`);
-            logger.info(`  压缩文件：${result.resourceAnalysis.archiveFiles.length}`);
+                logger.info(`[${completedCount}/${targets.length}] 分析完成：${t.relativePath} 用时 ${duration}ms`);
+                logger.info('分析概要:');
+                logger.info(`  框架类型：${result.soAnalysis.detectedFrameworks.join(', ') || '无'}`);
+                logger.info(`  SO 文件：${result.soAnalysis.totalSoFiles}`);
+                logger.info(`  资源文件：${result.resourceAnalysis.totalFiles}`);
+                logger.info(`  JS 文件：${result.resourceAnalysis.jsFiles.length}`);
+                logger.info(`  Hermes 文件：${result.resourceAnalysis.hermesFiles.length}`);
+                logger.info(`  压缩文件：${result.resourceAnalysis.archiveFiles.length}`);
 
-            const baseName = sanitizeBaseName(path.basename(t.outputBase, path.extname(t.outputBase)));
-            const perTargetOutput = path.join(output, baseName);
-            ensureDirectoryExists(perTargetOutput);
+                const baseName = sanitizeBaseName(t.outputBase);
+                const perTargetOutput = path.join(output, baseName);
+                ensureDirectoryExists(perTargetOutput);
 
-            if (format === 'all') {
-                const formats: Array<OutputFormat> = [OutputFormat.JSON, OutputFormat.HTML, OutputFormat.EXCEL];
-                logger.info(`为 ${baseName} 生成所有输出格式...`);
-                for (const currentFormat of formats) {
-                    await generateReport(result, currentFormat, baseName, timestamp, perTargetOutput, details);
+                // 生成报告
+                if (format === 'all') {
+                    const formats: Array<OutputFormat> = [OutputFormat.JSON, OutputFormat.HTML, OutputFormat.EXCEL];
+                    logger.info(`为 ${baseName} 生成所有输出格式...`);
+                    for (const currentFormat of formats) {
+                        await generateReport(result, currentFormat, baseName, timestamp, perTargetOutput, details);
+                    }
+                } else {
+                    await generateReport(result, format as OutputFormat, baseName, timestamp, perTargetOutput, details);
                 }
-            } else {
-                await generateReport(result, format as OutputFormat, baseName, timestamp, perTargetOutput, details);
+
+                return { success: true, target: t, result, duration };
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                completedCount++;
+                logger.error(`[${completedCount}/${targets.length}] 分析失败：${t.relativePath} 用时 ${duration}ms`, error);
+                return { success: false, target: t, error, duration };
             }
+        });
+
+        // 等待所有分析完成
+        const analysisResults = await analysisPromises;
+        
+        // 统计结果
+        const successful = analysisResults.filter(r => r.success).length;
+        const failed = analysisResults.filter(r => !r.success).length;
+        const totalDuration = analysisResults.reduce((sum, r) => sum + r.duration, 0);
+        
+        logger.info(`\n=== 分析完成统计 ===`);
+        logger.info(`总目标数：${targets.length}`);
+        logger.info(`成功：${successful}`);
+        logger.info(`失败：${failed}`);
+        logger.info(`总耗时：${totalDuration}ms`);
+        logger.info(`平均耗时：${Math.round(totalDuration / targets.length)}ms`);
+
+        if (failed > 0) {
+            logger.warn(`有 ${failed} 个HAP包分析失败，请检查日志`);
         }
 
     } catch (error) {
@@ -158,25 +197,67 @@ function formatFileSize(bytes: number): string {
 }
 
 function sanitizeBaseName(name: string): string {
-    return name.replace(/[^a-zA-Z0-9_\-\.]+/g, '_');
+    return name.replace(/[^a-zA-Z0-9_\-\.\/\\]+/g, '_');
 }
 
-async function collectAnalysisTargets(inputPath: string): Promise<Array<{ label: string; data?: Buffer; outputBase: string }>> {
-    const targets: Array<{ label: string; data?: Buffer; outputBase: string }> = [];
+async function collectAnalysisTargets(inputPath: string): Promise<Array<{ label: string; data?: Buffer; outputBase: string; relativePath: string }>> {
+    const targets: Array<{ label: string; data?: Buffer; outputBase: string; relativePath: string }> = [];
     const stat = fs.statSync(inputPath);
     if (stat.isDirectory()) {
         // 递归收集.hap文件
         const files = getAllFiles(inputPath, { exts: ['.hap'] });
         for (const f of files) {
-            targets.push({ label: f, outputBase: f });
+            // 计算相对于输入目录的相对路径
+            const relativePath = path.relative(inputPath, f);
+            // 移除文件扩展名，保留目录结构
+            const relativeDir = path.dirname(relativePath);
+            const fileName = path.basename(f, path.extname(f));
+            // 始终保留目录结构，即使目录是当前目录
+            const outputBase = relativeDir === '.' ? fileName : path.join(relativeDir, fileName);
+            
+            
+            targets.push({ 
+                label: f, 
+                outputBase: outputBase,
+                relativePath: relativePath
+            });
         }
     } else if (stat.isFile()) {
         const ext = path.extname(inputPath).toLowerCase();
         if (ext === '.hap' || ext === '.zip') {
-            targets.push({ label: inputPath, outputBase: inputPath });
+            const fileName = path.basename(inputPath, ext);
+            targets.push({ 
+                label: inputPath, 
+                outputBase: fileName,
+                relativePath: path.basename(inputPath)
+            });
         } else {
             logger.warn(`Unsupported file type: ${inputPath}. Only .hap or .zip are supported as files.`);
         }
     }
     return targets;
+}
+
+/**
+ * 并发控制执行函数
+ * @param items 要处理的项目数组
+ * @param concurrency 最大并发数
+ * @param processor 处理函数
+ * @returns Promise数组
+ */
+async function runWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    processor: (item: T) => Promise<R>
+): Promise<R[]> {
+    const results: R[] = [];
+    
+    for (let i = 0; i < items.length; i += concurrency) {
+        const batch = items.slice(i, i + concurrency);
+        const batchPromises = batch.map(processor);
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+    }
+    
+    return results;
 }
