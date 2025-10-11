@@ -64,13 +64,9 @@ class StaticAction:
             logging.error(f'Input file does not exist: {parsed_args.input}')
             return 1
 
-        if not parsed_args.input.lower().endswith('.hap'):
-            logging.error(f'Input file must be a HAP file: {parsed_args.input}')
-            return 1
-
         # 获取hapray-sa路径，支持exe环境
         project_root = CommonUtils.get_project_root()
-        static_analyzer_path = project_root / 'hapray-sa' / 'hapray-static.js'
+        static_analyzer_path = project_root / 'sa-cmd' / 'hapray-sa-cmd.js'
 
         if not static_analyzer_path.exists():
             logging.error(f'Static analyzer not found: {static_analyzer_path}')
@@ -78,10 +74,12 @@ class StaticAction:
             logging.error(f'Project root: {project_root}')
             return 1
 
-        # 构建命令
+        # 构建命令 - 使用hapray analyzer子命令
         cmd = [
             'node',
             str(static_analyzer_path),
+            'hapray',
+            'analyzer',
             '-i',
             parsed_args.input,
             '-o',
@@ -91,7 +89,8 @@ class StaticAction:
         ]
 
         if parsed_args.include_details:
-            cmd.append('--include-details')
+            # 新CLI默认包含详细信息，不需要额外参数
+            pass
 
         try:
             logging.info('Starting HAP static analysis...')
@@ -144,9 +143,11 @@ Examples:
   # Basic JSON analysis
   python main.py static -i app.hap -o ./output
 
-  # HTML report with verbose output
-  python main.py static -i app.hap -o ./output -f html -v
+  # HTML report with detailed analysis
+  python main.py static -i app.hap -o ./output -f html --include-details
 
   # All formats with detailed analysis
   python main.py static -i app.hap -o ./output -f all --include-details
+
+Note: The static analysis now uses the hapray analyzer command internally.
 """
