@@ -16,7 +16,7 @@
 import path from 'path';
 import fs from 'fs';
 import type { FrameworkTypeKey, SoAnalysisResult } from '../../../config/types';
-import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../../../config/framework-patterns';
+import { getFrameworkPatterns, matchSoPattern } from '../../../config/framework-patterns';
 import type {
     ZipInstance,
     ZipEntry,
@@ -183,7 +183,6 @@ export class SoAnalyzer {
 
             // 检测框架
             const frameworks = await this.identifyFrameworks(fileName, zipEntry, zip);
-            const isSystemLib = isSystemSo(fileName);
 
             // 如果是Flutter相关的SO文件，进行详细分析
             let flutterAnalysisResult = null;
@@ -200,7 +199,7 @@ export class SoAnalyzer {
                 fileName,
                 frameworks,
                 fileSize,
-                isSystemLib,
+                isSystemLib: false,
                 flutterAnalysis: flutterAnalysisResult
             };
         } catch (error) {
@@ -268,11 +267,6 @@ export class SoAnalyzer {
      */
     private async identifyFrameworks(fileName: string, zipEntry?: ZipEntry, zip?: ZipInstance): Promise<Array<FrameworkTypeKey>> {
         try {
-            // 首先检查是否是系统库
-            if (isSystemSo(fileName)) {
-                return ['System'];
-            }
-
             const frameworkPatterns = getFrameworkPatterns();
             const detectedFrameworks: Array<FrameworkTypeKey> = [];
 

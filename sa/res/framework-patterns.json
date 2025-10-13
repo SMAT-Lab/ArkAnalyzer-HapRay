@@ -60,284 +60,140 @@
         "libil2cpp.so"
       ]
     },
-    "System": {
-      "name": "System",
-      "description": "System libraries",
-      "patterns": []
+    "Taro": {
+      "name": "Taro",
+      "description": "Taro framework",
+      "patterns": [
+        "libJDSilkTaroNativeOH.so",
+        "libSilkTaroKit.so",
+        "libtaro_native_core.so",
+        "libTaroHarmonyLibrary.so",
+        "libsilktaronativelib.so"
+      ]
     },
-    "Unknown": {
-      "name": "Unknown",
-      "description": "Unknown framework",
-      "patterns": []
+    "Weex": {
+      "name": "Weex",
+      "description": "Weex framework",
+      "patterns": [
+        "libweex_ability.so", 
+        "libweex_framework.so"
+      ]
     }
   },
-  "systemLibraries": [
-    "libc.so",
-    "libm.so",
-    "libdl.so",
-    "liblog.so",
-    "libz.so",
-    "libssl.so",
-    "libcrypto.so",
-    "libpthread.so",
-    "librt.so",
-    "libstdc++.so",
-    "libc++_shared.so",
-    "libgcc_s.so",
-    "libnative_*.so",
-    "libace_*.so",
-    "libhilog_*.so"
-  ],
   "fileTypes": {
     "ZIP": {
       "name": "ZIP Archive",
-      "description": "ZIP compressed archive",
-      "category": "archive"
-    },
-    "JS": {
-      "name": "JavaScript",
-      "description": "JavaScript source file",
-      "category": "code"
-    },
-    "JSON": {
-      "name": "JSON",
-      "description": "JSON data file",
-      "category": "data"
-    },
-    "XML": {
-      "name": "XML",
-      "description": "XML markup file",
-      "category": "markup"
+      "magic": [80, 75],
+      "description": "ZIP compressed archive"
     },
     "PNG": {
       "name": "PNG Image",
-      "description": "PNG image file",
-      "category": "image"
+      "magic": [137, 80, 78, 71, 13, 10, 26, 10],
+      "description": "PNG image file"
     },
     "JPG": {
       "name": "JPEG Image",
-      "description": "JPEG image file",
-      "category": "image"
+      "magic": [255, 216, 255],
+      "description": "JPEG image file"
     },
     "WEBP": {
       "name": "WebP Image",
-      "description": "WebP image file",
-      "category": "image"
+      "magic": [82, 73, 70, 70],
+      "description": "WebP image file"
     },
     "GIF": {
       "name": "GIF Image",
-      "description": "GIF image file",
-      "category": "image"
+      "magic": [71, 73, 70, 56],
+      "description": "GIF image file"
     },
     "BMP": {
       "name": "Bitmap Image",
-      "description": "Bitmap image file",
-      "category": "image"
+      "magic": [66, 77],
+      "description": "Bitmap image file"
     },
     "SO": {
       "name": "Shared Object",
-      "description": "Shared object library",
-      "category": "library"
+      "magic": [127, 69, 76, 70],
+      "description": "Shared object library"
     },
     "HERMES_BYTECODE": {
       "name": "Hermes Bytecode",
-      "description": "Hermes JavaScript bytecode",
-      "category": "bytecode"
-    },
-    "BINARY": {
-      "name": "Binary",
-      "description": "Binary file",
-      "category": "binary"
-    },
-    "TEXT": {
-      "name": "Text",
-      "description": "Plain text file",
-      "category": "text"
-    },
-    "Unknown": {
-      "name": "Unknown",
-      "description": "Unknown file type",
-      "category": "unknown"
+      "magic": [194, 31, 240, 159],
+      "description": "Hermes JavaScript bytecode"
     },
     "WASM": {
       "name": "WebAssembly",
-      "description": "WebAssembly binary file",
-      "category": "bytecode"
+      "magic": [0, 97, 115, 109],
+      "description": "WebAssembly binary file"
     },
     "PDF": {
       "name": "PDF Document",
-      "description": "PDF document file",
-      "category": "document"
+      "magic": [37, 80, 68, 70],
+      "description": "PDF document file"
     },
     "MP3": {
       "name": "MP3 Audio",
-      "description": "MP3 audio file",
-      "category": "audio"
+      "magic": [73, 68, 51],
+      "description": "MP3 audio file"
     },
     "MP4": {
       "name": "MP4 Video",
-      "description": "MP4 video file",
-      "category": "video"
+      "magic": [0, 0, 0, 32, 102, 116, 121, 112],
+      "magicOffset": 4,
+      "description": "MP4 video file"
     },
     "WAV": {
       "name": "WAV Audio",
-      "description": "WAV audio file",
-      "category": "audio"
+      "magic": [82, 73, 70, 70],
+      "description": "WAV audio file"
     },
     "TTF": {
       "name": "TrueType Font",
-      "description": "TrueType font file",
-      "category": "font"
+      "magic": [0, 1, 0, 0],
+      "description": "TrueType font file"
     },
     "OTF": {
       "name": "OpenType Font",
-      "description": "OpenType font file",
-      "category": "font"
+      "magic": [79, 84, 84, 79],
+      "description": "OpenType font file"
     },
     "SQLITE": {
       "name": "SQLite Database",
-      "description": "SQLite database file",
-      "category": "database"
+      "magic": [83, 81, 76, 105, 116, 101, 32, 102, 111, 114, 109, 97, 116, 32, 51, 0],
+      "description": "SQLite database file"
     },
     "RAR": {
       "name": "RAR Archive",
-      "description": "RAR compressed archive",
-      "category": "archive"
+      "magic": [82, 97, 114, 33],
+      "description": "RAR compressed archive"
     },
     "7Z": {
       "name": "7-Zip Archive",
-      "description": "7-Zip compressed archive",
-      "category": "archive"
-    },
-    "CSS": {
-      "name": "CSS Stylesheet",
-      "description": "CSS stylesheet file",
-      "category": "style"
-    },
-    "C": {
-      "name": "C Source Code",
-      "description": "C programming language source file",
-      "category": "code"
-    },
-    "JAVA": {
-      "name": "Java Source Code",
-      "description": "Java programming language source file",
-      "category": "code"
-    },
-    "PYTHON": {
-      "name": "Python Script",
-      "description": "Python programming language script",
-      "category": "code"
-    },
-    "PHP": {
-      "name": "PHP Script",
-      "description": "PHP programming language script",
-      "category": "code"
-    },
-    "RUBY": {
-      "name": "Ruby Script",
-      "description": "Ruby programming language script",
-      "category": "code"
-    },
-    "GO": {
-      "name": "Go Source Code",
-      "description": "Go programming language source file",
-      "category": "code"
-    },
-    "RUST": {
-      "name": "Rust Source Code",
-      "description": "Rust programming language source file",
-      "category": "code"
-    },
-    "SWIFT": {
-      "name": "Swift Source Code",
-      "description": "Swift programming language source file",
-      "category": "code"
-    },
-    "KOTLIN": {
-      "name": "Kotlin Source Code",
-      "description": "Kotlin programming language source file",
-      "category": "code"
-    },
-    "DART": {
-      "name": "Dart Source Code",
-      "description": "Dart programming language source file",
-      "category": "code"
-    },
-    "SHELL": {
-      "name": "Shell Script",
-      "description": "Shell script file",
-      "category": "script"
-    },
-    "BATCH": {
-      "name": "Batch Script",
-      "description": "Batch script file",
-      "category": "script"
-    },
-    "POWERSHELL": {
-      "name": "PowerShell Script",
-      "description": "PowerShell script file",
-      "category": "script"
-    },
-    "EXECUTABLE": {
-      "name": "Executable",
-      "description": "Executable file",
-      "category": "executable"
-    },
-    "DLL": {
-      "name": "Dynamic Link Library",
-      "description": "Dynamic link library file",
-      "category": "library"
-    },
-    "SYSTEM": {
-      "name": "System File",
-      "description": "System file",
-      "category": "system"
-    },
-    "CONFIG": {
-      "name": "Configuration File",
-      "description": "Configuration file",
-      "category": "config"
-    },
-    "SQL": {
-      "name": "SQL Script",
-      "description": "SQL script file",
-      "category": "database"
-    },
-    "DOCUMENT": {
-      "name": "Document",
-      "description": "Document file",
-      "category": "document"
-    },
-    "SPREADSHEET": {
-      "name": "Spreadsheet",
-      "description": "Spreadsheet file",
-      "category": "document"
-    },
-    "PRESENTATION": {
-      "name": "Presentation",
-      "description": "Presentation file",
-      "category": "document"
-    },
-    "DISK_IMAGE": {
-      "name": "Disk Image",
-      "description": "Disk image file",
-      "category": "archive"
-    },
-    "HML": {
-      "name": "HarmonyOS Markup Language",
-      "description": "HarmonyOS markup language file",
-      "category": "markup"
-    },
-    "HAP": {
-      "name": "HarmonyOS Application Package",
-      "description": "HarmonyOS application package",
-      "category": "package"
-    },
-    "HSP": {
-      "name": "HarmonyOS Service Package",
-      "description": "HarmonyOS service package",
-      "category": "package"
+      "magic": [55, 122, 188, 175, 39, 28],
+      "description": "7-Zip compressed archive"
     }
+  },
+  "fileExtensions": {
+    "zip": "ZIP",
+    "png": "PNG",
+    "jpg": "JPG",
+    "jpeg": "JPG",
+    "webp": "WEBP",
+    "gif": "GIF",
+    "bmp": "BMP",
+    "so": "SO",
+    "hbc": "HERMES_BYTECODE",
+    "wasm": "WASM",
+    "pdf": "PDF",
+    "mp3": "MP3",
+    "mp4": "MP4",
+    "wav": "WAV",
+    "ttf": "TTF",
+    "otf": "OTF",
+    "db": "SQLITE",
+    "sqlite": "SQLITE",
+    "sqlite3": "SQLITE",
+    "rar": "RAR",
+    "7z": "7Z"
   }
 }

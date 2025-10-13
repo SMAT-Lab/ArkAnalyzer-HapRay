@@ -19,6 +19,19 @@ import type { MagicNumber } from '../config/types';
 import { FileType } from '../config/types';
 import { isValidFileType } from './types-config';
 
+interface FileTypeConfig {
+    name: string;
+    magic: Array<number>;
+    magicOffset?: number;
+    description: string;
+}
+
+interface FrameworkPatternsConfig {
+    frameworks: Record<string, unknown>;
+    fileTypes: Record<string, FileTypeConfig>;
+    fileExtensions: Record<string, string>;
+}
+
 interface MagicNumbersConfig {
     magicNumbers: Array<{
         type: string;
@@ -27,13 +40,12 @@ interface MagicNumbersConfig {
         description: string;
     }>;
     fileExtensions: Record<string, string>;
-    mimeTypes: Record<string, string>;
 }
 
 let magicConfig: MagicNumbersConfig | null = null;
 
 /**
- * 加载魔术字配置 - 只从JSON文件读取
+ * 加载魔术字配置 - 从 framework-patterns.json 读取
  */
 function loadMagicConfig(): MagicNumbersConfig {
     if (magicConfig) {
@@ -46,16 +58,29 @@ function loadMagicConfig(): MagicNumbersConfig {
         resDir = path.join(__dirname, '../../res');
     }
 
-    const configPath = path.join(resDir, 'magic-numbers.json');
+    const configPath = path.join(resDir, 'framework-patterns.json');
 
     if (!fs.existsSync(configPath)) {
-        throw new Error(`Magic numbers config file not found at: ${configPath}`);
+        throw new Error(`Framework patterns config file not found at: ${configPath}`);
     }
 
     const configData = fs.readFileSync(configPath, 'utf-8');
-    const parsed = JSON.parse(configData) as unknown as MagicNumbersConfig;
-    magicConfig = parsed;
-    return parsed;
+    const parsed = JSON.parse(configData) as unknown as FrameworkPatternsConfig;
+
+    // 转换 fileTypes 格式为 magicNumbers 格式
+    const magicNumbers = Object.entries(parsed.fileTypes).map(([type, config]) => ({
+        type,
+        signature: config.magic,
+        offset: config.magicOffset || 0,
+        description: config.description
+    }));
+
+    magicConfig = {
+        magicNumbers,
+        fileExtensions: parsed.fileExtensions || {}
+    };
+
+    return magicConfig;
 }
 
 /**
@@ -127,14 +152,12 @@ export function detectFileTypeByExtension(fileName: string): FileType {
 
 /**
  * 获取文件的MIME类型
- * @param fileName 文件名
+ * @param _fileName 文件名（未使用）
  * @returns MIME类型
  */
-export function getMimeType(fileName: string): string {
-    const config = loadMagicConfig();
-    const ext = path.extname(fileName).toLowerCase();
-
-    return config.mimeTypes[ext] || 'application/octet-stream';
+export function getMimeType(_fileName: string): string {
+    // 始终返回默认的 MIME 类型
+    return 'application/octet-stream';
 }
 
 /**

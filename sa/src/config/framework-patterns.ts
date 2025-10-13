@@ -24,7 +24,6 @@ interface FrameworkConfig {
 
 interface FrameworkPatternsConfig {
     frameworks: Record<string, FrameworkConfig>;
-    systemLibraries: Array<string>;
     fileTypes: Record<string, unknown>; // 添加fileTypes字段但不使用
 }
 
@@ -72,14 +71,6 @@ export function getFrameworkPatterns(): Record<string, Array<string>> {
 }
 
 /**
- * 获取系统库SO文件模式
- */
-export function getSystemSoPatterns(): Array<string> {
-    const config = loadFrameworkConfig();
-    return config.systemLibraries;
-}
-
-/**
  * 检查SO文件名是否匹配指定的模式
  * @param fileName SO文件名
  * @param pattern 匹配模式（支持正则表达式）
@@ -112,14 +103,4 @@ export function matchSoPattern(fileName: string, pattern: string): boolean {
         console.warn(`Invalid pattern: ${pattern}`, error);
         return false;
     }
-}
-
-/**
- * 检查SO文件是否为系统库
- * @param fileName SO文件名
- * @returns 是否为系统库
- */
-export function isSystemSo(fileName: string): boolean {
-    const systemPatterns = getSystemSoPatterns();
-    return systemPatterns.some((pattern: string) => matchSoPattern(fileName, pattern));
 }
