@@ -51,8 +51,9 @@ function loadFrameworkConfig(): FrameworkPatternsConfig {
     }
 
     const configData = fs.readFileSync(configPath, 'utf-8');
-    frameworkConfig = JSON.parse(configData);
-    return frameworkConfig!;
+    const parsed = JSON.parse(configData) as unknown as FrameworkPatternsConfig;
+    frameworkConfig = parsed;
+    return parsed;
 }
 
 /**

@@ -19,7 +19,6 @@ import { HapAnalyzerCli } from './commands/hap_analyzer_cli';
 import { PerfCli } from './commands/perf_cli';
 import { ElfAnalyzerCli } from './commands/elf_analyzer_cli';
 import { BjcCli } from './commands/bjc_cli';
-import { SaCli } from './commands/sa_cli';
 
 Logger.configure('arkanalyzer-hapray.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -30,7 +29,6 @@ HaprayCli.addCommand(HapAnalyzerCli);
 HaprayCli.addCommand(PerfCli);
 HaprayCli.addCommand(ElfAnalyzerCli);
 HaprayCli.addCommand(BjcCli);
-HaprayCli.addCommand(SaCli);
 
 try {
     program

@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult } from '../types';
+import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
 
 interface JsonReport {
     metadata: {
@@ -166,15 +166,17 @@ export class JsonFormatter extends BaseFormatter {
                 totalFiles: result.resourceAnalysis.totalFiles,
                 totalSize: result.resourceAnalysis.totalSize,
                 totalSizeFormatted: this.formatFileSize(result.resourceAnalysis.totalSize),
-                filesByType: Object.fromEntries(
-                    Array.from(result.resourceAnalysis.filesByType.entries()).map(([type, files]) => [
-                        type,
-                        files.map(file => ({
+                filesByType: ((): Record<string, Array<unknown>> => {
+                    const entries = Array.from(result.resourceAnalysis.filesByType.entries());
+                    const mapped = entries.map(([type, files]) => [
+                        type as unknown as string,
+                        files.map((file: ResourceFileInfo) => ({
                             ...file,
                             fileSizeFormatted: this.formatFileSize(file.fileSize)
                         }))
-                    ])
-                ),
+                    ]);
+                    return Object.fromEntries(mapped) as Record<string, Array<unknown>>;
+                })(),
                 jsFiles: result.resourceAnalysis.jsFiles.map(jsFile => ({
                     ...jsFile,
                     fileSizeFormatted: this.formatFileSize(jsFile.fileSize)
