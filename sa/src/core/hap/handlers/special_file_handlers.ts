@@ -43,7 +43,17 @@ export class SoFileHandler implements FileHandler {
             }
         }
         if (fileSize === 0) { return; }
-        const frameworks = identifyFrameworks(fileName);
+        let frameworks = identifyFrameworks(fileName);
+
+        // 如果是Unknown框架，尝试进行深度检测（KMP）
+        if (frameworks.includes('Unknown')) {
+            const isKmp = await this.detectKmpFramework(filePath, zipEntry, zip);
+            if (isKmp) {
+                frameworks = frameworks.filter(f => f !== 'Unknown');
+                frameworks.push('KMP');
+                console.log(`[KMP Detection] Detected KMP framework in: ${fileName}`);
+            }
+        }
 
         // 如果是Flutter相关的SO文件，进行详细分析
         let flutterAnalysisResult = null;
@@ -54,7 +64,7 @@ export class SoFileHandler implements FileHandler {
                 console.warn(`Failed to perform Flutter analysis for ${fileName}: ${(error as Error).message}`);
             }
         }
-        
+
         context.addSoResult({
             filePath,
             fileName,
@@ -64,6 +74,103 @@ export class SoFileHandler implements FileHandler {
             flutterAnalysis: flutterAnalysisResult
         });
         frameworks.forEach(f => context.addDetectedFramework(f));
+    }
+
+    /**
+     * 检测SO文件是否为KMP框架
+     * @param filePath SO文件路径
+     * @param zipEntry ZIP条目
+     * @param zip ZIP实例
+     * @returns 是否为KMP框架
+     */
+    /**
+     * 使用流式读取检测 KMP 框架特征
+     * 优化：分块读取，找到特征后立即停止
+     */
+    private async detectKmpFramework(filePath: string, zipEntry: ZipEntry, _zip: ZipInstance): Promise<boolean> {
+        try {
+            const fileName = path.basename(filePath);
+
+            // Kotlin 特征模式（Buffer 格式）
+            const kotlinPatterns = [
+                Buffer.from('Kotlin', 'utf8'),
+                Buffer.from('kotlin', 'utf8'),
+                Buffer.from('kfun:', 'utf8'),
+                Buffer.from('KOTLIN_NATIVE', 'utf8')
+            ];
+
+            // 流式读取：分块处理，避免一次性加载大文件到内存
+            const chunkSize = 1 * 1024 * 1024; // 每次读取 1MB
+            const maxChunks = 50; // 最多读取 50MB（50 个块）
+
+            // 使用 JSZip 的 async 方法获取完整 buffer，然后分块处理
+            // 注意：JSZip 不支持真正的流式读取，但我们可以分块搜索
+            const fileSize = zipEntry.uncompressedSize || zipEntry.compressedSize || 0;
+
+            // 对于小文件（<10MB），直接读取全部
+            if (fileSize < 10 * 1024 * 1024) {
+                try {
+                    const buffer = await zipEntry.async('nodebuffer');
+
+                    // 在 buffer 中搜索 Kotlin 特征
+                    for (const pattern of kotlinPatterns) {
+                        if (buffer.indexOf(pattern) !== -1) {
+                            return true;
+                        }
+                    }
+                    return false;
+                } catch (error) {
+                    console.warn(`KMP detection failed for ${fileName}:`, error);
+                    return false;
+                }
+            }
+
+            // 对于大文件（>=10MB），使用分块读取策略
+            // 由于 JSZip 不支持真正的流式读取，我们需要读取整个文件
+            // 但可以在读取后分块搜索，找到后立即返回
+            try {
+                const buffer = await zipEntry.async('nodebuffer');
+
+                // 分块搜索，找到后立即停止
+                const totalChunks = Math.min(Math.ceil(buffer.length / chunkSize), maxChunks);
+
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * chunkSize;
+                    const end = Math.min(start + chunkSize, buffer.length);
+                    const chunk = buffer.subarray(start, end);
+
+                    // 在当前块中搜索 Kotlin 特征
+                    for (const pattern of kotlinPatterns) {
+                        if (chunk.indexOf(pattern) !== -1) {
+                            return true;
+                        }
+                    }
+
+                    // 检查跨块边界的情况：保留最后几个字节到下一块
+                    // 避免特征字符串被分割到两个块中
+                    if (i < totalChunks - 1) {
+                        const maxPatternLength = Math.max(...kotlinPatterns.map(p => p.length));
+                        const overlap = buffer.subarray(Math.max(start, end - maxPatternLength), end);
+                        const nextChunkStart = buffer.subarray(end, Math.min(end + maxPatternLength, buffer.length));
+                        const boundary = Buffer.concat([overlap, nextChunkStart]);
+
+                        for (const pattern of kotlinPatterns) {
+                            if (boundary.indexOf(pattern) !== -1) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            } catch (error) {
+                console.warn(`KMP detection failed for ${fileName}:`, error);
+                return false;
+            }
+        } catch (error) {
+            console.warn(`KMP framework detection failed for ${filePath}:`, error);
+            return false;
+        }
     }
 
     /**
