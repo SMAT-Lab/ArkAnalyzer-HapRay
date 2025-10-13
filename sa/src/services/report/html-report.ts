@@ -18,32 +18,7 @@ import path from 'path';
 import Handlebars from 'handlebars';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
-
-interface FilterButton {
-    type: string;
-    label: string;
-    active: boolean;
-}
-
-interface FrameworkFilterButtons {
-    archiveButtons: Array<FilterButton>;
-    allFilesButtons: Array<FilterButton>;
-}
-
-/**
- * 扩展的文件信息，用于HTML展示
- */
-interface ExtendedFileInfo extends ResourceFileInfo {
-    /** 格式化后的文件大小 */
-    fileSizeFormatted: string;
-    /** 是否为嵌套文件 */
-    isNested: boolean;
-    /** 来源描述 */
-    source: string;
-    /** 父级信息 */
-    parentInfo: string;
-}
+import type { HapStaticAnalysisResult } from '../../config/types';
 
 /**
  * HTML格式化器
@@ -124,8 +99,23 @@ export class HtmlFormatter extends BaseFormatter {
     private buildTemplateData(result: HapStaticAnalysisResult): Record<string, unknown> {
         const fileTypeStats = this.getFileTypeStats(result);
         const frameworkStats = this.getFrameworkStats(result);
-        const allFiles = this.buildAllFilesList(result);
-        const dynamicFilterButtons = this.generateFrameworkFilterButtons(result, allFiles);
+
+        // 构建文件类型信息
+        const fileTypeInfo = this.buildFileTypeInfoData(result);
+
+        // 构建技术栈信息
+        const technologyStackInfo = this.buildTechnologyStackInfoData(result);
+
+        // 过滤掉 Unknown 框架
+        const detectedFrameworks = result.soAnalysis.detectedFrameworks.filter(f => f !== 'Unknown');
+
+        // 获取唯一的文件类型列表（用于筛选按钮）
+        const uniqueFileTypes = Array.from(new Set(fileTypeInfo.map(item => item.fileType))).sort();
+
+        // 获取唯一的技术栈列表（用于筛选按钮）
+        const uniqueTechStacks = Array.from(new Set(
+            technologyStackInfo.map(item => item.technologyStack)
+        )).sort();
 
         return {
             metadata: {
@@ -133,16 +123,16 @@ export class HtmlFormatter extends BaseFormatter {
                 hapFileName: path.basename(result.hapPath),
                 timestamp: result.timestamp,
                 analysisDate: this.formatDateTime(result.timestamp),
-                version: '1.1.0'
+                version: '2.0.0'
             },
             summary: {
-                totalSoFiles: result.soAnalysis.totalSoFiles,
-                totalResourceFiles: result.resourceAnalysis.totalFiles,
+                totalFiles: result.resourceAnalysis.totalFiles,
                 totalSize: this.formatFileSize(result.resourceAnalysis.totalSize),
-                detectedFrameworks: result.soAnalysis.detectedFrameworks,
-                jsFilesCount: result.resourceAnalysis.jsFiles.length,
-                hermesFilesCount: result.resourceAnalysis.hermesFiles.length,
-                archiveFilesCount: result.resourceAnalysis.archiveFiles.length,
+                totalSoFiles: result.soAnalysis.totalSoFiles,
+                totalResourceFiles: result.resourceAnalysis.totalFiles - result.soAnalysis.totalSoFiles,
+                detectedFrameworks: detectedFrameworks,
+                fileTypeCount: fileTypeInfo.length,
+                technologyStackCount: technologyStackInfo.length,
                 extractedArchiveCount: result.resourceAnalysis.extractedArchiveCount,
                 maxExtractionDepth: result.resourceAnalysis.maxExtractionDepth,
                 hasNestedArchives: result.resourceAnalysis.extractedArchiveCount > 0
@@ -153,73 +143,30 @@ export class HtmlFormatter extends BaseFormatter {
                 hasFileTypes: fileTypeStats.length > 0,
                 hasFrameworks: frameworkStats.length > 0
             },
-            soAnalysis: {
-                detectedFrameworks: result.soAnalysis.detectedFrameworks,
-                totalSoFiles: result.soAnalysis.totalSoFiles,
-                soFiles: result.soAnalysis.soFiles.map(soFile => ({
-                    ...soFile,
-                    fileSizeFormatted: this.formatFileSize(soFile.fileSize),
-                    frameworksText: soFile.frameworks.join(', '),
-                    isLibFlutter: soFile.fileName.toLowerCase() === 'libflutter.so',
-                    flutterHex40: soFile.flutterAnalysis?.flutterVersion?.hex40 ?? '',
-                    flutterLastModified: soFile.flutterAnalysis?.flutterVersion?.lastModified ?? '',
-                    flutterAnalysis: soFile.flutterAnalysis ? {
-                        isFlutter: soFile.flutterAnalysis.isFlutter,
-                        dartPackages: soFile.flutterAnalysis.dartPackages,
-                        flutterVersion: soFile.flutterAnalysis.flutterVersion,
-                        hasFlutterAnalysis: true
-                    } : {
-                        hasFlutterAnalysis: false
-                    }
-                })),
-                hasSoFiles: result.soAnalysis.soFiles.length > 0
+
+            // 第一部分：文件类型信息
+            fileTypeInfo: {
+                items: fileTypeInfo,
+                hasItems: fileTypeInfo.length > 0,
+                uniqueTypes: uniqueFileTypes
             },
+
+            // 第二部分：技术栈信息
+            technologyStackInfo: {
+                items: technologyStackInfo,
+                hasItems: technologyStackInfo.length > 0,
+                uniqueStacks: uniqueTechStacks
+            },
+
+            // 保留原有的详细信息（用于兼容）
             resourceAnalysis: {
-                totalFiles: result.resourceAnalysis.totalFiles,
-                totalSize: this.formatFileSize(result.resourceAnalysis.totalSize),
-                jsFiles: result.resourceAnalysis.jsFiles.map(jsFile => ({
-                    ...jsFile,
-                    fileSizeFormatted: this.formatFileSize(jsFile.fileSize),
-                    isNested: jsFile.filePath.includes('/')
-                })),
-                hermesFiles: result.resourceAnalysis.hermesFiles.map(hermesFile => ({
-                    ...hermesFile,
-                    fileSizeFormatted: this.formatFileSize(hermesFile.fileSize),
-                    isNested: hermesFile.filePath.includes('/')
-                })),
                 archiveFiles: result.resourceAnalysis.archiveFiles.map(archiveFile => ({
                     ...archiveFile,
                     fileSizeFormatted: this.formatFileSize(archiveFile.fileSize),
-                    nestedFiles: archiveFile.nestedFiles?.map(nestedFile => ({
-                        ...nestedFile,
-                        fileSizeFormatted: this.formatFileSize(nestedFile.fileSize),
-                        isNested: true,
-                        parentArchive: archiveFile.fileName
-                    })) ?? [],
-                    nestedArchives: archiveFile.nestedArchives?.map(nestedArchive => ({
-                        ...nestedArchive,
-                        fileSizeFormatted: this.formatFileSize(nestedArchive.fileSize),
-                        isNested: true,
-                        parentArchive: archiveFile.fileName,
-                        nestedFiles: nestedArchive.nestedFiles?.map(deepFile => ({
-                            ...deepFile,
-                            fileSizeFormatted: this.formatFileSize(deepFile.fileSize),
-                            isNested: true,
-                            parentArchive: `${archiveFile.fileName}/${nestedArchive.fileName}`
-                        })) ?? [],
-                        hasNestedFiles: (nestedArchive.nestedFiles?.length ?? 0) > 0
-                    })) ?? [],
                     hasNestedFiles: (archiveFile.nestedFiles?.length ?? 0) > 0,
                     hasNestedArchives: (archiveFile.nestedArchives?.length ?? 0) > 0
                 })),
-                allFiles: allFiles,
-                hasJsFiles: result.resourceAnalysis.jsFiles.length > 0,
-                hasHermesFiles: result.resourceAnalysis.hermesFiles.length > 0,
                 hasArchiveFiles: result.resourceAnalysis.archiveFiles.length > 0
-            },
-            filters: {
-                archiveFilterButtons: dynamicFilterButtons.archiveButtons,
-                allFilesFilterButtons: dynamicFilterButtons.allFilesButtons
             },
             options: {
                 includeDetails: this.options.includeDetails !== false
@@ -228,161 +175,103 @@ export class HtmlFormatter extends BaseFormatter {
     }
 
     /**
-     * 构建所有文件的完整列表
+     * 构建文件类型信息数据
      */
-    private buildAllFilesList(result: HapStaticAnalysisResult): Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }> {
-        const allFiles: Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }> = [];
+    private buildFileTypeInfoData(result: HapStaticAnalysisResult): Array<{
+        fileName: string;
+        filePath: string;
+        fileType: string;
+        fileSize: string;
+    }> {
+        const items: Array<{
+            fileName: string;
+            filePath: string;
+            fileType: string;
+            fileSize: string;
+        }> = [];
 
-        // 收集所有嵌套文件的路径，避免重复展示
-        const nestedFilePaths = new Set<string>();
-        for (const archiveFile of result.resourceAnalysis.archiveFiles) {
-            if (archiveFile.nestedFiles) {
-                for (const nestedFile of archiveFile.nestedFiles) {
-                    nestedFilePaths.add(nestedFile.filePath);
-                }
-            }
-            if (archiveFile.nestedArchives) {
-                for (const nestedArchive of archiveFile.nestedArchives) {
-                    if (nestedArchive.nestedFiles) {
-                        for (const deepFile of nestedArchive.nestedFiles) {
-                            nestedFilePaths.add(deepFile.filePath);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 添加直接的资源文件（从filesByType中获取，排除嵌套文件）
-        for (const [, files] of result.resourceAnalysis.filesByType) {
+        for (const [fileType, files] of result.resourceAnalysis.filesByType) {
             for (const file of files) {
-                // 跳过已经在压缩包分析中展示的嵌套文件
-                if (nestedFilePaths.has(file.filePath)) {
-                    continue;
+                // 如果 fileType 为空，使用文件扩展名
+                let displayFileType = String(fileType);
+                if (!displayFileType || displayFileType.trim() === '') {
+                    const ext = path.extname(file.fileName);
+                    displayFileType = ext ? ext.substring(1).toUpperCase() : 'Unknown';
                 }
 
-                const isNested = this.isNestedFile(file.filePath);
-                const frameworks = this.lookupFrameworksForFile(result, file.filePath, file.fileName);
-                allFiles.push({
-                    ...file,
-                    fileSizeFormatted: this.formatFileSize(file.fileSize),
-                    isNested: isNested,
-                    source: isNested ? '🗂️ 嵌套' : '📄 直接',
-                    parentInfo: this.getParentInfo(file.filePath),
-                    frameworkKey: frameworks.join(', '),
-                    frameworksText: frameworks.join(', ')
+                items.push({
+                    fileName: file.fileName,
+                    filePath: file.filePath,
+                    fileType: displayFileType,
+                    fileSize: this.formatFileSize(file.fileSize)
                 });
             }
         }
 
-        return allFiles.sort((a, b) => {
-            // Unknown 框架文件排在最后
-            const getFrameworks = (text: string) => text.split(',').map(s => s.trim()).filter(Boolean);
-            const aUnknown = getFrameworks(a.frameworksText).includes('Unknown');
-            const bUnknown = getFrameworks(b.frameworksText).includes('Unknown');
-            if (aUnknown !== bUnknown) {
-                return aUnknown ? 1 : -1;
+        return items;
+    }
+
+    /**
+     * 构建技术栈信息数据
+     */
+    private buildTechnologyStackInfoData(result: HapStaticAnalysisResult): Array<{
+        fileName: string;
+        filePath: string;
+        technologyStack: string;
+        fileSize: string;
+        analysisDetails: string;
+    }> {
+        const items: Array<{
+            fileName: string;
+            filePath: string;
+            technologyStack: string;
+            fileSize: string;
+            analysisDetails: string;
+        }> = [];
+
+        for (const soFile of result.soAnalysis.soFiles) {
+            // 过滤掉 Unknown 框架
+            const frameworks = soFile.frameworks.filter(f => f !== 'Unknown');
+            if (frameworks.length === 0) {
+                continue; // 跳过没有识别框架的 SO 文件
             }
-            // 其次按是否嵌套排序，再按文件名排序
-            if (a.isNested !== b.isNested) {
-                return a.isNested ? 1 : -1;
+
+            let analysisDetails = '无';
+
+            // 构建分析详情
+            if (soFile.flutterAnalysis) {
+                const details: Array<string> = [];
+                if (soFile.flutterAnalysis.isFlutter) {
+                    details.push('Flutter框架');
+                }
+                if (soFile.flutterAnalysis.flutterVersion?.hex40) {
+                    details.push(`版本: ${soFile.flutterAnalysis.flutterVersion.hex40}`);
+                }
+                if (soFile.flutterAnalysis.flutterVersion?.dartVersion) {
+                    details.push(`Dart: ${soFile.flutterAnalysis.flutterVersion.dartVersion}`);
+                }
+                if (soFile.flutterAnalysis.flutterVersion?.lastModified) {
+                    const date = new Date(soFile.flutterAnalysis.flutterVersion.lastModified);
+                    details.push(`修改时间: ${date.toLocaleDateString('zh-CN')}`);
+                }
+                if (soFile.flutterAnalysis.dartPackages.length > 0) {
+                    details.push(`Dart包: ${soFile.flutterAnalysis.dartPackages.length}个`);
+                }
+                analysisDetails = details.join('; ');
             }
-            return a.fileName.localeCompare(b.fileName);
-        });
+
+            items.push({
+                fileName: soFile.fileName,
+                filePath: soFile.filePath,
+                technologyStack: frameworks.join(', '),
+                fileSize: this.formatFileSize(soFile.fileSize),
+                analysisDetails
+            });
+        }
+
+        return items;
     }
 
-    /**
-     * 为资源文件推断框架：
-     * - 若在 libs 中存在同名/同前缀的 SO，继承其框架
-     * - 否则归类为 Unknown
-     */
-    private lookupFrameworksForFile(result: HapStaticAnalysisResult, _filePath: string, fileName: string): Array<string> {
-        // 按此前逻辑：仅以 SO 分析结果为准，不做路径/类型猜测
-        const lowerName = fileName.toLowerCase();
-        const matches = result.soAnalysis.soFiles.filter(so => so.fileName.toLowerCase() === lowerName);
-        if (matches.length > 0) {
-            const set = new Set<string>();
-            for (const so of matches) { so.frameworks.forEach(f => set.add(f)); }
-            return Array.from(set);
-        }
-        return ['Unknown'];
-    }
-
-    /**
-     * 判断是否为嵌套文件
-     */
-    private isNestedFile(filePath: string): boolean {
-        // 如果路径包含压缩包名称（.zip/），则为嵌套文件
-        return filePath.includes('.zip/');
-    }
-
-    /**
-     * 获取文件的父级信息
-     */
-    private getParentInfo(filePath: string): string {
-        const parts = filePath.split('/');
-        if (parts.length <= 1) {
-            return '';
-        }
-
-        // 如果是直接在assets或libs下的文件
-        if (parts[0] === 'assets' || parts[0] === 'libs') {
-            return '';
-        }
-
-        // 如果是嵌套文件，返回父级路径
-        const parentParts = parts.slice(0, -1);
-        return parentParts.join('/');
-    }
-
-    /**
-     * 生成动态过滤按钮
-     */
-    private generateFrameworkFilterButtons(
-        result: HapStaticAnalysisResult,
-        allFiles: Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }>
-    ): FrameworkFilterButtons {
-        // 压缩包分析按钮：仅展示存在的数据类型
-        const anyExtracted = result.resourceAnalysis.archiveFiles.some(a => a.extracted);
-        const anyNotExtracted = result.resourceAnalysis.archiveFiles.some(a => !a.extracted);
-
-        const archiveButtons: Array<FilterButton> = [
-            { type: 'all', label: '全部', active: true }
-        ];
-        if (anyExtracted) {
-            archiveButtons.push({ type: 'extracted', label: '已解压', active: false });
-        }
-        if (anyNotExtracted) {
-            archiveButtons.push({ type: 'not-extracted', label: '未解压', active: false });
-        }
-
-        // 所有文件详情按钮：仅展示实际存在的框架与嵌套项
-        const allFilesButtons: Array<FilterButton> = [
-            { type: 'all', label: '全部', active: true }
-        ];
-
-        const hasNested = allFiles.some(f => f.isNested);
-        if (hasNested) {
-            allFilesButtons.push({ type: 'nested', label: '嵌套文件', active: false });
-        }
-
-        const presentFrameworks = new Set<string>();
-        for (const file of allFiles) {
-            const parts = file.frameworksText.split(',').map(s => s.trim()).filter(Boolean);
-            for (const fw of parts) {
-                presentFrameworks.add(fw);
-            }
-        }
-        for (const fw of Array.from(presentFrameworks).sort()) {
-            allFilesButtons.push({ type: fw, label: fw, active: false });
-        }
-
-        return {
-            archiveButtons,
-            allFilesButtons
-        };
-    }
-
-    
 
     /**
      * 获取默认HTML模板
@@ -394,29 +283,141 @@ export class HtmlFormatter extends BaseFormatter {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HAP静态分析报告 - {{metadata.hapFileName}}</title>
+
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; }
-        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
-        .header .meta { opacity: 0.9; font-size: 1.1em; }
-        .card { background: white; border-radius: 10px; padding: 25px; margin-bottom: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .card h2 { color: #2c3e50; margin-bottom: 20px; font-size: 1.8em; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', sans-serif; line-height: 1.6; color: #2c3e50; background: #f8f9fa; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; border-radius: 12px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3); }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; font-weight: 600; }
+        .header .meta { opacity: 0.95; font-size: 1em; }
+
+        /* Card */
+        .card { background: white; border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e9ecef; }
+        .card h2 { color: #2c3e50; margin-bottom: 20px; font-size: 1.6em; font-weight: 600; border-bottom: 2px solid #667eea; padding-bottom: 12px; }
+
+        /* Summary */
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
-        .summary-item { text-align: center; padding: 20px; background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; border-radius: 8px; }
-        .summary-item .number { font-size: 2.5em; font-weight: bold; display: block; }
-        .summary-item .label { font-size: 1.1em; opacity: 0.9; }
-        .table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; }
-        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
-        .table th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
-        .table tr:hover { background: #f8f9fa; }
-        code { white-space: normal; word-break: break-all; overflow-wrap: anywhere; }
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 500; }
-        .badge-primary { background: #3498db; color: white; }
-        .badge-success { background: #27ae60; color: white; }
-        .badge-warning { background: #f39c12; color: white; }
-        .badge-danger { background: #e74c3c; color: white; }
+        .summary-item { text-align: center; padding: 25px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2); transition: transform 0.2s; }
+        .summary-item:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3); }
+        .summary-item .number { font-size: 2.2em; font-weight: 700; display: block; margin-bottom: 5px; }
+        .summary-item .label { font-size: 0.95em; opacity: 0.95; }
+
+        /* Filter Buttons */
+        .filter-container { margin: 20px 0; }
+        .filter-label { font-size: 0.95em; font-weight: 600; color: #495057; margin-bottom: 10px; display: block; }
+        .filter-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+        .filter-btn {
+            padding: 8px 16px;
+            border: 2px solid #dee2e6;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #495057;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .filter-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+            background: #f8f9ff;
+        }
+        .filter-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        /* DataTables Override */
+        .dataTables_wrapper { margin-top: 20px; }
+        .dataTables_wrapper .dataTables_length select,
+        .dataTables_wrapper .dataTables_filter input {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.9em;
+        }
+        .dataTables_wrapper .dataTables_filter input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            border-radius: 6px;
+            padding: 6px 12px;
+            margin: 0 2px;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            border: none;
+        }
+
+        /* Table */
+        table.dataTable {
+            border-collapse: separate !important;
+            border-spacing: 0;
+            table-layout: fixed;
+            width: 100% !important;
+        }
+        table.dataTable thead th {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            font-weight: 600;
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding: 14px 12px;
+            font-size: 0.9em;
+        }
+        table.dataTable tbody td {
+            padding: 12px;
+            border-bottom: 1px solid #f1f3f5;
+            font-size: 0.9em;
+            max-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        table.dataTable tbody td code {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: bottom;
+        }
+        table.dataTable tbody tr { transition: background-color 0.2s; }
+        table.dataTable tbody tr:hover { background-color: #f8f9ff; }
+        table.dataTable tbody tr:hover td {
+            white-space: normal;
+            word-break: break-all;
+        }
+
+        /* Badge */
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 500; }
+        .badge-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .badge-info { background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; }
+        .badge-success { background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; }
+        .badge-warning { background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); color: white; }
+        .badge-danger { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; }
+        .badge-secondary { background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; }
+        .badge-light { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: #e83e8c;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
         .frameworks { margin: 15px 0; }
         .framework-tag { display: inline-block; margin: 3px; padding: 6px 12px; background: #3498db; color: white; border-radius: 20px; font-size: 0.9em; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
         .flutter-analysis { font-size: 0.9em; }
@@ -606,76 +607,40 @@ export class HtmlFormatter extends BaseFormatter {
         {{/if}}
 
         {{#if options.includeDetails}}
-        {{#if soAnalysis.hasSoFiles}}
+
+        {{!-- 第一部分：文件类型信息 --}}
+        {{#if fileTypeInfo.hasItems}}
         <div class="card">
-            <h2>📦 SO文件详情</h2>
-            <table class="table">
+            <h2>📄 文件类型信息</h2>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、分类（后缀名）、文件大小</p>
+
+            <!-- 文件类型筛选按钮 -->
+            <div class="filter-container">
+                <span class="filter-label">按文件类型筛选：</span>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterFileType('all')">全部</button>
+                    {{#each fileTypeInfo.uniqueTypes}}
+                    <button class="filter-btn" onclick="filterFileType('{{this}}')">{{this}}</button>
+                    {{/each}}
+                </div>
+            </div>
+
+            <table id="fileTypeTable" class="table display" style="width:100%">
                 <thead>
                     <tr>
-                        <th>文件名</th>
-                        <th>路径</th>
-                        <th>框架</th>
-                        <th>大小</th>
-                        <th>详情分析</th>
+                        <th style="width: 20%">文件名</th>
+                        <th style="width: 45%">路径</th>
+                        <th style="width: 20%">分类（后缀名）</th>
+                        <th style="width: 15%">文件大小</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {{#each soAnalysis.soFiles}}
-                    <tr>
-                        <td><strong>{{fileName}}</strong></td>
-                        <td><code>{{filePath}}</code></td>
-                        <td>{{frameworksText}}</td>
-                        <td>{{fileSizeFormatted}}</td>
-                        <td>
-                            {{#if flutterAnalysis.hasFlutterAnalysis}}
-                                {{#if flutterAnalysis.isFlutter}}
-                                    <div class="flutter-analysis">
-                                        <div><strong>Flutter应用</strong></div>
-                                        {{#if flutterAnalysis.dartPackages}}
-                                            <div><strong>Dart包 ({{flutterAnalysis.dartPackages.length}}):</strong></div>
-                                            <ul>
-                                                {{#each flutterAnalysis.dartPackages}}
-                                                <li>{{name}}{{#if version}}@{{version}}{{/if}}</li>
-                                                {{/each}}
-                                            </ul>
-                                        {{/if}}
-                                        {{#if flutterAnalysis.flutterVersion}}
-                                            <div><strong>Flutter版本:</strong></div>
-                                            <div>Hex: <code>{{flutterAnalysis.flutterVersion.hex40}}</code></div>
-                                            <div>修改时间: <code>{{flutterAnalysis.flutterVersion.lastModified}}</code></div>
-                                        {{else}}
-                                            {{#if isLibFlutter}}
-                                                {{#if flutterHex40}}
-                                                    <div><strong>Flutter版本:</strong></div>
-                                                    <div>Hex: <code>{{flutterHex40}}</code></div>
-                                                    {{#if flutterLastModified}}
-                                                        <div>修改时间: <code>{{flutterLastModified}}</code></div>
-                                                    {{/if}}
-                                                {{/if}}
-                                            {{/if}}
-                                        {{/if}}
-                                    </div>
-                                {{else}}
-                                    <span class="badge badge-secondary">非Flutter</span>
-                                {{/if}}
-                            {{else}}
-                                {{#if isLibFlutter}}
-                                    {{#if flutterHex40}}
-                                        <div class="flutter-analysis">
-                                            <div><strong>Flutter版本:</strong></div>
-                                            <div>Hex: <code>{{flutterHex40}}</code></div>
-                                            {{#if flutterLastModified}}
-                                                <div>修改时间: <code>{{flutterLastModified}}</code></div>
-                                            {{/if}}
-                                        </div>
-                                    {{else}}
-                                        <span class="badge badge-light">未分析</span>
-                                    {{/if}}
-                                {{else}}
-                                    <span class="badge badge-light">未分析</span>
-                                {{/if}}
-                            {{/if}}
-                        </td>
+                    {{#each fileTypeInfo.items}}
+                    <tr data-filetype="{{fileType}}">
+                        <td title="{{fileName}}"><strong>{{fileName}}</strong></td>
+                        <td title="{{filePath}}"><code>{{filePath}}</code></td>
+                        <td><span class="badge badge-info">{{fileType}}</span></td>
+                        <td>{{fileSize}}</td>
                     </tr>
                     {{/each}}
                 </tbody>
@@ -683,39 +648,47 @@ export class HtmlFormatter extends BaseFormatter {
         </div>
         {{/if}}
 
-        
-
+        {{!-- 第二部分：技术栈信息 --}}
+        {{#if technologyStackInfo.hasItems}}
         <div class="card">
-            <h2>📁 所有文件详情（按框架筛选）</h2>
-            <div class="search-container">
-                <input type="text" class="search-box" placeholder="🔍 搜索所有文件..." onkeyup="searchAllFiles(this.value)">
+            <h2>🔧 技术栈信息</h2>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、技术栈、文件大小、分析详情</p>
+
+            <!-- 技术栈筛选按钮 -->
+            <div class="filter-container">
+                <span class="filter-label">按技术栈筛选：</span>
                 <div class="filter-buttons">
-                    {{#each filters.allFilesFilterButtons}}
-                    <button class="filter-btn {{#if active}}active{{/if}}" onclick="filterAllFiles('{{type}}')">{{label}}</button>
+                    <button class="filter-btn active" onclick="filterTechStack('all')">全部</button>
+                    {{#each technologyStackInfo.uniqueStacks}}
+                    <button class="filter-btn" onclick="filterTechStack('{{this}}')">{{this}}</button>
                     {{/each}}
                 </div>
             </div>
-            <table class="table" id="all-files-table">
+
+            <table id="technologyStackTable" class="table display" style="width:100%">
                 <thead>
                     <tr>
-                        <th>文件名</th>
-                        <th>框架</th>
-                        <th>路径</th>
-                        <th>大小</th>
+                        <th style="width: 18%">文件名</th>
+                        <th style="width: 35%">路径</th>
+                        <th style="width: 15%">技术栈</th>
+                        <th style="width: 12%">文件大小</th>
+                        <th style="width: 20%">分析详情</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {{#each resourceAnalysis.allFiles}}
-                    <tr class="file-row" data-framework="{{frameworkKey}}" data-source="{{#if isNested}}nested{{else}}direct{{/if}}">
-                        <td><strong>{{fileName}}</strong></td>
-                        <td><span class="file-type-tag">{{frameworksText}}</span></td>
-                        <td><code>{{filePath}}</code></td>
-                        <td>{{fileSizeFormatted}}</td>
+                    {{#each technologyStackInfo.items}}
+                    <tr data-techstack="{{technologyStack}}">
+                        <td title="{{fileName}}"><strong>{{fileName}}</strong></td>
+                        <td title="{{filePath}}"><code>{{filePath}}</code></td>
+                        <td><span class="badge badge-primary">{{technologyStack}}</span></td>
+                        <td>{{fileSize}}</td>
+                        <td title="{{analysisDetails}}">{{analysisDetails}}</td>
                     </tr>
                     {{/each}}
                 </tbody>
             </table>
         </div>
+        {{/if}}
 
 
         {{/if}}
@@ -726,7 +699,97 @@ export class HtmlFormatter extends BaseFormatter {
         </div>
     </div>
 
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
     <script>
+        // 全局变量存储 DataTables 实例
+        let fileTypeTable;
+        let techStackTable;
+
+        // 初始化 DataTables
+        $(document).ready(function() {
+            // 文件类型信息表格
+            if ($('#fileTypeTable').length) {
+                fileTypeTable = $('#fileTypeTable').DataTable({
+                    pageLength: 50,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "全部"]],
+                    language: {
+                        "sProcessing": "处理中...",
+                        "sLengthMenu": "显示 _MENU_ 条记录",
+                        "sZeroRecords": "没有匹配的记录",
+                        "sInfo": "显示第 _START_ 至 _END_ 条记录，共 _TOTAL_ 条",
+                        "sInfoEmpty": "显示第 0 至 0 条记录，共 0 条",
+                        "sInfoFiltered": "(由 _MAX_ 条记录过滤)",
+                        "sSearch": "搜索:",
+                        "oPaginate": {
+                            "sFirst": "首页",
+                            "sPrevious": "上一页",
+                            "sNext": "下一页",
+                            "sLast": "末页"
+                        }
+                    },
+                    order: [[0, 'asc']]
+                });
+            }
+
+            // 技术栈信息表格
+            if ($('#technologyStackTable').length) {
+                techStackTable = $('#technologyStackTable').DataTable({
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "全部"]],
+                    language: {
+                        "sProcessing": "处理中...",
+                        "sLengthMenu": "显示 _MENU_ 条记录",
+                        "sZeroRecords": "没有匹配的记录",
+                        "sInfo": "显示第 _START_ 至 _END_ 条记录，共 _TOTAL_ 条",
+                        "sInfoEmpty": "显示第 0 至 0 条记录，共 0 条",
+                        "sInfoFiltered": "(由 _MAX_ 条记录过滤)",
+                        "sSearch": "搜索:",
+                        "oPaginate": {
+                            "sFirst": "首页",
+                            "sPrevious": "上一页",
+                            "sNext": "下一页",
+                            "sLast": "末页"
+                        }
+                    },
+                    order: [[0, 'asc']]
+                });
+            }
+        });
+
+        // 文件类型筛选函数
+        function filterFileType(type) {
+            // 更新按钮状态
+            const buttons = document.querySelectorAll('.card:has(#fileTypeTable) .filter-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // 应用筛选
+            if (type === 'all') {
+                fileTypeTable.column(2).search('').draw();
+            } else {
+                fileTypeTable.column(2).search('^' + type + '$', true, false).draw();
+            }
+        }
+
+        // 技术栈筛选函数
+        function filterTechStack(stack) {
+            // 更新按钮状态
+            const buttons = document.querySelectorAll('.card:has(#technologyStackTable) .filter-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // 应用筛选
+            if (stack === 'all') {
+                techStackTable.column(2).search('').draw();
+            } else {
+                techStackTable.column(2).search('^' + stack + '$', true, false).draw();
+            }
+        }
+
         function toggleCollapse(element) {
             const content = element.nextElementSibling;
             const isCollapsed = content.classList.contains('collapsed');

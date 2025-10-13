@@ -82,19 +82,17 @@ export class ExcelFormatter extends BaseFormatter {
         const summarySheet = workbook.addWorksheet('分析摘要');
         this.buildSummarySheet(summarySheet, result);
 
-        // 创建所有文件工作表
-        const filesSheet = workbook.addWorksheet('所有文件');
-        this.buildFilesSheet(filesSheet, result);
+        // 第一部分：文件类型信息
+        const fileTypeSheet = workbook.addWorksheet('文件类型信息');
+        this.buildFileTypeInfoSheet(fileTypeSheet, result);
+
+        // 第二部分：技术栈信息
+        const techStackSheet = workbook.addWorksheet('技术栈信息');
+        this.buildTechnologyStackInfoSheet(techStackSheet, result);
 
         // 创建文件类型统计工作表
         const statsSheet = workbook.addWorksheet('文件类型统计');
         this.buildStatsSheet(statsSheet, result);
-
-        // 如果有SO文件，创建SO文件工作表
-        if (result.soAnalysis.soFiles.length > 0) {
-            const soSheet = workbook.addWorksheet('SO文件分析');
-            this.buildSoSheet(soSheet, result);
-        }
 
         // 如果有压缩包，创建压缩包工作表
         if (result.resourceAnalysis.archiveFiles.length > 0) {
@@ -145,31 +143,78 @@ export class ExcelFormatter extends BaseFormatter {
     }
 
     /**
-     * 构建所有文件工作表
+     * 构建文件类型信息工作表
      */
-    private buildFilesSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
+    private buildFileTypeInfoSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
         // 设置列
         worksheet.columns = [
             { header: '文件名', key: 'fileName', width: 30 },
-            { header: '类型', key: 'fileType', width: 12 },
             { header: '路径', key: 'filePath', width: 60 },
-            { header: '大小', key: 'fileSize', width: 15 },
-            { header: '来源', key: 'source', width: 15 }
+            { header: '分类（后缀名）', key: 'fileType', width: 20 },
+            { header: '文件大小', key: 'fileSize', width: 15 }
         ];
 
         // 添加数据
-        for (const [, files] of result.resourceAnalysis.filesByType) {
+        for (const [fileType, files] of result.resourceAnalysis.filesByType) {
             for (const file of files) {
-                const isNested = file.filePath.includes('.zip/');
                 worksheet.addRow({
                     fileName: file.fileName,
-                    fileType: file.fileType,
                     filePath: file.filePath,
-                    fileSize: this.formatFileSize(file.fileSize),
-                    source: isNested ? '🗂️ 嵌套' : '📄 直接'
+                    fileType: fileType,
+                    fileSize: this.formatFileSize(file.fileSize)
                 });
             }
         }
+
+        // 设置标题行样式
+        worksheet.getRow(1).font = { bold: true, size: 12 };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE6F3FF' }
+        };
+    }
+
+    /**
+     * 构建技术栈信息工作表
+     */
+    private buildTechnologyStackInfoSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
+        // 设置列
+        worksheet.columns = [
+            { header: '文件名', key: 'fileName', width: 30 },
+            { header: '路径', key: 'filePath', width: 60 },
+            { header: '技术栈', key: 'technologyStack', width: 25 },
+            { header: '文件大小', key: 'fileSize', width: 15 },
+            { header: '分析详情', key: 'analysisDetails', width: 50 }
+        ];
+
+        // 添加数据
+        result.soAnalysis.soFiles.forEach(soFile => {
+            let analysisDetails = '';
+
+            // 构建分析详情
+            if (soFile.flutterAnalysis) {
+                const details: Array<string> = [];
+                if (soFile.flutterAnalysis.isFlutter) {
+                    details.push('Flutter框架');
+                }
+                if (soFile.flutterAnalysis.flutterVersion?.hex40) {
+                    details.push(`版本: ${soFile.flutterAnalysis.flutterVersion.hex40}`);
+                }
+                if (soFile.flutterAnalysis.dartPackages.length > 0) {
+                    details.push(`Dart包: ${soFile.flutterAnalysis.dartPackages.length}个`);
+                }
+                analysisDetails = details.join('; ');
+            }
+
+            worksheet.addRow({
+                fileName: soFile.fileName,
+                filePath: soFile.filePath,
+                technologyStack: soFile.frameworks.join(', ') || '未识别',
+                fileSize: this.formatFileSize(soFile.fileSize),
+                analysisDetails: analysisDetails || '无'
+            });
+        });
 
         // 设置标题行样式
         worksheet.getRow(1).font = { bold: true, size: 12 };
@@ -219,38 +264,7 @@ export class ExcelFormatter extends BaseFormatter {
         };
     }
 
-    /**
-     * 构建SO文件工作表
-     */
-    private buildSoSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
-        // 设置列
-        worksheet.columns = [
-            { header: '文件名', key: 'fileName', width: 30 },
-            { header: '路径', key: 'filePath', width: 60 },
-            { header: '大小', key: 'fileSize', width: 15 },
-            { header: '框架', key: 'frameworks', width: 25 },
-            { header: '类型', key: 'type', width: 15 }
-        ];
 
-        // 添加数据
-        result.soAnalysis.soFiles.forEach(soFile => {
-            worksheet.addRow({
-                fileName: soFile.fileName,
-                filePath: soFile.filePath,
-                fileSize: this.formatFileSize(soFile.fileSize),
-                frameworks: soFile.frameworks.join(', ') || '未识别',
-                type: soFile.isSystemLib ? '系统库' : '应用库'
-            });
-        });
-
-        // 设置标题行样式
-        worksheet.getRow(1).font = { bold: true, size: 12 };
-        worksheet.getRow(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE6F3FF' }
-        };
-    }
 
     /**
      * 构建压缩包工作表

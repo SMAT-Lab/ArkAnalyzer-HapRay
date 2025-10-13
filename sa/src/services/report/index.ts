@@ -157,10 +157,13 @@ export abstract class BaseFormatter {
      */
     protected getFrameworkStats(result: HapStaticAnalysisResult): Array<{framework: string, count: number, percentage: string}> {
         const frameworkCount = new Map<string, number>();
-        
+
         result.soAnalysis.soFiles.forEach(soFile => {
             soFile.frameworks.forEach(framework => {
-                frameworkCount.set(framework, (frameworkCount.get(framework) ?? 0) + 1);
+                // 过滤掉 Unknown 框架
+                if (framework !== 'Unknown') {
+                    frameworkCount.set(framework, (frameworkCount.get(framework) ?? 0) + 1);
+                }
             });
         });
 

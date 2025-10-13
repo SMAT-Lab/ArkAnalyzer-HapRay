@@ -17,8 +17,44 @@ import fs from 'fs';
 import path from 'path';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
+import type { HapStaticAnalysisResult, ResourceFileInfo, FileType } from '../../config/types';
 
+/**
+ * 文件类型信息项
+ */
+interface FileTypeInfoItem {
+    fileName: string;
+    filePath: string;
+    fileType: string;
+    fileSize: number;
+    fileSizeFormatted: string;
+}
+
+/**
+ * 技术栈信息项
+ */
+interface TechnologyStackInfoItem {
+    fileName: string;
+    filePath: string;
+    technologyStack: Array<string>;
+    fileSize: number;
+    fileSizeFormatted: string;
+    analysisDetails?: {
+        isFlutter?: boolean;
+        dartPackages?: Array<{
+            name: string;
+            version?: string;
+        }>;
+        flutterVersion?: {
+            hex40?: string;
+            lastModified?: string;
+        };
+    };
+}
+
+/**
+ * JSON报告结构
+ */
 interface JsonReport {
     metadata: {
         hapPath: string;
@@ -28,46 +64,36 @@ interface JsonReport {
         format: string;
     };
     summary: {
-        totalSoFiles: number;
-        totalResourceFiles: number;
+        totalFiles: number;
         totalSize: number;
         totalSizeFormatted: string;
         detectedFrameworks: Array<string>;
-        jsFilesCount: number;
-        hermesFilesCount: number;
-        archiveFilesCount: number;
+        fileTypeCount: number;
+        technologyStackCount: number;
     };
-    statistics: {
-        fileTypes: Array<{
+
+    // 第一部分：文件类型信息
+    fileTypeInfo: {
+        totalCount: number;
+        items: Array<FileTypeInfoItem>;
+        statistics: Array<{
             type: string;
             count: number;
+            totalSize: number;
+            totalSizeFormatted: string;
             percentage: string;
         }>;
-        frameworks: Array<{
+    };
+
+    // 第二部分：技术栈信息
+    technologyStackInfo: {
+        totalCount: number;
+        items: Array<TechnologyStackInfoItem>;
+        statistics: Array<{
             framework: string;
             count: number;
             percentage: string;
         }>;
-    };
-    details?: {
-        soFiles: Array<unknown>;
-        jsFiles: Array<unknown>;
-        hermesFiles: Array<unknown>;
-        archiveFiles: Array<unknown>;
-    };
-    soAnalysis?: {
-        detectedFrameworks?: Array<string>;
-        totalSoFiles?: number;
-        soFiles?: Array<unknown>;
-    };
-    resourceAnalysis?: {
-        totalFiles?: number;
-        totalSize?: number;
-        totalSizeFormatted?: string;
-        filesByType?: Record<string, Array<unknown>>;
-        jsFiles?: Array<unknown>;
-        hermesFiles?: Array<unknown>;
-        archiveFiles?: Array<unknown>;
     };
 }
 
@@ -132,79 +158,109 @@ export class JsonFormatter extends BaseFormatter {
      * 构建JSON报告数据
      */
     private buildJsonReport(result: HapStaticAnalysisResult): JsonReport {
+        // 构建文件类型信息
+        const fileTypeInfo = this.buildFileTypeInfo(result);
+
+        // 构建技术栈信息
+        const technologyStackInfo = this.buildTechnologyStackInfo(result);
+
         const report: JsonReport = {
             metadata: {
                 hapPath: result.hapPath,
                 timestamp: result.timestamp.toISOString(),
                 analysisDate: this.formatDateTime(result.timestamp),
-                version: '1.1.0',
+                version: '2.0.0',
                 format: 'json'
             },
             summary: {
-                totalSoFiles: result.soAnalysis.totalSoFiles,
-                totalResourceFiles: result.resourceAnalysis.totalFiles,
-                totalSize: result.resourceAnalysis.totalSize,
-                totalSizeFormatted: this.formatFileSize(result.resourceAnalysis.totalSize),
-                detectedFrameworks: result.soAnalysis.detectedFrameworks,
-                jsFilesCount: result.resourceAnalysis.jsFiles.length,
-                hermesFilesCount: result.resourceAnalysis.hermesFiles.length,
-                archiveFilesCount: result.resourceAnalysis.archiveFiles.length
-            },
-            statistics: {
-                fileTypes: this.getFileTypeStats(result),
-                frameworks: this.getFrameworkStats(result)
-            },
-            soAnalysis: {
-                detectedFrameworks: result.soAnalysis.detectedFrameworks,
-                totalSoFiles: result.soAnalysis.totalSoFiles,
-                soFiles: result.soAnalysis.soFiles.map(soFile => ({
-                    ...soFile,
-                    fileSizeFormatted: this.formatFileSize(soFile.fileSize)
-                }))
-            },
-            resourceAnalysis: {
                 totalFiles: result.resourceAnalysis.totalFiles,
                 totalSize: result.resourceAnalysis.totalSize,
                 totalSizeFormatted: this.formatFileSize(result.resourceAnalysis.totalSize),
-                filesByType: ((): Record<string, Array<unknown>> => {
-                    const entries = Array.from(result.resourceAnalysis.filesByType.entries());
-                    const mapped = entries.map(([type, files]) => [
-                        type as unknown as string,
-                        files.map((file: ResourceFileInfo) => ({
-                            ...file,
-                            fileSizeFormatted: this.formatFileSize(file.fileSize)
-                        }))
-                    ]);
-                    return Object.fromEntries(mapped) as Record<string, Array<unknown>>;
-                })(),
-                jsFiles: result.resourceAnalysis.jsFiles.map(jsFile => ({
-                    ...jsFile,
-                    fileSizeFormatted: this.formatFileSize(jsFile.fileSize)
-                })),
-                hermesFiles: result.resourceAnalysis.hermesFiles.map(hermesFile => ({
-                    ...hermesFile,
-                    fileSizeFormatted: this.formatFileSize(hermesFile.fileSize)
-                })),
-                archiveFiles: result.resourceAnalysis.archiveFiles.map(archiveFile => ({
-                    ...archiveFile,
-                    fileSizeFormatted: this.formatFileSize(archiveFile.fileSize)
-                }))
-            }
+                detectedFrameworks: result.soAnalysis.detectedFrameworks,
+                fileTypeCount: fileTypeInfo.totalCount,
+                technologyStackCount: technologyStackInfo.totalCount
+            },
+            fileTypeInfo,
+            technologyStackInfo
         };
 
-        // 如果不包含详细信息，移除详细的文件列表
-        if (!this.options.includeDetails) {
-            if (report.soAnalysis) {
-                delete report.soAnalysis.soFiles;
-            }
-            if (report.resourceAnalysis) {
-                delete report.resourceAnalysis.filesByType;
-                delete report.resourceAnalysis.jsFiles;
-                delete report.resourceAnalysis.hermesFiles;
-                delete report.resourceAnalysis.archiveFiles;
+        return report;
+    }
+
+    /**
+     * 构建文件类型信息
+     */
+    private buildFileTypeInfo(result: HapStaticAnalysisResult): JsonReport['fileTypeInfo'] {
+        const items: Array<FileTypeInfoItem> = [];
+
+        // 收集所有文件的类型信息
+        for (const [fileType, files] of result.resourceAnalysis.filesByType) {
+            for (const file of files) {
+                items.push({
+                    fileName: file.fileName,
+                    filePath: file.filePath,
+                    fileType: String(fileType),
+                    fileSize: file.fileSize,
+                    fileSizeFormatted: this.formatFileSize(file.fileSize)
+                });
             }
         }
 
-        return report;
+        // 计算统计信息
+        const statistics = this.getFileTypeStats(result).map(stat => {
+            const files = result.resourceAnalysis.filesByType.get(stat.type as unknown as FileType) ?? [];
+            const totalSize = files.reduce((sum: number, file: ResourceFileInfo) => sum + file.fileSize, 0);
+            return {
+                type: stat.type,
+                count: stat.count,
+                totalSize,
+                totalSizeFormatted: this.formatFileSize(totalSize),
+                percentage: stat.percentage
+            };
+        });
+
+        return {
+            totalCount: items.length,
+            items: this.options.includeDetails !== false ? items : [],
+            statistics
+        };
+    }
+
+    /**
+     * 构建技术栈信息
+     */
+    private buildTechnologyStackInfo(result: HapStaticAnalysisResult): JsonReport['technologyStackInfo'] {
+        const items: Array<TechnologyStackInfoItem> = [];
+
+        // 收集所有SO文件的技术栈信息
+        for (const soFile of result.soAnalysis.soFiles) {
+            const item: TechnologyStackInfoItem = {
+                fileName: soFile.fileName,
+                filePath: soFile.filePath,
+                technologyStack: soFile.frameworks as unknown as Array<string>,
+                fileSize: soFile.fileSize,
+                fileSizeFormatted: this.formatFileSize(soFile.fileSize)
+            };
+
+            // 添加分析详情（如果有）
+            if (soFile.flutterAnalysis) {
+                item.analysisDetails = {
+                    isFlutter: soFile.flutterAnalysis.isFlutter,
+                    dartPackages: soFile.flutterAnalysis.dartPackages,
+                    flutterVersion: soFile.flutterAnalysis.flutterVersion
+                };
+            }
+
+            items.push(item);
+        }
+
+        // 计算统计信息
+        const statistics = this.getFrameworkStats(result);
+
+        return {
+            totalCount: items.length,
+            items: this.options.includeDetails !== false ? items : [],
+            statistics
+        };
     }
 }

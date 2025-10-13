@@ -15,13 +15,11 @@
 
 import path from 'path';
 import fs from 'fs';
+import { tmpdir } from 'os';
+import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { FlutterAnalysisResult, FrameworkTypeKey, SoAnalysisResult } from '../../../config/types';
 import { getFrameworkPatterns, matchSoPattern } from '../../../config/framework-patterns';
-import type {
-    ZipInstance,
-    ZipEntry,
-    FileSizeLimits
-} from '../../../types/zip-types';
+import type { ZipInstance, ZipEntry, FileSizeLimits } from '../../../types/zip-types';
 import {
     isValidZipEntry,
     getSafeFileSize,
@@ -31,14 +29,9 @@ import {
     MemoryMonitor,
     DEFAULT_FILE_SIZE_LIMITS
 } from '../../../types/zip-types';
-import {
-    ErrorFactory,
-    ErrorUtils
-} from '../../../errors';
+import { ErrorFactory, ErrorUtils } from '../../../errors';
 import { ElfAnalyzer } from '../../elf/elf_analyzer';
 import { FlutterAnalyzer } from './flutter_analyzer';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { tmpdir } from 'os';
 
 /**
  * SO文件分析器 - 支持类型安全的ZIP分析，包含内存管理和错误处理
