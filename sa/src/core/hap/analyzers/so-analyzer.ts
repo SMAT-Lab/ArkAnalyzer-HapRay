@@ -328,21 +328,60 @@ export class SoAnalyzer {
                 // 写入临时文件
                 fs.writeFileSync(tempFilePath, soBuffer);
                 
-                // 使用ElfAnalyzer获取符号
+                // 方法1: 使用ElfAnalyzer获取符号
                 const elfAnalyzer = ElfAnalyzer.getInstance();
                 const symbols = await elfAnalyzer.getSymbols(tempFilePath);
                 
-                // 检查导出符号中是否包含Kotlin相关字符串
+                // 检查符号表中是否包含Kotlin相关字符串
                 const allSymbols = [...symbols.exports, ...symbols.imports];
                 const kotlinSymbols = allSymbols.filter(symbol => 
                     symbol.includes('Kotlin') || 
-                    symbol.includes('KOTLIN_NATIVE_AVAILABLE_PROCESSORS')
+                    symbol.includes('KOTLIN_NATIVE_AVAILABLE_PROCESSORS') ||
+                    symbol.includes('kfun') ||
+                    symbol.includes('kotlinNativeReference')
                 );
                 
-                this.logger.debug(`KMP verification: found ${kotlinSymbols.length} Kotlin-related symbols out of ${allSymbols.length} total symbols`);
+                this.logger.debug(`KMP verification (symbols): found ${kotlinSymbols.length} Kotlin-related symbols out of ${allSymbols.length} total symbols`);
                 
-                // 如果找到Kotlin相关符号，则确认为KMP框架
-                return kotlinSymbols.length > 0;
+                // 如果符号表中找到Kotlin相关符号，直接返回true
+                if (kotlinSymbols.length > 0) {
+                    this.logger.debug(`KMP verification passed via symbol analysis: ${kotlinSymbols.length} Kotlin symbols found`);
+                    return true;
+                }
+                
+                // 方法2: 扫描二进制内容查找Kotlin特征
+                const binaryContent = soBuffer.toString('binary');
+                const kotlinPatterns = [
+                    'Kotlin',
+                    'KOTLIN_NATIVE_AVAILABLE_PROCESSORS',
+                    'kotlin'
+                ];
+                
+                let foundPatterns = 0;
+                const foundPatternDetails: Array<{pattern: string, count: number}> = [];
+                
+                for (const pattern of kotlinPatterns) {
+                    const regex = new RegExp(pattern, 'gi');
+                    const matches = binaryContent.match(regex);
+                    if (matches) {
+                        foundPatterns += matches.length;
+                        foundPatternDetails.push({pattern, count: matches.length});
+                        this.logger.debug(`KMP binary scan: found "${pattern}" ${matches.length} times`);
+                    }
+                }
+                
+                this.logger.debug(`KMP verification (binary): found ${foundPatterns} total Kotlin-related patterns`);
+                
+                // 如果找到足够的Kotlin特征，确认为KMP框架
+                const isKmpFramework = foundPatterns >= 1; // 至少需要1个特征匹配
+                
+                if (isKmpFramework) {
+                    this.logger.debug(`KMP verification passed via binary analysis: ${foundPatterns} patterns found`, foundPatternDetails);
+                } else {
+                    this.logger.debug(`KMP verification failed: only ${foundPatterns} patterns found (threshold: 3)`);
+                }
+                
+                return isKmpFramework;
                 
             } finally {
                 // 清理临时文件

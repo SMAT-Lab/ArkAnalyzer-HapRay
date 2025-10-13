@@ -56,6 +56,13 @@ class StaticAction:
         )
 
         parser.add_argument('--include-details', action='store_true', help='Include detailed analysis information')
+        parser.add_argument(
+            '-j',
+            '--jobs',
+            type=str,
+            default='auto',
+            help='Number of parallel jobs for analysis (default: auto, uses CPU core count)',
+        )
 
         parsed_args = parser.parse_args(args)
 
@@ -74,12 +81,12 @@ class StaticAction:
             logging.error(f'Project root: {project_root}')
             return 1
 
-        # 构建命令 - 使用hapray analyzer子命令
+        # 构建命令 - 使用hapray hap子命令
         cmd = [
             'node',
             str(static_analyzer_path),
             'hapray',
-            'analyzer',
+            'hap',
             '-i',
             parsed_args.input,
             '-o',
@@ -87,6 +94,10 @@ class StaticAction:
             '-f',
             parsed_args.format,
         ]
+
+        # 添加并发数参数
+        if parsed_args.jobs != 'auto':
+            cmd.extend(['-j', parsed_args.jobs])
 
         if parsed_args.include_details:
             # 新CLI默认包含详细信息，不需要额外参数
@@ -97,6 +108,10 @@ class StaticAction:
             logging.info(f'Input: {parsed_args.input}')
             logging.info(f'Output: {parsed_args.output}')
             logging.info(f'Format: {parsed_args.format}')
+            if parsed_args.jobs != 'auto':
+                logging.info(f'Jobs: {parsed_args.jobs}')
+            else:
+                logging.info('Jobs: auto (using CPU core count)')
 
             # 执行静态分析
             result = subprocess.run(
@@ -149,5 +164,11 @@ Examples:
   # All formats with detailed analysis
   python main.py static -i app.hap -o ./output -f all --include-details
 
-Note: The static analysis now uses the hapray analyzer command internally.
+  # Analysis with custom concurrency (4 parallel jobs)
+  python main.py static -i app.hap -o ./output -j 4
+
+  # Analysis with auto concurrency (uses CPU core count)
+  python main.py static -i app.hap -o ./output -j auto
+
+Note: The static analysis now uses the hapray hap command internally.
 """
