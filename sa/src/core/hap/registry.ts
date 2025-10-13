@@ -4,7 +4,7 @@
  */
 
 import type { FileType, SoAnalysisResult, ResourceFileInfo, ArchiveFileInfo, JsFileInfo, HermesFileInfo } from '../../config/types';
-import type { ZipEntry, ZipInstance, FileSizeLimits } from '../../types/zip-types';
+import type { ZipEntry, ZipInstance, FileSizeLimits, MemoryMonitor } from '../../types/zip-types';
 
 export interface ExtensionHandler {
     canHandle: (fileName: string) => boolean;
@@ -36,7 +36,7 @@ export interface FileProcessorContext {
     increaseExtractedArchiveCount: () => void;
     // Utilities
     getFileSizeLimits: () => FileSizeLimits;
-    getMemoryMonitor: () => import('../../types/zip-types').MemoryMonitor;
+    getMemoryMonitor: () => MemoryMonitor;
 }
 
 export interface FileHandler {

@@ -17,23 +17,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
 import { ElfAnalyzer } from '../../elf/elf_analyzer';
+import { FlutterAnalysisResult, FlutterVersionInfo } from '../../../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 export interface DartPackage {
     name: string;
     version?: string;
-}
-
-export interface FlutterVersionInfo {
-    hex40: string;
-    lastModified: string;
-}
-
-export interface FlutterAnalysisResult {
-    isFlutter: boolean;
-    dartPackages: Array<DartPackage>;
-    flutterVersion?: FlutterVersionInfo;
 }
 
 export class FlutterAnalyzer {
@@ -158,9 +148,18 @@ export class FlutterAnalyzer {
             const hex40Regex = /^[0-9a-fA-F]{40}$/;
             const hex40Strings: Array<string> = [];
 
+            // dart version
+            const dartVersionRegex = /^(\d+\.\d+\.\d+) \(stable\)/;
+            let dartVersion = '';
+
             for (const str of strings) {
                 if (hex40Regex.test(str)) {
                     hex40Strings.push(str);
+                } else {
+                    let matches = str.match(dartVersionRegex);
+                    if (matches) {
+                        dartVersion = matches[1];
+                    }
                 }
             }
 
@@ -179,7 +178,8 @@ export class FlutterAnalyzer {
                     logger.info(`Found Flutter version: ${hex40}, last modified: ${versionInfo.lastModified}`);
                     return {
                         hex40,
-                        lastModified: versionInfo.lastModified
+                        lastModified: versionInfo.lastModified,
+                        dartVersion: dartVersion
                     };
                 }
             }
@@ -196,7 +196,8 @@ export class FlutterAnalyzer {
             logger.warn(`No matching Flutter version found in map, fallback to hex ${fallbackHex} with mtime ${mtime || 'unknown'}`);
             return {
                 hex40: fallbackHex,
-                lastModified: mtime
+                lastModified: mtime,
+                dartVersion: dartVersion
             };
         } catch (error) {
             logger.error(`Failed to analyze Flutter version: ${(error as Error).message}`);

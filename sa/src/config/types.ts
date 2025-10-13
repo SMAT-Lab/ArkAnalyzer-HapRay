@@ -251,6 +251,7 @@ export interface HermesFileInfo extends ResourceFileInfo {
 export interface FlutterVersionInfo {
     hex40?: string;
     lastModified?: string;
+    dartVersion?: string;
 }
 
 export interface FlutterPackageInfo {

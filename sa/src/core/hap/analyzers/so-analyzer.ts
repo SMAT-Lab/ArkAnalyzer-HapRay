@@ -15,7 +15,7 @@
 
 import path from 'path';
 import fs from 'fs';
-import type { FrameworkTypeKey, SoAnalysisResult } from '../../../config/types';
+import type { FlutterAnalysisResult, FrameworkTypeKey, SoAnalysisResult } from '../../../config/types';
 import { getFrameworkPatterns, matchSoPattern } from '../../../config/framework-patterns';
 import type {
     ZipInstance,
@@ -38,6 +38,7 @@ import {
 import { ElfAnalyzer } from '../../elf/elf_analyzer';
 import { FlutterAnalyzer } from './flutter_analyzer';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import { tmpdir } from 'os';
 
 /**
  * SO文件分析器 - 支持类型安全的ZIP分析，包含内存管理和错误处理
@@ -315,7 +316,7 @@ export class SoAnalyzer {
             const soBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
 
             // 创建临时文件用于ELF分析
-            const tempDir = (await import('os')).tmpdir();
+            const tempDir = tmpdir();
             const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.so`);
             
             try {
@@ -399,7 +400,7 @@ export class SoAnalyzer {
      * @param zip ZIP实例
      * @returns Flutter分析结果
      */
-    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<import('../../../config/types').FlutterAnalysisResult | null> {
+    private async performFlutterAnalysis(fileName: string, zip: ZipInstance): Promise<FlutterAnalysisResult | null> {
         try {
             // 所有Flutter相关的SO文件都进行完整分析（包信息+版本信息）
             return await this.performFlutterFullAnalysis(fileName, zip);
@@ -412,7 +413,7 @@ export class SoAnalyzer {
     /**
      * 执行完整的Flutter分析（分析当前SO文件的包信息和版本信息）
      */
-    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<import('../../../config/types').FlutterAnalysisResult | null> {
+    private async performFlutterFullAnalysis(fileName: string, zip: ZipInstance): Promise<FlutterAnalysisResult | null> {
         try {
             // 查找当前SO文件和libflutter.so
             let currentSoPath: string | null = null;
@@ -433,7 +434,7 @@ export class SoAnalyzer {
             }
 
             // 创建临时文件进行分析
-            const tempDir = fs.mkdtempSync(path.join((await import('os')).tmpdir(), 'flutter-analysis-'));
+            const tempDir = fs.mkdtempSync(path.join(tmpdir(), 'flutter-analysis-'));
             let currentSoTempPath: string | null = null;
             let libflutterTempPath: string | null = null;
 
@@ -551,7 +552,7 @@ export class SoAnalyzer {
             const soBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
 
             // 创建临时文件用于ELF分析
-            const tempDir = (await import('os')).tmpdir();
+            const tempDir = tmpdir();
             const tempFilePath = path.join(tempDir, `temp_flutter_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.so`);
             
             try {
