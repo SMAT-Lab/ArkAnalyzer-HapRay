@@ -78,7 +78,7 @@ export class FileProcessorContextImpl implements FileProcessorContext {
     buildResourceAnalysis(): HapStaticAnalysisResult['resourceAnalysis'] {
         return {
             totalFiles: this.totalFiles,
-            filesByType: this.filesByType as unknown as Map<import('../../config/types').FileType, Array<ResourceFileInfo>>,
+            filesByType: this.filesByType as unknown as Map<FileType, Array<ResourceFileInfo>>,
             archiveFiles: this.archiveFiles,
             jsFiles: this.jsFiles,
             hermesFiles: this.hermesFiles,
