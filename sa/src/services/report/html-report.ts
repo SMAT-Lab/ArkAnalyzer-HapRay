@@ -18,7 +18,18 @@ import path from 'path';
 import Handlebars from 'handlebars';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, ResourceFileInfo } from '../types';
+import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
+
+interface FilterButton {
+    type: string;
+    label: string;
+    active: boolean;
+}
+
+interface FrameworkFilterButtons {
+    archiveButtons: Array<FilterButton>;
+    allFilesButtons: Array<FilterButton>;
+}
 
 /**
  * 扩展的文件信息，用于HTML展示
@@ -110,11 +121,11 @@ export class HtmlFormatter extends BaseFormatter {
     /**
      * 构建模板数据
      */
-    private buildTemplateData(result: HapStaticAnalysisResult) {
+    private buildTemplateData(result: HapStaticAnalysisResult): Record<string, unknown> {
         const fileTypeStats = this.getFileTypeStats(result);
         const frameworkStats = this.getFrameworkStats(result);
         const allFiles = this.buildAllFilesList(result);
-        const dynamicFilterButtons = this.generateDynamicFilterButtons(result);
+        const dynamicFilterButtons = this.generateFrameworkFilterButtons(result, allFiles);
 
         return {
             metadata: {
@@ -148,7 +159,18 @@ export class HtmlFormatter extends BaseFormatter {
                 soFiles: result.soAnalysis.soFiles.map(soFile => ({
                     ...soFile,
                     fileSizeFormatted: this.formatFileSize(soFile.fileSize),
-                    frameworksText: soFile.frameworks.join(', ')
+                    frameworksText: soFile.frameworks.join(', '),
+                    isLibFlutter: soFile.fileName.toLowerCase() === 'libflutter.so',
+                    flutterHex40: soFile.flutterAnalysis?.flutterVersion?.hex40 ?? '',
+                    flutterLastModified: soFile.flutterAnalysis?.flutterVersion?.lastModified ?? '',
+                    flutterAnalysis: soFile.flutterAnalysis ? {
+                        isFlutter: soFile.flutterAnalysis.isFlutter,
+                        dartPackages: soFile.flutterAnalysis.dartPackages,
+                        flutterVersion: soFile.flutterAnalysis.flutterVersion,
+                        hasFlutterAnalysis: true
+                    } : {
+                        hasFlutterAnalysis: false
+                    }
                 })),
                 hasSoFiles: result.soAnalysis.soFiles.length > 0
             },
@@ -173,7 +195,7 @@ export class HtmlFormatter extends BaseFormatter {
                         fileSizeFormatted: this.formatFileSize(nestedFile.fileSize),
                         isNested: true,
                         parentArchive: archiveFile.fileName
-                    })) || [],
+                    })) ?? [],
                     nestedArchives: archiveFile.nestedArchives?.map(nestedArchive => ({
                         ...nestedArchive,
                         fileSizeFormatted: this.formatFileSize(nestedArchive.fileSize),
@@ -184,11 +206,11 @@ export class HtmlFormatter extends BaseFormatter {
                             fileSizeFormatted: this.formatFileSize(deepFile.fileSize),
                             isNested: true,
                             parentArchive: `${archiveFile.fileName}/${nestedArchive.fileName}`
-                        })) || [],
-                        hasNestedFiles: (nestedArchive.nestedFiles?.length || 0) > 0
-                    })) || [],
-                    hasNestedFiles: (archiveFile.nestedFiles?.length || 0) > 0,
-                    hasNestedArchives: (archiveFile.nestedArchives?.length || 0) > 0
+                        })) ?? [],
+                        hasNestedFiles: (nestedArchive.nestedFiles?.length ?? 0) > 0
+                    })) ?? [],
+                    hasNestedFiles: (archiveFile.nestedFiles?.length ?? 0) > 0,
+                    hasNestedArchives: (archiveFile.nestedArchives?.length ?? 0) > 0
                 })),
                 allFiles: allFiles,
                 hasJsFiles: result.resourceAnalysis.jsFiles.length > 0,
@@ -208,19 +230,46 @@ export class HtmlFormatter extends BaseFormatter {
     /**
      * 构建所有文件的完整列表
      */
-    private buildAllFilesList(result: HapStaticAnalysisResult): Array<ExtendedFileInfo> {
-        const allFiles: Array<ExtendedFileInfo> = [];
+    private buildAllFilesList(result: HapStaticAnalysisResult): Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }> {
+        const allFiles: Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }> = [];
 
-        // 添加直接的资源文件（从filesByType中获取）
+        // 收集所有嵌套文件的路径，避免重复展示
+        const nestedFilePaths = new Set<string>();
+        for (const archiveFile of result.resourceAnalysis.archiveFiles) {
+            if (archiveFile.nestedFiles) {
+                for (const nestedFile of archiveFile.nestedFiles) {
+                    nestedFilePaths.add(nestedFile.filePath);
+                }
+            }
+            if (archiveFile.nestedArchives) {
+                for (const nestedArchive of archiveFile.nestedArchives) {
+                    if (nestedArchive.nestedFiles) {
+                        for (const deepFile of nestedArchive.nestedFiles) {
+                            nestedFilePaths.add(deepFile.filePath);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 添加直接的资源文件（从filesByType中获取，排除嵌套文件）
         for (const [, files] of result.resourceAnalysis.filesByType) {
             for (const file of files) {
+                // 跳过已经在压缩包分析中展示的嵌套文件
+                if (nestedFilePaths.has(file.filePath)) {
+                    continue;
+                }
+
                 const isNested = this.isNestedFile(file.filePath);
+                const frameworks = this.lookupFrameworksForFile(result, file.filePath, file.fileName);
                 allFiles.push({
                     ...file,
                     fileSizeFormatted: this.formatFileSize(file.fileSize),
                     isNested: isNested,
                     source: isNested ? '🗂️ 嵌套' : '📄 直接',
-                    parentInfo: this.getParentInfo(file.filePath)
+                    parentInfo: this.getParentInfo(file.filePath),
+                    frameworkKey: frameworks.join(', '),
+                    frameworksText: frameworks.join(', ')
                 });
             }
         }
@@ -232,6 +281,23 @@ export class HtmlFormatter extends BaseFormatter {
             }
             return a.fileName.localeCompare(b.fileName);
         });
+    }
+
+    /**
+     * 为资源文件推断框架：
+     * - 若在 libs 中存在同名/同前缀的 SO，继承其框架
+     * - 否则归类为 Unknown
+     */
+    private lookupFrameworksForFile(result: HapStaticAnalysisResult, _filePath: string, fileName: string): Array<string> {
+        // 按此前逻辑：仅以 SO 分析结果为准，不做路径/类型猜测
+        const lowerName = fileName.toLowerCase();
+        const matches = result.soAnalysis.soFiles.filter(so => so.fileName.toLowerCase() === lowerName);
+        if (matches.length > 0) {
+            const set = new Set<string>();
+            for (const so of matches) { so.frameworks.forEach(f => set.add(f)); }
+            return Array.from(set);
+        }
+        return ['Unknown'];
     }
 
     /**
@@ -264,42 +330,43 @@ export class HtmlFormatter extends BaseFormatter {
     /**
      * 生成动态过滤按钮
      */
-    private generateDynamicFilterButtons(result: HapStaticAnalysisResult) {
-        // 收集所有文件类型
-        const fileTypes = new Set<string>();
-        for (const [fileType] of result.resourceAnalysis.filesByType) {
-            fileTypes.add(fileType);
+    private generateFrameworkFilterButtons(
+        result: HapStaticAnalysisResult,
+        allFiles: Array<ExtendedFileInfo & { frameworkKey: string; frameworksText: string; }>
+    ): FrameworkFilterButtons {
+        // 压缩包分析按钮：仅展示存在的数据类型
+        const anyExtracted = result.resourceAnalysis.archiveFiles.some(a => a.extracted);
+        const anyNotExtracted = result.resourceAnalysis.archiveFiles.some(a => !a.extracted);
+
+        const archiveButtons: Array<FilterButton> = [
+            { type: 'all', label: '全部', active: true }
+        ];
+        if (anyExtracted) {
+            archiveButtons.push({ type: 'extracted', label: '已解压', active: false });
+        }
+        if (anyNotExtracted) {
+            archiveButtons.push({ type: 'not-extracted', label: '未解压', active: false });
         }
 
-        // 生成压缩包分析的过滤按钮
-        const archiveButtons = [
-            { type: 'all', label: '全部', active: true },
-            { type: 'extracted', label: '已解压', active: false },
-            { type: 'not-extracted', label: '未解压', active: false }
+        // 所有文件详情按钮：仅展示实际存在的框架与嵌套项
+        const allFilesButtons: Array<FilterButton> = [
+            { type: 'all', label: '全部', active: true }
         ];
 
-        // 添加文件类型按钮
-        for (const fileType of Array.from(fileTypes).sort()) {
-            archiveButtons.push({
-                type: fileType,
-                label: this.getFileTypeDisplayName(fileType),
-                active: false
-            });
+        const hasNested = allFiles.some(f => f.isNested);
+        if (hasNested) {
+            allFilesButtons.push({ type: 'nested', label: '嵌套文件', active: false });
         }
 
-        // 生成所有文件详情的过滤按钮
-        const allFilesButtons = [
-            { type: 'all', label: '全部', active: true },
-            { type: 'nested', label: '嵌套文件', active: false }
-        ];
-
-        // 添加文件类型按钮
-        for (const fileType of Array.from(fileTypes).sort()) {
-            allFilesButtons.push({
-                type: fileType,
-                label: this.getFileTypeDisplayName(fileType),
-                active: false
-            });
+        const presentFrameworks = new Set<string>();
+        for (const file of allFiles) {
+            const parts = file.frameworksText.split(',').map(s => s.trim()).filter(Boolean);
+            for (const fw of parts) {
+                presentFrameworks.add(fw);
+            }
+        }
+        for (const fw of Array.from(presentFrameworks).sort()) {
+            allFilesButtons.push({ type: fw, label: fw, active: false });
         }
 
         return {
@@ -308,34 +375,7 @@ export class HtmlFormatter extends BaseFormatter {
         };
     }
 
-    /**
-     * 获取文件类型的显示名称
-     */
-    private getFileTypeDisplayName(fileType: string): string {
-        const displayNames: Record<string, string> = {
-            'JS': 'JavaScript',
-            'JSON': 'JSON',
-            'XML': 'XML',
-            'PNG': '图片',
-            'JPG': '图片',
-            'JPEG': '图片',
-            'GIF': '图片',
-            'SVG': '图片',
-            'ZIP': '压缩包',
-            'JAR': '压缩包',
-            'SO': '动态库',
-            'TXT': '文本',
-            'MD': '文档',
-            'CSS': '样式',
-            'HTML': '网页',
-            'WOFF': '字体',
-            'TTF': '字体',
-            'OTF': '字体',
-            'HERMES_BYTECODE': 'Hermes字节码',
-            'UNKNOWN': '未知类型'
-        };
-        return displayNames[fileType] || fileType;
-    }
+    
 
     /**
      * 获取默认HTML模板
@@ -360,34 +400,41 @@ export class HtmlFormatter extends BaseFormatter {
         .summary-item { text-align: center; padding: 20px; background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; border-radius: 8px; }
         .summary-item .number { font-size: 2.5em; font-weight: bold; display: block; }
         .summary-item .label { font-size: 1.1em; opacity: 0.9; }
-        .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 15px; table-layout: fixed; }
+        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
         .table th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
         .table tr:hover { background: #f8f9fa; }
+        code { white-space: normal; word-break: break-all; overflow-wrap: anywhere; }
         .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 500; }
         .badge-primary { background: #3498db; color: white; }
         .badge-success { background: #27ae60; color: white; }
         .badge-warning { background: #f39c12; color: white; }
         .badge-danger { background: #e74c3c; color: white; }
         .frameworks { margin: 15px 0; }
-        .framework-tag { display: inline-block; margin: 3px; padding: 6px 12px; background: #3498db; color: white; border-radius: 20px; font-size: 0.9em; }
+        .framework-tag { display: inline-block; margin: 3px; padding: 6px 12px; background: #3498db; color: white; border-radius: 20px; font-size: 0.9em; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+        .flutter-analysis { font-size: 0.9em; }
+        .flutter-analysis ul { margin: 5px 0; padding-left: 20px; }
+        .flutter-analysis li { margin: 2px 0; }
+        .flutter-analysis code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; font-size: 0.85em; }
+        .badge-secondary { background: #6c757d; color: white; }
+        .badge-light { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
 
         /* 递归压缩包样式 */
         .archive-tree { margin: 10px 0; }
-        .archive-item { margin: 8px 0; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; }
+        .archive-item { margin: 8px 0; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; word-break: break-word; overflow-wrap: anywhere; }
         .archive-header { display: flex; align-items: center; margin-bottom: 8px; }
         .archive-icon { margin-right: 8px; font-size: 1.2em; }
-        .archive-name { font-weight: bold; color: #2c3e50; }
+        .archive-name { font-weight: bold; color: #2c3e50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .archive-info { margin-left: auto; font-size: 0.9em; color: #7f8c8d; }
         .archive-stats { margin: 8px 0; font-size: 0.9em; color: #555; }
         .nested-files { margin-left: 20px; margin-top: 10px; }
-        .nested-file { padding: 6px 10px; margin: 3px 0; background: white; border-left: 3px solid #3498db; border-radius: 3px; font-size: 0.9em; }
+        .nested-file { padding: 6px 10px; margin: 3px 0; background: white; border-left: 3px solid #3498db; border-radius: 3px; font-size: 0.9em; word-break: break-word; overflow-wrap: anywhere; }
         .nested-archive { margin-left: 20px; margin-top: 10px; border-left: 2px solid #e74c3c; padding-left: 15px; }
         .depth-indicator { display: inline-block; padding: 2px 6px; background: #e74c3c; color: white; border-radius: 10px; font-size: 0.8em; margin-left: 8px; }
         .extraction-status { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.8em; margin-left: 8px; }
         .extracted { background: #27ae60; color: white; }
         .not-extracted { background: #e74c3c; color: white; }
-        .file-type-tag { display: inline-block; padding: 2px 6px; background: #95a5a6; color: white; border-radius: 3px; font-size: 0.8em; margin-right: 4px; }
+        .file-type-tag { display: inline-block; padding: 2px 6px; background: #95a5a6; color: white; border-radius: 3px; font-size: 0.8em; margin-right: 4px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
         .collapsible { cursor: pointer; user-select: none; }
         .collapsible:hover { background: #f0f0f0; }
         .collapsible::before { content: '▼ '; color: #3498db; font-weight: bold; }
@@ -429,6 +476,10 @@ export class HtmlFormatter extends BaseFormatter {
             font-weight: bold;
             font-size: 0.9em;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            right: 70px;
         }
         .chart-value {
             position: absolute;
@@ -438,15 +489,17 @@ export class HtmlFormatter extends BaseFormatter {
             color: white;
             font-size: 0.8em;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            white-space: nowrap;
         }
 
         /* 响应式设计 */
         @media (max-width: 768px) {
             .container { padding: 10px; }
             .summary-grid { grid-template-columns: repeat(2, 1fr); }
-            .table { font-size: 0.9em; }
+            .table { font-size: 0.9em; table-layout: fixed; }
             .nested-files { margin-left: 10px; }
             .nested-archive { margin-left: 10px; }
+            .framework-tag, .file-type-tag { max-width: 160px; }
         }
 
         .no-data { text-align: center; color: #7f8c8d; font-style: italic; padding: 40px; }
@@ -575,6 +628,7 @@ export class HtmlFormatter extends BaseFormatter {
                         <th>框架</th>
                         <th>大小</th>
                         <th>系统库</th>
+                        <th>Flutter分析</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -585,6 +639,56 @@ export class HtmlFormatter extends BaseFormatter {
                         <td>{{frameworksText}}</td>
                         <td>{{fileSizeFormatted}}</td>
                         <td>{{#if isSystemLib}}<span class="badge badge-warning">是</span>{{else}}<span class="badge badge-success">否</span>{{/if}}</td>
+                        <td>
+                            {{#if flutterAnalysis.hasFlutterAnalysis}}
+                                {{#if flutterAnalysis.isFlutter}}
+                                    <div class="flutter-analysis">
+                                        <div><strong>Flutter应用</strong></div>
+                                        {{#if flutterAnalysis.dartPackages}}
+                                            <div><strong>Dart包 ({{flutterAnalysis.dartPackages.length}}):</strong></div>
+                                            <ul>
+                                                {{#each flutterAnalysis.dartPackages}}
+                                                <li>{{name}}{{#if version}}@{{version}}{{/if}}</li>
+                                                {{/each}}
+                                            </ul>
+                                        {{/if}}
+                                        {{#if flutterAnalysis.flutterVersion}}
+                                            <div><strong>Flutter版本:</strong></div>
+                                            <div>Hex: <code>{{flutterAnalysis.flutterVersion.hex40}}</code></div>
+                                            <div>修改时间: <code>{{flutterAnalysis.flutterVersion.lastModified}}</code></div>
+                                        {{else}}
+                                            {{#if isLibFlutter}}
+                                                {{#if flutterHex40}}
+                                                    <div><strong>Flutter版本:</strong></div>
+                                                    <div>Hex: <code>{{flutterHex40}}</code></div>
+                                                    {{#if flutterLastModified}}
+                                                        <div>修改时间: <code>{{flutterLastModified}}</code></div>
+                                                    {{/if}}
+                                                {{/if}}
+                                            {{/if}}
+                                        {{/if}}
+                                    </div>
+                                {{else}}
+                                    <span class="badge badge-secondary">非Flutter</span>
+                                {{/if}}
+                            {{else}}
+                                {{#if isLibFlutter}}
+                                    {{#if flutterHex40}}
+                                        <div class="flutter-analysis">
+                                            <div><strong>Flutter版本:</strong></div>
+                                            <div>Hex: <code>{{flutterHex40}}</code></div>
+                                            {{#if flutterLastModified}}
+                                                <div>修改时间: <code>{{flutterLastModified}}</code></div>
+                                            {{/if}}
+                                        </div>
+                                    {{else}}
+                                        <span class="badge badge-light">未分析</span>
+                                    {{/if}}
+                                {{else}}
+                                    <span class="badge badge-light">未分析</span>
+                                {{/if}}
+                            {{/if}}
+                        </td>
                     </tr>
                     {{/each}}
                 </tbody>
@@ -695,7 +799,7 @@ export class HtmlFormatter extends BaseFormatter {
         {{/if}}
 
         <div class="card">
-            <h2>📁 所有文件详情</h2>
+            <h2>📁 所有文件详情（按框架筛选）</h2>
             <div class="search-container">
                 <input type="text" class="search-box" placeholder="🔍 搜索所有文件..." onkeyup="searchAllFiles(this.value)">
                 <div class="filter-buttons">
@@ -708,7 +812,7 @@ export class HtmlFormatter extends BaseFormatter {
                 <thead>
                     <tr>
                         <th>文件名</th>
-                        <th>类型</th>
+                        <th>框架</th>
                         <th>路径</th>
                         <th>大小</th>
                         <th>来源</th>
@@ -716,9 +820,9 @@ export class HtmlFormatter extends BaseFormatter {
                 </thead>
                 <tbody>
                     {{#each resourceAnalysis.allFiles}}
-                    <tr class="file-row" data-type="{{fileType}}" data-source="{{#if isNested}}nested{{else}}direct{{/if}}">
+                    <tr class="file-row" data-framework="{{frameworkKey}}" data-source="{{#if isNested}}nested{{else}}direct{{/if}}">
                         <td><strong>{{fileName}}</strong></td>
-                        <td><span class="file-type-tag">{{fileType}}</span></td>
+                        <td><span class="file-type-tag">{{frameworksText}}</span></td>
                         <td><code>{{filePath}}</code></td>
                         <td>{{fileSizeFormatted}}</td>
                         <td>{{source}}{{#if parentInfo}} ({{parentInfo}}){{/if}}</td>
@@ -848,8 +952,11 @@ export class HtmlFormatter extends BaseFormatter {
                 } else if (filterType === 'nested') {
                     shouldShow = row.dataset.source === 'nested';
                 } else {
-                    // 按文件类型过滤
-                    shouldShow = row.dataset.type === filterType;
+                    // 按框架过滤
+                    // 多框架文件使用逗号分隔，支持包含判断
+                    const fw = row.dataset.framework || '';
+                    const arr = fw.split(',').map(s => s.trim()).filter(Boolean);
+                    shouldShow = arr.includes(filterType);
                 }
 
                 row.style.display = shouldShow ? 'table-row' : 'none';

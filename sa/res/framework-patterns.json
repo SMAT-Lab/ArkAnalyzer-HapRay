@@ -124,6 +124,16 @@
       "description": "WebP image file",
       "category": "image"
     },
+    "GIF": {
+      "name": "GIF Image",
+      "description": "GIF image file",
+      "category": "image"
+    },
+    "BMP": {
+      "name": "Bitmap Image",
+      "description": "Bitmap image file",
+      "category": "image"
+    },
     "SO": {
       "name": "Shared Object",
       "description": "Shared object library",
@@ -153,6 +163,181 @@
       "name": "WebAssembly",
       "description": "WebAssembly binary file",
       "category": "bytecode"
+    },
+    "PDF": {
+      "name": "PDF Document",
+      "description": "PDF document file",
+      "category": "document"
+    },
+    "MP3": {
+      "name": "MP3 Audio",
+      "description": "MP3 audio file",
+      "category": "audio"
+    },
+    "MP4": {
+      "name": "MP4 Video",
+      "description": "MP4 video file",
+      "category": "video"
+    },
+    "WAV": {
+      "name": "WAV Audio",
+      "description": "WAV audio file",
+      "category": "audio"
+    },
+    "TTF": {
+      "name": "TrueType Font",
+      "description": "TrueType font file",
+      "category": "font"
+    },
+    "OTF": {
+      "name": "OpenType Font",
+      "description": "OpenType font file",
+      "category": "font"
+    },
+    "SQLITE": {
+      "name": "SQLite Database",
+      "description": "SQLite database file",
+      "category": "database"
+    },
+    "RAR": {
+      "name": "RAR Archive",
+      "description": "RAR compressed archive",
+      "category": "archive"
+    },
+    "7Z": {
+      "name": "7-Zip Archive",
+      "description": "7-Zip compressed archive",
+      "category": "archive"
+    },
+    "CSS": {
+      "name": "CSS Stylesheet",
+      "description": "CSS stylesheet file",
+      "category": "style"
+    },
+    "C": {
+      "name": "C Source Code",
+      "description": "C programming language source file",
+      "category": "code"
+    },
+    "JAVA": {
+      "name": "Java Source Code",
+      "description": "Java programming language source file",
+      "category": "code"
+    },
+    "PYTHON": {
+      "name": "Python Script",
+      "description": "Python programming language script",
+      "category": "code"
+    },
+    "PHP": {
+      "name": "PHP Script",
+      "description": "PHP programming language script",
+      "category": "code"
+    },
+    "RUBY": {
+      "name": "Ruby Script",
+      "description": "Ruby programming language script",
+      "category": "code"
+    },
+    "GO": {
+      "name": "Go Source Code",
+      "description": "Go programming language source file",
+      "category": "code"
+    },
+    "RUST": {
+      "name": "Rust Source Code",
+      "description": "Rust programming language source file",
+      "category": "code"
+    },
+    "SWIFT": {
+      "name": "Swift Source Code",
+      "description": "Swift programming language source file",
+      "category": "code"
+    },
+    "KOTLIN": {
+      "name": "Kotlin Source Code",
+      "description": "Kotlin programming language source file",
+      "category": "code"
+    },
+    "DART": {
+      "name": "Dart Source Code",
+      "description": "Dart programming language source file",
+      "category": "code"
+    },
+    "SHELL": {
+      "name": "Shell Script",
+      "description": "Shell script file",
+      "category": "script"
+    },
+    "BATCH": {
+      "name": "Batch Script",
+      "description": "Batch script file",
+      "category": "script"
+    },
+    "POWERSHELL": {
+      "name": "PowerShell Script",
+      "description": "PowerShell script file",
+      "category": "script"
+    },
+    "EXECUTABLE": {
+      "name": "Executable",
+      "description": "Executable file",
+      "category": "executable"
+    },
+    "DLL": {
+      "name": "Dynamic Link Library",
+      "description": "Dynamic link library file",
+      "category": "library"
+    },
+    "SYSTEM": {
+      "name": "System File",
+      "description": "System file",
+      "category": "system"
+    },
+    "CONFIG": {
+      "name": "Configuration File",
+      "description": "Configuration file",
+      "category": "config"
+    },
+    "SQL": {
+      "name": "SQL Script",
+      "description": "SQL script file",
+      "category": "database"
+    },
+    "DOCUMENT": {
+      "name": "Document",
+      "description": "Document file",
+      "category": "document"
+    },
+    "SPREADSHEET": {
+      "name": "Spreadsheet",
+      "description": "Spreadsheet file",
+      "category": "document"
+    },
+    "PRESENTATION": {
+      "name": "Presentation",
+      "description": "Presentation file",
+      "category": "document"
+    },
+    "DISK_IMAGE": {
+      "name": "Disk Image",
+      "description": "Disk image file",
+      "category": "archive"
+    },
+    "HML": {
+      "name": "HarmonyOS Markup Language",
+      "description": "HarmonyOS markup language file",
+      "category": "markup"
+    },
+    "HAP": {
+      "name": "HarmonyOS Application Package",
+      "description": "HarmonyOS application package",
+      "category": "package"
+    },
+    "HSP": {
+      "name": "HarmonyOS Service Package",
+      "description": "HarmonyOS service package",
+      "category": "package"
     }
   }
 }

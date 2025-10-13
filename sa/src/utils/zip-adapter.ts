@@ -143,12 +143,12 @@ export function getJSZipObjectCompressedSize(jsZipObject: JSZip.JSZipObject): nu
     }
 
     // 方式2: 访问内部_data属性
-    if (obj._data && typeof obj._data.compressedSize === 'number') {
-        return obj._data.compressedSize;
+    if (obj._data && typeof (obj._data as Record<string, unknown>).compressedSize === 'number') {
+        return (obj._data as Record<string, unknown>).compressedSize as number;
     }
 
     // 方式3: 访问内部数据结构
-    if (obj.options && typeof obj.options.compressedSize === 'number') {
+    if (typeof obj.options.compressedSize === 'number') {
         return obj.options.compressedSize;
     }
 
@@ -179,12 +179,12 @@ export function getJSZipObjectUncompressedSize(jsZipObject: JSZip.JSZipObject): 
     }
 
     // 方式2: 访问内部_data属性
-    if (obj._data && typeof obj._data.uncompressedSize === 'number') {
-        return obj._data.uncompressedSize;
+    if (obj._data && typeof (obj._data as Record<string, unknown>).uncompressedSize === 'number') {
+        return (obj._data as Record<string, unknown>).uncompressedSize as number;
     }
 
     // 方式3: 访问内部数据结构
-    if (obj.options && typeof obj.options.uncompressedSize === 'number') {
+    if (typeof obj.options.uncompressedSize === 'number') {
         return obj.options.uncompressedSize;
     }
 

@@ -38,3 +38,43 @@ export function updateKindConfig(config: GlobalConfig, kindsJson: string): void 
         logger.error(`Invalid kind configuration: ${(error as Error).message} ${kindsJson}`);
     }
 }
+
+
+
+// 主要类和接口
+export { HapAnalysisService } from '../services/analysis/hap_analysis';
+
+// 类型定义
+export * from './types';
+export * from '../types/zip-types';
+
+// 错误类
+export * from '../errors';
+
+// 配置
+export * from '../config/framework-patterns';
+export * from '../config/magic-numbers';
+export * from '../config/types-config';
+
+// 工具函数
+export * from '../utils/file_utils';
+export * from '../utils/zip-adapter';
+
+// 格式化器
+export * from '../services/report';
+
+import { HapAnalysisService } from '../services/analysis/hap_analysis';
+
+/**
+ * 快速分析HAP包的便捷函数
+ * @param hapFilePath HAP包文件路径
+ * @param verbose 是否详细输出
+ * @returns 分析结果
+ */
+export async function analyzeHap(
+    hapFilePath: string,
+    verbose = false
+): Promise<unknown> {
+    const analyzer = new HapAnalysisService({ verbose });
+    return await analyzer.analyzeHap(hapFilePath);
+}

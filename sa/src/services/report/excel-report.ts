@@ -18,7 +18,7 @@ import path from 'path';
 import Excel from 'exceljs';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult } from '../types';
+import type { HapStaticAnalysisResult, ResourceFileInfo } from '../../config/types';
 
 /**
  * Excel格式化器
@@ -77,7 +77,7 @@ export class ExcelFormatter extends BaseFormatter {
     /**
      * 构建Excel工作簿
      */
-    private async buildExcelWorkbook(workbook: Excel.Workbook, result: HapStaticAnalysisResult) {
+    private async buildExcelWorkbook(workbook: Excel.Workbook, result: HapStaticAnalysisResult): Promise<void> {
         // 创建分析摘要工作表
         const summarySheet = workbook.addWorksheet('分析摘要');
         this.buildSummarySheet(summarySheet, result);
@@ -106,7 +106,7 @@ export class ExcelFormatter extends BaseFormatter {
     /**
      * 构建分析摘要工作表
      */
-    private buildSummarySheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult) {
+    private buildSummarySheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
         // 设置列
         worksheet.columns = [
             { header: '项目', key: 'item', width: 25 },
@@ -127,8 +127,8 @@ export class ExcelFormatter extends BaseFormatter {
             { item: '压缩文件数', value: result.resourceAnalysis.archiveFiles.length.toString(), description: '压缩包文件数量' },
             { item: '总文件大小', value: this.formatFileSize(result.resourceAnalysis.totalSize), description: '所有文件的总大小' },
             { item: '检测到的框架', value: result.soAnalysis.detectedFrameworks.join(', ') || '无', description: '通过SO文件识别的技术框架' },
-            { item: '解压的压缩包数', value: result.resourceAnalysis.extractedArchiveCount?.toString() || '0', description: '成功解压分析的压缩包数量' },
-            { item: '最大解压深度', value: result.resourceAnalysis.maxExtractionDepth?.toString() || '0', description: '嵌套压缩包的最大层级深度' }
+            { item: '解压的压缩包数', value: result.resourceAnalysis.extractedArchiveCount.toString() || '0', description: '成功解压分析的压缩包数量' },
+            { item: '最大解压深度', value: result.resourceAnalysis.maxExtractionDepth.toString() || '0', description: '嵌套压缩包的最大层级深度' }
         ];
 
         summaryData.forEach(row => {
@@ -147,7 +147,7 @@ export class ExcelFormatter extends BaseFormatter {
     /**
      * 构建所有文件工作表
      */
-    private buildFilesSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult) {
+    private buildFilesSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
         // 设置列
         worksheet.columns = [
             { header: '文件名', key: 'fileName', width: 30 },
@@ -183,7 +183,7 @@ export class ExcelFormatter extends BaseFormatter {
     /**
      * 构建文件类型统计工作表
      */
-    private buildStatsSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult) {
+    private buildStatsSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
         // 设置列
         worksheet.columns = [
             { header: '文件类型', key: 'fileType', width: 20 },
@@ -197,7 +197,7 @@ export class ExcelFormatter extends BaseFormatter {
         const totalFiles = result.resourceAnalysis.totalFiles;
         for (const [fileType, files] of result.resourceAnalysis.filesByType) {
             const count = files.length;
-            const totalSize = files.reduce((sum, file) => sum + file.fileSize, 0);
+            const totalSize = files.reduce((sum: number, file: ResourceFileInfo) => sum + file.fileSize, 0);
             const avgSize = count > 0 ? totalSize / count : 0;
             const percentage = totalFiles > 0 ? ((count / totalFiles) * 100).toFixed(1) + '%' : '0%';
 
@@ -222,7 +222,7 @@ export class ExcelFormatter extends BaseFormatter {
     /**
      * 构建SO文件工作表
      */
-    private buildSoSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult) {
+    private buildSoSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
         // 设置列
         worksheet.columns = [
             { header: '文件名', key: 'fileName', width: 30 },
@@ -255,7 +255,7 @@ export class ExcelFormatter extends BaseFormatter {
     /**
      * 构建压缩包工作表
      */
-    private buildArchiveSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult) {
+    private buildArchiveSheet(worksheet: Excel.Worksheet, result: HapStaticAnalysisResult): void {
         // 设置列
         worksheet.columns = [
             { header: '压缩包名', key: 'fileName', width: 30 },

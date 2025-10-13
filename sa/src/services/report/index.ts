@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import type { HapStaticAnalysisResult } from '../types';
+import type { HapStaticAnalysisResult } from '../../config/types';
 
 /**
  * 支持的输出格式
@@ -125,7 +125,7 @@ export abstract class BaseFormatter {
     /**
      * 获取文件类型统计
      */
-    protected getFileTypeStats(result: HapStaticAnalysisResult) {
+    protected getFileTypeStats(result: HapStaticAnalysisResult): Array<{type: string, count: number, percentage: string, barWidth: number}> {
         const stats: Array<{type: string, count: number, percentage: string, barWidth: number}> = [];
         const total = result.resourceAnalysis.totalFiles;
 
@@ -155,12 +155,12 @@ export abstract class BaseFormatter {
     /**
      * 获取框架统计
      */
-    protected getFrameworkStats(result: HapStaticAnalysisResult) {
+    protected getFrameworkStats(result: HapStaticAnalysisResult): Array<{framework: string, count: number, percentage: string}> {
         const frameworkCount = new Map<string, number>();
         
         result.soAnalysis.soFiles.forEach(soFile => {
             soFile.frameworks.forEach(framework => {
-                frameworkCount.set(framework, (frameworkCount.get(framework) || 0) + 1);
+                frameworkCount.set(framework, (frameworkCount.get(framework) ?? 0) + 1);
             });
         });
 
@@ -217,8 +217,8 @@ export class FormatterFactory {
 }
 
 // 导入具体的格式化器实现
-import { JsonFormatter } from './json-formatter';
-import { HtmlFormatter } from './html-formatter';
-import { ExcelFormatter } from './excel-formatter';
+import { JsonFormatter } from './json-report';
+import { HtmlFormatter } from './html-report';
+import { ExcelFormatter } from './excel-report';
 
 export { JsonFormatter, HtmlFormatter, ExcelFormatter };
