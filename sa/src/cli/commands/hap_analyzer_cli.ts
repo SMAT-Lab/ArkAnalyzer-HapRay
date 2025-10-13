@@ -22,7 +22,7 @@ import type { FormatOptions } from '../../services/report';
 import { FormatterFactory, OutputFormat } from '../../services/report';
 import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
 import { ensureDirectoryExists, getAllFiles } from '../../utils/file_utils';
-import { HapStaticAnalysisResult } from '../../config/types';
+import type { HapStaticAnalysisResult } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

@@ -12,7 +12,8 @@ import { getMimeType } from '../../../config/magic-numbers';
 import type { FileSizeLimits, ZipEntry, ZipInstance } from '../../../types/zip-types';
 import { isValidZipEntry, getSafeFileSize, safeReadZipEntry, isFileSizeExceeded } from '../../../types/zip-types';
 import type { MemoryMonitor } from '../../../types/zip-types';
-import { createZipAdapter, JSZipAdapter } from '../../../utils/zip-adapter';
+import type { JSZipAdapter } from '../../../utils/zip-adapter';
+import { createZipAdapter } from '../../../utils/zip-adapter';
 import { ErrorFactory, ErrorUtils } from '../../../errors';
 import { getFrameworkPatterns, matchSoPattern } from '../../../config/framework-patterns';
 import { FlutterAnalyzer } from '../analyzers/flutter_analyzer';
@@ -67,7 +68,6 @@ export class SoFileHandler implements FileHandler {
             if (isKmp) {
                 frameworks = frameworks.filter((f) => f !== 'Unknown');
                 frameworks.push('KMP');
-                console.log(`[KMP Detection] Detected KMP framework in: ${fileName}`);
             }
         }
 
@@ -121,7 +121,7 @@ export class SoFileHandler implements FileHandler {
 
             // 使用 JSZip 的 async 方法获取完整 buffer，然后分块处理
             // 注意：JSZip 不支持真正的流式读取，但我们可以分块搜索
-            const fileSize = zipEntry.uncompressedSize || zipEntry.compressedSize || 0;
+            const fileSize = zipEntry.uncompressedSize ?? zipEntry.compressedSize ?? 0;
 
             // 对于小文件（<10MB），直接读取全部
             if (fileSize < 10 * 1024 * 1024) {
