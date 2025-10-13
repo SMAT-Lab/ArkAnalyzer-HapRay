@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
 import { ElfAnalyzer } from '../../elf/elf_analyzer';
-import { FlutterAnalysisResult, FlutterVersionInfo } from '../../../config';
+import type { FlutterAnalysisResult, FlutterVersionInfo } from '../../../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

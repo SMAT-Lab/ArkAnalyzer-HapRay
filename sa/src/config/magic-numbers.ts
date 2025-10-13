@@ -71,13 +71,13 @@ function loadMagicConfig(): MagicNumbersConfig {
     const magicNumbers = Object.entries(parsed.fileTypes).map(([type, config]) => ({
         type,
         signature: config.magic,
-        offset: config.magicOffset || 0,
+        offset: config.magicOffset ?? 0,
         description: config.description
     }));
 
     magicConfig = {
         magicNumbers,
-        fileExtensions: parsed.fileExtensions || {}
+        fileExtensions: parsed.fileExtensions
     };
 
     return magicConfig;
