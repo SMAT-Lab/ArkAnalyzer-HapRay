@@ -17,12 +17,7 @@ import path from 'path';
 import type { ResourceFileInfo, ResourceAnalysisResult, ArchiveFileInfo, JsFileInfo, HermesFileInfo } from '../../../config/types';
 import { FileType } from '../../../config/types';
 import { getMimeType } from '../../../config/magic-numbers';
-import { createZipAdapter } from '../../../utils/zip-adapter';
-import type {
-    ZipInstance,
-    ZipEntry,
-    FileSizeLimits
-} from '../../../types/zip-types';
+import type { ZipInstance, ZipEntry, FileSizeLimits } from '../../../types/zip-types';
 import {
     isValidZipEntry,
     isFileEntry,
@@ -32,10 +27,8 @@ import {
     MemoryMonitor,
     DEFAULT_FILE_SIZE_LIMITS
 } from '../../../types/zip-types';
-import {
-    ErrorFactory,
-    ErrorUtils
-} from '../../../errors';
+import { createZipAdapter } from '../../../utils/zip-adapter';
+import { ErrorFactory, ErrorUtils } from '../../../errors';
 import { HandlerRegistry } from '../registry';
 
 /**
