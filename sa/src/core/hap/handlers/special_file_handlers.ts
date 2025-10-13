@@ -8,7 +8,7 @@ import type { MemoryMonitor } from '../../../types/zip-types';
 // import type { FileType } from '../../../config/types';
 import { createZipAdapter } from '../../../utils/zip-adapter';
 import { ErrorFactory, ErrorUtils } from '../../../errors';
-import { getFrameworkPatterns, matchSoPattern, isSystemSo } from '../../../config/framework-patterns';
+import { getFrameworkPatterns, matchSoPattern } from '../../../config/framework-patterns';
 import { FlutterAnalyzer } from '../analyzers/flutter_analyzer';
 
 export class SoFileHandler implements FileHandler {
@@ -44,8 +44,7 @@ export class SoFileHandler implements FileHandler {
         }
         if (fileSize === 0) { return; }
         const frameworks = identifyFrameworks(fileName);
-        const isSystemLib = isSystemSo(fileName);
-        
+
         // 如果是Flutter相关的SO文件，进行详细分析
         let flutterAnalysisResult = null;
         if (frameworks.includes('Flutter')) {
@@ -56,12 +55,12 @@ export class SoFileHandler implements FileHandler {
             }
         }
         
-        context.addSoResult({ 
-            filePath, 
-            fileName, 
-            frameworks: frameworks as unknown as Array<string>, 
-            fileSize, 
-            isSystemLib,
+        context.addSoResult({
+            filePath,
+            fileName,
+            frameworks: frameworks as unknown as Array<string>,
+            fileSize,
+            isSystemLib: false,
             flutterAnalysis: flutterAnalysisResult
         });
         frameworks.forEach(f => context.addDetectedFramework(f));
@@ -278,7 +277,6 @@ async function getFileSizeWithMemoryCheck(zipEntry: ZipEntry, filePath: string, 
 
 function identifyFrameworks(fileName: string): Array<string> {
     try {
-        if (isSystemSo(fileName)) { return ['System']; }
         const frameworkPatterns = getFrameworkPatterns();
         const detected: Array<string> = [];
         for (const [frameworkType, patterns] of Object.entries(frameworkPatterns)) {
