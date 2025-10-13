@@ -275,7 +275,14 @@ export class HtmlFormatter extends BaseFormatter {
         }
 
         return allFiles.sort((a, b) => {
-            // 先按是否嵌套排序，再按文件名排序
+            // Unknown 框架文件排在最后
+            const getFrameworks = (text: string) => text.split(',').map(s => s.trim()).filter(Boolean);
+            const aUnknown = getFrameworks(a.frameworksText).includes('Unknown');
+            const bUnknown = getFrameworks(b.frameworksText).includes('Unknown');
+            if (aUnknown !== bUnknown) {
+                return aUnknown ? 1 : -1;
+            }
+            // 其次按是否嵌套排序，再按文件名排序
             if (a.isNested !== b.isNested) {
                 return a.isNested ? 1 : -1;
             }
@@ -595,24 +602,6 @@ export class HtmlFormatter extends BaseFormatter {
                 </div>
                 {{/each}}
             </div>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>文件类型</th>
-                        <th>文件数量</th>
-                        <th>占比</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each statistics.fileTypes}}
-                    <tr>
-                        <td><span class="badge badge-success">{{type}}</span></td>
-                        <td>{{count}}</td>
-                        <td>{{percentage}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
         </div>
         {{/if}}
 
@@ -627,8 +616,7 @@ export class HtmlFormatter extends BaseFormatter {
                         <th>路径</th>
                         <th>框架</th>
                         <th>大小</th>
-                        <th>系统库</th>
-                        <th>Flutter分析</th>
+                        <th>详情分析</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -638,7 +626,6 @@ export class HtmlFormatter extends BaseFormatter {
                         <td><code>{{filePath}}</code></td>
                         <td>{{frameworksText}}</td>
                         <td>{{fileSizeFormatted}}</td>
-                        <td>{{#if isSystemLib}}<span class="badge badge-warning">是</span>{{else}}<span class="badge badge-success">否</span>{{/if}}</td>
                         <td>
                             {{#if flutterAnalysis.hasFlutterAnalysis}}
                                 {{#if flutterAnalysis.isFlutter}}
@@ -696,107 +683,7 @@ export class HtmlFormatter extends BaseFormatter {
         </div>
         {{/if}}
 
-        {{#if resourceAnalysis.hasArchiveFiles}}
-        <div class="card">
-            <h2>📦 压缩包分析</h2>
-            <div class="search-container">
-                <input type="text" class="search-box" placeholder="🔍 搜索文件名、路径或类型..." onkeyup="searchFiles(this.value)">
-                <div class="filter-buttons">
-                    {{#each filters.archiveFilterButtons}}
-                    <button class="filter-btn {{#if active}}active{{/if}}" onclick="filterFiles('{{type}}')">{{label}}</button>
-                    {{/each}}
-                </div>
-            </div>
-            <div class="archive-tree">
-                {{#each resourceAnalysis.archiveFiles}}
-                <div class="archive-item">
-                    <div class="archive-header collapsible" onclick="toggleCollapse(this)">
-                        <span class="archive-icon">📦</span>
-                        <span class="archive-name">{{fileName}}</span>
-                        <span class="archive-info">{{fileSizeFormatted}}</span>
-                        <span class="extraction-status {{#if extracted}}extracted{{else}}not-extracted{{/if}}">
-                            {{#if extracted}}✓ 已解压{{else}}✗ 未解压{{/if}}
-                        </span>
-                        <span class="depth-indicator">深度: {{extractionDepth}}</span>
-                    </div>
-                    <div class="collapsible-content">
-                        {{#if extracted}}
-                        <div class="archive-stats">
-                            📊 包含 {{entryCount}} 个文件
-                            {{#if hasNestedFiles}}
-                            | 直接文件: {{nestedFiles.length}} 个
-                            {{/if}}
-                            {{#if hasNestedArchives}}
-                            | 嵌套压缩包: {{nestedArchives.length}} 个
-                            {{/if}}
-                        </div>
-
-                        {{#if hasNestedFiles}}
-                        <div class="nested-files">
-                            <strong>📄 直接文件:</strong>
-                            {{#each nestedFiles}}
-                            <div class="nested-file">
-                                <span class="file-type-tag">{{fileType}}</span>
-                                <strong>{{fileName}}</strong>
-                                <span style="margin-left: 10px; color: #7f8c8d;">{{fileSizeFormatted}}</span>
-                                <code style="margin-left: 10px; font-size: 0.8em;">{{filePath}}</code>
-                            </div>
-                            {{/each}}
-                        </div>
-                        {{/if}}
-
-                        {{#if hasNestedArchives}}
-                        <div class="nested-archive">
-                            <strong>📦 嵌套压缩包:</strong>
-                            {{#each nestedArchives}}
-                            <div class="archive-item" style="margin-top: 10px;">
-                                <div class="archive-header collapsible" onclick="toggleCollapse(this)">
-                                    <span class="archive-icon">📦</span>
-                                    <span class="archive-name">{{fileName}}</span>
-                                    <span class="archive-info">{{fileSizeFormatted}}</span>
-                                    <span class="extraction-status {{#if extracted}}extracted{{else}}not-extracted{{/if}}">
-                                        {{#if extracted}}✓ 已解压{{else}}✗ 未解压{{/if}}
-                                    </span>
-                                    <span class="depth-indicator">深度: {{extractionDepth}}</span>
-                                </div>
-                                <div class="collapsible-content">
-                                    {{#if extracted}}
-                                    <div class="archive-stats">
-                                        📊 包含 {{entryCount}} 个文件
-                                        {{#if hasNestedFiles}}
-                                        | 直接文件: {{nestedFiles.length}} 个
-                                        {{/if}}
-                                    </div>
-                                    {{#if hasNestedFiles}}
-                                    <div class="nested-files">
-                                        <strong>📄 文件:</strong>
-                                        {{#each nestedFiles}}
-                                        <div class="nested-file">
-                                            <span class="file-type-tag">{{fileType}}</span>
-                                            <strong>{{fileName}}</strong>
-                                            <span style="margin-left: 10px; color: #7f8c8d;">{{fileSizeFormatted}}</span>
-                                            <code style="margin-left: 10px; font-size: 0.8em;">{{filePath}}</code>
-                                        </div>
-                                        {{/each}}
-                                    </div>
-                                    {{/if}}
-                                    {{else}}
-                                    <div class="no-data">未解压或解压失败</div>
-                                    {{/if}}
-                                </div>
-                            </div>
-                            {{/each}}
-                        </div>
-                        {{/if}}
-                        {{else}}
-                        <div class="no-data">压缩包未解压或解压失败</div>
-                        {{/if}}
-                    </div>
-                </div>
-                {{/each}}
-            </div>
-        </div>
-        {{/if}}
+        
 
         <div class="card">
             <h2>📁 所有文件详情（按框架筛选）</h2>
@@ -815,7 +702,6 @@ export class HtmlFormatter extends BaseFormatter {
                         <th>框架</th>
                         <th>路径</th>
                         <th>大小</th>
-                        <th>来源</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -825,7 +711,6 @@ export class HtmlFormatter extends BaseFormatter {
                         <td><span class="file-type-tag">{{frameworksText}}</span></td>
                         <td><code>{{filePath}}</code></td>
                         <td>{{fileSizeFormatted}}</td>
-                        <td>{{source}}{{#if parentInfo}} ({{parentInfo}}){{/if}}</td>
                     </tr>
                     {{/each}}
                 </tbody>

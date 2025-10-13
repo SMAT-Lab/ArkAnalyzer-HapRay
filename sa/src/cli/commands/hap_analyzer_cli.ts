@@ -29,24 +29,24 @@ interface AnalyzeOptions {
     input: string;
     output: string;
     format: string;
-    concurrency?: string;
+    jobs?: string;
 }
 
 const VERSION = '1.0.0';
 
-export const HapAnalyzerCli = new Command('analyzer')
+export const HapAnalyzerCli = new Command('hap')
     .version(VERSION)
     .description('HAP 静态分析器 - 分析 HAP/ZIP 文件或目录中的框架与资源')
     .requiredOption('-i, --input <path>', '分析输入路径（HAP/ZIP 文件或目录）')
     .option('-o, --output <path>', '输出目录', './output')
     .option('-f, --format <format>', '输出格式：json, html, excel, all', 'all')
-    .option('-c, --concurrency <number>', '并发分析数量，默认为CPU核心数', 'auto')
+    .option('-j, --jobs <number>', '并发分析数量，默认为CPU核心数', 'auto')
     .action(async (options: AnalyzeOptions) => {
         await analyzeHap(options);
     });
 
 async function analyzeHap(options: AnalyzeOptions): Promise<void> {
-    const { input, output, format, concurrency } = options;
+    const { input, output, format, jobs } = options;
 
     const verbose = true;
     const details = true;
@@ -80,12 +80,12 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
         // 确定并发数量
-        const maxConcurrency = concurrency === 'auto' ? os.cpus().length : parseInt(String(concurrency ?? '4'), 10);
-        logger.info(`开始并行分析 ${targets.length} 个HAP包，并发数：${maxConcurrency}...`);
+        const maxJobs = jobs === 'auto' ? os.cpus().length : parseInt(String(jobs ?? '4'), 10);
+        logger.info(`开始并行分析 ${targets.length} 个HAP包，并发数：${maxJobs}...`);
         
         // 使用并发控制
         let completedCount = 0;
-        const analysisPromises = runWithConcurrency(targets, maxConcurrency, async (t) => {
+        const analysisPromises = runWithConcurrency(targets, maxJobs, async (t) => {
             const startTime = Date.now();
             try {
                 const result = await analyzer.analyzeHap(t.label);
