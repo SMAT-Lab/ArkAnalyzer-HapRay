@@ -18,7 +18,7 @@ import fs from 'fs';
 import { tmpdir } from 'os';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { FlutterAnalysisResult, FrameworkTypeKey, SoAnalysisResult } from '../../../config/types';
-import { getFrameworkPatterns, matchSoPattern } from '../../../config/framework-patterns';
+import { FrameworkDetector } from '../../framework/framework-detector';
 import type { ZipInstance, ZipEntry, FileSizeLimits } from '../../../types/zip-types';
 import {
     isValidZipEntry,
@@ -30,7 +30,6 @@ import {
     DEFAULT_FILE_SIZE_LIMITS
 } from '../../../types/zip-types';
 import { ErrorFactory, ErrorUtils } from '../../../errors';
-import { ElfAnalyzer } from '../../elf/elf_analyzer';
 import { FlutterAnalyzer } from './flutter_analyzer';
 
 /**
@@ -175,12 +174,13 @@ export class SoAnalyzer {
                 return null;
             }
 
-            // 检测框架
-            const frameworks = await this.identifyFrameworks(fileName, zipEntry, zip);
+            // 使用 FrameworkDetector 进行框架检测
+            const detector = FrameworkDetector.getInstance();
+            const detectionResult = await detector.detectFrameworks(fileName, zipEntry, zip);
 
             // 如果是Flutter相关的SO文件，进行详细分析
             let flutterAnalysisResult = null;
-            if (frameworks.includes('Flutter')) {
+            if (detectionResult.frameworks.includes('Flutter')) {
                 try {
                     flutterAnalysisResult = await this.performFlutterAnalysis(fileName, zip);
                 } catch (error) {
@@ -188,13 +188,24 @@ export class SoAnalyzer {
                 }
             }
 
+            // 构建 KMP 分析详情
+            let kmpAnalysisDetail = null;
+            if (detectionResult.frameworks.includes('KMP') && detectionResult.kmpMatchedSignatures) {
+                kmpAnalysisDetail = {
+                    isKmp: true,
+                    matchedSignatures: detectionResult.kmpMatchedSignatures,
+                    detectionMethod: detectionResult.detectionMethod
+                };
+            }
+
             return {
                 filePath,
                 fileName,
-                frameworks,
+                frameworks: detectionResult.frameworks,
                 fileSize,
                 isSystemLib: false,
-                flutterAnalysis: flutterAnalysisResult
+                flutterAnalysis: flutterAnalysisResult,
+                kmpAnalysisDetail
             };
         } catch (error) {
             throw ErrorFactory.createSoAnalysisError(
@@ -252,140 +263,7 @@ export class SoAnalyzer {
         return fileSize;
     }
 
-    /**
-     * 根据SO文件名识别框架类型
-     * @param fileName SO文件名
-     * @param zipEntry SO文件的ZIP条目（用于KMP框架的细化检测）
-     * @param zip ZIP实例（用于KMP框架的细化检测）
-     * @returns 识别到的框架类型数组
-     */
-    private async identifyFrameworks(fileName: string, zipEntry?: ZipEntry, zip?: ZipInstance): Promise<Array<FrameworkTypeKey>> {
-        try {
-            const frameworkPatterns = getFrameworkPatterns();
-            const detectedFrameworks: Array<FrameworkTypeKey> = [];
 
-            // 遍历所有框架模式进行匹配
-            for (const [frameworkType, patterns] of Object.entries(frameworkPatterns)) {
-                for (const pattern of patterns) {
-                    if (matchSoPattern(fileName, pattern)) {
-                        const framework = frameworkType;
-                        
-                        // 对于KMP框架，需要进一步验证
-                        if (framework === 'KMP' && zipEntry && zip) {
-                            const isKmpConfirmed = await this.verifyKmpFramework(zipEntry, zip);
-                            if (isKmpConfirmed) {
-                                if (!detectedFrameworks.includes(framework)) {
-                                    detectedFrameworks.push(framework);
-                                }
-                            } else {
-                                this.logger.debug(`KMP framework verification failed for ${fileName}, treating as Unknown`);
-                            }
-                        } else {
-                            if (!detectedFrameworks.includes(framework)) {
-                                detectedFrameworks.push(framework);
-                            }
-                        }
-                        break; // 找到匹配就跳出内层循环
-                    }
-                }
-            }
-
-            return detectedFrameworks.length > 0 ? detectedFrameworks : ['Unknown'];
-        } catch (error) {
-            this.logger.warn(`Failed to identify frameworks for ${fileName}:`, error);
-            return ['Unknown'];
-        }
-    }
-
-    /**
-     * 验证KMP框架的细化检测
-     * @param zipEntry SO文件的ZIP条目
-     * @param zip ZIP实例
-     * @returns 是否为真正的KMP框架
-     */
-    private async verifyKmpFramework(zipEntry: ZipEntry, _zip: ZipInstance): Promise<boolean> {
-        try {
-            // 读取SO文件内容
-            const soBuffer = await safeReadZipEntry(zipEntry, this.fileSizeLimits);
-
-            // 创建临时文件用于ELF分析
-            const tempDir = tmpdir();
-            const tempFilePath = path.join(tempDir, `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.so`);
-            
-            try {
-                // 写入临时文件
-                fs.writeFileSync(tempFilePath, soBuffer);
-                
-                // 方法1: 使用ElfAnalyzer获取符号
-                const elfAnalyzer = ElfAnalyzer.getInstance();
-                const symbols = await elfAnalyzer.getSymbols(tempFilePath);
-                
-                // 检查符号表中是否包含Kotlin相关字符串
-                const allSymbols = [...symbols.exports, ...symbols.imports];
-                const kotlinSymbols = allSymbols.filter(symbol => 
-                    symbol.includes('Kotlin') || 
-                    symbol.includes('KOTLIN_NATIVE_AVAILABLE_PROCESSORS') ||
-                    symbol.includes('kfun') ||
-                    symbol.includes('kotlinNativeReference')
-                );
-                
-                this.logger.debug(`KMP verification (symbols): found ${kotlinSymbols.length} Kotlin-related symbols out of ${allSymbols.length} total symbols`);
-                
-                // 如果符号表中找到Kotlin相关符号，直接返回true
-                if (kotlinSymbols.length > 0) {
-                    this.logger.debug(`KMP verification passed via symbol analysis: ${kotlinSymbols.length} Kotlin symbols found`);
-                    return true;
-                }
-                
-                // 方法2: 扫描二进制内容查找Kotlin特征
-                const binaryContent = soBuffer.toString('binary');
-                const kotlinPatterns = [
-                    'Kotlin',
-                    'KOTLIN_NATIVE_AVAILABLE_PROCESSORS',
-                    'kotlin'
-                ];
-                
-                let foundPatterns = 0;
-                const foundPatternDetails: Array<{pattern: string, count: number}> = [];
-                
-                for (const pattern of kotlinPatterns) {
-                    const regex = new RegExp(pattern, 'gi');
-                    const matches = binaryContent.match(regex);
-                    if (matches) {
-                        foundPatterns += matches.length;
-                        foundPatternDetails.push({pattern, count: matches.length});
-                        this.logger.debug(`KMP binary scan: found "${pattern}" ${matches.length} times`);
-                    }
-                }
-                
-                this.logger.debug(`KMP verification (binary): found ${foundPatterns} total Kotlin-related patterns`);
-                
-                // 如果找到足够的Kotlin特征，确认为KMP框架
-                const isKmpFramework = foundPatterns >= 1; // 至少需要1个特征匹配
-                
-                if (isKmpFramework) {
-                    this.logger.debug(`KMP verification passed via binary analysis: ${foundPatterns} patterns found`, foundPatternDetails);
-                } else {
-                    this.logger.debug(`KMP verification failed: only ${foundPatterns} patterns found (threshold: 3)`);
-                }
-                
-                return isKmpFramework;
-                
-            } finally {
-                // 清理临时文件
-                try {
-                    if (fs.existsSync(tempFilePath)) {
-                        fs.unlinkSync(tempFilePath);
-                    }
-                } catch (cleanupError) {
-                    this.logger.warn(`Failed to cleanup temp file ${tempFilePath}:`, cleanupError);
-                }
-            }
-        } catch (error) {
-            this.logger.warn('KMP framework verification failed:', error);
-            return false;
-        }
-    }
 
     /**
      * 执行Flutter详细分析
@@ -585,8 +463,11 @@ export class SoAnalyzer {
             // 获取SO文件对应的ZIP条目
             const zipEntry = zip.files[soFile.filePath];
 
-            // 使用现有的KMP验证方法
-            return await this.verifyKmpFramework(zipEntry, zip);
+            // 使用 FrameworkDetector 进行 KMP 检测
+            const detector = FrameworkDetector.getInstance();
+            const result = await detector.detectFrameworks(soFile.fileName, zipEntry, zip);
+
+            return result.frameworks.includes('KMP');
         } catch (error) {
             this.logger.warn(`KMP framework detection failed for ${soFile.fileName}:`, error);
             return false;

@@ -130,6 +130,7 @@ export class HtmlFormatter extends BaseFormatter {
                 totalSize: this.formatFileSize(result.resourceAnalysis.totalSize),
                 totalSoFiles: result.soAnalysis.totalSoFiles,
                 totalResourceFiles: result.resourceAnalysis.totalFiles - result.soAnalysis.totalSoFiles,
+                jsFilesCount: result.resourceAnalysis.jsFiles.length,
                 detectedFrameworks: detectedFrameworks,
                 fileTypeCount: fileTypeInfo.length,
                 technologyStackCount: technologyStackInfo.length,
@@ -182,12 +183,14 @@ export class HtmlFormatter extends BaseFormatter {
         filePath: string;
         fileType: string;
         fileSize: string;
+        additionalInfo?: string;
     }> {
         const items: Array<{
             fileName: string;
             filePath: string;
             fileType: string;
             fileSize: string;
+            additionalInfo?: string;
         }> = [];
 
         for (const [fileType, files] of result.resourceAnalysis.filesByType) {
@@ -199,11 +202,31 @@ export class HtmlFormatter extends BaseFormatter {
                     displayFileType = ext ? ext.substring(1).toUpperCase() : 'Unknown';
                 }
 
+                // 检查是否为 JS 文件，添加额外信息
+                let additionalInfo: string | undefined;
+                if (displayFileType === 'JS' && 'isMinified' in file) {
+                    const jsFile = file as unknown as { isMinified: boolean; beautifiedPath?: string };
+                    const infoParts: Array<string> = [];
+
+                    if (jsFile.isMinified) {
+                        infoParts.push('压缩代码');
+                    } else {
+                        infoParts.push('可读代码');
+                    }
+
+                    if (jsFile.beautifiedPath) {
+                        infoParts.push(`已美化: ${path.basename(jsFile.beautifiedPath)}`);
+                    }
+
+                    additionalInfo = infoParts.join(', ');
+                }
+
                 items.push({
                     fileName: file.fileName,
                     filePath: file.filePath,
                     fileType: displayFileType,
-                    fileSize: this.formatFileSize(file.fileSize)
+                    fileSize: this.formatFileSize(file.fileSize),
+                    additionalInfo
                 });
             }
         }
@@ -237,10 +260,10 @@ export class HtmlFormatter extends BaseFormatter {
             }
 
             let analysisDetails = '无';
+            const details: Array<string> = [];
 
-            // 构建分析详情
+            // 构建 Flutter 分析详情
             if (soFile.flutterAnalysis) {
-                const details: Array<string> = [];
                 if (soFile.flutterAnalysis.isFlutter) {
                     details.push('Flutter框架');
                 }
@@ -255,8 +278,26 @@ export class HtmlFormatter extends BaseFormatter {
                     details.push(`修改时间: ${date.toLocaleDateString('zh-CN')}`);
                 }
                 if (soFile.flutterAnalysis.dartPackages.length > 0) {
-                    details.push(`Dart包: ${soFile.flutterAnalysis.dartPackages.length}个`);
+                    const packageNames = soFile.flutterAnalysis.dartPackages
+                        .map(pkg => pkg.version ? `${pkg.name}@${pkg.version}` : pkg.name)
+                        .join(', ');
+                    details.push(`Dart包(${soFile.flutterAnalysis.dartPackages.length}): ${packageNames}`);
                 }
+            }
+
+            // 构建 KMP 分析详情
+            if (soFile.kmpAnalysisDetail?.isKmp) {
+                details.push(`KMP框架 (${soFile.kmpAnalysisDetail.detectionMethod === 'pattern' ? '模式匹配' : '深度检测'})`);
+                if (soFile.kmpAnalysisDetail.matchedSignatures.length > 0) {
+                    const signatures = soFile.kmpAnalysisDetail.matchedSignatures.slice(0, 3).join(', ');
+                    const more = soFile.kmpAnalysisDetail.matchedSignatures.length > 3
+                        ? ` 等${soFile.kmpAnalysisDetail.matchedSignatures.length}个特征`
+                        : '';
+                    details.push(`匹配特征: ${signatures}${more}`);
+                }
+            }
+
+            if (details.length > 0) {
                 analysisDetails = details.join('; ');
             }
 
@@ -566,32 +607,8 @@ export class HtmlFormatter extends BaseFormatter {
             {{/if}}
         </div>
 
-        {{#if statistics.hasFrameworks}}
-        <div class="card">
-            <h2>🔧 框架统计</h2>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>框架</th>
-                        <th>文件数量</th>
-                        <th>占比</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each statistics.frameworks}}
-                    <tr>
-                        <td><span class="badge badge-primary">{{framework}}</span></td>
-                        <td>{{count}}</td>
-                        <td>{{percentage}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
-        {{/if}}
-
         {{#if statistics.hasFileTypes}}
-        <div class="card">
+        <!--<div class="card">
             <h2>📁 文件类型统计</h2>
             <div class="chart-container">
                 {{#each statistics.fileTypes}}
@@ -603,52 +620,12 @@ export class HtmlFormatter extends BaseFormatter {
                 </div>
                 {{/each}}
             </div>
-        </div>
+        </div>-->
         {{/if}}
 
         {{#if options.includeDetails}}
 
-        {{!-- 第一部分：文件类型信息 --}}
-        {{#if fileTypeInfo.hasItems}}
-        <div class="card">
-            <h2>📄 文件类型信息</h2>
-            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、分类（后缀名）、文件大小</p>
-
-            <!-- 文件类型筛选按钮 -->
-            <div class="filter-container">
-                <span class="filter-label">按文件类型筛选：</span>
-                <div class="filter-buttons">
-                    <button class="filter-btn active" onclick="filterFileType('all')">全部</button>
-                    {{#each fileTypeInfo.uniqueTypes}}
-                    <button class="filter-btn" onclick="filterFileType('{{this}}')">{{this}}</button>
-                    {{/each}}
-                </div>
-            </div>
-
-            <table id="fileTypeTable" class="table display" style="width:100%">
-                <thead>
-                    <tr>
-                        <th style="width: 20%">文件名</th>
-                        <th style="width: 45%">路径</th>
-                        <th style="width: 20%">分类（后缀名）</th>
-                        <th style="width: 15%">文件大小</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each fileTypeInfo.items}}
-                    <tr data-filetype="{{fileType}}">
-                        <td title="{{fileName}}"><strong>{{fileName}}</strong></td>
-                        <td title="{{filePath}}"><code>{{filePath}}</code></td>
-                        <td><span class="badge badge-info">{{fileType}}</span></td>
-                        <td>{{fileSize}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
-        {{/if}}
-
-        {{!-- 第二部分：技术栈信息 --}}
+        {{!-- 第一部分：技术栈信息 --}}
         {{#if technologyStackInfo.hasItems}}
         <div class="card">
             <h2>🔧 技术栈信息</h2>
@@ -690,6 +667,47 @@ export class HtmlFormatter extends BaseFormatter {
         </div>
         {{/if}}
 
+        {{!-- 第二部分：文件类型信息 --}}
+        {{#if fileTypeInfo.hasItems}}
+        <div class="card">
+            <h2>📄 文件类型信息</h2>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、分类（后缀名）、文件大小、附加信息</p>
+
+            <!-- 文件类型筛选按钮 -->
+            <div class="filter-container">
+                <span class="filter-label">按文件类型筛选：</span>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterFileType('all')">全部</button>
+                    {{#each fileTypeInfo.uniqueTypes}}
+                    <button class="filter-btn" onclick="filterFileType('{{this}}')">{{this}}</button>
+                    {{/each}}
+                </div>
+            </div>
+
+            <table id="fileTypeTable" class="table display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 18%">文件名</th>
+                        <th style="width: 38%">路径</th>
+                        <th style="width: 15%">分类（后缀名）</th>
+                        <th style="width: 12%">文件大小</th>
+                        <th style="width: 17%">附加信息</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each fileTypeInfo.items}}
+                    <tr data-filetype="{{fileType}}">
+                        <td title="{{fileName}}"><strong>{{fileName}}</strong></td>
+                        <td title="{{filePath}}"><code>{{filePath}}</code></td>
+                        <td><span class="badge badge-info">{{fileType}}</span></td>
+                        <td>{{fileSize}}</td>
+                        <td title="{{additionalInfo}}">{{#if additionalInfo}}{{additionalInfo}}{{else}}-{{/if}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+        {{/if}}
 
         {{/if}}
 

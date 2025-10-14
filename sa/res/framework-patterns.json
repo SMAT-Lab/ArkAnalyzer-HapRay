@@ -194,6 +194,7 @@
     "sqlite": "SQLITE",
     "sqlite3": "SQLITE",
     "rar": "RAR",
-    "7z": "7Z"
+    "7z": "7Z",
+    "js": "JS"
   }
 }

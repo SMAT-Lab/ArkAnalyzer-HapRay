@@ -31,6 +31,7 @@ interface AnalyzeOptions {
     output: string;
     format: string;
     jobs?: string;
+    beautifyJs?: boolean;
 }
 
 const VERSION = '1.0.0';
@@ -42,12 +43,13 @@ export const HapAnalyzerCli = new Command('hap')
     .option('-o, --output <path>', '输出目录', './output')
     .option('-f, --format <format>', '输出格式：json, html, excel, all', 'all')
     .option('-j, --jobs <number>', '并发分析数量，默认为CPU核心数', 'auto')
+    .option('--beautify-js', '美化压缩的 JS 文件并保存到输出目录', false)
     .action(async (options: AnalyzeOptions) => {
         await analyzeHap(options);
     });
 
 async function analyzeHap(options: AnalyzeOptions): Promise<void> {
-    const { input, output, format, jobs } = options;
+    const { input, output, format, jobs, beautifyJs } = options;
 
     const verbose = true;
     const details = true;
@@ -69,9 +71,12 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
     logger.info(`分析目标：${input}`);
     logger.info(`输出目录：${output}`);
     logger.info(`输出格式：${format}`);
+    if (beautifyJs) {
+        logger.info('JS 美化：已启用');
+    }
 
     try {
-        const analyzer = new HapAnalysisService({ verbose });
+        const analyzer = new HapAnalysisService({ verbose, beautifyJs });
         const targets = await collectAnalysisTargets(input);
         if (targets.length === 0) {
             logger.warn('未发现可分析的目标（.hap 文件或包含 .hap 的目录）。');
@@ -89,7 +94,7 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
         const analysisPromises = runWithConcurrency(targets, maxJobs, async (t) => {
             const startTime = Date.now();
             try {
-                const result = await analyzer.analyzeHap(t.label);
+                const result = await analyzer.analyzeHap(t.label, output);
                 const duration = Date.now() - startTime;
                 completedCount++;
 
