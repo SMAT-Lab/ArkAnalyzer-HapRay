@@ -1,4 +1,6 @@
 import path from 'path';
+import fs from 'fs/promises';
+import { js as jsBeautify } from 'js-beautify';
 import type { ArchiveFileInfo, ResourceFileInfo, JsFileInfo, HermesFileInfo, FlutterAnalysisResult } from '../../../config/types';
 import { getMimeType } from '../../../config/magic-numbers';
 import type { ZipEntry, ZipInstance } from '../../../types/zip-types';
@@ -10,6 +12,9 @@ import { ErrorUtils } from '../../../errors';
 import { detectFrameworks } from '../../framework/framework-detector';
 import { FlutterAnalyzer } from '../analyzers/flutter_analyzer';
 import { HandlerRegistry, type FileHandler, type FileProcessorContext } from '../registry';
+import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
+
+const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 export class SoFileHandler implements FileHandler {
     private readonly supportedArchitectures: Array<string> = ['libs/arm64-v8a/', 'libs/arm64/'];
@@ -56,6 +61,16 @@ export class SoFileHandler implements FileHandler {
             }
         }
 
+        // 构建 KMP 分析详情
+        let kmpAnalysisDetail = null;
+        if (frameworks.includes('KMP') && detectionResult.kmpMatchedSignatures) {
+            kmpAnalysisDetail = {
+                isKmp: true,
+                matchedSignatures: detectionResult.kmpMatchedSignatures,
+                detectionMethod: detectionResult.detectionMethod
+            };
+        }
+
         // 添加到上下文
         context.addSoResult({
             filePath,
@@ -63,7 +78,8 @@ export class SoFileHandler implements FileHandler {
             frameworks: frameworks as unknown as Array<string>,
             fileSize: sizeResult.size,
             isSystemLib: false,
-            flutterAnalysis: flutterAnalysisResult
+            flutterAnalysis: flutterAnalysisResult,
+            kmpAnalysisDetail
         });
 
         frameworks.forEach(f => context.addDetectedFramework(f));
@@ -315,6 +331,168 @@ async function extractAndAnalyzeNestedArchive(nestedZip: JSZipAdapter, archiveIn
         }
     }
     archiveInfo.entryCount = nestedFilesCount;
+}
+
+/**
+ * JS 文件处理器
+ * 识别并处理 JavaScript 文件，支持可选的代码美化功能
+ */
+export class JsFileHandler implements FileHandler {
+    private readonly jsExtensions: Array<string> = ['.js', '.mjs', '.cjs'];
+    private readonly jsPatterns: Array<RegExp> = [
+        /\bfunction\s+\w+\s*\(/,
+        /\bconst\s+\w+\s*=/,
+        /\blet\s+\w+\s*=/,
+        /\bvar\s+\w+\s*=/,
+        /=>\s*{/,
+        /\bexport\s+(default\s+)?/,
+        /\bimport\s+.*\s+from\s+/,
+        /\brequire\s*\(/
+    ];
+
+    public canHandle(filePath: string): boolean {
+        // 首先检查扩展名
+        const ext = path.extname(filePath).toLowerCase();
+        if (this.jsExtensions.includes(ext)) {
+            return true;
+        }
+        return false;
+    }
+
+    public async handle(filePath: string, zipEntry: ZipEntry, _zip: ZipInstance, context: FileProcessorContext): Promise<void> {
+        if (!isValidZipEntry(zipEntry)) {
+            return;
+        }
+
+        const fileName = path.basename(filePath);
+        const sizeResult = await getFileSizeWithFallback({
+            zipEntry,
+            filePath,
+            memoryMonitor: context.getMemoryMonitor(),
+            limits: context.getFileSizeLimits()
+        });
+
+        if (sizeResult.size === 0) {
+            return;
+        }
+
+        // 读取文件内容以检测是否为 JS 文件
+        let content: string;
+        try {
+            const buffer = await zipEntry.async('nodebuffer');
+            content = buffer.toString('utf8');
+        } catch (error) {
+            console.warn(`Failed to read JS file ${fileName}: ${(error as Error).message}`);
+            return;
+        }
+
+        // 如果没有扩展名匹配，检查内容特征
+        const ext = path.extname(filePath).toLowerCase();
+        if (!this.jsExtensions.includes(ext)) {
+            const isJs = this.jsPatterns.some(pattern => pattern.test(content));
+            if (!isJs) {
+                return; // 不是 JS 文件
+            }
+        }
+
+        // 检测是否为压缩代码
+        const isMinified = this.detectMinified(content);
+        const estimatedLines = content.split('\n').length;
+
+        // 构建 JS 文件信息
+        const jsFileInfo: JsFileInfo = {
+            filePath,
+            fileName,
+            fileType: 'JS',
+            fileSize: sizeResult.size,
+            mimeType: 'application/javascript',
+            isTextFile: true,
+            isMinified,
+            estimatedLines
+        };
+
+        // 如果启用了美化且代码是压缩的，进行美化
+        const options = context.getOptions();
+        const beautifyJs = options?.beautifyJs ?? false;
+        const outputDir = options?.outputDir;
+
+        if (beautifyJs && isMinified && outputDir) {
+            try {
+                const beautifiedPath = await this.beautifyAndSave(filePath, content, outputDir);
+                jsFileInfo.beautifiedPath = beautifiedPath;
+                logger.info(`[JS Handler] Beautified ${fileName} saved to: ${beautifiedPath}`);
+            } catch (error) {
+                logger.warn(`Failed to beautify JS file ${fileName}: ${(error as Error).message}`);
+            }
+        }
+
+        // 添加到上下文
+        context.addJsFile(jsFileInfo);
+    }
+
+    /**
+     * 检测 JS 代码是否被压缩
+     */
+    private detectMinified(content: string): boolean {
+        const lines = content.split('\n');
+
+        // 如果只有很少的行数但文件很大，可能是压缩的
+        if (lines.length < 10 && content.length > 1000) {
+            return true;
+        }
+
+        // 计算平均行长度
+        const avgLineLength = content.length / lines.length;
+        if (avgLineLength > 200) {
+            return true; // 平均行长度超过 200 字符，可能是压缩的
+        }
+
+        // 检查是否有适当的缩进
+        const indentedLines = lines.filter(line => /^\s{2,}/.test(line));
+        const indentRatio = indentedLines.length / lines.length;
+        if (indentRatio < 0.1) {
+            return true; // 缩进行数少于 10%，可能是压缩的
+        }
+
+        return false;
+    }
+
+    /**
+     * 美化 JS 代码并保存到输出目录
+     */
+    private async beautifyAndSave(filePath: string, content: string, outputDir: string): Promise<string> {
+        // 创建 js 子目录（使用绝对路径）
+        const absoluteOutputDir = path.isAbsolute(outputDir) ? outputDir : path.resolve(process.cwd(), outputDir);
+        const jsDir = path.join(absoluteOutputDir, 'js');
+        await fs.mkdir(jsDir, { recursive: true });
+
+        // 美化代码
+        const beautified = jsBeautify(content, {
+            indent_size: 2,
+            indent_char: ' ',
+            max_preserve_newlines: 2,
+            preserve_newlines: true,
+            keep_array_indentation: false,
+            break_chained_methods: false,
+            brace_style: 'collapse',
+            space_before_conditional: true,
+            unescape_strings: false,
+            jslint_happy: false,
+            end_with_newline: true,
+            wrap_line_length: 0,
+            comma_first: false,
+            e4x: false
+        });
+
+        // 生成输出文件路径
+        const relativePath = filePath.replace(/^\//, '').replace(/\\/g, '_').replace(/\//g, '_');
+        const outputPath = path.join(jsDir, relativePath);
+
+        // 保存美化后的文件
+        await fs.writeFile(outputPath, beautified, 'utf8');
+
+        return outputPath;
+    }
 }
 
 export class DefaultResourceFileHandler implements FileHandler {

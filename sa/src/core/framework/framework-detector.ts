@@ -21,6 +21,8 @@ export interface FrameworkDetectionResult {
     frameworks: Array<string>;
     /** 检测方法：'pattern' | 'deep' */
     detectionMethod: 'pattern' | 'deep';
+    /** KMP 匹配到的特征符号（仅当检测到 KMP 时） */
+    kmpMatchedSignatures?: Array<string>;
 }
 
 /**
@@ -103,42 +105,114 @@ export class FrameworkDetector {
         // 第一步：模式匹配
         let frameworks = this.identifyFrameworksByPattern(fileName);
         let detectionMethod: 'pattern' | 'deep' = 'pattern';
-        
+
         // 第二步：如果是Unknown，尝试深度检测
-        if (frameworks.includes('Unknown') && this.deepDetectionConfig.enableKmp) {
-            const isKmp = await this.detectKmpFramework(fileName, zipEntry, zip);
-            if (isKmp) {
+        let kmpMatchedSignatures: Array<string> | undefined;
+        if (frameworks.includes('Unknown')) {
+            // 尝试 Flutter 深度检测
+            const flutterResult = await this.detectFlutterFramework(fileName, zipEntry, zip);
+            if (flutterResult.isFlutter) {
                 frameworks = frameworks.filter(f => f !== 'Unknown');
-                frameworks.push('KMP');
+                frameworks.push('Flutter');
                 detectionMethod = 'deep';
-                logger.info(`[Framework Detection] Detected KMP framework in: ${fileName}`);
+                logger.info(`[Framework Detection] Detected Flutter framework in: ${fileName}, found ${flutterResult.dartPackageCount} Dart packages`);
+            }
+
+            // 尝试 KMP 深度检测
+            if (frameworks.includes('Unknown') && this.deepDetectionConfig.enableKmp) {
+                const kmpResult = await this.detectKmpFramework(fileName, zipEntry, zip);
+                if (kmpResult.isKmp) {
+                    frameworks = frameworks.filter(f => f !== 'Unknown');
+                    frameworks.push('KMP');
+                    detectionMethod = 'deep';
+                    kmpMatchedSignatures = kmpResult.matchedSignatures;
+                    logger.info(`[Framework Detection] Detected KMP framework in: ${fileName}, matched: ${kmpResult.matchedSignatures.join(', ')}`);
+                }
             }
         }
-        
+
         return {
             frameworks,
-            detectionMethod
+            detectionMethod,
+            kmpMatchedSignatures
         };
     }
-    
+
+    /**
+     * Flutter框架深度检测
+     *
+     * 策略：
+     * - 检测 Dart 包特征：package:xxx
+     * - 如果找到 Dart 包，则认为是 Flutter 应用
+     *
+     * @param fileName 文件名
+     * @param zipEntry ZIP条目
+     * @param zip ZIP实例
+     * @returns Flutter检测结果（是否为Flutter + Dart包数量）
+     */
+    private async detectFlutterFramework(
+        fileName: string,
+        zipEntry: ZipEntry,
+        _zip: ZipInstance
+    ): Promise<{ isFlutter: boolean; dartPackageCount: number }> {
+        try {
+            // Dart包特征模式：package:
+            const dartPackagePattern = Buffer.from('package:', 'utf8');
+
+            const fileSize = zipEntry.uncompressedSize ?? zipEntry.compressedSize;
+            const smallFileThreshold = this.deepDetectionConfig.smallFileThreshold * 1024 * 1024;
+
+            // 读取文件内容
+            const buffer = await zipEntry.async('nodebuffer');
+
+            // 搜索 Dart 包特征
+            let dartPackageCount = 0;
+            let searchStart = 0;
+
+            // 限制搜索次数，避免在大文件中搜索过久
+            const maxSearchCount = fileSize < smallFileThreshold ? 1000 : 100;
+
+            while (searchStart < buffer.length && dartPackageCount < maxSearchCount) {
+                const index = buffer.indexOf(dartPackagePattern, searchStart);
+                if (index === -1) {
+                    break;
+                }
+
+                dartPackageCount++;
+                searchStart = index + dartPackagePattern.length;
+            }
+
+            // 如果找到至少 1 个 Dart 包特征，则认为是 Flutter
+            const isFlutter = dartPackageCount > 0;
+
+            return {
+                isFlutter,
+                dartPackageCount
+            };
+        } catch (error) {
+            console.warn(`Flutter framework detection failed for ${fileName}:`, error);
+            return { isFlutter: false, dartPackageCount: 0 };
+        }
+    }
+
     /**
      * KMP框架深度检测
-     * 
+     *
      * 策略：
      * - 小文件（<10MB）：直接读取全部内容搜索
      * - 大文件（>=10MB）：分块搜索，找到特征后立即返回
      * - 跨块边界检查：避免特征被分割
-     * 
+     *
      * @param fileName 文件名
      * @param zipEntry ZIP条目
      * @param zip ZIP实例
-     * @returns 是否为KMP框架
+     * @returns KMP检测结果（是否为KMP + 匹配的特征）
      */
     private async detectKmpFramework(
         fileName: string,
         zipEntry: ZipEntry,
         _zip: ZipInstance
-    ): Promise<boolean> {
+    ): Promise<{ isKmp: boolean; matchedSignatures: Array<string> }> {
         try {
             // Kotlin特征模式
             const kotlinPatterns = [
@@ -155,16 +229,16 @@ export class FrameworkDetector {
             if (fileSize < smallFileThreshold) {
                 return await this.detectInSmallFile(zipEntry, kotlinPatterns, fileName);
             }
-            
+
             // 大文件策略：分块搜索
             return await this.detectInLargeFile(zipEntry, kotlinPatterns, fileName);
-            
+
         } catch (error) {
             console.warn(`KMP framework detection failed for ${fileName}:`, error);
-            return false;
+            return { isKmp: false, matchedSignatures: [] };
         }
     }
-    
+
     /**
      * 在小文件中检测Kotlin特征
      */
@@ -172,19 +246,24 @@ export class FrameworkDetector {
         zipEntry: ZipEntry,
         patterns: Array<Buffer>,
         fileName: string
-    ): Promise<boolean> {
+    ): Promise<{ isKmp: boolean; matchedSignatures: Array<string> }> {
         try {
             const buffer = await zipEntry.async('nodebuffer');
-            
+            const matchedSignatures: Array<string> = [];
+
             for (const pattern of patterns) {
                 if (buffer.indexOf(pattern) !== -1) {
-                    return true;
+                    matchedSignatures.push(pattern.toString('utf8'));
                 }
             }
-            return false;
+
+            return {
+                isKmp: matchedSignatures.length > 0,
+                matchedSignatures
+            };
         } catch (error) {
             console.warn(`KMP detection failed for ${fileName}:`, error);
-            return false;
+            return { isKmp: false, matchedSignatures: [] };
         }
     }
     
@@ -195,44 +274,53 @@ export class FrameworkDetector {
         zipEntry: ZipEntry,
         patterns: Array<Buffer>,
         fileName: string
-    ): Promise<boolean> {
+    ): Promise<{ isKmp: boolean; matchedSignatures: Array<string> }> {
         try {
             const buffer = await zipEntry.async('nodebuffer');
             const chunkSize = 1 * 1024 * 1024; // 1MB
             const maxChunks = this.deepDetectionConfig.maxChunksForLargeFile;
             const totalChunks = Math.min(Math.ceil(buffer.length / chunkSize), maxChunks);
-            
+            const matchedSignatures: Array<string> = [];
+
             // 分块搜索
             for (let i = 0; i < totalChunks; i++) {
                 const start = i * chunkSize;
                 const end = Math.min(start + chunkSize, buffer.length);
                 const chunk = buffer.subarray(start, end);
-                
+
                 // 在当前块中搜索
                 for (const pattern of patterns) {
                     if (chunk.indexOf(pattern) !== -1) {
-                        return true; // 早期退出
+                        const signature = pattern.toString('utf8');
+                        if (!matchedSignatures.includes(signature)) {
+                            matchedSignatures.push(signature);
+                        }
                     }
                 }
-                
+
                 // 检查跨块边界
                 if (i < totalChunks - 1) {
-                    const foundAtBoundary = this.checkChunkBoundary(
+                    const boundaryMatches = this.checkChunkBoundary(
                         buffer,
                         start,
                         end,
                         patterns
                     );
-                    if (foundAtBoundary) {
-                        return true;
+                    for (const match of boundaryMatches) {
+                        if (!matchedSignatures.includes(match)) {
+                            matchedSignatures.push(match);
+                        }
                     }
                 }
             }
-            
-            return false;
+
+            return {
+                isKmp: matchedSignatures.length > 0,
+                matchedSignatures
+            };
         } catch (error) {
             console.warn(`KMP detection failed for ${fileName}:`, error);
-            return false;
+            return { isKmp: false, matchedSignatures: [] };
         }
     }
     
@@ -244,19 +332,20 @@ export class FrameworkDetector {
         start: number,
         end: number,
         patterns: Array<Buffer>
-    ): boolean {
+    ): Array<string> {
         const maxPatternLength = Math.max(...patterns.map(p => p.length));
         const overlap = buffer.subarray(Math.max(start, end - maxPatternLength), end);
         const nextChunkStart = buffer.subarray(end, Math.min(end + maxPatternLength, buffer.length));
         const boundary = Buffer.concat([overlap, nextChunkStart]);
-        
+        const matches: Array<string> = [];
+
         for (const pattern of patterns) {
             if (boundary.indexOf(pattern) !== -1) {
-                return true;
+                matches.push(pattern.toString('utf8'));
             }
         }
-        
-        return false;
+
+        return matches;
     }
 }
 

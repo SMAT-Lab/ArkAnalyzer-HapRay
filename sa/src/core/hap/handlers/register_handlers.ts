@@ -5,7 +5,7 @@ import { HandlerRegistry } from '../registry';
 import { DefaultExtensionHandler } from './extension_handlers';
 import { DefaultFolderHandler } from './folder_handlers';
 import { ZipMagicHandler } from './magic_handlers';
-import { GenericArchiveFileHandler, SoFileHandler, JsBundleFileHandler, HermesBytecodeFileHandler, DefaultResourceFileHandler } from './special_file_handlers';
+import { GenericArchiveFileHandler, SoFileHandler, JsBundleFileHandler, HermesBytecodeFileHandler, JsFileHandler, DefaultResourceFileHandler } from './special_file_handlers';
 
 export function registerBuiltInHandlers(): void {
     const registry = HandlerRegistry.getInstance();
@@ -17,6 +17,7 @@ export function registerBuiltInHandlers(): void {
     registry.registerFile(new GenericArchiveFileHandler());
     registry.registerFile(new HermesBytecodeFileHandler());
     registry.registerFile(new JsBundleFileHandler());
+    registry.registerFile(new JsFileHandler());
     registry.registerFile(new DefaultResourceFileHandler());
 }
 

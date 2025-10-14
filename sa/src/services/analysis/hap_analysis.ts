@@ -49,6 +49,8 @@ export interface HapAnalyzerPlugin {
 interface HapAnalysisOptions {
     verbose?: boolean;
     outputDir?: string;
+    /** 是否美化 JS 文件（默认：false） */
+    beautifyJs?: boolean;
 }
 
 
@@ -79,12 +81,14 @@ class LocalAnalyzerRegistry {
 
 export class HapAnalysisService {
     private verbose: boolean;
+    private beautifyJs: boolean;
     private analyzerRegistry: LocalAnalyzerRegistry;
 
     constructor(options: HapAnalysisOptions = {}) {
         this.verbose = options.verbose ?? false;
+        this.beautifyJs = options.beautifyJs ?? false;
         this.analyzerRegistry = LocalAnalyzerRegistry.getInstance();
-        
+
         // 初始化注册表和处理器
         this.initializeRegistries();
         this.registerBuiltInAnalyzers();
@@ -143,7 +147,7 @@ export class HapAnalysisService {
             }
 
             // 执行分析
-            const analysisResult = await this.performAnalysis(zipAdapter, sourceLabel);
+            const analysisResult = await this.performAnalysis(zipAdapter, sourceLabel, outputDir);
             
             if (this.verbose) {
                 this.logAnalysisResults(analysisResult);
@@ -238,12 +242,16 @@ export class HapAnalysisService {
      * 执行核心分析逻辑
      */
     private async performAnalysis(
-        zipAdapter: EnhancedJSZipAdapter, 
-        sourceLabel: string
+        zipAdapter: EnhancedJSZipAdapter,
+        sourceLabel: string,
+        outputDir?: string
     ): Promise<HapStaticAnalysisResult> {
         // 遍历所有文件和目录，按注册的处理器进行分发
         const registry = HandlerRegistry.getInstance();
-        const ctx = new FileProcessorContextImpl();
+        const ctx = new FileProcessorContextImpl(undefined, {
+            beautifyJs: this.beautifyJs,
+            outputDir
+        });
 
         const safeZip = zipAdapter as unknown as ZipInstance;
         for (const [p, entry] of Object.entries(zipAdapter.files)) {

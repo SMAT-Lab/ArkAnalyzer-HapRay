@@ -30,10 +30,12 @@ export class FileProcessorContextImpl implements FileProcessorContext {
 
     private readonly memoryMonitor: MemoryMonitor;
     private readonly fileSizeLimits: FileSizeLimits;
+    private readonly options?: { beautifyJs?: boolean; outputDir?: string };
 
-    constructor(limits: FileSizeLimits = DEFAULT_FILE_SIZE_LIMITS) {
+    constructor(limits: FileSizeLimits = DEFAULT_FILE_SIZE_LIMITS, options?: { beautifyJs?: boolean; outputDir?: string }) {
         this.fileSizeLimits = limits;
         this.memoryMonitor = new MemoryMonitor(limits.maxMemoryUsage);
+        this.options = options;
     }
 
     // SO
@@ -55,7 +57,15 @@ export class FileProcessorContextImpl implements FileProcessorContext {
         this.filesByType.get(key)!.push(file);
     }
     addArchiveFile(file: ArchiveFileInfo): void { this.archiveFiles.push(file); }
-    addJsFile(file: JsFileInfo): void { this.jsFiles.push(file); }
+    addJsFile(file: JsFileInfo): void {
+        this.jsFiles.push(file);
+        // 同时添加到 filesByType 以便在 HTML 报告中显示
+        const key = 'JS';
+        if (!this.filesByType.has(key)) {
+            this.filesByType.set(key, []);
+        }
+        this.filesByType.get(key)!.push(file);
+    }
     addHermesFile(file: HermesFileInfo): void { this.hermesFiles.push(file); }
     increaseTotalFiles(count: number): void { this.totalFiles += count; }
     increaseTotalSize(size: number): void { this.totalSize += size; }
@@ -65,6 +75,7 @@ export class FileProcessorContextImpl implements FileProcessorContext {
     // Utils
     getFileSizeLimits(): FileSizeLimits { return this.fileSizeLimits; }
     getMemoryMonitor(): MemoryMonitor { return this.memoryMonitor; }
+    getOptions(): { beautifyJs?: boolean; outputDir?: string } | undefined { return this.options; }
 
     // Builders
     buildSoAnalysis(): HapStaticAnalysisResult['soAnalysis'] {

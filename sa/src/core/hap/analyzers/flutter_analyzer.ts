@@ -63,15 +63,21 @@ export class FlutterAnalyzer {
 
             // 2. 分析Dart包（对当前SO进行分析）
             const dartPackages = await this.analyzeDartPackages(soPath);
-            result.dartPackages = dartPackages;
 
-            // 3. 如果有自研包，则认为是Flutter应用
+            // 3. 开源的Dart包获取（过滤出在 pub.dev 上的第三方包）
             const pubDevPackages = await this.getPubDevPackages();
-            const customPackages = dartPackages.filter(pkg => !pubDevPackages.has(pkg.name));
-            
-            if (customPackages.length > 0) {
+            const customPackages = dartPackages.filter(pkg => pubDevPackages.has(pkg.name));
+
+            // 将第三方开源包（customPackages）赋值给 result.dartPackages，用于 HTML 报告显示
+            result.dartPackages = customPackages;
+
+            if (dartPackages.length > 0) {
                 result.isFlutter = true;
-                logger.info(`Detected Flutter app with ${customPackages.length} custom packages`);
+                logger.info(`Found ${dartPackages.length} total Dart packages in ${path.basename(soPath)}`);
+            }
+
+            if (customPackages.length > 0) {
+                logger.info(`Detected ${customPackages.length} custom packages (from pub.dev): ${customPackages.map(p => p.name).join(', ')}`);
             }
 
             // 4. 分析Flutter版本（如果提供了libflutter.so；若当前即为libflutter.so，可传当前路径）
@@ -99,9 +105,9 @@ export class FlutterAnalyzer {
         try {
             // 使用ELF分析器的strings方法提取字符串
             const strings = await this.elfAnalyzer.strings(soPath);
-            
+
             // 匹配package字符串的正则表达式
-            const packageRegex = /package:([a-zA-Z0-9_]+)(?:@([0-9]+\.[0-9]+\.[0-9]+))?/g;
+            const packageRegex = /package:([a-zA-Z0-9_]+)(?:@([0-9]+\\.[0-9]+\\.[0-9]+))?/g;
             const packages: Array<DartPackage> = [];
             const seenPackages = new Set<string>();
 
@@ -143,7 +149,7 @@ export class FlutterAnalyzer {
         try {
             // 使用ELF分析器的strings方法提取字符串
             const strings = await this.elfAnalyzer.strings(libflutterSoPath);
-            
+
             // 匹配40位Hex字符串的正则表达式
             const hex40Regex = /^[0-9a-fA-F]{40}$/;
             const hex40Strings: Array<string> = [];
@@ -170,7 +176,7 @@ export class FlutterAnalyzer {
 
             // 获取Flutter版本映射
             const flutterVersions = await this.getFlutterVersions();
-            
+
             // 优先返回映射中存在的版本；否则回退到首个hex并使用文件修改时间
             for (const hex40 of hex40Strings) {
                 const versionInfo = flutterVersions.get(hex40);
@@ -219,9 +225,10 @@ export class FlutterAnalyzer {
             const resPath = path.join(__dirname, '../../../../res/pub_dev_packages.json');
             if (fs.existsSync(resPath)) {
                 const data = fs.readFileSync(resPath, 'utf-8');
-                const packages = JSON.parse(data) as Array<string>;
+                const jsonData = JSON.parse(data) as { packages: Array<string> };
+                const packages = jsonData.packages;
                 this.pubDevPackages = new Set(packages);
-                logger.info(`Loaded ${packages.length} packages from local resource file`);
+                logger.info(`Loaded ${packages.length} pub.dev packages from local resource file`);
                 return this.pubDevPackages;
             } else {
                 logger.warn('pub_dev_packages.json not found in res directory, using empty set');
@@ -247,11 +254,11 @@ export class FlutterAnalyzer {
                 const data = fs.readFileSync(resPath, 'utf-8');
                 const versionsData = JSON.parse(data) as Record<string, { lastModified: string }>;
                 const versions = new Map<string, { lastModified: string }>();
-                
+
                 for (const [hex40, info] of Object.entries(versionsData)) {
                     versions.set(hex40, info);
                 }
-                
+
                 logger.info(`Loaded ${versions.size} Flutter versions from local resource file`);
                 return versions;
             } else {

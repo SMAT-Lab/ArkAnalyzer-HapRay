@@ -155,6 +155,18 @@ export type FrameworkTypeKey = keyof typeof FrameworkType;
 /**
  * SO文件分析结果
  */
+/**
+ * KMP 框架分析详情
+ */
+export interface KmpAnalysisDetail {
+    /** 是否检测到 KMP */
+    isKmp: boolean;
+    /** 匹配到的特征符号列表 */
+    matchedSignatures: Array<string>;
+    /** 检测方法 */
+    detectionMethod: 'pattern' | 'deep';
+}
+
 export interface SoAnalysisResult {
     /** SO文件路径 */
     filePath: string;
@@ -168,6 +180,8 @@ export interface SoAnalysisResult {
     isSystemLib: boolean;
     /** Flutter分析结果（可选） */
     flutterAnalysis?: FlutterAnalysisResult | null;
+    /** KMP分析详情（可选） */
+    kmpAnalysisDetail?: KmpAnalysisDetail | null;
 }
 
 /**
@@ -233,6 +247,8 @@ export interface JsFileInfo extends ResourceFileInfo {
     isMinified: boolean;
     /** 代码行数（估算） */
     estimatedLines: number;
+    /** 美化后的文件路径（如果已美化） */
+    beautifiedPath?: string;
 }
 
 /**

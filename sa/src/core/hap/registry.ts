@@ -37,6 +37,7 @@ export interface FileProcessorContext {
     // Utilities
     getFileSizeLimits: () => FileSizeLimits;
     getMemoryMonitor: () => MemoryMonitor;
+    getOptions: () => { beautifyJs?: boolean; outputDir?: string } | undefined;
 }
 
 export interface FileHandler {
