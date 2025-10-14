@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { HapStaticAnalysisResult } from '../../config/types';
+import type { HapStaticAnalysisResult, ResourceAnalysisResult } from '../../config/types';
 import { HandlerRegistry } from '../../core/hap/registry';
 import { FileProcessorContextImpl } from '../../core/hap/context_impl';
 import { registerBuiltInHandlers } from '../../core/hap/handlers/register_handlers';
@@ -26,15 +26,14 @@ import { ErrorFactory } from '../../errors';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import { SoAnalyzer } from '../../core/hap/analyzers/so-analyzer';
 import { ResourceAnalyzer } from '../../core/hap/analyzers/resource-analyzer';
+import type { ZipEntry, ZipInstance } from '../../types/zip-types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
-// ===================== 类型定义 =====================
-type ZipInstance = import('../../types/zip-types').ZipInstance;
 
 export interface HapAnalyzerPluginResult {
-    soAnalysis?: import('../../config/types').HapStaticAnalysisResult['soAnalysis'];
-    resourceAnalysis?: import('../../config/types').ResourceAnalysisResult;
+    soAnalysis?: HapStaticAnalysisResult['soAnalysis'];
+    resourceAnalysis?: ResourceAnalysisResult;
 }
 
 export interface HapAnalyzerPlugin {
@@ -258,7 +257,7 @@ export class HapAnalysisService {
             if (entry.dir) {
                 await registry.dispatchDirectory(p, ctx);
             } else {
-                await registry.dispatchFile(p, entry as unknown as import('../../types/zip-types').ZipEntry, safeZip, ctx);
+                await registry.dispatchFile(p, entry as unknown as ZipEntry, safeZip, ctx);
             }
         }
 
