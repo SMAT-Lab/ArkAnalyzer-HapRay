@@ -264,14 +264,14 @@ export class HapAnalysisService {
         logger.info('🔍 Starting TechStack analysis...');
 
         try {
-            // 1. 扫描 ZIP 文件，提取技术栈相关文件
+            // 1. 扫描 ZIP 文件，提取所有文件
+            // 不使用 fileFilter，让配置文件中的规则决定哪些文件需要检测
             const fileInfos = await HapFileScanner.scanZip(zip, {
                 loadContent: true,
-                maxFileSize: 500 * 1024 * 1024, // 500MB
-                fileFilter: HapFileScanner.createTechStackFileFilter()
+                maxFileSize: 500 * 1024 * 1024  // 500MB
             });
 
-            logger.info(`📁 Found ${fileInfos.length} tech stack related files`);
+            logger.info(`📁 Scanned ${fileInfos.length} files from HAP`);
 
             // 2. 并行检测所有文件
             const detectionResults = await this.detectorEngine.detectFiles(fileInfos);

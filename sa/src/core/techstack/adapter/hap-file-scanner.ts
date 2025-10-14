@@ -143,45 +143,6 @@ export class HapFileScanner {
     }
 
     /**
-     * 创建技术栈相关文件过滤器
-     */
-    public static createTechStackFileFilter(): (fileName: string) => boolean {
-        const extensions = [
-            '.so',      // Native
-            '.abc',     // ArkTS
-            '.js',      // JavaScript
-            '.ts',      // TypeScript
-            '.hbc',     // Hermes Bytecode
-            '.jsbundle', // React Native
-            '.ctz'      // React Native CTZ
-        ];
-
-        const patterns = [
-            /flutter_assets\//,  // Flutter Assets
-            /__uniappview\.html$/,  // Uni-app
-            /__uniappservice\.js$/,  // Uni-app
-            /cordova\.js$/,      // Cordova
-            /cordova_plugins\.js$/,  // Cordova
-            /taro\.js$/,         // Taro
-            /taro-runtime\.js$/  // Taro
-        ];
-
-        return (fileName: string) => {
-            // 检查扩展名
-            if (extensions.some(ext => fileName.endsWith(ext))) {
-                return true;
-            }
-
-            // 检查模式
-            if (patterns.some(pattern => pattern.test(fileName))) {
-                return true;
-            }
-
-            return false;
-        };
-    }
-
-    /**
      * 按文件类型分组
      */
     public static groupByType(fileInfos: Array<FileInfo>): Map<string, Array<FileInfo>> {
