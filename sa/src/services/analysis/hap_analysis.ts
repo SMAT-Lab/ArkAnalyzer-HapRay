@@ -16,30 +16,17 @@
 import fs from 'fs';
 import path from 'path';
 import type { HapStaticAnalysisResult, ResourceAnalysisResult } from '../../config/types';
-import { HandlerRegistry } from '../../core/hap/registry';
-import { FileProcessorContextImpl } from '../../core/hap/context_impl';
-import { registerBuiltInHandlers } from '../../core/hap/handlers/register_handlers';
 import { fileExists, ensureDirectoryExists } from '../../utils/file_utils';
 import type { EnhancedJSZipAdapter } from '../../utils/zip-adapter';
 import { createEnhancedZipAdapter } from '../../utils/zip-adapter';
 import { ErrorFactory } from '../../errors';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { SoAnalyzer } from '../../core/hap/analyzers/so-analyzer';
-import { ResourceAnalyzer } from '../../core/hap/analyzers/resource-analyzer';
-import type { ZipEntry, ZipInstance } from '../../types/zip-types';
+import type { ZipInstance } from '../../types/zip-types';
+import { DetectorEngine } from '../../core/techstack/detector/detector-engine';
+import { HapFileScanner } from '../../core/techstack/adapter/hap-file-scanner';
+import { ResultAdapter } from '../../core/techstack/adapter/result-adapter';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
-
-
-export interface HapAnalyzerPluginResult {
-    soAnalysis?: HapStaticAnalysisResult['soAnalysis'];
-    resourceAnalysis?: ResourceAnalysisResult;
-}
-
-export interface HapAnalyzerPlugin {
-    name: string;
-    analyze: (zip: ZipInstance) => Promise<HapAnalyzerPluginResult>;
-}
 
 // ===================== 内部类型定义 =====================
 /**
@@ -53,44 +40,17 @@ interface HapAnalysisOptions {
 }
 
 
-/**
- * 本地分析器注册表
- */
-class LocalAnalyzerRegistry {
-    private static instance: LocalAnalyzerRegistry | null = null;
-    private analyzers: Array<HapAnalyzerPlugin> = [];
-    
-    static getInstance(): LocalAnalyzerRegistry {
-        this.instance ??= new LocalAnalyzerRegistry();
-        return this.instance;
-    }
-    
-    register(a: HapAnalyzerPlugin): void { 
-        this.analyzers.push(a); 
-    }
-    
-    getAnalyzers(): Array<HapAnalyzerPlugin> { 
-        return this.analyzers.slice(); 
-    }
-    
-    clear(): void {
-        this.analyzers = [];
-    }
-}
-
 export class HapAnalysisService {
     private verbose: boolean;
-    private beautifyJs: boolean;
-    private analyzerRegistry: LocalAnalyzerRegistry;
+    private detectorEngine: DetectorEngine;
+    private detectorInitialized = false;
 
     constructor(options: HapAnalysisOptions = {}) {
         this.verbose = options.verbose ?? false;
-        this.beautifyJs = options.beautifyJs ?? false;
-        this.analyzerRegistry = LocalAnalyzerRegistry.getInstance();
+        this.detectorEngine = DetectorEngine.getInstance();
 
         // 初始化注册表和处理器
         this.initializeRegistries();
-        this.registerBuiltInAnalyzers();
     }
 
     // ===================== 主要业务方法 =====================
@@ -146,7 +106,7 @@ export class HapAnalysisService {
             }
 
             // 执行分析
-            const analysisResult = await this.performAnalysis(zipAdapter, sourceLabel, outputDir);
+            const analysisResult = await this.performAnalysis(zipAdapter, sourceLabel);
             
             if (this.verbose) {
                 this.logAnalysisResults(analysisResult);
@@ -238,38 +198,31 @@ export class HapAnalysisService {
 
     // ---- 分析执行 ----
     /**
-     * 执行核心分析逻辑
+     * 执行核心分析逻辑（直接调用技术栈检测）
      */
     private async performAnalysis(
         zipAdapter: EnhancedJSZipAdapter,
-        sourceLabel: string,
-        outputDir?: string
+        sourceLabel: string
     ): Promise<HapStaticAnalysisResult> {
-        // 遍历所有文件和目录，按注册的处理器进行分发
-        const registry = HandlerRegistry.getInstance();
-        const ctx = new FileProcessorContextImpl(undefined, {
-            beautifyJs: this.beautifyJs,
-            outputDir
-        });
+        // 直接执行技术栈分析
+        const soAnalysis = await this.runTechStackAnalysis(zipAdapter.getJSZip() as unknown as ZipInstance);
 
-        const safeZip = zipAdapter as unknown as ZipInstance;
-        for (const [p, entry] of Object.entries(zipAdapter.files)) {
-            if (entry.dir) {
-                await registry.dispatchDirectory(p, ctx);
-            } else {
-                await registry.dispatchFile(p, entry as unknown as ZipEntry, safeZip, ctx);
-            }
-        }
+        const resourceAnalysis: ResourceAnalysisResult = {
+            totalFiles: 0,
+            filesByType: new Map(),
+            archiveFiles: [],
+            jsFiles: [],
+            hermesFiles: [],
+            totalSize: 0,
+            maxExtractionDepth: 0,
+            extractedArchiveCount: 0
+        };
 
-        const soAnalysis = ctx.buildSoAnalysis();
-        const resourceAnalysis = ctx.buildResourceAnalysis();
-
-        // 默认兜底，确保结果结构完整
         return {
             hapPath: sourceLabel,
-            soAnalysis: soAnalysis,
-            resourceAnalysis: resourceAnalysis,
-            timestamp: new Date(),
+            soAnalysis,
+            resourceAnalysis,
+            timestamp: new Date()
         };
     }
 
@@ -278,33 +231,80 @@ export class HapAnalysisService {
      * 初始化注册表
      */
     private initializeRegistries(): void {
-        HandlerRegistry.getInstance();
-        registerBuiltInHandlers();
+        // 不再需要旧的注册表
     }
 
     /**
-     * 注册内置分析器
+     * 确保检测引擎已初始化
      */
-    private registerBuiltInAnalyzers(): void {
-        // 避免重复注册
-        if (this.analyzerRegistry.getAnalyzers().length === 0) {
-            const soAnalyzer = new SoAnalyzer();
-            this.analyzerRegistry.register({
-                name: 'so-analyzer',
-                async analyze(zip) {
-                    const result = await soAnalyzer.analyzeSoFilesFromZip(zip);
-                    return { soAnalysis: result };
-                }
+    private ensureDetectorInitialized(): void {
+        if (!this.detectorInitialized) {
+            try {
+                this.detectorEngine.initialize();
+                this.detectorInitialized = true;
+                logger.info('✅ DetectorEngine initialized');
+            } catch (error) {
+                logger.error('❌ Failed to initialize DetectorEngine:', error);
+                throw error;
+            }
+        }
+    }
+
+    /**
+     * 运行技术栈分析
+     */
+    private async runTechStackAnalysis(zip: ZipInstance): Promise<{
+        detectedFrameworks: Array<string>;
+        soFiles: Array<any>;
+        totalSoFiles: number;
+    }> {
+        this.ensureDetectorInitialized();
+
+        const startTime = Date.now();
+        logger.info('🔍 Starting TechStack analysis...');
+
+        try {
+            // 1. 扫描 ZIP 文件，提取技术栈相关文件
+            const fileInfos = await HapFileScanner.scanZip(zip, {
+                loadContent: true,
+                maxFileSize: 500 * 1024 * 1024, // 500MB
+                fileFilter: HapFileScanner.createTechStackFileFilter()
             });
 
-            const resourceAnalyzer = new ResourceAnalyzer();
-            this.analyzerRegistry.register({
-                name: 'resource-analyzer',
-                async analyze(zip) {
-                    const result = await resourceAnalyzer.analyzeResourcesFromZip(zip);
-                    return { resourceAnalysis: result };
-                }
-            });
+            logger.info(`📁 Found ${fileInfos.length} tech stack related files`);
+
+            // 2. 并行检测所有文件
+            const detectionResults = await this.detectorEngine.detectFiles(fileInfos);
+
+            // 3. 转换为现有格式
+            const soAnalysisResults = ResultAdapter.toSoAnalysisResults(detectionResults, '');
+
+            // 4. 提取所有检测到的框架
+            const detectedFrameworks = ResultAdapter.extractAllFrameworks(detectionResults);
+
+            // 5. 统计信息
+            const stats = ResultAdapter.getDetectionStats(detectionResults);
+            const duration = Date.now() - startTime;
+
+            logger.info(`✅ TechStack analysis completed in ${duration}ms`);
+            logger.info(`   - Total files: ${stats.totalFiles}`);
+            logger.info(`   - Detected files: ${stats.detectedFiles}`);
+            logger.info(`   - Total detections: ${stats.totalDetections}`);
+            logger.info(`   - Detected frameworks: ${detectedFrameworks.join(', ')}`);
+
+            // 打印框架统计
+            for (const [framework, count] of stats.frameworkCounts.entries()) {
+                logger.info(`   - ${framework}: ${count} files`);
+            }
+
+            return {
+                detectedFrameworks,
+                soFiles: soAnalysisResults,
+                totalSoFiles: soAnalysisResults.length
+            };
+        } catch (error) {
+            logger.error('❌ TechStack analysis failed:', error);
+            throw error;
         }
     }
 
@@ -340,7 +340,7 @@ export class HapAnalysisService {
         if (result.soAnalysis.soFiles.length > 0) {
             logger.info('SO 文件列表:');
             for (const soFile of result.soAnalysis.soFiles) {
-                logger.info(`  - ${soFile.fileName}（${soFile.frameworks.join(', ')}）`);
+                logger.info(`  - ${soFile.file}（${soFile.techStack}）`);
             }
         }
 
@@ -415,27 +415,5 @@ export class HapAnalysisService {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
 
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    // ---- 插件管理 ----
-    /**
-     * 注册自定义分析器插件
-     */
-    public registerAnalyzer(plugin: HapAnalyzerPlugin): void {
-        this.analyzerRegistry.register(plugin);
-    }
-
-    /**
-     * 获取已注册的分析器列表
-     */
-    public getRegisteredAnalyzers(): Array<HapAnalyzerPlugin> {
-        return this.analyzerRegistry.getAnalyzers();
-    }
-
-    /**
-     * 清除所有分析器
-     */
-    public clearAnalyzers(): void {
-        this.analyzerRegistry.clear();
     }
 }

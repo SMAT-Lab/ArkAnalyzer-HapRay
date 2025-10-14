@@ -159,12 +159,10 @@ export abstract class BaseFormatter {
         const frameworkCount = new Map<string, number>();
 
         result.soAnalysis.soFiles.forEach(soFile => {
-            soFile.frameworks.forEach(framework => {
-                // 过滤掉 Unknown 框架
-                if (framework !== 'Unknown') {
-                    frameworkCount.set(framework, (frameworkCount.get(framework) ?? 0) + 1);
-                }
-            });
+            // 过滤掉 Unknown 框架
+            if (soFile.techStack !== 'Unknown') {
+                frameworkCount.set(soFile.techStack, (frameworkCount.get(soFile.techStack) ?? 0) + 1);
+            }
         });
 
         const stats: Array<{framework: string, count: number, percentage: string}> = [];

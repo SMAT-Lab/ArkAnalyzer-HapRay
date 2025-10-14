@@ -185,34 +185,75 @@ export class ExcelFormatter extends BaseFormatter {
             { header: '路径', key: 'filePath', width: 60 },
             { header: '技术栈', key: 'technologyStack', width: 25 },
             { header: '文件大小', key: 'fileSize', width: 15 },
-            { header: '分析详情', key: 'analysisDetails', width: 50 }
+            { header: '40位版本', key: 'hex40', width: 45 },
+            { header: 'Dart版本', key: 'dartVersion', width: 15 },
+            { header: '最后修改时间', key: 'lastModified', width: 20 },
+            { header: 'Dart包', key: 'dartPackages', width: 50 },
+            { header: 'KMP特征', key: 'kmpSignatures', width: 40 },
+            { header: '其他元数据', key: 'metadata', width: 40 }
         ];
 
         // 添加数据
         result.soAnalysis.soFiles.forEach(soFile => {
-            let analysisDetails = '';
+            // 过滤掉 Unknown 框架
+            if (soFile.techStack === 'Unknown') {
+                return; // 跳过没有识别框架的文件
+            }
 
-            // 构建分析详情
-            if (soFile.flutterAnalysis) {
-                const details: Array<string> = [];
-                if (soFile.flutterAnalysis.isFlutter) {
-                    details.push('Flutter框架');
+            // 从 metadata 中提取信息
+            const hex40 = soFile.metadata.flutterHex40 || '';
+            const dartVersion = soFile.metadata.dartVersion || '';
+
+            // 最后修改时间
+            let lastModified = '';
+            const lastModifiedStr = soFile.metadata.lastModified;
+            if (lastModifiedStr) {
+                const date = new Date(lastModifiedStr);
+                if (!isNaN(date.getTime())) {
+                    lastModified = `${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN')}`;
                 }
-                if (soFile.flutterAnalysis.flutterVersion?.hex40) {
-                    details.push(`版本: ${soFile.flutterAnalysis.flutterVersion.hex40}`);
-                }
-                if (soFile.flutterAnalysis.dartPackages.length > 0) {
-                    details.push(`Dart包: ${soFile.flutterAnalysis.dartPackages.length}个`);
-                }
-                analysisDetails = details.join('; ');
+            }
+
+            // Dart 包
+            let dartPackages = '';
+            if (soFile.metadata.dartPackages && Array.isArray(soFile.metadata.dartPackages)) {
+                const packageNames = soFile.metadata.dartPackages
+                    .slice(0, 10) // Excel 中可以显示更多
+                    .join(', ');
+                const more = soFile.metadata.dartPackages.length > 10
+                    ? ` 等${soFile.metadata.dartPackages.length}个`
+                    : '';
+                dartPackages = `${packageNames}${more}`;
+            }
+
+            // KMP 相关信息
+            let kmpSignatures = '';
+            if (soFile.metadata.kotlinSignatures && Array.isArray(soFile.metadata.kotlinSignatures)) {
+                kmpSignatures = soFile.metadata.kotlinSignatures.join(', ');
+            }
+
+            // 其他元数据
+            let metadataStr = '';
+            if (soFile.metadata && Object.keys(soFile.metadata).length > 0) {
+                const excludeKeys = ['flutterHex40', 'dartVersion', 'lastModified', 'dartPackages', 'kotlinSignatures'];
+                const metadataEntries = Object.entries(soFile.metadata)
+                    .filter(([key]) => !excludeKeys.includes(key))
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join('; ');
+                metadataStr = metadataEntries;
             }
 
             worksheet.addRow({
-                fileName: soFile.fileName,
-                filePath: soFile.filePath,
-                technologyStack: soFile.frameworks.join(', ') || '未识别',
-                fileSize: this.formatFileSize(soFile.fileSize),
-                analysisDetails: analysisDetails || '无'
+                fileName: soFile.file,
+                filePath: `${soFile.folder}/${soFile.file}`,
+                technologyStack: soFile.techStack,
+                fileSize: this.formatFileSize(soFile.size),
+                hex40: hex40,
+                dartVersion: dartVersion,
+                lastModified: lastModified,
+                dartPackages: dartPackages,
+                kmpSignatures: kmpSignatures,
+                metadata: metadataStr
             });
         });
 
@@ -222,6 +263,12 @@ export class ExcelFormatter extends BaseFormatter {
             type: 'pattern',
             pattern: 'solid',
             fgColor: { argb: 'FFE6F3FF' }
+        };
+
+        // 设置自动筛选
+        worksheet.autoFilter = {
+            from: 'A1',
+            to: 'J1'
         };
     }
 
