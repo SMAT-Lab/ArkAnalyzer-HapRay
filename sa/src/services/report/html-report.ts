@@ -254,46 +254,68 @@ export class HtmlFormatter extends BaseFormatter {
 
         for (const soFile of result.soAnalysis.soFiles) {
             // 过滤掉 Unknown 框架
-            const frameworks = soFile.frameworks.filter(f => f !== 'Unknown');
-            if (frameworks.length === 0) {
+            if (soFile.techStack === 'Unknown') {
                 continue; // 跳过没有识别框架的 SO 文件
             }
 
             let analysisDetails = '无';
             const details: Array<string> = [];
 
-            // 构建 Flutter 分析详情
-            if (soFile.flutterAnalysis) {
-                if (soFile.flutterAnalysis.isFlutter) {
-                    details.push('Flutter框架');
-                }
-                if (soFile.flutterAnalysis.flutterVersion?.hex40) {
-                    details.push(`版本: ${soFile.flutterAnalysis.flutterVersion.hex40}`);
-                }
-                if (soFile.flutterAnalysis.flutterVersion?.dartVersion) {
-                    details.push(`Dart: ${soFile.flutterAnalysis.flutterVersion.dartVersion}`);
-                }
-                if (soFile.flutterAnalysis.flutterVersion?.lastModified) {
-                    const date = new Date(soFile.flutterAnalysis.flutterVersion.lastModified);
-                    details.push(`修改时间: ${date.toLocaleDateString('zh-CN')}`);
-                }
-                if (soFile.flutterAnalysis.dartPackages.length > 0) {
-                    const packageNames = soFile.flutterAnalysis.dartPackages
-                        .map(pkg => pkg.version ? `${pkg.name}@${pkg.version}` : pkg.name)
-                        .join(', ');
-                    details.push(`Dart包(${soFile.flutterAnalysis.dartPackages.length}): ${packageNames}`);
+            // 添加技术栈类型
+            details.push(`${soFile.techStack}框架`);
+
+            // 从 metadata 中提取信息
+            const hex40 = soFile.metadata.flutterHex40;
+            if (hex40) {
+                details.push(`40位版本: ${hex40}`);
+            }
+
+            const dartVersion = soFile.metadata.dartVersion;
+            if (dartVersion) {
+                details.push(`Dart: ${dartVersion}`);
+            }
+
+            // 优先使用 flutterVersionLastModified，如果没有则使用 lastModified
+            const lastModified = soFile.metadata.flutterVersionLastModified || soFile.metadata.lastModified;
+            if (lastModified) {
+                const date = new Date(lastModified);
+                if (!isNaN(date.getTime())) {
+                    details.push(`修改时间: ${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN')}`);
                 }
             }
 
-            // 构建 KMP 分析详情
-            if (soFile.kmpAnalysisDetail?.isKmp) {
-                details.push(`KMP框架 (${soFile.kmpAnalysisDetail.detectionMethod === 'pattern' ? '模式匹配' : '深度检测'})`);
-                if (soFile.kmpAnalysisDetail.matchedSignatures.length > 0) {
-                    const signatures = soFile.kmpAnalysisDetail.matchedSignatures.slice(0, 3).join(', ');
-                    const more = soFile.kmpAnalysisDetail.matchedSignatures.length > 3
-                        ? ` 等${soFile.kmpAnalysisDetail.matchedSignatures.length}个特征`
-                        : '';
-                    details.push(`匹配特征: ${signatures}${more}`);
+            // 开源包（pub.dev 上的包）
+            if (soFile.metadata.openSourcePackages && Array.isArray(soFile.metadata.openSourcePackages)) {
+                const packageNames = soFile.metadata.openSourcePackages
+                    .slice(0, 5) // 最多显示5个包
+                    .join(', ');
+                const more = soFile.metadata.openSourcePackages.length > 5
+                    ? ` 等${soFile.metadata.openSourcePackages.length}个`
+                    : '';
+                details.push(`开源包: ${packageNames}${more}`);
+            }
+
+            // KMP 相关信息
+            if (soFile.metadata.kotlinSignatures && Array.isArray(soFile.metadata.kotlinSignatures)) {
+                const signatures = soFile.metadata.kotlinSignatures.slice(0, 3).join(', ');
+                const more = soFile.metadata.kotlinSignatures.length > 3
+                    ? ` 等${soFile.metadata.kotlinSignatures.length}个特征`
+                    : '';
+                details.push(`Kotlin特征: ${signatures}${more}`);
+            }
+
+            // 如果有通用元数据，也显示出来（排除已经显示的字段）
+            if (soFile.metadata && Object.keys(soFile.metadata).length > 0) {
+                const excludeKeys = ['flutterHex40', 'dartVersion', 'lastModified', 'flutterVersionLastModified', 'openSourcePackages', 'customPackages', 'kotlinSignatures'];
+                const metadataEntries = Object.entries(soFile.metadata)
+                    .filter(([key]) => !excludeKeys.includes(key))
+                    .slice(0, 3); // 最多显示3个额外的元数据
+
+                if (metadataEntries.length > 0) {
+                    const metadataStr = metadataEntries
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(', ');
+                    details.push(`元数据: ${metadataStr}`);
                 }
             }
 
@@ -302,10 +324,10 @@ export class HtmlFormatter extends BaseFormatter {
             }
 
             items.push({
-                fileName: soFile.fileName,
-                filePath: soFile.filePath,
-                technologyStack: frameworks.join(', '),
-                fileSize: this.formatFileSize(soFile.fileSize),
+                fileName: soFile.file,
+                filePath: `${soFile.folder}/${soFile.file}`,
+                technologyStack: soFile.techStack,
+                fileSize: this.formatFileSize(soFile.size),
                 analysisDetails
             });
         }

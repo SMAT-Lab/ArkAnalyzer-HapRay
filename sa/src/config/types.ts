@@ -168,20 +168,31 @@ export interface KmpAnalysisDetail {
 }
 
 export interface SoAnalysisResult {
-    /** SO文件路径 */
-    filePath: string;
+    /** 文件夹路径 */
+    folder: string;
     /** 文件名 */
-    fileName: string;
-    /** 识别到的框架类型 */
-    frameworks: Array<FrameworkTypeKey>;
-    /** 文件大小 */
-    fileSize: number;
-    /** 是否为系统库 */
-    isSystemLib: boolean;
-    /** Flutter分析结果（可选） */
-    flutterAnalysis?: FlutterAnalysisResult | null;
-    /** KMP分析详情（可选） */
-    kmpAnalysisDetail?: KmpAnalysisDetail | null;
+    file: string;
+    /** 文件大小（字节） */
+    size: number;
+    /** 技术栈类型 */
+    techStack: string;
+    /** 元数据（包含所有提取的信息） */
+    metadata: {
+        /** 版本信息 */
+        version?: string;
+        /** 最后修改时间 */
+        lastModified?: string;
+        /** Dart 版本 */
+        dartVersion?: string;
+        /** Flutter 40位版本 */
+        flutterHex40?: string;
+        /** Dart 包列表 */
+        dartPackages?: Array<string>;
+        /** Kotlin 签名列表 */
+        kotlinSignatures?: Array<string>;
+        /** 其他自定义字段 */
+        [key: string]: any;
+    };
 }
 
 /**

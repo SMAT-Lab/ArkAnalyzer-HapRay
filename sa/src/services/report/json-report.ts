@@ -31,24 +31,21 @@ interface FileTypeInfoItem {
 }
 
 /**
- * 技术栈信息项
+ * 技术栈信息项（直接使用 SoAnalysisResult 格式）
  */
 interface TechnologyStackInfoItem {
-    fileName: string;
-    filePath: string;
-    technologyStack: Array<string>;
-    fileSize: number;
-    fileSizeFormatted: string;
-    analysisDetails?: {
-        isFlutter?: boolean;
-        dartPackages?: Array<{
-            name: string;
-            version?: string;
-        }>;
-        flutterVersion?: {
-            hex40?: string;
-            lastModified?: string;
-        };
+    folder: string;
+    file: string;
+    size: number;
+    techStack: string;
+    metadata: {
+        version?: string;
+        lastModified?: string;
+        dartVersion?: string;
+        flutterHex40?: string;
+        dartPackages?: Array<string>;
+        kotlinSignatures?: Array<string>;
+        [key: string]: any;
     };
 }
 
@@ -234,22 +231,19 @@ export class JsonFormatter extends BaseFormatter {
 
         // 收集所有SO文件的技术栈信息
         for (const soFile of result.soAnalysis.soFiles) {
-            const item: TechnologyStackInfoItem = {
-                fileName: soFile.fileName,
-                filePath: soFile.filePath,
-                technologyStack: soFile.frameworks as unknown as Array<string>,
-                fileSize: soFile.fileSize,
-                fileSizeFormatted: this.formatFileSize(soFile.fileSize)
-            };
-
-            // 添加分析详情（如果有）
-            if (soFile.flutterAnalysis) {
-                item.analysisDetails = {
-                    isFlutter: soFile.flutterAnalysis.isFlutter,
-                    dartPackages: soFile.flutterAnalysis.dartPackages,
-                    flutterVersion: soFile.flutterAnalysis.flutterVersion
-                };
+            // 过滤掉 Unknown 技术栈
+            if (soFile.techStack === 'Unknown') {
+                continue;
             }
+
+            // 直接使用 SoAnalysisResult 格式
+            const item: TechnologyStackInfoItem = {
+                folder: soFile.folder,
+                file: soFile.file,
+                size: soFile.size,
+                techStack: soFile.techStack,
+                metadata: soFile.metadata
+            };
 
             items.push(item);
         }
