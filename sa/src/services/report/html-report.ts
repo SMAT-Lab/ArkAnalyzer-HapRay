@@ -106,7 +106,7 @@ export class HtmlFormatter extends BaseFormatter {
         // 构建技术栈信息
         const technologyStackInfo = this.buildTechnologyStackInfoData(result);
 
-        // 过滤掉 Unknown 框架
+        // 过滤掉 Unknown 技术栈
         const detectedFrameworks = result.soAnalysis.detectedFrameworks.filter(f => f !== 'Unknown');
 
         // 获取唯一的文件类型列表（用于筛选按钮）
@@ -253,16 +253,16 @@ export class HtmlFormatter extends BaseFormatter {
         }> = [];
 
         for (const soFile of result.soAnalysis.soFiles) {
-            // 过滤掉 Unknown 框架
+            // 过滤掉 Unknown 技术栈
             if (soFile.techStack === 'Unknown') {
-                continue; // 跳过没有识别框架的 SO 文件
+                continue; // 跳过没有识别技术栈的 SO 文件
             }
 
             let analysisDetails = '无';
             const details: Array<string> = [];
 
             // 添加技术栈类型
-            details.push(`${soFile.techStack}框架`);
+            details.push(`${soFile.techStack}技术栈`);
 
             // 从 metadata 中提取信息
             const hex40 = soFile.metadata.flutterHex40;
@@ -621,7 +621,7 @@ export class HtmlFormatter extends BaseFormatter {
             
             {{#if summary.detectedFrameworks.length}}
             <div class="frameworks">
-                <strong>检测到的框架:</strong>
+                <strong>检测到的技术栈:</strong>
                 {{#each summary.detectedFrameworks}}
                 <span class="framework-tag">{{this}}</span>
                 {{/each}}
@@ -940,8 +940,8 @@ export class HtmlFormatter extends BaseFormatter {
                 } else if (filterType === 'nested') {
                     shouldShow = row.dataset.source === 'nested';
                 } else {
-                    // 按框架过滤
-                    // 多框架文件使用逗号分隔，支持包含判断
+                    // 按技术栈过滤
+                    // 多技术栈文件使用逗号分隔，支持包含判断
                     const fw = row.dataset.framework || '';
                     const arr = fw.split(',').map(s => s.trim()).filter(Boolean);
                     shouldShow = arr.includes(filterType);

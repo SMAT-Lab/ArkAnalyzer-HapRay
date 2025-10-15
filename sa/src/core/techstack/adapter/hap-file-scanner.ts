@@ -10,36 +10,16 @@ import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 /**
- * 文件扫描选项
- */
-export interface ScanOptions {
-    /** 是否加载文件内容（默认：true） */
-    loadContent?: boolean;
-    /** 文件大小限制（字节，默认：10MB） */
-    maxFileSize?: number;
-    /** 文件类型过滤器（默认：所有文件） */
-    fileFilter?: (fileName: string) => boolean;
-}
-
-/**
  * HAP 文件扫描器
  */
 export class HapFileScanner {
-    private static readonly DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
     /**
      * 扫描 ZIP 文件，提取所有文件信息
+     *
+     * 注意：默认扫描所有文件并加载内容，不做任何过滤。
+     * 文件过滤应该由配置文件中的规则决定，而不是在扫描阶段。
      */
-    public static async scanZip(
-        zip: ZipInstance,
-        options: ScanOptions = {}
-    ): Promise<Array<FileInfo>> {
-        const {
-            loadContent = true,
-            maxFileSize = this.DEFAULT_MAX_FILE_SIZE,
-            fileFilter
-        } = options;
-
+    public static async scanZip(zip: ZipInstance): Promise<Array<FileInfo>> {
         const fileInfos: Array<FileInfo> = [];
 
         for (const [filePath, zipEntry] of Object.entries(zip.files)) {
@@ -48,22 +28,9 @@ export class HapFileScanner {
                 continue;
             }
 
-            // 应用文件过滤器
-            if (fileFilter && !fileFilter(filePath)) {
-                continue;
-            }
-
             try {
-                const fileInfo = await this.extractFileInfo(
-                    filePath,
-                    zipEntry,
-                    loadContent,
-                    maxFileSize
-                );
-
-                if (fileInfo) {
-                    fileInfos.push(fileInfo);
-                }
+                const fileInfo = await this.extractFileInfo(filePath, zipEntry);
+                fileInfos.push(fileInfo);
             } catch (error) {
                 logger.warn(`Failed to extract file info for ${filePath}:`, error);
             }
@@ -78,36 +45,21 @@ export class HapFileScanner {
      */
     private static async extractFileInfo(
         filePath: string,
-        zipEntry: ZipEntry,
-        loadContent: boolean,
-        maxFileSize: number
-    ): Promise<FileInfo | null> {
+        zipEntry: ZipEntry
+    ): Promise<FileInfo> {
         const fileName = this.getFileName(filePath);
         const folder = this.getFolder(filePath);
-        const fileSize = getSafeFileSize(zipEntry);
-
-        // 检查文件大小
-        if (fileSize > maxFileSize) {
-            logger.debug(`File ${filePath} exceeds max size (${fileSize} > ${maxFileSize}), skipping content load`);
-            return {
-                folder,
-                file: fileName,
-                path: filePath,
-                size: fileSize,
-                content: undefined,
-                lastModified: zipEntry.date
-            };
-        }
 
         // 加载文件内容
         let content: Buffer | undefined;
-        if (loadContent) {
-            try {
-                content = await zipEntry.async('nodebuffer');
-            } catch (error) {
-                logger.warn(`Failed to load content for ${filePath}:`, error);
-            }
+        try {
+            content = await zipEntry.async('nodebuffer');
+        } catch (error) {
+            logger.warn(`Failed to load content for ${filePath}:`, error);
         }
+
+        // 使用实际内容大小，如果加载失败则使用 ZIP 元数据
+        const fileSize = content ? content.length : getSafeFileSize(zipEntry);
 
         return {
             folder,

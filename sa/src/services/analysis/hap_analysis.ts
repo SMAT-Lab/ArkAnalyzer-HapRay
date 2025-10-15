@@ -48,9 +48,6 @@ export class HapAnalysisService {
     constructor(options: HapAnalysisOptions = {}) {
         this.verbose = options.verbose ?? false;
         this.detectorEngine = DetectorEngine.getInstance();
-
-        // 初始化注册表和处理器
-        this.initializeRegistries();
     }
 
     // ===================== 主要业务方法 =====================
@@ -226,14 +223,6 @@ export class HapAnalysisService {
         };
     }
 
-    // ---- 注册表管理 ----
-    /**
-     * 初始化注册表
-     */
-    private initializeRegistries(): void {
-        // 不再需要旧的注册表
-    }
-
     /**
      * 确保检测引擎已初始化
      */
@@ -265,11 +254,8 @@ export class HapAnalysisService {
 
         try {
             // 1. 扫描 ZIP 文件，提取所有文件
-            // 不使用 fileFilter，让配置文件中的规则决定哪些文件需要检测
-            const fileInfos = await HapFileScanner.scanZip(zip, {
-                loadContent: true,
-                maxFileSize: 500 * 1024 * 1024 // 500MB
-            });
+            // 扫描所有文件，由配置文件中的规则决定哪些文件需要检测
+            const fileInfos = await HapFileScanner.scanZip(zip);
 
             logger.info(`📁 Scanned ${fileInfos.length} files from HAP`);
 

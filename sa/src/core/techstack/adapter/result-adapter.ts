@@ -11,19 +11,18 @@ import type { SoAnalysisResult } from '../../../config/types';
 export class ResultAdapter {
     /**
      * 将文件检测结果转换为 SO 分析结果
+     * 注意：虽然方法名是 toSoAnalysisResult，但实际上处理所有检测到技术栈的文件
      */
     public static toSoAnalysisResult(
         fileDetection: FileDetectionResult
     ): SoAnalysisResult | null {
-        // 只处理 SO 文件
-        if (!fileDetection.file.endsWith('.so')) {
+        // 只处理检测到技术栈的文件
+        if (fileDetection.detections.length === 0) {
             return null;
         }
 
         // 提取技术栈（取第一个检测到的框架）
-        const techStack = fileDetection.detections.length > 0
-            ? fileDetection.detections[0].techStack
-            : 'Unknown';
+        const techStack = fileDetection.detections[0].techStack;
 
         // 合并所有元数据
         const metadata = this.mergeMetadata(fileDetection.detections);

@@ -147,15 +147,6 @@ export interface FileDetectionResult {
 }
 
 /**
- * 规则匹配结果
- */
-export interface RuleMatchResult {
-    matched: boolean;
-    confidence: number;
-    metadata?: Record<string, unknown>;
-}
-
-/**
  * 自定义提取器函数类型
  */
 export type CustomExtractor = (

@@ -47,7 +47,6 @@ export class CustomExtractorRegistry {
     private registerBuiltinExtractors(): void {
         // Flutter Dart 包提取器
         this.register('extractDartPackages', extractDartPackages);
-        this.register('extractPubDevPackages', extractPubDevPackages);
 
         // Flutter 版本提取器
         this.register('extractFlutterVersion', extractFlutterVersion);
@@ -221,68 +220,6 @@ async function extractKotlinSignatures(fileInfo: FileInfo, _pattern?: MetadataPa
         }
     } catch (error) {
         console.warn('Failed to extract Kotlin signatures:', error);
-        return [];
-    }
-}
-
-/**
- * 提取自研 Dart 包（不在 pub.dev 上的包）
- */
-async function extractPubDevPackages(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
-    if (!fileInfo.content) {
-        return [];
-    }
-
-    try {
-        // 使用 ELF 分析器提取字符串
-        const elfAnalyzer = ElfAnalyzer.getInstance();
-
-        // 创建临时文件
-        const tempDir = path.join(process.cwd(), '.temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const tempFilePath = path.join(tempDir, `temp_${Date.now()}.so`);
-        fs.writeFileSync(tempFilePath, fileInfo.content);
-
-        try {
-            const strings = await elfAnalyzer.strings(tempFilePath);
-
-            // 匹配 package 字符串的正则表达式（支持版本号）
-            const packageRegex = /package:([a-zA-Z0-9_]+)(?:@([0-9]+\.[0-9]+\.[0-9]+))?/g;
-            const packages = new Set<string>();
-
-            for (const str of strings) {
-                let match;
-                while ((match = packageRegex.exec(str)) !== null) {
-                    const packageName = match[1];
-                    packages.add(packageName);
-                }
-            }
-
-            // 加载 pub.dev 包列表，只保留自研包
-            try {
-                const resPath = path.join(__dirname, '../../../../res/pub_dev_packages.json');
-                const data = fs.readFileSync(resPath, 'utf-8');
-                const jsonData = JSON.parse(data) as { packages: Array<string> };
-                const pubDevPackages = new Set(jsonData.packages);
-
-                // 只保留不在 pub.dev 上的包（自研包）
-                const customPackages = Array.from(packages).filter(name => !pubDevPackages.has(name));
-                return customPackages;
-            } catch (error) {
-                console.warn('Failed to load pub.dev packages, returning all packages:', error);
-                return Array.from(packages);
-            }
-        } finally {
-            // 清理临时文件
-            if (fs.existsSync(tempFilePath)) {
-                fs.unlinkSync(tempFilePath);
-            }
-        }
-    } catch (error) {
-        console.warn('Failed to extract custom Dart packages:', error);
         return [];
     }
 }

@@ -2,7 +2,8 @@
  * 组合匹配器
  */
 
-import type { CombinedRule, FileInfo, RuleMatchResult, FileRule } from '../types';
+import type { FileInfo, FileRule } from '../types';
+import { BaseMatcher } from './base-matcher';
 import { FilenameMatcher } from './filename-matcher';
 import { PathMatcher } from './path-matcher';
 import { MagicMatcher } from './magic-matcher';
@@ -12,26 +13,43 @@ import { ContentMatcher } from './content-matcher';
 /**
  * 组合匹配器
  */
-export class CombinedMatcher {
-    private filenameMatcher: FilenameMatcher;
-    private pathMatcher: PathMatcher;
-    private magicMatcher: MagicMatcher;
-    private extensionMatcher: ExtensionMatcher;
-    private contentMatcher: ContentMatcher;
+export class CombinedMatcher extends BaseMatcher {
+    private matchers: Map<string, BaseMatcher>;
 
     constructor() {
-        this.filenameMatcher = new FilenameMatcher();
-        this.pathMatcher = new PathMatcher();
-        this.magicMatcher = new MagicMatcher();
-        this.extensionMatcher = new ExtensionMatcher();
-        this.contentMatcher = new ContentMatcher();
+        super();
+        // 使用 Map 存储所有匹配器，通过类型动态查找
+        this.matchers = new Map<string, BaseMatcher>();
+        this.registerMatcher(new FilenameMatcher());
+        this.registerMatcher(new PathMatcher());
+        this.registerMatcher(new MagicMatcher());
+        this.registerMatcher(new ExtensionMatcher());
+        this.registerMatcher(new ContentMatcher());
+        this.registerMatcher(this); // 支持嵌套的 combined 规则
+    }
+
+    /**
+     * 获取匹配器类型
+     */
+    public getType = (): string => {
+        return 'combined';
+    };
+
+    /**
+     * 注册匹配器
+     */
+    private registerMatcher(matcher: BaseMatcher): void {
+        this.matchers.set(matcher.getType(), matcher);
     }
 
     /**
      * 匹配组合规则
      */
-    public async match(rule: CombinedRule, fileInfo: FileInfo): Promise<RuleMatchResult> {
-        const results: Array<RuleMatchResult> = [];
+    public match = async (rule: FileRule, fileInfo: FileInfo): Promise<boolean> => {
+        if (rule.type !== 'combined') {
+            return false;
+        }
+        const results: Array<boolean> = [];
 
         // 递归匹配所有子规则
         for (const subRule of rule.rules) {
@@ -41,70 +59,37 @@ export class CombinedMatcher {
 
         // 根据操作符计算最终结果
         switch (rule.operator) {
-            case 'and': {
+            case 'and':
                 // AND: 所有规则都必须匹配
-                const allMatched = results.every(r => r.matched);
-                const avgConfidence = allMatched
-                    ? results.reduce((sum, r) => sum + r.confidence, 0) / results.length
-                    : 0;
-
-                return {
-                    matched: allMatched,
-                    confidence: avgConfidence
-                };
-            }
-            case 'or': {
+                return results.every(r => r);
+            case 'or':
                 // OR: 至少一个规则匹配
-                const anyMatched = results.some(r => r.matched);
-                const maxConfidence = anyMatched
-                    ? Math.max(...results.map(r => r.confidence))
-                    : 0;
-
-                return {
-                    matched: anyMatched,
-                    confidence: maxConfidence
-                };
-            }
+                return results.some(r => r);
             case 'not': {
                 // NOT: 第一个规则匹配，但后续规则都不匹配
                 if (results.length === 0) {
-                    return { matched: false, confidence: 0 };
+                    return false;
                 }
-
-                const firstMatched = results[0].matched;
-                const othersMatched = results.slice(1).some(r => r.matched);
-
-                return {
-                    matched: firstMatched && !othersMatched,
-                    confidence: firstMatched && !othersMatched ? results[0].confidence : 0
-                };
+                const firstMatched = results[0];
+                const othersMatched = results.slice(1).some(r => r);
+                return firstMatched && !othersMatched;
             }
         }
-    }
+    };
 
     /**
      * 匹配单个文件规则
+     * 使用动态查找，现在类型安全
      */
-    private async matchFileRule(rule: FileRule, fileInfo: FileInfo): Promise<RuleMatchResult> {
-        switch (rule.type) {
-            case 'filename':
-                return this.filenameMatcher.match(rule, fileInfo);
-            case 'path':
-                return this.pathMatcher.match(rule, fileInfo);
-            case 'magic':
-                return this.magicMatcher.match(rule, fileInfo);
-            case 'extension':
-                return this.extensionMatcher.match(rule, fileInfo);
-            case 'content':
-                return this.contentMatcher.match(rule, fileInfo);
-            case 'combined':
-                return this.match(rule, fileInfo);
-            default:
-                return {
-                    matched: false,
-                    confidence: 0
-                };
+    private async matchFileRule(rule: FileRule, fileInfo: FileInfo): Promise<boolean> {
+        const matcher = this.matchers.get(rule.type);
+        if (!matcher) {
+            console.warn(`Unknown matcher type: ${rule.type}`);
+            return false;
         }
+
+        // 现在类型安全，因为所有匹配器都接受 FileRule 类型
+        return await matcher.match(rule, fileInfo);
     }
 }
 
