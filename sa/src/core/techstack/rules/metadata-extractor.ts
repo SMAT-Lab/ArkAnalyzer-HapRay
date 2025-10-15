@@ -40,33 +40,39 @@ export class MetadataExtractor {
 
     /**
      * 提取单个字段
+     * 同时执行正则模式提取和自定义提取器，合并结果
      */
     private async extractField(rule: MetadataRule, fileInfo: FileInfo): Promise<unknown> {
-        // 如果指定了自定义提取器，使用自定义提取器
-        if (rule.extractor) {
-            return await this.extractFromCustomExtractor(rule.extractor, fileInfo);
-        }
-
-        // 否则使用正则模式提取
-        if (!rule.patterns || rule.patterns.length === 0) {
-            return null;
-        }
-
         const values: Array<unknown> = [];
 
-        for (const pattern of rule.patterns) {
-            const value = await this.extractFromPattern(pattern, fileInfo);
-            if (value !== null && value !== undefined) {
-                if (Array.isArray(value)) {
-                    // Type assertion: we know value is an array of unknown
-                    values.push(...(value as Array<unknown>));
-                } else {
-                    values.push(value);
+        // 1. 执行正则模式提取
+        if (rule.patterns && rule.patterns.length > 0) {
+            for (const pattern of rule.patterns) {
+                const value = await this.extractFromPattern(pattern, fileInfo);
+                if (value !== null && value !== undefined) {
+                    if (Array.isArray(value)) {
+                        // Type assertion: we know value is an array of unknown
+                        values.push(...(value as Array<unknown>));
+                    } else {
+                        values.push(value);
+                    }
                 }
             }
         }
 
-        // 如果只有一个值，返回单个值；否则返回数组
+        // 2. 执行自定义提取器（如果有）
+        if (rule.extractor) {
+            const extractorValue = await this.extractFromCustomExtractor(rule.extractor, fileInfo);
+            if (extractorValue !== null && extractorValue !== undefined) {
+                if (Array.isArray(extractorValue)) {
+                    values.push(...(extractorValue as Array<unknown>));
+                } else {
+                    values.push(extractorValue);
+                }
+            }
+        }
+
+        // 3. 返回合并后的结果
         if (values.length === 0) {
             return null;
         } else if (values.length === 1) {

@@ -20,23 +20,21 @@ detections:
         patterns: ["flutter_assets/.*"]
     metadataRules:
       - field: "dartVersion"
-        extractor: "extractDartVersion"
+        patterns:
+          - source: "content"
+            pattern: "(\\d+\\.\\d+\\.\\d+) \\(stable\\)"
+            captureGroup: 1
       - field: "flutterHex40"
         extractor: "extractFlutterHex40"
       - field: "flutterVersionLastModified"
         extractor: "extractFlutterVersionLastModified"
       - field: "openSourcePackages"
         extractor: "extractDartPackages"
-      - field: "customPackages"
-        extractor: "extractPubDevPackages"
-
-  - id: "Flutter_Assets"
-    name: "Flutter Assets"
-    type: "Flutter"
-    confidence: 0.90
-    fileRules:
-      - type: "path"
-        patterns: ["flutter_assets/.*"]
+      - field: "flutterVersion"
+        patterns:
+          - source: "content"
+            pattern: "\"flutterVersion\":\"(\\d+\\.\\d+\\.\\d+)\""
+            captureGroup: 1
 
   # ==================== React Native ====================
   - id: "RN_LibReact"
@@ -47,15 +45,23 @@ detections:
       - type: "filename"
         patterns: ["libreact_.*\\.so$","libreact_.*\\.so", "librnoh\\.so", "librnoh_.*\\.so", "libjsi\\.so", "libjsinspector\\.so"]
 
-  - id: "RN bundles"
-    name: "RN bundles"
+  - id: "RN_Bundles"
+    name: "RN Bundles"
     type: "RN"
     confidence: 0.90
     fileRules:
+      # Hermes字节码文件 (.hbc) 或 JS bundle 文件
       - type: "extension"
         extensions: ["hbc", "jsbundle"]
-      - type: "magic"
-        magicBytes: [0xc2, 0x1f, 0xf0, 0x9f]
+      # Hermes字节码魔术字节 (0xc2 0x1f 0xf0 0x9f)
+      - type: "combined"
+        operator: "or"
+        rules:
+          - type: "extension"
+            extensions: ["bundle", "js"]
+          - type: "magic"
+            magicBytes: [0xc2, 0x1f, 0xf0, 0x9f]
+      # CTZ压缩文件 (trip魔术字节)
       - type: "combined"
         operator: "and"
         rules:
@@ -63,11 +69,19 @@ detections:
             extensions: ["ctz"]
           - type: "magic"
             magicBytes: [0x74, 0x72, 0x69, 0x70]
+    metadataRules:
+      # 示例：从文件名提取bundle类型
+      - field: "bundleType"
+        patterns:
+          - source: "filename"
+            pattern: "\\.(hbc|jsbundle|bundle|js|ctz)$"
+            captureGroup: 1
+            transform: "lowercase"
 
   # ==================== Hermes ====================
   - id: "Hermes_Engine"
     name: "Hermes JavaScript Engine"
-    type: "Hermes"
+    type: "RN"
     confidence: 0.95
     fileRules:
       - type: "filename"
@@ -93,7 +107,7 @@ detections:
   # ==================== CMP (Compose Multiplatform) ====================
   - id: "CMP_Skiko"
     name: "Compose Multiplatform"
-    type: "CMP"
+    type: "KMP"
     confidence: 0.95
     fileRules:
       - type: "filename"

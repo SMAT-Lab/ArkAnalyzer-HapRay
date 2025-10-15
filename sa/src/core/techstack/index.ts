@@ -16,6 +16,15 @@ export { FileRuleMatcher } from './rules/file-rule-matcher';
 export { MetadataExtractor } from './rules/metadata-extractor';
 export { CustomExtractorRegistry } from './rules/custom-extractors';
 
+// Matchers
+export { BaseMatcher, IMatcher } from './matchers/base-matcher';
+export { FilenameMatcher } from './matchers/filename-matcher';
+export { PathMatcher } from './matchers/path-matcher';
+export { ExtensionMatcher } from './matchers/extension-matcher';
+export { MagicMatcher } from './matchers/magic-matcher';
+export { ContentMatcher } from './matchers/content-matcher';
+export { CombinedMatcher } from './matchers/combined-matcher';
+
 // 并行执行器
 export { ParallelExecutor } from './detector/parallel-executor';
 

@@ -42,22 +42,19 @@ export class ParallelExecutor {
     ): Promise<DetectionResult | null> {
         try {
             // 1. 匹配文件规则
-            const matchResult = await this.fileRuleMatcher.matchRules(rule.fileRules, fileInfo);
+            const matched = await this.fileRuleMatcher.matchRules(rule.fileRules, fileInfo);
 
-            if (!matchResult.matched) {
+            if (!matched) {
                 return null;
             }
 
             // 2. 提取元数据
             const metadata = await this.metadataExtractor.extractMetadata(rule.metadataRules, fileInfo);
 
-            // 3. 计算最终置信度（规则置信度 * 匹配置信度）
-            const confidence = rule.confidence * matchResult.confidence;
-
-            // 4. 返回检测结果
+            // 3. 返回检测结果（使用规则配置的置信度）
             return {
                 techStack: rule.type,
-                confidence,
+                confidence: rule.confidence,
                 ruleId: rule.id,
                 ruleName: rule.name,
                 metadata

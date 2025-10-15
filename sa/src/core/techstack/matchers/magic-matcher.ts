@@ -2,21 +2,29 @@
  * 魔术字匹配器
  */
 
-import type { MagicRule, FileInfo, RuleMatchResult } from '../types';
+import type { FileRule, FileInfo } from '../types';
+import { BaseMatcher } from './base-matcher';
 
 /**
  * 魔术字匹配器
  */
-export class MagicMatcher {
+export class MagicMatcher extends BaseMatcher {
+    /**
+     * 获取匹配器类型
+     */
+    public getType = (): string => {
+        return 'magic';
+    };
+
     /**
      * 匹配魔术字规则
      */
-    public async match(rule: MagicRule, fileInfo: FileInfo): Promise<RuleMatchResult> {
+    public match = async (rule: FileRule, fileInfo: FileInfo): Promise<boolean> => {
+        if (rule.type !== 'magic') {
+            return false;
+        }
         if (!fileInfo.content) {
-            return {
-                matched: false,
-                confidence: 0
-            };
+            return false;
         }
 
         const offset = rule.offset ?? 0;
@@ -24,26 +32,17 @@ export class MagicMatcher {
 
         // 检查文件是否足够长
         if (fileInfo.content.length < offset + magicBytes.length) {
-            return {
-                matched: false,
-                confidence: 0
-            };
+            return false;
         }
 
         // 比较魔术字
         for (let i = 0; i < magicBytes.length; i++) {
             if (fileInfo.content[offset + i] !== magicBytes[i]) {
-                return {
-                    matched: false,
-                    confidence: 0
-                };
+                return false;
             }
         }
 
-        return {
-            matched: true,
-            confidence: 1.0
-        };
-    }
+        return true;
+    };
 }
 
