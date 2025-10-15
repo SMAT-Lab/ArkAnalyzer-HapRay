@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { HapStaticAnalysisResult, ResourceAnalysisResult } from '../../config/types';
+import type { HapStaticAnalysisResult, ResourceAnalysisResult, SoAnalysisResult } from '../../config/types';
 import { fileExists, ensureDirectoryExists } from '../../utils/file_utils';
 import type { EnhancedJSZipAdapter } from '../../utils/zip-adapter';
 import { createEnhancedZipAdapter } from '../../utils/zip-adapter';
@@ -255,7 +255,7 @@ export class HapAnalysisService {
      */
     private async runTechStackAnalysis(zip: ZipInstance): Promise<{
         detectedFrameworks: Array<string>;
-        soFiles: Array<any>;
+        soFiles: Array<SoAnalysisResult>;
         totalSoFiles: number;
     }> {
         this.ensureDetectorInitialized();
@@ -268,7 +268,7 @@ export class HapAnalysisService {
             // 不使用 fileFilter，让配置文件中的规则决定哪些文件需要检测
             const fileInfos = await HapFileScanner.scanZip(zip, {
                 loadContent: true,
-                maxFileSize: 500 * 1024 * 1024  // 500MB
+                maxFileSize: 500 * 1024 * 1024 // 500MB
             });
 
             logger.info(`📁 Scanned ${fileInfos.length} files from HAP`);

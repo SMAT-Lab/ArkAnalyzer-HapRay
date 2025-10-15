@@ -191,7 +191,7 @@ export interface SoAnalysisResult {
         /** Kotlin 签名列表 */
         kotlinSignatures?: Array<string>;
         /** 其他自定义字段 */
-        [key: string]: any;
+        [key: string]: unknown;
     };
 }
 
