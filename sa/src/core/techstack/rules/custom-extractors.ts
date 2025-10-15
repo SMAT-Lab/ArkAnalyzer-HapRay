@@ -23,9 +23,7 @@ export class CustomExtractorRegistry {
      * 获取单例实例
      */
     public static getInstance(): CustomExtractorRegistry {
-        if (!CustomExtractorRegistry.instance) {
-            CustomExtractorRegistry.instance = new CustomExtractorRegistry();
-        }
+        CustomExtractorRegistry.instance ??= new CustomExtractorRegistry();
         return CustomExtractorRegistry.instance;
     }
 
@@ -71,14 +69,14 @@ export class CustomExtractorRegistry {
  *
  * 注意：这个方法返回的是 pub.dev 上的开源包（排除自研包）
  */
-async function extractDartPackages(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<Array<string>> {
+async function extractDartPackages(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
     if (!fileInfo.content) {
         return [];
     }
 
     try {
         // 使用 ELF 分析器提取字符串
-        const elfAnalyzer = await ElfAnalyzer.getInstance();
+        const elfAnalyzer = ElfAnalyzer.getInstance();
 
         // 创建临时文件
         const tempDir = path.join(process.cwd(), '.temp');
@@ -135,14 +133,14 @@ async function extractDartPackages(fileInfo: FileInfo, pattern?: MetadataPattern
  * 原始逻辑：从 strings 中匹配 Dart 版本字符串
  * 注意：这个方法实际上提取的是 Dart 版本，不是 Flutter 版本
  */
-async function extractFlutterVersion(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<string | null> {
+async function extractFlutterVersion(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<string | null> {
     if (!fileInfo.content) {
         return null;
     }
 
     try {
         // 使用 ELF 分析器提取字符串
-        const elfAnalyzer = await ElfAnalyzer.getInstance();
+        const elfAnalyzer = ElfAnalyzer.getInstance();
 
         // 创建临时文件
         const tempDir = path.join(process.cwd(), '.temp');
@@ -182,14 +180,14 @@ async function extractFlutterVersion(fileInfo: FileInfo, pattern?: MetadataPatte
 /**
  * 提取 Kotlin 签名（使用 ELF 分析器）
  */
-async function extractKotlinSignatures(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<Array<string>> {
+async function extractKotlinSignatures(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
     if (!fileInfo.content) {
         return [];
     }
 
     try {
         // 使用 ELF 分析器提取字符串
-        const elfAnalyzer = await ElfAnalyzer.getInstance();
+        const elfAnalyzer = ElfAnalyzer.getInstance();
 
         // 创建临时文件
         const tempDir = path.join(process.cwd(), '.temp');
@@ -230,14 +228,14 @@ async function extractKotlinSignatures(fileInfo: FileInfo, pattern?: MetadataPat
 /**
  * 提取自研 Dart 包（不在 pub.dev 上的包）
  */
-async function extractPubDevPackages(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<Array<string>> {
+async function extractPubDevPackages(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
     if (!fileInfo.content) {
         return [];
     }
 
     try {
         // 使用 ELF 分析器提取字符串
-        const elfAnalyzer = await ElfAnalyzer.getInstance();
+        const elfAnalyzer = ElfAnalyzer.getInstance();
 
         // 创建临时文件
         const tempDir = path.join(process.cwd(), '.temp');
@@ -292,14 +290,14 @@ async function extractPubDevPackages(fileInfo: FileInfo, pattern?: MetadataPatte
 /**
  * 提取 Flutter 40位 Hex 字符串（从 libflutter.so）
  */
-async function extractFlutterHex40(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<string | null> {
+async function extractFlutterHex40(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<string | null> {
     if (!fileInfo.content) {
         return null;
     }
 
     try {
         // 使用 ELF 分析器提取字符串
-        const elfAnalyzer = await ElfAnalyzer.getInstance();
+        const elfAnalyzer = ElfAnalyzer.getInstance();
 
         // 创建临时文件
         const tempDir = path.join(process.cwd(), '.temp');
@@ -386,9 +384,9 @@ async function getFlutterVersions(): Promise<Map<string, { lastModified: string 
  * 提取 Flutter 版本的最后修改时间
  * 从 flutter_versions.json 中根据 hex40 查找对应的 lastModified
  */
-async function extractFlutterVersionLastModified(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<string | null> {
+async function extractFlutterVersionLastModified(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<string | null> {
     // 首先提取 hex40
-    const hex40 = await extractFlutterHex40(fileInfo, pattern);
+    const hex40 = await extractFlutterHex40(fileInfo);
     if (!hex40) {
         return null;
     }
@@ -398,7 +396,7 @@ async function extractFlutterVersionLastModified(fileInfo: FileInfo, pattern?: M
         const flutterVersions = await getFlutterVersions();
         const versionInfo = flutterVersions.get(hex40);
 
-        if (versionInfo && versionInfo.lastModified) {
+        if (versionInfo?.lastModified) {
             return versionInfo.lastModified;
         }
 
@@ -412,15 +410,15 @@ async function extractFlutterVersionLastModified(fileInfo: FileInfo, pattern?: M
 /**
  * 提取 Dart 版本（从 libflutter.so）
  */
-async function extractDartVersion(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<string | null> {
+async function extractDartVersion(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<string | null> {
     // 复用 extractFlutterVersion
-    return extractFlutterVersion(fileInfo, pattern);
+    return extractFlutterVersion(fileInfo);
 }
 
 /**
  * 提取文件最后修改时间
  */
-async function extractLastModified(fileInfo: FileInfo, pattern?: MetadataPattern): Promise<string | null> {
+async function extractLastModified(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<string | null> {
     if (!fileInfo.lastModified) {
         return null;
     }

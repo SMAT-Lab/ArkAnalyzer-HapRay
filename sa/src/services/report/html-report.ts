@@ -276,7 +276,7 @@ export class HtmlFormatter extends BaseFormatter {
             }
 
             // 优先使用 flutterVersionLastModified，如果没有则使用 lastModified
-            const lastModified = soFile.metadata.flutterVersionLastModified || soFile.metadata.lastModified;
+            const lastModified = (soFile.metadata.flutterVersionLastModified ?? soFile.metadata.lastModified) as string | undefined;
             if (lastModified) {
                 const date = new Date(lastModified);
                 if (!isNaN(date.getTime())) {
@@ -305,7 +305,7 @@ export class HtmlFormatter extends BaseFormatter {
             }
 
             // 如果有通用元数据，也显示出来（排除已经显示的字段）
-            if (soFile.metadata && Object.keys(soFile.metadata).length > 0) {
+            if (Object.keys(soFile.metadata).length > 0) {
                 const excludeKeys = ['flutterHex40', 'dartVersion', 'lastModified', 'flutterVersionLastModified', 'openSourcePackages', 'customPackages', 'kotlinSignatures'];
                 const metadataEntries = Object.entries(soFile.metadata)
                     .filter(([key]) => !excludeKeys.includes(key))

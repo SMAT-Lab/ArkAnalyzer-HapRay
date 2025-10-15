@@ -26,8 +26,8 @@ export interface ExcludeRule {
 export interface DetectionRule {
     id: string;
     name: string;
-    type: string;  // 技术栈类型
-    confidence: number;  // 置信度 0-1
+    type: string; // 技术栈类型
+    confidence: number; // 置信度 0-1
     fileRules: Array<FileRule>;
     metadataRules?: Array<MetadataRule>;
 }
@@ -48,7 +48,7 @@ export type FileRule =
  */
 export interface FilenameRule {
     type: 'filename';
-    patterns: Array<string>;  // 正则表达式
+    patterns: Array<string>; // 正则表达式
 }
 
 /**
@@ -56,7 +56,7 @@ export interface FilenameRule {
  */
 export interface PathRule {
     type: 'path';
-    patterns: Array<string>;  // 正则表达式
+    patterns: Array<string>; // 正则表达式
 }
 
 /**
@@ -81,7 +81,7 @@ export interface ExtensionRule {
  */
 export interface ContentRule {
     type: 'content';
-    patterns: Array<string>;  // 正则表达式或字符串
+    patterns: Array<string>; // 正则表达式或字符串
 }
 
 /**
@@ -97,9 +97,9 @@ export interface CombinedRule {
  * 元数据提取规则
  */
 export interface MetadataRule {
-    field: string;  // 提取字段名
-    patterns?: Array<MetadataPattern>;  // 正则模式（可选）
-    extractor?: string;  // 自定义提取器名称（可选）
+    field: string; // 提取字段名
+    patterns?: Array<MetadataPattern>; // 正则模式（可选）
+    extractor?: string; // 自定义提取器名称（可选）
 }
 
 /**
@@ -107,10 +107,10 @@ export interface MetadataRule {
  */
 export interface MetadataPattern {
     source: 'content' | 'path' | 'filename';
-    pattern: string;  // 正则表达式
-    captureGroup?: number;  // 捕获组索引
+    pattern: string; // 正则表达式
+    captureGroup?: number; // 捕获组索引
     transform?: 'trim' | 'lowercase' | 'uppercase';
-    custom?: string;  // 自定义提取器名称
+    custom?: string; // 自定义提取器名称
 }
 
 /**
@@ -119,10 +119,10 @@ export interface MetadataPattern {
 export interface FileInfo {
     folder: string;
     file: string;
-    path: string;  // 完整路径
+    path: string; // 完整路径
     size: number;
-    content?: Buffer;  // 文件内容（按需加载）
-    lastModified?: Date;  // 最后修改时间
+    content?: Buffer; // 文件内容（按需加载）
+    lastModified?: Date; // 最后修改时间
 }
 
 /**
@@ -133,7 +133,7 @@ export interface DetectionResult {
     confidence: number;
     ruleId: string;
     ruleName: string;
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
 }
 
 /**
@@ -152,7 +152,7 @@ export interface FileDetectionResult {
 export interface RuleMatchResult {
     matched: boolean;
     confidence: number;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }
 
 /**
@@ -161,5 +161,5 @@ export interface RuleMatchResult {
 export type CustomExtractor = (
     fileInfo: FileInfo,
     pattern?: MetadataPattern
-) => Promise<any>;
+) => Promise<unknown>;
 

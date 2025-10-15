@@ -45,7 +45,7 @@ interface TechnologyStackInfoItem {
         flutterHex40?: string;
         dartPackages?: Array<string>;
         kotlinSignatures?: Array<string>;
-        [key: string]: any;
+        [key: string]: unknown;
     };
 }
 

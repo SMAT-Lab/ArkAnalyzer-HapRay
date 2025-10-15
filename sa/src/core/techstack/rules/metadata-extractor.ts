@@ -21,12 +21,12 @@ export class MetadataExtractor {
     public async extractMetadata(
         rules: Array<MetadataRule> | undefined,
         fileInfo: FileInfo
-    ): Promise<Record<string, any>> {
+    ): Promise<Record<string, unknown>> {
         if (!rules || rules.length === 0) {
             return {};
         }
 
-        const metadata: Record<string, any> = {};
+        const metadata: Record<string, unknown> = {};
 
         for (const rule of rules) {
             const value = await this.extractField(rule, fileInfo);
@@ -41,7 +41,7 @@ export class MetadataExtractor {
     /**
      * 提取单个字段
      */
-    private async extractField(rule: MetadataRule, fileInfo: FileInfo): Promise<any> {
+    private async extractField(rule: MetadataRule, fileInfo: FileInfo): Promise<unknown> {
         // 如果指定了自定义提取器，使用自定义提取器
         if (rule.extractor) {
             return await this.extractFromCustomExtractor(rule.extractor, fileInfo);
@@ -52,13 +52,14 @@ export class MetadataExtractor {
             return null;
         }
 
-        const values: Array<any> = [];
+        const values: Array<unknown> = [];
 
         for (const pattern of rule.patterns) {
             const value = await this.extractFromPattern(pattern, fileInfo);
             if (value !== null && value !== undefined) {
                 if (Array.isArray(value)) {
-                    values.push(...value);
+                    // Type assertion: we know value is an array of unknown
+                    values.push(...(value as Array<unknown>));
                 } else {
                     values.push(value);
                 }
@@ -78,7 +79,7 @@ export class MetadataExtractor {
     /**
      * 使用自定义提取器提取数据
      */
-    private async extractFromCustomExtractor(extractorName: string, fileInfo: FileInfo): Promise<any> {
+    private async extractFromCustomExtractor(extractorName: string, fileInfo: FileInfo): Promise<unknown> {
         const extractor = this.customExtractorRegistry.get(extractorName);
         if (!extractor) {
             console.warn(`Custom extractor not found: ${extractorName}`);
@@ -97,7 +98,7 @@ export class MetadataExtractor {
     /**
      * 从模式中提取值
      */
-    private async extractFromPattern(pattern: MetadataPattern, fileInfo: FileInfo): Promise<any> {
+    private async extractFromPattern(pattern: MetadataPattern, fileInfo: FileInfo): Promise<unknown> {
         // 如果有自定义提取器，使用自定义提取器
         if (pattern.custom) {
             const extractor = this.customExtractorRegistry.get(pattern.custom);

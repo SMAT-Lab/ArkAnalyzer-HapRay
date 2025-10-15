@@ -42,7 +42,7 @@ export class ResultAdapter {
      */
     public static toSoAnalysisResults(
         fileDetections: Array<FileDetectionResult>,
-        baseFolder: string
+        _baseFolder: string
     ): Array<SoAnalysisResult> {
         const results: Array<SoAnalysisResult> = [];
 
@@ -63,10 +63,8 @@ export class ResultAdapter {
         const merged: SoAnalysisResult['metadata'] = {};
 
         for (const detection of detections) {
-            if (detection.metadata) {
-                // 合并元数据
-                Object.assign(merged, detection.metadata);
-            }
+            // 合并元数据
+            Object.assign(merged, detection.metadata);
         }
 
         return merged;
@@ -108,7 +106,7 @@ export class ResultAdapter {
                 totalDetections += fileDetection.detections.length;
 
                 for (const detection of fileDetection.detections) {
-                    const count = frameworkCounts.get(detection.techStack) || 0;
+                    const count = frameworkCounts.get(detection.techStack) ?? 0;
                     frameworkCounts.set(detection.techStack, count + 1);
                 }
             }

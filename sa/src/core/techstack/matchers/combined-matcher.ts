@@ -40,46 +40,45 @@ export class CombinedMatcher {
         }
 
         // 根据操作符计算最终结果
-        if (rule.operator === 'and') {
-            // AND: 所有规则都必须匹配
-            const allMatched = results.every(r => r.matched);
-            const avgConfidence = allMatched
-                ? results.reduce((sum, r) => sum + r.confidence, 0) / results.length
-                : 0;
+        switch (rule.operator) {
+            case 'and': {
+                // AND: 所有规则都必须匹配
+                const allMatched = results.every(r => r.matched);
+                const avgConfidence = allMatched
+                    ? results.reduce((sum, r) => sum + r.confidence, 0) / results.length
+                    : 0;
 
-            return {
-                matched: allMatched,
-                confidence: avgConfidence
-            };
-        } else if (rule.operator === 'or') {
-            // OR: 至少一个规则匹配
-            const anyMatched = results.some(r => r.matched);
-            const maxConfidence = anyMatched
-                ? Math.max(...results.map(r => r.confidence))
-                : 0;
-
-            return {
-                matched: anyMatched,
-                confidence: maxConfidence
-            };
-        } else if (rule.operator === 'not') {
-            // NOT: 第一个规则匹配，但后续规则都不匹配
-            if (results.length === 0) {
-                return { matched: false, confidence: 0 };
+                return {
+                    matched: allMatched,
+                    confidence: avgConfidence
+                };
             }
+            case 'or': {
+                // OR: 至少一个规则匹配
+                const anyMatched = results.some(r => r.matched);
+                const maxConfidence = anyMatched
+                    ? Math.max(...results.map(r => r.confidence))
+                    : 0;
 
-            const firstMatched = results[0].matched;
-            const othersMatched = results.slice(1).some(r => r.matched);
+                return {
+                    matched: anyMatched,
+                    confidence: maxConfidence
+                };
+            }
+            case 'not': {
+                // NOT: 第一个规则匹配，但后续规则都不匹配
+                if (results.length === 0) {
+                    return { matched: false, confidence: 0 };
+                }
 
-            return {
-                matched: firstMatched && !othersMatched,
-                confidence: firstMatched && !othersMatched ? results[0].confidence : 0
-            };
-        } else {
-            return {
-                matched: false,
-                confidence: 0
-            };
+                const firstMatched = results[0].matched;
+                const othersMatched = results.slice(1).some(r => r.matched);
+
+                return {
+                    matched: firstMatched && !othersMatched,
+                    confidence: firstMatched && !othersMatched ? results[0].confidence : 0
+                };
+            }
         }
     }
 

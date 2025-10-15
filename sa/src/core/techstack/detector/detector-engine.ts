@@ -25,9 +25,7 @@ export class DetectorEngine {
      * 获取单例实例
      */
     public static getInstance(): DetectorEngine {
-        if (!DetectorEngine.instance) {
-            DetectorEngine.instance = new DetectorEngine();
-        }
+        DetectorEngine.instance ??= new DetectorEngine();
         return DetectorEngine.instance;
     }
 
@@ -86,7 +84,7 @@ export class DetectorEngine {
      * 检查是否应该排除文件
      */
     private shouldExclude(fileInfo: FileInfo): boolean {
-        if (!this.config || !this.config.excludes) {
+        if (!this.config?.excludes) {
             return false;
         }
 

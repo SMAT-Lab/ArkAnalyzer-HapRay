@@ -41,9 +41,7 @@ export class TechStackConfigLoader {
      * 获取单例实例
      */
     public static getInstance(): TechStackConfigLoader {
-        if (!TechStackConfigLoader.instance) {
-            TechStackConfigLoader.instance = new TechStackConfigLoader();
-        }
+        TechStackConfigLoader.instance ??= new TechStackConfigLoader();
         return TechStackConfigLoader.instance;
     }
 
@@ -69,10 +67,11 @@ export class TechStackConfigLoader {
             }
 
             const content = fs.readFileSync(this.configPath, 'utf-8');
-            this.config = yaml.load(content) as TechStackConfig;
+            const loadedConfig = yaml.load(content);
 
-            // 验证配置
-            this.validateConfig(this.config);
+            // 验证配置（类型断言）
+            this.validateConfig(loadedConfig);
+            this.config = loadedConfig;
 
             logger.info(`✅ 技术栈配置加载成功：${this.config.detections.length} 个检测规则`);
 
@@ -93,21 +92,23 @@ export class TechStackConfigLoader {
     /**
      * 验证配置格式
      */
-    private validateConfig(config: TechStackConfig): void {
+    private validateConfig(config: unknown): asserts config is TechStackConfig {
         if (!config || typeof config !== 'object') {
             throw new Error('配置文件格式错误：根对象无效');
         }
 
-        if (!config.version || typeof config.version !== 'string') {
+        const cfg = config as Record<string, unknown>;
+
+        if (!cfg.version || typeof cfg.version !== 'string') {
             throw new Error('配置文件格式错误：缺少 version 字段');
         }
 
-        if (!config.detections || !Array.isArray(config.detections)) {
+        if (!cfg.detections || !Array.isArray(cfg.detections)) {
             throw new Error('配置文件格式错误：缺少 detections 字段或格式错误');
         }
 
         // 验证每个检测规则
-        for (const detection of config.detections) {
+        for (const detection of cfg.detections) {
             this.validateDetectionRule(detection);
         }
     }
@@ -115,29 +116,36 @@ export class TechStackConfigLoader {
     /**
      * 验证检测规则
      */
-    private validateDetectionRule(detection: any): void {
-        if (!detection.id || typeof detection.id !== 'string') {
+    private validateDetectionRule(detection: unknown): void {
+        // 类型守卫：检查是否为对象
+        if (typeof detection !== 'object' || detection === null) {
+            throw new Error('检测规则必须是对象');
+        }
+
+        const det = detection as Record<string, unknown>;
+
+        if (!det.id || typeof det.id !== 'string') {
             throw new Error('检测规则缺少 id 字段');
         }
 
-        if (!detection.name || typeof detection.name !== 'string') {
-            throw new Error(`检测规则 ${detection.id} 缺少 name 字段`);
+        if (!det.name || typeof det.name !== 'string') {
+            throw new Error(`检测规则 ${det.id} 缺少 name 字段`);
         }
 
-        if (!detection.type || typeof detection.type !== 'string') {
-            throw new Error(`检测规则 ${detection.id} 缺少 type 字段`);
+        if (!det.type || typeof det.type !== 'string') {
+            throw new Error(`检测规则 ${det.id} 缺少 type 字段`);
         }
 
-        if (typeof detection.confidence !== 'number' || detection.confidence < 0 || detection.confidence > 1) {
-            throw new Error(`检测规则 ${detection.id} 的 confidence 字段无效（应为 0-1 之间的数字）`);
+        if (typeof det.confidence !== 'number' || det.confidence < 0 || det.confidence > 1) {
+            throw new Error(`检测规则 ${det.id} 的 confidence 字段无效（应为 0-1 之间的数字）`);
         }
 
-        if (!detection.fileRules || !Array.isArray(detection.fileRules)) {
-            throw new Error(`检测规则 ${detection.id} 缺少 fileRules 字段或格式错误`);
+        if (!det.fileRules || !Array.isArray(det.fileRules)) {
+            throw new Error(`检测规则 ${det.id} 缺少 fileRules 字段或格式错误`);
         }
 
-        if (detection.fileRules.length === 0) {
-            throw new Error(`检测规则 ${detection.id} 的 fileRules 不能为空`);
+        if (det.fileRules.length === 0) {
+            throw new Error(`检测规则 ${det.id} 的 fileRules 不能为空`);
         }
     }
 

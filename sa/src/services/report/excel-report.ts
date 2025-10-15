@@ -201,8 +201,8 @@ export class ExcelFormatter extends BaseFormatter {
             }
 
             // 从 metadata 中提取信息
-            const hex40 = soFile.metadata.flutterHex40 || '';
-            const dartVersion = soFile.metadata.dartVersion || '';
+            const hex40 = soFile.metadata.flutterHex40 ?? '';
+            const dartVersion = soFile.metadata.dartVersion ?? '';
 
             // 最后修改时间
             let lastModified = '';
@@ -234,7 +234,7 @@ export class ExcelFormatter extends BaseFormatter {
 
             // 其他元数据
             let metadataStr = '';
-            if (soFile.metadata && Object.keys(soFile.metadata).length > 0) {
+            if (Object.keys(soFile.metadata).length > 0) {
                 const excludeKeys = ['flutterHex40', 'dartVersion', 'lastModified', 'dartPackages', 'kotlinSignatures'];
                 const metadataEntries = Object.entries(soFile.metadata)
                     .filter(([key]) => !excludeKeys.includes(key))

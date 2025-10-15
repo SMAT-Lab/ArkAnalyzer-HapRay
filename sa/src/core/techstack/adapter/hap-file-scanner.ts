@@ -4,6 +4,7 @@
 
 import type { FileInfo } from '../types';
 import type { ZipInstance, ZipEntry } from '../../../types/zip-types';
+import { getSafeFileSize } from '../../../types/zip-types';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -83,7 +84,7 @@ export class HapFileScanner {
     ): Promise<FileInfo | null> {
         const fileName = this.getFileName(filePath);
         const folder = this.getFolder(filePath);
-        const fileSize = zipEntry.uncompressedSize || zipEntry.compressedSize || 0;
+        const fileSize = getSafeFileSize(zipEntry);
 
         // 检查文件大小
         if (fileSize > maxFileSize) {
@@ -150,7 +151,7 @@ export class HapFileScanner {
 
         for (const fileInfo of fileInfos) {
             const ext = this.getExtension(fileInfo.file);
-            const type = ext || 'unknown';
+            const type = ext ?? 'unknown';
 
             if (!groups.has(type)) {
                 groups.set(type, []);
@@ -188,8 +189,8 @@ export class HapFileScanner {
         for (const fileInfo of fileInfos) {
             totalSize += fileInfo.size;
 
-            const ext = this.getExtension(fileInfo.file) || 'unknown';
-            const count = filesByType.get(ext) || 0;
+            const ext = this.getExtension(fileInfo.file) ?? 'unknown';
+            const count = filesByType.get(ext) ?? 0;
             filesByType.set(ext, count + 1);
         }
 

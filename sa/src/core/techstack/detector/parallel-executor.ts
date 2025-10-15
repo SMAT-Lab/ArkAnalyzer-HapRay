@@ -30,7 +30,7 @@ export class ParallelExecutor {
         const results = await Promise.all(promises);
 
         // 过滤掉未匹配的结果
-        return results.filter(result => result !== null) as Array<DetectionResult>;
+        return results.filter((result): result is DetectionResult => result !== null);
     }
 
     /**
