@@ -3,7 +3,7 @@
  */
 
 import type { FileDetectionResult, DetectionResult } from '../types';
-import type { SoAnalysisResult } from '../../../config/types';
+import type { TechStackDetection } from '../../../config/types';
 
 /**
  * 结果适配器
@@ -15,14 +15,17 @@ export class ResultAdapter {
      */
     public static toSoAnalysisResult(
         fileDetection: FileDetectionResult
-    ): SoAnalysisResult | null {
+    ): TechStackDetection | null {
         // 只处理检测到技术栈的文件
         if (fileDetection.detections.length === 0) {
             return null;
         }
 
         // 提取技术栈（取第一个检测到的框架）
-        const techStack = fileDetection.detections[0].techStack;
+        const firstDetection = fileDetection.detections[0];
+        const techStack = firstDetection.techStack;
+        const fileType = firstDetection.ruleName;
+        const confidence = firstDetection.confidence;
 
         // 合并所有元数据
         const metadata = this.mergeMetadata(fileDetection.detections);
@@ -32,6 +35,8 @@ export class ResultAdapter {
             file: fileDetection.file,
             size: fileDetection.size,
             techStack,
+            fileType,
+            confidence,
             metadata
         };
     }
@@ -42,8 +47,8 @@ export class ResultAdapter {
     public static toSoAnalysisResults(
         fileDetections: Array<FileDetectionResult>,
         _baseFolder: string
-    ): Array<SoAnalysisResult> {
-        const results: Array<SoAnalysisResult> = [];
+    ): Array<TechStackDetection> {
+        const results: Array<TechStackDetection> = [];
 
         for (const fileDetection of fileDetections) {
             const soResult = this.toSoAnalysisResult(fileDetection);
@@ -58,8 +63,8 @@ export class ResultAdapter {
     /**
      * 合并所有检测结果的元数据
      */
-    private static mergeMetadata(detections: Array<DetectionResult>): SoAnalysisResult['metadata'] {
-        const merged: SoAnalysisResult['metadata'] = {};
+    private static mergeMetadata(detections: Array<DetectionResult>): TechStackDetection['metadata'] {
+        const merged: TechStackDetection['metadata'] = {};
 
         for (const detection of detections) {
             // 合并元数据

@@ -252,7 +252,7 @@ export class HtmlFormatter extends BaseFormatter {
             analysisDetails: string;
         }> = [];
 
-        for (const soFile of result.soAnalysis.soFiles) {
+        for (const soFile of result.soAnalysis.techStackDetections) {
             // 过滤掉 Unknown 技术栈
             if (soFile.techStack === 'Unknown') {
                 continue; // 跳过没有识别技术栈的 SO 文件
@@ -261,8 +261,16 @@ export class HtmlFormatter extends BaseFormatter {
             let analysisDetails = '无';
             const details: Array<string> = [];
 
-            // 添加技术栈类型
-            details.push(`${soFile.techStack}技术栈`);
+            // 添加规则名称和置信度
+            if (soFile.fileType) {
+                const confidenceStr = soFile.confidence !== undefined
+                    ? ` (置信度: ${(soFile.confidence * 100).toFixed(0)}%)`
+                    : '';
+                details.push(`规则: ${soFile.fileType}${confidenceStr}`);
+            } else {
+                // 兼容旧数据：如果没有规则名称，显示文件类型
+                details.push(`${soFile.techStack}文件类型`);
+            }
 
             // 从 metadata 中提取信息
             const hex40 = soFile.metadata.flutterHex40;

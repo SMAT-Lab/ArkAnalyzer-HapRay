@@ -66,7 +66,7 @@ export class CustomExtractorRegistry {
  * 提取 Dart 包（从 libapp.so）
  * 原始逻辑来自 FlutterAnalyzer.analyzeDartPackages
  *
- * 注意：这个方法返回的是 pub.dev 上的开源包（排除自研包）
+ * 注意：这个方法返回的是 pub.dev 上的开源包（排除自研包），包含版本号
  */
 async function extractDartPackages(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
     if (!fileInfo.content) {
@@ -91,29 +91,58 @@ async function extractDartPackages(fileInfo: FileInfo, _pattern?: MetadataPatter
 
             // 匹配 package 字符串的正则表达式（支持版本号）
             const packageRegex = /package:([a-zA-Z0-9_]+)(?:@([0-9]+\.[0-9]+\.[0-9]+))?/g;
-            const packages = new Set<string>();
+            const packagesMap = new Map<string, string>(); // packageName -> version (or empty)
 
             for (const str of strings) {
                 let match;
                 while ((match = packageRegex.exec(str)) !== null) {
                     const packageName = match[1];
-                    packages.add(packageName);
+                    const version = match[2] || ''; // 版本号可能不存在
+
+                    // 如果已经有这个包，优先保留有版本号的
+                    const existing = packagesMap.get(packageName);
+                    if (!existing || (version && !existing)) {
+                        packagesMap.set(packageName, version);
+                    }
                 }
             }
 
             // 加载 pub.dev 包列表，只保留开源包
             try {
-                const resPath = path.join(__dirname, '../../../../res/pub_dev_packages.json');
+                // 使用与 loadFrameworkConfig 相同的路径查找策略
+                // 先尝试从当前工作目录查找（适用于 ts-node 运行）
+                let resPath = path.join(process.cwd(), 'res/techstack/pub_dev_packages.json');
+
+                // 如果找不到，尝试从编译后的目录查找（适用于编译后运行）
+                if (!fs.existsSync(resPath)) {
+                    let resDir = path.join(__dirname, 'res');
+                    if (!fs.existsSync(resDir)) {
+                        resDir = path.join(__dirname, '../../../../res');
+                    }
+                    resPath = path.join(resDir, 'techstack/pub_dev_packages.json');
+                }
+
                 const data = fs.readFileSync(resPath, 'utf-8');
                 const jsonData = JSON.parse(data) as { packages: Array<string> };
                 const pubDevPackages = new Set(jsonData.packages);
 
                 // 只保留在 pub.dev 上的包（开源包），排除自研包
-                const openSourcePackages = Array.from(packages).filter(name => pubDevPackages.has(name));
+                const openSourcePackages: Array<string> = [];
+                for (const [packageName, version] of packagesMap.entries()) {
+                    if (pubDevPackages.has(packageName)) {
+                        // 如果有版本号，格式为 "packageName@version"，否则只显示包名
+                        openSourcePackages.push(version ? `${packageName}@${version}` : packageName);
+                    }
+                }
                 return openSourcePackages;
             } catch (error) {
                 console.warn('Failed to load pub.dev packages, returning all packages:', error);
-                return Array.from(packages);
+                // 返回所有包（带版本号）
+                const allPackages: Array<string> = [];
+                for (const [packageName, version] of packagesMap.entries()) {
+                    allPackages.push(version ? `${packageName}@${version}` : packageName);
+                }
+                return allPackages;
             }
         } finally {
             // 清理临时文件
@@ -291,12 +320,23 @@ async function extractFlutterHex40(fileInfo: FileInfo, _pattern?: MetadataPatter
 
 /**
  * 获取 Flutter 版本映射
- * 从 res/flutter_versions.json 加载
+ * 从 res/techstack/flutter_versions.json 加载
  */
 async function getFlutterVersions(): Promise<Map<string, { lastModified: string }>> {
     try {
-        // 从本地资源文件读取版本映射
-        const resPath = path.join(__dirname, '../../../../res/flutter_versions.json');
+        // 使用与 loadFrameworkConfig 相同的路径查找策略
+        // 先尝试从当前工作目录查找（适用于 ts-node 运行）
+        let resPath = path.join(process.cwd(), 'res/techstack/flutter_versions.json');
+
+        // 如果找不到，尝试从编译后的目录查找（适用于编译后运行）
+        if (!fs.existsSync(resPath)) {
+            let resDir = path.join(__dirname, 'res');
+            if (!fs.existsSync(resDir)) {
+                resDir = path.join(__dirname, '../../../../res');
+            }
+            resPath = path.join(resDir, 'techstack/flutter_versions.json');
+        }
+
         if (fs.existsSync(resPath)) {
             const data = fs.readFileSync(resPath, 'utf-8');
             const versionsData = JSON.parse(data) as Record<string, { lastModified: string }>;
@@ -308,7 +348,7 @@ async function getFlutterVersions(): Promise<Map<string, { lastModified: string 
 
             return versions;
         } else {
-            console.warn('flutter_versions.json not found in res directory, using empty map');
+            console.warn('flutter_versions.json not found in res/techstack directory, using empty map');
             return new Map();
         }
     } catch (error) {

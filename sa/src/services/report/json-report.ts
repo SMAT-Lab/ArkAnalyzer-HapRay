@@ -230,19 +230,19 @@ export class JsonFormatter extends BaseFormatter {
         const items: Array<TechnologyStackInfoItem> = [];
 
         // 收集所有SO文件的技术栈信息
-        for (const soFile of result.soAnalysis.soFiles) {
+        for (const techStackDetection of result.soAnalysis.techStackDetections) {
             // 过滤掉 Unknown 技术栈
-            if (soFile.techStack === 'Unknown') {
+            if (techStackDetection.techStack === 'Unknown') {
                 continue;
             }
 
             // 直接使用 SoAnalysisResult 格式
             const item: TechnologyStackInfoItem = {
-                folder: soFile.folder,
-                file: soFile.file,
-                size: soFile.size,
-                techStack: soFile.techStack,
-                metadata: soFile.metadata
+                folder: techStackDetection.folder,
+                file: techStackDetection.file,
+                size: techStackDetection.size,
+                techStack: techStackDetection.techStack,
+                metadata: techStackDetection.metadata
             };
 
             items.push(item);

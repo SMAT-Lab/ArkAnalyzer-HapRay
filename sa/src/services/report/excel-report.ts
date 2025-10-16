@@ -194,19 +194,19 @@ export class ExcelFormatter extends BaseFormatter {
         ];
 
         // 添加数据
-        result.soAnalysis.soFiles.forEach(soFile => {
+        result.soAnalysis.techStackDetections.forEach(techStackDetection => {
             // 过滤掉 Unknown 框架
-            if (soFile.techStack === 'Unknown') {
+            if (techStackDetection.techStack === 'Unknown') {
                 return; // 跳过没有识别框架的文件
             }
 
             // 从 metadata 中提取信息
-            const hex40 = soFile.metadata.flutterHex40 ?? '';
-            const dartVersion = soFile.metadata.dartVersion ?? '';
+            const hex40 = techStackDetection.metadata.flutterHex40 ?? '';
+            const dartVersion = techStackDetection.metadata.dartVersion ?? '';
 
             // 最后修改时间
             let lastModified = '';
-            const lastModifiedStr = soFile.metadata.lastModified;
+            const lastModifiedStr = techStackDetection.metadata.lastModified;
             if (lastModifiedStr) {
                 const date = new Date(lastModifiedStr);
                 if (!isNaN(date.getTime())) {
@@ -216,27 +216,27 @@ export class ExcelFormatter extends BaseFormatter {
 
             // Dart 包
             let dartPackages = '';
-            if (soFile.metadata.dartPackages && Array.isArray(soFile.metadata.dartPackages)) {
-                const packageNames = soFile.metadata.dartPackages
+            if (techStackDetection.metadata.dartPackages && Array.isArray(techStackDetection.metadata.dartPackages)) {
+                const packageNames = techStackDetection.metadata.dartPackages
                     .slice(0, 10) // Excel 中可以显示更多
                     .join(', ');
-                const more = soFile.metadata.dartPackages.length > 10
-                    ? ` 等${soFile.metadata.dartPackages.length}个`
+                const more = techStackDetection.metadata.dartPackages.length > 10
+                    ? ` 等${techStackDetection.metadata.dartPackages.length}个`
                     : '';
                 dartPackages = `${packageNames}${more}`;
             }
 
             // KMP 相关信息
             let kmpSignatures = '';
-            if (soFile.metadata.kotlinSignatures && Array.isArray(soFile.metadata.kotlinSignatures)) {
-                kmpSignatures = soFile.metadata.kotlinSignatures.join(', ');
+            if (techStackDetection.metadata.kotlinSignatures && Array.isArray(techStackDetection.metadata.kotlinSignatures)) {
+                kmpSignatures = techStackDetection.metadata.kotlinSignatures.join(', ');
             }
 
             // 其他元数据
             let metadataStr = '';
-            if (Object.keys(soFile.metadata).length > 0) {
+            if (Object.keys(techStackDetection.metadata).length > 0) {
                 const excludeKeys = ['flutterHex40', 'dartVersion', 'lastModified', 'dartPackages', 'kotlinSignatures'];
-                const metadataEntries = Object.entries(soFile.metadata)
+                const metadataEntries = Object.entries(techStackDetection.metadata)
                     .filter(([key]) => !excludeKeys.includes(key))
                     .map(([key, value]) => `${key}: ${value}`)
                     .join('; ');
@@ -244,10 +244,10 @@ export class ExcelFormatter extends BaseFormatter {
             }
 
             worksheet.addRow({
-                fileName: soFile.file,
-                filePath: `${soFile.folder}/${soFile.file}`,
-                technologyStack: soFile.techStack,
-                fileSize: this.formatFileSize(soFile.size),
+                fileName: techStackDetection.file,
+                filePath: `${techStackDetection.folder}/${techStackDetection.file}`,
+                technologyStack: techStackDetection.techStack,
+                fileSize: this.formatFileSize(techStackDetection.size),
                 hex40: hex40,
                 dartVersion: dartVersion,
                 lastModified: lastModified,

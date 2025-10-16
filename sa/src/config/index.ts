@@ -51,11 +51,6 @@ export * from '../types/zip-types';
 // 错误类
 export * from '../errors';
 
-// 配置
-export * from '../config/framework-patterns';
-export * from '../config/magic-numbers';
-export * from '../config/types-config';
-
 // 工具函数
 export * from '../utils/file_utils';
 export * from '../utils/zip-adapter';

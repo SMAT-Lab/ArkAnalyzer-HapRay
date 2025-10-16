@@ -158,10 +158,10 @@ export abstract class BaseFormatter {
     protected getFrameworkStats(result: HapStaticAnalysisResult): Array<{framework: string, count: number, percentage: string}> {
         const frameworkCount = new Map<string, number>();
 
-        result.soAnalysis.soFiles.forEach(soFile => {
+        result.soAnalysis.techStackDetections.forEach(techStackDetection => {
             // 过滤掉 Unknown 框架
-            if (soFile.techStack !== 'Unknown') {
-                frameworkCount.set(soFile.techStack, (frameworkCount.get(soFile.techStack) ?? 0) + 1);
+            if (techStackDetection.techStack !== 'Unknown') {
+                frameworkCount.set(techStackDetection.techStack, (frameworkCount.get(techStackDetection.techStack) ?? 0) + 1);
             }
         });
 

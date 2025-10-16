@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { HapStaticAnalysisResult, ResourceAnalysisResult, SoAnalysisResult } from '../../config/types';
+import type { HapStaticAnalysisResult, ResourceAnalysisResult, TechStackDetection } from '../../config/types';
 import { fileExists, ensureDirectoryExists } from '../../utils/file_utils';
 import type { EnhancedJSZipAdapter } from '../../utils/zip-adapter';
 import { createEnhancedZipAdapter } from '../../utils/zip-adapter';
@@ -244,7 +244,7 @@ export class HapAnalysisService {
      */
     private async runTechStackAnalysis(zip: ZipInstance): Promise<{
         detectedFrameworks: Array<string>;
-        soFiles: Array<SoAnalysisResult>;
+        techStackDetections: Array<TechStackDetection>;
         totalSoFiles: number;
     }> {
         this.ensureDetectorInitialized();
@@ -263,7 +263,7 @@ export class HapAnalysisService {
             const detectionResults = await this.detectorEngine.detectFiles(fileInfos);
 
             // 3. 转换为现有格式
-            const soAnalysisResults = ResultAdapter.toSoAnalysisResults(detectionResults, '');
+            const techStackDetections = ResultAdapter.toSoAnalysisResults(detectionResults, '');
 
             // 4. 提取所有检测到的框架
             const detectedFrameworks = ResultAdapter.extractAllFrameworks(detectionResults);
@@ -285,8 +285,8 @@ export class HapAnalysisService {
 
             return {
                 detectedFrameworks,
-                soFiles: soAnalysisResults,
-                totalSoFiles: soAnalysisResults.length
+                techStackDetections: techStackDetections,
+                totalSoFiles: techStackDetections.length
             };
         } catch (error) {
             logger.error('❌ TechStack analysis failed:', error);
@@ -323,9 +323,9 @@ export class HapAnalysisService {
         logger.info(`SO文件总数：${result.soAnalysis.totalSoFiles}`);
         logger.info(`识别到的框架：${result.soAnalysis.detectedFrameworks.join(', ') || '无'}`);
 
-        if (result.soAnalysis.soFiles.length > 0) {
+        if (result.soAnalysis.techStackDetections.length > 0) {
             logger.info('SO 文件列表:');
-            for (const soFile of result.soAnalysis.soFiles) {
+            for (const soFile of result.soAnalysis.techStackDetections) {
                 logger.info(`  - ${soFile.file}（${soFile.techStack}）`);
             }
         }

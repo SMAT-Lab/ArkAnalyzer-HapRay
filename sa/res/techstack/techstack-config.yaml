@@ -16,20 +16,28 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libflutter\\.so$", "libapp\\.so$"]
-      - type: "path"
-        patterns: ["flutter_assets/.*"]
     metadataRules:
       - field: "dartVersion"
         patterns:
           - source: "content"
             pattern: "(\\d+\\.\\d+\\.\\d+) \\(stable\\)"
             captureGroup: 1
-      - field: "flutterHex40"
+      - field: "Key"
         extractor: "extractFlutterHex40"
       - field: "flutterVersionLastModified"
         extractor: "extractFlutterVersionLastModified"
       - field: "openSourcePackages"
         extractor: "extractDartPackages"
+      
+
+  - id: "FlutterAssets"
+    name: "Flutter Assets"
+    type: "Flutter"
+    confidence: 0.95
+    fileRules:
+      - type: "path"
+        patterns: ["flutter_assets/.*"]
+    metadataRules:
       - field: "flutterVersion"
         patterns:
           - source: "content"
@@ -45,40 +53,6 @@ detections:
       - type: "filename"
         patterns: ["libreact_.*\\.so$","libreact_.*\\.so", "librnoh\\.so", "librnoh_.*\\.so", "libjsi\\.so", "libjsinspector\\.so"]
 
-  - id: "RN_Bundles"
-    name: "RN Bundles"
-    type: "RN"
-    confidence: 0.90
-    fileRules:
-      # Hermes字节码文件 (.hbc) 或 JS bundle 文件
-      - type: "extension"
-        extensions: ["hbc", "jsbundle"]
-      # Hermes字节码魔术字节 (0xc2 0x1f 0xf0 0x9f)
-      - type: "combined"
-        operator: "or"
-        rules:
-          - type: "extension"
-            extensions: ["bundle", "js"]
-          - type: "magic"
-            magicBytes: [0xc2, 0x1f, 0xf0, 0x9f]
-      # CTZ压缩文件 (trip魔术字节)
-      - type: "combined"
-        operator: "and"
-        rules:
-          - type: "extension"
-            extensions: ["ctz"]
-          - type: "magic"
-            magicBytes: [0x74, 0x72, 0x69, 0x70]
-    metadataRules:
-      # 示例：从文件名提取bundle类型
-      - field: "bundleType"
-        patterns:
-          - source: "filename"
-            pattern: "\\.(hbc|jsbundle|bundle|js|ctz)$"
-            captureGroup: 1
-            transform: "lowercase"
-
-  # ==================== Hermes ====================
   - id: "Hermes_Engine"
     name: "Hermes JavaScript Engine"
     type: "RN"
@@ -87,6 +61,24 @@ detections:
       - type: "filename"
         patterns: ["libhermes\\.so$"]
 
+  - id: "RN bundles"
+    name: "RN bundles"
+    type: "RN"
+    confidence: 0.90
+    fileRules:
+      - type: "extension"
+        extensions: ["hbc", "jsbundle"]
+      - type: "magic"
+        magicBytes: [0xc2, 0x1f, 0xf0, 0x9f]
+      - type: "combined"
+        operator: "and"
+        rules:
+          - type: "extension"
+            extensions: ["ctz"]
+          - type: "magic"
+            magicBytes: [0x74, 0x72, 0x69, 0x70]
+    #提取二进制还是文本标记
+      
   # ==================== KMP (Kotlin Multiplatform) ====================
   - id: "KMP_LibKn"
     name: "Kotlin Multiplatform"
@@ -99,12 +91,16 @@ detections:
           - type: "filename"
             patterns: [".*\\.so$"]
           - type: "content"
-            patterns: ["kfun:", "Kotlin", "kotlin", "KOTLIN_NATIVE"]
-    metadataRules:
-      - field: "kotlinSignatures"
-        extractor: "extractKotlinSignatures"
+            patterns:
+              - pattern: "KOTLIN_NATIVE_AVAILABLE_PROCESSORS"
+                confidence: 0.95
+              - pattern: "kfun:"
+                confidence: 0.5
+              - pattern: "Kotlin"
+                confidence: 0.5
+              - pattern: "kotlin"
+                confidence: 0.5
 
-  # ==================== CMP (Compose Multiplatform) ====================
   - id: "CMP_Skiko"
     name: "Compose Multiplatform"
     type: "KMP"
