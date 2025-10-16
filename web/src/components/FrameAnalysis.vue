@@ -831,15 +831,11 @@ const filteredStutters = computed(() => {
         ...performanceData.value.stutter_details.render_stutter
     ];
 
-    // 只保留有调用链的条目
-    const stuttersWithCallchain = allStutters.filter(stutter => 
-        stutter.sample_callchains && stutter.sample_callchains.length > 0
-    );
-
-    if (activeFilter.value === 'all') return stuttersWithCallchain;
+    // 显示所有卡顿条目（包括没有调用链的），仅按等级过滤
+    if (activeFilter.value === 'all') return allStutters;
 
     const level = parseInt(activeFilter.value.split('_')[1]);
-    return stuttersWithCallchain.filter(stutter => stutter.stutter_level === level);
+    return allStutters.filter(stutter => stutter.stutter_level === level);
 });
 
 // 卡顿级别颜色
