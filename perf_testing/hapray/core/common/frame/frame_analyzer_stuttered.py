@@ -23,7 +23,6 @@ from typing import Any, Optional
 from ...config.config import Config
 from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
-from .frame_data_basic_accessor import FrameDbBasicAccessor
 from .frame_data_parser import get_frame_type, parse_frame_slice_db
 from .frame_time_utils import FrameTimeUtils
 
@@ -171,25 +170,18 @@ class StutteredFrameAnalyzer:
                 logging.warning('Failed to get runtime from database, setting to None')
                 runtime = None
 
-            # 使用应用级过滤获取帧数据
-            if app_pids:
-                logging.info('使用应用级过滤，PID列表: %s', app_pids)
-                frames_df = FrameDbBasicAccessor.get_frames_data(conn, app_pids)
-
-                if frames_df.empty:
-                    logging.info('未找到应用相关的帧数据')
-                    return None
-
-                # 将DataFrame转换为按vsync分组的字典格式（保持兼容性）
-                data = self._convert_dataframe_to_vsync_groups(frames_df)
-            else:
-                logging.warning('未提供app_pids，使用系统级数据（不推荐）')
-                data = parse_frame_slice_db(db_path)
+            # 始终获取所有帧数据用于统计（fps_stats, frame_stats等）
+            logging.info('获取所有进程的帧数据用于统计分析')
+            data = parse_frame_slice_db(db_path)
 
             # 检查是否有有效数据
             if not data:
                 logging.info('未找到任何帧数据')
                 return None
+
+            # 如果提供了app_pids，记录用于后续的调用链分析过滤
+            if app_pids:
+                logging.info('应用进程PID列表: %s (用于调用链分析过滤)', app_pids)
 
             LOW_FPS_THRESHOLD = 45  # 低FPS阈值
 
