@@ -46,6 +46,8 @@ Options:
 - `--round <N>`: Number of test rounds to execute (default: 5)
 - `--no-trace`: Disable trace capturing
 - `--devices <device_serial_numbers...>`: Device serial numbers (e.g., HX1234567890)
+- `--manual`: Enable manual testing mode with interactive 30-second performance data collection
+- `--app`: Target application bundle name for manual testing (performance data will be collected for 30 seconds)
 
 Requirements:
 - hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
@@ -57,6 +59,9 @@ python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir 
 
 # Run specific test cases sample CPU cycles
 python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
+
+# Run manual testing 
+python -m scripts.main perf --manual --app your_app_bundle_name
 ```
 
 #### Simplified Test Execution (`prepare`)
