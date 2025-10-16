@@ -261,6 +261,16 @@ class PerfAction:
             metavar='HOMECHECK_DIR',
             help='Enable HapFlow pipeline and specify Homecheck root directory',
         )
+        parser.add_argument(
+            '--manual',
+            action='store_true',
+            help='Enable manual testing mode with interactive 30-second performance data collection',
+        )
+        parser.add_argument(
+            '--app',
+            default=None,
+            help='Target application bundle name for manual testing (performance data will be collected for 30 seconds)',
+        )
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
             parsed_args.circles = True
@@ -276,6 +286,10 @@ class PerfAction:
             Config.set('hiperf.event', 'raw-cpu-cycles')
         if parsed_args.so_dir is not None:
             Config.set('so_dir', parsed_args.so_dir)
+        if parsed_args.manual:
+            Config.set('run_testcases', ['PerformanceDynamic_Manual'])
+            Config.set('app', parsed_args.app)
+
         Config.set('trace.enable', not parsed_args.no_trace)
 
         so_dir = Config.get('so_dir', None)
