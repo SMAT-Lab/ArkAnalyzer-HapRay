@@ -2,7 +2,7 @@
  * 内容匹配器
  */
 
-import type { FileRule, FileInfo, ContentPattern } from '../types';
+import type { FileRule, FileInfo } from '../types';
 import { BaseMatcher } from './base-matcher';
 
 /**
@@ -56,8 +56,8 @@ export class ContentMatcher extends BaseMatcher {
             if (typeof patternItem === 'string') {
                 pattern = patternItem;
             } else {
-                pattern = (patternItem as ContentPattern).pattern;
-                confidence = (patternItem as ContentPattern).confidence ?? 0.5;
+                pattern = (patternItem).pattern;
+                confidence = (patternItem).confidence ?? 0.5;
             }
 
             try {
