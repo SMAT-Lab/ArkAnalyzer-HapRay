@@ -11,20 +11,30 @@ import { ExtensionMatcher } from './extension-matcher';
 import { ContentMatcher } from './content-matcher';
 
 /**
+ * 组合匹配结果
+ */
+export interface CombinedMatchResult {
+    matched: boolean;
+    confidence?: number;
+}
+
+/**
  * 组合匹配器
  */
 export class CombinedMatcher extends BaseMatcher {
     private matchers: Map<string, BaseMatcher>;
+    private contentMatcher: ContentMatcher;
 
     constructor() {
         super();
         // 使用 Map 存储所有匹配器，通过类型动态查找
         this.matchers = new Map<string, BaseMatcher>();
+        this.contentMatcher = new ContentMatcher();
         this.registerMatcher(new FilenameMatcher());
         this.registerMatcher(new PathMatcher());
         this.registerMatcher(new MagicMatcher());
         this.registerMatcher(new ExtensionMatcher());
-        this.registerMatcher(new ContentMatcher());
+        this.registerMatcher(this.contentMatcher);
         this.registerMatcher(this); // 支持嵌套的 combined 规则
     }
 
@@ -46,50 +56,77 @@ export class CombinedMatcher extends BaseMatcher {
      * 匹配组合规则
      */
     public match = async (rule: FileRule, fileInfo: FileInfo): Promise<boolean> => {
-        if (rule.type !== 'combined') {
-            return false;
-        }
-        const results: Array<boolean> = [];
-
-        // 递归匹配所有子规则
-        for (const subRule of rule.rules) {
-            const result = await this.matchFileRule(subRule, fileInfo);
-            results.push(result);
-        }
-
-        // 根据操作符计算最终结果
-        switch (rule.operator) {
-            case 'and':
-                // AND: 所有规则都必须匹配
-                return results.every(r => r);
-            case 'or':
-                // OR: 至少一个规则匹配
-                return results.some(r => r);
-            case 'not': {
-                // NOT: 第一个规则匹配，但后续规则都不匹配
-                if (results.length === 0) {
-                    return false;
-                }
-                const firstMatched = results[0];
-                const othersMatched = results.slice(1).some(r => r);
-                return firstMatched && !othersMatched;
-            }
-        }
+        const result = await this.matchWithConfidence(rule, fileInfo);
+        return result.matched;
     };
 
     /**
-     * 匹配单个文件规则
-     * 使用动态查找，现在类型安全
+     * 匹配组合规则（带置信度）
      */
-    private async matchFileRule(rule: FileRule, fileInfo: FileInfo): Promise<boolean> {
+    public matchWithConfidence = async (rule: FileRule, fileInfo: FileInfo): Promise<CombinedMatchResult> => {
+        if (rule.type !== 'combined') {
+            return { matched: false };
+        }
+        const results: Array<boolean> = [];
+        const confidences: Array<number> = [];
+
+        // 递归匹配所有子规则
+        for (const subRule of rule.rules) {
+            const result = await this.matchFileRuleWithConfidence(subRule, fileInfo);
+            results.push(result.matched);
+            if (result.confidence !== undefined) {
+                confidences.push(result.confidence);
+            }
+        }
+
+        // 根据操作符计算最终结果
+        let matched = false;
+        switch (rule.operator) {
+            case 'and':
+                // AND: 所有规则都必须匹配
+                matched = results.every(r => r);
+                break;
+            case 'or':
+                // OR: 至少一个规则匹配
+                matched = results.some(r => r);
+                break;
+            case 'not': {
+                // NOT: 第一个规则匹配，但后续规则都不匹配
+                if (results.length === 0) {
+                    matched = false;
+                } else {
+                    const firstMatched = results[0];
+                    const othersMatched = results.slice(1).some(r => r);
+                    matched = firstMatched && !othersMatched;
+                }
+                break;
+            }
+        }
+
+        // 计算置信度（取最高值）
+        const confidence = confidences.length > 0 ? Math.max(...confidences) : undefined;
+
+        return { matched, confidence };
+    };
+
+    /**
+     * 匹配单个文件规则（带置信度）
+     */
+    private async matchFileRuleWithConfidence(rule: FileRule, fileInfo: FileInfo): Promise<CombinedMatchResult> {
         const matcher = this.matchers.get(rule.type);
         if (!matcher) {
             console.warn(`Unknown matcher type: ${rule.type}`);
-            return false;
+            return { matched: false };
         }
 
-        // 现在类型安全，因为所有匹配器都接受 FileRule 类型
-        return await matcher.match(rule, fileInfo);
+        // 特殊处理 ContentMatcher，获取置信度
+        if (rule.type === 'content' && matcher instanceof ContentMatcher) {
+            return await matcher.matchWithConfidence(rule, fileInfo);
+        }
+
+        // 其他匹配器只返回布尔值
+        const matched = await matcher.match(rule, fileInfo);
+        return { matched, confidence: matched ? 1.0 : undefined };
     }
 }
 

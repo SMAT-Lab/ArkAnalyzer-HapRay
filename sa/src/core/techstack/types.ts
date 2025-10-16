@@ -81,7 +81,15 @@ export interface ExtensionRule {
  */
 export interface ContentRule {
     type: 'content';
-    patterns: Array<string>; // 正则表达式或字符串
+    patterns: Array<string | ContentPattern>; // 正则表达式或字符串，或带置信度的模式
+}
+
+/**
+ * 内容模式（支持置信度）
+ */
+export interface ContentPattern {
+    pattern: string; // 正则表达式或字符串
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**

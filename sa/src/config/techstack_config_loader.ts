@@ -20,21 +20,19 @@ export class TechStackConfigLoader {
 
     private constructor() {
         // 使用与 loadFrameworkConfig 相同的路径查找策略
-        // 先尝试当前目录，再尝试上级目录
-        let resDir = path.join(__dirname, 'res');
-        if (!fs.existsSync(resDir)) {
-            resDir = path.join(__dirname, '../../res');
-        }
+        // 先尝试从当前工作目录查找（适用于 ts-node 运行）
+        let configPath = path.join(process.cwd(), 'res/techstack/techstack-config.yaml');
 
-        this.configPath = path.join(resDir, 'techstack-config.yaml');
-
-        // 如果还是找不到，尝试从当前工作目录查找
-        if (!fs.existsSync(this.configPath)) {
-            const cwdPath = path.join(process.cwd(), 'res/techstack-config.yaml');
-            if (fs.existsSync(cwdPath)) {
-                this.configPath = cwdPath;
+        // 如果找不到，尝试从编译后的目录查找（适用于编译后运行）
+        if (!fs.existsSync(configPath)) {
+            let resDir = path.join(__dirname, 'res');
+            if (!fs.existsSync(resDir)) {
+                resDir = path.join(__dirname, '../../res');
             }
+            configPath = path.join(resDir, 'techstack/techstack-config.yaml');
         }
+
+        this.configPath = configPath;
     }
 
     /**

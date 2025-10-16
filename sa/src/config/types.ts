@@ -12,8 +12,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { createFrameworkTypeEnum, createFileTypeEnum } from '../config/types-config';
-
 export enum OSPlatform {
     HarmonyOS = 0,
     Android = 1,
@@ -143,9 +141,22 @@ export interface GlobalConfig {
 
 
 /**
- * 技术栈框架类型 - 从配置文件动态生成
+ * 技术栈框架类型
  */
-export const FrameworkType = createFrameworkTypeEnum();
+export enum FrameworkType {
+    RN = 'RN',
+    Flutter = 'Flutter',
+    Hermes = 'Hermes',
+    KMP = 'KMP',
+    CMP = 'CMP',
+    Lynx = 'Lynx',
+    Qt = 'Qt',
+    Unity = 'Unity',
+    Taro = 'Taro',
+    Weex = 'Weex',
+    System = 'System',
+    Unknown = 'Unknown'
+}
 
 /**
  * 框架类型的类型定义
@@ -167,7 +178,7 @@ export interface KmpAnalysisDetail {
     detectionMethod: 'pattern' | 'deep';
 }
 
-export interface SoAnalysisResult {
+export interface TechStackDetection {
     /** 文件夹路径 */
     folder: string;
     /** 文件名 */
@@ -176,6 +187,10 @@ export interface SoAnalysisResult {
     size: number;
     /** 技术栈类型 */
     techStack: string;
+    /** 文件类型 */
+    fileType?: string;
+    /** 置信度 */
+    confidence?: number;
     /** 元数据（包含所有提取的信息） */
     metadata: {
         /** 版本信息 */
@@ -196,15 +211,9 @@ export interface SoAnalysisResult {
 }
 
 /**
- * 文件类型枚举 - 从配置文件动态生成
+ * 文件类型枚举
  */
-export const FileType = createFileTypeEnum();
-
-/**
- * 文件类型的类型定义
- */
- 
-export type FileType = keyof typeof FileType;
+export type FileType = string;
 
 /**
  * 魔术字定义
@@ -323,9 +332,9 @@ export interface HapStaticAnalysisResult {
     /** SO文件分析结果 */
     soAnalysis: {
         /** 检测到的框架 */
-        detectedFrameworks: Array<FrameworkTypeKey>;
+        detectedFrameworks: Array<string>;
         /** SO文件详情 */
-        soFiles: Array<SoAnalysisResult>;
+        techStackDetections: Array<TechStackDetection>;
         /** 总SO文件数 */
         totalSoFiles: number;
     };
