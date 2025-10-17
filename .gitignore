@@ -10,13 +10,16 @@ package-lock.json
 web/dist/
 toolbox/hapray-toolbox*.zip
 *.tgz
+*.zip
 build
 dist
 
 # Third-party and Generated Directories
 third-party/HapRayDep/
 third-party/trace_streamer_binary/
+third-party/xvm/
 perf_testing/hapray-toolbox/
+perf_testing/sa-cmd/
 perf_testing/.tox
 perf_testing/tmp_hypium/
 perf_testing/ts_tmp.perf.data
@@ -27,3 +30,11 @@ perf_testing/files_results_cache/
 
 # Log
 *.log
+
+# Performance Testing Reports
+perf_testing/scripts/reports/
+
+# staticanalyzer
+sa/lib
+hapray-sa
+

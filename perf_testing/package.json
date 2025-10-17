@@ -1,6 +1,6 @@
 {
   "name": "perf_testing",
-  "version": "1.0.2",
+  "version": "1.0.9",
   "files": [
     "dist"
   ],
@@ -12,6 +12,7 @@
     "build": "",
     "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
     "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint",
+    "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix",
     "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe",
     "prepack": "npm run build:python && node zip.js ArkAnalyzer-HapRay"
   },

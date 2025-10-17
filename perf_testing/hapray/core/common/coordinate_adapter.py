@@ -15,18 +15,17 @@ limitations under the License.
 
 # coding: utf-8
 import re
-from typing import Tuple
 
 from hypium import UiDriver
 
-from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.exe_utils import ExeUtils
 
 
 class CoordinateAdapter:
     """坐标自适应工具类，用于处理不同设备间的坐标转换"""
 
     @staticmethod
-    def get_device_screen_size(driver: UiDriver, source_width: int, source_height: int) -> Tuple[int, int]:
+    def get_device_screen_size(driver: UiDriver, source_width: int, source_height: int) -> tuple[int, int]:
         """获取当前设备的屏幕尺寸
 
         Args:
@@ -40,7 +39,7 @@ class CoordinateAdapter:
         try:
             # 使用hidumper命令获取屏幕尺寸
             cmd = f'hdc -t {driver.device_sn} shell hidumper -s RenderService -a screen'
-            result = CommonUtils.exe_cmd(cmd)
+            result = ExeUtils.execute_command_check_output(cmd)
 
             # 将字节类型转换为字符串
             result_str = result.decode('utf-8') if isinstance(result, bytes) else result
@@ -52,7 +51,7 @@ class CoordinateAdapter:
                 height = int(match.group(2))
                 return (width, height)
         except Exception as e:
-            print(f"Warning: Failed to get device screen size: {e}")
+            print(f'Warning: Failed to get device screen size: {e}')
 
         # 如果获取失败，返回source_width和source_height
         return (source_width, source_height)
@@ -78,12 +77,14 @@ class CoordinateAdapter:
             # 验证输入参数
             if x < 0 or y < 0 or source_width <= 0 or source_height <= 0:
                 raise ValueError(
-                    f"Invalid input parameters: x={x}, y={y}, "
-                    f"source_width={source_width}, source_height={source_height}")
+                    f'Invalid input parameters: x={x}, y={y}, '
+                    f'source_width={source_width}, source_height={source_height}'
+                )
 
             # 获取当前设备的屏幕尺寸
-            current_width, current_height = CoordinateAdapter.get_device_screen_size(driver, source_width,
-                                                                                     source_height)
+            current_width, current_height = CoordinateAdapter.get_device_screen_size(
+                driver, source_width, source_height
+            )
 
             # 如果当前设备与采集设备屏幕尺寸相同，直接返回原始坐标
             if current_width == source_width and current_height == source_height:
@@ -100,11 +101,12 @@ class CoordinateAdapter:
             # 验证转换后的坐标是否在屏幕范围内
             if new_x < 0 or new_x > current_width or new_y < 0 or new_y > current_height:
                 raise ValueError(
-                    f"Converted coordinates ({new_x}, {new_y}) out of screen bounds ({current_width}x{current_height})")
+                    f'Converted coordinates ({new_x}, {new_y}) out of screen bounds ({current_width}x{current_height})'
+                )
 
             return (new_x, new_y)
 
         except Exception as e:
             if isinstance(e, ValueError):
                 raise
-            raise ValueError(f"Failed to convert coordinate: {str(e)}") from e
+            raise ValueError(f'Failed to convert coordinate: {str(e)}') from e

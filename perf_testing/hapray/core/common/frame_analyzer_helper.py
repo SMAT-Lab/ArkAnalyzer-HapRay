@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from perf_testing.hapray.analyze.base_analyzer import AnalyzerHelper
 
-from hapray.core.common.frame_analyzer import FrameAnalyzer
+from hapray.core.common.frame import FrameAnalyzer
 
 
 def test_collect_empty_frame_loads():
@@ -33,32 +33,32 @@ def test_collect_empty_frame_loads():
     root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports'
 
     try:
-        print("\n=== 开始收集空帧负载数据 ===")
+        print('\n=== 开始收集空帧负载数据 ===')
         results = collect_empty_frame_analysis_results(root_dir)
 
         # 构建输出JSON
         output = {
-            "total_scenes": len(results),
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "data": results
+            'total_scenes': len(results),
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'data': results,
         }
 
         # 将结果保存到JSON文件
-        output_file = os.path.join(root_dir, "empty_frame_loads_summary.json")
+        output_file = os.path.join(root_dir, 'empty_frame_loads_summary.json')
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
         # 生成可视化图表
-        output_dir = os.path.join(root_dir, "empty_frame_loads_plots")
+        output_dir = os.path.join(root_dir, 'empty_frame_loads_plots')
         visualize_empty_frame_loads(results, output_dir)
 
-        print("\n=== 收集完成 ===")
-        print(f"总共收集到 {len(results)} 个场景的数据")
-        print(f"结果已保存到: {output_file}")
-        print(f"可视化图表已保存到: {output_dir}")
+        print('\n=== 收集完成 ===')
+        print(f'总共收集到 {len(results)} 个场景的数据')
+        print(f'结果已保存到: {output_file}')
+        print(f'可视化图表已保存到: {output_dir}')
 
     except Exception as e:
-        print(f"\n收集失败: {str(e)}")
+        print(f'\n收集失败: {str(e)}')
         raise
 
 
@@ -93,7 +93,7 @@ def update_one_empty_frame_results(report_dir: str) -> bool:
     try:
         # 检查目录是否存在
         if not os.path.exists(report_dir):
-            logging.error("Error: Directory not found at %s", report_dir)
+            logging.error('Error: Directory not found at %s', report_dir)
             return False
 
         # 获取htrace和hiperf目录
@@ -101,7 +101,7 @@ def update_one_empty_frame_results(report_dir: str) -> bool:
         hiperf_dir = os.path.join(report_dir, 'hiperf')
 
         if not os.path.exists(htrace_dir) or not os.path.exists(hiperf_dir):
-            logging.error("Error: Required directories not found at %s", report_dir)
+            logging.error('Error: Required directories not found at %s', report_dir)
             return False
 
         # 用于存储所有步骤的分析结果
@@ -116,47 +116,51 @@ def update_one_empty_frame_results(report_dir: str) -> bool:
             # 查找trace.db文件
             trace_db = os.path.join(step_path, 'trace.db')
             if not os.path.exists(trace_db):
-                logging.warning("Missing trace.db in %s", step_path)
+                logging.warning('Missing trace.db in %s', step_path)
                 continue
 
             # 查找对应的perf.db文件
             perf_db = os.path.join(hiperf_dir, step_dir, 'perf.db')
             if not os.path.exists(perf_db):
-                logging.warning("Missing perf.db in %s", os.path.join(hiperf_dir, step_dir))
+                logging.warning('Missing perf.db in %s', os.path.join(hiperf_dir, step_dir))
                 continue
 
             # 获取进程ID列表
             app_pids = AnalyzerHelper.get_app_pids(report_dir, step_dir)
             if not app_pids:
-                logging.warning("No app PIDs found for step %s", step_dir)
+                logging.warning('No app PIDs found for step %s', step_dir)
                 continue
 
             # 分析空帧数据
             try:
-                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, app_pids, report_dir, step_dir)
+                result = FrameAnalyzer.analyze_empty_frames(trace_db, perf_db, step_dir, app_pids)
                 # 如果有结果，将结果添加到总结果字典中
                 if result is not None:
                     all_results[step_dir] = result
-                    logging.info("Successfully analyzed empty frames for %s", step_dir)
+                    logging.info('Successfully analyzed empty frames for %s', step_dir)
                 else:
-                    logging.info("No empty frame data found for %s", step_dir)
+                    logging.info('No empty frame data found for %s', step_dir)
             except Exception as e:
-                logging.error("Error analyzing empty frames for %s: %s", step_dir, str(e))
+                logging.error('Error analyzing empty frames for %s: %s', step_dir, str(e))
                 return False
 
         # 保存所有步骤的分析结果
         if all_results:
+            # 直接保存JSON文件
             output_file = os.path.join(htrace_dir, 'empty_frames_analysis.json')
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(all_results, f, indent=2, ensure_ascii=False)
-            print(f"✓ 分析结果已保存到: {output_file}")
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(all_results, f, ensure_ascii=False, indent=2)
+                print(f'✓ 分析结果已保存到: {output_file}')
+            except Exception as e:
+                logging.error('保存空帧分析结果失败: %s', str(e))
         else:
-            logging.warning("No valid analysis results to save")
+            logging.warning('No valid analysis results to save')
 
         return True
 
     except Exception as e:
-        logging.error("Error updating empty frame analysis: %s", str(e))
+        logging.error('Error updating empty frame analysis: %s', str(e))
         return False
 
 
@@ -170,28 +174,29 @@ def update_empty_frame_results():
     root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports\20250611161807'
 
     try:
-        print("\n=== 开始批量更新空帧分析数据 ===")
+        print('\n=== 开始批量更新空帧分析数据 ===')
 
         # 遍历目录
         for root, dirs, _ in os.walk(root_dir):
             # 过滤出符合条件的目录
-            target_dirs = [d for d in dirs if
-                           d.startswith('ResourceUsage_PerformanceDynamic_') and 'round' not in d.lower()]
+            target_dirs = [
+                d for d in dirs if d.startswith('ResourceUsage_PerformanceDynamic_') and 'round' not in d.lower()
+            ]
 
             for target_dir in target_dirs:
                 report_dir = os.path.join(root, target_dir)
-                print(f"\n处理目录: {report_dir}")
+                print(f'\n处理目录: {report_dir}')
 
                 # 调用update_empty_frame_results函数
                 if update_one_empty_frame_results(report_dir):
-                    print(f"✓ 成功更新 {target_dir} 的空帧分析数据")
+                    print(f'✓ 成功更新 {target_dir} 的空帧分析数据')
                 else:
-                    print(f"✗ 更新 {target_dir} 的空帧分析数据失败")
+                    print(f'✗ 更新 {target_dir} 的空帧分析数据失败')
 
-        print("\n=== 批量更新完成 ===")
+        print('\n=== 批量更新完成 ===')
 
     except Exception as e:
-        print(f"\n更新失败: {str(e)}")
+        print(f'\n更新失败: {str(e)}')
         raise
 
 
@@ -208,14 +213,14 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         os.makedirs(output_dir, exist_ok=True)
 
         if not results:
-            logging.warning("No data to visualize")
+            logging.warning('No data to visualize')
             return None
 
         # 简化场景名称
         def simplify_scene_name(scene_name: str) -> str:
             # 移除 "ResourceUsage_PerformanceDynamic_" 前缀
-            if scene_name.startswith("ResourceUsage_PerformanceDynamic_"):
-                return scene_name[len("ResourceUsage_PerformanceDynamic_"):]
+            if scene_name.startswith('ResourceUsage_PerformanceDynamic_'):
+                return scene_name[len('ResourceUsage_PerformanceDynamic_') :]
             return scene_name
 
         # 1. 按场景分组的空帧负载柱状图
@@ -225,9 +230,11 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         LOAD_THRESHOLD = 3.0  # 3%的负载阈值
 
         # 准备数据并过滤
-        filtered_data = [(simplify_scene_name(r['scene']), r['step'], r['empty_frame_percentage'])
-                         for r in results
-                         if r['empty_frame_percentage'] > 0 and r['empty_frame_percentage'] >= LOAD_THRESHOLD]
+        filtered_data = [
+            (simplify_scene_name(r['scene']), r['step'], r['empty_frame_percentage'])
+            for r in results
+            if r['empty_frame_percentage'] > 0 and r['empty_frame_percentage'] >= LOAD_THRESHOLD
+        ]
 
         # 按负载百分比排序
         filtered_data.sort(key=lambda x: x[2], reverse=True)
@@ -235,18 +242,20 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         # 如果过滤后没有数据，降低阈值
         if not filtered_data:
             LOAD_THRESHOLD = 0.0
-            filtered_data = [(simplify_scene_name(r['scene']), r['step'], r['empty_frame_percentage'])
-                             for r in results
-                             if r['empty_frame_percentage'] > 0]  # 只保留大于0的数据
+            filtered_data = [
+                (simplify_scene_name(r['scene']), r['step'], r['empty_frame_percentage'])
+                for r in results
+                if r['empty_frame_percentage'] > 0
+            ]  # 只保留大于0的数据
             filtered_data.sort(key=lambda x: x[2], reverse=True)
 
         # 如果还是没有数据，返回
         if not filtered_data:
-            logging.warning("No valid data to visualize after filtering")
+            logging.warning('No valid data to visualize after filtering')
             return None
 
         # 修改横坐标标签格式为 "场景_步骤"
-        scenes = [f"{scene}_{step}" for scene, step, _ in filtered_data]
+        scenes = [f'{scene}_{step}' for scene, step, _ in filtered_data]
         loads = [load for _, _, load in filtered_data]
 
         # 创建柱状图
@@ -260,10 +269,9 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         # 添加数值标签
         for _bar in bars:
             height = _bar.get_height()
-            plt.text(_bar.get_x() + _bar.get_width() / 2., height,
-                     f'{height:.1f}%',
-                     ha='center', va='bottom',
-                     fontsize=10)
+            plt.text(
+                _bar.get_x() + _bar.get_width() / 2.0, height, f'{height:.1f}%', ha='center', va='bottom', fontsize=10
+            )
 
         plt.tight_layout()
 
@@ -279,14 +287,14 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         step_data = {}
         for result in results:
             if result['empty_frame_percentage'] > 0:  # 只保留大于0的数据
-                step_key = f"{simplify_scene_name(result['scene'])}_{result['step']}"
+                step_key = f'{simplify_scene_name(result["scene"])}_{result["step"]}'
                 if step_key not in step_data:
                     step_data[step_key] = []
                 step_data[step_key].append(result['empty_frame_percentage'])
 
         # 如果没有有效数据，返回
         if not step_data:
-            logging.warning("No valid data for boxplot after filtering")
+            logging.warning('No valid data for boxplot after filtering')
             return None
 
         # 计算每个步骤的平均负载，并按平均值排序
@@ -294,9 +302,7 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         sorted_steps = sorted(step_means.keys(), key=lambda x: step_means[x], reverse=True)
 
         # 创建箱线图
-        plt.boxplot([step_data[step] for step in sorted_steps],
-                    tick_labels=sorted_steps,
-                    vert=True)
+        plt.boxplot([step_data[step] for step in sorted_steps], tick_labels=sorted_steps, vert=True)
         plt.title('Empty Frame Load Distribution by Step', fontsize=14)
         plt.xlabel('Scene_Step', fontsize=12)
         plt.ylabel('Empty Frame Load (%)', fontsize=12)
@@ -315,13 +321,10 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
         plt.savefig(boxplot_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-        return {
-            "bar_plot": bar_plot_path,
-            "boxplot": boxplot_path
-        }
+        return {'bar_plot': bar_plot_path, 'boxplot': boxplot_path}
 
     except Exception as e:
-        logging.error("Error generating empty frame load visualizations: %s", str(e))
+        logging.error('Error generating empty frame load visualizations: %s', str(e))
         return None
 
 
@@ -359,7 +362,7 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
     for file_path in all_empty_frames_analysis:
         try:
             # 读取JSON文件
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, encoding='utf-8') as f:
                 data = json.load(f)
 
             # 获取场景名称（最近的包含ResourceUsage_PerformanceDynamic的目录）
@@ -373,32 +376,34 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
 
             # 如果没找到，使用默认值
             if not scene_name:
-                scene_name = f"Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}"
-                logging.warning("Using default scene name for %s: %s", file_path, scene_name)
+                scene_name = f'Unknown_Scene_{os.path.basename(os.path.dirname(file_path))}'
+                logging.warning('Using default scene name for %s: %s', file_path, scene_name)
 
             # 遍历每个步骤的数据
             for step_id, step_data in data.items():
-                if step_data.get("status") == "success":
-                    summary = step_data.get("summary", {})
-                    load_percentage = summary.get("empty_frame_percentage", 0)
+                if step_data.get('status') == 'success':
+                    summary = step_data.get('summary', {})
+                    load_percentage = summary.get('empty_frame_percentage', 0)
 
-                    results.append({
-                        "scene": scene_name,
-                        "step": step_id,
-                        "empty_frame_percentage": load_percentage,
-                        "file_path": file_path
-                    })
+                    results.append(
+                        {
+                            'scene': scene_name,
+                            'step': step_id,
+                            'empty_frame_percentage': load_percentage,
+                            'file_path': file_path,
+                        }
+                    )
 
         except Exception as e:
-            logging.error("Error processing %s: %s", file_path, str(e))
+            logging.error('Error processing %s: %s', file_path, str(e))
             continue
 
     # 按负载百分比排序
-    results.sort(key=lambda x: x["empty_frame_percentage"], reverse=True)
+    results.sort(key=lambda x: x['empty_frame_percentage'], reverse=True)
     return results
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     update_empty_frame_results()
     # root_dir = r'D:\projects\ArkAnalyzer-HapRay\perf_testing\reports'
     # collect_empty_frame_analysis_results(root_dir)

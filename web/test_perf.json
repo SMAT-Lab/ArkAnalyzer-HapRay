@@ -4273,5 +4273,770 @@
         }
       ]
     }
-  ]
+  ],
+  "frames": {
+    "step1": {
+      "runtime": "5.2s",
+      "statistics": {
+        "total_frames": 300,
+        "frame_stats": {
+          "ui": {
+            "total": 150,
+            "stutter": 8,
+            "stutter_rate": 5.3
+          },
+          "render": {
+            "total": 150,
+            "stutter": 5,
+            "stutter_rate": 3.3
+          },
+          "sceneboard": {
+            "total": 0,
+            "stutter": 0,
+            "stutter_rate": 0
+          }
+        },
+        "total_stutter_frames": 13,
+        "stutter_rate": 4.3,
+        "stutter_levels": {
+          "level_1": 8,
+          "level_2": 4,
+          "level_3": 1
+        }
+      },
+      "stutter_details": {
+        "ui_stutter": [
+          {
+            "vsync": 1001,
+            "ts": 1000000000,
+            "actual_duration": 33340000,
+            "expected_duration": 16670000,
+            "exceed_time": 16.67,
+            "exceed_frames": 1,
+            "stutter_level": 1,
+            "level_description": "轻微卡顿",
+            "src": "ui",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 1000000000,
+                "event_count": 25,
+                "load_percentage": 85.2,
+                "callchain": [
+                  {
+                    "symbol": "ui_render_slow",
+                    "file": "/system/lib64/libui.so",
+                    "line": 234
+                  },
+                  {
+                    "symbol": "layout_measure",
+                    "file": "/system/lib64/libui.so",
+                    "line": 567
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "vsync": 1005,
+            "ts": 1083340000,
+            "actual_duration": 50010000,
+            "expected_duration": 16670000,
+            "exceed_time": 33.34,
+            "exceed_frames": 2,
+            "stutter_level": 2,
+            "level_description": "中度卡顿",
+            "src": "ui",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 1083340000,
+                "event_count": 45,
+                "load_percentage": 92.5,
+                "callchain": [
+                  {
+                    "symbol": "complex_animation",
+                    "file": "/system/lib64/libui.so",
+                    "line": 789
+                  },
+                  {
+                    "symbol": "gpu_sync_wait",
+                    "file": "/system/lib64/libgpu.so",
+                    "line": 123
+                  },
+                  {
+                    "symbol": "memory_allocation",
+                    "file": "/system/lib64/libc.so",
+                    "line": 456
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "vsync": 1010,
+            "ts": 1200000000,
+            "actual_duration": 116700000,
+            "expected_duration": 16670000,
+            "exceed_time": 100.03,
+            "exceed_frames": 6,
+            "stutter_level": 3,
+            "level_description": "严重卡顿",
+            "src": "ui",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 1200000000,
+                "event_count": 80,
+                "load_percentage": 98.7,
+                "callchain": [
+                  {
+                    "symbol": "blocking_io_operation",
+                    "file": "/system/lib64/libio.so",
+                    "line": 345
+                  },
+                  {
+                    "symbol": "database_query_slow",
+                    "file": "/system/lib64/libdb.so",
+                    "line": 678
+                  },
+                  {
+                    "symbol": "network_timeout",
+                    "file": "/system/lib64/libnet.so",
+                    "line": 234
+                  },
+                  {
+                    "symbol": "ui_thread_blocked",
+                    "file": "/system/lib64/libui.so",
+                    "line": 890
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "render_stutter": [
+          {
+            "vsync": 1003,
+            "ts": 1050000000,
+            "actual_duration": 25005000,
+            "expected_duration": 16670000,
+            "exceed_time": 8.335,
+            "exceed_frames": 0.5,
+            "stutter_level": 1,
+            "level_description": "轻微卡顿",
+            "src": "render",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 1050000000,
+                "event_count": 18,
+                "load_percentage": 75.3,
+                "callchain": [
+                  {
+                    "symbol": "texture_upload",
+                    "file": "/system/lib64/librender.so",
+                    "line": 456
+                  },
+                  {
+                    "symbol": "shader_compile",
+                    "file": "/system/lib64/libgpu.so",
+                    "line": 789
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "vsync": 1008,
+            "ts": 1150000000,
+            "actual_duration": 66680000,
+            "expected_duration": 16670000,
+            "exceed_time": 50.01,
+            "exceed_frames": 3,
+            "stutter_level": 2,
+            "level_description": "中度卡顿",
+            "src": "render",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 1150000000,
+                "event_count": 55,
+                "load_percentage": 88.9,
+                "callchain": [
+                  {
+                    "symbol": "complex_geometry",
+                    "file": "/system/lib64/librender.so",
+                    "line": 234
+                  },
+                  {
+                    "symbol": "vertex_buffer_overflow",
+                    "file": "/system/lib64/libgpu.so",
+                    "line": 567
+                  },
+                  {
+                    "symbol": "memory_fragmentation",
+                    "file": "/system/lib64/libc.so",
+                    "line": 123
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "fps_stats": {
+        "average_fps": 57.8,
+        "min_fps": 15.0,
+        "max_fps": 60.0,
+        "low_fps_window_count": 2,
+        "fps_windows": [
+          {
+            "start_time": 0,
+            "end_time": 1000000000,
+            "start_time_ts": 1000000000,
+            "end_time_ts": 2000000000,
+            "frame_count": 60,
+            "fps": 60.0
+          },
+          {
+            "start_time": 1000000000,
+            "end_time": 2000000000,
+            "start_time_ts": 2000000000,
+            "end_time_ts": 3000000000,
+            "frame_count": 58,
+            "fps": 58.0
+          },
+          {
+            "start_time": 2000000000,
+            "end_time": 3000000000,
+            "start_time_ts": 3000000000,
+            "end_time_ts": 4000000000,
+            "frame_count": 55,
+            "fps": 55.0
+          },
+          {
+            "start_time": 3000000000,
+            "end_time": 4000000000,
+            "start_time_ts": 4000000000,
+            "end_time_ts": 5000000000,
+            "frame_count": 15,
+            "fps": 15.0
+          },
+          {
+            "start_time": 4000000000,
+            "end_time": 5000000000,
+            "start_time_ts": 5000000000,
+            "end_time_ts": 6000000000,
+            "frame_count": 60,
+            "fps": 60.0
+          }
+        ]
+      }
+    },
+    "step2": {
+      "runtime": "3.8s",
+      "statistics": {
+        "total_frames": 228,
+        "frame_stats": {
+          "ui": {
+            "total": 114,
+            "stutter": 3,
+            "stutter_rate": 2.6
+          },
+          "render": {
+            "total": 114,
+            "stutter": 2,
+            "stutter_rate": 1.8
+          },
+          "sceneboard": {
+            "total": 0,
+            "stutter": 0,
+            "stutter_rate": 0
+          }
+        },
+        "total_stutter_frames": 5,
+        "stutter_rate": 2.2,
+        "stutter_levels": {
+          "level_1": 4,
+          "level_2": 1,
+          "level_3": 0
+        }
+      },
+      "stutter_details": {
+        "ui_stutter": [
+          {
+            "vsync": 2002,
+            "ts": 2016670000,
+            "actual_duration": 28340000,
+            "expected_duration": 16670000,
+            "exceed_time": 11.67,
+            "exceed_frames": 0.7,
+            "stutter_level": 1,
+            "level_description": "轻微卡顿",
+            "src": "ui",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 2016670000,
+                "event_count": 20,
+                "load_percentage": 68.5,
+                "callchain": [
+                  {
+                    "symbol": "ui_layout_recalc",
+                    "file": "/system/lib64/libui.so",
+                    "line": 345
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "vsync": 2006,
+            "ts": 2083340000,
+            "actual_duration": 41675000,
+            "expected_duration": 16670000,
+            "exceed_time": 25.005,
+            "exceed_frames": 1.5,
+            "stutter_level": 2,
+            "level_description": "中度卡顿",
+            "src": "ui",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 2083340000,
+                "event_count": 35,
+                "load_percentage": 82.3,
+                "callchain": [
+                  {
+                    "symbol": "image_decode_slow",
+                    "file": "/system/lib64/libimage.so",
+                    "line": 678
+                  },
+                  {
+                    "symbol": "cache_miss",
+                    "file": "/system/lib64/libcache.so",
+                    "line": 234
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "render_stutter": [
+          {
+            "vsync": 2004,
+            "ts": 2050000000,
+            "actual_duration": 21670000,
+            "expected_duration": 16670000,
+            "exceed_time": 5.0,
+            "exceed_frames": 0.3,
+            "stutter_level": 1,
+            "level_description": "轻微卡顿",
+            "src": "render",
+            "dst": 1,
+            "sample_callchains": [
+              {
+                "timestamp": 2050000000,
+                "event_count": 15,
+                "load_percentage": 62.8,
+                "callchain": [
+                  {
+                    "symbol": "render_pipeline_stall",
+                    "file": "/system/lib64/librender.so",
+                    "line": 567
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "fps_stats": {
+        "average_fps": 59.2,
+        "min_fps": 40.0,
+        "max_fps": 60.0,
+        "low_fps_window_count": 1,
+        "fps_windows": [
+          {
+            "start_time": 0,
+            "end_time": 1000000000,
+            "start_time_ts": 2000000000,
+            "end_time_ts": 3000000000,
+            "frame_count": 60,
+            "fps": 60.0
+          },
+          {
+            "start_time": 1000000000,
+            "end_time": 2000000000,
+            "start_time_ts": 3000000000,
+            "end_time_ts": 4000000000,
+            "frame_count": 58,
+            "fps": 58.0
+          },
+          {
+            "start_time": 2000000000,
+            "end_time": 3000000000,
+            "start_time_ts": 4000000000,
+            "end_time_ts": 5000000000,
+            "frame_count": 40,
+            "fps": 40.0
+          },
+          {
+            "start_time": 3000000000,
+            "end_time": 3800000000,
+            "start_time_ts": 5000000000,
+            "end_time_ts": 5800000000,
+            "frame_count": 48,
+            "fps": 60.0
+          }
+        ]
+      }
+    }
+  },
+  "frameLoads": {
+    "step1": {
+      "status": "success",
+      "summary": {
+        "total_frames": 150,
+        "total_load": 2500.5,
+        "average_load": 16.67,
+        "max_load": 85.2,
+        "min_load": 2.1
+      },
+      "top_frames": [
+        {
+          "ts": 1000000000,
+          "dur": 16670000,
+          "tid": 12345,
+          "process_name": "com.example.app",
+          "thread_name": "RenderThread",
+          "frame_load": 85.2,
+          "is_main_thread": 1,
+          "vsync": 1001,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 1000000000,
+              "event_count": 150,
+              "load_percentage": 85.2,
+              "callchain": [
+                {
+                  "symbol": "main_render_function",
+                  "file": "/system/lib64/librender.so",
+                  "line": 123
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 1050000000,
+          "dur": 16670000,
+          "tid": 12346,
+          "process_name": "com.example.app",
+          "thread_name": "UIThread",
+          "frame_load": 72.8,
+          "is_main_thread": 1,
+          "vsync": 1002,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 1050000000,
+              "event_count": 120,
+              "load_percentage": 72.8,
+              "callchain": [
+                {
+                  "symbol": "ui_update_function",
+                  "file": "/system/lib64/libui.so",
+                  "line": 456
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 1100000000,
+          "dur": 16670000,
+          "tid": 12347,
+          "process_name": "com.example.app",
+          "thread_name": "BackgroundThread",
+          "frame_load": 45.3,
+          "is_main_thread": 0,
+          "vsync": 1003,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 1100000000,
+              "event_count": 80,
+              "load_percentage": 45.3,
+              "callchain": [
+                {
+                  "symbol": "background_task",
+                  "file": "/system/lib64/libbackground.so",
+                  "line": 789
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 1150000000,
+          "dur": 16670000,
+          "tid": 12348,
+          "process_name": "com.example.app",
+          "thread_name": "RenderThread",
+          "frame_load": 38.9,
+          "is_main_thread": 1,
+          "vsync": 1004,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 1150000000,
+              "event_count": 65,
+              "load_percentage": 38.9,
+              "callchain": [
+                {
+                  "symbol": "render_optimization",
+                  "file": "/system/lib64/librender.so",
+                  "line": 234
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 1200000000,
+          "dur": 16670000,
+          "tid": 12349,
+          "process_name": "com.example.app",
+          "thread_name": "UIThread",
+          "frame_load": 29.7,
+          "is_main_thread": 1,
+          "vsync": 1005,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 1200000000,
+              "event_count": 50,
+              "load_percentage": 29.7,
+              "callchain": [
+                {
+                  "symbol": "ui_layout_function",
+                  "file": "/system/lib64/libui.so",
+                  "line": 567
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "step2": {
+      "status": "success",
+      "summary": {
+        "total_frames": 120,
+        "total_load": 1800.3,
+        "average_load": 15.0,
+        "max_load": 68.5,
+        "min_load": 1.8
+      },
+      "top_frames": [
+        {
+          "ts": 2000000000,
+          "dur": 16670000,
+          "tid": 22345,
+          "process_name": "com.example.app",
+          "thread_name": "RenderThread",
+          "frame_load": 68.5,
+          "is_main_thread": 1,
+          "vsync": 2001,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 2000000000,
+              "event_count": 110,
+              "load_percentage": 68.5,
+              "callchain": [
+                {
+                  "symbol": "complex_render",
+                  "file": "/system/lib64/librender.so",
+                  "line": 345
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 2050000000,
+          "dur": 16670000,
+          "tid": 22346,
+          "process_name": "com.example.app",
+          "thread_name": "UIThread",
+          "frame_load": 55.2,
+          "is_main_thread": 1,
+          "vsync": 2002,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 2050000000,
+              "event_count": 90,
+              "load_percentage": 55.2,
+              "callchain": [
+                {
+                  "symbol": "ui_animation",
+                  "file": "/system/lib64/libui.so",
+                  "line": 678
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 2100000000,
+          "dur": 16670000,
+          "tid": 22347,
+          "process_name": "com.example.app",
+          "thread_name": "BackgroundThread",
+          "frame_load": 32.1,
+          "is_main_thread": 0,
+          "vsync": 2003,
+          "flag": 0,
+          "sample_callchains": [
+            {
+              "timestamp": 2100000000,
+              "event_count": 55,
+              "load_percentage": 32.1,
+              "callchain": [
+                {
+                  "symbol": "data_processing",
+                  "file": "/system/lib64/libdata.so",
+                  "line": 123
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "vsyncAnomaly": {
+    "step1": {
+      "status": "success",
+      "statistics": {
+        "total_vsync_signals": 300,
+        "frequency_anomalies_count": 5,
+        "frame_mismatch_count": 8,
+        "anomaly_rate": 4.3
+      },
+      "frequency_anomalies": [
+        {
+          "type": "high_frequency_period",
+          "start_vsync": 1001,
+          "end_vsync": 1005,
+          "start_ts": 1000000000,
+          "end_ts": 1083340000,
+          "duration": 83340000,
+          "interval_count": 4,
+          "avg_interval": 20835000,
+          "avg_frequency": 48.0,
+          "min_frequency": 45.0,
+          "max_frequency": 52.0,
+          "severity": "medium",
+          "description": "持续高频时间段: 4个间隔, 平均48.0Hz, 持续83.3ms"
+        },
+        {
+          "type": "low_frequency_period",
+          "start_vsync": 1010,
+          "end_vsync": 1015,
+          "start_ts": 1200000000,
+          "end_ts": 1366700000,
+          "duration": 166700000,
+          "interval_count": 5,
+          "avg_interval": 33340000,
+          "avg_frequency": 30.0,
+          "min_frequency": 25.0,
+          "max_frequency": 35.0,
+          "severity": "high",
+          "description": "持续低频时间段: 5个间隔, 平均30.0Hz, 持续166.7ms"
+        }
+      ],
+      "frame_mismatches": [
+        {
+          "type": "no_actual_frame",
+          "vsync": 1003,
+          "expect_frames": 2,
+          "description": "VSync 1003 只有期望帧，没有实际渲染帧",
+          "ts": 1050000000,
+          "thread_name": "RenderThread",
+          "process_name": "com.example.app"
+        },
+        {
+          "type": "no_expect_frame",
+          "vsync": 1007,
+          "actual_frames": 1,
+          "description": "VSync 1007 只有实际帧，没有期望帧",
+          "ts": 1116670000,
+          "thread_name": "UIThread",
+          "process_name": "com.example.app"
+        },
+        {
+          "type": "frame_count_mismatch",
+          "vsync": 1012,
+          "expect_frames": 3,
+          "actual_frames": 1,
+          "description": "VSync 1012 期望帧数与实际帧数不匹配",
+          "ts": 1233340000,
+          "thread_name": "RenderThread",
+          "process_name": "com.example.app"
+        }
+      ]
+    },
+    "step2": {
+      "status": "success",
+      "statistics": {
+        "total_vsync_signals": 228,
+        "frequency_anomalies_count": 2,
+        "frame_mismatch_count": 3,
+        "anomaly_rate": 2.2
+      },
+      "frequency_anomalies": [
+        {
+          "type": "high_frequency_period",
+          "start_vsync": 2003,
+          "end_vsync": 2006,
+          "start_ts": 2050000000,
+          "end_ts": 2116670000,
+          "duration": 66670000,
+          "interval_count": 3,
+          "avg_interval": 22223333,
+          "avg_frequency": 45.0,
+          "min_frequency": 42.0,
+          "max_frequency": 48.0,
+          "severity": "low",
+          "description": "持续高频时间段: 3个间隔, 平均45.0Hz, 持续66.7ms"
+        }
+      ],
+      "frame_mismatches": [
+        {
+          "type": "no_actual_frame",
+          "vsync": 2008,
+          "expect_frames": 1,
+          "description": "VSync 2008 只有期望帧，没有实际渲染帧",
+          "ts": 2150000000,
+          "thread_name": "RenderThread",
+          "process_name": "com.example.app"
+        },
+        {
+          "type": "no_expect_frame",
+          "vsync": 2012,
+          "actual_frames": 2,
+          "description": "VSync 2012 只有实际帧，没有期望帧",
+          "ts": 2216670000,
+          "thread_name": "UIThread",
+          "process_name": "com.example.app"
+        }
+      ]
+    }
+  }
 }

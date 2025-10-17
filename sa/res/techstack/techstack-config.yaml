@@ -1,0 +1,160 @@
+version: "1.0.0"
+description: "技术栈检测配置文件 - 基于 framework-patterns.json 扩展"
+
+# 排除规则：排除不需要检测的文件
+excludes:
+  - type: "path"
+    pattern: "resources/base/.*"
+
+# 技术栈检测规则
+detections:
+  # ==================== Flutter ====================
+  - id: "Flutter"
+    name: "Flutter"
+    type: "Flutter"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libflutter\\.so$", "libapp\\.so$"]
+    metadataRules:
+      - field: "dartVersion"
+        patterns:
+          - source: "content"
+            pattern: "(\\d+\\.\\d+\\.\\d+) \\(stable\\)"
+            captureGroup: 1
+      - field: "Key"
+        extractor: "extractFlutterHex40"
+      - field: "flutterVersionLastModified"
+        extractor: "extractFlutterVersionLastModified"
+      - field: "openSourcePackages"
+        extractor: "extractDartPackages"
+      
+
+  - id: "FlutterAssets"
+    name: "Flutter Assets"
+    type: "Flutter"
+    confidence: 0.95
+    fileRules:
+      - type: "path"
+        patterns: ["flutter_assets/.*"]
+    metadataRules:
+      - field: "flutterVersion"
+        patterns:
+          - source: "content"
+            pattern: "\"flutterVersion\":\"(\\d+\\.\\d+\\.\\d+)\""
+            captureGroup: 1
+
+  # ==================== React Native ====================
+  - id: "RN_LibReact"
+    name: "React Native"
+    type: "RN"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libreact_.*\\.so$","libreact_.*\\.so", "librnoh\\.so", "librnoh_.*\\.so", "libjsi\\.so", "libjsinspector\\.so"]
+
+  - id: "Hermes_Engine"
+    name: "Hermes JavaScript Engine"
+    type: "RN"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libhermes\\.so$"]
+
+  - id: "RN bundles"
+    name: "RN bundles"
+    type: "RN"
+    confidence: 0.90
+    fileRules:
+      - type: "extension"
+        extensions: ["hbc", "jsbundle"]
+      - type: "magic"
+        magicBytes: [0xc2, 0x1f, 0xf0, 0x9f]
+      - type: "combined"
+        operator: "and"
+        rules:
+          - type: "extension"
+            extensions: ["ctz"]
+          - type: "magic"
+            magicBytes: [0x74, 0x72, 0x69, 0x70]
+    #提取二进制还是文本标记
+      
+  # ==================== KMP (Kotlin Multiplatform) ====================
+  - id: "KMP_LibKn"
+    name: "Kotlin Multiplatform"
+    type: "KMP"
+    confidence: 0.90
+    fileRules:
+      - type: "combined"
+        operator: "and"
+        rules:
+          - type: "filename"
+            patterns: [".*\\.so$"]
+          - type: "content"
+            patterns:
+              - pattern: "KOTLIN_NATIVE_AVAILABLE_PROCESSORS"
+                confidence: 0.95
+              - pattern: "kfun:"
+                confidence: 0.5
+              - pattern: "Kotlin"
+                confidence: 0.5
+              - pattern: "kotlin"
+                confidence: 0.5
+
+  - id: "CMP_Skiko"
+    name: "Compose Multiplatform"
+    type: "KMP"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libskikobridge\\.so$"]
+
+  # ==================== Lynx ====================
+  - id: "Lynx_Framework"
+    name: "Lynx Framework"
+    type: "Lynx"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblynx.*\\.so$"]
+
+  # ==================== Qt ====================
+  - id: "Qt_Framework"
+    name: "Qt Framework"
+    type: "Qt"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libQt.*\\.so$"]
+
+  # ==================== Unity ====================
+  - id: "Unity_Engine"
+    name: "Unity Game Engine"
+    type: "Unity"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libunity\\.so$", "libil2cpp\\.so$"]
+
+  # ==================== Taro ====================
+  - id: "Taro_Framework"
+    name: "Taro Framework"
+    type: "Taro"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns:
+          - "libJDSilkTaroNativeOH\\.so$"
+          - "libSilkTaroKit\\.so$"
+          - "libtaro_native_core\\.so$"
+          - "libTaroHarmonyLibrary\\.so$"
+          - "libsilktaronativelib\\.so$"
+
+  # ==================== Weex ====================
+  - id: "Weex_Framework"
+    name: "Weex Framework"
+    type: "Weex"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libweex_ability\\.so$", "libweex_framework\\.so$"]

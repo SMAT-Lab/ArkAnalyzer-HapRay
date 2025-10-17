@@ -37,21 +37,107 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 hapray = [
-    "core/config/*.yaml",
+    "core/**/*.yaml",
+    "core/**/*.json",
+    "testcases/**/*.yaml",
     "testcases/**/*.json",
     "testcases/**/*.py",
     "optimization_detector/models/*.h5"
 ]
 
 [tool.setuptools.data-files]
-"hapray-toolbox" = [
-    "hapray-toolbox/*.js",
-    "hapray-toolbox/config/*.json",
-    "hapray-toolbox/node_modules/sql.js/dist/*.js",
-    "hapray-toolbox/node_modules/sql.js/dist/*.wasm",
-    "hapray-toolbox/node_modules/sql.js/*.json",
-    "hapray-toolbox/res/*.html",
-    "hapray-toolbox/res/**/*.json",
-    "hapray-toolbox/third-party/trace_streamer_binary/lib/*.dylib",
-    "hapray-toolbox/third-party/trace_streamer_binary/trace_streamer_*"
+"sa-cmd" = [
+    "sa-cmd/*.js",
+    "sa-cmd/config/*.json",
+    "sa-cmd/node_modules/sql.js/dist/*.js",
+    "sa-cmd/node_modules/sql.js/dist/*.wasm",
+    "sa-cmd/node_modules/sql.js/*.json",
+    "sa-cmd/res/*.html",
+    "sa-cmd/res/**/*.json",
+    "sa-cmd/third-party/trace_streamer_binary/lib/*.dylib",
+    "sa-cmd/third-party/trace_streamer_binary/trace_streamer_*"
 ]
+
+# ruff.toml 或 pyproject.toml 的 [tool.ruff] 部分
+
+[tool.ruff]
+# 每行最大长度
+line-length = 120
+target-version = "py39"
+
+# 选择所有与 Flake8 和 Pylint 对应的规则
+lint.select = [
+  "E",   # Pycodestyle 错误
+  "F",   # Pyflakes
+  "W",   # Pycodestyle 警告
+  "C90", # 唐纳德·克努特复杂度
+  "B",   # flake8-bugbear
+  "PL",  # Pylint 规则
+  "PT",  # Pytest 风格检查
+  "RET", # return 语句检查
+  "SIM", # 简化检查
+  "I",   # isort (导入排序)
+  "UP",  # pyupgrade
+  "N",   # PEP8 命名约定 (pep8-naming)
+]
+
+# 忽略的规则 - 根据项目需求调整
+lint.ignore = [
+  "E501",  # 行过长 (通常由格式化工具处理)
+  "PLR0913", # 太多参数 (Pylint 的 R0913)
+  "PLW0603", # 全局变量使用 (Pylint 的 W0603)
+  "PLR0911", # Too many return statements
+  "PLR0912", # Too many branches
+  "PLR0915",
+  "PLR2004",
+  "N801",
+  "N806", # Variable should be lowercase
+  "C901",
+  "UP007", # 禁用 Optional 到 | 的转换
+]
+
+# 排除的文件/目录
+exclude = [
+  "reports",
+  ".venv",
+  "build",
+  "dist"
+]
+
+# 配置格式化器使用单引号
+[tool.ruff.format]
+# 设置所有引号为单引号
+quote-style = "single"
+
+# PEP8 命名约定配置 (替代原来的 allowed-variable-names)
+[tool.ruff.lint.pep8-naming]
+# 忽略的名称模式 (使用正则表达式)
+ignore-names = [
+  "setUp",
+  "tearDown",
+  "setUpClass",
+  "tearDownClass",
+  "setUpModule",
+  "tearDownModule",
+  "assertRaisesRegex",
+  "assertWarnsRegex"
+]
+
+# 函数参数数量最大限制
+[tool.ruff.lint.pylint]
+max-args = 5
+max-branches = 12
+max-statements = 50
+max-returns = 6
+
+# 函数复杂度限制
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+# 每文件忽略的错误上限
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = ["PLR2004", "S101"] # 测试文件中忽略魔术值和使用断言
+"__init__.py" = ["F401"] # __init__.py 中允许未使用的导入
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true

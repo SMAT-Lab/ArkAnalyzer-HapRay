@@ -1,0 +1,17 @@
+{
+  "description": "",
+  "environment": [
+    {
+      "type": "device",
+      "label": "phone"
+    }
+  ],
+  "driver": {
+    "type": "DeviceTest",
+    "py_file": [
+      "ResourceUsage_PerformanceDynamic_Douyin_0180.py"
+    ]
+  },
+  "kits": [
+  ]
+}

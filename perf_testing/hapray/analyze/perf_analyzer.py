@@ -13,11 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import base64
 import json
 import logging
 import os
 import re
-from typing import Dict, Any, Optional
+import zlib
+from typing import Any, Optional
 
 from hapray.analyze import BaseAnalyzer
 from hapray.core.common.common_utils import CommonUtils
@@ -26,29 +28,38 @@ from hapray.core.config.config import Config
 
 
 class PerfAnalyzer(BaseAnalyzer):
-    def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'hiperf_info.json')
+    def __init__(self, scene_dir: str, time_ranges: list[dict] = None):
+        super().__init__(scene_dir, 'more/flame_graph')
+        self.time_ranges = time_ranges
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         """Run performance analysis"""
-        args = ['dbtools', '-i', self.scene_dir]
+        flame_graph = self.generate_hiperf_report(perf_db_path)
+        # Execute only in step1
+        if step_dir == 'step1':
+            args = ['perf', '-i', self.scene_dir]
+            so_dir = Config.get('so_dir', None)
+            if so_dir:
+                args.extend(['-s', os.path.abspath(so_dir)])
 
-        so_dir = Config.get('so_dir', None)
-        if so_dir:
-            args.extend(['-s', os.path.abspath(so_dir)])
+            kind = self.convert_kind_to_json()
+            if len(kind) > 0:
+                args.extend(['-k', kind])
 
-        kind = self.convert_kind_to_json()
-        if len(kind) > 0:
-            args.extend(['-k', kind])
+            # Add time ranges if provided
+            if self.time_ranges:
+                time_range_strings = []
+                for tr in self.time_ranges:
+                    time_range_str = f'{tr["startTime"]}-{tr["endTime"]}'
+                    time_range_strings.append(time_range_str)
+                args.extend(['--time-ranges'] + time_range_strings)
+                logging.info('Adding time ranges to perf command: %s', time_range_strings)
 
-        logging.debug("Running perf analysis with command: %s", ' '.join(args))
-        ExeUtils.execute_hapray_cmd(args)
-        self.generate_hiperf_report(perf_db_path)
-        return {}
-
-    def write_report(self):
-        # override
-        pass
+            logging.debug('Running perf analysis with command: %s', ' '.join(args))
+            ExeUtils.execute_hapray_cmd(args)
+        return flame_graph
 
     @staticmethod
     def convert_kind_to_json() -> str:
@@ -56,47 +67,48 @@ class PerfAnalyzer(BaseAnalyzer):
         if kind is None:
             return ''
 
-        kind_entry = {
-            "name": 'APP_SO',
-            "kind": 1,
-            "components": []
-        }
+        kind_entry = {'name': 'APP_SO', 'kind': 1, 'components': []}
 
         for category in Config.get('kind', None):
-            component = {
-                "name": category['name'],
-                "files": category['files']
-            }
+            component = {'name': category['name'], 'files': category['files']}
 
             if 'thread' in category:
-                component["threads"] = category['thread']
+                component['threads'] = category['thread']
 
-            kind_entry["components"].append(component)
+            kind_entry['components'].append(component)
 
         return json.dumps([kind_entry])
 
     @staticmethod
-    def generate_hiperf_report(perf_path: str):
+    def generate_hiperf_report(perf_path: str) -> Optional[str]:
+        """生成火焰图报告，返回原始JSON字符串"""
         report_file = os.path.join(os.path.dirname(perf_path), 'hiperf_report.html')
-        if os.path.exists(report_file):
-            return
-        template_file = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'res',
-                                     'hiperf_report_template.html')
+        template_file = os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'res', 'hiperf_report_template.html')
         if not os.path.exists(template_file):
             logging.warning('Not found file %s', template_file)
-            return
+            return None
         perf_json_file = os.path.join(os.path.dirname(perf_path), 'perf.json')
         if not os.path.exists(perf_json_file):
             logging.warning('Not found file %s', perf_json_file)
-            return
+            return None
 
+        script_start = '<script id="record_data" type="application/gzip+json;base64">'
+        script_end = '</script></body></html>'
         all_json = PerfAnalyzer.apply_symbol_split_rules(perf_json_file)
-        with open(template_file, 'r', encoding='utf-8') as html_file:
+
+        # 为HTML报告压缩数据
+        compressed_bytes = zlib.compress(all_json.encode('utf-8'), level=9)
+        base64_bytes = base64.b64encode(compressed_bytes)
+        base64_all_json_str = base64_bytes.decode('ascii')
+
+        with open(template_file, encoding='utf-8') as html_file:
             html_str = html_file.read()
         with open(report_file, 'w', encoding='utf-8') as report_html_file:
-            report_html_file.write(html_str + all_json + '</script>'
-                                                         ' </body>'
-                                                         ' </html>')
+            report_html_file.write(html_str)
+            report_html_file.write(script_start + base64_all_json_str + script_end)
+
+        # 返回原始JSON字符串，供后续处理
+        return all_json
 
     @staticmethod
     def filter_and_move_symbols(data, filter_rules):
@@ -138,9 +150,8 @@ class PerfAnalyzer(BaseAnalyzer):
                 logging.warning("警告: 未找到源库 '%s'，跳过符号拆分", rule['source_file'])
                 continue
 
-            filter_strs = ", ".join(f"'{fs}'" for fs in filter_str_list)
-            logging.info("处理规则: 从 '%s' 移动包含 %s 的符号到 '%s'",
-                         rule['source_file'], filter_strs, new_lib_name)
+            filter_strs = ', '.join(f"'{fs}'" for fs in filter_str_list)
+            logging.info("处理规则: 从 '%s' 移动包含 %s 的符号到 '%s'", rule['source_file'], filter_strs, new_lib_name)
             logging.info("找到源库 '%s' 的索引: %s", rule['source_file'], source_lib_indices)
 
             # 收集包含任一过滤字符串的符号的symbol ID
@@ -162,7 +173,7 @@ class PerfAnalyzer(BaseAnalyzer):
                             sym_info['file'] = new_index
                             break
 
-            logging.info("从源库中找到 %s 个匹配 %s 的符号", len(filtered_symbol_ids), filter_strs)
+            logging.info('从源库中找到 %s 个匹配 %s 的符号', len(filtered_symbol_ids), filter_strs)
             PerfAnalyzer.process_record_sample(data, source_lib_indices, filtered_symbol_ids, new_index)
 
         return data
@@ -180,11 +191,7 @@ class PerfAnalyzer(BaseAnalyzer):
     @staticmethod
     def update_thread_libs(source_lib_indices, filtered_symbol_ids, new_index, thread_info):
         # 为当前线程创建新的lib对象
-        new_lib_obj = {
-            "fileId": new_index,
-            "eventCount": 0,
-            "functions": []
-        }
+        new_lib_obj = {'fileId': new_index, 'eventCount': 0, 'functions': []}
 
         # 处理线程中的每个lib
         libs = thread_info.get('libs', [])
@@ -226,13 +233,13 @@ class PerfAnalyzer(BaseAnalyzer):
     @staticmethod
     def apply_symbol_split_rules(perf_json_file: str) -> str:
         """应用符号拆分规则"""
-        with open(perf_json_file, 'r', errors='ignore', encoding='UTF-8') as json_file:
+        with open(perf_json_file, errors='ignore', encoding='UTF-8') as json_file:
             data = json.load(json_file)
         rules = []
-        config_file = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'res', 'perf', 'symbol_split.json')
+        config_file = os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'res', 'perf', 'symbol_split.json')
         # 1. 从配置文件加载规则
         if config_file and os.path.exists(config_file):
-            with open(config_file, 'r', encoding='UTF-8') as f:
+            with open(config_file, encoding='UTF-8') as f:
                 rules.extend(json.load(f))
 
         return json.dumps(PerfAnalyzer.filter_and_move_symbols(data, rules))

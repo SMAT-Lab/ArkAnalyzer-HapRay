@@ -16,7 +16,7 @@ limitations under the License.
 import os
 import threading
 from importlib.resources import files
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -28,7 +28,7 @@ class ConfigError(Exception):
 class ConfigObject:
     """将字典转换为可点属性访问的对象"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         for key, value in data.items():
             if isinstance(value, dict):
                 setattr(self, key, ConfigObject(value))
@@ -36,7 +36,7 @@ class ConfigObject:
                 setattr(self, key, value)
 
 
-def deep_merge(default: Dict, custom: Dict) -> Dict:
+def deep_merge(default: dict, custom: dict) -> dict:
     """深度合并两个字典，custom中的值覆盖default中的值"""
     merged = default.copy()
     for key, value in custom.items():
@@ -50,7 +50,7 @@ def deep_merge(default: Dict, custom: Dict) -> Dict:
 class Config:
     _instance = None  # 单例实例
     _lock = threading.Lock()  # 线程安全锁
-    _default_config_path = files('hapray.core.config').joinpath("config.yaml")  # 默认配置文件路径
+    _default_config_path = files('hapray.core.config').joinpath('config.yaml')  # 默认配置文件路径
     _user_config_path = None  # 用户自定义配置文件路径
     _data = None  # 配置数据
     _initialized = False  # 是否已初始化标志
@@ -91,27 +91,27 @@ class Config:
             self._data = ConfigObject(merged_config)
 
         except FileNotFoundError as e:
-            raise ConfigError(f"配置文件未找到: {str(e)}") from e
+            raise ConfigError(f'配置文件未找到: {str(e)}') from e
         except yaml.YAMLError as e:
-            raise ConfigError(f"YAML 解析错误: {str(e)}") from e
+            raise ConfigError(f'YAML 解析错误: {str(e)}') from e
 
-    def _load_config(self, path) -> Dict:
+    def _load_config(self, path) -> dict:
         """加载YAML配置文件"""
         try:
             if isinstance(path, str):
                 # 处理文件路径
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(path, encoding='utf-8') as f:
                     return yaml.safe_load(f)
             else:
                 # 处理importlib.resources路径
                 return yaml.safe_load(path.read_text(encoding='utf-8'))
         except FileNotFoundError as e:
-            raise ConfigError(f"配置文件未找到: {str(path)}") from e
+            raise ConfigError(f'配置文件未找到: {str(path)}') from e
 
     def __getattr__(self, name: str) -> Any:
         """通过属性访问配置项"""
         if self._data is None:
-            raise ConfigError("配置未初始化，请先调用 reload()")
+            raise ConfigError('配置未初始化，请先调用 reload()')
         return getattr(self._data, name)
 
     @property

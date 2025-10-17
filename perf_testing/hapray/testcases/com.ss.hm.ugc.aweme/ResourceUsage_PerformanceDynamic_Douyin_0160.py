@@ -1,40 +1,16 @@
-# coding: utf-8
-import os
-import time
-
-from devicetest.core.test_case import Step
-from hypium import BY
-
-from hapray.core.perf_testcase import PerfTestCase, Log
-from hapray.core.common.common_utils import CommonUtils
-from hapray.core.common.coordinate_adapter import CoordinateAdapter
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_Douyin_0160(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
 
         self._app_package = 'com.ss.hm.ugc.aweme'
         self._app_name = '抖音'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 观看收藏的5个固定带弹幕的视频，每个观看10s"
-            },
-            {
-                "name": "step2",
-                "description": "2. 观看收藏的5个固定图文轮播视频，每个观看10s"
-            }
-        ]
         # 原始采集设备的屏幕尺寸（Pura 70 Pro）
         self.source_screen_width = 1260
         self.source_screen_height = 2844
-
-    @property
-    def steps(self) -> list[dict[str, str]]:
-        return self._steps
 
     @property
     def app_package(self) -> str:
@@ -44,59 +20,28 @@ class ResourceUsage_PerformanceDynamic_Douyin_0160(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
-        def start(driver):
-            Step('启动被测应用')
-            driver.wake_up_display()
-            time.sleep(1)
-            self.driver.swipe_to_home()
-            time.sleep(1)
+        def start():
             # 1. 打开抖音，等待 5s
-            self.driver.start_app(self.app_package)
-            driver.wait(2)  # 等待应用启动
-            time.sleep(3)
+            self.start_app()
 
             # 2. 抖音点击“我”，等待 2s
-            driver.touch(BY.text('我'))
-            time.sleep(2)
+            self.touch_by_text('我', 2)
 
             # 3. 点击收藏
-            driver.touch(BY.text('收藏'))
-            time.sleep(2)
+            self.touch_by_text('收藏', 2)
 
             # 4. 点击进入第一个视频
-            driver.touch(CoordinateAdapter.convert_coordinate(
-                self.driver,
-                x=235,  # 原始x坐标
-                y=2020,  # 原始y坐标
-                source_width=self.source_screen_width,
-                source_height=self.source_screen_height))
-            time.sleep(2)
+            self.touch_by_coordinates(235, 2020, 2)
 
-        def step1(driver):
-            Step('1. 观看收藏的5个固定带弹幕的视频，每个观看10s')
-            for _ in range(5):
-                CommonUtils.swipes_up_load(driver, 1, 10, 300)
+        def step1():
+            # 观看收藏的5个固定图文轮播视频，每个观看10s
+            self.swipes_up(5, 10, 300)
 
-        def step2(driver):
-            Step('2. 观看收藏的5个固定图文轮播视频，每个观看10s')
-            for _ in range(5):
-                CommonUtils.swipes_up_load(driver, 1, 10, 300)
+        def step2():
+            # 观看收藏的5个固定带弹幕的视频，每个观看10s
+            self.swipes_up(5, 10, 300)
 
-        def finish(driver):
-            driver.swipe_to_home()
-
-        start(self.driver)
-        self.execute_performance_step(1, step1, 60)
-        self.execute_performance_step(2, step2, 60)
-        finish(self.driver)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()
+        start()
+        self.execute_performance_step('抖音-视频播放场景-step1图文视频轮播', 60, step1)
+        self.execute_performance_step('抖音-视频播放场景-step2弹幕视频轮播', 60, step2)

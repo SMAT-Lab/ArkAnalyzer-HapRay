@@ -12,10 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import os.path
 import re
 import sqlite3
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 
@@ -28,9 +29,11 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
     pattern = re.compile(r'^H:CustomNode:BuildItem\s*\[([^\]]*)\]')
 
     def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'component_reusability_report.json')
+        super().__init__(scene_dir, 'trace/componentReuse')
 
-    def _analyze_impl(self, step_dir: str, trace_db_path: str, perf_db_path: str) -> Optional[Dict[str, Any]]:
+    def _analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
         """Analyze component reusability metrics.
 
         Metrics:
@@ -46,12 +49,7 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
         Returns:
             Dictionary containing reusability metrics
         """
-        metrics = {
-            "max_component": '',
-            "total_builds": 0,
-            "recycled_builds": 0,
-            "reusability_ratio": 0.0
-        }
+        metrics = {'max_component': '', 'total_builds': 0, 'recycled_builds': 0, 'reusability_ratio': 0.0}
 
         if not os.path.exists(trace_db_path):
             return None
@@ -67,11 +65,11 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                 for row in cursor.fetchall():
                     # H:CustomNode:BuildItem [ItemView][self:86][parent:-1]
                     # H:CustomNode:BuildRecycle ItemView
-                    component = self._extract_component_name(row["name"])
+                    component = self._extract_component_name(row['name'])
                     if component not in result:
                         result[component] = [0, 0]
                     result[component][0] = result[component][0] + 1
-                    if row["name"].startswith('H:CustomNode:BuildRecycle'):
+                    if row['name'].startswith('H:CustomNode:BuildRecycle'):
                         result[component][1] = result[component][1] + 1
 
                 # choose max component as build result
@@ -82,20 +80,17 @@ class ComponentReusableAnalyzer(BaseAnalyzer):
                         max_component[1] = value[1]
                         max_component[2] = key
 
-                metrics["total_builds"] = max_component[0]
-                metrics["recycled_builds"] = max_component[1]
-                metrics["max_component"] = max_component[2]
-                metrics["details"] = result
+                metrics['total_builds'] = max_component[0]
+                metrics['recycled_builds'] = max_component[1]
+                metrics['max_component'] = max_component[2]
+                metrics['details'] = result
 
                 # Calculate reusability ratio
-                if metrics["total_builds"] > 0:
-                    metrics["reusability_ratio"] = round(
-                        metrics["recycled_builds"] / metrics["total_builds"],
-                        2
-                    )
+                if metrics['total_builds'] > 0:
+                    metrics['reusability_ratio'] = round(metrics['recycled_builds'] / metrics['total_builds'], 2)
         except sqlite3.Error as e:
-            self.logger.error("Database error: %s", str(e))
-            return {"error": f"Database operation failed: {str(e)}"}
+            self.logger.error('ComponentReusableAnalyzer Database error: %s', str(e))
+            return {'error': f'Database operation failed: {str(e)}'}
 
         return metrics
 

@@ -1,0 +1,17 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "ResourceUsage_PerformanceDynamic_zhifubao_0040.py"
+        ]
+    },
+    "kits":[
+    ]
+}

@@ -1,6 +1,6 @@
 #include "napi/native_api.h"
 
-static napi_value Add(napi_env env, napi_callback_info info)
+extern "C" napi_value Add(napi_env env, napi_callback_info info)
 {
     size_t argc = 2;
     napi_value args[2] = {nullptr};

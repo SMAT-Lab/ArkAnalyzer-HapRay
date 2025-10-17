@@ -1,35 +1,20 @@
-# coding: utf-8
-import os
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase, Log
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
-
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
 
         self._app_package = 'com.alipay.mobile.client'
         self._app_name = '支付宝'
-        self._steps = [
-            {
-                "name": "step1",
-                "description": "1. 支付宝-首页扫一扫"
-            },
-            {
-                "name": "step2",
-                "description": "2. 支付宝-点击“相册”按钮"
-            }
-        ]
-
-    @property
-    def steps(self) -> list:
-        return self._steps
+        # 原始采集设备的屏幕尺寸（Nova 14）
+        self.source_screen_width = 1084
+        self.source_screen_height = 2412
 
     @property
     def app_package(self) -> str:
@@ -39,41 +24,55 @@ class ResourceUsage_PerformanceDynamic_zhifubao_0020(PerfTestCase):
     def app_name(self) -> str:
         return self._app_name
 
-    def setup(self):
-        Log.info('setup')
-        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-
     def process(self):
         self.driver.swipe_to_home()
 
-        Step('启动被测应用')
+        # 启动被测应用
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
 
-        def step1(driver):
-            Step('1. 支付宝-首页扫一扫')
-            component = driver.find_component(BY.type('Text').text('扫一扫'))
-            driver.touch(component)
+        def step1():
+            # 点击收付款
+            self.driver.touch(BY.type('Text').text('收付款'))
             time.sleep(5)
 
-        def step2(driver):
-            Step('2. 支付宝-点击“相册”按钮')
-            component = driver.find_component(BY.type('Text').text('相册'))
-            driver.touch(component)
+            # 点击收钱
+            self.touch_by_coordinates(210, 1752, 5)
+
+        def without_perf_after_step1():
+            time.sleep(10)
+            self.swipe_to_back(1)
+            self.swipe_to_back(1)
+
+            # 点击扫一扫
+            self.driver.touch(BY.type('Text').text('扫一扫'))
             time.sleep(5)
 
-        def finish(driver):
+            # 点击相册
+            self.driver.touch(BY.type('Text').text('相册'))
+            time.sleep(5)
+            self.swipe_to_back(1)
+            self.swipe_to_back(1)
+
+        def step2():
+            # 点击扫一扫
+            self.driver.touch(BY.type('Text').text('扫一扫'))
+            time.sleep(5)
+            # 点击相册
+            self.driver.touch(BY.type('Text').text('相册'))
+            time.sleep(5)
+            # 选择第一张为支付宝收款码的图片
+            self.touch_by_coordinates(483, 446, 5)
+            # 点击完成
+            self.driver.touch(BY.type('Text').text('完成'))
+            time.sleep(5)
+
+        def finish():
             # 上滑返回桌面
-            driver.swipe_to_home()
+            self.driver.swipe_to_home()
             time.sleep(2)
 
-        self.execute_performance_step(1, step1, 10)
-        time.sleep(10)
-        self.execute_performance_step(2, step2, 10)
-        finish(self.driver)
-
-    def teardown(self):
-        Log.info('teardown')
-        self.driver.stop_app(self.app_package)
-        self.generate_reports()
+        self.execute_performance_step('支付宝-扫一扫场景-step1首付款码展示', 15, step1)
+        without_perf_after_step1()
+        self.execute_performance_step('支付宝-扫一扫场景-step2扫一扫识别收款码', 25, step2)
+        finish()
