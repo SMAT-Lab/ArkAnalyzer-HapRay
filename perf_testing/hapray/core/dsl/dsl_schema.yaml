@@ -1,0 +1,325 @@
+# UI 测试配置规范 v1.0
+version: 1.0
+description: 支持复杂组件选择器的 UI 测试配置规范
+
+# 根对象
+type: object
+required: [config, test_case]
+properties:
+  config:
+    type: object
+    required: [app_package, app_name, scene_name]
+    properties:
+      source_screen:
+        type: array
+        description: 设计基准分辨率 [宽度, 高度]
+        items:
+          type: number
+        minItems: 2
+        maxItems: 2
+      app_package:
+        type: string
+        description: 应用包名
+        minLength: 1
+      app_name:
+        type: string
+        description: 应用显示名称
+        minLength: 1
+      scene_name:
+        type: string
+        description: 测试场景标识符
+        minLength: 1
+
+  test_case:
+    type: object
+    description: 测试用例
+    required: [steps]
+    properties:
+      setup:
+        type: array
+        description: 前置步骤序列
+        items:
+          $ref: "#/definitions/event"
+      cleanup:
+        type: array
+        description: 清理步骤序列
+        items:
+          $ref: "#/definitions/event"
+      steps:
+        type: array
+        description: 主步骤序列
+        minItems: 1
+        items:
+          type: object
+          required: [name, events]
+          properties:
+            name:
+              type: string
+              description: 步骤名称
+              minLength: 1
+            performance:
+              type: object
+              required: [duration]
+              description: 性能采集配置
+              properties:
+                duration:
+                  type: integer
+                  description: 采集持续时间(s)
+                  minimum: 1
+            events:
+              type: array
+              description: 事件序列
+              minItems: 1
+              items:
+                $ref: "#/definitions/event"
+# 定义
+definitions:
+  componentSelector:
+    type: object
+    description: 组件选择器
+    properties:
+      text:
+        type: string
+        description: 文本匹配
+      key:
+        type: string
+        description: 键值匹配
+      type:
+        type: string
+        description: 类型匹配
+      xpath:
+        type: string
+        description: XPath 匹配
+      relations:
+        type: array
+        description: 相对位置关系
+        items:
+          type: object
+          properties:
+            relation:
+              type: string
+              enum: [ isAfter, isBefore, within, inWindow ]
+            target:
+              $ref: "#/definitions/componentSelector"
+          required: [ relation, target ]
+      pos:
+        type: array
+        description: 坐标位置 [x, y]
+        items:
+          type: number
+        minItems: 2
+        maxItems: 2
+
+  event:
+    oneOf:
+      - $ref: "#/definitions/touchEvent"
+      - $ref: "#/definitions/swipeEvent"
+      - $ref: "#/definitions/pinchEvent"
+      - $ref: "#/definitions/inputEvent"
+      - $ref: "#/definitions/waitEvent"
+      - $ref: "#/definitions/loopEvent"
+      - $ref: "#/definitions/keyEvent"
+      - $ref: "#/definitions/startAppEvent"
+      - $ref: "#/definitions/stopAppEvent"
+
+  # 具体事件类型
+  touchEvent:
+    type: object
+    required: [type, target]
+    properties:
+      type:
+        type: string
+        const: touch
+        description: 点击事件
+      target:
+        $ref: "#/definitions/componentSelector"
+      mode:
+        type: string
+        description: 点击模式
+        enum: [normal, long, double]
+        default: normal
+      scroll_target:
+        $ref: "#/definitions/componentSelector"
+        description: 滚动查找的目标组件
+      wait_time:
+        type: number
+        description: 点击后等待时间(s)
+        default: 0.1
+
+  swipeEvent:
+    type: object
+    required: [type, direction]
+    properties:
+      type:
+        type: string
+        const: swipe
+        description: 滑动事件
+      direction:
+        type: string
+        description: 滑动方向
+        enum: [LEFT, RIGHT, UP, DOWN]
+      distance:
+        type: integer
+        description: 滑动距离百分比(1-100)
+        minimum: 1
+        maximum: 100
+        default: 60
+      area:
+        $ref: "#/definitions/componentSelector"
+        description: 滑动区域组件
+      side:
+        type: string
+        description: 滑动起始位置
+        enum: [LEFT, RIGHT, TOP, BOTTOM]
+      start_point:
+        type: array
+        description: 滑动起始点坐标 [x, y] 或比例 [0.5, 0.5]
+        items:
+          type: number
+        minItems: 2
+        maxItems: 2
+      swipe_time:
+        type: number
+        description: 滑动时间(s)
+        default: 0.3
+
+  pinchEvent:
+    type: object
+    required: [type, operation, area]
+    properties:
+      type:
+        type: string
+        const: pinch
+        description: 捏合手势事件
+      operation:
+        type: string
+        description: 捏合操作类型
+        enum: [in, out]
+      area:
+        $ref: "#/definitions/componentSelector"
+      scale:
+        type: number
+        description: 缩放比例
+        default: 0.4
+      direction:
+        type: string
+        description: 滑动方向
+        enum: [diagonal, horizontal]
+        default: diagonal
+      dead_zone_ratio:
+        type: number
+        description: 边界死区比例
+        minimum: 0
+        maximum: 0.5
+        default: 0.2
+
+  inputEvent:
+    type: object
+    required: [type, component, text]
+    properties:
+      type:
+        type: string
+        const: input_text
+        description: 输入事件
+      component:
+        $ref: "#/definitions/componentSelector"
+        description: 目标输入组件
+      text:
+        type: string
+        description: 输入的文本
+
+  waitEvent:
+    type: object
+    required: [type, duration]
+    properties:
+      type:
+        type: string
+        const: wait
+        description: 等待事件
+      duration:
+        type: integer
+        description: 等待时间(s)
+        default: 1
+
+  loopEvent:
+    type: object
+    required: [type, count, events]
+    properties:
+      type:
+        type: string
+        const: loop
+        description: 循环事件
+      count:
+        type: integer
+        description: 循环次数
+        minimum: 1
+      events:
+        type: array
+        description: 循环内的事件序列
+        minItems: 1
+        items:
+          $ref: "#/definitions/event"
+
+  keyEvent:
+    type: object
+    required: [type, key_code]
+    properties:
+      type:
+        type: string
+        const: press_key
+        description: 按键事件
+      key_code:
+        oneOf:
+          - type: string
+            enum: [BACK, HOME, MENU, ENTER, VOLUME_UP, VOLUME_DOWN, POWER]
+          - type: integer
+        description: 按键类型
+      key_code2:
+        oneOf:
+          - type: string
+            enum: [BACK, HOME, MENU, ENTER, VOLUME_UP, VOLUME_DOWN, POWER]
+          - type: integer
+        description: 第二个按键(组合键)
+      mode:
+        type: string
+        description: 按键模式
+        enum: [normal, long, double]
+        default: normal
+
+  startAppEvent:
+    type: object
+    required: [type]
+    properties:
+      type:
+        type: string
+        const: start_app
+        description: 启动应用事件
+      package_name:
+        type: string
+        description: 应用包名
+      page_name:
+        type: string
+        description: 应用内页面名称
+      params:
+        type: string
+        description: 启动参数
+      wait_time:
+        type: number
+        description: 等待时间(s)
+        default: 1
+
+  stopAppEvent:
+    type: object
+    required: [type]
+    properties:
+      type:
+        type: string
+        const: stop_app
+        description: 停止应用事件
+      package_name:
+        type: string
+        description: 应用包名
+      wait_time:
+        type: number
+        description: 等待时间(s)
+        default: 0.5

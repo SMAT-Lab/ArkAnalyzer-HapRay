@@ -1,0 +1,94 @@
+[
+    {
+        "name": "androidx.compose.ui:ui",
+        "namespace": "androidx.compose.ui"
+    },
+    {
+        "name": "androidx.compose.ui:ui-geometry",
+        "namespace": "androidx.compose.ui.geometry"
+    },
+    {
+        "name": "androidx.compose.ui:ui-graphics",
+        "namespace": "androidx.compose.ui.graphics"
+    },
+    {
+        "name": "androidx.compose.ui:ui-test",
+        "namespace": "androidx.compose.ui.test"
+    },
+    {
+        "name": "androidx.compose.ui:ui-text",
+        "namespace": "androidx.compose.ui.text"
+    },
+    {
+        "name": "androidx.compose.ui:ui-tooling-data",
+        "namespace": "androidx.compose.ui.tooling.data"
+    },
+    {
+        "name": "androidx.compose.ui:ui-tooling-preview",
+        "namespace": "androidx.compose.ui.tooling.preview"
+    },
+    {
+        "name": "androidx.compose.ui:ui-tooling",
+        "namespace": "androidx.compose.ui.tooling"
+    },
+    {
+        "name": "androidx.compose.ui:ui-unit",
+        "namespace": "androidx.compose.ui.unit"
+    },
+    {
+        "name": "androidx.compose.ui:ui-util",
+        "namespace": "androidx.compose.ui.util"
+    },
+    {
+        "name": "androidx.compose.ui:ui-viewbinding",
+        "namespace": "androidx.compose.ui.viewbinding"
+    },
+    {
+        "name": "androidx.compose.runtime:runtime-annotation",
+        "namespace": "androidx.compose.runtime.annotation"
+    },
+    {
+        "name": "androidx.compose.runtime:runtime-saveable",
+        "namespace": "androidx.compose.runtime.saveable"
+    },
+    {
+        "name": "androidx.compose.runtime:runtime",
+        "namespace": "androidx.compose.runtime"
+    },
+    {
+        "name": "androidx.compose.foundation:foundation-layout",
+        "namespace": "androidx.compose.foundation.layout"
+    },
+    {
+        "name": "androidx.compose.foundation:foundation",
+        "namespace": "androidx.compose.foundation"
+    },
+    {
+        "name": "androidx.compose.animation:animation",
+        "namespace": "androidx.compose.animation"
+    },
+    {
+        "name": "androidx.compose.animation:animation-core",
+        "namespace": "androidx.compose.animation.core"
+    },
+    {
+        "name": "androidx.compose.animation:animation-graphics",
+        "namespace": "androidx.compose.animation.graphics"
+    },
+    {
+        "name": "androidx.collection:collection",
+        "namespace": "androidx.collection"
+    },
+    {
+        "name": "kotlin",
+        "namespace": "kotlin"
+    },
+    {
+        "name": "kotlinx",
+        "namespace": "kotlinx"
+    },
+    {
+        "name": "org.jetbrains.skia",
+        "namespace": "org.jetbrains.skia"
+    }
+]

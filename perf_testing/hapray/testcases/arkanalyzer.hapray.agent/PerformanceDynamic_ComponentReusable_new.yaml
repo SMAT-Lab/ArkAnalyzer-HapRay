@@ -1,0 +1,60 @@
+config:
+  source_screen: [1084, 2412]  # 设计基准分辨率
+  app_package: 'arkanalyzer.hapray.agent' # 应用报名
+  app_name: 'HapRay' # 应用名
+  scene_name: 'PerformanceDynamic_ComponentReusable_new' # 测试场景名
+
+test_case:
+  steps:
+    - name: "start"
+      events:
+        # 启动应用，等待5s
+        - type: "start_app"
+        - type: "wait"
+          duration: 5
+
+        - type: "start_app"
+          package_name: "arkanalyzer.hapray.agent"
+          page_name: "ExecutorAbility"
+          params: "--ps testSuite test_suite --ps testCase ComponentReusableTest"
+          wait_time: 2
+
+        # 上滑5次, 每次等待2s
+        - type: "loop"
+          count: 5
+          events:
+            - type: "swipe"
+              direction: "UP"
+            - type: "wait"
+              duration: 2
+
+        # 下滑5次, 每次等待2s
+        - type: "loop"
+          count: 5
+          events:
+            - type: "swipe"
+              direction: "DOWN"
+            - type: "wait"
+              duration: 2
+
+    - name: "组件复用-list上滑/下滑"
+      performance:
+        duration: 20   # perf/trace采集时间20s
+      events:
+        # 上滑5次, 每次等待2s
+        - type: "loop"
+          count: 5
+          events:
+            - type: "swipe"
+              direction: "UP"
+            - type: "wait"
+              duration: 2
+
+        # 下滑5次, 每次等待2s
+        - type: "loop"
+          count: 5
+          events:
+            - type: "swipe"
+              direction: "DOWN"
+            - type: "wait"
+              duration: 2

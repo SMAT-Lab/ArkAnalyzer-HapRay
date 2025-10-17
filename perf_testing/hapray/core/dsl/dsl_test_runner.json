@@ -1,0 +1,17 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "dsl_test_runner.py"
+        ]
+    },
+    "kits":[
+    ]
+}

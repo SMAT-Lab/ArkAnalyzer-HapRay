@@ -14,14 +14,17 @@ limitations under the License.
 """
 
 import argparse
+import logging
+import multiprocessing
 import os
 import sys
-import logging
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
 from hapray.actions.opt_action import OptAction
 from hapray.actions.perf_action import PerfAction
+from hapray.actions.prepare_action import PrepareAction
+from hapray.actions.static_action import StaticAction
 from hapray.actions.update_action import UpdateAction
 from hapray.core.config.config import Config
 
@@ -44,9 +47,7 @@ def configure_logging(log_file='HapRay.log'):
     logger.addHandler(console_handler)
 
     # 文件处理器（如果指定了日志文件）
-    file_handler = RotatingFileHandler(
-        log_file, mode="a", maxBytes=10 * 1024 * 1024, backupCount=10,
-        encoding="UTF-8")
+    file_handler = RotatingFileHandler(log_file, mode='a', maxBytes=10 * 1024 * 1024, backupCount=10, encoding='UTF-8')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
@@ -57,22 +58,27 @@ class HapRayCmd:
         configure_logging('HapRay.log')
 
         actions = {
-            "perf": PerfAction,
-            "opt": OptAction,
-            "update": UpdateAction,
-            "compare": CompareAction,
+            'perf': PerfAction,
+            'opt': OptAction,
+            'static': StaticAction,
+            'update': UpdateAction,
+            'compare': CompareAction,
+            'prepare': PrepareAction,
         }
 
         parser = argparse.ArgumentParser(
-            description="Code-oriented Performance Analysis for OpenHarmony Apps",
-            usage=f"{sys.argv[0]} [action] [<args>]\nActions: {' | '.join(actions.keys())}",
-            add_help=False)
+            description='Code-oriented Performance Analysis for OpenHarmony Apps',
+            usage=f'{sys.argv[0]} [action] [<args>]\nActions: {" | ".join(actions.keys())}',
+            add_help=False,
+        )
 
-        parser.add_argument("action",
-                            choices=list(actions.keys()),
-                            nargs='?',
-                            default="perf",
-                            help="Action to perform (perf: performance testing, opt: so optimization detection)")
+        parser.add_argument(
+            'action',
+            choices=list(actions.keys()),
+            nargs='?',
+            default='perf',
+            help='Action to perform (perf: performance testing, opt: so optimization detection, static: HAP static analysis, prepare: simplified test execution)',
+        )
         # Parse action
         action_args = []
         if len(sys.argv[1:2]) > 0 and sys.argv[1:2][0] not in actions:
@@ -92,5 +98,6 @@ class HapRayCmd:
         Config(config_path)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
     HapRayCmd()

@@ -20,10 +20,11 @@ import logging
 import os
 import zlib
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 import pandas as pd
 
+from hapray import VERSION
 from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
@@ -38,126 +39,200 @@ class DataType(enum.Enum):
 class ReportData:
     """封装报告生成所需的所有数据"""
 
-    def __init__(self):
+    def __init__(self, scene_dir: str, result: dict):
+        self.scene_dir = scene_dir
         self.perf_data = []
-        self.frame_data = {}
-        self.empty_frame_data = {}
-        self.component_reusability_data = {}
-        self.cold_start_analysis_data = {}
-        self.basic_info = {}
+        self.result = {
+            **{
+                'version': VERSION,
+                'type': DataType.BASE64_GZIP_JSON.value,
+                'versionCode': 1,
+                'basicInfo': {},
+                'perf': {'steps': []},  # 默认空步骤
+            },
+            **result,
+        }
 
     @classmethod
-    def from_paths(cls, scene_dir):
+    def from_paths(cls, scene_dir: str, result: dict):
         """从文件路径加载数据"""
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
-        frame_data_path = os.path.join(scene_dir, 'htrace', 'frame_analysis_summary.json')
-        empty_frames_analysis_path = os.path.join(scene_dir, 'htrace', 'empty_frames_analysis.json')
-        component_reusability_path = os.path.join(scene_dir, 'htrace', 'component_reusability_report.json')
-        cold_start_analysis_path = os.path.join(scene_dir, 'htrace', 'cold_start_analysis_summary.json')
-
-        data = cls()
+        data = cls(scene_dir, result)
         data.load_perf_data(perf_data_path)
-        data.load_frame_data(frame_data_path)
-        data.load_empty_frame_data(empty_frames_analysis_path)
-        data.load_component_reusability_data(component_reusability_path)
-        data.load_cold_start_analysis_data(cold_start_analysis_path)
-        data.extract_basic_info()
+        data.load_trace_data(scene_dir)
         return data
 
     def __str__(self):
-        # 构建基础数据结构
-        merged_data = {
-            "type": DataType.BASE64_GZIP_JSON.value,
-            "versionCode": 1,
-            "basicInfo": self.basic_info or {},
-            "perf": {"steps": []}  # 默认空步骤
-        }
-
-        # 处理性能数据
-        if isinstance(self.perf_data, list) and len(self.perf_data) > 0:
-            first_entry = self.perf_data[0]
-            merged_data["perf"]["steps"] = first_entry.get("steps", [])
-
-        # 处理跟踪数据（可选）
-        if self.frame_data:
-            trace_data = {
-                "componentReuse": self.component_reusability_data
-            }
-
-            # 添加帧分析数据
-            frames = self.frame_data
-            if frames != {}:
-                trace_data["frames"] = frames
-
-            # 添加空帧分析数据（可选）
-            if self.empty_frame_data != {}:
-                trace_data["emptyFrame"] = self.empty_frame_data
-
-            # 添加冷启动分析数据（可选）
-            if self.cold_start_analysis_data != {}:
-                trace_data["coldStart"] = self.cold_start_analysis_data
-
-            merged_data["trace"] = trace_data
-
         # 路径1: Base64编码的gzip压缩JSON
-        json_bytes = json.dumps(merged_data).encode('utf-8')
-        compressed_bytes = zlib.compress(json_bytes, level=9)
+        # 清理数据中的NaN值以确保JSON序列化安全
+        cleaned_result = self._clean_data_for_json(self.result)
+
+        # 特殊处理火焰图数据：按步骤单独压缩
+        cleaned_result = self._compress_flame_graph_by_steps(cleaned_result)
+
+        json_str = json.dumps(cleaned_result)
+        with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
+            f.write(json_str)
+        compressed_bytes = zlib.compress(json_str.encode('utf-8'), level=9)
         base64_bytes = base64.b64encode(compressed_bytes)
         return base64_bytes.decode('ascii')
+
+    def _clean_data_for_json(self, data):  # pylint: disable=too-many-return-statements
+        """清理数据，将numpy类型和NaN值转换为标准Python类型以确保JSON序列化"""
+        # pylint: disable=duplicate-code
+        if isinstance(data, dict):
+            return {key: self._clean_data_for_json(value) for key, value in data.items()}
+        if isinstance(data, list):
+            return [self._clean_data_for_json(item) for item in data]
+        if hasattr(data, 'dtype') and hasattr(data, 'item'):
+            # numpy类型
+            if pd.isna(data):
+                # 处理NaN值
+                if 'int' in str(data.dtype):
+                    return 0
+                if 'float' in str(data.dtype):
+                    return 0.0
+                return None
+            if 'int' in str(data.dtype):
+                return int(data)
+            if 'float' in str(data.dtype):
+                return float(data)
+            return data.item()
+        if hasattr(data, '__class__') and 'int64' in str(data.__class__):
+            # 其他可能的int64类型
+            if pd.isna(data):
+                return 0
+            return int(data)
+        if pd.isna(data):
+            # 处理pandas NaN值
+            if isinstance(data, (int, float)):
+                return 0
+            return None
+        return data
+        # pylint: enable=duplicate-code
+
+    def _compress_flame_graph_by_steps(self, data):
+        """按步骤压缩火焰图数据，避免字符串过长"""
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有火焰图数据
+        if 'more' not in data or 'flame_graph' not in data['more']:
+            return data
+
+        flame_graph_data = data['more']['flame_graph']
+        if not isinstance(flame_graph_data, dict):
+            return data
+
+        # 按步骤压缩火焰图数据
+        compressed_flame_graph = {}
+
+        for step_key, step_data in flame_graph_data.items():
+            if isinstance(step_data, str) and step_data:
+                try:
+                    # 压缩单个步骤的数据
+                    compressed_bytes = zlib.compress(step_data.encode('utf-8'), level=9)
+                    base64_bytes = base64.b64encode(compressed_bytes)
+                    compressed_flame_graph[step_key] = base64_bytes.decode('ascii')
+
+                    # 记录压缩效果
+                    original_size = len(step_data)
+                    compressed_size = len(compressed_flame_graph[step_key])
+                    compression_ratio = (1 - compressed_size / original_size) * 100
+                    logging.info(
+                        '火焰图数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
+                    )
+                except Exception as e:
+                    logging.warning('压缩火焰图数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_flame_graph[step_key] = step_data
+            else:
+                # 非字符串数据或空数据保持不变
+                compressed_flame_graph[step_key] = step_data
+
+        # 更新数据结构
+        data['more']['flame_graph'] = compressed_flame_graph
+        return data
 
     def load_perf_data(self, path):
         self.perf_data = self._load_json_safe(path, default=[])
         if len(self.perf_data) == 0:
-            raise FileNotFoundError(f"hiperf_info.json not found: {path}")
+            raise FileNotFoundError(f'hiperf_info.json not found: {path}')
+        first_entry = self.perf_data[0]
+        self.result['perf']['steps'] = first_entry.get('steps', [])
+        self.result['perf']['har'] = first_entry.get('har', {})
+        self.result['basicInfo'] = {
+            'rom_version': first_entry.get('rom_version', ''),
+            'app_id': first_entry.get('app_id', ''),
+            'app_name': first_entry.get('app_name', ''),
+            'app_version': first_entry.get('app_version', ''),
+            'scene': first_entry.get('scene', ''),
+            'timestamp': first_entry.get('timestamp', 0),
+        }
 
-    def load_frame_data(self, path):
-        self.frame_data = self._load_json_safe(path, default={})
+    def load_trace_data(self, scene_dir: str):
+        """加载 trace 相关数据"""
+        report_dir = os.path.join(scene_dir, 'report')
 
-    def load_empty_frame_data(self, path):
-        self.empty_frame_data = self._load_json_safe(path, default={})
+        # 确保 trace 字段存在
+        if 'trace' not in self.result:
+            self.result['trace'] = {}
 
-    def load_component_reusability_data(self, path):
-        self.component_reusability_data = self._load_json_safe(path, default={})
+        # 加载各种 trace 数据
+        trace_files = {
+            'frames': 'trace_frames.json',
+            'emptyFrame': 'trace_emptyFrame.json',
+            'componentReuse': 'trace_componentReuse.json',
+            'coldStart': 'trace_coldStart.json',
+            'gc_thread': 'trace_gc_thread.json',
+            'frameLoads': 'trace_frameLoads.json',
+            'vsyncAnomaly': 'trace_vsyncAnomaly.json',
+            'faultTree': 'trace_fault_tree.json',
+        }
 
-    def load_cold_start_analysis_data(self, path):
-        self.cold_start_analysis_data = self._load_json_safe(path, default={})
+        for key, filename in trace_files.items():
+            file_path = os.path.join(report_dir, filename)
+            data = self._load_json_safe(file_path, default={})
+            if data:  # 只有当数据不为空时才添加
+                self.result['trace'][key] = data
 
-    def extract_basic_info(self):
-        if self.perf_data and isinstance(self.perf_data, list):
-            first_entry = self.perf_data[0]
-            self.basic_info = {
-                "rom_version": first_entry.get("rom_version", ""),
-                "app_id": first_entry.get("app_id", ""),
-                "app_name": first_entry.get("app_name", ""),
-                "app_version": first_entry.get("app_version", ""),
-                "scene": first_entry.get("scene", ""),
-                "timestamp": first_entry.get("timestamp", 0)
-            }
+        # 加载火焰图数据
+        if 'more' not in self.result:
+            self.result['more'] = {}
+
+        flame_graph_path = os.path.join(report_dir, 'more_flame_graph.json')
+        flame_graph_data = self._load_json_safe(flame_graph_path, default={})
+        if flame_graph_data:
+            self.result['more']['flame_graph'] = flame_graph_data
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""
         if not os.path.exists(path):
-            logging.info("File not found: %s", path)
+            logging.info('File not found: %s', path)
             return default
 
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding='utf-8') as f:
                 data = json.load(f)
 
             # 验证数据类型
             if isinstance(default, list) and not isinstance(data, list):
-                logging.warning("Invalid format in %s, expected list but got %s", path, type(data).__name__)
+                logging.warning('Invalid format in %s, expected list but got %s', path, type(data).__name__)
                 return default
             if isinstance(default, dict) and not isinstance(data, dict):
-                logging.warning("Invalid format in %s, expected list but got %s", path, type(data).__name__)
+                logging.warning('Invalid format in %s, expected list but got %s', path, type(data).__name__)
                 return default
 
             return data
         except json.JSONDecodeError as e:
-            logging.error("JSON decoding error in %s: %s", path, str(e))
+            logging.error('JSON decoding error in %s: %s', path, str(e))
             return default
         except Exception as e:
-            logging.error("Error loading %s: %s", path, str(e))
+            logging.error('Error loading %s: %s', path, str(e))
             return default
 
 
@@ -167,70 +242,56 @@ class ReportGenerator:
     def __init__(self):
         self.perf_testing_dir = CommonUtils.get_project_root()
 
-    def update_report(self, scene_dir: str) -> bool:
-        """Update an existing performance report"""
+    def update_report(self, scene_dir: str, time_ranges: list[dict] = None) -> bool:
+        """Update an existing performance report
+
+        Args:
+            scene_dir: Directory containing the scene data
+            time_ranges: Optional list of time range filters
+        """
         return self._generate_report(
-            scene_dirs=[scene_dir],
-            scene_dir=scene_dir,
-            skip_round_selection=True
+            scene_dirs=[scene_dir], scene_dir=scene_dir, skip_round_selection=True, time_ranges=time_ranges
         )
 
-    def generate_report(
-            self,
-            scene_dirs: List[str],
-            scene_dir: str
-    ) -> bool:
+    def generate_report(self, scene_dirs: list[str], scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Generate a new performance analysis report"""
-        return self._generate_report(
-            scene_dirs,
-            scene_dir,
-            skip_round_selection=False
-        )
+        return self._generate_report(scene_dirs, scene_dir, skip_round_selection=False, time_ranges=time_ranges)
 
     def _generate_report(
-            self,
-            scene_dirs: List[str],
-            scene_dir: str,
-            skip_round_selection: bool
+        self, scene_dirs: list[str], scene_dir: str, skip_round_selection: bool, time_ranges: list[dict] = None
     ) -> bool:
         """Core method for report generation and updating"""
         # Step 1: Select round (only for new reports)
-        if not skip_round_selection:
-            if not self._select_round(scene_dirs, scene_dir):
-                logging.error("Round selection failed, aborting report generation")
-                return False
-
-        # Step 2: Analyze data (includes empty frames and frame drops analysis)
-        analyze_data(scene_dir)
-
-        # Step 3: Generate HTML report
-        self._create_html_report(scene_dir)
-
-        logging.info("Report successfully %s for %s", 'updated' if skip_round_selection else 'generated', scene_dir)
-        return True
-
-    def _select_round(self, scene_dirs: List[str], scene_dir: str) -> bool:
-        """Select the best round for report generation"""
-        if not scene_dirs:
-            logging.error("No scene directories provided for round selection")
+        if not skip_round_selection and not self._select_round(scene_dirs, scene_dir):
+            logging.error('Round selection failed, aborting report generation')
             return False
 
-        args = ['dbtools',
-                '--choose',
-                '-i', scene_dir
-                ]
+        # Step 2: Analyze data (includes empty frames and frame drops analysis)
+        result = analyze_data(scene_dir, time_ranges)
 
-        logging.debug("Selecting round with command: %s", ' '.join(args))
+        # Step 3: Generate HTML report
+        self._create_html_report(scene_dir, result)
+
+        logging.info('Report successfully %s for %s', 'updated' if skip_round_selection else 'generated', scene_dir)
+        return True
+
+    def _select_round(self, scene_dirs: list[str], scene_dir: str) -> bool:
+        """Select the best round for report generation"""
+        if not scene_dirs:
+            logging.error('No scene directories provided for round selection')
+            return False
+
+        args = ['perf', '--choose', '-i', scene_dir]
+
+        logging.debug('Selecting round with command: %s', ' '.join(args))
         return ExeUtils.execute_hapray_cmd(args)
 
-    def _create_html_report(self, scene_dir: str) -> None:
+    def _create_html_report(self, scene_dir: str, result: dict) -> None:
         """Create the final HTML report"""
         try:
-            json_data_str = self._build_json_data(scene_dir)
+            json_data_str = self._build_json_data(scene_dir, result)
 
-            template_path = os.path.join(
-                self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html'
-            )
+            template_path = os.path.join(self.perf_testing_dir, 'sa-cmd', 'res', 'report_template.html')
             output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
 
             # Create directory structure if needed
@@ -241,31 +302,26 @@ class ReportGenerator:
                 json_data_str=json_data_str,
                 placeholder='JSON_DATA_PLACEHOLDER',
                 html_path=template_path,
-                output_path=output_path
+                output_path=output_path,
             )
 
-            logging.info("HTML report created at %s", output_path)
+            logging.info('HTML report created at %s', output_path)
         except Exception as e:
-            logging.error("Failed to create HTML report: %s", str(e))
+            logging.error('Failed to create HTML report: %s', str(e))
 
     @staticmethod
-    def _build_json_data(scene_dir: str) -> str:
-        return str(ReportData.from_paths(scene_dir))
+    def _build_json_data(scene_dir: str, result: dict) -> str:
+        return str(ReportData.from_paths(scene_dir, result))
 
     @staticmethod
-    def _inject_json_to_html(
-            json_data_str: str,
-            placeholder: str,
-            html_path: str,
-            output_path: str
-    ) -> None:
+    def _inject_json_to_html(json_data_str: str, placeholder: str, html_path: str, output_path: str) -> None:
         """Inject JSON data into an HTML template"""
         # Validate path
         if not os.path.exists(html_path):
-            raise FileNotFoundError(f"HTML template not found: {html_path}")
+            raise FileNotFoundError(f'HTML template not found: {html_path}')
 
         # Load HTML template
-        with open(html_path, 'r', encoding='utf-8') as f:
+        with open(html_path, encoding='utf-8') as f:
             html_content = f.read()
 
         # Inject JSON into HTML
@@ -275,20 +331,20 @@ class ReportGenerator:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(updated_html)
 
-        logging.debug("Injected %s into %s", json_data_str, output_path)
+        logging.debug('Injected %s into %s', json_data_str, output_path)
 
 
-def merge_summary_info(directory: str) -> List[Dict[str, Any]]:
+def merge_summary_info(directory: str) -> list[dict[str, Any]]:
     """合并指定目录下所有summary_info.json文件中的数据"""
     merged_data = []
 
     for root, _, files in os.walk(directory):
         for file in files:
-            if file == "summary_info.json":
+            if file == 'summary_info.json':
                 file_path = os.path.join(root, file)
 
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    with open(file_path, encoding='utf-8') as f:
                         data = json.load(f)
 
                         if isinstance(data, dict):
@@ -298,19 +354,19 @@ def merge_summary_info(directory: str) -> List[Dict[str, Any]]:
                                 if isinstance(item, dict):
                                     merged_data.append(item)
                                 else:
-                                    logging.warning("警告: 文件 %s 包含非字典项，已跳过", file_path)
+                                    logging.warning('警告: 文件 %s 包含非字典项，已跳过', file_path)
                         else:
-                            logging.warning("警告: 文件 %s 格式不符合预期，已跳过", file_path)
+                            logging.warning('警告: 文件 %s 格式不符合预期，已跳过', file_path)
                 except Exception as e:
-                    logging.error("错误: 无法读取文件 %s: %s", file_path, str(e))
+                    logging.error('错误: 无法读取文件 %s: %s', file_path, str(e))
 
     return merged_data
 
 
-def process_to_dataframe(data: List[Dict[str, Any]]) -> pd.DataFrame:
+def process_to_dataframe(data: list[dict[str, Any]]) -> pd.DataFrame:
     """将合并后的数据转换为DataFrame并处理为透视表"""
     if not data:
-        logging.warning("警告: 没有数据可处理")
+        logging.warning('警告: 没有数据可处理')
         return pd.DataFrame()
 
     # 转换为DataFrame
@@ -323,15 +379,13 @@ def process_to_dataframe(data: List[Dict[str, Any]]) -> pd.DataFrame:
     df['scene_name'] = df['scene'] + '步骤' + df['step_id'].astype(str) + ': ' + df['step_name']
 
     # 创建透视表，行=scene_name，列=version，值=count
-    pivot_table = df.pivot_table(
+    return df.pivot_table(
         index='scene_name',
         columns='version',
         values='count',
         aggfunc='sum',  # 如果有重复值，使用求和聚合
         fill_value=0,
     )
-
-    return pivot_table
 
 
 def add_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -345,7 +399,7 @@ def add_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
         添加了百分比列的DataFrame
     """
     if df.empty or len(df.columns) < 2:
-        logging.warning("警告: 数据不足，无法计算百分比")
+        logging.warning('警告: 数据不足，无法计算百分比')
         return df
 
     # 获取基线列（第一列）
@@ -354,7 +408,7 @@ def add_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
     # 为除基线列外的每一列计算百分比
     for col in df.columns[1:]:
         # 计算百分比 (新值-基线值)/基线值*100%
-        percentage_col = f"{col}_百分比"
+        percentage_col = f'{col}_百分比'
         df[percentage_col] = (df[col] - df[baseline_col]) / df[baseline_col]
 
         # 将百分比列放在对应数据列之后
@@ -366,39 +420,43 @@ def add_percentage_columns(df: pd.DataFrame) -> pd.DataFrame:
 def create_perf_summary_excel(input_path: str) -> bool:
     try:
         if not os.path.isdir(input_path):
-            logging.error("错误: 目录 %s 不存在", input_path)
+            logging.error('错误: 目录 %s 不存在', input_path)
             return False
 
         # 合并JSON数据
         merged_data = merge_summary_info(input_path)
 
         if not merged_data:
-            logging.error("错误: 没有找到任何summary_info.json文件或文件内容为空")
+            logging.error('错误: 没有找到任何summary_info.json文件或文件内容为空')
             return False
 
-        # 处理为透视表
-        pivot_df = process_to_dataframe(merged_data)
+        # 转为DataFrame
+        df = pd.DataFrame(merged_data)
+        if df.empty:
+            logging.error('错误: 合并后的数据为空')
+            return False
 
-        # 确保有足够的列来计算百分比
-        if len(pivot_df.columns) > 1:
-            # 添加百分比列（以第一列为基线）
-            pivot_df = add_percentage_columns(pivot_df)
-            logging.info("已计算相对于 %s 的百分比增长", pivot_df.columns[0])
-        else:
-            logging.warning("警告: 数据列不足，无法计算百分比增长")
+        # 保留所有rom_version的数据
+        rom_versions = df['rom_version'].unique()
+        if len(rom_versions) > 1:
+            logging.info('检测到多个ROM版本: %s', ', '.join(rom_versions))
 
-        # 确定输出路径
+        # 重新组织列结构，将rom_version、app_version、count作为列名
+        result_df = df[['rom_version', 'app_version', 'scene', 'step_id', 'step_name', 'count', 'app_count']].copy()
+
+        # 按场景、步骤ID、步骤名称排序
+        result_df = result_df.sort_values(['scene', 'step_id', 'step_name', 'app_version'])
+
+        # 输出路径
         output_path = Path(input_path) / 'summary_pivot.xlsx'
-
-        # 确保输出目录存在
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # 保存到Excel
         report_saver = ExcelReportSaver(str(output_path))
-        report_saver.add_sheet(pivot_df, 'Summary')
+        report_saver.add_sheet(result_df, 'Summary')
         report_saver.save()
 
         return True
     except Exception as e:
-        logging.error("未知错误：没有生成汇总excel %s", str(e))
+        logging.error('未知错误：没有生成汇总excel %s', str(e))
         return False

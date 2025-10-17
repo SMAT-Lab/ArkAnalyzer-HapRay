@@ -15,17 +15,21 @@ limitations under the License.
 
 import json
 import os
+import re
 import threading
 import time
 from abc import ABC, abstractmethod
 
 from devicetest.core.test_case import TestCase
-from hypium import UiDriver
+from hypium.uidriver.ohos.app_manager import get_bundle_info
+from hypium.uidriver.uitree import UiTree
 from xdevice import platform_logger
 
 from hapray.core.config.config import Config
+from hapray.core.ui_event_wrapper import UIEventWrapper
+from hapray.core.xvm import XVM
 
-Log = platform_logger("PerfTestCase")
+Log = platform_logger('PerfTestCase')
 
 # Template for basic performance collection command
 _PERF_CMD_TEMPLATE = (
@@ -118,29 +122,28 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
 CONFIG"""
 
 
-class ConnectedException(Exception):
+class ConnectedError(Exception):
     pass
 
 
-class PerfTestCase(TestCase, ABC):
+class PerfTestCase(TestCase, UIEventWrapper, ABC):
     """Base class for performance test cases with trace collection support"""
 
     def __init__(self, tag: str, configs):
-        super().__init__(tag, configs)
-        self.driver = UiDriver(self.device1)
+        TestCase.__init__(self, tag, configs)
+        UIEventWrapper.__init__(self, self.device1)
         self.tag = tag
-        self._start_app_package = None  # Package name for process identification
         self._redundant_mode_status = False  # default close redundant mode
+        self._steps = []
+        self.uitree = UiTree(self.driver)
+        self.bundle_info = None
+        self.module_name = None
+        self.xvm = XVM(self)
 
     @property
-    @abstractmethod
     def steps(self) -> list:
         """List of test steps with name and description"""
-
-    @property
-    @abstractmethod
-    def app_package(self) -> str:
-        """Package identifier of the application under test"""
+        return self._steps
 
     @property
     @abstractmethod
@@ -152,12 +155,26 @@ class PerfTestCase(TestCase, ABC):
         """Path where test reports will be stored"""
         return self.get_case_report_path()
 
+    def setup(self):
+        """common setup"""
+        Log.info('PerfTestCase setup')
+        self.bundle_info = get_bundle_info(self.driver, self.app_package)
+        self.module_name = self.bundle_info.get('entryModuleName')
+
+        os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
+        self.stop_app()
+        self.driver.wake_up_display()
+        self.driver.swipe_to_home()
+
+    def teardown(self):
+        """common teardown"""
+        Log.info('PerfTestCase teardown')
+        self.stop_app()
+        self._generate_reports()
+
     def execute_performance_step(
-            self,
-            step_id: int,
-            action: callable,
-            duration: int,
-            sample_all_processes: bool = False
+        self, step_name: str, duration: int, action: callable, *args, sample_all_processes: bool = False
     ):
         """
         Execute a test step while collecting performance and trace data
@@ -168,32 +185,34 @@ class PerfTestCase(TestCase, ABC):
             duration: Data collection time in seconds
             sample_all_processes: Whether to sample all system processes
         """
+        step_id = len(self._steps) + 1
+        self._steps.append({'name': f'step{step_id}', 'description': step_name})
         output_file = self._prepare_output_path(step_id)
         self._clean_previous_output(output_file)
 
-        cmd = self._build_collection_command(
-            output_file,
-            duration,
-            sample_all_processes
-        )
+        # dump view tree when start test step
+        perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
+        self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_start.json'))
 
-        collection_thread = threading.Thread(
-            target=self._run_perf_command,
-            args=(cmd, duration)
-        )
+        cmd = self._build_collection_command(output_file, duration, sample_all_processes)
+        self.xvm.start_trace(duration)
+        collection_thread = threading.Thread(target=self._run_perf_command, args=(cmd, duration))
         collection_thread.start()
-
-        # Execute the test action while data collection runs
-        action(self.driver)
+        try:
+            # Execute the test action while data collection runs
+            action(*args)
+        except Exception as e:
+            Log.error(f'execute performance action err {e}')
 
         collection_thread.join()
-        self._save_performance_data(output_file, step_id)
 
-    def generate_reports(self):
-        """Generate test reports and metadata files"""
-        steps_info = self._collect_step_information()
-        self._save_steps_info(steps_info)
-        self._save_test_metadata()
+        # dump view tree when end test step
+        try:
+            self.uitree.dump_to_file(os.path.join(perf_step_dir, 'layout_end.json'))
+        finally:
+            self._collect_coverage_data(perf_step_dir)
+            self._save_performance_data(output_file, step_id)
+            self.xvm.stop_trace(perf_step_dir)
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
@@ -202,6 +221,7 @@ class PerfTestCase(TestCase, ABC):
         self._redundant_mode_status = True
 
     def reboot_device(self):
+        regex = re.compile(r'\d+')
         # 重启手机
         Log.info('重启手机')
         os.system('hdc shell reboot')
@@ -214,15 +234,17 @@ class PerfTestCase(TestCase, ABC):
 
         while elapsed_time < max_wait_time:
             try:
-                # 使用hdc shell命令检测设备是否真正连接
-                result = os.system('hdc shell "echo device_ready"')
-                if result == 0:
+                # 检测设备桌面是否完成启动
+                pid = self.driver.shell('pidof com.ohos.sceneboard', 10)
+                if regex.match(pid.strip()):
                     Log.info('手机重启成功，设备已连接')
                     Log.info('等待手机完全启动到大屏幕界面...')
-                    time.sleep(60)  # 额外等待60秒确保系统完全启动到大屏幕
+                    self.driver.wake_up_display()
+                    self.driver.swipe_to_back()
+                    self.driver.swipe_to_home(5)
                     return
 
-                Log.info(f'设备未连接，返回码: {result}')
+                Log.info(f'设备未连接，返回码: {pid}')
             except Exception as e:
                 Log.info(f'设备检测失败: {e}')
 
@@ -232,98 +254,67 @@ class PerfTestCase(TestCase, ABC):
             Log.info(f'时间已更新: {elapsed_time}秒')
 
         # 如果超时仍未检测到设备
-        raise ConnectedException('手机重启超时，设备未连接')
+        raise ConnectedError('手机重启超时，设备未连接')
+
+    def _generate_reports(self):
+        """Generate test reports and metadata files"""
+        steps_info = self._collect_step_information()
+        self._save_steps_info(steps_info)
+        self._save_test_metadata()
 
     def _prepare_output_path(self, step_id: int) -> str:
         """Generate output file path on device"""
-        return f"/data/local/tmp/hiperf_step{step_id}.data"
+        return f'/data/local/tmp/hiperf_step{step_id}.data'
 
     def _clean_previous_output(self, output_path: str):
         """Remove previous output files from device"""
         output_dir = os.path.dirname(output_path)
-        self.driver.shell(f"mkdir -p {output_dir}")
-        self.driver.shell(f"rm -f {output_path}")
-        self.driver.shell(f"rm -f {output_path}.htrace")
+        self.driver.shell(f'mkdir -p {output_dir}')
+        self.driver.shell(f'rm -f {output_path}')
+        self.driver.shell(f'rm -f {output_path}.htrace')
 
-    def _build_collection_command(
-            self,
-            output_path: str,
-            duration: int,
-            sample_all: bool
-    ) -> str:
+    def _build_collection_command(self, output_path: str, duration: int, sample_all: bool) -> str:
         """Build appropriate command based on collection parameters"""
         pids_args = self._build_processes_args(sample_all)
 
         if Config.get('trace.enable'):
             record_args = self._build_perf_command(pids_args, duration)
             return self._build_trace_perf_command(output_path, duration, record_args)
-        return self._build_perf_command(
-            pids_args, duration, 'hiperf record', f'-o {output_path}'
-        )
+        return self._build_perf_command(pids_args, duration, 'hiperf record', f'-o {output_path}')
 
     def _build_processes_args(self, sample_all: bool) -> str:
         if sample_all:
             return '-a'
         process_ids, _ = self._get_app_pids()
         if not process_ids:
-            Log.error("No application processes found for collection")
-            return ""
+            Log.error('No application processes found for collection')
+            return ''
 
         pid_args = ','.join(map(str, process_ids))
         return f'-p {pid_args}'
 
-    def _build_perf_command(
-            self,
-            pids: str,
-            duration: int,
-            cmd: str = '',
-            output_arg: str = ''
-    ) -> str:
+    def _build_perf_command(self, pids: str, duration: int, cmd: str = '', output_arg: str = '') -> str:
         """Construct base performance collection command"""
         return _PERF_CMD_TEMPLATE.format(
-            cmd=cmd,
-            pids=pids,
-            output_path=output_arg,
-            duration=duration,
-            event=Config.get('hiperf.event')
+            cmd=cmd, pids=pids, output_path=output_arg, duration=duration, event=Config.get('hiperf.event')
         )
 
-    def _build_trace_perf_command(
-            self,
-            output_path: str,
-            duration: int,
-            record_args: str
-    ) -> str:
+    def _build_trace_perf_command(self, output_path: str, duration: int, record_args: str) -> str:
         """Construct combined trace and performance command"""
-        return _TRACE_PERF_CMD_TEMPLATE.format(
-            output_path=output_path,
-            duration=duration,
-            record_args=record_args
-        )
+        return _TRACE_PERF_CMD_TEMPLATE.format(output_path=output_path, duration=duration, record_args=record_args)
 
     def _run_perf_command(self, command: str, duration: int):
         """Execute performance collection command on device"""
         Log.info(f'Starting performance collection for {duration}s')
-        self.driver.shell(command, timeout=duration + 30)
-        Log.info('Performance collection completed')
+        result = self.driver.shell(command, timeout=duration + 30)
+        Log.info('Performance collection completed %s', result)
 
     def _save_performance_data(self, device_file: str, step_id: int):
         """Save performance and trace data to report directory"""
-        perf_step_dir = os.path.join(
-            self.report_path,
-            'hiperf',
-            f'step{step_id}'
-        )
-        trace_step_dir = os.path.join(
-            self.report_path,
-            'htrace',
-            f'step{step_id}'
-        )
+        perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
+        trace_step_dir = os.path.join(self.report_path, 'htrace', f'step{step_id}')
 
-        local_perf_path = os.path.join(
-            perf_step_dir,
-            Config.get('hiperf.data_filename', 'perf.data')
-        )
+        local_perf_path = os.path.join(perf_step_dir, Config.get('hiperf.data_filename', 'perf.data'))
         local_trace_path = os.path.join(trace_step_dir, 'trace.htrace')
 
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
@@ -337,11 +328,7 @@ class PerfTestCase(TestCase, ABC):
         """Collect metadata about test steps"""
         step_info = []
         for idx, step in enumerate(self.steps, start=1):
-            step_info.append({
-                "name": step['name'],
-                "description": step['description'],
-                "stepIdx": idx
-            })
+            step_info.append({'name': step['name'], 'description': step['description'], 'stepIdx': idx})
         return step_info
 
     def _save_steps_info(self, steps_info: list):
@@ -353,12 +340,12 @@ class PerfTestCase(TestCase, ABC):
     def _save_test_metadata(self):
         """Save test metadata to JSON file"""
         metadata = {
-            "app_id": self.app_package,
-            "app_name": self.app_name,
-            "app_version": self._get_app_version(),
-            "scene": self.tag,
-            "device": self.devices[0].device_description,
-            "timestamp": int(time.time() * 1000)  # Millisecond precision
+            'app_id': self.app_package,
+            'app_name': self.app_name,
+            'app_version': self._get_app_version(),
+            'scene': self.tag,
+            'device': self.devices[0].device_description,
+            'timestamp': int(time.time() * 1000),  # Millisecond precision
         }
 
         metadata_path = os.path.join(self.report_path, 'testInfo.json')
@@ -367,21 +354,24 @@ class PerfTestCase(TestCase, ABC):
 
     def _get_app_version(self) -> str:
         """Retrieve application version from device"""
-        cmd = f"bm dump -n {self.app_package}"
+        cmd = f'bm dump -n {self.app_package}'
         result = self.driver.shell(cmd)
 
         try:
             # Extract JSON portion from command output
             json_str = result.split(':', 1)[1].strip()
             data = json.loads(json_str)
-            return data.get('applicationInfo', {}).get('versionName', "Unknown")
+            return data.get('applicationInfo', {}).get('versionName', 'Unknown')
         except (json.JSONDecodeError, IndexError, KeyError):
-            return "Unknown"
+            return 'Unknown'
+
+    def get_app_process_id(self) -> int:
+        result = self.driver.shell(f'pidof {self.app_package}')
+        return int(result.strip())
 
     def _get_app_pids(self) -> tuple[list[int], list[str]]:
         """Get all PIDs and process names associated with the application"""
-        target_package = self._start_app_package or self.app_package
-        cmd = f"ps -ef | grep {target_package}"
+        cmd = f'ps -ef | grep {self.app_package}'
         result = self.driver.shell(cmd)
 
         process_ids = []
@@ -407,12 +397,14 @@ class PerfTestCase(TestCase, ABC):
         """Save process information to JSON file"""
         process_ids, process_names = self._get_app_pids()
         info_path = os.path.join(directory, 'pids.json')
+        maps = []
+        for pid in process_ids:
+            result = self.driver.shell(f'cat /proc/{pid}/maps')
+            maps.append(result.split('\n'))
+
         with open(info_path, 'w', encoding='utf-8') as file:
             json.dump(
-                {'pids': process_ids, 'process_names': process_names},
-                file,
-                indent=4,
-                ensure_ascii=False
+                {'pids': process_ids, 'process_names': process_names, 'maps': maps}, file, indent=4, ensure_ascii=False
             )
 
     def _ensure_directories_exist(self, *paths):
@@ -420,51 +412,57 @@ class PerfTestCase(TestCase, ABC):
         for path in paths:
             os.makedirs(path, exist_ok=True)
 
-    def _verify_remote_files_exist(self, device_file: str) -> bool:
-        """Verify required files exist on device"""
-        perf_result = self.driver.shell(f"ls -l {device_file}")
-        if "No such file" in perf_result:
-            Log.error(f"Performance data missing: {device_file}")
-            return False
-
-        return True
-
     def _transfer_perf_data(self, remote_path: str, local_path: str):
         """Transfer performance data from device to host"""
-        if not self._verify_remote_files_exist(remote_path):
+        if not self.driver.has_file(remote_path):
+            Log.error('Not found %s', remote_path)
             return
-        self.driver.shell(f"hiperf report -i {remote_path} --json -o {remote_path}.json")
+        self.driver.shell(
+            f'hiperf report -i {remote_path} --json -o {remote_path}.json --symbol-dir /data/local/tmp/so_dir'
+        )
         self.driver.pull_file(remote_path, local_path)
-        self.driver.pull_file(f"{remote_path}.json", os.path.join(os.path.dirname(local_path), 'perf.json'))
+        self.driver.pull_file(f'{remote_path}.json', os.path.join(os.path.dirname(local_path), 'perf.json'))
         if os.path.exists(local_path):
-            Log.info(f"Performance data saved: {local_path}")
+            Log.info(f'Performance data saved: {local_path}')
         else:
-            Log.error(f"Failed to transfer performance data: {local_path}")
+            Log.error(f'Failed to transfer performance data: {local_path}')
 
     def _transfer_trace_data(self, remote_path: str, local_path: str):
         """Transfer trace data from device to host"""
         if not Config.get('trace.enable'):
             return
 
-        if not self._verify_remote_files_exist(f"{remote_path}.htrace"):
+        if not self.driver.has_file(f'{remote_path}.htrace'):
             return
 
-        self.driver.pull_file(f"{remote_path}.htrace", local_path)
+        self.driver.pull_file(f'{remote_path}.htrace', local_path)
         if os.path.exists(local_path):
-            Log.info(f"Trace data saved: {local_path}")
+            Log.info(f'Trace data saved: {local_path}')
         else:
-            Log.error(f"Failed to transfer trace data: {local_path}")
+            Log.error(f'Failed to transfer trace data: {local_path}')
 
     def _transfer_redundant_data(self, trace_step_dir: str):
         if not self._redundant_mode_status:
             return
-        bundle_name = self._start_app_package or self.app_package
-        remote_path = f'data/app/el2/100/base/{bundle_name}/files/{bundle_name}_redundant_file.txt'
-        if not self._verify_remote_files_exist(remote_path):
+        remote_path = f'data/app/el2/100/base/{self.app_package}/files/{self.app_package}_redundant_file.txt'
+        if not self.driver.has_file(remote_path):
             return
         local_path = os.path.join(trace_step_dir, 'redundant_file.txt')
         self.driver.pull_file(remote_path, local_path)
         if os.path.exists(local_path):
-            Log.info(f"Redundant data saved: {local_path}")
+            Log.info(f'Redundant data saved: {local_path}')
         else:
-            Log.error(f"Failed to transfer redundant data: {local_path}")
+            Log.error(f'Failed to transfer redundant data: {local_path}')
+
+    def _collect_coverage_data(self, perf_step_dir: str):
+        self.driver.shell('aa dump -c -l')
+        self.driver.wait(1)
+        file = f'data/app/el2/100/base/{self.app_package}/haps/{self.module_name}/cache/bjc*'
+        result = self.driver.shell(f'ls {file}')
+        # not found bjc_cov file
+        if result.find(file) != -1:
+            return
+
+        files = result.splitlines()
+        files.sort(key=lambda x: x, reverse=True)
+        self.driver.pull_file(files[0], os.path.join(perf_step_dir, 'bjc_cov.json'))

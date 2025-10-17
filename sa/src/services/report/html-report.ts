@@ -1,0 +1,975 @@
+/*
+ * Copyright (c) 2025 Huawei Device Co., Ltd.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import fs from 'fs';
+import path from 'path';
+import Handlebars from 'handlebars';
+import type { FormatResult } from './index';
+import { BaseFormatter } from './index';
+import type { HapStaticAnalysisResult } from '../../config/types';
+
+/**
+ * HTML格式化器
+ */
+export class HtmlFormatter extends BaseFormatter {
+    /**
+     * 格式化分析结果为HTML
+     */
+    async format(result: HapStaticAnalysisResult): Promise<FormatResult> {
+        const startTime = Date.now();
+        
+        try {
+            this.validateOptions();
+            
+            // 确保输出目录存在
+            const outputDir = path.dirname(this.options.outputPath);
+            if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir, { recursive: true });
+            }
+
+            // 构建HTML报告数据
+            const templateData = this.buildTemplateData(result);
+            
+            // 获取模板内容
+            const template = this.getTemplate();
+            
+            // 编译模板
+            const compiledTemplate = Handlebars.compile(template);
+            const htmlContent = compiledTemplate(templateData);
+            
+            // 写入文件
+            fs.writeFileSync(this.options.outputPath, htmlContent, 'utf8');
+            
+            const fileSize = fs.statSync(this.options.outputPath).size;
+            const duration = Date.now() - startTime;
+
+            return {
+                filePath: this.options.outputPath,
+                fileSize,
+                duration,
+                success: true
+            };
+
+        } catch (error) {
+            return {
+                filePath: this.options.outputPath,
+                fileSize: 0,
+                duration: Date.now() - startTime,
+                success: false,
+                error: error instanceof Error ? error.message : String(error)
+            };
+        }
+    }
+
+    /**
+     * 获取文件扩展名
+     */
+    getFileExtension(): string {
+        return '.html';
+    }
+
+    /**
+     * 获取HTML模板
+     */
+    private getTemplate(): string {
+        // 如果指定了自定义模板路径，使用自定义模板
+        if (this.options.templatePath && fs.existsSync(this.options.templatePath)) {
+            return fs.readFileSync(this.options.templatePath, 'utf8');
+        }
+        
+        // 使用默认模板
+        return this.getDefaultTemplate();
+    }
+
+    /**
+     * 构建模板数据
+     */
+    private buildTemplateData(result: HapStaticAnalysisResult): Record<string, unknown> {
+        const fileTypeStats = this.getFileTypeStats(result);
+        const frameworkStats = this.getFrameworkStats(result);
+
+        // 构建文件类型信息
+        const fileTypeInfo = this.buildFileTypeInfoData(result);
+
+        // 构建技术栈信息
+        const technologyStackInfo = this.buildTechnologyStackInfoData(result);
+
+        // 过滤掉 Unknown 技术栈
+        const detectedFrameworks = result.soAnalysis.detectedFrameworks.filter(f => f !== 'Unknown');
+
+        // 获取唯一的文件类型列表（用于筛选按钮）
+        const uniqueFileTypes = Array.from(new Set(fileTypeInfo.map(item => item.fileType))).sort();
+
+        // 获取唯一的技术栈列表（用于筛选按钮）
+        const uniqueTechStacks = Array.from(new Set(
+            technologyStackInfo.map(item => item.technologyStack)
+        )).sort();
+
+        return {
+            metadata: {
+                hapPath: result.hapPath,
+                hapFileName: path.basename(result.hapPath),
+                timestamp: result.timestamp,
+                analysisDate: this.formatDateTime(result.timestamp),
+                version: '2.0.0'
+            },
+            summary: {
+                totalFiles: result.resourceAnalysis.totalFiles,
+                totalSize: this.formatFileSize(result.resourceAnalysis.totalSize),
+                totalSoFiles: result.soAnalysis.totalSoFiles,
+                totalResourceFiles: result.resourceAnalysis.totalFiles - result.soAnalysis.totalSoFiles,
+                jsFilesCount: result.resourceAnalysis.jsFiles.length,
+                detectedFrameworks: detectedFrameworks,
+                fileTypeCount: fileTypeInfo.length,
+                technologyStackCount: technologyStackInfo.length,
+                extractedArchiveCount: result.resourceAnalysis.extractedArchiveCount,
+                maxExtractionDepth: result.resourceAnalysis.maxExtractionDepth,
+                hasNestedArchives: result.resourceAnalysis.extractedArchiveCount > 0
+            },
+            statistics: {
+                fileTypes: fileTypeStats,
+                frameworks: frameworkStats,
+                hasFileTypes: fileTypeStats.length > 0,
+                hasFrameworks: frameworkStats.length > 0
+            },
+
+            // 第一部分：文件类型信息
+            fileTypeInfo: {
+                items: fileTypeInfo,
+                hasItems: fileTypeInfo.length > 0,
+                uniqueTypes: uniqueFileTypes
+            },
+
+            // 第二部分：技术栈信息
+            technologyStackInfo: {
+                items: technologyStackInfo,
+                hasItems: technologyStackInfo.length > 0,
+                uniqueStacks: uniqueTechStacks
+            },
+
+            // 保留原有的详细信息（用于兼容）
+            resourceAnalysis: {
+                archiveFiles: result.resourceAnalysis.archiveFiles.map(archiveFile => ({
+                    ...archiveFile,
+                    fileSizeFormatted: this.formatFileSize(archiveFile.fileSize),
+                    hasNestedFiles: (archiveFile.nestedFiles?.length ?? 0) > 0,
+                    hasNestedArchives: (archiveFile.nestedArchives?.length ?? 0) > 0
+                })),
+                hasArchiveFiles: result.resourceAnalysis.archiveFiles.length > 0
+            },
+            options: {
+                includeDetails: this.options.includeDetails !== false
+            }
+        };
+    }
+
+    /**
+     * 构建文件类型信息数据
+     */
+    private buildFileTypeInfoData(result: HapStaticAnalysisResult): Array<{
+        fileName: string;
+        filePath: string;
+        fileType: string;
+        fileSize: string;
+        additionalInfo?: string;
+    }> {
+        const items: Array<{
+            fileName: string;
+            filePath: string;
+            fileType: string;
+            fileSize: string;
+            additionalInfo?: string;
+        }> = [];
+
+        for (const [fileType, files] of result.resourceAnalysis.filesByType) {
+            for (const file of files) {
+                // 如果 fileType 为空，使用文件扩展名
+                let displayFileType = String(fileType);
+                if (!displayFileType || displayFileType.trim() === '') {
+                    const ext = path.extname(file.fileName);
+                    displayFileType = ext ? ext.substring(1).toUpperCase() : 'Unknown';
+                }
+
+                // 检查是否为 JS 文件，添加额外信息
+                let additionalInfo: string | undefined;
+                if (displayFileType === 'JS' && 'isMinified' in file) {
+                    const jsFile = file as unknown as { isMinified: boolean; beautifiedPath?: string };
+                    const infoParts: Array<string> = [];
+
+                    if (jsFile.isMinified) {
+                        infoParts.push('压缩代码');
+                    } else {
+                        infoParts.push('可读代码');
+                    }
+
+                    if (jsFile.beautifiedPath) {
+                        infoParts.push(`已美化: ${path.basename(jsFile.beautifiedPath)}`);
+                    }
+
+                    additionalInfo = infoParts.join(', ');
+                }
+
+                items.push({
+                    fileName: file.fileName,
+                    filePath: file.filePath,
+                    fileType: displayFileType,
+                    fileSize: this.formatFileSize(file.fileSize),
+                    additionalInfo
+                });
+            }
+        }
+
+        return items;
+    }
+
+    /**
+     * 构建技术栈信息数据
+     */
+    private buildTechnologyStackInfoData(result: HapStaticAnalysisResult): Array<{
+        fileName: string;
+        filePath: string;
+        technologyStack: string;
+        fileSize: string;
+        analysisDetails: string;
+    }> {
+        const items: Array<{
+            fileName: string;
+            filePath: string;
+            technologyStack: string;
+            fileSize: string;
+            analysisDetails: string;
+        }> = [];
+
+        for (const soFile of result.soAnalysis.techStackDetections) {
+            // 过滤掉 Unknown 技术栈
+            if (soFile.techStack === 'Unknown') {
+                continue; // 跳过没有识别技术栈的 SO 文件
+            }
+
+            let analysisDetails = '无';
+            const details: Array<string> = [];
+
+            // 添加规则名称和置信度
+            if (soFile.fileType) {
+                const confidenceStr = soFile.confidence !== undefined
+                    ? ` (置信度: ${(soFile.confidence * 100).toFixed(0)}%)`
+                    : '';
+                details.push(`规则: ${soFile.fileType}${confidenceStr}`);
+            } else {
+                // 兼容旧数据：如果没有规则名称，显示文件类型
+                details.push(`${soFile.techStack}文件类型`);
+            }
+
+            // 从 metadata 中提取信息
+            const hex40 = soFile.metadata.flutterHex40;
+            if (hex40) {
+                details.push(`40位版本: ${hex40}`);
+            }
+
+            const dartVersion = soFile.metadata.dartVersion;
+            if (dartVersion) {
+                details.push(`Dart: ${dartVersion}`);
+            }
+
+            // 优先使用 flutterVersionLastModified，如果没有则使用 lastModified
+            const lastModified = (soFile.metadata.flutterVersionLastModified ?? soFile.metadata.lastModified) as string | undefined;
+            if (lastModified) {
+                const date = new Date(lastModified);
+                if (!isNaN(date.getTime())) {
+                    details.push(`修改时间: ${date.toLocaleDateString('zh-CN')} ${date.toLocaleTimeString('zh-CN')}`);
+                }
+            }
+
+            // 开源包（pub.dev 上的包）
+            if (soFile.metadata.openSourcePackages && Array.isArray(soFile.metadata.openSourcePackages)) {
+                const packageNames = soFile.metadata.openSourcePackages
+                    .slice(0, 5) // 最多显示5个包
+                    .join(', ');
+                const more = soFile.metadata.openSourcePackages.length > 5
+                    ? ` 等${soFile.metadata.openSourcePackages.length}个`
+                    : '';
+                details.push(`开源包: ${packageNames}${more}`);
+            }
+
+            // KMP 相关信息
+            if (soFile.metadata.kotlinSignatures && Array.isArray(soFile.metadata.kotlinSignatures)) {
+                const signatures = soFile.metadata.kotlinSignatures.slice(0, 3).join(', ');
+                const more = soFile.metadata.kotlinSignatures.length > 3
+                    ? ` 等${soFile.metadata.kotlinSignatures.length}个特征`
+                    : '';
+                details.push(`Kotlin特征: ${signatures}${more}`);
+            }
+
+            // 如果有通用元数据，也显示出来（排除已经显示的字段）
+            if (Object.keys(soFile.metadata).length > 0) {
+                const excludeKeys = ['flutterHex40', 'dartVersion', 'lastModified', 'flutterVersionLastModified', 'openSourcePackages', 'customPackages', 'kotlinSignatures'];
+                const metadataEntries = Object.entries(soFile.metadata)
+                    .filter(([key]) => !excludeKeys.includes(key))
+                    .slice(0, 3); // 最多显示3个额外的元数据
+
+                if (metadataEntries.length > 0) {
+                    const metadataStr = metadataEntries
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(', ');
+                    details.push(`元数据: ${metadataStr}`);
+                }
+            }
+
+            if (details.length > 0) {
+                analysisDetails = details.join('; ');
+            }
+
+            items.push({
+                fileName: soFile.file,
+                filePath: `${soFile.folder}/${soFile.file}`,
+                technologyStack: soFile.techStack,
+                fileSize: this.formatFileSize(soFile.size),
+                analysisDetails
+            });
+        }
+
+        return items;
+    }
+
+
+    /**
+     * 获取默认HTML模板
+     */
+    private getDefaultTemplate(): string {
+        return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAP静态分析报告 - {{metadata.hapFileName}}</title>
+
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', sans-serif; line-height: 1.6; color: #2c3e50; background: #f8f9fa; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; border-radius: 12px; margin-bottom: 30px; box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3); }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; font-weight: 600; }
+        .header .meta { opacity: 0.95; font-size: 1em; }
+
+        /* Card */
+        .card { background: white; border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e9ecef; }
+        .card h2 { color: #2c3e50; margin-bottom: 20px; font-size: 1.6em; font-weight: 600; border-bottom: 2px solid #667eea; padding-bottom: 12px; }
+
+        /* Summary */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .summary-item { text-align: center; padding: 25px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2); transition: transform 0.2s; }
+        .summary-item:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3); }
+        .summary-item .number { font-size: 2.2em; font-weight: 700; display: block; margin-bottom: 5px; }
+        .summary-item .label { font-size: 0.95em; opacity: 0.95; }
+
+        /* Filter Buttons */
+        .filter-container { margin: 20px 0; }
+        .filter-label { font-size: 0.95em; font-weight: 600; color: #495057; margin-bottom: 10px; display: block; }
+        .filter-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+        .filter-btn {
+            padding: 8px 16px;
+            border: 2px solid #dee2e6;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #495057;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .filter-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+            background: #f8f9ff;
+        }
+        .filter-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        /* DataTables Override */
+        .dataTables_wrapper { margin-top: 20px; }
+        .dataTables_wrapper .dataTables_length select,
+        .dataTables_wrapper .dataTables_filter input {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.9em;
+        }
+        .dataTables_wrapper .dataTables_filter input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            border-radius: 6px;
+            padding: 6px 12px;
+            margin: 0 2px;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            border: none;
+        }
+
+        /* Table */
+        table.dataTable {
+            border-collapse: separate !important;
+            border-spacing: 0;
+            table-layout: fixed;
+            width: 100% !important;
+        }
+        table.dataTable thead th {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            font-weight: 600;
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding: 14px 12px;
+            font-size: 0.9em;
+        }
+        table.dataTable tbody td {
+            padding: 12px;
+            border-bottom: 1px solid #f1f3f5;
+            font-size: 0.9em;
+            max-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        table.dataTable tbody td code {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: bottom;
+        }
+        table.dataTable tbody tr { transition: background-color 0.2s; }
+        table.dataTable tbody tr:hover { background-color: #f8f9ff; }
+        table.dataTable tbody tr:hover td {
+            white-space: normal;
+            word-break: break-all;
+        }
+
+        /* Badge */
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 6px; font-size: 0.85em; font-weight: 500; }
+        .badge-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .badge-info { background: linear-gradient(135deg, #17a2b8 0%, #138496 100%); color: white; }
+        .badge-success { background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; }
+        .badge-warning { background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); color: white; }
+        .badge-danger { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; }
+        .badge-secondary { background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%); color: white; }
+        .badge-light { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            color: #e83e8c;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        .frameworks { margin: 15px 0; }
+        .framework-tag { display: inline-block; margin: 3px; padding: 6px 12px; background: #3498db; color: white; border-radius: 20px; font-size: 0.9em; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+        .flutter-analysis { font-size: 0.9em; }
+        .flutter-analysis ul { margin: 5px 0; padding-left: 20px; }
+        .flutter-analysis li { margin: 2px 0; }
+        .flutter-analysis code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; font-size: 0.85em; }
+        .badge-secondary { background: #6c757d; color: white; }
+        .badge-light { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+
+        /* 递归压缩包样式 */
+        .archive-tree { margin: 10px 0; }
+        .archive-item { margin: 8px 0; padding: 12px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fafafa; word-break: break-word; overflow-wrap: anywhere; }
+        .archive-header { display: flex; align-items: center; margin-bottom: 8px; }
+        .archive-icon { margin-right: 8px; font-size: 1.2em; }
+        .archive-name { font-weight: bold; color: #2c3e50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .archive-info { margin-left: auto; font-size: 0.9em; color: #7f8c8d; }
+        .archive-stats { margin: 8px 0; font-size: 0.9em; color: #555; }
+        .nested-files { margin-left: 20px; margin-top: 10px; }
+        .nested-file { padding: 6px 10px; margin: 3px 0; background: white; border-left: 3px solid #3498db; border-radius: 3px; font-size: 0.9em; word-break: break-word; overflow-wrap: anywhere; }
+        .nested-archive { margin-left: 20px; margin-top: 10px; border-left: 2px solid #e74c3c; padding-left: 15px; }
+        .depth-indicator { display: inline-block; padding: 2px 6px; background: #e74c3c; color: white; border-radius: 10px; font-size: 0.8em; margin-left: 8px; }
+        .extraction-status { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.8em; margin-left: 8px; }
+        .extracted { background: #27ae60; color: white; }
+        .not-extracted { background: #e74c3c; color: white; }
+        .file-type-tag { display: inline-block; padding: 2px 6px; background: #95a5a6; color: white; border-radius: 3px; font-size: 0.8em; margin-right: 4px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+        .collapsible { cursor: pointer; user-select: none; }
+        .collapsible:hover { background: #f0f0f0; }
+        .collapsible::before { content: '▼ '; color: #3498db; font-weight: bold; }
+        .collapsible.collapsed::before { content: '▶ '; }
+        .collapsible-content { display: block; }
+        .collapsible-content.collapsed { display: none; }
+
+        /* 搜索和过滤功能 */
+        .search-container { margin: 20px 0; }
+        .search-box { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 1em; }
+        .search-box:focus { border-color: #3498db; outline: none; }
+        .filter-buttons { margin: 10px 0; }
+        .filter-btn { padding: 8px 16px; margin: 4px; border: none; border-radius: 20px; cursor: pointer; font-size: 0.9em; transition: all 0.3s; }
+        .filter-btn.active { background: #3498db; color: white; }
+        .filter-btn:not(.active) { background: #ecf0f1; color: #2c3e50; }
+        .filter-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+        /* 统计图表样式 */
+        .chart-container { margin: 20px 0; }
+        .chart-item { margin: 8px 0; }
+        .chart-bar {
+            height: 30px;
+            background: linear-gradient(90deg, #3498db, #2980b9);
+            border-radius: 10px;
+            position: relative;
+            min-width: 120px;
+            transition: all 0.3s ease;
+        }
+        .chart-bar:hover {
+            background: linear-gradient(90deg, #2980b9, #1f4e79);
+            transform: translateX(5px);
+        }
+        .chart-label {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-weight: bold;
+            font-size: 0.9em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            right: 70px;
+        }
+        .chart-value {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-size: 0.8em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            white-space: nowrap;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            .summary-grid { grid-template-columns: repeat(2, 1fr); }
+            .table { font-size: 0.9em; table-layout: fixed; }
+            .nested-files { margin-left: 10px; }
+            .nested-archive { margin-left: 10px; }
+            .framework-tag, .file-type-tag { max-width: 160px; }
+        }
+
+        .no-data { text-align: center; color: #7f8c8d; font-style: italic; padding: 40px; }
+        .footer { text-align: center; margin-top: 40px; padding: 20px; color: #7f8c8d; border-top: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>HAP静态分析报告</h1>
+            <div class="meta">
+                <div>文件: {{metadata.hapFileName}}</div>
+                <div>分析时间: {{metadata.analysisDate}}</div>
+                <div>版本: {{metadata.version}}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📊 分析摘要</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <span class="number">{{summary.totalSoFiles}}</span>
+                    <span class="label">SO文件</span>
+                </div>
+                <div class="summary-item">
+                    <span class="number">{{summary.totalResourceFiles}}</span>
+                    <span class="label">资源文件</span>
+                </div>
+                <div class="summary-item">
+                    <span class="number">{{summary.jsFilesCount}}</span>
+                    <span class="label">JS文件</span>
+                </div>
+                <div class="summary-item">
+                    <span class="number">{{summary.totalSize}}</span>
+                    <span class="label">总大小</span>
+                </div>
+                {{#if summary.hasNestedArchives}}
+                <div class="summary-item">
+                    <span class="number">{{summary.extractedArchiveCount}}</span>
+                    <span class="label">解压压缩包</span>
+                </div>
+                <div class="summary-item">
+                    <span class="number">{{summary.maxExtractionDepth}}</span>
+                    <span class="label">最大深度</span>
+                </div>
+                {{/if}}
+            </div>
+            
+            {{#if summary.detectedFrameworks.length}}
+            <div class="frameworks">
+                <strong>检测到的技术栈:</strong>
+                {{#each summary.detectedFrameworks}}
+                <span class="framework-tag">{{this}}</span>
+                {{/each}}
+            </div>
+            {{/if}}
+        </div>
+
+        {{#if statistics.hasFileTypes}}
+        <!--<div class="card">
+            <h2>📁 文件类型统计</h2>
+            <div class="chart-container">
+                {{#each statistics.fileTypes}}
+                <div class="chart-item">
+                    <div class="chart-bar" style="width: {{barWidth}}%;">
+                        <span class="chart-label">{{type}}</span>
+                        <span class="chart-value">{{count}} ({{percentage}})</span>
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>-->
+        {{/if}}
+
+        {{#if options.includeDetails}}
+
+        {{!-- 第一部分：技术栈信息 --}}
+        {{#if technologyStackInfo.hasItems}}
+        <div class="card">
+            <h2>🔧 技术栈信息</h2>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、技术栈、文件大小、分析详情</p>
+
+            <!-- 技术栈筛选按钮 -->
+            <div class="filter-container">
+                <span class="filter-label">按技术栈筛选：</span>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterTechStack('all')">全部</button>
+                    {{#each technologyStackInfo.uniqueStacks}}
+                    <button class="filter-btn" onclick="filterTechStack('{{this}}')">{{this}}</button>
+                    {{/each}}
+                </div>
+            </div>
+
+            <table id="technologyStackTable" class="table display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 18%">文件名</th>
+                        <th style="width: 35%">路径</th>
+                        <th style="width: 15%">技术栈</th>
+                        <th style="width: 12%">文件大小</th>
+                        <th style="width: 20%">分析详情</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each technologyStackInfo.items}}
+                    <tr data-techstack="{{technologyStack}}">
+                        <td title="{{fileName}}"><strong>{{fileName}}</strong></td>
+                        <td title="{{filePath}}"><code>{{filePath}}</code></td>
+                        <td><span class="badge badge-primary">{{technologyStack}}</span></td>
+                        <td>{{fileSize}}</td>
+                        <td title="{{analysisDetails}}">{{analysisDetails}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+        {{/if}}
+
+        {{!-- 第二部分：文件类型信息 --}}
+        {{#if fileTypeInfo.hasItems}}
+        <div class="card">
+            <h2>📄 文件类型信息</h2>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、分类（后缀名）、文件大小、附加信息</p>
+
+            <!-- 文件类型筛选按钮 -->
+            <div class="filter-container">
+                <span class="filter-label">按文件类型筛选：</span>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterFileType('all')">全部</button>
+                    {{#each fileTypeInfo.uniqueTypes}}
+                    <button class="filter-btn" onclick="filterFileType('{{this}}')">{{this}}</button>
+                    {{/each}}
+                </div>
+            </div>
+
+            <table id="fileTypeTable" class="table display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width: 18%">文件名</th>
+                        <th style="width: 38%">路径</th>
+                        <th style="width: 15%">分类（后缀名）</th>
+                        <th style="width: 12%">文件大小</th>
+                        <th style="width: 17%">附加信息</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each fileTypeInfo.items}}
+                    <tr data-filetype="{{fileType}}">
+                        <td title="{{fileName}}"><strong>{{fileName}}</strong></td>
+                        <td title="{{filePath}}"><code>{{filePath}}</code></td>
+                        <td><span class="badge badge-info">{{fileType}}</span></td>
+                        <td>{{fileSize}}</td>
+                        <td title="{{additionalInfo}}">{{#if additionalInfo}}{{additionalInfo}}{{else}}-{{/if}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+        {{/if}}
+
+        {{/if}}
+
+        <div class="footer">
+            <p>报告由 HAP静态分析器 v{{metadata.version}} 生成</p>
+            <p>生成时间: {{metadata.analysisDate}}</p>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <!-- DataTables JS -->
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+    <script>
+        // 全局变量存储 DataTables 实例
+        let fileTypeTable;
+        let techStackTable;
+
+        // 初始化 DataTables
+        $(document).ready(function() {
+            // 文件类型信息表格
+            if ($('#fileTypeTable').length) {
+                fileTypeTable = $('#fileTypeTable').DataTable({
+                    pageLength: 50,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "全部"]],
+                    language: {
+                        "sProcessing": "处理中...",
+                        "sLengthMenu": "显示 _MENU_ 条记录",
+                        "sZeroRecords": "没有匹配的记录",
+                        "sInfo": "显示第 _START_ 至 _END_ 条记录，共 _TOTAL_ 条",
+                        "sInfoEmpty": "显示第 0 至 0 条记录，共 0 条",
+                        "sInfoFiltered": "(由 _MAX_ 条记录过滤)",
+                        "sSearch": "搜索:",
+                        "oPaginate": {
+                            "sFirst": "首页",
+                            "sPrevious": "上一页",
+                            "sNext": "下一页",
+                            "sLast": "末页"
+                        }
+                    },
+                    order: [[0, 'asc']]
+                });
+            }
+
+            // 技术栈信息表格
+            if ($('#technologyStackTable').length) {
+                techStackTable = $('#technologyStackTable').DataTable({
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "全部"]],
+                    language: {
+                        "sProcessing": "处理中...",
+                        "sLengthMenu": "显示 _MENU_ 条记录",
+                        "sZeroRecords": "没有匹配的记录",
+                        "sInfo": "显示第 _START_ 至 _END_ 条记录，共 _TOTAL_ 条",
+                        "sInfoEmpty": "显示第 0 至 0 条记录，共 0 条",
+                        "sInfoFiltered": "(由 _MAX_ 条记录过滤)",
+                        "sSearch": "搜索:",
+                        "oPaginate": {
+                            "sFirst": "首页",
+                            "sPrevious": "上一页",
+                            "sNext": "下一页",
+                            "sLast": "末页"
+                        }
+                    },
+                    order: [[0, 'asc']]
+                });
+            }
+        });
+
+        // 文件类型筛选函数
+        function filterFileType(type) {
+            // 更新按钮状态
+            const buttons = document.querySelectorAll('.card:has(#fileTypeTable) .filter-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // 应用筛选
+            if (type === 'all') {
+                fileTypeTable.column(2).search('').draw();
+            } else {
+                fileTypeTable.column(2).search('^' + type + '$', true, false).draw();
+            }
+        }
+
+        // 技术栈筛选函数
+        function filterTechStack(stack) {
+            // 更新按钮状态
+            const buttons = document.querySelectorAll('.card:has(#technologyStackTable) .filter-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // 应用筛选
+            if (stack === 'all') {
+                techStackTable.column(2).search('').draw();
+            } else {
+                techStackTable.column(2).search('^' + stack + '$', true, false).draw();
+            }
+        }
+
+        function toggleCollapse(element) {
+            const content = element.nextElementSibling;
+            const isCollapsed = content.classList.contains('collapsed');
+
+            if (isCollapsed) {
+                content.classList.remove('collapsed');
+                element.classList.remove('collapsed');
+            } else {
+                content.classList.add('collapsed');
+                element.classList.add('collapsed');
+            }
+        }
+
+        // 搜索功能
+        function searchFiles(query) {
+            const searchTerm = query.toLowerCase();
+            const allFiles = document.querySelectorAll('.nested-file, .archive-item');
+
+            allFiles.forEach(function(file) {
+                const text = file.textContent.toLowerCase();
+                const shouldShow = text.includes(searchTerm);
+                file.style.display = shouldShow ? 'block' : 'none';
+
+                // 如果是搜索结果，展开父级容器
+                if (shouldShow && searchTerm) {
+                    let parent = file.closest('.collapsible-content');
+                    while (parent) {
+                        parent.classList.remove('collapsed');
+                        const header = parent.previousElementSibling;
+                        if (header && header.classList.contains('collapsible')) {
+                            header.classList.remove('collapsed');
+                        }
+                        parent = parent.parentElement.closest('.collapsible-content');
+                    }
+                }
+            });
+        }
+
+        // 过滤功能
+        function filterFiles(filterType) {
+            // 更新按钮状态
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const allFiles = document.querySelectorAll('.nested-file, .archive-item');
+
+            allFiles.forEach(function(file) {
+                let shouldShow = true;
+
+                if (filterType === 'all') {
+                    shouldShow = true;
+                } else if (filterType === 'extracted') {
+                    shouldShow = file.querySelector('.extracted') !== null;
+                } else if (filterType === 'not-extracted') {
+                    shouldShow = file.querySelector('.not-extracted') !== null;
+                } else {
+                    // 按文件类型过滤
+                    const typeTag = file.querySelector('.file-type-tag');
+                    shouldShow = typeTag && typeTag.textContent === filterType;
+                }
+
+                file.style.display = shouldShow ? 'block' : 'none';
+
+                // 如果是过滤结果，展开父级容器
+                if (shouldShow && filterType !== 'all') {
+                    let parent = file.closest('.collapsible-content');
+                    while (parent) {
+                        parent.classList.remove('collapsed');
+                        const header = parent.previousElementSibling;
+                        if (header && header.classList.contains('collapsible')) {
+                            header.classList.remove('collapsed');
+                        }
+                        parent = parent.parentElement.closest('.collapsible-content');
+                    }
+                }
+            });
+        }
+
+        // 搜索所有文件
+        function searchAllFiles(query) {
+            const searchTerm = query.toLowerCase();
+            const allRows = document.querySelectorAll('#all-files-table .file-row');
+
+            allRows.forEach(function(row) {
+                const text = row.textContent.toLowerCase();
+                const shouldShow = text.includes(searchTerm);
+                row.style.display = shouldShow ? 'table-row' : 'none';
+            });
+        }
+
+        // 过滤所有文件
+        function filterAllFiles(filterType) {
+            // 更新按钮状态
+            const allFilesCard = document.querySelector('.card:has(#all-files-table)');
+            if (allFilesCard) {
+                const buttons = allFilesCard.querySelectorAll('.filter-btn');
+                buttons.forEach(btn => btn.classList.remove('active'));
+                event.target.classList.add('active');
+            }
+
+            const allRows = document.querySelectorAll('#all-files-table .file-row');
+
+            allRows.forEach(function(row) {
+                let shouldShow = true;
+
+                if (filterType === 'all') {
+                    shouldShow = true;
+                } else if (filterType === 'nested') {
+                    shouldShow = row.dataset.source === 'nested';
+                } else {
+                    // 按技术栈过滤
+                    // 多技术栈文件使用逗号分隔，支持包含判断
+                    const fw = row.dataset.framework || '';
+                    const arr = fw.split(',').map(s => s.trim()).filter(Boolean);
+                    shouldShow = arr.includes(filterType);
+                }
+
+                row.style.display = shouldShow ? 'table-row' : 'none';
+            });
+        }
+
+        // 初始化：默认展开第一层，折叠深层嵌套
+        document.addEventListener('DOMContentLoaded', function() {
+            const nestedArchives = document.querySelectorAll('.nested-archive .collapsible');
+            nestedArchives.forEach(function(element) {
+                const content = element.nextElementSibling;
+                content.classList.add('collapsed');
+                element.classList.add('collapsed');
+            });
+        });
+    </script>
+</body>
+</html>`;
+    }
+}

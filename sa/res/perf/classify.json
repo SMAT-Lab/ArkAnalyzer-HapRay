@@ -1,0 +1,4599 @@
+{
+    "process": {
+        "大桌面": {
+            "桌面": {
+                "大桌面": {
+                    "Android_Process": [
+                        "^com.huawei.android.launcher$",
+                        "^com.android.systemui$",
+                        "^com.huawei.aod$",
+                        "^com.huawei.search$",
+                        "^com.huawei.controlcenter$",
+                        "com.huawei.controlcenter:.+",
+                        "^com.huawei.intelligent$",
+                        "^com.huawei.commonwallpaper$",
+                        "^com.huawei.livewallpaper.paradise$",
+                        "com.huawei.livewallpaper.paradise:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.sceneboard$",
+                        "^com.ohos.sceneboard:workScheduler$"
+                    ],
+                    "IOS_Process": [
+                        "^SpringBoard$",
+                        "^distnoted$",
+                        "^notifyd$"
+                    ]
+                }
+            }
+        },
+        "媒体应用": {
+            "媒体应用": {
+                "图库": {
+                    "Android_Process": [
+                        "^com.huawei.photos$",
+                        "com.huawei.photos:.+",
+                        "^com.huawei.ohos.photos$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.photos$",
+                        "^wei.hmos.photos$",
+                        "com.huawei.hmos.photos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "相机": {
+                    "Android_Process": [
+                        "^com.huawei.camera$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.camera$",
+                        "^wei.hmos.camera$"
+                    ],
+                    "IOS_Process": []
+                },
+                "播控中心": {
+                    "Android_Process": [
+                        "^com.huawei.mediacontroller$",
+                        "com.huawei.mediacontroller:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.mediacontroller$",
+                        "com.huawei.hmos.mediacontroller:.+",
+                        "^mediacontroller$",
+                        "UIExtAbility:.+",
+                        "IExtAbility:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "OS媒体软件": {
+                "华为音频产品管家": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.audioaccessorymanager$",
+                        "^ccessorymanager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "花瓣剪辑": {
+                    "Android_Process": [
+                        "^com.huawei.videoeditor$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.petalclip$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "系统应用": {
+            "系统应用": {
+                "安全隐私中心": {
+                    "Android_Process": [
+                        "^com.huawei.security.privacycenter$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "计算器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.calculator$"
+                    ],
+                    "IOS_Process": []
+                },
+                "健康使用手机-管控服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^parent_control_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "克隆": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.dataclone$",
+                        "com.huawei.hmos.dataclone:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "链接认证管理": {
+                    "Android_Process": [
+                        "^com.android.statementservice$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "录屏": {
+                    "Android_Process": [
+                        "^com.huawei.screenrecorder$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.ohos.screenrecorder$"
+                    ],
+                    "IOS_Process": []
+                },
+                "密码校验": {
+                    "Android_Process": [
+                        "^com.android.keychain$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "权限控制器": {
+                    "Android_Process": [
+                        "^com.android.permissioncontroller$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "设备画像": {
+                    "Android_Process": [
+                        "^com.huawei.profile$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "设置": {
+                    "Android_Process": [
+                        "^com.android.settings$",
+                        "^settings$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.settings$",
+                        "com.huawei.hmos.settings:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "时钟": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.clock$",
+                        "^hmos.clock:form$",
+                        "com.huawei.hmos.clock:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "手机管家": {
+                    "Android_Process": [
+                        "^com.huawei.systemmanager$",
+                        "com.huawei.systemmanager:.+"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "手写悬浮窗": {
+                    "Android_Process": [
+                        "^com.huawei.stylus.floatmenu$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "通知弹框": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.notificationdialog$",
+                        "com.ohos.notificationdialog:EnableNotificationDialog:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "玩机技巧": {
+                    "Android_Process": [
+                        "^com.huawei.android.tips$",
+                        "^com.huawei.hmos.tips.widget$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.tips$",
+                        "com.huawei.hmos.tips:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "文本管理器": {
+                    "Android_Process": [
+                        "^com.android.documentsui$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "文本选择器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cker/filePicker$"
+                    ],
+                    "IOS_Process": []
+                },
+                "我的华为": {
+                    "Android_Process": [
+                        "^com.huawei.phoneservice$",
+                        "com.huawei.phoneservice:.+"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "小区广播": {
+                    "Android_Process": [
+                        "^com.android.cellbroadcastreceiver$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "杂志锁屏": {
+                    "Android_Process": [
+                        "^com.huawei.magazine$",
+                        "com.huawei.magazine:.+"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "智灵键": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.hwquickaccessmenu$"
+                    ],
+                    "IOS_Process": []
+                },
+                "智能提醒": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.advisor$",
+                        "^ei.hmos.advisor$"
+                    ],
+                    "IOS_Process": []
+                },
+                "中转站": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.superhub$"
+                    ],
+                    "IOS_Process": []
+                },
+                "主题引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "com.ohos.sceneboard:EngineServiceAbility:.+",
+                        "^com.ohos.sceneboard:sys/commonUI$",
+                        "^com.ohos.sceneboard:SettingTHemeComponentExtAbility$",
+                        "^onentExtAbility$",
+                        "^com.ohos.sceneboard:HomeThemeComponentExtAbility$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "云服务应用": {
+            "云服务": {
+                "查找设备": {
+                    "Android_Process": [
+                        "^com.huawei.android.findmyphone$",
+                        "^com.huawei.hidisk$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.finddevice$",
+                        "^com.huawei.hmos.findservice$",
+                        "^mos.findservice$",
+                        "com.huawei.hmos.findservice:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "负一屏": {
+                    "Android_Process": [
+                        "^com.huawei.android.launcher$",
+                        "^com.android.systemui$",
+                        "^com.huawei.intelligent$",
+                        "com.huawei.intelligent:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.intelligent$",
+                        "^com.huawei.hmsapp.intelligentUI$",
+                        "^p.intelligentUI$",
+                        "^com.ohos.sceneboard$",
+                        "^com.ohos.sceneboard:workScheduler$"
+                    ],
+                    "IOS_Process": []
+                },
+                "花瓣地图": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.mapservice$",
+                        "^.hms.mapservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "华为商城": {
+                    "Android_Process": [
+                        "^com.vmall.client$",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.vmall$",
+                        "^awei.hmos.vmall$",
+                        "com.huawei.hmos.vmall:.+",
+                        "os.vmall:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "华为视频": {
+                    "Android_Process": [
+                        "^com.huawei.himovie$",
+                        "com.huawei.himovie:.+",
+                        "^com.huawei.himovie.local$",
+                        "^com.huawei.hmos.himovie.fa$",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.himovie$",
+                        "^.hmsapp.himovie$",
+                        "com.huawei.hmsapp.himovie:.+",
+                        "pp.himovie:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "华为音乐": {
+                    "Android_Process": [
+                        "^com.huawei.music$",
+                        "com.huawei.music:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.music$",
+                        "^ei.hmsapp.music$"
+                    ],
+                    "IOS_Process": []
+                },
+                "华为阅读": {
+                    "Android_Process": [
+                        "^com.huawei.hwread.dz$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.books$",
+                        "^ei.hmsapp.books$"
+                    ],
+                    "IOS_Process": []
+                },
+                "会员中心": {
+                    "Android_Process": [
+                        "^com.huawei.mycenter$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "浏览器": {
+                    "Android_Process": [
+                        "^com.huawei.browser$",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.browser$",
+                        "^ei.hmos.browser$",
+                        "com.huawei.hmos.browser:.+",
+                        ".browser:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "扫码": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.scanservice$",
+                        "^hms.scanservice$",
+                        "com.huawei.hms.scanservice:ScanUIExtAbility:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "天际通": {
+                    "Android_Process": [
+                        "^com.huawei.skytone$",
+                        "com.huawei.skytone:.+",
+                        "^com.huawei.hiskytone$",
+                        "com.huawei.hiskytone:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.skytone$",
+                        "^skytone_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "天气": {
+                    "Android_Process": [
+                        "^com.huawei.android.totemweather$",
+                        "com.huawei.android.totemweather:.+",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.totemweather$",
+                        "com.huawei.hmsapp.totemweather:.+",
+                        "temweather:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "外卡文件管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.UserFile.ExternalFileManager:fileAccess$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.filemanager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "应用市场": {
+                    "Android_Process": [
+                        "^com.huawei.appmarket$",
+                        "com.huawei.appmarket:.+",
+                        "^com.huawei.appmarket.entrance$",
+                        "^com.huawei.appmarket.incident$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.appgallery$",
+                        "com.huawei.hmsapp.appgallery:.+",
+                        "^commonUI$",
+                        "^appgallery_service$",
+                        "^AppGalleryService$",
+                        "^pGalleryService$"
+                    ],
+                    "IOS_Process": []
+                },
+                "应用助手": {
+                    "Android_Process": [
+                        "^com.huawei.gameassistant$",
+                        "com.huawei.gameassistant:.+"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "游戏服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.gameservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "游戏中心": {
+                    "Android_Process": [
+                        "^com.huawei.gamebox$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.gamecenter$"
+                    ],
+                    "IOS_Process": []
+                },
+                "云空间": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.clouddrive$",
+                        "^homs.clouddrive$"
+                    ],
+                    "IOS_Process": []
+                },
+                "指南针": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.compass$",
+                        "^.hmsapp.compass$"
+                    ],
+                    "IOS_Process": []
+                },
+                "主题": {
+                    "Android_Process": [
+                        "^com.huawei.android.thememanager$",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.thememanager$",
+                        "^pp.thememanager$",
+                        "com.huawei.hmsapp.thememanager:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "地图快照": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^com.apple.MapKit.SnapshotService$"
+                    ]
+                }
+            },
+            "AI": {
+                "AIEngine": {
+                    "Android_Process": [
+                        "^com.huawei.hiai.engineservice$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "HiAction": {
+                    "Android_Process": [
+                        "^com.huawei.hiaction$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "融合搜索": {
+                    "Android_Process": [
+                        "^com.huawei.OPServer$",
+                        "^com.huawei.searchservice$",
+                        "com.huawei.searchservice:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.FusionSearch$",
+                        "com.ohos.FusionSearch:.+",
+                        "^onSearch:search$",
+                        "^earch:scheduled$",
+                        "^com.huawei.hmsapp.hisearch$",
+                        "com.huawei.hmsapp.hisearch:.+"
+                    ],
+                    "IOS_Process": [
+                        "^searchpartyd$"
+                    ]
+                },
+                "AI建议": {
+                    "Android_Process": [
+                        "^com.huawei.ohos.suggestion$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^suggestd$"
+                    ]
+                },
+                "小艺输入法": {
+                    "Android_Process": [
+                        "^com.huawei.ohos.inputmethod$",
+                        "com.huawei.ohos.inputmethod:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.inputmethod$",
+                        "com.huawei.hmos.inputmethod:.+",
+                        "^hod:inputMethod$"
+                    ],
+                    "IOS_Process": []
+                },
+                "决策引擎": {
+                    "Android_Process": [
+                        "^com.huawei.recsys$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "语音助手": {
+                    "Android_Process": [
+                        "^com.huawei.vassistant$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "智慧识屏": {
+                    "Android_Process": [
+                        "^com.huawei.hitouch$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                }
+            },
+            "应用认证服务": {
+                "账号": {
+                    "Android_Process": [
+                        "^com.huawei.hwid$",
+                        "^com.huawei.hwid.core$",
+                        "com.huawei.hwid.container.+",
+                        "^com.huawei.hwid.persistent$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.huaweiid$",
+                        "com.huawei.hms.huaweiid:.+",
+                        "^iid:hms/account$",
+                        "^huawei_id_svc$",
+                        "^huaweiid_svc$"
+                    ],
+                    "IOS_Process": []
+                },
+                "家人共享": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.myfamily$",
+                        "^ei.hms.myfamily$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "钱包支付服务": {
+                "钱包": {
+                    "Android_Process": [
+                        "^com.huawei.wallet$",
+                        "^com.huawei.wallet.core$",
+                        "^com.huawei.wallet.keepalive$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.wallet$",
+                        "^wei.hmos.wallet$",
+                        "^com.huawei.hmos.walletservice$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "AI全场景应用": {
+            "AI": {
+                "智慧助手": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.vassistant$",
+                        "^hmos.vassistant$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "畅联": {
+            "畅联": {
+                "畅联": {
+                    "Android_Process": [
+                        "^com.huawei.meetime$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.meetime$",
+                        "^com.huawei.hmos.meetimeservice$",
+                        "com.huawei.hmos.meetimeservice:.+",
+                        "^caas_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "通信互联应用": {
+            "通信互联": {
+                "5G Kit": {
+                    "Android_Process": [
+                        "^com.huawei.hms5gkit.agentservice$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "HwNeraby": {
+                    "Android_Process": [
+                        "^com.huawei.nearby$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "SIM卡管理": {
+                    "Android_Process": [
+                        "^com.huawei.dsdscardmanager$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "信息": {
+                    "Android_Process": [
+                        "^com.android.mms$",
+                        "^com.android.phone$",
+                        "^com.huawei.ohos.mms$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.mms$",
+                        "com.ohos.mms:.+",
+                        "^com.ohos.telephonydataability$",
+                        "^honydataability$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "通信应用": {
+                "联系人": {
+                    "Android_Process": [
+                        "^com.huawei.contacts$",
+                        "^android.process.acore$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.contacts$",
+                        "com.ohos.contacts:.+",
+                        "^m.ohos.contacts$",
+                        "^taticSubscriber$",
+                        "^com.ohos.contactsdataability$",
+                        "com.ohos.contactsdataability:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "通话": {
+                    "Android_Process": [
+                        "^com.android.incallui$",
+                        "^com.huawei.conracts$",
+                        "^android.process.acore$",
+                        "^com.huawei.numberidentity$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.callui$",
+                        "^com.huawei.hmos.callrecorder$",
+                        "^os.callrecorder$",
+                        "^com.huawei.hmos.numberidentity$",
+                        "com.huawei.hmos.numberidentity:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "通话设置": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.callsetting$",
+                        "^mos.callsetting$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "PC应用": {
+            "本地应用": {
+                "备忘录": {
+                    "Android_Process": [
+                        "^com.huawei.notepad$",
+                        "^com.example.android.notepad$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.notepad$",
+                        "^ei.hmos.notepad$"
+                    ],
+                    "IOS_Process": []
+                },
+                "日历": {
+                    "Android_Process": [
+                        "^com.huawei.calendar$",
+                        "^com.android.providers.calendar$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.calendar$",
+                        "com.huawei.hmos.calendar:.+",
+                        "^i.hmos.calendar$",
+                        "^com.huawei.hmos.calendardata$",
+                        "^os.calendardata$"
+                    ],
+                    "IOS_Process": [
+                        "^MobileCal$"
+                    ]
+                }
+            }
+        },
+        "运动健康应用": {
+            "运动健康应用": {
+                "运动健康": {
+                    "Android_Process": [
+                        "^com.huawei.health$",
+                        "com.huawei.health:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.health$",
+                        "^wei.hmos.health$",
+                        "com.huawei.hmos.health:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "IoT应用": {
+            "IoT": {
+                "智慧生活": {
+                    "Android_Process": [
+                        "^com.huawei.smarthome$",
+                        "com.huawei.smarthome:.+",
+                        "^com.huawei.hilink.framework$",
+                        "com.huawei.hilink.framework:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.ailife$",
+                        "^com.huawei.hmos.ailifesvc$",
+                        "^.hmos.ailifesvc$",
+                        "com.huawei.hmos.ailifesvc:.+",
+                        "^vc:sys/commonUI$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "全场景协同应用": {
+            "分布式应用": {
+                "超级终端部件": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.superdevice$",
+                        "^mos.superdevice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "键鼠穿越": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.associateassistant$",
+                        "^ociateassistant$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "通信互联": {
+                "华为分享": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.instantshare$",
+                        "^os.instantshare$",
+                        "com.huawei.hmos.instantshare:.+",
+                        "ModalAbility:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "元服务应用": {
+            "元服务应用": {
+                "元服务应用": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "com.atomicservice.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "DFX应用": {
+            "DFX": {
+                "我的华为": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.myhuawei$",
+                        "com.huawei.hmos.myhuawei:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "OTA": {
+            "升级服务": {
+                "设备激活": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.hwdac$"
+                    ],
+                    "IOS_Process": []
+                },
+                "在线更新客户端": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.ouc$",
+                        "com.huawei.hmos.ouc:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "补丁引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^quickfix_engine$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式升级引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^updater_sa$"
+                    ],
+                    "IOS_Process": []
+                },
+                "升级包安装": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^module_update_service$",
+                        "^module_update_s$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件迁移能力": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^file_migrate_ability$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "三方应用": {
+            "三方应用": {
+                "58同城": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.wuba.life$",
+                        "com.wuba.life:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "QQ浏览器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.tencent.mtthm$",
+                        "^m.tencent.mtthm$",
+                        "com.tencent.mtthm:.+",
+                        "nt.mtthm:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "QQ音乐": {
+                    "Android_Process": [
+                        "^com.tencent.qqmusic$",
+                        "com.tencent.qqmusic:.+",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.tencent.hm.qqmusic$",
+                        "^cent.hm.qqmusic$",
+                        "com.tencent.hm.qqmusic:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "UC浏览器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.uc.mobile$",
+                        "com.uc.mobile:.+",
+                        "c.mobile:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "WPS": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cn.wps.mobileoffice.hap$",
+                        "^obileoffice.hap$",
+                        "cn.wps.mobileoffice.hap:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "爱奇艺": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.qiyi.video.hmy$",
+                        "^.qiyi.video.hmy$",
+                        "com.qiyi.video.hmy:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "安居客": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.anjuke.home$",
+                        "com.anjuke.home:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "宝宝巴士": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sinyee.babybus.recommendapp.hos$",
+                        "^ecommendapp.hos$"
+                    ],
+                    "IOS_Process": []
+                },
+                "哔哩哔哩": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^yylx.danmaku.bili$",
+                        "^lx.danmaku.bili$"
+                    ],
+                    "IOS_Process": [
+                        "^bili-universal$"
+                    ]
+                },
+                "大众点评": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sankuai.dianping$",
+                        "^ankuai.dianping$",
+                        "com.sankuai.dianping:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "滴滴出行": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sdu.didi.hmos.psnger$",
+                        "^idi.hmos.psnger$",
+                        "com.sdu.didi.hmos.psnger:.+",
+                        "s.psnger:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "懂车帝": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ss.dcar.auto$",
+                        "^om.ss.dcar.auto$",
+                        "com.ss.dcar.auto:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "抖音": {
+                    "Android_Process": [
+                        "^com.ss.android.ugc.aweme$",
+                        "com.ss.android.ugc.aweme:.+",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ss.hm.ugc.aweme$",
+                        "^ss.hm.ugc.aweme$",
+                        "com.ss.hm.ugc.aweme:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "斗鱼": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.douyu.ho.app$",
+                        "^om.douyu.ho.app$",
+                        "com.douyu.ho.app:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "番茄免费小说": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.dragon.read.next$",
+                        "^ragon.read.next$",
+                        "com.dragon.read.next:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "高德地图": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.amap.hmapp$",
+                        "com.amap.hmapp:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "航旅纵横": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.umetrip.hm.app$",
+                        "^.umetrip.hm.app$",
+                        "^p.hm.app$",
+                        "com.umetrip.hm.app:.+",
+                        "p.hm.app:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "今日头条": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ss.hm.article.news$",
+                        "^hm.article.news$",
+                        "com.ss.hm.article.news:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "京东": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.jd.hm.mall$",
+                        "com.jd.hm.mall:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "开心消消乐": {
+                    "Android_Process": [
+                        "^com.happyelements.AndroidAnimal$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.happyelements.OhosAnimal$",
+                        "^ents.OhosAnimal$",
+                        "^OhosAnimal$"
+                    ],
+                    "IOS_Process": []
+                },
+                "快手": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.kuaishou.hmapp$",
+                        "^.kuaishou.hmapp$"
+                    ],
+                    "IOS_Process": []
+                },
+                "芒果TV": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.mgtv.phone$",
+                        "com.mgtv.phone:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "美图秀秀": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.meitu.meitupic$",
+                        "^.meitu.meitupic$"
+                    ],
+                    "IOS_Process": []
+                },
+                "美团": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sankuai.hmeituan$",
+                        "^ankuai.hmeituan$",
+                        "com.sankuai.hmeituan:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "七猫免费小说": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.qimao.novel$"
+                    ],
+                    "IOS_Process": []
+                },
+                "去哪儿旅行": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.qunar.hos$",
+                        "com.qunar.hos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "搜狐新闻": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sohu.harmonynews$"
+                    ],
+                    "IOS_Process": []
+                },
+                "淘宝": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.taobao.taobao4hmos$",
+                        "^bao.taobao4hmos$",
+                        "com.taobao.taobao4hmos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "腾讯视频": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.tencent.videohm$",
+                        "^tencent.videohm$",
+                        "com.tencent.videohm:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "腾讯新闻": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.tencent.hm.news$",
+                        "^tencent.hm.news$",
+                        "^.hm.news$",
+                        "com.tencent.hm.news:.+",
+                        ".hm.news:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "铁路12306": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.chinarailway.ticketingHM$",
+                        "^way.ticketingHM$",
+                        "com.chinarailway.ticketingHM:.+",
+                        "ketingHM:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "同城旅行": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.tongcheng.hmos$",
+                        "com.tongcheng.hmos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "同花顺": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.hexin.hmn.sjcg$",
+                        "^.hexin.hmn.sjcg$",
+                        "com.hexin.hmn.sjcg:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "网易云音乐": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.netease.cloudmusic.hm$",
+                        "^e.cloudmusic.hm$"
+                    ],
+                    "IOS_Process": []
+                },
+                "王者荣耀": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.tencent.tmgp.sgame.hw$"
+                    ],
+                    "IOS_Process": []
+                },
+                "微博": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sina.weibo.stage$",
+                        "^ina.weibo.stage$"
+                    ],
+                    "IOS_Process": []
+                },
+                "微信": {
+                    "Android_Process": [
+                        "^com.tencent.mm$",
+                        "com.tencent.mm:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.tencent.wechat$",
+                        "^.tencent.wechat$",
+                        "com.tencent.wechat:.+"
+                    ],
+                    "IOS_Process": [
+                        "^WeChat$"
+                    ]
+                },
+                "唯品会": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.vip.hosapp$",
+                        "com.vip.hosapp:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "喜马拉雅": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ximalaya.ting.xmharmony$",
+                        "^.ting.xmharmony$",
+                        "com.ximalaya.ting.xmharmony:.+",
+                        "mharmony:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "闲鱼": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.taobao.idlefish4ohos$",
+                        "^o.idlefish4ohos$",
+                        "com.taobao.idlefish4ohos:.+",
+                        "ish4ohos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "小红书": {
+                    "Android_Process": [
+                        "^com.xingin.xhs$",
+                        "com.xingin.xhs:.+",
+                        ".+:sandboxed_process.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.xingin.xhs_hos$",
+                        "^.xhs_hos$",
+                        "^.xingin.xhs_hos$",
+                        "com.xingin.xhs_hos:.+",
+                        "com.xingin.xhs_hos:.+",
+                        ".xhs_hos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "携程旅行": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ctrip.harmonynext$",
+                        "^rip.harmonynext$",
+                        "com.ctrip.harmonynext:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "新浪新闻": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.sina.news.hm.next$",
+                        "^na.news.hm.next$",
+                        "com.sina.news.hm.next:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "学习强国": {
+                    "Android_Process": [
+                        "^cn.xuexi.android$"
+                    ],
+                    "Harmony_Process": [
+                        "^cn.xuexi.qg4ohos$",
+                        "^n.xuexi.qg4ohos$"
+                    ],
+                    "IOS_Process": []
+                },
+                "优酷视频": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.youku.next$"
+                    ],
+                    "IOS_Process": []
+                },
+                "云闪付": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.unionpay.hmos.wallet$",
+                        "^pay.hmos.wallet$",
+                        "com.unionpay.hmos.wallet:.+",
+                        "s.wallet:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "招商银行": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.cmbchina.harmony$"
+                    ],
+                    "IOS_Process": []
+                },
+                "支付宝": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.alipay.mobile.client$",
+                        "^y.mobile.client$",
+                        "com.alipay.mobile.client:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "知乎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.zhihu.hmos$",
+                        "com.zhihu.hmos:.+",
+                        "ihu.hmos:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "直播吧": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.zhibo8.hmclient$"
+                    ],
+                    "IOS_Process": []
+                },
+                "作业帮": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.zuoyebang.homework$",
+                        "^yebang.homework$",
+                        "com.zuoyebang.homework:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "媒体框架": {
+            "OS媒体软件": {
+                "播放框架": {
+                    "Android_Process": [
+                        "^mediaserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^media_service$"
+                    ],
+                    "IOS_Process": [
+                        "^mediaserverd$"
+                    ]
+                },
+                "播控框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^av_session$"
+                    ],
+                    "IOS_Process": [
+                        "^mediaplaybackd$"
+                    ]
+                },
+                "铃音库": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.ringtonelibrary.ringtonelibrarydata$",
+                        "^tonelibrarydata$"
+                    ],
+                    "IOS_Process": []
+                },
+                "媒体进程": {
+                    "Android_Process": [
+                        "^android.process.media$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "媒体Provider": {
+                    "Android_Process": [
+                        "^com.android.providers.media.module$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "媒体解码": {
+                    "Android_Process": [
+                        "^media.codec$",
+                        "^media.swcodec$"
+                    ],
+                    "Harmony_Process": [
+                        "^av_codec_service$",
+                        "^av_codec_servic$"
+                    ],
+                    "IOS_Process": [
+                        "^videocodecd$"
+                    ]
+                },
+                "媒体分析": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^media_analysis_service$",
+                        "^media_analysis_$"
+                    ],
+                    "IOS_Process": [
+                        "^audioanalyticsd$"
+                    ]
+                },
+                "媒体监听": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^media_monitor$"
+                    ],
+                    "IOS_Process": []
+                },
+                "媒体解析": {
+                    "Android_Process": [
+                        "media.extractor$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^mediaparserd$"
+                    ]
+                },
+                "媒体库": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.medialibrary.medialibrarydata$",
+                        "^edialibrarydata$"
+                    ],
+                    "IOS_Process": [
+                        "^assetsd$"
+                    ]
+                },
+                "媒体数字版权": {
+                    "Android_Process": [
+                        "android.hardware.drm@.+",
+                        "^drmserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^drm_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "媒体信息": {
+                    "Android_Process": [
+                        "^media.metrics$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "视频处理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^video_processing_service$",
+                        "^video_processin$"
+                    ],
+                    "IOS_Process": []
+                },
+                "图像效果": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^image_effect$"
+                    ],
+                    "IOS_Process": []
+                },
+                "相机算法": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^algorithm_camera$"
+                    ],
+                    "IOS_Process": []
+                },
+                "音频框架": {
+                    "Android_Process": [
+                        "^audioserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^audio_server$",
+                        "^audio_algorithm$",
+                        "^audio_policy$",
+                        "^anco_audio$",
+                        "^pulseaudio$"
+                    ],
+                    "IOS_Process": [
+                        "^audiomxd$",
+                        "^audioclocksyncd$",
+                        "^corespeechd$"
+                    ]
+                },
+                "华为音频引擎": {
+                    "Android_Process": [
+                        "^com.huawei.multimedia.audioengine.HwAudioEngeService$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "华为音频卡拉OK特性": {
+                    "Android_Process": [
+                        "^com.huawei.multimedia.audioengine.HwAudioKaraokeFeatureService$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "媒体远程控制管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^mediaremoted$"
+                    ]
+                }
+            }
+        },
+        "相机框架": {
+            "OS媒体软件": {
+                "相机框架": {
+                    "Android_Process": [
+                        "^cameraserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^camera_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "相机HAL": {
+            "OS媒体软件": {
+                "相机HAL": {
+                    "Android_Process": [
+                        "^CameraDaemon$"
+                    ],
+                    "Harmony_Process": [
+                        "^CameraDaemon$"
+                    ],
+                    "IOS_Process": [
+                        "^appleh16camerad$",
+                        "^cameracaptured$"
+                    ]
+                }
+            }
+        },
+        "图形": {
+            "图形图像": {
+                "AGP服务": {
+                    "Android_Process": [
+                        "^AGPService$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "Surface合成器": {
+                    "Android_Process": [
+                        "^surfaceflinger$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "图形服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^render_service$"
+                    ],
+                    "IOS_Process": [
+                        "^backboardd$"
+                    ]
+                },
+                "图形低功耗服务框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^aps_manager$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "系统服务": {
+            "系统服务管理": {
+                "基础服务": {
+                    "Android_Process": [
+                        "^system_server$",
+                        "^com.huawei.systemserver$",
+                        "^com.huawei.harmonyos.foundation$",
+                        "^servicemanager$"
+                    ],
+                    "Harmony_Process": [
+                        "^foundation$"
+                    ],
+                    "IOS_Process": [
+                        "^lsd$"
+                    ]
+                },
+                "系统服务管理": {
+                    "Android_Process": [
+                        "^samgr$"
+                    ],
+                    "Harmony_Process": [
+                        "^samgr$",
+                        "^sa_main$"
+                    ],
+                    "IOS_Process": []
+                },
+                "上下文存储": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^contextstored$"
+                    ]
+                },
+                "系统配置管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^configd$"
+                    ]
+                },
+                "系统统计数据": {
+                    "Android_Process": [
+                        "^statsd$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                }
+            },
+            "系统服务管理": {
+                "数据技术应用服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^dtappserviced$"
+                    ]
+                }
+            }
+        },
+        "全局资源调度": {
+            "全局资源调度": {
+                "后台任务管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^bgtaskmgr_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "资源调度服务": {
+                    "Android_Process": [
+                        "^com.huawei.iaware$",
+                        "^iawared$"
+                    ],
+                    "Harmony_Process": [
+                        "^resource_schedule_service$"
+                    ],
+                    "IOS_Process": [
+                        "^runningboardd$"
+                    ]
+                },
+                "资源调度执行器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^resource_schedule_executor$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备使用情况统计": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^device_usage_stats_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "热控制": {
+                    "Android_Process": [
+                        "^thermal-daemon$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^thermalmonitord$"
+                    ]
+                },
+                "省电精灵": {
+                    "Android_Process": [
+                        "^hepged$",
+                        "^powerlogd$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "iAware平台": {
+                    "Android_Process": [
+                        "vendor.huawei.hardware.iawareperf@.+-service"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "系统功耗": {
+                    "Android_Process": [
+                        "android.hardware.thermal@.+-service-ithermal"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "后台活动调度": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^dasd$"
+                    ]
+                }
+            }
+        },
+        "内存管理": {
+            "内存管理": {
+                "并发任务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^concurrent_task_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "低内存查杀": {
+                    "Android_Process": [
+                        "^lmkd$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "内存管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^memmgrservice$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "AI": {
+            "AI": {
+                "AI基础服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.aibase$"
+                    ],
+                    "IOS_Process": []
+                },
+                "AI引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^aiengine$"
+                    ],
+                    "IOS_Process": []
+                },
+                "HiAI引擎": {
+                    "Android_Process": [
+                        "^com.huawei.hiai$",
+                        "com.huawei.hiai:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.hiai$",
+                        "^com.huawei.hmsapp.hiai.core$",
+                        "^app.hiai.core$",
+                        "^com.huawei.hmsapp.hiai.vision$",
+                        "^app.huai.vision$",
+                        "^com.huawei.hmsapp.hiai.voice$",
+                        "^sapp.hiai.voice$",
+                        "^app.hiai.voice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "HiAI框架": {
+                    "Android_Process": [
+                        "^hiaiserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^hiaiserver$"
+                    ],
+                    "IOS_Process": []
+                },
+                "大模型引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^large_model_engine$"
+                    ],
+                    "IOS_Process": []
+                },
+                "端侧AI推理框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dllite_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "智慧分发": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.aidispatch$",
+                        "^com.huawei.hmos.aidispatch.1$",
+                        "^os.aidispatch.1$"
+                    ],
+                    "IOS_Process": []
+                },
+                "智慧分发服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.aidispatchservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "智慧分发引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^ai_dispatcher_engine_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "智慧数据服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.aidataservice$",
+                        "^com.huawei.hmos.aidataservice.1$",
+                        "^aidataservice.1$"
+                    ],
+                    "IOS_Process": []
+                },
+                "Siri动作": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^siriactionsd$"
+                    ]
+                },
+                "Siri知识": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^siriknowledged$"
+                    ]
+                },
+                "Siri语音助手": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^assistantd$"
+                    ]
+                }
+            }
+        },
+        "通信互联": {
+            "电话服务": {
+                "电话服务增强": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^telephonyenhanced$",
+                        "^lephonyenhanced$"
+                    ],
+                    "IOS_Process": []
+                },
+                "电话核心服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^telephony$"
+                    ],
+                    "IOS_Process": []
+                },
+                "卫星通信服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^satellite_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "通信互联": {
+                "DCM服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dcm_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "IPv4 tables恢复": {
+                    "Android_Process": [
+                        "^iptables-restore$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "IPv6 tables恢复": {
+                    "Android_Process": [
+                        "^ip6tables-restore$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "WLAN中间件": {
+                    "Android_Process": [
+                        "^wpa_supplicant_hisi$"
+                    ],
+                    "Harmony_Process": [
+                        "^wpa_supplicant$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分享服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^sharing_service$"
+                    ],
+                    "IOS_Process": [
+                        "^sharingd$"
+                    ]
+                },
+                "通信优化": {
+                    "Android_Process": [
+                        "^emcomd$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "无线洞察": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^wirelessinsightsd$"
+                    ]
+                },
+                "多播域名系统响应器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^mDNSResponder$"
+                    ]
+                },
+                "无线电台管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^WirelessRadioManagerd$"
+                    ]
+                },
+                "通信中心": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^CommCenter$"
+                    ]
+                }
+            },
+            "网络管理": {
+                "网络管理基础服务": {
+                    "Android_Process": [
+                        "^netd$"
+                    ],
+                    "Harmony_Process": [
+                        "^netmanager$",
+                        "^netsysnative$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "通信协议": {
+            "基础通信": {
+                "5G Kit HMI服务": {
+                    "Android_Process": [
+                        "^hmi_service$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "NFC服务": {
+                    "Android_Process": [
+                        "^com.android.nfc$",
+                        "com.android.nfc:.+"
+                    ],
+                    "Harmony_Process": [
+                        "^nfc_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "WLAN服务": {
+                    "Android_Process": [
+                        "^wifiservice"
+                    ],
+                    "Harmony_Process": [
+                        "^wifi_hal_service$",
+                        "^wifi_hal_servic$"
+                    ],
+                    "IOS_Process": [
+                        "^wifid$"
+                    ]
+                },
+                "WLAN管理服务": {
+                    "Android_Process": [
+                        "^wificond$"
+                    ],
+                    "Harmony_Process": [
+                        "^wifi_manager_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "安全单元": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^se_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "蜂窝通信协议": {
+                    "Android_Process": [
+                        "^shs$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "蓝牙服务": {
+                    "Android_Process": [
+                        "^com.android.bluetooth$"
+                    ],
+                    "Harmony_Process": [
+                        "^bluetooth_service$"
+                    ],
+                    "IOS_Process": [
+                        "^bluetoothd$"
+                    ]
+                },
+                "通信协议资源管控": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^comm_protocol_resource_manager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "无线HID配件管理服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^wireless_hid_accessory_manager_ability$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "基础通信": {
+                "心跳代理": {
+                    "Android_Process": [
+                        "^bastetd$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                }
+            },
+            "位置服务": {
+                "位置服务": {
+                    "Android_Process": [
+                        "^com.huawei.lbs$",
+                        "com.huawei.lbs:.+",
+                        "^locationhub$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.location$",
+                        "com.huawei.hmos.location:.+",
+                        "^s.location:core$",
+                        "^locationhub$"
+                    ],
+                    "IOS_Process": []
+                },
+                "GPS GNSS协议": {
+                    "Android_Process": [
+                        "^hignss_110x$",
+                        "^hignss_hisi$"
+                    ],
+                    "Harmony_Process": [
+                        "^hignss_110x_ohos$"
+                    ],
+                    "IOS_Process": []
+                },
+                "融合位置服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^locationd$"
+                    ]
+                },
+                "GPS守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^gpsd"
+                    ]
+                },
+                "地理位置守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^geod$"
+                    ]
+                }
+            }
+        },
+        "安全": {
+            "安全端云治理": {
+                "设备风险管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^security_guard$"
+                    ],
+                    "IOS_Process": []
+                },
+                "业务风险检测": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.brid$",
+                        "^com.huawei.hmos.brid:workScheduler$",
+                        "^uawei.hmos.brid$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "安全基础能力": {
+                "DLP权限服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dlp_permission_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "FIDO服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.fido$",
+                        "^uawei.hmos.fido$"
+                    ],
+                    "IOS_Process": []
+                },
+                "SOTER服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^soter$"
+                    ],
+                    "IOS_Process": []
+                },
+                "安全基础服务": {
+                    "Android_Process": [
+                        "^com.huawei.securityserver$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^securityd$"
+                    ]
+                },
+                "安全插件": {
+                    "Android_Process": [
+                        "^com.huawei.securitypluginbase$",
+                        "com.huawei.securitpluginbase:.+"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "关键资产存储": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^asset_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "关键资产信任环服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^trusted_ring_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "激活锁基础能力服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^activation_lock$"
+                    ],
+                    "IOS_Process": []
+                },
+                "密钥存储": {
+                    "Android_Process": [
+                        "^keystore2$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^applekeystored$"
+                    ]
+                },
+                "密钥管理CA": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cadaemon$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备安全等级管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dslm_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备互信认证": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^deviceauth_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备健康认证": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dha_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备密钥管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^huks_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备认证": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^ifaa$"
+                    ],
+                    "IOS_Process": []
+                },
+                "数据防泄漏凭据管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dlp_credential_service_sa$"
+                    ],
+                    "IOS_Process": []
+                },
+                "行为识别": {
+                    "Android_Process": [
+                        "^com.huawei.behaviorauth$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "证书管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cert_manager_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "安全警报": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^safetyalertsd$"
+                    ]
+                }
+            },
+            "程序访问控制": {
+                "安全控件": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^security_component_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "访问控制": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^accesstoken_service$",
+                        "^token_sync_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "webview管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^sanbox_manager_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "锁屏文件密钥策略": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^el5_filekey_manager$",
+                        "^el5_filekey_man$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "可信执行环境": {
+                "TEE客户端": {
+                    "Android_Process": [
+                        "^teecd$"
+                    ],
+                    "Harmony_Process": [
+                        "^teecd$"
+                    ],
+                    "IOS_Process": []
+                },
+                "可信应用服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^trusted_app_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "可信守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^trustd$"
+                    ]
+                }
+            },
+            "应用安全隐私能力": {
+                "安全隐私服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^security_privacy_server$"
+                    ],
+                    "IOS_Process": []
+                },
+                "代码保护服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^code_protect$"
+                    ],
+                    "IOS_Process": []
+                },
+                "应用锁服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^app_lock_service$",
+                        "^app_lock_servic$"
+                    ],
+                    "IOS_Process": []
+                },
+                "隐私服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^privacy_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "Safari安全浏览服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^com.apple.Safari.SafeBrowsing.Service$"
+                    ]
+                },
+                "透明度及同意和控制": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^tccd$"
+                    ]
+                }
+            },
+            "用户IAM": {
+                "口令认证": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^pinauth$"
+                    ],
+                    "IOS_Process": []
+                },
+                "统一用户认证": {
+                    "Android_Process": [
+                        "^com.huawei.coauthservice$"
+                    ],
+                    "Harmony_Process": [
+                        "^useriam$"
+                    ],
+                    "IOS_Process": []
+                },
+                "身份服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^identityservicesd$"
+                    ]
+                }
+            },
+            "安全其他": {
+                "安全采集框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^security_collector$",
+                        "^security_collec$"
+                    ],
+                    "IOS_Process": []
+                },
+                "安全检测响应": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.hsdr$",
+                        "^com.huawei.hmos.hsdr:workScheduler$",
+                        "^uawei.hmos.hsdr$"
+                    ],
+                    "IOS_Process": []
+                },
+                "开发者模式与坚盾守护模式管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dsmm_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "云服务": {
+            "端云网关服务": {
+                "端云加速服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^client_cloud_accelerate$"
+                    ],
+                    "IOS_Process": []
+                },
+                "端云接口认证服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cloudinterfaceauth$"
+                    ],
+                    "IOS_Process": []
+                },
+                "端云协同缓存服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.pafservice$",
+                        "^client_cloud_cache_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "媒体云增强服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^media_cloud_enhance_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "云开发代理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^clouddevelopproxy$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "广告服务": {
+                "广告服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^advertising_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "广告应用": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.adsservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "开放广告设备标识": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^oaid_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "钱包支付服务": {
+                "应用内支付服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.iapservice$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "服务直达": {
+                "扫码直达服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.serviceaccess$",
+                        "^s.serviceaccess$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "推送服务": {
+                "推送管理服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^push_manager_service$"
+                    ],
+                    "IOS_Process": [
+                        "^apsd$"
+                    ]
+                },
+                "推送业务服务": {
+                    "Android_Process": [
+                        "^com.huawei.android.pushagent.PushService$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.adsservice$",
+                        "^hms.pushservice$",
+                        "com.huawei.hms.pushservice:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "文件管理": {
+                "云备份服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cloud_backup_service$",
+                        "^cloud_backup_se$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "云服务": {
+                "分析服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hianalytics$"
+                    ],
+                    "IOS_Process": [
+                        "^analyticsd$"
+                    ]
+                },
+                "iCloud遥测服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^CloudTelemetryService$"
+                    ]
+                }
+            }
+        },
+        "文件管理": {
+            "文件管理": {
+                "端云文件服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cloudfileservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "端云文件守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cloudfiledaemon$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式文件守护进程": {
+                    "Android_Process": [
+                        "^distributedfileservice$",
+                        "^distributedfiledaemon$"
+                    ],
+                    "Harmony_Process": [
+                        "^distributedfiledaemon$"
+                    ],
+                    "IOS_Process": []
+                },
+                "卷守护进程": {
+                    "Android_Process": [
+                        "^vold$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "索引注入服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^index_insert_service$",
+                        "^index_insert_se$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件访问服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^file_access_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件管理服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^file_manager_service$",
+                        "^file_manager_se$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件监听服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^file_monitor_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "iCloud数据同步": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^duetexpertd$"
+                    ]
+                },
+                "云守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^cloudd$"
+                    ]
+                },
+                "Cache删除": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^deleted$"
+                    ]
+                },
+                "APFS删除助手": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^deleted_helper$"
+                    ]
+                }
+            }
+        },
+        "包管理": {
+            "包管理": {
+                "包管理基础框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^installs$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式包管理框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^d-bms$"
+                    ],
+                    "IOS_Process": []
+                },
+                "应用域名校验": {
+                    "Android_Process": [
+                        "^app_domain_verify_agent$"
+                    ],
+                    "Harmony_Process": [
+                        "^app_domian_verify_agent$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "卡片框架": {
+            "卡片框架": {
+                "卡片管理框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.formrenderservice$",
+                        "^rmrenderservice$",
+                        ".+:form"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "桌面服务": {
+            "桌面服务": {
+                "AOD服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^aod_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "分布式软总线": {
+            "分布式软总线": {
+                "软总线": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^softbus_server$"
+                    ],
+                    "IOS_Process": []
+                },
+                "近场活动管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^com.apple.NeighborhoodActivityConduitService$"
+                    ]
+                }
+            }
+        },
+        "分布式数据管理": {
+            "分布式数据管理": {
+                "bindfs文件系统": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^bindfs$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式数据对象": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^distributeddata$"
+                    ],
+                    "IOS_Process": []
+                },
+                "数据管理中间件": {
+                    "Android_Process": [
+                        "^com.huawei.HwOPServer$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "剪贴板服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^pasteboard_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "分布式硬件": {
+            "分布式硬件": {
+                "存储守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^storage_daemon$"
+                    ],
+                    "IOS_Process": []
+                },
+                "存储管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^storage_manager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式modem": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dmodem$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式相机": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dcamera$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式硬件管理框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dhardware$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式音频": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^daudio$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分布式组件管理框架": {
+                    "Android_Process": [
+                        "^distributedsche$"
+                    ],
+                    "Harmony_Process": [
+                        "^distributedsched$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^device_manager$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "运动健康服务": {
+            "运动健康服务": {
+                "穿戴协同服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.health.core:co$",
+                        "^.health.core:co$"
+                    ],
+                    "IOS_Process": []
+                },
+                "运动健康系统服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.health.core$",
+                        "^mos.health.core$",
+                        "^healthsport_services$"
+                    ],
+                    "IOS_Process": []
+                },
+                "健康守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^healthd$"
+                    ]
+                }
+            }
+        },
+        "多模": {
+            "多模输入": {
+                "多模输入": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^uinput_inject$",
+                        "^multimodalinput$"
+                    ],
+                    "IOS_Process": []
+                },
+                "键盘守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^kbd$"
+                    ]
+                }
+            }
+        },
+        "UI平台": {
+            "UI": {
+                "UI服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^ui_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "无障碍软件服务": {
+                "无障碍": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^accessibility$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "主题框架": {
+                "壁纸管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^wallpaper_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "硬工多媒体": {
+            "图形图像": {
+                "触控守护进程": {
+                    "Android_Process": [
+                        "^aptouch_daemon$"
+                    ],
+                    "Harmony_Process": [
+                        "^aptouch_daemon$"
+                    ],
+                    "IOS_Process": []
+                },
+                "显示效果": {
+                    "Android_Process": [
+                        "^displayengineserver$"
+                    ],
+                    "Harmony_Process": [
+                        "^display_engine_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "OS媒体软件": {
+                "THP扩展": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^thp_extra$"
+                    ],
+                    "IOS_Process": []
+                },
+                "华为音频产品连接服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^aam_connection_svc$",
+                        "^aam_connection_$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "Sensor": {
+            "泛Sensor服务": {
+                "泛Sensor服务启动": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^sensors$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "传感器框架": {
+                "活动识别": {
+                    "Android_Process": [
+                        "^activity_recognition_service$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                }
+            },
+            "生物医学传感": {
+                "生物医学传感器数据处理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^biomed$"
+                    ]
+                }
+            }
+        },
+        "启动恢复": {
+            "启动恢复": {
+                "NWeb孵化器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^nwebspawn$"
+                    ],
+                    "IOS_Process": []
+                },
+                "uevent守护进程": {
+                    "Android_Process": [
+                        "^ueventd$"
+                    ],
+                    "Harmony_Process": [
+                        "^ueventd$"
+                    ],
+                    "IOS_Process": [
+                        "^UserEventAgent$"
+                    ]
+                },
+                "参数监听": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^param_watcher$"
+                    ]
+                },
+                "初始化": {
+                    "Android_Process": [
+                        "^init$"
+                    ],
+                    "Harmony_Process": [
+                        "^init$"
+                    ],
+                    "IOS_Process": [
+                        "^launchd$"
+                    ]
+                },
+                "设备信息服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^deviceinfoservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "系统挂起": {
+                    "Android_Process": [
+                        "^android.system.suspend$",
+                        "android.system.suspend@.*-service"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "应用池": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^apppool$"
+                    ],
+                    "IOS_Process": []
+                },
+                "应用孵化器": {
+                    "Android_Process": [
+                        "^zygote$",
+                        "^zygote64$"
+                    ],
+                    "Harmony_Process": [
+                        "^appspawn$",
+                        "^nativespawn$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "全场景协同": {
+            "分布式协同框架": {
+                "全场景协同框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^CollaborationFwk$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备协同核心": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^coreduetd$"
+                    ]
+                }
+            },
+            "音视频投播服务": {
+                "音视频投播服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cast_engine_service$",
+                        "^cast_engine_ser$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "USB服务": {
+            "USB服务": {
+                "USB管理服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^usb_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "USB权限": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.usb.right$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "电源服务": {
+            "电源服务": {
+                "电源管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^powermgr$"
+                    ],
+                    "IOS_Process": [
+                        "^powerd$"
+                    ]
+                }
+            }
+        },
+        "性能电源服务": {
+            "性能电源服务": {
+                "性能电源服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^PerfPowerServices$"
+                    ]
+                }
+            }
+        },
+        "上传下载": {
+            "上传下载": {
+                "上传下载请求管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^download_server$"
+                    ],
+                    "IOS_Process": [
+                        "^nsurlsessiond$"
+                    ]
+                }
+            }
+        },
+        "时间时区": {
+            "时间时区": {
+                "时间时区服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^time_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "输入法": {
+            "输入法": {
+                "输入法broker服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^anco_service_broker$"
+                    ],
+                    "IOS_Process": []
+                },
+                "输入法框架": {
+                    "Android_Process": [
+                        "^ime$"
+                    ],
+                    "Harmony_Process": [
+                        "^inputmethod_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "账号": {
+            "账号": {
+                "账号管理": {
+                    "Android_Process": [
+                        "^accountmgr$"
+                    ],
+                    "Harmony_Process": [
+                        "^accountmgr$"
+                    ],
+                    "IOS_Process": [
+                        "^accountsd$"
+                    ]
+                }
+            }
+        },
+        "其他系统调度": {
+            "FFRT": {
+                "静态调度": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^staticschedulerserver$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "ArkWeb升级": {
+            "ArkWeb升级": {
+                "ArkWeb升级服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^app_fwk_update_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "Swing服务": {
+            "Swing服务": {
+                "Swing系统服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^swing_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "出行": {
+            "Car专有业务": {
+                "出行分布式业务引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^car_distributed_engine$",
+                        "^nav_info_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "分布式DeviceProfile": {
+            "分布式DeviceProfile": {
+                "设备硬件能力和系统软件特征管理器": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^deviceprofile$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "开放能力": {
+            "查找设备": {
+                "查找网络": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^findnetwork$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "游戏": {
+            "游戏服务": {
+                "游戏服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^gameservice_server$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "游戏加速": {
+                "游戏加速决策服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^game_accelerate_schedule$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "元服务分发": {
+            "元服务分发": {
+                "元服务分发引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.asde$",
+                        "com.huawei.hmos.asde:.*",
+                        "^uawei.hmos.asde$"
+                    ],
+                    "IOS_Process": []
+                },
+                "元服务生态规则管控": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^atomicservice_ecological_rule_manager$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "元服务组件": {
+            "元服务组件": {
+                "元服务API策略控制服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^api_policy_service$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "元能力": {
+            "元能力": {
+                "自动填充框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "AutoFillAbility:.+",
+                        "oFillAbility:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "综合传感处理平台": {
+            "综合传感处理平台": {
+                "设备状态感知": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^msdp$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "生态融合": {
+            "虚拟化服务": {
+                "融合管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hmos_fusion_manager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "容器引擎": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^isulad$",
+                        "^rgm_manager$"
+                    ],
+                    "IOS_Process": []
+                },
+                "虚拟设备代理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^virt_device$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "海思": {
+            "芯片解决方案": {
+                "大海思SOC": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^rfile_user_phone$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "专注模式": {
+            "专注模式": {
+                "专注模式": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^routined$"
+                    ]
+                }
+            }
+        },
+        "图形IDL/HDI": {
+            "IDL/HDI": {
+                "图形IDL/HDI": {
+                    "Android_Process": [
+                        "vendor.huawei.hardware.graphics.hdm@.+-service",
+                        "vendor.huawei.hardware.graphics.hwcinterface@.+-service",
+                        "vendor.huawei.hardware.graphics.displayeffect@.+-service",
+                        "vendor.huawei.hardware.graphics.mediacomm@.+-service",
+                        "^displayservice$"
+                    ],
+                    "Harmony_Process": [
+                        "^composer_host$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "音频IDL/HDI": {
+            "IDL/HDI": {
+                "音频IDL/HDI": {
+                    "Android_Process": [
+                        "^vendor.huawei.hardware.audio.service$"
+                    ],
+                    "Harmony_Process": [
+                        "^audio_host$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "编创服务IDL/HDI": {
+            "IDL/HDI": {
+                "编创服务IDL/HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^image_process_host$",
+                        "^image_process_h$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "其他IDL/HDI": {
+            "IDL/HDI": {
+                "IDL": {
+                    "Android_Process": [
+                        ".+.hardware.+service"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "AI调度HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hwsched_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "DCM HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^dcm_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "HiMediacomm HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^himediacomm$"
+                    ],
+                    "IOS_Process": []
+                },
+                "modem日志HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hmi_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "NFC HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^nfc_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "perfgenius HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^perfgenius_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "RIL适配HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^riladapter_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "TP HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^tp_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "USB HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^usb_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "WLAN HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^wifi_host$"
+                    ],
+                    "IOS_Process": [
+                        "^com.apple.DriverKit-AppleBCMWLAN$"
+                    ]
+                },
+                "wpa_supplicant HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^wpa_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "安全单元HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^secure_element_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "编解码HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^codec_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "传感器HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^sensor_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "低功耗蓝牙HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^contexthub_ble_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "电池管理HDI服务扩展": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^battery_extra_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "电源管理HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^power_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "口令认证HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^pin_auth_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "蓝牙HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^blue_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "媒体数字版本插件HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^wiseplay_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "人脸认证HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^face_auth_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "生产HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^factory_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "统一用户认证HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^user_auth_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "位置服务HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^location_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "星闪HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^off_find_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "显示HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^allocator_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "振动HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^vibrator_host$"
+                    ],
+                    "IOS_Process": []
+                },
+                "指纹认证HDI": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^fingerprint_auth_host$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "内核": {
+            "内核": {
+                "鸿蒙内核": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^\\[sysmgr-main]$",
+                        "^sysmgr$"
+                    ],
+                    "IOS_Process": []
+                },
+                "鸿蒙内核crypto": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^crypto.elf$"
+                    ],
+                    "IOS_Process": []
+                },
+                "鸿蒙内核devmgr": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^devmgr.elf$"
+                    ],
+                    "IOS_Process": []
+                },
+                "鸿蒙内核hguard": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hguard.elf$"
+                    ],
+                    "IOS_Process": []
+                },
+                "鸿蒙内核tppmgr": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^tppmgr.elf$"
+                    ],
+                    "IOS_Process": []
+                },
+                "ios内核": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^Unknown$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "内核驱动": {
+            "内核驱动": {
+                "鸿蒙内核devhost驱动": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^devhost.elf$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "内核与驱动": {
+            "内核驱动": {
+                "Linux内核与驱动": {
+                    "Android_Process": [
+                        "\\[.+]"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "内核swapper": {
+                    "Android_Process": [
+                        "^swapper$"
+                    ],
+                    "Harmony_Process": [
+                        "^swapper$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "器件驱动": {
+            "器件驱动": {
+                "电池管理": {
+                    "Android_Process": [
+                        "^bms_behavior$"
+                    ],
+                    "Harmony_Process": [
+                        "^bms_behavior$"
+                    ],
+                    "IOS_Process": []
+                },
+                "电池管理-扩展服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^bms_event$"
+                    ],
+                    "IOS_Process": []
+                },
+                "电池健康服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^batterycare_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "USB端口": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^usb_port$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "内核扩展": {
+            "内核扩展": {
+                "数据监听服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^data_monitor_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "本地文件系统扩展": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^file_system_service$",
+                        "^file_system_ser$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件系统事件守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^fseventsd$"
+                    ]
+                }
+            }
+        },
+        "HDF驱动": {
+            "HDF驱动": {
+                "HDF驱动框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hdf_devhost$",
+                        "^hdf_devmgr$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "DFX": {
+            "DFX": {
+                "Dex优化分析器": {
+                    "Android_Process": [
+                        "^dexoptanalyzer$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "Dubai": {
+                    "Android_Process": [
+                        "^dubaid$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "HiViewX": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.hiviewx$",
+                        "^com.huawei.hmos.hiviewx:workScheduler$",
+                        "^x:workScheduler$"
+                    ],
+                    "IOS_Process": []
+                },
+                "HiView应用": {
+                    "Android_Process": [
+                        "^com.huawei.hiview$",
+                        "^com.huawei.hiviewtunnel$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.huawei.hiview$"
+                    ],
+                    "IOS_Process": []
+                },
+                "HiView服务": {
+                    "Android_Process": [
+                        "^hiview$"
+                    ],
+                    "Harmony_Process": [
+                        "^hiview$"
+                    ],
+                    "IOS_Process": []
+                },
+                "ISP日志": {
+                    "Android_Process": [
+                        "^isplogcat$"
+                    ],
+                    "Harmony_Process": [
+                        "^isplogcat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "Perf": {
+                    "Android_Process": [
+                        "^simpleperf$",
+                        "^\\[simpleperf]$"
+                    ],
+                    "Harmony_Process": [
+                        "^hiperf$",
+                        "^\\[hiperf]$",
+                        "^hiprofiler$",
+                        "^\\[hiprofiler]$",
+                        "^hiprofiler_cmd$",
+                        "^hiprofilerd$",
+                        "^hiprofiler_plugins$",
+                        "^native_daemon$"
+                    ],
+                    "IOS_Process": []
+                },
+                "RIL日志": {
+                    "Android_Process": [
+                        "^rillogcat$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "SensorHub日志服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^shs$"
+                    ],
+                    "IOS_Process": []
+                },
+                "SDT工具": {
+                    "Android_Process": [
+                        "^oam_hisi$"
+                    ],
+                    "Harmony_Process": [
+                        "^oam_hisi$"
+                    ],
+                    "IOS_Process": []
+                },
+                "TEE日志": {
+                    "Android_Process": [
+                        "^tlogcat$"
+                    ],
+                    "Harmony_Process": [
+                        "^tlogcat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "Trace Dump": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^HitraceDump$"
+                    ],
+                    "IOS_Process": []
+                },
+                "存储信息打印": {
+                    "Android_Process": [
+                        "^storage_info$"
+                    ],
+                    "Harmony_Process": [
+                        "^storage_info$"
+                    ],
+                    "IOS_Process": []
+                },
+                "电源日志": {
+                    "Android_Process": [
+                        "^chargelogcat$",
+                        "^chargelogcat-c$"
+                    ],
+                    "Harmony_Process": [
+                        "^chargelogcat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "分析服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hms.analyticsservice$",
+                        "^nalyticsservice$"
+                    ],
+                    "IOS_Process": []
+                },
+                "故障日志生成服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^faultloggerd$"
+                    ],
+                    "IOS_Process": []
+                },
+                "进程Dump": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^processdump$"
+                    ],
+                    "IOS_Process": []
+                },
+                "流水日志": {
+                    "Android_Process": [
+                        "^logcat$"
+                    ],
+                    "Harmony_Process": [
+                        "^hilog$",
+                        "^hilogcat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "流水日志守护进程": {
+                    "Android_Process": [
+                        "^logd$",
+                        "^hilogd$"
+                    ],
+                    "Harmony_Process": [
+                        "^hilogd$"
+                    ],
+                    "IOS_Process": [
+                        "^logd$"
+                    ]
+                },
+                "内核日志": {
+                    "Android_Process": [
+                        "^kmsglogcat$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "生产信息存储服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^oeminfo_nvme_server$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设备活跃服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^device_activate_service$"
+                    ],
+                    "IOS_Process": []
+                },
+                "事件日志": {
+                    "Android_Process": [
+                        "^eventslogcat$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "使用报告": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^usage_report$"
+                    ],
+                    "IOS_Process": []
+                },
+                "输入日志": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^inputlogcat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "系统事件": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hisysevent$"
+                    ],
+                    "IOS_Process": []
+                },
+                "系统信息导出": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hidumper$"
+                    ],
+                    "IOS_Process": []
+                },
+                "系统信息导出服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hidumper_service$",
+                        "^hidumper_servic$"
+                    ],
+                    "IOS_Process": []
+                },
+                "业务专有流水日志": {
+                    "Android_Process": [
+                        "^sleeplogcat$"
+                    ],
+                    "Harmony_Process": [
+                        "^sleeplogcat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "症状框架守护进程": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^symptomsd$"
+                    ]
+                },
+                "智能检测": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmos.hiviewcare$",
+                        "com.huawei.hmos.hiviewcare:.+",
+                        "^hmos.hiviewcare$"
+                    ],
+                    "IOS_Process": []
+                },
+                "驱动外设工具": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^einj.elf$",
+                        "^hmesg.elf$",
+                        "^perf.elf$",
+                        "^sysdump.elf$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "Test": {
+            "Shell命令": {
+                "Ability助手": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^aa$"
+                    ],
+                    "IOS_Process": []
+                },
+                "Dump系统信息": {
+                    "Android_Process": [
+                        "^dumpsys$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "IPv4包过滤和NAT管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^iptables$"
+                    ],
+                    "IOS_Process": []
+                },
+                "IPv6包过滤和NAT管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^ip6tables$"
+                    ],
+                    "IOS_Process": []
+                },
+                "Shell解释器": {
+                    "Android_Process": [
+                        "^sh$"
+                    ],
+                    "Harmony_Process": [
+                        "^sh$"
+                    ],
+                    "IOS_Process": []
+                },
+                "包管理": {
+                    "Android_Process": [
+                        "^pm$"
+                    ],
+                    "Harmony_Process": [
+                        "^bm$"
+                    ],
+                    "IOS_Process": []
+                },
+                "查找": {
+                    "Android_Process": [
+                        "^find$"
+                    ],
+                    "Harmony_Process": [
+                        "^find$"
+                    ],
+                    "IOS_Process": []
+                },
+                "创建文件或修改文件和目录的时间": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^touch$"
+                    ],
+                    "IOS_Process": []
+                },
+                "打印环境变量": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^printenv$"
+                    ],
+                    "IOS_Process": []
+                },
+                "打印网络信息": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^netstat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "打印文本内容": {
+                    "Android_Process": [
+                        "^cat$"
+                    ],
+                    "Harmony_Process": [
+                        "^cat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "打印文件中可打印字符串": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^strings$"
+                    ],
+                    "IOS_Process": []
+                },
+                "打印系统负载信息": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^uptime$"
+                    ],
+                    "IOS_Process": []
+                },
+                "打印系统内存释放与使用信息": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^free$"
+                    ],
+                    "IOS_Process": []
+                },
+                "挂载": {
+                    "Android_Process": [
+                        "^mount$"
+                    ],
+                    "Harmony_Process": [
+                        "^mount$"
+                    ],
+                    "IOS_Process": []
+                },
+                "管理本地账号": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^acm$"
+                    ],
+                    "IOS_Process": []
+                },
+                "活动管理": {
+                    "Android_Process": [
+                        "^am$"
+                    ],
+                    "Harmony_Process": [
+                        "^am$"
+                    ],
+                    "IOS_Process": []
+                },
+                "获取进程PID": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^pidof$"
+                    ],
+                    "IOS_Process": []
+                },
+                "获取属性": {
+                    "Android_Process": [
+                        "^getprop$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "截图": {
+                    "Android_Process": [
+                        "^screencap$"
+                    ],
+                    "Harmony_Process": [
+                        "^snapshot_display$",
+                        "^snapshot_displa$"
+                    ],
+                    "IOS_Process": []
+                },
+                "结束进程": {
+                    "Android_Process": [
+                        "^kill$"
+                    ],
+                    "Harmony_Process": [
+                        "^kill$"
+                    ],
+                    "IOS_Process": []
+                },
+                "列表": {
+                    "Android_Process": [
+                        "^ls$"
+                    ],
+                    "Harmony_Process": [
+                        "^ls$"
+                    ],
+                    "IOS_Process": []
+                },
+                "命令参数传递过滤器": {
+                    "Android_Process": [
+                        "^xargs$"
+                    ],
+                    "Harmony_Process": [
+                        "^xargs$"
+                    ],
+                    "IOS_Process": []
+                },
+                "命令行": {
+                    "Android_Process": [
+                        "^cmd$"
+                    ],
+                    "Harmony_Process": [
+                        "^cmd$"
+                    ],
+                    "IOS_Process": []
+                },
+                "日期时间": {
+                    "Android_Process": [
+                        "^date$"
+                    ],
+                    "Harmony_Process": [
+                        "^date$"
+                    ],
+                    "IOS_Process": []
+                },
+                "删除": {
+                    "Android_Process": [
+                        "^rm$"
+                    ],
+                    "Harmony_Process": [
+                        "^rm$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设置参数值": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^param$"
+                    ],
+                    "IOS_Process": []
+                },
+                "设置属性": {
+                    "Android_Process": [
+                        "^setprop$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "手机连接守护进程": {
+                    "Android_Process": [
+                        "^adbd$"
+                    ],
+                    "Harmony_Process": [
+                        "^hdcd$"
+                    ],
+                    "IOS_Process": []
+                },
+                "睡眠若干微秒": {
+                    "Android_Process": [
+                        "^usleep$"
+                    ],
+                    "Harmony_Process": [
+                        "^usleep$"
+                    ],
+                    "IOS_Process": []
+                },
+                "网络接口管理": {
+                    "Android_Process": [
+                        "^ip$"
+                    ],
+                    "Harmony_Process": [
+                        "^ip$"
+                    ],
+                    "IOS_Process": []
+                },
+                "网络连通测试": {
+                    "Android_Process": [
+                        "^ping$"
+                    ],
+                    "Harmony_Process": [
+                        "^ping$"
+                    ],
+                    "IOS_Process": []
+                },
+                "网络配置": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^ifconfig$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文本替换": {
+                    "Android_Process": [
+                        "^sed$"
+                    ],
+                    "Harmony_Process": [
+                        "^sed$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文本行移除": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^cut$"
+                    ],
+                    "IOS_Process": []
+                },
+                "文件类型检测": {
+                    "Android_Process": [
+                        "^file$"
+                    ],
+                    "Harmony_Process": [
+                        "^file$"
+                    ],
+                    "IOS_Process": []
+                },
+                "显示操作系统信息": {
+                    "Android_Process": [
+                        "^uname$",
+                        "^\\[uname]$"
+                    ],
+                    "Harmony_Process": [
+                        "^uname$",
+                        "^\\[uname]$"
+                    ],
+                    "IOS_Process": []
+                },
+                "显示活跃进程信息": {
+                    "Android_Process": [
+                        "^ps$"
+                    ],
+                    "Harmony_Process": [
+                        "^ps$"
+                    ],
+                    "IOS_Process": []
+                },
+                "显示进程实时状态": {
+                    "Android_Process": [
+                        "^top$"
+                    ],
+                    "Harmony_Process": [
+                        "^top$"
+                    ],
+                    "IOS_Process": []
+                },
+                "显示文件或文件系统状态": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^stat$"
+                    ],
+                    "IOS_Process": []
+                },
+                "修改权限": {
+                    "Android_Process": [
+                        "^chown$"
+                    ],
+                    "Harmony_Process": [
+                        "^chown$"
+                    ],
+                    "IOS_Process": []
+                },
+                "修改内核运行参数": {
+                    "Android_Process": [
+                        "^sysctl$"
+                    ],
+                    "Harmony_Process": [
+                        "^sysctl$"
+                    ],
+                    "IOS_Process": []
+                },
+                "样式搜索匹配": {
+                    "Android_Process": [
+                        "^grep$"
+                    ],
+                    "Harmony_Process": [
+                        "^grep$"
+                    ],
+                    "IOS_Process": []
+                }
+            },
+            "测试": {
+                "adb键盘": {
+                    "Android_Process": [
+                        "^com.android.adbkeyboard$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "DT安全": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^com.apple.dt.instruments.dtsecurity$"
+                    ]
+                },
+                "DT服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^DTServiceHub$"
+                    ]
+                },
+                "Hypium测试框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.hypium_input:inputMethod$",
+                        "com.ohos.hypium_input:inputMethod:.+"
+                    ],
+                    "IOS_Process": []
+                },
+                "plrd测试": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.devicetest.plrdtest$"
+                    ],
+                    "IOS_Process": []
+                },
+                "iCloud账户配对": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^remotepairingdeviced$"
+                    ]
+                },
+                "trace抓取": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^hitrace$"
+                    ],
+                    "IOS_Process": []
+                },
+                "UI测试": {
+                    "Android_Process": [
+                        "^uitest$"
+                    ],
+                    "Harmony_Process": [
+                        "^uitest$"
+                    ],
+                    "IOS_Process": []
+                },
+                "UI自动化测试": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^AutomationModeUI$"
+                    ]
+                },
+                "测试服务": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^testserver$"
+                    ],
+                    "IOS_Process": [
+                        "^testmanagerd$"
+                    ]
+                },
+                "网络驱动代理测试框架": {
+                    "Android_Process": [],
+                    "Harmony_Process": [],
+                    "IOS_Process": [
+                        "^WebDriverAgentRunner-Runner$"
+                    ]
+                },
+                "稳定性测试": {
+                    "Android_Process": [
+                        "^kingkong$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                },
+                "样机管理": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.huawei.hmsapp.samplemanagement$"
+                    ],
+                    "IOS_Process": []
+                },
+                "用户输入": {
+                    "Android_Process": [
+                        "^input$"
+                    ],
+                    "Harmony_Process": [
+                        "^uinput$"
+                    ],
+                    "IOS_Process": []
+                },
+                "自动化测试": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^com.ohos.devicetest$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "其他": {
+            "其他": {
+                "其他": {
+                    "Android_Process": [],
+                    "Harmony_Process": [
+                        "^ce:sys/commonUI$",
+                        "meExtension:.+",
+                        "ntionAbility:.+",
+                        "^on:sys/commonUI$",
+                        "umeExtension:.+"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        }
+    },
+    "process_special": {
+        "云服务应用": {
+            "云服务": {
+                "负一屏": {
+                    "scene": "ResourceUsage_PerformanceDynamic_nscreen_\\d+",
+                    "Android_Process": [
+                        "^com.huawei.android.launcher$",
+                        "^com.android.systemui$",
+                        "^com.huawei.intelligent$"
+                    ],
+                    "Harmony_Process": [
+                        "^com.ohos.sceneboard$"
+                    ],
+                    "IOS_Process": []
+                }
+            }
+        },
+        "通信互联应用": {
+            "通信应用": {
+                "通话": {
+                    "scene": "ResourceUsage_PerformanceDynamic_Call\\d+",
+                    "Android_Process": [
+                        "^com.huawei.contacts$",
+                        "^android.process.acore$"
+                    ],
+                    "Harmony_Process": [],
+                    "IOS_Process": []
+                }
+            }
+        }
+    },
+    "dfx_symbols": [
+        "irqctrl_unset_kern_irq_threshold$",
+        "irqctrl_set_kern_irq_threshold\\.\\d+",
+        "__irqctrl_set_kern_irq_threshold",
+        "arm_pmu_start_counters",
+        "arm_pmu_stop_counters",
+        "actv_switch_perf_hook"
+    ],
+    "compute_files": [
+        ["/system/lib64/module/arkcompiler/stub.an", ".*"],
+        ["/system/lib64/platformsdk/libark_jsruntime.so", ".*"],
+        ["/system/lib64/platformsdk/libace_napi.z.so", ".*"],
+        ["/system/lib64/libark_jsoptimizer.so", ".*"],
+        ["/system/lib64/libc\\+\\+.so", ".*"],
+        ["/system/lib64/libdfmalloc.z.so", ".*"],
+        ["/system/lib/ld-musl-aarch64.so.1", ".*"],
+        ["/system/etc/abc/framework/stateMgmt.abc", ".*"],
+        ["/lib/libhmulibs.so.0.1", ".*"],
+        ["/lib/libdh-lnxbase.so.1.0", ".*"],
+        ["/lib/libdh-linux.so", ".*"],
+        ["/lib/libdh.so.0.1", ".*"],
+        ["/lib/libc-sys.so", ".*"],
+        ["^(?!\\[anon:ArkTS[^\\]]*\\])\\[.*\\]", ".*"],
+        ["^(?!.*devhost\\.elf$).*\\.elf$", ".*"],
+        ["/proc/.*/bundle/libs/arm64/libkn.so", "EnterFrame"],
+        ["/proc/.*/bundle/libs/arm64/libkn.so", "LeaveFrame"]
+    ]
+}
