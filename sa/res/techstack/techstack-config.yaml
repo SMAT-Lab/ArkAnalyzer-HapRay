@@ -13,6 +13,7 @@ detections:
     name: "Flutter"
     type: "Flutter"
     confidence: 0.95
+    requireMetadata: true  # 必须至少获取到一个metadata信息
     fileRules:
       - type: "filename"
         patterns: ["libflutter\\.so$", "libapp\\.so$"]
@@ -34,6 +35,7 @@ detections:
     name: "Flutter Assets"
     type: "Flutter"
     confidence: 0.95
+    requireMetadata: false  # 不要求metadata，仅基于文件路径匹配
     fileRules:
       - type: "path"
         patterns: ["flutter_assets/.*"]

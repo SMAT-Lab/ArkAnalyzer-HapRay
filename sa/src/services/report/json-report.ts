@@ -17,37 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { HapStaticAnalysisResult, ResourceFileInfo, FileType } from '../../config/types';
-
-/**
- * 文件类型信息项
- */
-interface FileTypeInfoItem {
-    fileName: string;
-    filePath: string;
-    fileType: string;
-    fileSize: number;
-    fileSizeFormatted: string;
-}
-
-/**
- * 技术栈信息项（直接使用 SoAnalysisResult 格式）
- */
-interface TechnologyStackInfoItem {
-    folder: string;
-    file: string;
-    size: number;
-    techStack: string;
-    metadata: {
-        version?: string;
-        lastModified?: string;
-        dartVersion?: string;
-        flutterHex40?: string;
-        dartPackages?: Array<string>;
-        kotlinSignatures?: Array<string>;
-        [key: string]: unknown;
-    };
-}
+import type { Hap, TechStackDetection } from '../../core/hap/hap_parser';
 
 /**
  * JSON报告结构
@@ -55,6 +25,10 @@ interface TechnologyStackInfoItem {
 interface JsonReport {
     metadata: {
         hapPath: string;
+        bundleName: string;
+        appName: string;
+        versionName: string;
+        versionCode: number;
         timestamp: string;
         analysisDate: string;
         version: string;
@@ -62,34 +36,29 @@ interface JsonReport {
     };
     summary: {
         totalFiles: number;
-        totalSize: number;
-        totalSizeFormatted: string;
-        detectedFrameworks: Array<string>;
-        fileTypeCount: number;
-        technologyStackCount: number;
+        detectedTechStacks: Array<string>;
+        totalFileSize: number;
+        techStackDistribution: Record<string, number>;
     };
-
-    // 第一部分：文件类型信息
-    fileTypeInfo: {
-        totalCount: number;
-        items: Array<FileTypeInfoItem>;
-        statistics: Array<{
-            type: string;
+    techStackDetections: Array<TechStackDetection>;
+    analysisInsights: {
+        primaryTechStack: string;
+        techStackDiversity: number;
+        fileSizeDistribution: {
+            small: number; // < 1MB
+            medium: number; // 1MB - 10MB
+            large: number; // > 10MB
+        };
+        confidenceDistribution: {
+            high: number; // > 0.8
+            medium: number; // 0.5 - 0.8
+            low: number; // < 0.5
+        };
+        techStackDetails: Record<string, {
             count: number;
+            files: Array<string>;
             totalSize: number;
-            totalSizeFormatted: string;
-            percentage: string;
-        }>;
-    };
-
-    // 第二部分：技术栈信息
-    technologyStackInfo: {
-        totalCount: number;
-        items: Array<TechnologyStackInfoItem>;
-        statistics: Array<{
-            framework: string;
-            count: number;
-            percentage: string;
+            avgSize: number;
         }>;
     };
 }
@@ -101,7 +70,7 @@ export class JsonFormatter extends BaseFormatter {
     /**
      * 格式化分析结果为JSON
      */
-    async format(result: HapStaticAnalysisResult): Promise<FormatResult> {
+    async format(result: Hap): Promise<FormatResult> {
         const startTime = Date.now();
         
         try {
@@ -154,107 +123,180 @@ export class JsonFormatter extends BaseFormatter {
     /**
      * 构建JSON报告数据
      */
-    private buildJsonReport(result: HapStaticAnalysisResult): JsonReport {
-        // 构建文件类型信息
-        const fileTypeInfo = this.buildFileTypeInfo(result);
+    private buildJsonReport(result: Hap): JsonReport {
+        // 计算总文件大小
+        const totalFileSize = result.techStackDetections.reduce((sum, item) => sum + item.size, 0);
 
-        // 构建技术栈信息
-        const technologyStackInfo = this.buildTechnologyStackInfo(result);
+        // 构建技术栈分布
+        const techStackDistribution = this.buildTechStackDistribution(result);
+
+        // 构建分析洞察
+        const analysisInsights = this.buildAnalysisInsights(result);
+
+        // 过滤掉 Unknown 技术栈
+        const filteredDetections = result.techStackDetections.filter(d => d.techStack !== 'Unknown');
+        const detectedTechStacks = [...new Set(filteredDetections.map(d => d.techStack))];
 
         const report: JsonReport = {
             metadata: {
                 hapPath: result.hapPath,
-                timestamp: result.timestamp.toISOString(),
-                analysisDate: this.formatDateTime(result.timestamp),
+                bundleName: result.bundleName,
+                appName: result.appName,
+                versionName: result.versionName,
+                versionCode: result.versionCode,
+                timestamp: new Date().toISOString(),
+                analysisDate: this.formatDateTime(new Date()),
                 version: '2.0.0',
                 format: 'json'
             },
             summary: {
-                totalFiles: result.resourceAnalysis.totalFiles,
-                totalSize: result.resourceAnalysis.totalSize,
-                totalSizeFormatted: this.formatFileSize(result.resourceAnalysis.totalSize),
-                detectedFrameworks: result.soAnalysis.detectedFrameworks,
-                fileTypeCount: fileTypeInfo.totalCount,
-                technologyStackCount: technologyStackInfo.totalCount
+                totalFiles: filteredDetections.length,
+                detectedTechStacks,
+                totalFileSize,
+                techStackDistribution
             },
-            fileTypeInfo,
-            technologyStackInfo
+            techStackDetections: this.options.includeDetails !== false ? filteredDetections : [],
+            analysisInsights
         };
 
         return report;
     }
 
     /**
-     * 构建文件类型信息
+     * 构建技术栈分布
      */
-    private buildFileTypeInfo(result: HapStaticAnalysisResult): JsonReport['fileTypeInfo'] {
-        const items: Array<FileTypeInfoItem> = [];
+    private buildTechStackDistribution(result: Hap): Record<string, number> {
+        const distribution: Record<string, number> = {};
+        const filteredDetections = result.techStackDetections.filter(d => d.techStack !== 'Unknown');
+        const totalFiles = filteredDetections.length;
 
-        // 收集所有文件的类型信息
-        for (const [fileType, files] of result.resourceAnalysis.filesByType) {
-            for (const file of files) {
-                items.push({
-                    fileName: file.fileName,
-                    filePath: file.filePath,
-                    fileType: String(fileType),
-                    fileSize: file.fileSize,
-                    fileSizeFormatted: this.formatFileSize(file.fileSize)
-                });
+        if (totalFiles === 0) {
+            return distribution;
+        }
+
+        for (const item of filteredDetections) {
+            const techStack = item.techStack;
+            distribution[techStack] = (distribution[techStack] || 0) + 1;
+        }
+
+        // 转换为百分比
+        for (const techStack in distribution) {
+            distribution[techStack] = Math.round((distribution[techStack] / totalFiles) * 100);
+        }
+
+        return distribution;
+    }
+
+    /**
+     * 构建分析洞察
+     */
+    private buildAnalysisInsights(result: Hap): JsonReport['analysisInsights'] {
+        const techStackCounts: Record<string, number> = {};
+        const techStackDetails: Record<string, { count: number; files: Array<string>; totalSize: number; avgSize: number }> = {};
+        let highConfidence = 0;
+        let mediumConfidence = 0;
+        let lowConfidence = 0;
+
+        // 过滤掉 Unknown 技术栈
+        const filteredDetections = result.techStackDetections.filter(d => d.techStack !== 'Unknown');
+
+        // 统计信息
+        for (const item of filteredDetections) {
+            const techStack = item.techStack;
+            techStackCounts[techStack] = (techStackCounts[techStack] || 0) + 1;
+
+            // 构建技术栈详情
+            if (!(techStack in techStackDetails)) {
+                techStackDetails[techStack] = {
+                    count: 0,
+                    files: [],
+                    totalSize: 0,
+                    avgSize: 0
+                };
+            }
+
+            techStackDetails[techStack].count++;
+            techStackDetails[techStack].files.push(item.file);
+            techStackDetails[techStack].totalSize += item.size;
+
+            const confidence = item.confidence ?? 0;
+            if (confidence > 0.8) {
+                highConfidence++;
+            } else if (confidence >= 0.5) {
+                mediumConfidence++;
+            } else {
+                lowConfidence++;
             }
         }
 
-        // 计算统计信息
-        const statistics = this.getFileTypeStats(result).map(stat => {
-            const files = result.resourceAnalysis.filesByType.get(stat.type as unknown as FileType) ?? [];
-            const totalSize = files.reduce((sum: number, file: ResourceFileInfo) => sum + file.fileSize, 0);
-            return {
-                type: stat.type,
-                count: stat.count,
-                totalSize,
-                totalSizeFormatted: this.formatFileSize(totalSize),
-                percentage: stat.percentage
-            };
-        });
+        // 计算平均大小
+        for (const techStack in techStackDetails) {
+            const details = techStackDetails[techStack];
+            details.avgSize = details.count > 0 ? Math.round(details.totalSize / details.count) : 0;
+        }
+
+        // 找到主要技术栈
+        const primaryTechStack = Object.entries(techStackCounts)
+            .sort(([, a], [, b]) => b - a)[0]?.[0] || 'Unknown';
+
+        // 计算技术栈多样性（熵）
+        const techStackDiversity = this.calculateDiversity(techStackCounts);
+
+        // 文件大小分布
+        const fileSizeDistribution = this.calculateFileSizeDistribution(filteredDetections);
 
         return {
-            totalCount: items.length,
-            items: this.options.includeDetails !== false ? items : [],
-            statistics
+            primaryTechStack,
+            techStackDiversity,
+            fileSizeDistribution,
+            confidenceDistribution: {
+                high: highConfidence,
+                medium: mediumConfidence,
+                low: lowConfidence
+            },
+            techStackDetails
         };
     }
 
     /**
-     * 构建技术栈信息
+     * 计算技术栈多样性（熵）
      */
-    private buildTechnologyStackInfo(result: HapStaticAnalysisResult): JsonReport['technologyStackInfo'] {
-        const items: Array<TechnologyStackInfoItem> = [];
+    private calculateDiversity(techStackCounts: Record<string, number>): number {
+        const total = Object.values(techStackCounts).reduce((sum, count) => sum + count, 0);
 
-        // 收集所有SO文件的技术栈信息
-        for (const techStackDetection of result.soAnalysis.techStackDetections) {
-            // 过滤掉 Unknown 技术栈
-            if (techStackDetection.techStack === 'Unknown') {
-                continue;
-            }
-
-            // 直接使用 SoAnalysisResult 格式
-            const item: TechnologyStackInfoItem = {
-                folder: techStackDetection.folder,
-                file: techStackDetection.file,
-                size: techStackDetection.size,
-                techStack: techStackDetection.techStack,
-                metadata: techStackDetection.metadata
-            };
-
-            items.push(item);
+        if (total === 0) {
+            return 0;
         }
 
-        // 计算统计信息
-        const statistics = this.getFrameworkStats(result);
+        let entropy = 0;
 
-        return {
-            totalCount: items.length,
-            items: this.options.includeDetails !== false ? items : [],
-            statistics
-        };
+        for (const count of Object.values(techStackCounts)) {
+            const probability = count / total;
+            if (probability > 0) {
+                entropy -= probability * Math.log2(probability);
+            }
+        }
+
+        return Math.round(entropy * 100) / 100;
+    }
+
+    /**
+     * 计算文件大小分布
+     */
+    private calculateFileSizeDistribution(items: Array<{ size: number }>): { small: number; medium: number; large: number } {
+        const distribution = { small: 0, medium: 0, large: 0 };
+        const MB = 1024 * 1024;
+
+        for (const item of items) {
+            if (item.size < MB) {
+                distribution.small++;
+            } else if (item.size < 10 * MB) {
+                distribution.medium++;
+            } else {
+                distribution.large++;
+            }
+        }
+
+        return distribution;
     }
 }

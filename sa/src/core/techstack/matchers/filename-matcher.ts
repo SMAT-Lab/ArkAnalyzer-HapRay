@@ -3,7 +3,7 @@
  */
 
 import type { FileRule, FileInfo } from '../types';
-import { BaseMatcher } from './base-matcher';
+import { BaseMatcher, type MatchResult } from './base-matcher';
 
 /**
  * 文件名匹配器
@@ -20,8 +20,16 @@ export class FilenameMatcher extends BaseMatcher {
      * 匹配文件名规则
      */
     public match = async (rule: FileRule, fileInfo: FileInfo): Promise<boolean> => {
+        const result = await this.matchWithConfidence(rule, fileInfo);
+        return result.matched;
+    };
+
+    /**
+     * 匹配文件名规则（带置信度）
+     */
+    public matchWithConfidence = async (rule: FileRule, fileInfo: FileInfo): Promise<MatchResult> => {
         if (rule.type !== 'filename') {
-            return false;
+            return { matched: false };
         }
         const filename = fileInfo.file;
 
@@ -29,14 +37,15 @@ export class FilenameMatcher extends BaseMatcher {
             try {
                 const regex = new RegExp(pattern);
                 if (regex.test(filename)) {
-                    return true;
+                    // 使用配置文件中的置信度，如果没有设置则使用默认值1.0
+                    return { matched: true, confidence: rule.confidence ?? 1.0 };
                 }
             } catch (error) {
                 console.warn(`Invalid regex pattern: ${pattern}`, error);
             }
         }
 
-        return false;
+        return { matched: false };
     };
 }
 

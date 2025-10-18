@@ -3,20 +3,12 @@
  */
 
 import type { FileInfo, FileRule } from '../types';
-import { BaseMatcher } from './base-matcher';
+import { BaseMatcher, type MatchResult } from './base-matcher';
 import { FilenameMatcher } from './filename-matcher';
 import { PathMatcher } from './path-matcher';
 import { MagicMatcher } from './magic-matcher';
 import { ExtensionMatcher } from './extension-matcher';
 import { ContentMatcher } from './content-matcher';
-
-/**
- * 组合匹配结果
- */
-export interface CombinedMatchResult {
-    matched: boolean;
-    confidence?: number;
-}
 
 /**
  * 组合匹配器
@@ -63,7 +55,7 @@ export class CombinedMatcher extends BaseMatcher {
     /**
      * 匹配组合规则（带置信度）
      */
-    public matchWithConfidence = async (rule: FileRule, fileInfo: FileInfo): Promise<CombinedMatchResult> => {
+    public matchWithConfidence = async (rule: FileRule, fileInfo: FileInfo): Promise<MatchResult> => {
         if (rule.type !== 'combined') {
             return { matched: false };
         }
@@ -103,8 +95,13 @@ export class CombinedMatcher extends BaseMatcher {
             }
         }
 
-        // 计算置信度（取最高值）
-        const confidence = confidences.length > 0 ? Math.max(...confidences) : undefined;
+        // 计算置信度：优先使用配置文件中的置信度，否则取子规则的最高置信度
+        let confidence: number | undefined;
+        if (rule.confidence !== undefined) {
+            confidence = rule.confidence;
+        } else if (confidences.length > 0) {
+            confidence = Math.max(...confidences);
+        }
 
         return { matched, confidence };
     };
@@ -112,21 +109,15 @@ export class CombinedMatcher extends BaseMatcher {
     /**
      * 匹配单个文件规则（带置信度）
      */
-    private async matchFileRuleWithConfidence(rule: FileRule, fileInfo: FileInfo): Promise<CombinedMatchResult> {
+    private async matchFileRuleWithConfidence(rule: FileRule, fileInfo: FileInfo): Promise<MatchResult> {
         const matcher = this.matchers.get(rule.type);
         if (!matcher) {
             console.warn(`Unknown matcher type: ${rule.type}`);
             return { matched: false };
         }
 
-        // 特殊处理 ContentMatcher，获取置信度
-        if (rule.type === 'content' && matcher instanceof ContentMatcher) {
-            return await matcher.matchWithConfidence(rule, fileInfo);
-        }
-
-        // 其他匹配器只返回布尔值
-        const matched = await matcher.match(rule, fileInfo);
-        return { matched, confidence: matched ? 1.0 : undefined };
+        // 所有匹配器现在都支持置信度
+        return await matcher.matchWithConfidence(rule, fileInfo);
     }
 }
 

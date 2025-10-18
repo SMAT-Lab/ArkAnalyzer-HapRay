@@ -29,6 +29,4 @@ export { CombinedMatcher } from './matchers/combined-matcher';
 export { ParallelExecutor } from './detector/parallel-executor';
 
 // 适配器
-export { ResultAdapter } from './adapter/result-adapter';
-export { HapFileScanner } from './adapter/hap-file-scanner';
 
