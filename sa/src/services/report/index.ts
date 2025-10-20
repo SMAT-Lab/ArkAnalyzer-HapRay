@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import type { HapStaticAnalysisResult } from '../../config/types';
+import type { Hap } from '../../core/hap/hap_parser';
 
 /**
  * 支持的输出格式
@@ -71,7 +71,7 @@ export abstract class BaseFormatter {
      * @param result 分析结果
      * @returns 格式化结果
      */
-    abstract format(result: HapStaticAnalysisResult): Promise<FormatResult>;
+    abstract format(result: Hap): Promise<FormatResult>;
 
     /**
      * 获取输出文件扩展名
@@ -125,52 +125,54 @@ export abstract class BaseFormatter {
     /**
      * 获取文件类型统计
      */
-    protected getFileTypeStats(result: HapStaticAnalysisResult): Array<{type: string, count: number, percentage: string, barWidth: number}> {
+    protected getFileTypeStats(result: Hap): Array<{type: string, count: number, percentage: string, barWidth: number}> {
+        // 简化实现，只返回技术栈统计
         const stats: Array<{type: string, count: number, percentage: string, barWidth: number}> = [];
-        const total = result.resourceAnalysis.totalFiles;
-
-        for (const [fileType, files] of result.resourceAnalysis.filesByType) {
+        const total = result.techStackDetections.length;
+        
+        if (total === 0) {return stats;}
+        
+        // 按技术栈分组统计
+        const techStackCount = new Map<string, number>();
+        for (const detection of result.techStackDetections) {
+            const count = techStackCount.get(detection.techStack) ?? 0;
+            techStackCount.set(detection.techStack, count + 1);
+        }
+        
+        for (const [techStack, count] of techStackCount) {
+            const percentage = ((count / total) * 100).toFixed(1);
+            const barWidth = Math.max(5, (count / total) * 100);
+            
             stats.push({
-                type: fileType,
-                count: files.length,
-                percentage: this.calculatePercentage(files.length, total),
-                barWidth: 0 // 临时值，稍后计算
+                type: techStack,
+                count: count,
+                percentage: `${percentage}%`,
+                barWidth: barWidth
             });
         }
-
-        // 按数量排序
-        const sortedStats = stats.sort((a, b) => b.count - a.count);
-
-        // 计算条状图宽度（基于最大值的相对百分比）
-        if (sortedStats.length > 0) {
-            const maxCount = sortedStats[0].count;
-            sortedStats.forEach(stat => {
-                stat.barWidth = maxCount > 0 ? Math.max(10, (stat.count / maxCount) * 100) : 10;
-            });
-        }
-
-        return sortedStats;
+        
+        return stats.sort((a, b) => b.count - a.count);
     }
 
     /**
-     * 获取框架统计
+     * 获取技术栈统计
      */
-    protected getFrameworkStats(result: HapStaticAnalysisResult): Array<{framework: string, count: number, percentage: string}> {
-        const frameworkCount = new Map<string, number>();
+    protected getTechStackStats(result: Hap): Array<{techStack: string, count: number, percentage: string}> {
+        const techStackCount = new Map<string, number>();
 
-        result.soAnalysis.techStackDetections.forEach(techStackDetection => {
-            // 过滤掉 Unknown 框架
+        result.techStackDetections.forEach(techStackDetection => {
+            // 过滤掉 Unknown 技术栈
             if (techStackDetection.techStack !== 'Unknown') {
-                frameworkCount.set(techStackDetection.techStack, (frameworkCount.get(techStackDetection.techStack) ?? 0) + 1);
+                techStackCount.set(techStackDetection.techStack, (techStackCount.get(techStackDetection.techStack) ?? 0) + 1);
             }
         });
 
-        const stats: Array<{framework: string, count: number, percentage: string}> = [];
-        const total = result.soAnalysis.totalSoFiles;
+        const stats: Array<{techStack: string, count: number, percentage: string}> = [];
+        const total = result.techStackDetections.length;
 
-        for (const [framework, count] of frameworkCount) {
+        for (const [techStack, count] of techStackCount) {
             stats.push({
-                framework,
+                techStack,
                 count,
                 percentage: this.calculatePercentage(count, total)
             });

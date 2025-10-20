@@ -21,29 +21,48 @@ import { ResourceIndexParser } from './resource_index_parser';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
+export interface TechStackDetection {
+    /** 文件夹路径 */
+    folder: string;
+    /** 文件名 */
+    file: string;
+    /** 文件大小（字节） */
+    size: number;
+    /** 技术栈类型 */
+    techStack: string;
+    /** 文件类型 */
+    fileType?: string;
+    /** 置信度 */
+    confidence?: number;
+    /** 元数据（只包含自定义字段） */
+    metadata: Record<string, unknown>;
+}
+
 /**
  * 解析HAP包，从HAP包提取包名，版本，abc文件，so文件
  */
 export class Hap {
-    file: string;
+    hapPath: string;
     bundleName: string;
     versionCode: number;
     versionName: string;
     appName: string;
+    techStackDetections: Array<TechStackDetection>;
 
-    private constructor(hapFile: string) {
-        logger.info(`parse file ${hapFile}`);
-        this.file = hapFile;
+    private constructor(hapPath: string) {
+        logger.info(`parse file ${hapPath}`);
+        this.hapPath = hapPath;
         this.bundleName = '';
         this.versionCode = 0;
         this.versionName = '';
         this.appName = '';
+        this.techStackDetections = [];
     }
 
-    public static async loadFromHap(hapFile: string): Promise<Hap> {
-        let parser = new Hap(hapFile);
+    public static async loadFromHap(hapPath: string): Promise<Hap> {
+        let parser = new Hap(hapPath);
 
-        let zip = await JSZip.loadAsync(fs.readFileSync(hapFile));
+        let zip = await JSZip.loadAsync(fs.readFileSync(hapPath));
         try {
             let module = JSON.parse(await zip.file('module.json')?.async('string')!) as {
                 app: { bundleName: string; versionCode: number; versionName: string; label: string };
@@ -59,7 +78,7 @@ export class Hap {
                 parser.appName = res.getStringValue(label.substring('$string:'.length));
             }
         } catch {
-            logger.error(`HapParser HAP ${hapFile} not found 'pack.info'.`);
+            logger.error(`HapParser HAP ${hapPath} not found 'pack.info'.`);
         }
 
         return parser;
@@ -68,13 +87,13 @@ export class Hap {
     public async readAbc(): Promise<Map<string, Buffer>> {
         let decrypt = new Map<string, Buffer>();
         let abcMap = new Map<string, Buffer>();
-        let zip = await JSZip.loadAsync(fs.readFileSync(this.file));
+        let zip = await JSZip.loadAsync(fs.readFileSync(this.hapPath));
 
         let metadata = (await zip.file('encrypt/metadata.info')?.async('string')) ?? '';
         if (metadata.length > 0) {
-            let decryptPath = path.join(path.dirname(this.file), 'decrypt');
+            let decryptPath = path.join(path.dirname(this.hapPath), 'decrypt');
             if (fs.existsSync(decryptPath)) {
-                let basename = path.basename(this.file);
+                let basename = path.basename(this.hapPath);
                 for (const abc of fs.readdirSync(decryptPath)) {
                     if (abc.indexOf(basename) !== -1) {
                         let abcBuf: Buffer = fs.readFileSync(path.join(decryptPath, abc));
@@ -100,12 +119,12 @@ export class Hap {
     }
 
     public async extract(output: string): Promise<void> {
-        output = path.join(output, 'unzip', path.basename(this.file));
+        output = path.join(output, 'unzip', path.basename(this.hapPath));
         fs.mkdirSync(output, { recursive: true });
-        let zip = await JSZip.loadAsync(fs.readFileSync(this.file));
+        let zip = await JSZip.loadAsync(fs.readFileSync(this.hapPath));
         for (const entry of Object.values(zip.files)) {
             try {
-                const dest = path.join(output, entry.name);
+                const dest = path.join(output, entry.name.replace(/\//g, path.sep));
                 if (entry.dir) {
                     fs.mkdirSync(dest, { recursive: true });
                 } else {

@@ -46,14 +46,13 @@ export { HapAnalysisService } from '../services/analysis/hap_analysis';
 
 // 类型定义
 export * from './types';
-export * from '../types/zip-types';
 
 // 错误类
 export * from '../errors';
 
 // 工具函数
 export * from '../utils/file_utils';
-export * from '../utils/zip-adapter';
+export * from '../utils/zip_utils';
 
 // 格式化器
 export * from '../services/report';
