@@ -164,8 +164,8 @@ export class HapAnalysisService {
             if (entryHap && result.hapPath === entryHap.hapPath) {
                 combinedResult = result;
                 logger.info(`  使用entry HAP的版本信息：${result.versionName} (${result.versionCode})`);
-            } else if (!combinedResult) {
-                combinedResult = result;
+            } else {
+                combinedResult ??= result;
             }
             allResults.push(result);
 
@@ -188,7 +188,7 @@ export class HapAnalysisService {
                 logger.info(`  使用entry HAP的版本信息：${entryHap.versionName} (${entryHap.versionCode})`);
             } else {
                 // 没有找到entry HAP，使用目录名作为后备
-                logger.warn(`  未找到entry类型的主应用包，使用目录名的版本信息`);
+                logger.warn('  未找到entry类型的主应用包，使用目录名的版本信息');
                 combinedResult.bundleName = appInfo.packageName;
                 combinedResult.versionName = appInfo.version;
                 // versionCode 从版本名称推导
@@ -285,8 +285,8 @@ export class HapAnalysisService {
                     if (entryHap && result.hapPath === entryHap.hapPath) {
                         combinedResult = result;
                         logger.info(`    使用entry HAP的版本信息：${result.versionName} (${result.versionCode})`);
-                    } else if (!combinedResult) {
-                        combinedResult = result;
+                    } else {
+                        combinedResult ??= result;
                     }
 
                     // 合并技术栈检测结果
@@ -308,7 +308,7 @@ export class HapAnalysisService {
                         logger.info(`    使用entry HAP的版本信息：${entryHap.versionName} (${entryHap.versionCode})`);
                     } else {
                         // 没有找到entry HAP，使用目录名作为后备
-                        logger.warn(`    未找到entry类型的主应用包，使用目录名的版本信息`);
+                        logger.warn('    未找到entry类型的主应用包，使用目录名的版本信息');
                         combinedResult.bundleName = appInfo.packageName;
                         combinedResult.versionName = appInfo.version;
                         // versionCode 从版本名称推导
@@ -881,7 +881,7 @@ export class HapAnalysisService {
                     let cellValue = '';
                     if (value !== undefined && value !== null) {
                         if (Array.isArray(value)) {
-                            cellValue = value.join(', ');
+                            cellValue = value.join(os.EOL);
                         } else {
                             cellValue = String(value);
                         }

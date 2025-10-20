@@ -15,6 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import writeXlsxFile from 'write-excel-file/node';
 import type { SheetData } from 'write-excel-file';
 import type { FormatResult } from './index';
@@ -503,7 +504,7 @@ export class ExcelFormatter extends BaseFormatter {
             sheetData.push([
                 { value: packageName, type: String },
                 { value: info.version, type: String },
-                { value: info.filePaths.join(', '), type: String },
+                { value: info.filePaths.join(os.EOL), type: String },
                 { value: info.filePaths.length, type: Number }
             ]);
         }
