@@ -28,7 +28,7 @@ import { FormatterFactory, OutputFormat } from '../../core/techstack/report';
 import { Hap, type TechStackDetection } from '../../core/hap/hap_parser';
 import { ZipUtils } from '../../utils/zip_utils';
 import { isBinaryFile } from '../../utils/file_utils';
-import type { FileDetectionResult } from '../../core/techstack/types';
+import type { FileDetectionResult, FileInfo } from '../../core/techstack/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -566,8 +566,8 @@ export class HapAnalysisService {
             // 2. 并行检测所有文件
             const detectionResults = await this.detectorEngine.detectFiles(fileInfos);
 
-            // 3. 直接转换为 TechStackDetection 格式
-            const techStackDetections = this.convertToTechStackDetections(detectionResults);
+            // 3. 直接转换为 TechStackDetection 格式（传递 fileInfos 以获取文件内容）
+            const techStackDetections = this.convertToTechStackDetections(detectionResults, fileInfos);
 
             // 4. 提取所有检测到的技术栈
             const detectedTechStacks = this.extractAllTechStacks(detectionResults);
@@ -1387,8 +1387,17 @@ export class HapAnalysisService {
     /**
      * 将文件检测结果转换为 TechStackDetection 格式
      */
-    private convertToTechStackDetections(fileDetections: Array<FileDetectionResult>): Array<TechStackDetection> {
+    private convertToTechStackDetections(
+        fileDetections: Array<FileDetectionResult>,
+        fileInfos: Array<FileInfo>
+    ): Array<TechStackDetection> {
         const results: Array<TechStackDetection> = [];
+
+        // 创建文件路径到 FileInfo 的映射，以便快速查找文件内容
+        const fileInfoMap = new Map<string, FileInfo>();
+        for (const fileInfo of fileInfos) {
+            fileInfoMap.set(fileInfo.path, fileInfo);
+        }
 
         for (const fileDetection of fileDetections) {
             // 只处理检测到技术栈的文件
@@ -1405,8 +1414,12 @@ export class HapAnalysisService {
             // 合并所有元数据
             const metadata = this.mergeMetadata(fileDetection.detections);
 
-            // 判断文件是否为二进制文件
-            const isBinary = isBinaryFile(fileDetection.file);
+            // 构建完整路径以查找 FileInfo
+            const fullPath = `${fileDetection.folder}/${fileDetection.file}`.replace(/\/+/g, '/');
+            const fileInfo = fileInfoMap.get(fullPath);
+
+            // 判断文件是否为二进制文件（仅基于文件内容）
+            const isBinary = isBinaryFile(fileInfo?.content);
 
             results.push({
                 folder: fileDetection.folder,
