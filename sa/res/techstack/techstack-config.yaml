@@ -96,11 +96,11 @@ detections:
             patterns:
               - pattern: "KOTLIN_NATIVE_AVAILABLE_PROCESSORS"
                 confidence: 0.95
-              - pattern: "kfun:"
+              - pattern: "ZN6kotlin2gc22ConcurrentMarkAndSweep"
                 confidence: 0.5
-              - pattern: "Kotlin"
+              - pattern: "ZN6kotlin2gc27ParallelMarkConcurrentSweep"
                 confidence: 0.5
-              - pattern: "kotlin"
+              - pattern: "ZN6kotlin11gcScheduler11GCScheduler4ImplC1ERNS0_17GCSchedulerConfigEE3$_0"
                 confidence: 0.5
 
   - id: "CMP_Skiko"

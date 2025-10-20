@@ -34,8 +34,18 @@ export interface TechStackDetection {
     fileType?: string;
     /** 置信度 */
     confidence?: number;
+    /** 是否为二进制文件 */
+    isBinary?: boolean;
     /** 元数据（只包含自定义字段） */
     metadata: Record<string, unknown>;
+    /** 来源HAP/HSP包路径 */
+    sourceHapPath?: string;
+    /** 来源HAP/HSP包名 */
+    sourceBundleName?: string;
+    /** 来源HAP/HSP版本号 */
+    sourceVersionCode?: number;
+    /** 来源HAP/HSP版本名称 */
+    sourceVersionName?: string;
 }
 
 /**

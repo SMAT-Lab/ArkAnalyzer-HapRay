@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import type { Hap } from '../../core/hap/hap_parser';
+import type { Hap } from '../../hap/hap_parser';
 
 /**
  * 支持的输出格式
