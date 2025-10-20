@@ -22,7 +22,6 @@ const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 interface AnalyzeOptions {
     input: string;
     output: string;
-    format: string;
     jobs?: string;
     beautifyJs?: boolean;
 }
@@ -34,7 +33,6 @@ export const HapAnalyzerCli = new Command('hap')
     .description('HAP 静态分析器 - 分析 HAP/ZIP 文件或目录中的技术栈与资源')
     .requiredOption('-i, --input <path>', '分析输入路径（HAP/ZIP 文件或目录）')
     .option('-o, --output <path>', '输出目录', './output')
-    .option('-f, --format <format>', '输出格式：json, html, excel, all', 'all')
     .option('-j, --jobs <number>', '并发分析数量，默认为CPU核心数', 'auto')
     .option('--beautify-js', '美化压缩的 JS 文件并保存到输出目录', false)
     .action(async (options: AnalyzeOptions) => {
@@ -42,11 +40,11 @@ export const HapAnalyzerCli = new Command('hap')
     });
 
 async function analyzeHap(options: AnalyzeOptions): Promise<void> {
-    const { input, output, format, jobs, beautifyJs } = options;
+    const { input, output, jobs, beautifyJs } = options;
 
     try {
         const analyzer = new HapAnalysisService({ verbose: true, beautifyJs });
-        await analyzer.analyzeMultipleHaps(input, output, format, jobs);
+        await analyzer.analyzeMultipleHaps(input, output, jobs);
     } catch (error) {
         logger.error('分析失败：', error);
         process.exit(1);

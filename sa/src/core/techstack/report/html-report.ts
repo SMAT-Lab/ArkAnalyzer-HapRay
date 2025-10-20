@@ -18,7 +18,7 @@ import path from 'path';
 import Handlebars from 'handlebars';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { Hap, TechStackDetection } from '../../core/hap/hap_parser';
+import type { Hap, TechStackDetection } from '../../hap/hap_parser';
 
 /**
  * HTML格式化器
@@ -295,7 +295,11 @@ export class HtmlFormatter extends BaseFormatter {
                 technologyStack: detection.techStack,
                 fileSize: this.formatFileSize(detection.size),
                 fileType: detection.fileType ?? '',
-                confidence: detection.confidence !== undefined ? `${(detection.confidence * 100).toFixed(0)}%` : ''
+                confidence: detection.confidence !== undefined ? `${(detection.confidence * 100).toFixed(0)}%` : '',
+                sourceHapPath: detection.sourceHapPath ?? '',
+                sourceBundleName: detection.sourceBundleName ?? '',
+                sourceVersionCode: detection.sourceVersionCode?.toString() ?? '',
+                sourceVersionName: detection.sourceVersionName ?? ''
             };
 
             // 添加 metadata 字段
@@ -571,7 +575,7 @@ export class HtmlFormatter extends BaseFormatter {
         <div class="header">
             <h1>HAP静态分析报告</h1>
             <div class="meta">
-                <div>文件: {{metadata.hapFileName}}</div>
+                <div>应用包: {{metadata.hapFileName}}</div>
                 <div>分析时间: {{metadata.analysisDate}}</div>
                 <div>版本: {{metadata.version}}</div>
             </div>
@@ -612,7 +616,7 @@ export class HtmlFormatter extends BaseFormatter {
         {{#if technologyStackInfo.hasItems}}
         <div class="card">
             <h2>🔧 技术栈信息</h2>
-            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、技术栈、文件大小、文件类型、置信度及元数据信息</p>
+            <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">文件名、路径、技术栈、文件大小、文件类型、置信度、来源信息及元数据</p>
 
             <!-- 技术栈筛选按钮 -->
             <div class="filter-container">
@@ -628,14 +632,18 @@ export class HtmlFormatter extends BaseFormatter {
             <table id="technologyStackTable" class="table display" style="width:100%">
                 <thead>
                     <tr>
-                        <th style="width: 18%">文件名</th>
-                        <th style="width: 25%">路径</th>
-                        <th style="width: 10%">技术栈</th>
-                        <th style="width: 10%">文件大小</th>
-                        <th style="width: 10%">文件类型</th>
-                        <th style="width: 8%">置信度</th>
+                        <th style="width: 12%">文件名</th>
+                        <th style="width: 15%">路径</th>
+                        <th style="width: 8%">技术栈</th>
+                        <th style="width: 8%">文件大小</th>
+                        <th style="width: 8%">文件类型</th>
+                        <th style="width: 6%">置信度</th>
+                        <th style="width: 12%">来源HAP包</th>
+                        <th style="width: 10%">来源包名</th>
+                        <th style="width: 6%">来源版本号</th>
+                        <th style="width: 8%">来源版本名称</th>
                         {{#each technologyStackInfo.metadataColumns}}
-                        <th style="width: 10%" title="{{this}}">{{this}}</th>
+                        <th style="width: 8%" title="{{this}}">{{this}}</th>
                         {{/each}}
                     </tr>
                 </thead>
@@ -648,6 +656,10 @@ export class HtmlFormatter extends BaseFormatter {
                         <td>{{fileSize}}</td>
                         <td>{{fileType}}</td>
                         <td>{{confidence}}</td>
+                        <td title="{{sourceHapPath}}">{{sourceHapPath}}</td>
+                        <td title="{{sourceBundleName}}">{{sourceBundleName}}</td>
+                        <td>{{sourceVersionCode}}</td>
+                        <td>{{sourceVersionName}}</td>
                         {{#each ../technologyStackInfo.metadataColumns}}
                         <td title="{{lookup ../this this}}">{{lookup ../this this}}</td>
                     {{/each}}
