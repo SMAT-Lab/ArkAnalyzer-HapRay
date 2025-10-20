@@ -55,7 +55,7 @@ export * from '../utils/file_utils';
 export * from '../utils/zip_utils';
 
 // 格式化器
-export * from '../services/report';
+export * from '../core/techstack/report';
 
 import { HapAnalysisService } from '../services/analysis/hap_analysis';
 
