@@ -47,13 +47,6 @@ class StaticAction:
             default='./static-output',
             help='Output directory for analysis results (default: ./static-output)',
         )
-        parser.add_argument(
-            '--format',
-            '-f',
-            choices=['json', 'html', 'excel', 'all'],
-            default='json',
-            help='Output format (default: json)',
-        )
 
         parser.add_argument('--include-details', action='store_true', help='Include detailed analysis information')
         parser.add_argument(
@@ -91,8 +84,6 @@ class StaticAction:
             parsed_args.input,
             '-o',
             parsed_args.output,
-            '-f',
-            parsed_args.format,
         ]
 
         # 添加并发数参数
@@ -107,7 +98,6 @@ class StaticAction:
             logging.info('Starting HAP static analysis...')
             logging.info(f'Input: {parsed_args.input}')
             logging.info(f'Output: {parsed_args.output}')
-            logging.info(f'Format: {parsed_args.format}')
             if parsed_args.jobs != 'auto':
                 logging.info(f'Jobs: {parsed_args.jobs}')
             else:
@@ -155,14 +145,11 @@ Static Analysis Action:
   - Archive files and nested content analysis
 
 Examples:
-  # Basic JSON analysis
+  # Basic analysis (generates all formats by default)
   python main.py static -i app.hap -o ./output
 
-  # HTML report with detailed analysis
-  python main.py static -i app.hap -o ./output -f html --include-details
-
-  # All formats with detailed analysis
-  python main.py static -i app.hap -o ./output -f all --include-details
+  # Analysis with detailed information
+  python main.py static -i app.hap -o ./output --include-details
 
   # Analysis with custom concurrency (4 parallel jobs)
   python main.py static -i app.hap -o ./output -j 4

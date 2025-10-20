@@ -128,30 +128,19 @@ python -m scripts.main static -i <hap_file> [-o <output_directory>] [options]
 Options:
 - `-i/--input <path>`: HAP file path to analyze (required)
 - `-o/--output <path>`: Output directory for analysis results (default: ./static-output)
-- `-f/--format <format>`: Output format: json, html, excel, all (default: json)
 - `--include-details`: Include detailed analysis information
 
 Features:
 - **Framework Detection**: Automatically identifies technology stacks (React Native, Flutter, Unity, etc.)
 - **SO File Analysis**: Deep analysis of native libraries and their optimization opportunities
 - **Resource Analysis**: Comprehensive scanning of JavaScript, images, and other resources
-- **Multiple Output Formats**: JSON for programmatic use, HTML for visual reports, Excel for data analysis
 - **Hermes Bytecode Detection**: Specialized detection for React Native Hermes engine bytecode
 - **Nested Archive Support**: Recursive analysis of compressed files within HAP packages
 
 Example:
 ```bash
-# Basic JSON analysis
-python -m scripts.main static -i app.hap -o ./static-output
-
-# Generate HTML report with detailed information
-python -m scripts.main static -i app.hap -o ./static-output -f html --include-details
-
 # Generate all output formats
-python -m scripts.main static -i app.hap -o ./static-output -f all
-
-# Analyze specific HAP with custom output directory
-python -m scripts.main static -i /path/to/my-app.hap -o /path/to/analysis-results -f excel
+python -m scripts.main static -i app.hap -o ./static-output
 ```
 
 #### Update Reports (`update`)
