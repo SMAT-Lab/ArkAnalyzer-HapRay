@@ -138,6 +138,7 @@ export interface FileInfo {
     size: number;
     content?: Buffer; // 文件内容（按需加载）
     lastModified?: Date; // 最后修改时间
+    isBinary?: boolean; // 是否为二进制文件
 }
 
 /**
