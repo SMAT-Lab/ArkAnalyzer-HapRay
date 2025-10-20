@@ -51,14 +51,30 @@ export class ParallelExecutor {
             // 2. 提取元数据
             const metadata = await this.metadataExtractor.extractMetadata(rule.metadataRules, fileInfo);
 
-            // 3. 计算最终置信度
+            // 3. 检查是否要求必须有metadata
+            if (rule.requireMetadata === true) {
+                // 如果要求必须有metadata，检查是否至少有一个非空的metadata字段
+                const hasMetadata = Object.keys(metadata).length > 0 && 
+                    Object.values(metadata).some(value => 
+                        value !== null && value !== undefined && 
+                        (typeof value !== 'string' || value.trim() !== '') &&
+                        (!Array.isArray(value) || value.length > 0)
+                    );
+                
+                if (!hasMetadata) {
+                    // 没有获取到有效的metadata，不分类到此技术栈
+                    return null;
+                }
+            }
+
+            // 4. 计算最终置信度
             // 如果匹配结果有置信度，则使用 规则置信度 × 匹配置信度
             // 否则只使用规则置信度
             const finalConfidence = matchResult.confidence !== undefined
                 ? rule.confidence * matchResult.confidence
                 : rule.confidence;
 
-            // 4. 返回检测结果
+            // 5. 返回检测结果
             return {
                 techStack: rule.type,
                 confidence: finalConfidence,

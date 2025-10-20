@@ -3,16 +3,7 @@
  */
 
 import type { FileRule, FileInfo } from '../types';
-import { BaseMatcher } from './base-matcher';
-
-/**
- * 内容匹配结果
- */
-export interface ContentMatchResult {
-    matched: boolean;
-    confidence?: number; // 匹配的置信度
-    matchedPatterns?: Array<string>; // 匹配到的模式
-}
+import { BaseMatcher, type MatchResult } from './base-matcher';
 
 /**
  * 内容匹配器
@@ -36,7 +27,7 @@ export class ContentMatcher extends BaseMatcher {
     /**
      * 匹配内容规则（带置信度）
      */
-    public matchWithConfidence = async (rule: FileRule, fileInfo: FileInfo): Promise<ContentMatchResult> => {
+    public matchWithConfidence = async (rule: FileRule, fileInfo: FileInfo): Promise<MatchResult> => {
         if (rule.type !== 'content') {
             return { matched: false };
         }
@@ -50,14 +41,15 @@ export class ContentMatcher extends BaseMatcher {
 
         for (const patternItem of rule.patterns) {
             let pattern: string;
-            let confidence = 0.5; // 默认置信度
+            let confidence = rule.confidence ?? 1.0; // 使用配置文件中的置信度，如果没有设置则使用默认值1.0
 
             // 判断是字符串还是 ContentPattern 对象
             if (typeof patternItem === 'string') {
                 pattern = patternItem;
             } else {
                 pattern = (patternItem).pattern;
-                confidence = (patternItem).confidence ?? 0.5;
+                // 如果 ContentPattern 中有置信度，则使用它；否则使用规则级别的置信度
+                confidence = (patternItem).confidence ?? rule.confidence ?? 1.0;
             }
 
             try {
@@ -85,8 +77,7 @@ export class ContentMatcher extends BaseMatcher {
 
         return {
             matched: true,
-            confidence: maxConfidence,
-            matchedPatterns
+            confidence: maxConfidence
         };
     };
 }

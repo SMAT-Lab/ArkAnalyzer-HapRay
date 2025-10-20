@@ -30,6 +30,7 @@ export interface DetectionRule {
     confidence: number; // 置信度 0-1
     fileRules: Array<FileRule>;
     metadataRules?: Array<MetadataRule>;
+    requireMetadata?: boolean; // 是否必须至少获取到一个metadata信息，默认为false
 }
 
 /**
@@ -49,6 +50,7 @@ export type FileRule =
 export interface FilenameRule {
     type: 'filename';
     patterns: Array<string>; // 正则表达式
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**
@@ -57,6 +59,7 @@ export interface FilenameRule {
 export interface PathRule {
     type: 'path';
     patterns: Array<string>; // 正则表达式
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**
@@ -66,6 +69,7 @@ export interface MagicRule {
     type: 'magic';
     magicBytes: Array<number>;
     offset?: number;
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**
@@ -74,6 +78,7 @@ export interface MagicRule {
 export interface ExtensionRule {
     type: 'extension';
     extensions: Array<string>;
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**
@@ -82,6 +87,7 @@ export interface ExtensionRule {
 export interface ContentRule {
     type: 'content';
     patterns: Array<string | ContentPattern>; // 正则表达式或字符串，或带置信度的模式
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**
@@ -99,6 +105,7 @@ export interface CombinedRule {
     type: 'combined';
     operator: 'and' | 'or' | 'not';
     rules: Array<FileRule>;
+    confidence?: number; // 可选的置信度 0-1
 }
 
 /**
