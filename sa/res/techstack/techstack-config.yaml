@@ -1,6 +1,58 @@
 version: "1.0.0"
 description: "技术栈检测配置文件 - 基于 framework-patterns.json 扩展"
 
+# 二进制魔数配置（可根据需要扩展/修改）
+binaryMagicNumbers:
+  # ELF (Linux 可执行文件/库)
+  - bytes: [127, 69, 76, 70]
+    offset: 0
+
+  # PE (Windows 可执行文件)
+  - bytes: [77, 90]
+    offset: 0
+
+  # Mach-O (macOS 可执行文件) - 32 位
+  - bytes: [254, 237, 250, 206]
+    offset: 0
+  - bytes: [206, 250, 237, 254]
+    offset: 0
+
+  # Mach-O (macOS 可执行文件) - 64 位
+  - bytes: [254, 237, 250, 207]
+    offset: 0
+  - bytes: [207, 250, 237, 254]
+    offset: 0
+
+  # ZIP/JAR/APK/HAP
+  - bytes: [80, 75, 3, 4]
+    offset: 0
+  - bytes: [80, 75, 5, 6]
+    offset: 0
+
+  # PNG
+  - bytes: [137, 80, 78, 71, 13, 10, 26, 10]
+    offset: 0
+
+  # JPEG
+  - bytes: [255, 216, 255]
+    offset: 0
+
+  # GIF
+  - bytes: [71, 73, 70, 56]
+    offset: 0
+
+  # PDF
+  - bytes: [37, 80, 68, 70]
+    offset: 0
+
+  # Java Class 文件
+  - bytes: [202, 254, 186, 190]
+    offset: 0
+
+  # DEX 文件
+  - bytes: [100, 101, 120, 10]
+    offset: 0
+
 # 排除规则：排除不需要检测的文件
 excludes:
   - type: "path"
@@ -96,11 +148,11 @@ detections:
             patterns:
               - pattern: "KOTLIN_NATIVE_AVAILABLE_PROCESSORS"
                 confidence: 0.95
-              - pattern: "kfun:"
+              - pattern: "ZN6kotlin2gc22ConcurrentMarkAndSweep"
                 confidence: 0.5
-              - pattern: "Kotlin"
+              - pattern: "ZN6kotlin2gc27ParallelMarkConcurrentSweep"
                 confidence: 0.5
-              - pattern: "kotlin"
+              - pattern: "ZN6kotlin11gcScheduler11GCScheduler4ImplC1ERNS0_17GCSchedulerConfigEE3$_0"
                 confidence: 0.5
 
   - id: "CMP_Skiko"

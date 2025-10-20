@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import type { FormatResult } from './index';
 import { BaseFormatter } from './index';
-import type { Hap, TechStackDetection } from '../../core/hap/hap_parser';
+import type { Hap, TechStackDetection } from '../../hap/hap_parser';
 
 /**
  * JSON报告结构

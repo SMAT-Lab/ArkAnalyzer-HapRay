@@ -10,6 +10,7 @@ export interface TechStackConfig {
     description: string;
     excludes: Array<ExcludeRule>;
     detections: Array<DetectionRule>;
+    binaryMagicNumbers?: Array<BinaryMagicEntry>;
 }
 
 /**
@@ -70,6 +71,14 @@ export interface MagicRule {
     magicBytes: Array<number>;
     offset?: number;
     confidence?: number; // 可选的置信度 0-1
+}
+
+/**
+ * 二进制魔数配置项
+ */
+export interface BinaryMagicEntry {
+    bytes: Array<number>;
+    offset: number;
 }
 
 /**
@@ -138,6 +147,7 @@ export interface FileInfo {
     size: number;
     content?: Buffer; // 文件内容（按需加载）
     lastModified?: Date; // 最后修改时间
+    isBinary?: boolean; // 是否为二进制文件
 }
 
 /**
