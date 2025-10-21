@@ -25,6 +25,7 @@ from hypium.uidriver.ohos.app_manager import get_bundle_info
 from hypium.uidriver.uitree import UiTree
 from xdevice import platform_logger
 
+from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
 from hapray.core.ui_event_wrapper import UIEventWrapper
 from hapray.core.xvm import XVM
@@ -121,9 +122,25 @@ _TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
  }}
 CONFIG"""
 
-# Native Memory 配置模板 - 固定参数，只有 pid/expand_pids 动态替换
-# 共享的配置数据部分
-_NATIVEHOOK_CONFIG_DATA = """    save_file: false
+# Native Memory 配置模板 - 应用级采集（固定参数，只有 expand_pids 动态替换）
+_NATIVE_MEMORY_CONFIG = """hiprofiler_cmd \\
+  -c - \\
+  -o {output_path}.htrace \\
+  -t {duration} \\
+  -s \\
+  -k \\
+<<CONFIG
+request_id: 1
+session_config {{
+  buffers {{
+    pages: 16384
+  }}
+}}
+plugin_configs {{
+  plugin_name: "nativehook"
+  sample_interval: 5000
+  config_data {{
+    save_file: false
     smb_pages: 16384
     max_stack_depth: 20
     string_compressed: true
@@ -133,51 +150,8 @@ _NATIVEHOOK_CONFIG_DATA = """    save_file: false
     record_accurately: true
     offline_symbolization: true
     startup_mode: false
-    malloc_free_matching_interval: 10"""
-
-# Template for Native Memory config (application-level) - 应用级采集
-_NATIVE_MEMORY_MULTI_PID_CONFIG = """hiprofiler_cmd \\
-  -c - \\
-  -o {output_path}.htrace \\
-  -t {duration} \\
-  -s \\
-  -k \\
-<<CONFIG
-request_id: 1
-session_config {{
-  buffers {{
-    pages: 16384
-  }}
-}}
-plugin_configs {{
-  plugin_name: "nativehook"
-  sample_interval: 5000
-  config_data {{
-{config_data}
+    malloc_free_matching_interval: 10
 {expand_pids}
-  }}
-}}
-CONFIG"""
-
-# Template for Native Memory config (system-wide) - 整机采集
-_NATIVE_MEMORY_SYSTEM_WIDE_CONFIG = """hiprofiler_cmd \\
-  -c - \\
-  -o {output_path}.htrace \\
-  -t {duration} \\
-  -s \\
-  -k \\
-<<CONFIG
-request_id: 1
-session_config {{
-  buffers {{
-    pages: 16384
-  }}
-}}
-plugin_configs {{
-  plugin_name: "nativehook"
-  sample_interval: 5000
-  config_data {{
-{config_data}
   }}
 }}
 CONFIG"""
@@ -224,7 +198,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'hmemory'), exist_ok=True)
+        os.makedirs(os.path.join(self.report_path, 'memory'), exist_ok=True)
         self.stop_app()
         self.driver.wake_up_display()
         self.driver.swipe_to_home()
@@ -344,55 +318,67 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """
         Build appropriate command based on collection parameters
 
-        Supports the following collection modes:
-        1. Perf only (trace.enable=False, memory.enable=False)
-        2. Trace + Perf (trace.enable=True, memory.enable=False)
-        3. Memory only (trace.enable=False, memory.enable=True)
-        4. Trace + Perf + Memory (trace.enable=True, memory.enable=True)
-
         Args:
             output_path: Output file path on device
             duration: Collection duration in seconds
-            sample_all: Whether to sample all processes
+            sample_all: Whether to sample all processes (only for perf/trace, not for memory)
 
         Returns:
             Formatted collection command string
         """
-        pids_args = self._build_processes_args(sample_all)
         trace_enabled = Config.get('trace.enable', True)
         memory_enabled = Config.get('memory.enable', False)
 
-        # Get process IDs for memory collection
-        memory_pids = []
-        if memory_enabled:
-            if not sample_all:
-                # 应用级采集：获取应用进程
-                process_ids, _ = self._get_app_pids()
-                memory_pids = process_ids if process_ids else []
-            # 整机采集：memory_pids 保持为空列表
+        # Validate memory collection constraints
+        if memory_enabled and sample_all:
+            Log.warning('Memory collection enabled but sample_all=True. '
+                        'Memory collection will use application-level only.')
+            Log.warning('Consider setting sample_all=False for consistent data collection.')
 
-        # Determine collection mode
+        # Get collection components
+        pids_args = self._build_processes_args(sample_all)
+        memory_pids = self._get_memory_pids() if memory_enabled else []
+
+        # Build command based on enabled features
+        collection_mode = self._determine_collection_mode(trace_enabled, memory_enabled)
+        return self._build_command_by_mode(collection_mode, output_path, duration, pids_args, memory_pids)
+
+    def _get_memory_pids(self) -> list[int]:
+        """Get process IDs for memory collection (application-level only)"""
+        process_ids, _ = self._get_app_pids()
+        if not process_ids:
+            Log.error('Memory collection enabled but no application PIDs found')
+            raise ValueError('No process IDs available for memory collection')
+        return process_ids
+
+    def _determine_collection_mode(self, trace_enabled: bool, memory_enabled: bool) -> str:
+        """Determine the collection mode based on enabled features"""
         if trace_enabled and memory_enabled:
-            # Mode 4: Trace + Perf + Memory (mixed collection)
-            if not sample_all and not memory_pids:
-                Log.warning('Memory collection enabled but no PIDs found, falling back to trace+perf mode')
-                record_args = self._build_perf_command(pids_args, duration)
-                return self._build_trace_perf_command(output_path, duration, record_args)
-            record_args = self._build_perf_command(pids_args, duration)
-            return self._build_trace_perf_memory_command(output_path, duration, record_args, memory_pids, sample_all)
+            return 'trace_perf_memory'
         elif memory_enabled:
-            # Mode 3: Memory only
-            if not sample_all and not memory_pids:
-                Log.error('Memory collection enabled but no PIDs found')
-                raise ValueError('No process IDs available for memory collection')
-            return self._build_native_memory_command(output_path, duration, memory_pids, sample_all)
+            return 'memory_only'
         elif trace_enabled:
-            # Mode 2: Trace + Perf
-            record_args = self._build_perf_command(pids_args, duration)
-            return self._build_trace_perf_command(output_path, duration, record_args)
+            return 'trace_perf'
         else:
-            # Mode 1: Perf only
-            return self._build_perf_command(pids_args, duration, 'hiperf record', f'-o {output_path}')
+            return 'perf_only'
+
+    def _build_command_by_mode(self, mode: str, output_path: str, duration: int,
+                               pids_args: str, memory_pids: list[int]) -> str:
+        """Build command based on collection mode using strategy pattern"""
+        strategies = {
+            'memory_only': lambda: self._build_native_memory_command(output_path, duration, memory_pids),
+            'trace_perf': lambda: self._build_trace_perf_command(
+                output_path, duration, self._build_perf_command(pids_args, duration)),
+            'trace_perf_memory': lambda: self._build_trace_perf_memory_command(
+                output_path, duration, self._build_perf_command(pids_args, duration), memory_pids),
+            'perf_only': lambda: self._build_perf_command(pids_args, duration, 'hiperf record', f'-o {output_path}')
+        }
+
+        strategy = strategies.get(mode)
+        if not strategy:
+            raise ValueError(f'Unknown collection mode: {mode}')
+
+        return strategy()
 
     def _build_processes_args(self, sample_all: bool) -> str:
         if sample_all:
@@ -415,126 +401,13 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """Construct combined trace and performance command"""
         return _TRACE_PERF_CMD_TEMPLATE.format(output_path=output_path, duration=duration, record_args=record_args)
 
-    def _build_native_memory_command(self, output_path: str, duration: int, pids: list[int], sample_all: bool = False) -> str:
-        """
-        Construct Native Memory collection command
-        严格按照用户提供的命令，只有pid/expand_pids需要动态替换
-        支持整机采集和应用级采集
-
-        Args:
-            output_path: Output file path on device (without .htrace extension)
-            duration: Collection duration in seconds
-            pids: List of process IDs to monitor (empty for system-wide)
-            sample_all: Whether to collect system-wide memory data
-
-        Returns:
-            Command string with config via stdin
-        """
-        # 整机采集模式 - 不指定任何 pid 或 expand_pids（让 nativehook 插件自动采集所有进程）
-        if sample_all:
-            Log.info('System-wide memory collection: no PID specified (collect all processes)')
-            return _NATIVE_MEMORY_SYSTEM_WIDE_CONFIG.format(
-                output_path=output_path,
-                duration=duration,
-                config_data=_NATIVEHOOK_CONFIG_DATA
-            )
-
-        # 应用级采集模式
-        if not pids:
-            Log.warning('No PIDs provided for application-level collection')
-            return _NATIVE_MEMORY_SYSTEM_WIDE_CONFIG.format(
-                output_path=output_path,
-                duration=duration,
-                config_data=_NATIVEHOOK_CONFIG_DATA
-            )
-
-        # 应用级采集 - 使用 expand_pids 字段（支持单进程和多进程）
-        expand_pids_lines = '\n'.join([f'    expand_pids: {pid}' for pid in pids])
-        Log.info(f'Application-level memory collection: {len(pids)} processes')
-        return _NATIVE_MEMORY_MULTI_PID_CONFIG.format(
-            output_path=output_path,
-            duration=duration,
-            config_data=_NATIVEHOOK_CONFIG_DATA,
-            expand_pids=expand_pids_lines
-        )
-
-    def _build_trace_perf_memory_command(
-        self, output_path: str, duration: int, record_args: str, pids: list[int], sample_all: bool = False
-    ) -> str:
-        """
-        Construct combined trace, perf, and memory collection command
-        严格按照用户提供的命令，只有pid/expand_pids需要动态替换
-        支持整机采集和应用级采集
-
-        Args:
-            output_path: Output file path on device (without .htrace extension)
-            duration: Collection duration in seconds
-            record_args: Performance recording arguments
-            pids: List of process IDs for memory monitoring (empty for system-wide)
-            sample_all: Whether to collect system-wide memory data
-
-        Returns:
-            Command string with config via stdin
-        """
-        # Build nativehook plugin config - 使用共享的配置数据模板
-        if sample_all or not pids:
-            # 整机采集模式 - 不指定 pid
-            nativehook_config = f"""
-# nativehook plugin configuration
- plugin_configs {{
-  plugin_name: "nativehook"
-  sample_interval: 5000
-  config_data {{
-{_NATIVEHOOK_CONFIG_DATA}
-  }}
- }}"""
-        elif len(pids) == 1:
-            # 单进程应用级采集
-            nativehook_config = f"""
-# nativehook plugin configuration
- plugin_configs {{
-  plugin_name: "nativehook"
-  sample_interval: 5000
-  config_data {{
-    pid: {pids[0]}
-{_NATIVEHOOK_CONFIG_DATA}
-  }}
- }}"""
-        else:
-            # 多进程应用级采集
-            expand_pids_lines = '\n'.join([f'    expand_pids: {pid}' for pid in pids])
-            nativehook_config = f"""
-# nativehook plugin configuration
- plugin_configs {{
-  plugin_name: "nativehook"
-  sample_interval: 5000
-  config_data {{
-{_NATIVEHOOK_CONFIG_DATA}
-{expand_pids_lines}
-  }}
- }}"""
-
-        # Build complete command with config via stdin
-        return f"""hiprofiler_cmd \\
-  -c - \\
-  -o {output_path}.htrace \\
-  -t {duration} \\
-  -s \\
-  -k \\
-<<CONFIG
-# Session configuration
-request_id: 1
-session_config {{
-  buffers {{
-    pages: 16384
-  }}
-}}
-
-# ftrace plugin configuration
-plugin_configs {{
+    def _build_ftrace_plugin_config(self) -> str:
+        """构建 ftrace 插件配置字符串"""
+        return """# ftrace plugin configuration
+plugin_configs {
   plugin_name: "ftrace-plugin"
   sample_interval: 1000
-  config_data {{
+  config_data {
     # ftrace events
     ftrace_events: "sched/sched_switch"
     ftrace_events: "power/suspend_resume"
@@ -583,10 +456,12 @@ plugin_configs {{
     clock: "boot"
     trace_period_ms: 200
     debug_on: false
-  }}
-}}
+  }
+}"""
 
-# hiperf plugin configuration
+    def _build_hiperf_plugin_config(self, output_path: str, record_args: str) -> str:
+        """构建 hiperf 插件配置字符串"""
+        return f"""# hiperf plugin configuration
 plugin_configs {{
   plugin_name: "hiperf-plugin"
   config_data {{
@@ -594,7 +469,110 @@ plugin_configs {{
     outfile_name: "{output_path}"
     record_args: "{record_args}"
   }}
+}}"""
+
+    def _build_nativehook_plugin_config(self, expand_pids_lines: str) -> str:
+        """
+        构建 nativehook 插件配置字符串
+
+        Args:
+            expand_pids_lines: expand_pids 配置行（已格式化）
+
+        Returns:
+            nativehook 插件配置字符串
+        """
+        return f"""# nativehook plugin configuration
+ plugin_configs {{
+  plugin_name: "nativehook"
+  sample_interval: 5000
+  config_data {{
+    save_file: false
+    smb_pages: 16384
+    max_stack_depth: 20
+    string_compressed: true
+    fp_unwind: true
+    blocked: true
+    callframe_compress: true
+    record_accurately: true
+    offline_symbolization: true
+    startup_mode: false
+    malloc_free_matching_interval: 10
+{expand_pids_lines}
+  }}
+ }}"""
+
+    def _build_native_memory_command(self, output_path: str, duration: int, pids: list[int]) -> str:
+        """
+        Construct Native Memory collection command (application-level only)
+        严格按照用户提供的命令，只有 expand_pids 需要动态替换
+
+        Args:
+            output_path: Output file path on device (without .htrace extension)
+            duration: Collection duration in seconds
+            pids: List of process IDs to monitor
+
+        Returns:
+            Command string with config via stdin
+        """
+        if not pids:
+            Log.error('No PIDs provided for memory collection')
+            raise ValueError('Memory collection requires process IDs')
+
+        # 构建 expand_pids 配置行
+        expand_pids_lines = '\n'.join([f'    expand_pids: {pid}' for pid in pids])
+        Log.info(f'Memory collection: {len(pids)} process(es) - PIDs: {pids}')
+
+        return _NATIVE_MEMORY_CONFIG.format(
+            output_path=output_path,
+            duration=duration,
+            expand_pids=expand_pids_lines
+        )
+
+    def _build_trace_perf_memory_command(
+        self, output_path: str, duration: int, record_args: str, pids: list[int]
+    ) -> str:
+        """
+        Construct combined trace, perf, and memory collection command (application-level only)
+        严格按照用户提供的命令，只有 expand_pids 需要动态替换
+
+        Args:
+            output_path: Output file path on device (without .htrace extension)
+            duration: Collection duration in seconds
+            record_args: Performance recording arguments
+            pids: List of process IDs for memory monitoring
+
+        Returns:
+            Command string with config via stdin
+        """
+        if not pids:
+            Log.error('No PIDs provided for memory collection')
+            raise ValueError('Memory collection requires process IDs')
+
+        # 构建各插件配置
+        expand_pids_lines = '\n'.join([f'    expand_pids: {pid}' for pid in pids])
+        ftrace_config = self._build_ftrace_plugin_config()
+        hiperf_config = self._build_hiperf_plugin_config(output_path, record_args)
+        nativehook_config = self._build_nativehook_plugin_config(expand_pids_lines)
+
+        # 构建完整命令
+        return f"""hiprofiler_cmd \\
+  -c - \\
+  -o {output_path}.htrace \\
+  -t {duration} \\
+  -s \\
+  -k \\
+<<CONFIG
+# Session configuration
+request_id: 1
+session_config {{
+  buffers {{
+    pages: 16384
+  }}
 }}
+
+{ftrace_config}
+
+{hiperf_config}
 {nativehook_config}
 CONFIG"""
 
@@ -615,7 +593,7 @@ CONFIG"""
         """Save performance, trace, and memory data to report directory"""
         perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
         trace_step_dir = os.path.join(self.report_path, 'htrace', f'step{step_id}')
-        memory_step_dir = os.path.join(self.report_path, 'hmemory', f'step{step_id}')
+        memory_step_dir = os.path.join(self.report_path, 'memory', f'step{step_id}')
 
         local_perf_path = os.path.join(perf_step_dir, Config.get('hiperf.data_filename', 'perf.data'))
         local_trace_path = os.path.join(trace_step_dir, 'trace.htrace')
@@ -759,52 +737,33 @@ CONFIG"""
         if not Config.get('memory.enable'):
             return
 
-        # For memory-only mode, the file is named {remote_path}.htrace
-        # For mixed mode (trace+perf+memory), the htrace file contains all data
         memory_file = f'{remote_path}.htrace'
 
         if not self.driver.has_file(memory_file):
             Log.warning(f'Memory data file not found: {memory_file}')
             return
 
-        # If trace is also enabled, the htrace file is already transferred by _transfer_trace_data
-        # In that case, we create a symlink or copy to the memory directory
-        if Config.get('trace.enable'):
-            # The htrace file contains both trace and memory data
-            # We can create a symlink or note in the memory directory
-            trace_step_dir = os.path.dirname(local_path).replace('hmemory', 'htrace')
-            trace_file = os.path.join(trace_step_dir, 'trace.htrace')
+        # Always pull the memory htrace file
+        self.driver.pull_file(memory_file, local_path)
 
-            if os.path.exists(trace_file):
-                # Create a reference file indicating data is in trace directory
-                ref_file = os.path.join(os.path.dirname(local_path), 'memory_data_location.txt')
-                with open(ref_file, 'w', encoding='utf-8') as f:
-                    f.write(f'Memory profiling data is included in: {trace_file}\n')
-                    f.write('The htrace file contains combined trace and memory profiling data.\n')
-                Log.info(f'Memory data reference created: {ref_file}')
-        else:
-            # Memory-only mode: transfer the htrace file to memory directory
-            self.driver.pull_file(memory_file, local_path)
-            if os.path.exists(local_path):
-                Log.info(f'Memory profiling data saved: {local_path}')
+        if not os.path.exists(local_path):
+            Log.error(f'Failed to transfer memory data: {local_path}')
+            return
 
-                # Convert memory.htrace to memory.db
-                self._convert_memory_to_db(local_path)
+        Log.info(f'Memory profiling data saved: {local_path}')
+
+        # Convert htrace to db
+        db_path = local_path.replace('.htrace', '.db')
+        Log.info(f'Converting memory.htrace to db: {local_path} -> {db_path}')
+
+        try:
+            ExeUtils.convert_data_to_db(local_path, db_path)
+            if os.path.exists(db_path):
+                Log.info(f'Memory db file created: {db_path}')
             else:
-                Log.error(f'Failed to transfer memory profiling data: {local_path}')
-
-    def _convert_memory_to_db(self, htrace_path: str):
-        """Convert memory.htrace to memory.db using trace_streamer"""
-        from hapray.core.common.exe_utils import ExeUtils
-
-        db_path = htrace_path.replace('.htrace', '.db')
-
-        Log.info(f'Converting memory.htrace to db: {htrace_path} -> {db_path}')
-
-        if ExeUtils.convert_data_to_db(htrace_path, db_path):
-            Log.info(f'Memory db file created: {db_path}')
-        else:
-            Log.error(f'Failed to convert memory.htrace to db: {htrace_path}')
+                Log.error(f'Failed to create memory db file: {db_path}')
+        except Exception as e:
+            Log.error(f'Error converting memory htrace to db: {e}')
 
     def _transfer_redundant_data(self, trace_step_dir: str):
         if not self._redundant_mode_status:
