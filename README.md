@@ -45,13 +45,15 @@ Options:
 - `--circles`: Sample CPU cycles instead of default events
 - `--round <N>`: Number of test rounds to execute (default: 5)
 - `--no-trace`: Disable trace capturing
+- `--no-perf`: Disable perf capturing (for memory-only mode)
+- `--memory`: Enable Memory profiling using hiprofiler nativehook plugin
 - `--devices <device_serial_numbers...>`: Device serial numbers (e.g., HX1234567890)
 - `--manual`: Enable manual testing mode with interactive 30-second performance data collection
 - `--app`: Target application bundle name for manual testing (performance data will be collected for 30 seconds)
 
 Requirements:
-- hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
-  
+- hdc and node must be in PATH (from Command Line Tools for HarmonyOS)
+
 Example:
 ```bash
 # Run specific test cases with symbol files
@@ -60,9 +62,29 @@ python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir 
 # Run specific test cases sample CPU cycles
 python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
 
-# Run manual testing 
+# Run manual testing
 python -m scripts.main perf --manual --app your_app_bundle_name
+
+# Memory profiling (memory only)
+python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace --no-perf
+
+# Mixed collection: perf + trace + memory
+python -m scripts.main perf --run_testcases .*_xhs_.* --memory
+
+# Mixed collection: perf + memory (no trace)
+python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace
 ```
+
+**Memory Collection Modes:**
+1. **Memory Only**: Use `--memory --no-trace --no-perf` to collect only Memory data
+2. **Perf + Trace + Memory**: Use `--memory` (default includes perf and trace)
+3. **Perf + Memory**: Use `--memory --no-trace` to collect perf and memory without trace
+
+The Memory profiling uses HarmonyOS hiprofiler_cmd with nativehook plugin to collect:
+- Memory allocation/deallocation events
+- Call stacks with configurable depth (default: 20)
+- Malloc/free matching for leak detection
+- Offline symbolization support
 
 #### Simplified Test Execution (`prepare`)
 ```bash

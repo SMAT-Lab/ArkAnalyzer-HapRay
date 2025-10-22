@@ -31,18 +31,55 @@ Log = platform_logger('FolderUtils')
 
 
 def scan_folders(root_dir):
-    root_dir = Path(root_dir) / 'hiperf'
-    steps_json = read_json_arrays_from_dir(str(root_dir))
+    """
+    检查性能测试数据是否完整
+    trace、perf、memory 三者有一种数据完整就算成功
+    """
+    root_dir_path = Path(root_dir)
+    hiperf_dir = root_dir_path / 'hiperf'
+
+    # 读取 steps.json 获取步骤数量
+    steps_json = read_json_arrays_from_dir(str(hiperf_dir))
     if len(steps_json) == 0:
         return False
-    perf_data_num = 0
-    for item in os.listdir(root_dir):
-        item_path = os.path.join(root_dir, item)
-        if os.path.isdir(item_path) and (Path(item_path) / 'perf.data').exists():
-            perf_data_num = perf_data_num + 1
 
-    perf_data_percent = perf_data_num / len(steps_json) * 100
-    return perf_data_percent > 50
+    total_steps = len(steps_json)
+
+    # 统计各类数据文件数量
+    perf_data_num = 0
+    trace_data_num = 0
+    memory_data_num = 0
+
+    # 检查 hiperf 目录中的 perf.data
+    if hiperf_dir.exists():
+        for item in os.listdir(hiperf_dir):
+            item_path = hiperf_dir / item
+            if item_path.is_dir() and (item_path / 'perf.data').exists():
+                perf_data_num += 1
+
+    # 检查 htrace 目录中的 trace.htrace
+    htrace_dir = root_dir_path / 'htrace'
+    if htrace_dir.exists():
+        for item in os.listdir(htrace_dir):
+            item_path = htrace_dir / item
+            if item_path.is_dir() and (item_path / 'trace.htrace').exists():
+                trace_data_num += 1
+
+    # 检查 memory 目录中的 memory.htrace
+    memory_dir = root_dir_path / 'memory'
+    if memory_dir.exists():
+        for item in os.listdir(memory_dir):
+            item_path = memory_dir / item
+            if item_path.is_dir() and (item_path / 'memory.htrace').exists():
+                memory_data_num += 1
+
+    # 计算各类数据的完整度百分比
+    perf_percent = (perf_data_num / total_steps * 100) if total_steps > 0 else 0
+    trace_percent = (trace_data_num / total_steps * 100) if total_steps > 0 else 0
+    memory_percent = (memory_data_num / total_steps * 100) if total_steps > 0 else 0
+
+    # 只要有一种数据完整度超过 50%，就认为测试成功
+    return perf_percent > 50 or trace_percent > 50 or memory_percent > 50
 
 
 def delete_folder(folder_path):
