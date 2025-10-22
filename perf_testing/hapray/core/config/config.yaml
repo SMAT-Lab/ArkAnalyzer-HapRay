@@ -6,6 +6,8 @@ hiperf: # 性能采样相关
   event: raw-instruction-retired # 默认采集指令数，可配置为raw-cpu-cycles采集cycles
 trace:
   enable: True
+memory:
+  enable: False  # Memory采集开关（通过命令行参数控制）
 
 # 帧分析配置
 frame_analysis:
