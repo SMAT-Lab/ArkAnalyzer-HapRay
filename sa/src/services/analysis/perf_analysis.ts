@@ -406,14 +406,19 @@ export class PerfAnalysisService {
         const stepIdx = step.stepIdx;
         const srcStepPaths = this.buildStepPaths(sourceRound, stepIdx);
         const destStepPaths = this.buildStepPaths(destPath, stepIdx);
-    
+
         const srcResultDir = path.join(sourceRound, 'result');
         const destResultDir = path.join(destPath, 'result');
-    
+
+        // 构建ui目录路径
+        const srcUiStepDir = path.join(sourceRound, 'ui', `step${stepIdx}`);
+        const destUiStepDir = path.join(destPath, 'ui', `step${stepIdx}`);
+
         await Promise.all([
             copyDirectory(srcStepPaths.stepDir, destStepPaths.stepDir),
             copyDirectory(path.dirname(srcStepPaths.htracePath), path.dirname(destStepPaths.htracePath)),
             copyDirectory(srcResultDir, destResultDir),
+            copyDirectory(srcUiStepDir, destUiStepDir)
         ]);
     }
     
