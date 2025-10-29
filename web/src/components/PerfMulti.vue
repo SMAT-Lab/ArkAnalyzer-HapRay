@@ -200,7 +200,7 @@ interface StepDataItem {
 interface MultiDataItem {
   fileName: string;
   basicInfo: BasicInfo;
-  perfData: PerfData;
+  perfData: PerfData | null;
   scenePieData: PieChartData;
   categoryData: CategoryDataItem[];
   stepData: StepDataItem[];
@@ -382,27 +382,36 @@ const readFileContent = (file: File): Promise<string> => {
 const processJsonData = async (jsonData: JSONData, fileName: string): Promise<MultiDataItem> => {
   let scenePieData: PieChartData;
   let categoryData: CategoryDataItem[];
-  
-  try {
-    scenePieData = processJson2PieChartData(jsonData.perf, 0);
-    categoryData = calculateCategorysData(jsonData.perf, null, true);
-  } catch (error) {
-    console.error('数据处理错误:', error);
-    // 提供默认数据
+  let stepData: StepDataItem[] = [];
+
+  // 检查是否有负载数据
+  if (!jsonData.perf) {
+    console.warn('No perf data available for:', fileName);
     scenePieData = { legendData: [], seriesData: [] };
     categoryData = [];
+    stepData = [];
+  } else {
+    try {
+      scenePieData = processJson2PieChartData(jsonData.perf, 0);
+      categoryData = calculateCategorysData(jsonData.perf, null, true);
+      stepData = jsonData.perf.steps.map(step => ({
+        stepId: step.step_id,
+        stepName: step.step_name,
+        count: step.count
+      }));
+    } catch (error) {
+      console.error('数据处理错误:', error);
+      // 提供默认数据
+      scenePieData = { legendData: [], seriesData: [] };
+      categoryData = [];
+      stepData = [];
+    }
   }
-  
-  const stepData: StepDataItem[] = jsonData.perf.steps.map(step => ({
-    stepId: step.step_id,
-    stepName: step.step_name,
-    count: step.count
-  }));
-  
+
   return {
     fileName,
     basicInfo: jsonData.basicInfo,
-    perfData: jsonData.perf,
+    perfData: jsonData.perf || null,
     scenePieData,
     categoryData,
     stepData

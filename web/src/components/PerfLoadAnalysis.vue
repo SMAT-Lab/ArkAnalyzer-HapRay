@@ -1,5 +1,12 @@
 <template>
   <div class="performance-comparison">
+    <!-- 无数据提示 -->
+    <div v-if="!hasPerfData" class="no-data-tip">
+      <el-empty description="暂无负载分析数据" />
+    </div>
+
+    <!-- 负载数据展示（仅当有数据时显示） -->
+    <template v-else>
     <div class="info-box">
       负载分类说明：
       <p>APP_ABC => 应用代码 |
@@ -213,6 +220,7 @@
         </div>
       </el-col>
     </el-row>
+    </template>
   </div>
 </template>
 
@@ -253,14 +261,17 @@ const perfData = jsonDataStore.perfData;
 
 console.log('负载分析组件获取到的 JSON 数据:');
 
+// 检查是否有负载数据
+const hasPerfData = computed(() => perfData !== null && perfData !== undefined);
+
 const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
+  perfData?.steps.map((step, index) => ({
     id: index + 1,
     step_name: step.step_name,
     count: step.count,
     round: step.round,
     perf_data_path: step.perf_data_path,
-  }))
+  })) || []
 );
 
 interface TestStep {
