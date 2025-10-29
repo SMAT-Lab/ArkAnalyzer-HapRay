@@ -345,10 +345,15 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         const srcResultDir = path.join(sourceRound, 'result');
         const destResultDir = path.join(destPath, 'result');
 
+        // 构建ui目录路径
+        const srcUiStepDir = path.join(sourceRound, 'ui', `step${stepIdx}`);
+        const destUiStepDir = path.join(destPath, 'ui', `step${stepIdx}`);
+
         const copyTasks = [
             copyDirectory(srcStepPaths.stepDir, destStepPaths.stepDir),
             copyDirectory(path.dirname(srcStepPaths.htracePath), path.dirname(destStepPaths.htracePath)),
             copyDirectory(srcResultDir, destResultDir),
+            copyDirectory(srcUiStepDir, destUiStepDir),
         ];
 
         // 复制memory目录（如果存在）
