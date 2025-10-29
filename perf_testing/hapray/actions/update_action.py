@@ -38,8 +38,8 @@ class UpdateAction:
             prog='ArkAnalyzer-HapRay update',
         )
         parser.add_argument(
-            '--report_dir',
             '-r',
+            '--report_dir',
             required=True,
             help='Directory containing reports to update',
         )

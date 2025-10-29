@@ -14,3 +14,4 @@ arpy~=2.3.0
 tox
 jsonschema
 lxml
+opencv-python
