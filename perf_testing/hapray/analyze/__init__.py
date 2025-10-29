@@ -27,6 +27,7 @@ MAX_WORKERS = 8  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
     'PerfAnalyzer',
+    'MemoryAnalyzer',  # 独立的内存分析器，参考 PerfAnalyzer 的结构
     'FrameLoadAnalyzer',  # 提前执行，作为数据收集前驱
     'EmptyFrameAnalyzer',  # 使用缓存的帧负载数据
     'FrameDropAnalyzer',  # 使用缓存的帧负载数据
@@ -131,8 +132,8 @@ def _initialize_analyzers(scene_dir: str, time_ranges: list[dict] = None) -> lis
             module = __import__(f'hapray.analyze.{module_name}', fromlist=[analyzer_class])
             cls = getattr(module, analyzer_class)
 
-            # Check if this analyzer supports time ranges (specifically PerfAnalyzer)
-            if analyzer_class == 'PerfAnalyzer' and time_ranges:
+            # Check if this analyzer supports time ranges (PerfAnalyzer and MemoryAnalyzer)
+            if analyzer_class in ['PerfAnalyzer', 'MemoryAnalyzer'] and time_ranges:
                 analyzers.append(cls(scene_dir, time_ranges))
                 logging.info('Initialized analyzer: %s with %d time ranges', analyzer_class, len(time_ranges))
             else:

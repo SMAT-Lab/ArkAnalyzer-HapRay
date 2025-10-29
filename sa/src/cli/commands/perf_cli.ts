@@ -71,6 +71,7 @@ interface HapAnalyzerOptions {
     compatibility: boolean;
     ut: boolean;
     timeRanges?: Array<string>;
+    analysisMode?: 'all' | 'perf' | 'memory'; // 分析模式：all(默认)、perf(仅负载)、memory(仅内存)
 }
 
 export const PerfCli = new Command('perf')
@@ -82,6 +83,7 @@ export const PerfCli = new Command('perf')
     .option('--compatibility', 'start compatibility mode', false)
     .option('--ut', 'ut mode', false)
     .option('--time-ranges <ranges...>', 'optional time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges')
+    .option('--analysis-mode <mode>', 'analysis mode: all (default), perf (load analysis only), memory (memory analysis only)', 'all')
     .action(async (options: HapAnalyzerOptions) => {
         let cliArgs: Partial<GlobalConfig> = { ...options };
         initConfig(cliArgs, (config) => {
@@ -104,9 +106,23 @@ export const PerfCli = new Command('perf')
         }
 
         const perfAnalysisService = new PerfAnalysisService();
+        const analysisMode = options.analysisMode ?? 'all';
+        logger.info(`Analysis mode: ${analysisMode}`);
+
         if (options.choose) {
             await perfAnalysisService.chooseRound(options.input);
         } else {
-            await perfAnalysisService.generatePerfReport(options.input, timeRanges);
+            switch (analysisMode) {
+                case 'perf':
+                    await perfAnalysisService.analyzePerfOnly(options.input, timeRanges);
+                    break;
+                case 'memory':
+                    await perfAnalysisService.analyzeMemoryOnly(options.input);
+                    break;
+                case 'all':
+                default:
+                    await perfAnalysisService.generatePerfReport(options.input, timeRanges);
+                    break;
+            }
         }
     });

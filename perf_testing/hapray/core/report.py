@@ -29,6 +29,7 @@ from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.config.config import Config
 
 
 class DataType(enum.Enum):
@@ -54,12 +55,20 @@ class ReportData:
         }
 
     @classmethod
-    def from_paths(cls, scene_dir: str, result: dict):
-        """从文件路径加载数据"""
+    def from_paths(cls, scene_dir: str, result: dict, load_memory: bool = True):
+        """从文件路径加载数据
+
+        Args:
+            scene_dir: 场景目录路径
+            result: 分析结果字典
+            load_memory: 是否加载内存数据（默认True，支持仅负载分析模式）
+        """
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         data = cls(scene_dir, result)
         data.load_perf_data(perf_data_path)
         data.load_trace_data(scene_dir)
+        if load_memory:
+            data.load_native_memory_data(scene_dir)
         return data
 
     def __str__(self):
@@ -158,10 +167,19 @@ class ReportData:
         data['more']['flame_graph'] = compressed_flame_graph
         return data
 
-    def load_perf_data(self, path):
+    def load_perf_data(self, path, required: bool = True):
+        """加载性能数据
+
+        Args:
+            path: hiperf_info.json 文件路径
+            required: 是否必须存在（默认True，支持仅内存分析模式设为False）
+        """
         self.perf_data = self._load_json_safe(path, default=[])
         if len(self.perf_data) == 0:
-            raise FileNotFoundError(f'hiperf_info.json not found: {path}')
+            if required:
+                raise FileNotFoundError(f'hiperf_info.json not found: {path}')
+            logging.warning('hiperf_info.json not found: %s, skipping perf data loading', path)
+            return
         first_entry = self.perf_data[0]
         self.result['perf']['steps'] = first_entry.get('steps', [])
         self.result['perf']['har'] = first_entry.get('har', {})
@@ -174,8 +192,29 @@ class ReportData:
             'timestamp': first_entry.get('timestamp', 0),
         }
 
-    def load_trace_data(self, scene_dir: str):
-        """加载 trace 相关数据"""
+    def load_native_memory_data(self, scene_dir: str):
+        """加载Native Memory数据（类似trace_frames.json的格式）"""
+        report_dir = os.path.join(scene_dir, 'report')
+
+        # 确保 more 字段存在
+        if 'more' not in self.result:
+            self.result['more'] = {}
+
+        # 加载native_memory.json文件
+        native_memory_path = os.path.join(report_dir, 'native_memory.json')
+        native_memory_data = self._load_json_safe(native_memory_path, default={})
+
+        if native_memory_data:
+            self.result['more']['native_memory'] = native_memory_data
+            logging.info(f'Loaded Native Memory data: {len(native_memory_data)} steps')
+
+    def load_trace_data(self, scene_dir: str, required: bool = False):
+        """加载 trace 相关数据
+
+        Args:
+            scene_dir: 场景目录路径
+            required: 是否必须存在（默认False，支持仅内存分析模式）
+        """
         report_dir = os.path.join(scene_dir, 'report')
 
         # 确保 trace 字段存在
@@ -200,7 +239,7 @@ class ReportData:
             if data:  # 只有当数据不为空时才添加
                 self.result['trace'][key] = data
 
-        # 加载火焰图数据
+        # 加载火焰图数据和Native Memory数据
         if 'more' not in self.result:
             self.result['more'] = {}
 
@@ -208,6 +247,8 @@ class ReportData:
         flame_graph_data = self._load_json_safe(flame_graph_path, default={})
         if flame_graph_data:
             self.result['more']['flame_graph'] = flame_graph_data
+        elif required:
+            logging.warning('Flame graph data not found at %s', flame_graph_path)
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""
@@ -311,7 +352,33 @@ class ReportGenerator:
 
     @staticmethod
     def _build_json_data(scene_dir: str, result: dict) -> str:
-        return str(ReportData.from_paths(scene_dir, result))
+        """构建JSON数据，支持三种分析模式
+
+        Args:
+            scene_dir: 场景目录路径
+            result: 分析结果字典
+
+        Returns:
+            Base64编码的压缩JSON字符串
+        """
+        # 从配置中获取分析模式，默认为 'all'
+        analysis_mode = Config.get('analysis_mode', 'all')
+
+        # 根据分析模式决定是否加载内存数据
+        load_memory = analysis_mode in ['all', 'memory']
+
+        # 根据分析模式决定是否加载性能数据
+        load_perf = analysis_mode in ['all', 'perf']
+
+        # 创建 ReportData 实例
+        report_data = ReportData.from_paths(scene_dir, result, load_memory=load_memory)
+
+        # 如果是仅内存分析模式，不加载性能数据
+        if not load_perf:
+            report_data.perf_data = []
+            report_data.result['perf']['steps'] = []
+
+        return str(report_data)
 
     @staticmethod
     def _inject_json_to_html(json_data_str: str, placeholder: str, html_path: str, output_path: str) -> None:
