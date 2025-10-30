@@ -79,6 +79,9 @@ class ReportData:
         # 特殊处理火焰图数据：按步骤单独压缩
         cleaned_result = self._compress_flame_graph_by_steps(cleaned_result)
 
+        # 特殊处理内存数据：按步骤单独压缩
+        cleaned_result = self._compress_native_memory_by_steps(cleaned_result)
+
         json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
             f.write(json_str)
@@ -165,6 +168,67 @@ class ReportData:
 
         # 更新数据结构
         data['more']['flame_graph'] = compressed_flame_graph
+        return data
+
+    def _compress_native_memory_by_steps(self, data):
+        """按步骤压缩内存数据，避免字符串过长
+
+        参考火焰图的压缩逻辑，对每个步骤的内存记录进行压缩
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有内存数据
+        if 'more' not in data or 'native_memory' not in data['more']:
+            return data
+
+        native_memory_data = data['more']['native_memory']
+        if not isinstance(native_memory_data, dict):
+            return data
+
+        # 按步骤压缩内存数据
+        compressed_native_memory = {}
+
+        for step_key, step_data in native_memory_data.items():
+            if isinstance(step_data, dict) and 'records' in step_data:
+                try:
+                    # 将记录数组转换为 JSON 字符串
+                    records_json = json.dumps(step_data['records'])
+
+                    # 压缩记录数据
+                    compressed_bytes = zlib.compress(records_json.encode('utf-8'), level=9)
+                    base64_bytes = base64.b64encode(compressed_bytes)
+                    compressed_records = base64_bytes.decode('ascii')
+
+                    # 保留统计信息，压缩记录数据
+                    compressed_step_data = {
+                        'stats': step_data.get('stats', {}),
+                        'records': compressed_records,  # 压缩后的记录
+                        'compressed': True,  # 标记为已压缩
+                    }
+                    compressed_native_memory[step_key] = compressed_step_data
+
+                    # 记录压缩效果
+                    original_size = len(records_json)
+                    compressed_size = len(compressed_records)
+                    compression_ratio = (1 - compressed_size / original_size) * 100
+                    logging.info(
+                        '内存数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
+                    )
+                except Exception as e:
+                    logging.warning('压缩内存数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_native_memory[step_key] = step_data
+            else:
+                # 非预期格式的数据保持不变
+                compressed_native_memory[step_key] = step_data
+
+        # 更新数据结构
+        data['more']['native_memory'] = compressed_native_memory
         return data
 
     def load_perf_data(self, path, required: bool = True):

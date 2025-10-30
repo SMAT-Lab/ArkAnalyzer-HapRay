@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { transformNativeMemoryData } from '@/utils/jsonUtil';
+import pako from 'pako';
 
 // ==================== 类型定义 ====================
 /** 负载事件类型 */
@@ -125,7 +126,15 @@ export interface NativeMemoryStepData {
   records: NativeMemoryRecord[];
 }
 
+// Native Memory压缩数据类型
+export interface CompressedNativeMemoryStepData {
+  compressed: true;
+  stats?: NativeMemoryStepStats;
+  records: string; // Base64编码的压缩数据
+}
+
 export type NativeMemoryData = Record<string, NativeMemoryStepData>;
+export type CompressedNativeMemoryData = Record<string, CompressedNativeMemoryStepData | NativeMemoryStepData>;
 
 interface PerfDataStep {
   step_name: string;
@@ -976,6 +985,67 @@ export const useJsonDataStore = defineStore('config', {
   }),
 
   actions: {
+    /**
+     * 解压缩内存数据
+     * 参考火焰图的解压缩逻辑
+     */
+    decompressNativeMemoryData(nativeMemData: CompressedNativeMemoryData): NativeMemoryData {
+      if (!nativeMemData || typeof nativeMemData !== 'object') {
+        return nativeMemData as NativeMemoryData;
+      }
+
+      const decompressed: NativeMemoryData = {};
+
+      for (const [stepKey, stepData] of Object.entries(nativeMemData)) {
+        if (typeof stepData === 'object' && stepData !== null && 'compressed' in stepData && stepData.compressed) {
+          // 解压缩记录数据
+          const compressedStepData = stepData as CompressedNativeMemoryStepData;
+          try {
+            const compressedRecords = compressedStepData.records;
+
+            // Base64解码
+            const binaryString = atob(compressedRecords);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // 使用pako解压缩
+            const decompressedStr = pako.inflate(bytes, { to: 'string' });
+            const records = JSON.parse(decompressedStr) as NativeMemoryRecord[];
+
+            // 恢复原始格式
+            decompressed[stepKey] = {
+              stats: compressedStepData.stats || {
+                peakMemorySize: 0,
+                peakMemoryDuration: 0,
+                averageMemorySize: 0,
+              },
+              records: records,
+            };
+
+            console.log(`解压缩内存数据 ${stepKey}: ${compressedRecords.length} -> ${decompressedStr.length} 字节`);
+          } catch (error) {
+            console.error(`解压缩内存数据失败 ${stepKey}:`, error);
+            // 解压缩失败时返回空数据
+            decompressed[stepKey] = {
+              stats: compressedStepData.stats || {
+                peakMemorySize: 0,
+                peakMemoryDuration: 0,
+                averageMemorySize: 0,
+              },
+              records: [],
+            };
+          }
+        } else {
+          // 未压缩的数据保持不变
+          decompressed[stepKey] = stepData as NativeMemoryStepData;
+        }
+      }
+
+      return decompressed;
+    },
+
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
@@ -1016,8 +1086,8 @@ export const useJsonDataStore = defineStore('config', {
           if (typeof nativeMemData === 'object' && 'process_dimension' in nativeMemData) {
             this.nativeMemoryData = transformNativeMemoryData(nativeMemData);
           } else {
-            // 已经是平铺格式
-            this.nativeMemoryData = nativeMemData;
+            // 已经是平铺格式，但可能需要解压缩
+            this.nativeMemoryData = this.decompressNativeMemoryData(nativeMemData);
           }
         } else {
           this.nativeMemoryData = null;

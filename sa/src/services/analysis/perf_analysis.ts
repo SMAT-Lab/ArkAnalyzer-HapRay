@@ -23,7 +23,6 @@ import { getConfig } from '../../config';
 import { traceStreamerCmd } from '../external/trace_streamer';
 import { checkPerfFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
 import { AnalysisServiceBase, type Steps, type TestReportInfo, type StepPaths, type StandardTestInfo } from './analysis_service_base';
-import { MemoryAnalysisService } from './memory_analysis';
 
 import type {
     Round,
@@ -35,11 +34,8 @@ import type {
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 export class PerfAnalysisService extends AnalysisServiceBase {
-    private memoryAnalysisService: MemoryAnalysisService;
-
     constructor() {
         super();
-        this.memoryAnalysisService = new MemoryAnalysisService();
     }
 
     /**
@@ -99,28 +95,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         await this.generatePerfJsonOnly(input, testReportInfo, steps, timeRanges);
     }
 
-    /**
-     * 单独分析内存数据（不分析负载数据）
-     * 用于只需要内存分析的场景
-     */
-    async analyzeMemoryOnly(input: string): Promise<void> {
-        const scene = path.basename(input);
-        const steps = await this.loadSteps(input);
-        const testReportInfo = await this.loadTestReportInfo(input, scene, getConfig());
-        const memoryDbPaths = await this.getMemoryDbPaths(input, steps);
 
-        if (memoryDbPaths.length === 0) {
-            logger.warn('未找到任何内存数据文件，无法进行内存分析');
-            return;
-        }
-
-        const outputDir = path.join(input, 'report');
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
-
-        await this.generateNativeMemoryJson(testReportInfo, memoryDbPaths, outputDir, steps);
-    }
 
     // ===================== 数据加载函数 =====================
     // 注：loadSteps, loadTestReportInfo, loadStandardTestReportInfo 已在基类中实现
@@ -410,10 +385,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
         await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
 
-        // 分析Native Memory数据（如果存在）- 委托给 MemoryAnalysisService
-        if (memoryDbPaths.length > 0) {
-            await this.memoryAnalysisService.generateMemoryJson(testInfo, memoryDbPaths, outputDir, steps);
-        }
+        // 注意：内存分析已由 Python 完成，SA 不再处理内存数据
     }
 
     /**
@@ -457,15 +429,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         logger.info('负载分析完成，未生成内存数据');
     }
 
-    /**
-     * 生成内存分析报告（仅内存分析模式）
-     * 只生成内存数据，不分析负载数据
-     * 注：此方法已废弃，请直接使用 MemoryAnalysisService.generateMemoryJson()
-     */
-    async generateNativeMemoryJson(testInfo: TestReportInfo, memoryDbPaths: Array<string>, outputDir: string, steps: Steps): Promise<void> {
-        // 委托给 MemoryAnalysisService
-        await this.memoryAnalysisService.generateMemoryJson(testInfo, memoryDbPaths, outputDir, steps);
-    }
+
     
     /**
      * 获取 perf.data 路径数组
@@ -524,7 +488,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
     }
 
     // 注：getMemoryDbPaths 已在基类中实现
-    // 注：analyzeNativeMemory 已在 MemoryAnalysisService 中实现
+    // 注：内存分析已完全迁移到 Python，SA 不再处理内存分析逻辑
     
     // ---- 兼容性模式支持 ----
     /**

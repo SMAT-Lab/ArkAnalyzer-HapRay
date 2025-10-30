@@ -117,7 +117,8 @@ export const PerfCli = new Command('perf')
                     await perfAnalysisService.analyzePerfOnly(options.input, timeRanges);
                     break;
                 case 'memory':
-                    await perfAnalysisService.analyzeMemoryOnly(options.input);
+                    // 内存分析已完全迁移到 Python，SA 不再处理
+                    logger.warn('Memory analysis is now handled by Python. Please use Python update command.');
                     break;
                 case 'all':
                 default:
