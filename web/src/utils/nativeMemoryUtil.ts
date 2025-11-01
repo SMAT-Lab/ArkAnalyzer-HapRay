@@ -356,7 +356,7 @@ export function nativeMemory2EventTypePieChartData(nativeMemoryData: NativeMemor
 
 // 聚合函数：按进程聚合
 // 进程维度的 key 是：process
-// 从原始事件记录中独立计算每个进程的内存统计
+// 直接使用后端预计算的进程维度统计信息
 export function aggregateByProcess(nativeMemoryData: NativeMemoryData | null, stepId: number): ProcessMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -364,47 +364,40 @@ export function aggregateByProcess(nativeMemoryData: NativeMemoryData | null, st
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按进程分组原始事件记录
-  const processRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按进程分组，使用 Map 来去重
+  const processStatsMap = new Map<string, ProcessMemoryItem>();
 
   for (const item of stepData.records) {
     const processName = item.process || "Unknown Process";
-    if (!processRecordsMap.has(processName)) {
-      processRecordsMap.set(processName, []);
+
+    // 如果已经处理过这个进程，跳过（因为每条记录都有相同的进程统计信息）
+    if (processStatsMap.has(processName)) {
+      continue;
     }
-    processRecordsMap.get(processName)!.push(item);
-  }
 
-  // 计算每个进程的内存统计
-  const result: ProcessMemoryItem[] = [];
-  processRecordsMap.forEach((records, processName) => {
-    const stats = calculateMemoryStats(records);
-
-    // 获取第一条记录的分类信息
-    const firstRecord = records[0];
-
-    result.push({
+    // 使用后端预计算的进程维度统计信息（包括 eventNum）
+    processStatsMap.set(processName, {
       stepId,
       process: processName,
-      category: getCategoryName(firstRecord.componentCategory),
+      category: getCategoryName(item.componentCategory),
       componentName: processName,
-      categoryName: firstRecord.categoryName,
-      subCategoryName: firstRecord.subCategoryName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
-      start_ts: stats.start_ts,
+      categoryName: item.categoryName,
+      subCategoryName: item.subCategoryName,
+      eventNum: item.processEventNum, // 使用后端预计算的事件数
+      peakMem: item.processPeakMem,
+      avgMem: item.processAvgMem,
+      totalAllocMem: item.processTotalAllocMem,
+      totalFreeMem: item.processTotalFreeMem,
+      start_ts: item.relativeTs,
     });
-  });
+  }
 
-  return result;
+  return Array.from(processStatsMap.values());
 }
 
 // 聚合函数：按线程聚合
 // 线程维度的 key 是：process|thread
-// 从原始事件记录中独立计算每个线程的内存统计
+// 直接使用后端预计算的线程维度统计信息
 export function aggregateByThread(nativeMemoryData: NativeMemoryData | null, stepId: number): ThreadMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -412,8 +405,8 @@ export function aggregateByThread(nativeMemoryData: NativeMemoryData | null, ste
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按进程+线程分组原始事件记录
-  const threadRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按进程+线程分组，使用 Map 来去重
+  const threadStatsMap = new Map<string, ThreadMemoryItem>();
 
   for (const item of stepData.records) {
     // 只处理有 tid 的记录
@@ -423,44 +416,35 @@ export function aggregateByThread(nativeMemoryData: NativeMemoryData | null, ste
     const threadName = item.thread || "Unknown Thread";
     const key = `${processName}|${threadName}`;
 
-    if (!threadRecordsMap.has(key)) {
-      threadRecordsMap.set(key, []);
+    // 如果已经处理过这个线程，跳过（因为每条记录都有相同的线程统计信息）
+    if (threadStatsMap.has(key)) {
+      continue;
     }
-    threadRecordsMap.get(key)!.push(item);
-  }
 
-  // 计算每个线程的内存统计
-  const result: ThreadMemoryItem[] = [];
-  threadRecordsMap.forEach((records, key) => {
-    const stats = calculateMemoryStats(records);
-
-    // 获取第一条记录的信息
-    const firstRecord = records[0];
-    const [processName, threadName] = key.split('|');
-
-    result.push({
+    // 使用后端预计算的线程维度统计信息（包括 eventNum）
+    threadStatsMap.set(key, {
       stepId,
       process: processName,
       thread: threadName,
-      category: getCategoryName(firstRecord.componentCategory),
+      category: getCategoryName(item.componentCategory),
       componentName: threadName,
-      categoryName: firstRecord.categoryName,
-      subCategoryName: firstRecord.subCategoryName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
-      start_ts: stats.start_ts,
+      categoryName: item.categoryName,
+      subCategoryName: item.subCategoryName,
+      eventNum: item.threadEventNum, // 使用后端预计算的事件数
+      peakMem: item.threadPeakMem,
+      avgMem: item.threadAvgMem,
+      totalAllocMem: item.threadTotalAllocMem,
+      totalFreeMem: item.threadTotalFreeMem,
+      start_ts: item.relativeTs,
     });
-  });
+  }
 
-  return result;
+  return Array.from(threadStatsMap.values());
 }
 
 // 聚合函数：按文件聚合
 // 文件维度的 key 是：process|thread|file
-// 从原始事件记录中独立计算每个文件的内存统计
+// 直接使用后端预计算的文件维度统计信息
 export function aggregateByFile(nativeMemoryData: NativeMemoryData | null, stepId: number): FileMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -468,8 +452,8 @@ export function aggregateByFile(nativeMemoryData: NativeMemoryData | null, stepI
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按进程+线程+文件分组原始事件记录
-  const fileRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按进程+线程+文件分组，使用 Map 来去重
+  const fileStatsMap = new Map<string, FileMemoryItem>();
 
   for (const item of stepData.records) {
     // 只处理有 fileId 的记录
@@ -480,45 +464,36 @@ export function aggregateByFile(nativeMemoryData: NativeMemoryData | null, stepI
     const fileName = item.file || "Unknown File";
     const key = `${processName}|${threadName}|${fileName}`;
 
-    if (!fileRecordsMap.has(key)) {
-      fileRecordsMap.set(key, []);
+    // 如果已经处理过这个文件，跳过（因为每条记录都有相同的文件统计信息）
+    if (fileStatsMap.has(key)) {
+      continue;
     }
-    fileRecordsMap.get(key)!.push(item);
-  }
 
-  // 计算每个文件的内存统计
-  const result: FileMemoryItem[] = [];
-  fileRecordsMap.forEach((records, key) => {
-    const stats = calculateMemoryStats(records);
-
-    // 获取第一条记录的信息
-    const firstRecord = records[0];
-    const [processName, threadName, fileName] = key.split('|');
-
-    result.push({
+    // 使用后端预计算的文件维度统计信息（包括 eventNum）
+    fileStatsMap.set(key, {
       stepId,
       process: processName,
       thread: threadName,
       file: fileName,
-      category: getCategoryName(firstRecord.componentCategory),
+      category: getCategoryName(item.componentCategory),
       componentName: fileName,
-      categoryName: firstRecord.categoryName,
-      subCategoryName: firstRecord.subCategoryName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
-      start_ts: stats.start_ts,
+      categoryName: item.categoryName,
+      subCategoryName: item.subCategoryName,
+      eventNum: item.fileEventNum, // 使用后端预计算的事件数
+      peakMem: item.filePeakMem,
+      avgMem: item.fileAvgMem,
+      totalAllocMem: item.fileTotalAllocMem,
+      totalFreeMem: item.fileTotalFreeMem,
+      start_ts: item.relativeTs,
     });
-  });
+  }
 
-  return result;
+  return Array.from(fileStatsMap.values());
 }
 
 // 聚合函数：按符号聚合
 // 符号维度的 key 是：process|thread|file|symbol
-// 从原始事件记录中独立计算每个符号的内存统计
+// 直接使用后端预计算的符号维度统计信息
 export function aggregateBySymbol(nativeMemoryData: NativeMemoryData | null, stepId: number): SymbolMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -526,8 +501,8 @@ export function aggregateBySymbol(nativeMemoryData: NativeMemoryData | null, ste
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按进程+线程+文件+符号分组原始事件记录
-  const symbolRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按进程+线程+文件+符号分组，使用 Map 来去重
+  const symbolStatsMap = new Map<string, SymbolMemoryItem>();
 
   for (const item of stepData.records) {
     // 只处理有 symbolId 的记录
@@ -539,46 +514,37 @@ export function aggregateBySymbol(nativeMemoryData: NativeMemoryData | null, ste
     const symbolName = item.symbol || "Unknown Symbol";
     const key = `${processName}|${threadName}|${fileName}|${symbolName}`;
 
-    if (!symbolRecordsMap.has(key)) {
-      symbolRecordsMap.set(key, []);
+    // 如果已经处理过这个符号，跳过（因为每条记录都有相同的符号统计信息）
+    if (symbolStatsMap.has(key)) {
+      continue;
     }
-    symbolRecordsMap.get(key)!.push(item);
-  }
 
-  // 计算每个符号的内存统计
-  const result: SymbolMemoryItem[] = [];
-  symbolRecordsMap.forEach((records, key) => {
-    const stats = calculateMemoryStats(records);
-
-    // 获取第一条记录的信息
-    const firstRecord = records[0];
-    const [processName, threadName, fileName, symbolName] = key.split('|');
-
-    result.push({
+    // 使用后端预计算的符号维度统计信息（包括 eventNum）
+    symbolStatsMap.set(key, {
       stepId,
       process: processName,
       thread: threadName,
       file: fileName,
       symbol: symbolName,
-      category: getCategoryName(firstRecord.componentCategory),
+      category: getCategoryName(item.componentCategory),
       componentName: symbolName,
-      categoryName: firstRecord.categoryName,
-      subCategoryName: firstRecord.subCategoryName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
-      start_ts: stats.start_ts,
+      categoryName: item.categoryName,
+      subCategoryName: item.subCategoryName,
+      eventNum: item.symbolEventNum, // 使用后端预计算的事件数
+      peakMem: item.symbolPeakMem,
+      avgMem: item.symbolAvgMem,
+      totalAllocMem: item.symbolTotalAllocMem,
+      totalFreeMem: item.symbolTotalFreeMem,
+      start_ts: item.relativeTs,
     });
-  });
+  }
 
-  return result;
+  return Array.from(symbolStatsMap.values());
 }
 
 // 聚合函数：按大类聚合
 // 大分类维度的 key 是：categoryName
-// 从原始事件记录中独立计算每个大分类的内存统计
+// 直接使用后端预计算的大分类维度统计信息
 export function aggregateByCategory(nativeMemoryData: NativeMemoryData | null, stepId: number): ThreadMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -586,48 +552,41 @@ export function aggregateByCategory(nativeMemoryData: NativeMemoryData | null, s
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按大分类分组原始事件记录
-  const categoryRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按大分类分组，使用 Map 来去重
+  const categoryStatsMap = new Map<string, ThreadMemoryItem>();
 
   for (const item of stepData.records) {
     const categoryName = item.categoryName;
-    if (!categoryRecordsMap.has(categoryName)) {
-      categoryRecordsMap.set(categoryName, []);
+
+    // 如果已经处理过这个大分类，跳过（因为每条记录都有相同的大分类统计信息）
+    if (categoryStatsMap.has(categoryName)) {
+      continue;
     }
-    categoryRecordsMap.get(categoryName)!.push(item);
-  }
 
-  // 计算每个大分类的内存统计
-  const result: ThreadMemoryItem[] = [];
-  categoryRecordsMap.forEach((records, categoryName) => {
-    const stats = calculateMemoryStats(records);
-
-    // 获取第一条记录的信息
-    const firstRecord = records[0];
-
-    result.push({
+    // 使用后端预计算的大分类维度统计信息
+    categoryStatsMap.set(categoryName, {
       stepId,
       process: categoryName,
       thread: categoryName,
       category: categoryName,
       componentName: '',
       categoryName: categoryName,
-      subCategoryName: firstRecord.subCategoryName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
-      start_ts: stats.start_ts,
+      subCategoryName: item.subCategoryName,
+      eventNum: item.categoryEventNum,
+      peakMem: item.categoryPeakMem,
+      avgMem: item.categoryAvgMem,
+      totalAllocMem: item.categoryTotalAllocMem,
+      totalFreeMem: item.categoryTotalFreeMem,
+      start_ts: item.relativeTs,
     });
-  });
+  }
 
-  return result;
+  return Array.from(categoryStatsMap.values());
 }
 
 // 聚合函数：按小类（子分类）聚合
 // 小分类维度的 key 是：categoryName|subCategoryName
-// 从原始事件记录中独立计算每个小分类的内存统计
+// 直接使用后端预计算的小分类维度统计信息
 export function aggregateByComponent(nativeMemoryData: NativeMemoryData | null, stepId: number): ThreadMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -635,43 +594,36 @@ export function aggregateByComponent(nativeMemoryData: NativeMemoryData | null, 
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按大分类+小分类分组原始事件记录
-  const componentRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按大分类+小分类分组，使用 Map 来去重
+  const componentStatsMap = new Map<string, ThreadMemoryItem>();
 
   for (const item of stepData.records) {
     const key = `${item.categoryName}|${item.subCategoryName}`;
-    if (!componentRecordsMap.has(key)) {
-      componentRecordsMap.set(key, []);
+
+    // 如果已经处理过这个小分类，跳过（因为每条记录都有相同的小分类统计信息）
+    if (componentStatsMap.has(key)) {
+      continue;
     }
-    componentRecordsMap.get(key)!.push(item);
+
+    // 使用后端预计算的小分类维度统计信息
+    componentStatsMap.set(key, {
+      stepId,
+      process: item.subCategoryName,
+      thread: item.subCategoryName,
+      category: item.categoryName,
+      componentName: item.subCategoryName,
+      categoryName: item.categoryName,
+      subCategoryName: item.subCategoryName,
+      eventNum: item.componentEventNum,
+      peakMem: item.componentPeakMem,
+      avgMem: item.componentAvgMem,
+      totalAllocMem: item.componentTotalAllocMem,
+      totalFreeMem: item.componentTotalFreeMem,
+      start_ts: item.relativeTs,
+    });
   }
 
-  // 计算每个小分类的内存统计
-  const result: ThreadMemoryItem[] = [];
-  componentRecordsMap.forEach((records, key) => {
-    const stats = calculateMemoryStats(records);
-
-    // 获取第一条记录的信息
-    const [categoryName, subCategoryName] = key.split('|');
-
-    result.push({
-      stepId,
-      process: subCategoryName,
-      thread: subCategoryName,
-      category: categoryName,
-      componentName: subCategoryName,
-      categoryName: categoryName,
-      subCategoryName: subCategoryName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
-      start_ts: stats.start_ts,
-    });
-  });
-
-  return result;
+  return Array.from(componentStatsMap.values());
 }
 
 // 聚合函数：按文件聚合（分类维度）
@@ -788,7 +740,7 @@ export function aggregateBySymbolCategory(nativeMemoryData: NativeMemoryData | n
 
 // 聚合函数：按事件类型聚合
 // 事件类型维度的 key 是：eventTypeName
-// 从原始事件记录中独立计算每个事件类型的内存统计
+// 直接使用后端预计算的事件类型维度统计信息
 export function aggregateByEventType(nativeMemoryData: NativeMemoryData | null, stepId: number): EventTypeMemoryItem[] {
   if (!nativeMemoryData) return [];
 
@@ -796,33 +748,29 @@ export function aggregateByEventType(nativeMemoryData: NativeMemoryData | null, 
   const stepData = nativeMemoryData[stepKey];
   if (!stepData || !stepData.records) return [];
 
-  // 按事件类型分组原始事件记录
-  const eventTypeRecordsMap = new Map<string, NativeMemoryRecord[]>();
+  // 按事件类型分组，使用 Map 来去重
+  const eventTypeStatsMap = new Map<string, EventTypeMemoryItem>();
 
   for (const item of stepData.records) {
     const eventTypeName = getEventTypeName(item.eventType, item.subEventType);
-    if (!eventTypeRecordsMap.has(eventTypeName)) {
-      eventTypeRecordsMap.set(eventTypeName, []);
+
+    // 如果已经处理过这个事件类型，跳过（因为每条记录都有相同的事件类型统计信息）
+    if (eventTypeStatsMap.has(eventTypeName)) {
+      continue;
     }
-    eventTypeRecordsMap.get(eventTypeName)!.push(item);
-  }
 
-  // 计算每个事件类型的内存统计
-  const result: EventTypeMemoryItem[] = [];
-  eventTypeRecordsMap.forEach((records, eventTypeName) => {
-    const stats = calculateMemoryStats(records);
-
-    result.push({
+    // 使用后端预计算的事件类型维度统计信息
+    eventTypeStatsMap.set(eventTypeName, {
       stepId,
       eventTypeName,
-      eventNum: stats.eventNum,
-      peakMem: stats.peakMem,
-      avgMem: stats.avgMem,
-      totalAllocMem: stats.totalAllocMem,
-      totalFreeMem: stats.totalFreeMem,
+      eventNum: item.eventTypeEventNum,
+      peakMem: item.eventTypePeakMem,
+      avgMem: item.eventTypeAvgMem,
+      totalAllocMem: item.eventTypeTotalAllocMem,
+      totalFreeMem: item.eventTypeTotalFreeMem,
     });
-  });
+  }
 
-  return result.sort((a, b) => b.peakMem - a.peakMem);
+  return Array.from(eventTypeStatsMap.values()).sort((a, b) => b.peakMem - a.peakMem);
 }
 

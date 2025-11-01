@@ -192,33 +192,101 @@ class ReportData:
         for step_key, step_data in native_memory_data.items():
             if isinstance(step_data, dict) and 'records' in step_data:
                 try:
+                    records = step_data['records']
+                    records_count = len(records)
+
                     # 将记录数组转换为 JSON 字符串
-                    records_json = json.dumps(step_data['records'])
-
-                    # 压缩记录数据
-                    compressed_bytes = zlib.compress(records_json.encode('utf-8'), level=9)
-                    base64_bytes = base64.b64encode(compressed_bytes)
-                    compressed_records = base64_bytes.decode('ascii')
-
-                    # 保留统计信息，压缩记录数据
-                    compressed_step_data = {
-                        'stats': step_data.get('stats', {}),
-                        'records': compressed_records,  # 压缩后的记录
-                        'compressed': True,  # 标记为已压缩
-                    }
-                    compressed_native_memory[step_key] = compressed_step_data
-
-                    # 记录压缩效果
+                    records_json = json.dumps(records)
                     original_size = len(records_json)
-                    compressed_size = len(compressed_records)
-                    compression_ratio = (1 - compressed_size / original_size) * 100
-                    logging.info(
-                        '内存数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
-                        step_key,
-                        original_size,
-                        compressed_size,
-                        compression_ratio,
-                    )
+
+                    # 检查数据大小，如果超过 500MB，使用分块压缩
+                    # JavaScript 字符串最大长度约 512MB，我们使用 500MB 作为阈值
+                    MAX_CHUNK_SIZE = 500 * 1024 * 1024  # 500MB
+
+                    if original_size > MAX_CHUNK_SIZE:
+                        # 分块压缩
+                        logging.info(
+                            '内存数据过大 %s: %d 字节 (%d 条记录)，使用分块压缩',
+                            step_key,
+                            original_size,
+                            records_count,
+                        )
+
+                        # 计算每块的记录数（确保每块 JSON 大小不超过 MAX_CHUNK_SIZE）
+                        avg_record_size = original_size / records_count if records_count > 0 else 1
+                        chunk_record_count = max(1, int(MAX_CHUNK_SIZE / avg_record_size))
+
+                        # 分块压缩
+                        compressed_chunks = []
+                        total_compressed_size = 0
+
+                        for i in range(0, records_count, chunk_record_count):
+                            chunk = records[i : i + chunk_record_count]
+                            chunk_json = json.dumps(chunk)
+                            chunk_size = len(chunk_json)
+
+                            # 压缩块
+                            compressed_bytes = zlib.compress(chunk_json.encode('utf-8'), level=9)
+                            base64_bytes = base64.b64encode(compressed_bytes)
+                            compressed_chunk = base64_bytes.decode('ascii')
+
+                            compressed_chunks.append(compressed_chunk)
+                            total_compressed_size += len(compressed_chunk)
+
+                            logging.info(
+                                '  分块 %d/%d: %d 条记录, %d -> %d 字节',
+                                len(compressed_chunks),
+                                (records_count + chunk_record_count - 1) // chunk_record_count,
+                                len(chunk),
+                                chunk_size,
+                                len(compressed_chunk),
+                            )
+
+                        # 保留统计信息，使用分块压缩数据
+                        compressed_step_data = {
+                            'stats': step_data.get('stats', {}),
+                            'records': compressed_chunks,  # 压缩后的记录块数组
+                            'compressed': True,  # 标记为已压缩
+                            'chunked': True,  # 标记为分块压缩
+                            'chunk_count': len(compressed_chunks),  # 块数量
+                            'total_records': records_count,  # 总记录数
+                        }
+                        compressed_native_memory[step_key] = compressed_step_data
+
+                        # 记录压缩效果
+                        compression_ratio = (1 - total_compressed_size / original_size) * 100
+                        logging.info(
+                            '内存数据分块压缩完成 %s: %d -> %d 字节 (压缩率: %.1f%%), %d 个块',
+                            step_key,
+                            original_size,
+                            total_compressed_size,
+                            compression_ratio,
+                            len(compressed_chunks),
+                        )
+                    else:
+                        # 单块压缩（原有逻辑）
+                        compressed_bytes = zlib.compress(records_json.encode('utf-8'), level=9)
+                        base64_bytes = base64.b64encode(compressed_bytes)
+                        compressed_records = base64_bytes.decode('ascii')
+
+                        # 保留统计信息，压缩记录数据
+                        compressed_step_data = {
+                            'stats': step_data.get('stats', {}),
+                            'records': compressed_records,  # 压缩后的记录
+                            'compressed': True,  # 标记为已压缩
+                        }
+                        compressed_native_memory[step_key] = compressed_step_data
+
+                        # 记录压缩效果
+                        compressed_size = len(compressed_records)
+                        compression_ratio = (1 - compressed_size / original_size) * 100
+                        logging.info(
+                            '内存数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                            step_key,
+                            original_size,
+                            compressed_size,
+                            compression_ratio,
+                        )
                 except Exception as e:
                     logging.warning('压缩内存数据失败 %s: %s', step_key, str(e))
                     # 压缩失败时保持原数据

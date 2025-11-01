@@ -111,6 +111,48 @@ export interface NativeMemoryRecord {
   // 分类信息 - 小类（从符号、文件、线程等推断）
   categoryName: string;      // 大类名称（如 'APP_ABC', 'SYS_SDK'）
   subCategoryName: string;   // 小类名称（如包名、文件名、线程名）
+  // 进程维度统计（key: pid）
+  processPeakMem: number;
+  processAvgMem: number;
+  processTotalAllocMem: number;
+  processTotalFreeMem: number;
+  processEventNum: number;
+  // 线程维度统计（key: pid|tid）
+  threadPeakMem: number;
+  threadAvgMem: number;
+  threadTotalAllocMem: number;
+  threadTotalFreeMem: number;
+  threadEventNum: number;
+  // 文件维度统计（key: pid|tid|fileId）
+  filePeakMem: number;
+  fileAvgMem: number;
+  fileTotalAllocMem: number;
+  fileTotalFreeMem: number;
+  fileEventNum: number;
+  // 符号维度统计（key: pid|tid|fileId|symbolId）
+  symbolPeakMem: number;
+  symbolAvgMem: number;
+  symbolTotalAllocMem: number;
+  symbolTotalFreeMem: number;
+  symbolEventNum: number;
+  // 大分类维度统计（key: categoryName）
+  categoryPeakMem: number;
+  categoryAvgMem: number;
+  categoryTotalAllocMem: number;
+  categoryTotalFreeMem: number;
+  categoryEventNum: number;
+  // 小分类维度统计（key: categoryName|subCategoryName）
+  componentPeakMem: number;
+  componentAvgMem: number;
+  componentTotalAllocMem: number;
+  componentTotalFreeMem: number;
+  componentEventNum: number;
+  // 事件类型维度统计（key: eventTypeName）
+  eventTypePeakMem: number;
+  eventTypeAvgMem: number;
+  eventTypeTotalAllocMem: number;
+  eventTypeTotalFreeMem: number;
+  eventTypeEventNum: number;
 }
 
 // Native Memory步骤统计信息
@@ -118,6 +160,13 @@ export interface NativeMemoryStepStats {
   peakMemorySize: number;
   peakMemoryDuration: number;
   averageMemorySize: number;
+}
+
+// 后端返回的统计信息（使用下划线命名）
+interface BackendNativeMemoryStepStats {
+  peak_memory_size?: number;
+  peak_memory_duration?: number;
+  average_memory_size?: number;
 }
 
 // Native Memory数据类型（包含统计信息和平铺记录）
@@ -130,7 +179,10 @@ export interface NativeMemoryStepData {
 export interface CompressedNativeMemoryStepData {
   compressed: true;
   stats?: NativeMemoryStepStats;
-  records: string; // Base64编码的压缩数据
+  records: string | string[]; // Base64编码的压缩数据（单块或多块）
+  chunked?: boolean; // 是否为分块压缩
+  chunk_count?: number; // 块数量
+  total_records?: number; // 总记录数
 }
 
 export type NativeMemoryData = Record<string, NativeMemoryStepData>;
@@ -1003,43 +1055,108 @@ export const useJsonDataStore = defineStore('config', {
           try {
             const compressedRecords = compressedStepData.records;
 
-            // Base64解码
-            const binaryString = atob(compressedRecords);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
+            // 检查是否为分块压缩
+            const isChunked = 'chunked' in compressedStepData && compressedStepData.chunked;
+
+            let records: NativeMemoryRecord[] = [];
+
+            if (isChunked && Array.isArray(compressedRecords)) {
+              // 分块解压缩
+              console.log(`解压缩分块内存数据 ${stepKey}: ${compressedStepData.chunk_count} 个块, ${compressedStepData.total_records} 条记录`);
+
+              for (let i = 0; i < compressedRecords.length; i++) {
+                const compressedChunk = compressedRecords[i];
+
+                try {
+                  // Base64解码
+                  const binaryString = atob(compressedChunk);
+                  const bytes = new Uint8Array(binaryString.length);
+                  for (let j = 0; j < binaryString.length; j++) {
+                    bytes[j] = binaryString.charCodeAt(j);
+                  }
+
+                  // 使用pako解压缩为 Uint8Array（避免字符串长度限制）
+                  const decompressedBytes = pako.inflate(bytes);
+
+                  // 使用 TextDecoder 进行流式解码（支持大数据）
+                  const decoder = new TextDecoder('utf-8');
+                  const decompressedStr = decoder.decode(decompressedBytes);
+
+                  // 解析 JSON
+                  const chunkRecords = JSON.parse(decompressedStr) as NativeMemoryRecord[];
+                  records = records.concat(chunkRecords);
+
+                  console.log(`  解压缩块 ${i + 1}/${compressedRecords.length}: ${compressedChunk.length} -> ${decompressedBytes.length} 字节, ${chunkRecords.length} 条记录`);
+                } catch (chunkError) {
+                  console.error(`解压缩块 ${i + 1}/${compressedRecords.length} 失败:`, chunkError);
+                  // 继续处理下一个块
+                }
+              }
+
+              console.log(`分块解压缩完成 ${stepKey}: 总共 ${records.length} 条记录`);
+            } else if (typeof compressedRecords === 'string') {
+              // 单块解压缩（原有逻辑）
+              // Base64解码
+              const binaryString = atob(compressedRecords);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+
+              // 使用pako解压缩为 Uint8Array（避免字符串长度限制）
+              const decompressedBytes = pako.inflate(bytes);
+
+              // 使用 TextDecoder 进行流式解码（支持大数据）
+              const decoder = new TextDecoder('utf-8');
+              const decompressedStr = decoder.decode(decompressedBytes);
+
+              // 解析 JSON
+              records = JSON.parse(decompressedStr) as NativeMemoryRecord[];
+
+              console.log(`解压缩内存数据 ${stepKey}: ${compressedRecords.length} -> ${decompressedBytes.length} 字节`);
             }
 
-            // 使用pako解压缩
-            const decompressedStr = pako.inflate(bytes, { to: 'string' });
-            const records = JSON.parse(decompressedStr) as NativeMemoryRecord[];
-
-            // 恢复原始格式
-            decompressed[stepKey] = {
-              stats: compressedStepData.stats || {
-                peakMemorySize: 0,
-                peakMemoryDuration: 0,
-                averageMemorySize: 0,
-              },
-              records: records,
+            // 恢复原始格式，转换 stats 字段名（后端使用下划线，前端使用驼峰）
+            const rawStats = (compressedStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
+            const stats: NativeMemoryStepStats = {
+              peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
+              peakMemoryDuration: rawStats.peak_memory_duration || rawStats.peakMemoryDuration || 0,
+              averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
             };
 
-            console.log(`解压缩内存数据 ${stepKey}: ${compressedRecords.length} -> ${decompressedStr.length} 字节`);
+            decompressed[stepKey] = {
+              stats: stats,
+              records: records,
+            };
           } catch (error) {
             console.error(`解压缩内存数据失败 ${stepKey}:`, error);
             // 解压缩失败时返回空数据
+            const rawStats = (compressedStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
+            const stats: NativeMemoryStepStats = {
+              peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
+              peakMemoryDuration: rawStats.peak_memory_duration || rawStats.peakMemoryDuration || 0,
+              averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
+            };
+
             decompressed[stepKey] = {
-              stats: compressedStepData.stats || {
-                peakMemorySize: 0,
-                peakMemoryDuration: 0,
-                averageMemorySize: 0,
-              },
+              stats: stats,
               records: [],
             };
           }
         } else {
-          // 未压缩的数据保持不变
-          decompressed[stepKey] = stepData as NativeMemoryStepData;
+          // 未压缩的数据，需要转换 stats 字段名
+          const rawStepData = stepData as { stats?: BackendNativeMemoryStepStats & NativeMemoryStepStats; records?: NativeMemoryRecord[] };
+          const rawStats = (rawStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
+          const stats: NativeMemoryStepStats = {
+            peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
+            peakMemoryDuration: rawStats.peak_memory_duration || rawStats.peakMemoryDuration || 0,
+            averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
+          };
+
+          decompressed[stepKey] = {
+            stats: stats,
+            records: rawStepData.records || [],
+          };
         }
       }
 
