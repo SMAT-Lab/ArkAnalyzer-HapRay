@@ -17,9 +17,11 @@ import json
 import logging
 import os
 import time
+import traceback
 from typing import Any, Optional
 
-from .memory_aggregator import MemoryAggregator
+import pandas as pd
+
 from .memory_classifier import MemoryClassifier
 from .memory_data_loader import MemoryDataLoader
 from .memory_record_generator import MemoryRecordGenerator
@@ -32,8 +34,7 @@ class MemoryAnalyzerCore:
     1. 数据加载 - MemoryDataLoader
     2. 分类器 - MemoryClassifier
     3. 记录生成 - MemoryRecordGenerator
-    4. 聚合器 - MemoryAggregator
-    5. 核心协调 - 本类
+    4. 核心协调 - 本类
     """
 
     def __init__(self):
@@ -41,7 +42,6 @@ class MemoryAnalyzerCore:
         self.classifier = MemoryClassifier()
         self.record_generator = MemoryRecordGenerator(self.classifier)
         self.data_loader = MemoryDataLoader()
-        self.aggregator = MemoryAggregator()
 
     def analyze_memory(
         self,
@@ -90,16 +90,13 @@ class MemoryAnalyzerCore:
                 # 计算统计信息
                 stats = self.record_generator.calculate_stats(data['events'])
 
-                # 聚合数据（多维度）
-                logging.info('Aggregating memory data for step%d...', step_idx)
-                aggregated = self.aggregator.aggregate_all(records)
-                logging.info('Aggregation completed for step%d', step_idx)
-
                 step_memory_data[f'step{step_idx}'] = {
                     'stats': stats,
                     'records': records,
-                    'aggregated': aggregated,  # 添加聚合数据
                 }
+
+                # 导出 records 到 Excel（放在 memory.db 同目录）
+                self._export_records_to_excel(db_path, records, step_idx)
 
                 step_time = time.time() - step_start
                 logging.info(
@@ -158,14 +155,9 @@ class MemoryAnalyzerCore:
                     # 分块写入数据
                     stats = memory_data['stats']
                     records = memory_data['records']
-                    aggregated = memory_data.get('aggregated', {})
 
                     f.write('{\n')
                     f.write(f'    "stats": {json.dumps(stats)},\n')
-
-                    # 写入聚合数据（前端主要使用这个）
-                    f.write(f'    "aggregated": {json.dumps(aggregated)},\n')
-
                     f.write('    "records": [\n')
 
                     # 分批写入记录，避免一次性序列化所有记录
@@ -189,3 +181,59 @@ class MemoryAnalyzerCore:
         except Exception as e:
             logging.error('Failed to save Native Memory JSON: %s', str(e))
             raise
+
+    def _export_records_to_excel(self, db_path: str, records: list[dict[str, Any]], step_idx: int):
+        """导出 records 到 Excel 文件（优化版本）
+
+        Args:
+            db_path: memory.db 文件路径
+            records: 记录列表
+            step_idx: 步骤索引
+        """
+        try:
+            start_time = time.time()
+
+            # 获取 memory.db 所在目录
+            db_dir = os.path.dirname(db_path)
+            excel_path = os.path.join(db_dir, f'memory_records_step{step_idx}.xlsx')
+
+            logging.info('开始导出 %d 条记录到 Excel...', len(records))
+
+            # 优化1: 使用 xlsxwriter 引擎（比 openpyxl 快 3-5 倍）
+            # 优化2: 禁用常量内存优化以提升速度
+            # 优化3: 使用字典列表直接构造 DataFrame（避免额外的数据复制）
+            df = pd.DataFrame(records)
+
+            df_time = time.time()
+            logging.info('  DataFrame 构造完成，耗时 %.2f 秒', df_time - start_time)
+
+            # 使用 xlsxwriter 引擎导出（速度更快）
+            with pd.ExcelWriter(
+                excel_path, engine='xlsxwriter', engine_kwargs={'options': {'strings_to_numbers': False}}
+            ) as writer:
+                df.to_excel(writer, sheet_name=f'Step{step_idx}', index=False)
+
+                # 优化4: 禁用自动列宽计算（节省大量时间）
+                worksheet = writer.sheets[f'Step{step_idx}']
+                # 设置固定列宽（避免自动计算）
+                worksheet.set_column(0, len(df.columns) - 1, 15)
+
+            write_time = time.time()
+            total_time = write_time - start_time
+
+            # 获取文件大小
+            file_size_mb = os.path.getsize(excel_path) / (1024 * 1024)
+
+            logging.info('Excel 导出完成: %s', excel_path)
+            logging.info('  记录数: %d, 文件大小: %.2f MB', len(records), file_size_mb)
+            logging.info(
+                '  总耗时: %.2f 秒 (DataFrame: %.2f 秒, 写入: %.2f 秒)',
+                total_time,
+                df_time - start_time,
+                write_time - df_time,
+            )
+            logging.info('  导出速度: %.0f 条/秒', len(records) / total_time if total_time > 0 else 0)
+
+        except Exception as e:
+            logging.error('Failed to export records to Excel: %s', str(e))
+            logging.error('Traceback: %s', traceback.format_exc())

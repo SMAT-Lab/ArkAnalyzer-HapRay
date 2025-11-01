@@ -527,6 +527,48 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                 componentCategory: -1,
                 categoryName: 'UNKNOWN',
                 subCategoryName: 'unknown',
+                // 进程维度统计（旧数据格式，使用默认值）
+                processPeakMem: process.max_mem || 0,
+                processAvgMem: 0,
+                processTotalAllocMem: 0,
+                processTotalFreeMem: 0,
+                processEventNum: 0,
+                // 线程维度统计（旧数据格式，使用默认值）
+                threadPeakMem: 0,
+                threadAvgMem: 0,
+                threadTotalAllocMem: 0,
+                threadTotalFreeMem: 0,
+                threadEventNum: 0,
+                // 文件维度统计（旧数据格式，使用默认值）
+                filePeakMem: 0,
+                fileAvgMem: 0,
+                fileTotalAllocMem: 0,
+                fileTotalFreeMem: 0,
+                fileEventNum: 0,
+                // 符号维度统计（旧数据格式，使用默认值）
+                symbolPeakMem: 0,
+                symbolAvgMem: 0,
+                symbolTotalAllocMem: 0,
+                symbolTotalFreeMem: 0,
+                symbolEventNum: 0,
+                // 大分类维度统计（旧数据格式，使用默认值）
+                categoryPeakMem: 0,
+                categoryAvgMem: 0,
+                categoryTotalAllocMem: 0,
+                categoryTotalFreeMem: 0,
+                categoryEventNum: 0,
+                // 小分类维度统计（旧数据格式，使用默认值）
+                componentPeakMem: 0,
+                componentAvgMem: 0,
+                componentTotalAllocMem: 0,
+                componentTotalFreeMem: 0,
+                componentEventNum: 0,
+                // 事件类型维度统计（旧数据格式，使用默认值）
+                eventTypePeakMem: 0,
+                eventTypeAvgMem: 0,
+                eventTypeTotalAllocMem: 0,
+                eventTypeTotalFreeMem: 0,
+                eventTypeEventNum: 0,
             };
             records.push(processRecord);
 
@@ -553,6 +595,48 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                         componentCategory: -1,
                         categoryName: 'UNKNOWN',
                         subCategoryName: 'unknown',
+                        // 进程维度统计（旧数据格式，使用默认值）
+                        processPeakMem: process.max_mem || 0,
+                        processAvgMem: 0,
+                        processTotalAllocMem: 0,
+                        processTotalFreeMem: 0,
+                        processEventNum: 0,
+                        // 线程维度统计（旧数据格式，使用默认值）
+                        threadPeakMem: thread.max_mem || 0,
+                        threadAvgMem: 0,
+                        threadTotalAllocMem: 0,
+                        threadTotalFreeMem: 0,
+                        threadEventNum: 0,
+                        // 文件维度统计（旧数据格式，使用默认值）
+                        filePeakMem: 0,
+                        fileAvgMem: 0,
+                        fileTotalAllocMem: 0,
+                        fileTotalFreeMem: 0,
+                        fileEventNum: 0,
+                        // 符号维度统计（旧数据格式，使用默认值）
+                        symbolPeakMem: 0,
+                        symbolAvgMem: 0,
+                        symbolTotalAllocMem: 0,
+                        symbolTotalFreeMem: 0,
+                        symbolEventNum: 0,
+                        // 大分类维度统计（旧数据格式，使用默认值）
+                        categoryPeakMem: 0,
+                        categoryAvgMem: 0,
+                        categoryTotalAllocMem: 0,
+                        categoryTotalFreeMem: 0,
+                        categoryEventNum: 0,
+                        // 小分类维度统计（旧数据格式，使用默认值）
+                        componentPeakMem: 0,
+                        componentAvgMem: 0,
+                        componentTotalAllocMem: 0,
+                        componentTotalFreeMem: 0,
+                        componentEventNum: 0,
+                        // 事件类型维度统计（旧数据格式，使用默认值）
+                        eventTypePeakMem: 0,
+                        eventTypeAvgMem: 0,
+                        eventTypeTotalAllocMem: 0,
+                        eventTypeTotalFreeMem: 0,
+                        eventTypeEventNum: 0,
                     };
                     records.push(threadRecord);
 
@@ -579,6 +663,48 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                                 componentCategory: -1,
                                 categoryName: 'UNKNOWN',
                                 subCategoryName: 'unknown',
+                                // 进程维度统计（旧数据格式，使用默认值）
+                                processPeakMem: process.max_mem || 0,
+                                processAvgMem: 0,
+                                processTotalAllocMem: 0,
+                                processTotalFreeMem: 0,
+                                processEventNum: 0,
+                                // 线程维度统计（旧数据格式，使用默认值）
+                                threadPeakMem: thread.max_mem || 0,
+                                threadAvgMem: 0,
+                                threadTotalAllocMem: 0,
+                                threadTotalFreeMem: 0,
+                                threadEventNum: 0,
+                                // 文件维度统计（旧数据格式，使用默认值）
+                                filePeakMem: file.max_mem || 0,
+                                fileAvgMem: 0,
+                                fileTotalAllocMem: 0,
+                                fileTotalFreeMem: 0,
+                                fileEventNum: 0,
+                                // 符号维度统计（旧数据格式，使用默认值）
+                                symbolPeakMem: 0,
+                                symbolAvgMem: 0,
+                                symbolTotalAllocMem: 0,
+                                symbolTotalFreeMem: 0,
+                                symbolEventNum: 0,
+                                // 大分类维度统计（旧数据格式，使用默认值）
+                                categoryPeakMem: 0,
+                                categoryAvgMem: 0,
+                                categoryTotalAllocMem: 0,
+                                categoryTotalFreeMem: 0,
+                                categoryEventNum: 0,
+                                // 小分类维度统计（旧数据格式，使用默认值）
+                                componentPeakMem: 0,
+                                componentAvgMem: 0,
+                                componentTotalAllocMem: 0,
+                                componentTotalFreeMem: 0,
+                                componentEventNum: 0,
+                                // 事件类型维度统计（旧数据格式，使用默认值）
+                                eventTypePeakMem: 0,
+                                eventTypeAvgMem: 0,
+                                eventTypeTotalAllocMem: 0,
+                                eventTypeTotalFreeMem: 0,
+                                eventTypeEventNum: 0,
                             };
                             records.push(fileRecord);
 
@@ -605,6 +731,48 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                                         componentCategory: -1,
                                         categoryName: 'UNKNOWN',
                                         subCategoryName: 'unknown',
+                                        // 进程维度统计（旧数据格式，使用默认值）
+                                        processPeakMem: process.max_mem || 0,
+                                        processAvgMem: 0,
+                                        processTotalAllocMem: 0,
+                                        processTotalFreeMem: 0,
+                                        processEventNum: 0,
+                                        // 线程维度统计（旧数据格式，使用默认值）
+                                        threadPeakMem: thread.max_mem || 0,
+                                        threadAvgMem: 0,
+                                        threadTotalAllocMem: 0,
+                                        threadTotalFreeMem: 0,
+                                        threadEventNum: 0,
+                                        // 文件维度统计（旧数据格式，使用默认值）
+                                        filePeakMem: file.max_mem || 0,
+                                        fileAvgMem: 0,
+                                        fileTotalAllocMem: 0,
+                                        fileTotalFreeMem: 0,
+                                        fileEventNum: 0,
+                                        // 符号维度统计（旧数据格式，使用默认值）
+                                        symbolPeakMem: symbol.max_mem || 0,
+                                        symbolAvgMem: 0,
+                                        symbolTotalAllocMem: 0,
+                                        symbolTotalFreeMem: 0,
+                                        symbolEventNum: 0,
+                                        // 大分类维度统计（旧数据格式，使用默认值）
+                                        categoryPeakMem: 0,
+                                        categoryAvgMem: 0,
+                                        categoryTotalAllocMem: 0,
+                                        categoryTotalFreeMem: 0,
+                                        categoryEventNum: 0,
+                                        // 小分类维度统计（旧数据格式，使用默认值）
+                                        componentPeakMem: 0,
+                                        componentAvgMem: 0,
+                                        componentTotalAllocMem: 0,
+                                        componentTotalFreeMem: 0,
+                                        componentEventNum: 0,
+                                        // 事件类型维度统计（旧数据格式，使用默认值）
+                                        eventTypePeakMem: 0,
+                                        eventTypeAvgMem: 0,
+                                        eventTypeTotalAllocMem: 0,
+                                        eventTypeTotalFreeMem: 0,
+                                        eventTypeEventNum: 0,
                                     };
                                     records.push(symbolRecord);
                                 });
