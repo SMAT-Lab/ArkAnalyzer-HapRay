@@ -75,7 +75,7 @@ class MemoryDataLoader:
                 conn.close()
 
     @staticmethod
-    def load_all_data(db_path: str) -> dict[str, Any]:
+    def load_all_data(db_path: str, app_pids: list) -> dict[str, Any]:
         """加载所有内存分析所需的数据
 
         Args:
@@ -90,12 +90,13 @@ class MemoryDataLoader:
             conn.row_factory = sqlite3.Row
 
             data = {
-                'events': MemoryDataLoader._query_native_hook_events(conn),
+                'events': MemoryDataLoader._query_native_hook_events(conn, app_pids),
                 'processes': MemoryDataLoader._query_processes(conn),
                 'threads': MemoryDataLoader._query_threads(conn),
                 'sub_type_names': MemoryDataLoader._query_sub_type_names(conn),
                 'data_dict': MemoryDataLoader._query_data_dict(conn),
                 'trace_start_ts': MemoryDataLoader._query_trace_start_ts(conn),
+                'callchains': MemoryDataLoader.query_all_callchain(conn),
             }
 
             logging.info(
@@ -115,17 +116,27 @@ class MemoryDataLoader:
                 conn.close()
 
     @staticmethod
-    def _query_native_hook_events(conn: sqlite3.Connection) -> list[dict]:
-        """查询 native_hook 表中的所有事件"""
-        cursor = conn.cursor()
-        cursor.execute("""
+    def _query_native_hook_events(conn: sqlite3.Connection, app_pids: list) -> list[dict]:
+        """查询 native_hook 表中的事件，仅包含 pid 属于 app_pids 的进程
+
+        当 app_pids 为空时返回空列表。
+        """
+        if not app_pids:
+            return []
+
+        placeholders = ','.join(['?'] * len(app_pids))
+        sql = f"""
             SELECT
-                id, callchain_id, ipid, itid, event_type, sub_type_id,
-                start_ts, end_ts, dur, addr, heap_size, all_heap_size,
-                current_size_dur, last_lib_id, last_symbol_id
-            FROM native_hook
-            ORDER BY start_ts
-        """)
+                nh.id, nh.callchain_id, nh.ipid, nh.itid, nh.event_type, nh.sub_type_id,
+                nh.start_ts, nh.end_ts, nh.dur, nh.addr, nh.heap_size,
+                nh.last_lib_id, nh.last_symbol_id
+            FROM native_hook AS nh
+            JOIN process AS p ON nh.ipid = p.ipid
+            WHERE p.pid IN ({placeholders})
+            ORDER BY nh.start_ts
+        """
+        cursor = conn.cursor()
+        cursor.execute(sql, app_pids)
 
         events = []
         for row in cursor.fetchall():
@@ -142,10 +153,8 @@ class MemoryDataLoader:
                     'dur': row[8],
                     'addr': row[9],
                     'heap_size': row[10],
-                    'all_heap_size': row[11],
-                    'current_size_dur': row[12],
-                    'last_lib_id': row[13],
-                    'last_symbol_id': row[14],
+                    'last_lib_id': row[11],
+                    'last_symbol_id': row[12],
                 }
             )
 
@@ -278,3 +287,42 @@ class MemoryDataLoader:
             )
 
         return frames
+
+    @staticmethod
+    def query_all_callchain(conn: sqlite3.Connection) -> list[dict]:
+        """查询指定调用链的所有帧
+
+        Args:
+            conn: 数据库连接
+
+        Returns:
+            调用链帧列表，按 depth 排序
+        """
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+                SELECT id, callchain_id, depth, ip, symbol_id, file_id,
+                    offset, symbol_offset, vaddr
+                FROM native_hook_frame
+                WHERE callchain_id in (select callchain_id from native_hook)
+                ORDER BY callchain_id, depth
+            """,
+        )
+
+        callchain = []
+        for row in cursor.fetchall():
+            callchain.append(
+                {
+                    'id': row[0],
+                    'callchain_id': row[1],
+                    'depth': row[2],
+                    'ip': row[3],
+                    'symbol_id': row[4],
+                    'file_id': row[5],
+                    'offset': row[6],
+                    'symbol_offset': row[7],
+                    'vaddr': row[8],
+                }
+            )
+
+        return callchain

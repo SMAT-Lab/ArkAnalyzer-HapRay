@@ -23,15 +23,20 @@ class MemoryAggregator:
     def __init__(self):
         pass
 
-    def aggregate_all(self, records: list[dict[str, Any]]) -> dict[str, Any]:
+    def aggregate_all(self, records: list[dict[str, Any]], time: int | None = None) -> dict[str, Any]:
         """对记录进行所有维度的聚合
 
         Args:
             records: 内存记录列表
+            time: 仅聚合 relativeTs <= time 的记录（毫秒/微秒，取决于记录单位）
 
         Returns:
             包含所有聚合结果的字典
         """
+        # 可选的时间过滤
+        if time is not None:
+            records = [r for r in records if r.get('relativeTs', 0) <= time]
+
         if not records:
             return {
                 'by_process': [],
@@ -54,6 +59,149 @@ class MemoryAggregator:
             'by_symbol_category': self._aggregate_by_symbol_category(records),
             'by_event_type': self._aggregate_by_event_type(records),
         }
+
+    def get_unreleased_by_callchain(self, records: list[dict[str, Any]], time: int) -> dict[int, dict[str, Any]]:
+        """在给定时间点返回未释放地址信息，并按 callchain_id 聚合
+
+        Args:
+            records: 平铺后的内存记录（由 MemoryRecordGenerator 生成）
+            time: 仅统计 relativeTs <= time 的记录
+
+        Returns:
+            { callchainId: { 'totalBytes': int, 'allocs': [ ...未释放分配详情... ] } }
+        """
+        if not records:
+            return {}
+
+        # 仅处理截止到 time 的事件，并按时间升序
+        filtered = [r for r in records if r.get('relativeTs', 0) <= time]
+        if not filtered:
+            return {}
+
+        filtered.sort(key=lambda r: r.get('relativeTs', 0))
+
+        # 地址 -> 活跃分配栈（LIFO），用于处理可能的重复地址/部分释放
+        addr_to_active_allocs: dict[int, list[dict[str, Any]]] = defaultdict(list)
+
+        def is_alloc(evt_type: Any) -> bool:
+            return evt_type in ('AllocEvent', 'MmapEvent', 0)
+
+        def is_free(evt_type: Any) -> bool:
+            return evt_type in ('FreeEvent', 'MunmapEvent', 1)
+
+        for rec in filtered:
+            addr = rec.get('addr')
+            if addr is None:
+                continue
+
+            evt_type = rec.get('eventType')
+            size = rec.get('heapSize') or 0
+
+            # 忽略异常数据
+            if not size:
+                continue
+
+            if is_alloc(evt_type):
+                # 记录一次分配作为活跃块，后续 free 按 LIFO 消耗
+                active = {
+                    'addr': addr,
+                    'size': size,  # 剩余未释放大小（初始化为分配大小）
+                    'pid': rec.get('pid'),
+                    'process': rec.get('process'),
+                    'tid': rec.get('tid'),
+                    'thread': rec.get('thread'),
+                    'fileId': rec.get('fileId'),
+                    'file': rec.get('file'),
+                    'symbolId': rec.get('symbolId'),
+                    'symbol': rec.get('symbol'),
+                    'callchainId': rec.get('callchainId'),
+                    'relativeTs': rec.get('relativeTs'),
+                    'componentCategory': rec.get('componentCategory'),
+                    'categoryName': rec.get('categoryName'),
+                    'subCategoryName': rec.get('subCategoryName'),
+                }
+                addr_to_active_allocs[addr].append(active)
+            elif is_free(evt_type):
+                # 释放：按 LIFO 从该地址的活跃分配中扣减
+                remaining = size
+                stack = addr_to_active_allocs.get(addr)
+                if not stack:
+                    continue
+
+                while remaining > 0 and stack:
+                    top = stack[-1]
+                    if top['size'] > remaining:
+                        top['size'] -= remaining
+                        remaining = 0
+                    else:
+                        remaining -= top['size']
+                        stack.pop()
+                # 如果该地址已完全释放，清理空列表
+                if not stack:
+                    addr_to_active_allocs.pop(addr, None)
+
+        # 聚合：按分配时的 callchainId 汇总
+        result: dict[int, dict[str, Any]] = {}
+
+        for allocs in addr_to_active_allocs.values():
+            for alloc in allocs:
+                if alloc['size'] <= 0:
+                    continue
+                callchain_id = alloc.get('callchainId')
+                if callchain_id is None:
+                    continue
+                group = result.setdefault(callchain_id, {'totalBytes': 0, 'allocs': []})
+                group['totalBytes'] += alloc['size']
+                group['allocs'].append(alloc)
+
+        # 在同一 callchainId 下按 (pid, tid) 聚合：
+        # - 去除 addr 字段
+        # - 新增 count 统计次数
+        # - size 汇总
+        # - relativeTs 取最小（最早出现）
+        for callchain_id, group in result.items():
+            merged: dict[tuple[int, int], dict[str, Any]] = {}
+            for alloc in group['allocs']:
+                pid = alloc.get('pid')
+                tid = alloc.get('tid')
+                key = (pid, tid)
+                existing = merged.get(key)
+                if existing is None:
+                    merged[key] = {
+                        # 基础标识
+                        'pid': pid,
+                        'process': alloc.get('process'),
+                        'tid': tid,
+                        'thread': alloc.get('thread'),
+                        'fileId': alloc.get('fileId'),
+                        'file': alloc.get('file'),
+                        'symbolId': alloc.get('symbolId'),
+                        'symbol': alloc.get('symbol'),
+                        'callchainId': callchain_id,
+                        'relativeTs': alloc.get('relativeTs'),
+                        'componentCategory': alloc.get('componentCategory'),
+                        'categoryName': alloc.get('categoryName'),
+                        'subCategoryName': alloc.get('subCategoryName'),
+                        # 聚合指标
+                        'size': alloc.get('size', 0),
+                        'count': 1,
+                    }
+                else:
+                    existing['size'] = (existing.get('size') or 0) + (alloc.get('size') or 0)
+                    existing['count'] = (existing.get('count') or 0) + 1
+                    # relativeTs 取最早
+                    rts = alloc.get('relativeTs')
+                    if rts is not None and (existing.get('relativeTs') is None or rts < existing.get('relativeTs')):
+                        existing['relativeTs'] = rts
+
+            # 回写合并后的列表，并按 size 降序
+            merged_list = list(merged.values())
+            merged_list.sort(key=lambda a: a.get('size', 0), reverse=True)
+            group['allocs'] = merged_list
+            # totalBytes 按合并后 size 汇总，避免与原列表不一致
+            group['totalBytes'] = sum(a.get('size', 0) for a in merged_list)
+
+        return result
 
     def _aggregate_by_process(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """按进程聚合"""

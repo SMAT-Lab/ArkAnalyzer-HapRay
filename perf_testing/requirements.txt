@@ -9,7 +9,7 @@ tensorflow==2.16.1
 termcolor>=3.1.0
 tqdm>=4.67.1
 pandas>=2.0.3
-openpyxl>=3.1.5
+xlsxwriter
 arpy~=2.3.0
 tox
 jsonschema
