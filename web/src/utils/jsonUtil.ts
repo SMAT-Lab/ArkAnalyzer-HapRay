@@ -1,4 +1,4 @@
-import { ComponentCategory, type PerfData } from "@/stores/jsonDataStore";
+import { ComponentCategory, EventType, type PerfData, type NativeMemoryData, type NativeMemoryRecord, type NativeMemoryStepData } from "@/stores/jsonDataStore";
 import pako from 'pako';
 
 // 定义数据类型接口
@@ -466,4 +466,356 @@ function isBase64(str: string, dataType: string) {
         return false;
     }
     return true;
+}
+
+/**
+ * Transform hierarchical native memory JSON from backend into flattened format for frontend
+ * Backend format: { process_dimension: [...], category_dimension: [...], peak_memory_size, ... }
+ * Frontend format: { step1: { stats: {...}, records: [...] }, step2: {...} }
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function transformNativeMemoryData(rawData: any): NativeMemoryData | null {
+    if (!rawData || typeof rawData !== 'object') {
+        return null;
+    }
+
+    const result: NativeMemoryData = {};
+
+    // Extract statistics from top level
+    const stats = {
+        peakMemorySize: rawData.peak_memory_size || 0,
+        peakMemoryDuration: rawData.peak_memory_duration || 0,
+        averageMemorySize: rawData.average_memory_size || 0,
+    };
+
+    // Flatten the hierarchical structure into records
+    const records: NativeMemoryRecord[] = [];
+    const categoryMap = new Map<number, string>(); // Map category_id to category name
+
+    // First pass: build category map from category_dimension
+    if (Array.isArray(rawData.category_dimension)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rawData.category_dimension.forEach((cat: any) => {
+            categoryMap.set(cat.category_id, cat.category);
+        });
+    }
+
+    // Second pass: flatten process_dimension into records
+    // 新的数据结构：每条记录代表一个维度的内存统计信息
+    // 根据新的 NativeMemoryRecord 结构，每条记录包含所有维度的信息，
+    // 如果某个维度的字段取不到，就设为 null
+    if (Array.isArray(rawData.process_dimension)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rawData.process_dimension.forEach((process: any) => {
+            // 进程维度记录（只有 pid/process，其他维度为 null）
+            const processRecord: NativeMemoryRecord = {
+                stepIdx: 1,
+                pid: process.pid,
+                process: process.process_name,
+                tid: null,
+                thread: null,
+                fileId: null,
+                file: null,
+                symbolId: null,
+                symbol: null,
+                eventType: EventType.AllocEvent,
+                subEventType: 'unknown',
+                heapSize: process.max_mem || 0,
+                allHeapSize: process.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
+                relativeTs: process.max_mem_time || 0,
+                componentName: 'unknown',
+                componentCategory: -1,
+                categoryName: 'UNKNOWN',
+                subCategoryName: 'unknown',
+                // 进程维度统计（旧数据格式，使用默认值）
+                processPeakMem: process.max_mem || 0,
+                processAvgMem: 0,
+                processTotalAllocMem: 0,
+                processTotalFreeMem: 0,
+                processEventNum: 0,
+                // 线程维度统计（旧数据格式，使用默认值）
+                threadPeakMem: 0,
+                threadAvgMem: 0,
+                threadTotalAllocMem: 0,
+                threadTotalFreeMem: 0,
+                threadEventNum: 0,
+                // 文件维度统计（旧数据格式，使用默认值）
+                filePeakMem: 0,
+                fileAvgMem: 0,
+                fileTotalAllocMem: 0,
+                fileTotalFreeMem: 0,
+                fileEventNum: 0,
+                // 符号维度统计（旧数据格式，使用默认值）
+                symbolPeakMem: 0,
+                symbolAvgMem: 0,
+                symbolTotalAllocMem: 0,
+                symbolTotalFreeMem: 0,
+                symbolEventNum: 0,
+                // 大分类维度统计（旧数据格式，使用默认值）
+                categoryPeakMem: 0,
+                categoryAvgMem: 0,
+                categoryTotalAllocMem: 0,
+                categoryTotalFreeMem: 0,
+                categoryEventNum: 0,
+                // 小分类维度统计（旧数据格式，使用默认值）
+                componentPeakMem: 0,
+                componentAvgMem: 0,
+                componentTotalAllocMem: 0,
+                componentTotalFreeMem: 0,
+                componentEventNum: 0,
+                // 事件类型维度统计（旧数据格式，使用默认值）
+                eventTypePeakMem: 0,
+                eventTypeAvgMem: 0,
+                eventTypeTotalAllocMem: 0,
+                eventTypeTotalFreeMem: 0,
+                eventTypeEventNum: 0,
+            };
+            records.push(processRecord);
+
+            if (Array.isArray(process.threads)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                process.threads.forEach((thread: any) => {
+                    // 线程维度记录（pid/process 和 tid/thread，其他维度为 null）
+                    const threadRecord: NativeMemoryRecord = {
+                        stepIdx: 1,
+                        pid: process.pid,
+                        process: process.process_name,
+                        tid: thread.tid,
+                        thread: thread.thread_name,
+                        fileId: null,
+                        file: null,
+                        symbolId: null,
+                        symbol: null,
+                        eventType: EventType.AllocEvent,
+                        subEventType: 'unknown',
+                        heapSize: thread.max_mem || 0,
+                        allHeapSize: thread.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
+                        relativeTs: thread.max_mem_time || 0,
+                        componentName: 'unknown',
+                        componentCategory: -1,
+                        categoryName: 'UNKNOWN',
+                        subCategoryName: 'unknown',
+                        // 进程维度统计（旧数据格式，使用默认值）
+                        processPeakMem: process.max_mem || 0,
+                        processAvgMem: 0,
+                        processTotalAllocMem: 0,
+                        processTotalFreeMem: 0,
+                        processEventNum: 0,
+                        // 线程维度统计（旧数据格式，使用默认值）
+                        threadPeakMem: thread.max_mem || 0,
+                        threadAvgMem: 0,
+                        threadTotalAllocMem: 0,
+                        threadTotalFreeMem: 0,
+                        threadEventNum: 0,
+                        // 文件维度统计（旧数据格式，使用默认值）
+                        filePeakMem: 0,
+                        fileAvgMem: 0,
+                        fileTotalAllocMem: 0,
+                        fileTotalFreeMem: 0,
+                        fileEventNum: 0,
+                        // 符号维度统计（旧数据格式，使用默认值）
+                        symbolPeakMem: 0,
+                        symbolAvgMem: 0,
+                        symbolTotalAllocMem: 0,
+                        symbolTotalFreeMem: 0,
+                        symbolEventNum: 0,
+                        // 大分类维度统计（旧数据格式，使用默认值）
+                        categoryPeakMem: 0,
+                        categoryAvgMem: 0,
+                        categoryTotalAllocMem: 0,
+                        categoryTotalFreeMem: 0,
+                        categoryEventNum: 0,
+                        // 小分类维度统计（旧数据格式，使用默认值）
+                        componentPeakMem: 0,
+                        componentAvgMem: 0,
+                        componentTotalAllocMem: 0,
+                        componentTotalFreeMem: 0,
+                        componentEventNum: 0,
+                        // 事件类型维度统计（旧数据格式，使用默认值）
+                        eventTypePeakMem: 0,
+                        eventTypeAvgMem: 0,
+                        eventTypeTotalAllocMem: 0,
+                        eventTypeTotalFreeMem: 0,
+                        eventTypeEventNum: 0,
+                    };
+                    records.push(threadRecord);
+
+                    if (Array.isArray(thread.files)) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        thread.files.forEach((file: any) => {
+                            // 文件维度记录（pid/process、tid/thread、fileId/file，symbolId 为 null）
+                            const fileRecord: NativeMemoryRecord = {
+                                stepIdx: 1,
+                                pid: process.pid,
+                                process: process.process_name,
+                                tid: thread.tid,
+                                thread: thread.thread_name,
+                                fileId: file.file_id || 0,
+                                file: file.file_path,
+                                symbolId: null,
+                                symbol: null,
+                                eventType: EventType.AllocEvent,
+                                subEventType: 'unknown',
+                                heapSize: file.max_mem || 0,
+                                allHeapSize: file.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
+                                relativeTs: file.max_mem_time || 0,
+                                componentName: 'unknown',
+                                componentCategory: -1,
+                                categoryName: 'UNKNOWN',
+                                subCategoryName: 'unknown',
+                                // 进程维度统计（旧数据格式，使用默认值）
+                                processPeakMem: process.max_mem || 0,
+                                processAvgMem: 0,
+                                processTotalAllocMem: 0,
+                                processTotalFreeMem: 0,
+                                processEventNum: 0,
+                                // 线程维度统计（旧数据格式，使用默认值）
+                                threadPeakMem: thread.max_mem || 0,
+                                threadAvgMem: 0,
+                                threadTotalAllocMem: 0,
+                                threadTotalFreeMem: 0,
+                                threadEventNum: 0,
+                                // 文件维度统计（旧数据格式，使用默认值）
+                                filePeakMem: file.max_mem || 0,
+                                fileAvgMem: 0,
+                                fileTotalAllocMem: 0,
+                                fileTotalFreeMem: 0,
+                                fileEventNum: 0,
+                                // 符号维度统计（旧数据格式，使用默认值）
+                                symbolPeakMem: 0,
+                                symbolAvgMem: 0,
+                                symbolTotalAllocMem: 0,
+                                symbolTotalFreeMem: 0,
+                                symbolEventNum: 0,
+                                // 大分类维度统计（旧数据格式，使用默认值）
+                                categoryPeakMem: 0,
+                                categoryAvgMem: 0,
+                                categoryTotalAllocMem: 0,
+                                categoryTotalFreeMem: 0,
+                                categoryEventNum: 0,
+                                // 小分类维度统计（旧数据格式，使用默认值）
+                                componentPeakMem: 0,
+                                componentAvgMem: 0,
+                                componentTotalAllocMem: 0,
+                                componentTotalFreeMem: 0,
+                                componentEventNum: 0,
+                                // 事件类型维度统计（旧数据格式，使用默认值）
+                                eventTypePeakMem: 0,
+                                eventTypeAvgMem: 0,
+                                eventTypeTotalAllocMem: 0,
+                                eventTypeTotalFreeMem: 0,
+                                eventTypeEventNum: 0,
+                            };
+                            records.push(fileRecord);
+
+                            if (Array.isArray(file.symbols)) {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                file.symbols.forEach((symbol: any) => {
+                                    // 符号维度记录（所有维度都不为 null）
+                                    const symbolRecord: NativeMemoryRecord = {
+                                        stepIdx: 1,
+                                        pid: process.pid,
+                                        process: process.process_name,
+                                        tid: thread.tid,
+                                        thread: thread.thread_name,
+                                        fileId: file.file_id || 0,
+                                        file: file.file_path,
+                                        symbolId: symbol.symbol_id || 0,
+                                        symbol: symbol.symbol_name,
+                                        eventType: EventType.AllocEvent,
+                                        subEventType: 'unknown',
+                                        heapSize: symbol.max_mem || 0,
+                                        allHeapSize: symbol.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
+                                        relativeTs: symbol.max_mem_time || 0,
+                                        componentName: 'unknown',
+                                        componentCategory: -1,
+                                        categoryName: 'UNKNOWN',
+                                        subCategoryName: 'unknown',
+                                        // 进程维度统计（旧数据格式，使用默认值）
+                                        processPeakMem: process.max_mem || 0,
+                                        processAvgMem: 0,
+                                        processTotalAllocMem: 0,
+                                        processTotalFreeMem: 0,
+                                        processEventNum: 0,
+                                        // 线程维度统计（旧数据格式，使用默认值）
+                                        threadPeakMem: thread.max_mem || 0,
+                                        threadAvgMem: 0,
+                                        threadTotalAllocMem: 0,
+                                        threadTotalFreeMem: 0,
+                                        threadEventNum: 0,
+                                        // 文件维度统计（旧数据格式，使用默认值）
+                                        filePeakMem: file.max_mem || 0,
+                                        fileAvgMem: 0,
+                                        fileTotalAllocMem: 0,
+                                        fileTotalFreeMem: 0,
+                                        fileEventNum: 0,
+                                        // 符号维度统计（旧数据格式，使用默认值）
+                                        symbolPeakMem: symbol.max_mem || 0,
+                                        symbolAvgMem: 0,
+                                        symbolTotalAllocMem: 0,
+                                        symbolTotalFreeMem: 0,
+                                        symbolEventNum: 0,
+                                        // 大分类维度统计（旧数据格式，使用默认值）
+                                        categoryPeakMem: 0,
+                                        categoryAvgMem: 0,
+                                        categoryTotalAllocMem: 0,
+                                        categoryTotalFreeMem: 0,
+                                        categoryEventNum: 0,
+                                        // 小分类维度统计（旧数据格式，使用默认值）
+                                        componentPeakMem: 0,
+                                        componentAvgMem: 0,
+                                        componentTotalAllocMem: 0,
+                                        componentTotalFreeMem: 0,
+                                        componentEventNum: 0,
+                                        // 事件类型维度统计（旧数据格式，使用默认值）
+                                        eventTypePeakMem: 0,
+                                        eventTypeAvgMem: 0,
+                                        eventTypeTotalAllocMem: 0,
+                                        eventTypeTotalFreeMem: 0,
+                                        eventTypeEventNum: 0,
+                                    };
+                                    records.push(symbolRecord);
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    // Third pass: enrich records with category and component information from category_dimension
+    if (Array.isArray(rawData.category_dimension)) {
+        const categoryComponentMap = new Map<string, { categoryId: number; categoryName: string }>();
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rawData.category_dimension.forEach((cat: any) => {
+            if (Array.isArray(cat.components)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                cat.components.forEach((comp: any) => {
+                    categoryComponentMap.set(comp.component_name, {
+                        categoryId: cat.category_id,
+                        categoryName: cat.category,
+                    });
+                });
+            }
+        });
+
+        // Update records with category information
+        records.forEach(record => {
+            const catInfo = categoryComponentMap.get(record.componentName);
+            if (catInfo) {
+                record.componentCategory = catInfo.categoryId;
+            }
+        });
+    }
+
+    // Create step data
+    const stepData: NativeMemoryStepData = {
+        stats,
+        records,
+    };
+
+    result['step1'] = stepData;
+    return result;
 }

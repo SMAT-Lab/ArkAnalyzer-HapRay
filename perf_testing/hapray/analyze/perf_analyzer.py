@@ -39,26 +39,40 @@ class PerfAnalyzer(BaseAnalyzer):
         flame_graph = self.generate_hiperf_report(perf_db_path)
         # Execute only in step1
         if step_dir == 'step1':
-            args = ['perf', '-i', self.scene_dir]
-            so_dir = Config.get('so_dir', None)
-            if so_dir:
-                args.extend(['-s', os.path.abspath(so_dir)])
+            # 支持三种分析模式：all（默认）、perf、memory
+            analysis_mode = Config.get('analysis_mode', 'all')
 
-            kind = self.convert_kind_to_json()
-            if len(kind) > 0:
-                args.extend(['-k', kind])
+            # 仅负载分析或联合分析时执行
+            if analysis_mode in ['all', 'perf']:
+                args = ['perf', '-i', self.scene_dir, '--analysis-mode', analysis_mode]
+                so_dir = Config.get('so_dir', None)
+                if so_dir:
+                    args.extend(['-s', os.path.abspath(so_dir)])
 
-            # Add time ranges if provided
-            if self.time_ranges:
-                time_range_strings = []
-                for tr in self.time_ranges:
-                    time_range_str = f'{tr["startTime"]}-{tr["endTime"]}'
-                    time_range_strings.append(time_range_str)
-                args.extend(['--time-ranges'] + time_range_strings)
-                logging.info('Adding time ranges to perf command: %s', time_range_strings)
+                kind = self.convert_kind_to_json()
+                if len(kind) > 0:
+                    args.extend(['-k', kind])
 
-            logging.debug('Running perf analysis with command: %s', ' '.join(args))
-            ExeUtils.execute_hapray_cmd(args)
+                # Add time ranges if provided
+                if self.time_ranges:
+                    time_range_strings = []
+                    for tr in self.time_ranges:
+                        time_range_str = f'{tr["startTime"]}-{tr["endTime"]}'
+                        time_range_strings.append(time_range_str)
+                    args.extend(['--time-ranges'] + time_range_strings)
+                    logging.info('Adding time ranges to perf command: %s', time_range_strings)
+
+                logging.debug('Running perf analysis with command: %s', ' '.join(args))
+                ExeUtils.execute_hapray_cmd(args)
+            elif analysis_mode == 'memory':
+                # 仅内存分析模式：使用独立的 memory 命令
+                args = ['memory', '-i', self.scene_dir]
+                logging.info('Running memory-only analysis with command: %s', ' '.join(args))
+                ExeUtils.execute_hapray_cmd(args)
+            else:
+                logging.warning('Unknown analysis mode: %s, defaulting to all', analysis_mode)
+                args = ['perf', '-i', self.scene_dir, '--analysis-mode', 'all']
+                ExeUtils.execute_hapray_cmd(args)
         return flame_graph
 
     @staticmethod

@@ -58,6 +58,7 @@
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
           <FaultTreeAnalysis v-else-if="showPage.startsWith('fault_tree_step_')" :step="getFaultTreeStepId(showPage)" />
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
+          <PerfNativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
           <CompareOverview v-else-if="showPage === 'compare_overview'" @navigate="changeContent" />
@@ -145,6 +146,7 @@ import FaultTreeCompare from '@/components/compare/FaultTreeCompare.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
+import PerfNativeMemory from '@/components/PerfNativeMemory.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
@@ -245,6 +247,12 @@ const getFlameStepId = (pageId: string): number => {
   return match ? parseInt(match[1]) : 1;
 };
 
+// 从Native Memory页面ID中提取步骤ID
+const getMemoryStepId = (pageId: string): number => {
+  const match = pageId.match(/memory_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
 // 动态获取步骤页面标题
 const getStepPageTitle = (pageId: string): string => {
   const stepId = getStepId(pageId);
@@ -327,6 +335,18 @@ const getFlameStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / 火焰图分析`;
 };
 
+// 动态获取Native Memory步骤页面标题
+const getMemoryStepPageTitle = (pageId: string): string => {
+  const stepId = getMemoryStepId(pageId);
+  return `步骤${stepId} Memory分析`;
+};
+
+// 动态获取Native Memory步骤页面面包屑
+const getMemoryStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getMemoryStepId(pageId);
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / Memory分析`;
+};
+
 const getPageTitle = () => {
   if (showPage.value.startsWith('perf_step_')) {
     return getStepPageTitle(showPage.value);
@@ -342,6 +362,9 @@ const getPageTitle = () => {
   }
   if (showPage.value.startsWith('flame_step_')) {
     return getFlameStepPageTitle(showPage.value);
+  }
+  if (showPage.value.startsWith('memory_step_')) {
+    return getMemoryStepPageTitle(showPage.value);
   }
   return pageTitles[showPage.value] || '未知页面';
 };
@@ -361,6 +384,9 @@ const getBreadcrumb = () => {
   }
   if (showPage.value.startsWith('flame_step_')) {
     return getFlameStepPageBreadcrumb(showPage.value);
+  }
+  if (showPage.value.startsWith('memory_step_')) {
+    return getMemoryStepPageBreadcrumb(showPage.value);
   }
   return breadcrumbMap[showPage.value] || '首页';
 };
@@ -386,7 +412,8 @@ const shouldShowSteps = () => {
          showPage.value.startsWith('frame_step_') ||
          showPage.value.startsWith('fault_tree_step_') ||
          showPage.value.startsWith('compare_step_') ||
-         showPage.value.startsWith('flame_step_');
+         showPage.value.startsWith('flame_step_') ||
+         showPage.value.startsWith('memory_step_');
 };
 
 // 获取当前步骤信息（计算属性）
@@ -403,6 +430,8 @@ const currentStepInfo = computed(() => {
     currentStepId = getCompareStepId(showPage.value);
   } else if (showPage.value.startsWith('flame_step_')) {
     currentStepId = getFlameStepId(showPage.value);
+  } else if (showPage.value.startsWith('memory_step_')) {
+    currentStepId = getMemoryStepId(showPage.value);
   }
 
   if (currentStepId) {

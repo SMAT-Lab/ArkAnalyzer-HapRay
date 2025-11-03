@@ -81,6 +81,13 @@
               </el-icon>
               <span>火焰图分析</span>
             </el-menu-item>
+
+            <el-menu-item :index="`memory_step_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Coin />
+              </el-icon>
+              <span>Memory分析</span>
+            </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
       </el-sub-menu>
@@ -211,7 +218,8 @@ import {
   CirclePlus,
   Trophy,
   Upload,
-  Share
+  Share,
+  Coin
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{
