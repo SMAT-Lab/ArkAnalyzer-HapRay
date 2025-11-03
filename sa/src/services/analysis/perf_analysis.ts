@@ -331,14 +331,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
             copyDirectory(srcUiStepDir, destUiStepDir),
         ];
 
-        // 复制memory目录（如果存在）
-        if (srcStepPaths.memoryHtracePath && destStepPaths.memoryHtracePath) {
-            const srcMemoryDir = path.dirname(srcStepPaths.memoryHtracePath);
-            if (fs.existsSync(srcMemoryDir)) {
-                const destMemoryDir = path.dirname(destStepPaths.memoryHtracePath);
-                copyTasks.push(copyDirectory(srcMemoryDir, destMemoryDir));
-            }
-        }
+        // 注：memory 数据已包含在 htrace 目录中，不需要单独复制
 
         await Promise.all(copyTasks);
     }
@@ -354,7 +347,6 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         const perfDataPaths = this.getPerfDataPaths(inputPath, steps);
         const perfDbPaths = await this.getPerfDbPaths(inputPath, steps);
         const htracePaths = this.getHtracePaths(inputPath, steps);
-        const memoryDbPaths = await this.getMemoryDbPaths(inputPath, steps);
 
         const perfAnalyzer = new PerfAnalyzer('');
         const testSceneInfo = this.buildTestSceneInfo(testInfo);
@@ -366,8 +358,6 @@ export class PerfAnalysisService extends AnalysisServiceBase {
                 perfDataPath: perfDataPaths[i],
                 dbPath: perfDbPaths[i],
                 htracePath: htracePaths[i],
-                memoryHtracePath: memoryDbPaths[i] ? memoryDbPaths[i].replace('.db', '.htrace') : '',
-                memoryDbPath: memoryDbPaths[i] || '',
             };
             const group = this.buildTestStepGroup(inputPath, steps[i], stepPaths);
             round.steps.push(group);
@@ -408,8 +398,6 @@ export class PerfAnalysisService extends AnalysisServiceBase {
                 perfDataPath: perfDataPaths[i],
                 dbPath: perfDbPaths[i],
                 htracePath: htracePaths[i],
-                memoryHtracePath: '',
-                memoryDbPath: '',
             };
             const group = this.buildTestStepGroup(inputPath, steps[i], stepPaths);
             round.steps.push(group);
@@ -487,9 +475,6 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         });
     }
 
-    // 注：getMemoryDbPaths 已在基类中实现
-    // 注：内存分析已完全迁移到 Python，SA 不再处理内存分析逻辑
-    
     // ---- 兼容性模式支持 ----
     /**
      * 加载兼容性模式的测试报告信息

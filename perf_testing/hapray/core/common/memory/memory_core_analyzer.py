@@ -53,7 +53,7 @@ class MemoryAnalyzerCore:
 
         Args:
             scene_dir: 场景目录
-            memory_db_paths: memory.db 文件路径列表（每个 step 一个）
+            memory_db_paths: trace.db 文件路径列表（每个 step 一个，包含 native_hook 数据）
             time_ranges: 时间范围列表（可选）
 
         Returns:
@@ -95,7 +95,7 @@ class MemoryAnalyzerCore:
                     'records': records,
                 }
 
-                # 导出 records 到 Excel（放在 memory.db 同目录）
+                # 导出 records 到 Excel（放在 trace.db 同目录）
                 self._export_records_to_excel(db_path, records, step_idx)
 
                 step_time = time.time() - step_start
@@ -186,14 +186,14 @@ class MemoryAnalyzerCore:
         """导出 records 到 Excel 文件（优化版本）
 
         Args:
-            db_path: memory.db 文件路径
+            db_path: trace.db 文件路径
             records: 记录列表
             step_idx: 步骤索引
         """
         try:
             start_time = time.time()
 
-            # 获取 memory.db 所在目录
+            # 获取 trace.db 所在目录
             db_dir = os.path.dirname(db_path)
             excel_path = os.path.join(db_dir, f'memory_records_step{step_idx}.xlsx')
 
