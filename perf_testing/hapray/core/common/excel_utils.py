@@ -52,7 +52,7 @@ class ExcelReportSaver:
         os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
 
         # Save to Excel using ExcelWriter
-        with pd.ExcelWriter(self.output_path, engine='openpyxl') as writer:
+        with pd.ExcelWriter(self.output_path, engine='xlsxwriter') as writer:
             for sheet_name, df in self.sheets.items():
                 df.to_excel(writer, sheet_name=sheet_name)
                 ExcelReportSaver._auto_adjust_columns(writer, sheet_name, df)
@@ -69,4 +69,5 @@ class ExcelReportSaver:
                 len(str(col)),  # column name len
                 df[col].astype(str).map(len).max(),  # max data len
             )
-            worksheet.column_dimensions[chr(65 + idx + 1)].width = max_len + 2
+            # xlsxwriter uses set_column method (0-indexed columns)
+            worksheet.set_column(idx, idx, max_len + 2)
