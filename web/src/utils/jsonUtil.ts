@@ -501,15 +501,13 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
     }
 
     // Second pass: flatten process_dimension into records
-    // 新的数据结构：每条记录代表一个维度的内存统计信息
-    // 根据新的 NativeMemoryRecord 结构，每条记录包含所有维度的信息，
-    // 如果某个维度的字段取不到，就设为 null
+    // 旧数据格式兼容：将层级结构转换为平铺记录
+    // 注意：这是旧数据格式，新数据已经是平铺格式，不需要转换
     if (Array.isArray(rawData.process_dimension)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rawData.process_dimension.forEach((process: any) => {
             // 进程维度记录（只有 pid/process，其他维度为 null）
             const processRecord: NativeMemoryRecord = {
-                stepIdx: 1,
                 pid: process.pid,
                 process: process.process_name,
                 tid: null,
@@ -520,55 +518,14 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                 symbol: null,
                 eventType: EventType.AllocEvent,
                 subEventType: 'unknown',
+                addr: 0,
+                callchainId: 0,
                 heapSize: process.max_mem || 0,
-                allHeapSize: process.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
                 relativeTs: process.max_mem_time || 0,
                 componentName: 'unknown',
                 componentCategory: -1,
                 categoryName: 'UNKNOWN',
                 subCategoryName: 'unknown',
-                // 进程维度统计（旧数据格式，使用默认值）
-                processPeakMem: process.max_mem || 0,
-                processAvgMem: 0,
-                processTotalAllocMem: 0,
-                processTotalFreeMem: 0,
-                processEventNum: 0,
-                // 线程维度统计（旧数据格式，使用默认值）
-                threadPeakMem: 0,
-                threadAvgMem: 0,
-                threadTotalAllocMem: 0,
-                threadTotalFreeMem: 0,
-                threadEventNum: 0,
-                // 文件维度统计（旧数据格式，使用默认值）
-                filePeakMem: 0,
-                fileAvgMem: 0,
-                fileTotalAllocMem: 0,
-                fileTotalFreeMem: 0,
-                fileEventNum: 0,
-                // 符号维度统计（旧数据格式，使用默认值）
-                symbolPeakMem: 0,
-                symbolAvgMem: 0,
-                symbolTotalAllocMem: 0,
-                symbolTotalFreeMem: 0,
-                symbolEventNum: 0,
-                // 大分类维度统计（旧数据格式，使用默认值）
-                categoryPeakMem: 0,
-                categoryAvgMem: 0,
-                categoryTotalAllocMem: 0,
-                categoryTotalFreeMem: 0,
-                categoryEventNum: 0,
-                // 小分类维度统计（旧数据格式，使用默认值）
-                componentPeakMem: 0,
-                componentAvgMem: 0,
-                componentTotalAllocMem: 0,
-                componentTotalFreeMem: 0,
-                componentEventNum: 0,
-                // 事件类型维度统计（旧数据格式，使用默认值）
-                eventTypePeakMem: 0,
-                eventTypeAvgMem: 0,
-                eventTypeTotalAllocMem: 0,
-                eventTypeTotalFreeMem: 0,
-                eventTypeEventNum: 0,
             };
             records.push(processRecord);
 
@@ -577,7 +534,6 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                 process.threads.forEach((thread: any) => {
                     // 线程维度记录（pid/process 和 tid/thread，其他维度为 null）
                     const threadRecord: NativeMemoryRecord = {
-                        stepIdx: 1,
                         pid: process.pid,
                         process: process.process_name,
                         tid: thread.tid,
@@ -588,55 +544,14 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                         symbol: null,
                         eventType: EventType.AllocEvent,
                         subEventType: 'unknown',
+                        addr: 0,
+                        callchainId: 0,
                         heapSize: thread.max_mem || 0,
-                        allHeapSize: thread.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
                         relativeTs: thread.max_mem_time || 0,
                         componentName: 'unknown',
                         componentCategory: -1,
                         categoryName: 'UNKNOWN',
                         subCategoryName: 'unknown',
-                        // 进程维度统计（旧数据格式，使用默认值）
-                        processPeakMem: process.max_mem || 0,
-                        processAvgMem: 0,
-                        processTotalAllocMem: 0,
-                        processTotalFreeMem: 0,
-                        processEventNum: 0,
-                        // 线程维度统计（旧数据格式，使用默认值）
-                        threadPeakMem: thread.max_mem || 0,
-                        threadAvgMem: 0,
-                        threadTotalAllocMem: 0,
-                        threadTotalFreeMem: 0,
-                        threadEventNum: 0,
-                        // 文件维度统计（旧数据格式，使用默认值）
-                        filePeakMem: 0,
-                        fileAvgMem: 0,
-                        fileTotalAllocMem: 0,
-                        fileTotalFreeMem: 0,
-                        fileEventNum: 0,
-                        // 符号维度统计（旧数据格式，使用默认值）
-                        symbolPeakMem: 0,
-                        symbolAvgMem: 0,
-                        symbolTotalAllocMem: 0,
-                        symbolTotalFreeMem: 0,
-                        symbolEventNum: 0,
-                        // 大分类维度统计（旧数据格式，使用默认值）
-                        categoryPeakMem: 0,
-                        categoryAvgMem: 0,
-                        categoryTotalAllocMem: 0,
-                        categoryTotalFreeMem: 0,
-                        categoryEventNum: 0,
-                        // 小分类维度统计（旧数据格式，使用默认值）
-                        componentPeakMem: 0,
-                        componentAvgMem: 0,
-                        componentTotalAllocMem: 0,
-                        componentTotalFreeMem: 0,
-                        componentEventNum: 0,
-                        // 事件类型维度统计（旧数据格式，使用默认值）
-                        eventTypePeakMem: 0,
-                        eventTypeAvgMem: 0,
-                        eventTypeTotalAllocMem: 0,
-                        eventTypeTotalFreeMem: 0,
-                        eventTypeEventNum: 0,
                     };
                     records.push(threadRecord);
 
@@ -645,7 +560,6 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                         thread.files.forEach((file: any) => {
                             // 文件维度记录（pid/process、tid/thread、fileId/file，symbolId 为 null）
                             const fileRecord: NativeMemoryRecord = {
-                                stepIdx: 1,
                                 pid: process.pid,
                                 process: process.process_name,
                                 tid: thread.tid,
@@ -656,55 +570,14 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                                 symbol: null,
                                 eventType: EventType.AllocEvent,
                                 subEventType: 'unknown',
+                                addr: 0,
+                                callchainId: 0,
                                 heapSize: file.max_mem || 0,
-                                allHeapSize: file.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
                                 relativeTs: file.max_mem_time || 0,
                                 componentName: 'unknown',
                                 componentCategory: -1,
                                 categoryName: 'UNKNOWN',
                                 subCategoryName: 'unknown',
-                                // 进程维度统计（旧数据格式，使用默认值）
-                                processPeakMem: process.max_mem || 0,
-                                processAvgMem: 0,
-                                processTotalAllocMem: 0,
-                                processTotalFreeMem: 0,
-                                processEventNum: 0,
-                                // 线程维度统计（旧数据格式，使用默认值）
-                                threadPeakMem: thread.max_mem || 0,
-                                threadAvgMem: 0,
-                                threadTotalAllocMem: 0,
-                                threadTotalFreeMem: 0,
-                                threadEventNum: 0,
-                                // 文件维度统计（旧数据格式，使用默认值）
-                                filePeakMem: file.max_mem || 0,
-                                fileAvgMem: 0,
-                                fileTotalAllocMem: 0,
-                                fileTotalFreeMem: 0,
-                                fileEventNum: 0,
-                                // 符号维度统计（旧数据格式，使用默认值）
-                                symbolPeakMem: 0,
-                                symbolAvgMem: 0,
-                                symbolTotalAllocMem: 0,
-                                symbolTotalFreeMem: 0,
-                                symbolEventNum: 0,
-                                // 大分类维度统计（旧数据格式，使用默认值）
-                                categoryPeakMem: 0,
-                                categoryAvgMem: 0,
-                                categoryTotalAllocMem: 0,
-                                categoryTotalFreeMem: 0,
-                                categoryEventNum: 0,
-                                // 小分类维度统计（旧数据格式，使用默认值）
-                                componentPeakMem: 0,
-                                componentAvgMem: 0,
-                                componentTotalAllocMem: 0,
-                                componentTotalFreeMem: 0,
-                                componentEventNum: 0,
-                                // 事件类型维度统计（旧数据格式，使用默认值）
-                                eventTypePeakMem: 0,
-                                eventTypeAvgMem: 0,
-                                eventTypeTotalAllocMem: 0,
-                                eventTypeTotalFreeMem: 0,
-                                eventTypeEventNum: 0,
                             };
                             records.push(fileRecord);
 
@@ -713,7 +586,6 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                                 file.symbols.forEach((symbol: any) => {
                                     // 符号维度记录（所有维度都不为 null）
                                     const symbolRecord: NativeMemoryRecord = {
-                                        stepIdx: 1,
                                         pid: process.pid,
                                         process: process.process_name,
                                         tid: thread.tid,
@@ -724,55 +596,14 @@ export function transformNativeMemoryData(rawData: any): NativeMemoryData | null
                                         symbol: symbol.symbol_name,
                                         eventType: EventType.AllocEvent,
                                         subEventType: 'unknown',
+                                        addr: 0,
+                                        callchainId: 0,
                                         heapSize: symbol.max_mem || 0,
-                                        allHeapSize: symbol.max_mem || 0, // 旧数据格式，使用 max_mem 作为累积值
                                         relativeTs: symbol.max_mem_time || 0,
                                         componentName: 'unknown',
                                         componentCategory: -1,
                                         categoryName: 'UNKNOWN',
                                         subCategoryName: 'unknown',
-                                        // 进程维度统计（旧数据格式，使用默认值）
-                                        processPeakMem: process.max_mem || 0,
-                                        processAvgMem: 0,
-                                        processTotalAllocMem: 0,
-                                        processTotalFreeMem: 0,
-                                        processEventNum: 0,
-                                        // 线程维度统计（旧数据格式，使用默认值）
-                                        threadPeakMem: thread.max_mem || 0,
-                                        threadAvgMem: 0,
-                                        threadTotalAllocMem: 0,
-                                        threadTotalFreeMem: 0,
-                                        threadEventNum: 0,
-                                        // 文件维度统计（旧数据格式，使用默认值）
-                                        filePeakMem: file.max_mem || 0,
-                                        fileAvgMem: 0,
-                                        fileTotalAllocMem: 0,
-                                        fileTotalFreeMem: 0,
-                                        fileEventNum: 0,
-                                        // 符号维度统计（旧数据格式，使用默认值）
-                                        symbolPeakMem: symbol.max_mem || 0,
-                                        symbolAvgMem: 0,
-                                        symbolTotalAllocMem: 0,
-                                        symbolTotalFreeMem: 0,
-                                        symbolEventNum: 0,
-                                        // 大分类维度统计（旧数据格式，使用默认值）
-                                        categoryPeakMem: 0,
-                                        categoryAvgMem: 0,
-                                        categoryTotalAllocMem: 0,
-                                        categoryTotalFreeMem: 0,
-                                        categoryEventNum: 0,
-                                        // 小分类维度统计（旧数据格式，使用默认值）
-                                        componentPeakMem: 0,
-                                        componentAvgMem: 0,
-                                        componentTotalAllocMem: 0,
-                                        componentTotalFreeMem: 0,
-                                        componentEventNum: 0,
-                                        // 事件类型维度统计（旧数据格式，使用默认值）
-                                        eventTypePeakMem: 0,
-                                        eventTypeAvgMem: 0,
-                                        eventTypeTotalAllocMem: 0,
-                                        eventTypeTotalFreeMem: 0,
-                                        eventTypeEventNum: 0,
                                     };
                                     records.push(symbolRecord);
                                 });

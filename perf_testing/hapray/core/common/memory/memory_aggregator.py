@@ -463,7 +463,7 @@ class MemoryAggregator:
         # 按时间排序
         sorted_records = sorted(records, key=lambda r: r.get('relativeTs', 0))
 
-        # 计算累积内存和统计信息
+        # 计算当前内存和统计信息
         current_mem = 0
         peak_mem = 0
         total_alloc = 0
@@ -473,7 +473,7 @@ class MemoryAggregator:
         for record in sorted_records:
             heap_size = record.get('heapSize', 0)
 
-            # 更新累积内存
+            # 更新当前内存
             current_mem += heap_size
 
             # 更新峰值

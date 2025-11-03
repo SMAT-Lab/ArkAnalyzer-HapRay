@@ -143,7 +143,7 @@ v-if="dataType === 'symbol'" v-model="symbolNameQuery" placeholder="根据符号
       <!-- 通用列 -->
       <!-- <el-table-column prop="eventType" label="事件类型" width="120" show-overflow-tooltip />
       <el-table-column prop="subEventType" label="子事件类型" width="140" show-overflow-tooltip /> -->
-      <el-table-column prop="eventNum" label="事件数" width="100" sortable />
+      <el-table-column prop="eventNum" label="总事件数" width="100" sortable />
       <el-table-column prop="peakMem" label="峰值内存" width="120" sortable>
         <template #default="{ row }">
           <span :class="getMemoryClass()">
@@ -167,11 +167,13 @@ v-if="dataType === 'symbol'" v-model="symbolNameQuery" placeholder="根据符号
           {{ formatBytes(row.totalAllocMem) }}
         </template>
       </el-table-column>
+      <el-table-column prop="allocEventNum" label="分配事件数" width="110" sortable />
       <el-table-column prop="totalFreeMem" label="释放内存" width="120" sortable>
         <template #default="{ row }">
           {{ formatBytes(row.totalFreeMem) }}
         </template>
       </el-table-column>
+      <el-table-column prop="freeEventNum" label="释放事件数" width="110" sortable />
       <el-table-column prop="start_ts" label="峰值时刻(ms)" width="140" sortable>
         <template #default="{ row }">
           {{ (row.start_ts / 1000000).toFixed(2) }}
