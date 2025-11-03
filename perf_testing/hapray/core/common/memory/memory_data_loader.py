@@ -21,20 +21,65 @@ from typing import Any
 class MemoryDataLoader:
     """内存数据加载器
 
-    负责从 memory.db 数据库中加载所有必要的数据：
+    负责从 trace.db 数据库中加载所有必要的内存分析数据：
     1. Native Hook 事件
     2. 进程信息
     3. 线程信息
     4. 数据字典（符号和文件名）
     5. Trace 起始时间
+
+    注意：内存数据从 trace.htrace 转换的 trace.db 中获取，不再使用单独的 memory.db
     """
+
+    @staticmethod
+    def has_native_hook_data(db_path: str) -> bool:
+        """检查数据库中是否存在 native_hook 表且有数据
+
+        Args:
+            db_path: 数据库路径
+
+        Returns:
+            如果 native_hook 表存在且有数据返回 True，否则返回 False
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # 检查 native_hook 表是否存在
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='native_hook'
+            """)
+
+            if not cursor.fetchone():
+                logging.info('native_hook table does not exist in database: %s', db_path)
+                return False
+
+            # 检查表中是否有数据
+            cursor.execute('SELECT COUNT(*) FROM native_hook')
+            count = cursor.fetchone()[0]
+
+            if count == 0:
+                logging.info('native_hook table is empty in database: %s', db_path)
+                return False
+
+            logging.info('Found %d records in native_hook table: %s', count, db_path)
+            return True
+
+        except Exception as e:
+            logging.warning('Failed to check native_hook table in %s: %s', db_path, str(e))
+            return False
+        finally:
+            if conn:
+                conn.close()
 
     @staticmethod
     def load_all_data(db_path: str) -> dict[str, Any]:
         """加载所有内存分析所需的数据
 
         Args:
-            db_path: memory.db 数据库路径
+            db_path: trace.db 数据库路径（包含 native_hook 数据）
 
         Returns:
             包含所有数据的字典
