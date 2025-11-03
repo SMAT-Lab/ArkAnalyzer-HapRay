@@ -82,8 +82,13 @@ export enum EventType {
  * - componentName: 组件名称
  * - componentCategory: 组件分类
  */
+/**
+ * Native Memory 记录接口
+ *
+ * 后端生成的平铺记录，每条记录对应一个内存事件
+ * 不包含聚合统计信息，所有统计需要在前端实时计算
+ */
 export interface NativeMemoryRecord {
-  stepIdx: number;
   // 进程维度信息
   pid: number;
   process: string;
@@ -99,60 +104,17 @@ export interface NativeMemoryRecord {
   // 事件信息
   eventType: EventType;
   subEventType: string;
+  addr: number;  // 内存地址
+  callchainId: number;  // 调用链 ID
   // 内存大小（单次分配/释放的大小）
   heapSize: number;
-  // 当前时间点的累积内存值（后端计算）
-  allHeapSize: number;
-  // 相对时间戳（相对于 trace 开始时间）
+  // 相对时间戳（相对于 trace 开始时间，纳秒）
   relativeTs: number;
-  // 分类信息 - 大类
-  componentName: string;
-  componentCategory: ComponentCategory;
-  // 分类信息 - 小类（从符号、文件、线程等推断）
-  categoryName: string;      // 大类名称（如 'APP_ABC', 'SYS_SDK'）
-  subCategoryName: string;   // 小类名称（如包名、文件名、线程名）
-  // 进程维度统计（key: pid）
-  processPeakMem: number;
-  processAvgMem: number;
-  processTotalAllocMem: number;
-  processTotalFreeMem: number;
-  processEventNum: number;
-  // 线程维度统计（key: pid|tid）
-  threadPeakMem: number;
-  threadAvgMem: number;
-  threadTotalAllocMem: number;
-  threadTotalFreeMem: number;
-  threadEventNum: number;
-  // 文件维度统计（key: pid|tid|fileId）
-  filePeakMem: number;
-  fileAvgMem: number;
-  fileTotalAllocMem: number;
-  fileTotalFreeMem: number;
-  fileEventNum: number;
-  // 符号维度统计（key: pid|tid|fileId|symbolId）
-  symbolPeakMem: number;
-  symbolAvgMem: number;
-  symbolTotalAllocMem: number;
-  symbolTotalFreeMem: number;
-  symbolEventNum: number;
-  // 大分类维度统计（key: categoryName）
-  categoryPeakMem: number;
-  categoryAvgMem: number;
-  categoryTotalAllocMem: number;
-  categoryTotalFreeMem: number;
-  categoryEventNum: number;
-  // 小分类维度统计（key: categoryName|subCategoryName）
-  componentPeakMem: number;
-  componentAvgMem: number;
-  componentTotalAllocMem: number;
-  componentTotalFreeMem: number;
-  componentEventNum: number;
-  // 事件类型维度统计（key: eventTypeName）
-  eventTypePeakMem: number;
-  eventTypeAvgMem: number;
-  eventTypeTotalAllocMem: number;
-  eventTypeTotalFreeMem: number;
-  eventTypeEventNum: number;
+  // 分类信息
+  componentName: string;  // 组件名称（小类名称）
+  componentCategory: ComponentCategory;  // 组件分类（大类编号）
+  categoryName: string;  // 大类名称（如 'APP_ABC', 'SYS_SDK'）
+  subCategoryName: string;  // 小类名称（如包名、文件名、线程名）
 }
 
 // Native Memory步骤统计信息
@@ -169,17 +131,32 @@ interface BackendNativeMemoryStepStats {
   average_memory_size?: number;
 }
 
+// Callchain 数据结构
+export interface CallchainRecord {
+  callchainId: number;
+  depth: number;
+  file: string;
+  symbol: string;
+  is_alloc: boolean;
+}
+
 // Native Memory数据类型（包含统计信息和平铺记录）
 export interface NativeMemoryStepData {
+  peak_time?: number; // 峰值时间点（纳秒）
+  peak_value?: number; // 峰值内存值（字节）
   stats?: NativeMemoryStepStats;
   records: NativeMemoryRecord[];
+  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据（数组或字典格式）
 }
 
 // Native Memory压缩数据类型
 export interface CompressedNativeMemoryStepData {
   compressed: true;
+  peak_time?: number; // 峰值时间点（纳秒）
+  peak_value?: number; // 峰值内存值（字节）
   stats?: NativeMemoryStepStats;
   records: string | string[]; // Base64编码的压缩数据（单块或多块）
+  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据（通常不压缩）
   chunked?: boolean; // 是否为分块压缩
   chunk_count?: number; // 块数量
   total_records?: number; // 总记录数
@@ -1125,8 +1102,11 @@ export const useJsonDataStore = defineStore('config', {
             };
 
             decompressed[stepKey] = {
+              peak_time: compressedStepData.peak_time,
+              peak_value: compressedStepData.peak_value,
               stats: stats,
               records: records,
+              callchains: compressedStepData.callchains,
             };
           } catch (error) {
             console.error(`解压缩内存数据失败 ${stepKey}:`, error);
@@ -1139,13 +1119,16 @@ export const useJsonDataStore = defineStore('config', {
             };
 
             decompressed[stepKey] = {
+              peak_time: compressedStepData.peak_time,
+              peak_value: compressedStepData.peak_value,
               stats: stats,
               records: [],
+              callchains: compressedStepData.callchains,
             };
           }
         } else {
           // 未压缩的数据，需要转换 stats 字段名
-          const rawStepData = stepData as { stats?: BackendNativeMemoryStepStats & NativeMemoryStepStats; records?: NativeMemoryRecord[] };
+          const rawStepData = stepData as NativeMemoryStepData & { stats?: BackendNativeMemoryStepStats & NativeMemoryStepStats };
           const rawStats = (rawStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
           const stats: NativeMemoryStepStats = {
             peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
@@ -1154,8 +1137,11 @@ export const useJsonDataStore = defineStore('config', {
           };
 
           decompressed[stepKey] = {
+            peak_time: rawStepData.peak_time,
+            peak_value: rawStepData.peak_value,
             stats: stats,
             records: rawStepData.records || [],
+            callchains: rawStepData.callchains,
           };
         }
       }
