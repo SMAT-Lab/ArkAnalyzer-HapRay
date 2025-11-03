@@ -1,0 +1,235 @@
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import logging
+import sqlite3
+from typing import Any
+
+
+class MemoryDataLoader:
+    """内存数据加载器
+
+    负责从 memory.db 数据库中加载所有必要的数据：
+    1. Native Hook 事件
+    2. 进程信息
+    3. 线程信息
+    4. 数据字典（符号和文件名）
+    5. Trace 起始时间
+    """
+
+    @staticmethod
+    def load_all_data(db_path: str) -> dict[str, Any]:
+        """加载所有内存分析所需的数据
+
+        Args:
+            db_path: memory.db 数据库路径
+
+        Returns:
+            包含所有数据的字典
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+
+            data = {
+                'events': MemoryDataLoader._query_native_hook_events(conn),
+                'processes': MemoryDataLoader._query_processes(conn),
+                'threads': MemoryDataLoader._query_threads(conn),
+                'sub_type_names': MemoryDataLoader._query_sub_type_names(conn),
+                'data_dict': MemoryDataLoader._query_data_dict(conn),
+                'trace_start_ts': MemoryDataLoader._query_trace_start_ts(conn),
+            }
+
+            logging.info(
+                'Loaded memory data: %d events, %d processes, %d threads',
+                len(data['events']),
+                len(data['processes']),
+                len(data['threads']),
+            )
+
+            return data
+
+        except Exception as e:
+            logging.error('Failed to load memory data: %s', str(e))
+            raise
+        finally:
+            if conn:
+                conn.close()
+
+    @staticmethod
+    def _query_native_hook_events(conn: sqlite3.Connection) -> list[dict]:
+        """查询 native_hook 表中的所有事件"""
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                id, callchain_id, ipid, itid, event_type, sub_type_id,
+                start_ts, end_ts, dur, addr, heap_size, all_heap_size,
+                current_size_dur, last_lib_id, last_symbol_id
+            FROM native_hook
+            ORDER BY start_ts
+        """)
+
+        events = []
+        for row in cursor.fetchall():
+            events.append(
+                {
+                    'id': row[0],
+                    'callchain_id': row[1],
+                    'ipid': row[2],
+                    'itid': row[3],
+                    'event_type': row[4],
+                    'sub_type_id': row[5],
+                    'start_ts': row[6],
+                    'end_ts': row[7],
+                    'dur': row[8],
+                    'addr': row[9],
+                    'heap_size': row[10],
+                    'all_heap_size': row[11],
+                    'current_size_dur': row[12],
+                    'last_lib_id': row[13],
+                    'last_symbol_id': row[14],
+                }
+            )
+
+        return events
+
+    @staticmethod
+    def _query_processes(conn: sqlite3.Connection) -> list[dict]:
+        """查询进程信息"""
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, ipid, pid, name FROM process')
+
+        processes = []
+        for row in cursor.fetchall():
+            processes.append(
+                {
+                    'id': row[0],
+                    'ipid': row[1],
+                    'pid': row[2],
+                    'name': row[3],
+                }
+            )
+
+        return processes
+
+    @staticmethod
+    def _query_threads(conn: sqlite3.Connection) -> list[dict]:
+        """查询线程信息"""
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, itid, tid, name, ipid FROM thread')
+
+        threads = []
+        for row in cursor.fetchall():
+            threads.append(
+                {
+                    'id': row[0],
+                    'itid': row[1],
+                    'tid': row[2],
+                    'name': row[3],
+                    'ipid': row[4],
+                }
+            )
+
+        return threads
+
+    @staticmethod
+    def _query_sub_type_names(conn: sqlite3.Connection) -> dict[int, str]:
+        """查询 sub_type 名称映射
+
+        注意：sub_type 表可能不存在，如果不存在则返回空字典
+        """
+        cursor = conn.cursor()
+
+        # 检查表是否存在
+        cursor.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='sub_type'
+        """)
+
+        if not cursor.fetchone():
+            logging.warning('sub_type table does not exist in database')
+            return {}
+
+        cursor.execute('SELECT id, name FROM sub_type')
+
+        sub_type_map = {}
+        for row in cursor.fetchall():
+            sub_type_map[row[0]] = row[1]
+
+        return sub_type_map
+
+    @staticmethod
+    def _query_data_dict(conn: sqlite3.Connection) -> dict[int, str]:
+        """查询 data_dict 表（符号和文件名）"""
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, data FROM data_dict')
+
+        data_dict = {}
+        for row in cursor.fetchall():
+            data_dict[row[0]] = row[1]
+
+        return data_dict
+
+    @staticmethod
+    def _query_trace_start_ts(conn: sqlite3.Connection) -> int:
+        """查询 trace_range 的 start_ts"""
+        cursor = conn.cursor()
+        cursor.execute('SELECT start_ts FROM trace_range LIMIT 1')
+
+        row = cursor.fetchone()
+        return row[0] if row else 0
+
+    @staticmethod
+    def query_callchain_frames(conn: sqlite3.Connection, callchain_id: int) -> list[dict]:
+        """查询指定调用链的所有帧
+
+        Args:
+            conn: 数据库连接
+            callchain_id: 调用链 ID
+
+        Returns:
+            调用链帧列表，按 depth 排序
+        """
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                id, callchain_id, depth, ip, symbol_id, file_id,
+                offset, symbol_offset, vaddr
+            FROM native_hook_frame
+            WHERE callchain_id = ?
+            ORDER BY depth
+        """,
+            (callchain_id,),
+        )
+
+        frames = []
+        for row in cursor.fetchall():
+            frames.append(
+                {
+                    'id': row[0],
+                    'callchain_id': row[1],
+                    'depth': row[2],
+                    'ip': row[3],
+                    'symbol_id': row[4],
+                    'file_id': row[5],
+                    'offset': row[6],
+                    'symbol_offset': row[7],
+                    'vaddr': row[8],
+                }
+            )
+
+        return frames

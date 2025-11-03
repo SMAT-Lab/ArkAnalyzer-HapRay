@@ -1,39 +1,5 @@
 <template>
   <div class="step-load-container">
-    <!-- 步骤信息卡片 -->
-    <!-- <div class="step-info-card">
-      <div class="step-header">
-        <div class="step-badge">STEP {{ stepId }}</div>
-        <div class="step-details">
-          <h2 class="step-title">{{ stepInfo?.step_name || '未知步骤' }}</h2>
-          <div class="step-metrics">
-            <div class="metric-item">
-              <span class="metric-label">指令数：</span>
-              <span class="metric-value">{{ formatNumber(stepInfo?.count || 0) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">功耗估算：</span>
-              <span class="metric-value">{{ formatEnergy(stepInfo?.count || 0) }}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">轮次：</span>
-              <span class="metric-value">{{ stepInfo?.round || 0 }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="step-actions">
-          <el-button type="primary" @click="downloadPerfData">
-            <el-icon><Download /></el-icon>
-            下载perf
-          </el-button>
-          <el-button type="success" @click="downloadTraceData">
-            <el-icon><Download /></el-icon>
-            下载trace
-          </el-button>
-        </div>
-      </div>
-    </div> -->
-
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
       <el-col :span="12">
@@ -461,6 +427,8 @@ const filteredSymbolPerformanceData1 = computed(() => {
   );
 });
 
+
+
 // 左侧 drill 联动
 const filteredThreadPerformanceDataDrill = computed(() => {
   const stack = processPieDrilldownStack.value;
@@ -684,6 +652,28 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
 .breadcrumb-item:last-child {
   color: #667eea;
   font-weight: 500;
+}
+
+/* Tab样式 */
+.analysis-tabs {
+  margin-top: 20px;
+}
+
+.analysis-tabs :deep(.el-tabs__header) {
+  margin-bottom: 20px;
+}
+
+.analysis-tabs :deep(.el-tabs__item) {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* Native Memory 样式 */
+.memory-summary {
+  margin-left: 20px;
+  font-size: 14px;
+  color: #606266;
+  font-weight: normal;
 }
 
 /* 响应式设计 */

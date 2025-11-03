@@ -22,49 +22,21 @@ import { PerfAnalyzer } from '../../core/perf/perf_analyzer';
 import { getConfig } from '../../config';
 import { traceStreamerCmd } from '../external/trace_streamer';
 import { checkPerfFiles, copyDirectory, copyFile, getSceneRoundsFolders } from '../../utils/folder_utils';
+import { AnalysisServiceBase, type Steps, type TestReportInfo, type StepPaths, type StandardTestInfo } from './analysis_service_base';
 
 import type {
     Round,
     TestSceneInfo as PerfTestSceneInfo,
     TestStepGroup,
-    TestReportInfo,
     RoundInfo,
 } from '../../core/perf/perf_analyzer_base';
-import type { GlobalConfig } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
-// ===================== 类型定义 =====================
-export type Steps = Array<Step>;
-
-// ===================== 内部类型定义 =====================
-/**
- * 标准 testInfo.json 文件结构
- */
-interface StandardTestInfo {
-    app_id: string;
-    app_name: string;
-    app_version: string;
-    scene: string;
-    timestamp: number;
-    device?: {
-        version: string;
-        sn: string;
-    };
-}
-
-/**
- * 步骤路径信息
- */
-interface StepPaths {
-    stepDir: string;
-    perfDataPath: string;
-    dbPath: string;
-    htracePath: string;
-}
-
-export class PerfAnalysisService {
-    constructor() {}
+export class PerfAnalysisService extends AnalysisServiceBase {
+    constructor() {
+        super();
+    }
 
     /**
      * 处理选择轮次（choose round）
@@ -88,7 +60,8 @@ export class PerfAnalysisService {
     }
 
     /**
-     * 处理生成报告（Generate PerfReport）
+     * 处理生成报告（Generate PerfReport）- 联合分析模式
+     * 同时分析负载数据和内存数据
      */
     async generatePerfReport(input: string, timeRanges?: Array<TimeRange>): Promise<void> {
         const config = getConfig();
@@ -104,64 +77,31 @@ export class PerfAnalysisService {
         await this.generatePerfJson(input, testReportInfo, steps, timeRanges);
     }
 
-    // ===================== 数据加载函数 =====================
     /**
-     * 加载步骤信息
+     * 单独分析负载数据（不分析内存数据）
+     * 用于只需要负载分析的场景
      */
-    async loadSteps(basePath: string): Promise<Steps> {
-        const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
-        return await this.loadJsonFile<Steps>(stepsJsonPath);
-    }
-    
-    /**
-     * 加载测试报告信息
-     */
-    async loadTestReportInfo(input: string, scene: string, config: GlobalConfig): Promise<TestReportInfo> {
-        if (config.compatibility) {
-            return this.loadCompatibilityTestReportInfo(input, scene);
-        } else {
-            return await this.loadStandardTestReportInfo(input);
+    async analyzePerfOnly(input: string, timeRanges?: Array<TimeRange>): Promise<void> {
+        const config = getConfig();
+        const scene = path.basename(input);
+        const steps = await this.loadSteps(input);
+
+        if (!(await checkPerfFiles(input, steps.length))) {
+            logger.error('hiperf 数据不全，需要先执行数据收集步骤！');
+            return;
         }
+
+        const testReportInfo = await this.loadTestReportInfo(input, scene, config);
+        await this.generatePerfJsonOnly(input, testReportInfo, steps, timeRanges);
     }
-    
-    /**
-     * 加载标准模式的测试报告信息
-     */
-    async loadStandardTestReportInfo(input: string): Promise<TestReportInfo> {
-        const testInfoPath = path.join(input, 'testInfo.json');
-        const testInfo = await this.loadJsonFile<StandardTestInfo>(testInfoPath);
-        return {
-            app_id: testInfo.app_id,
-            app_name: testInfo.app_name,
-            app_version: testInfo.app_version,
-            scene: testInfo.scene,
-            timestamp: testInfo.timestamp,
-            rom_version: testInfo.device?.version ?? '',
-            device_sn: testInfo.device?.sn ?? '',
-        };
-    }
+
+
+
+    // ===================== 数据加载函数 =====================
+    // 注：loadSteps, loadTestReportInfo, loadStandardTestReportInfo 已在基类中实现
     
     // ===================== 工具函数区 =====================
-    // ---- JSON/文件操作 ----
-    /** 加载 JSON 文件 */
-    async loadJsonFile<T>(filePath: string): Promise<T> {
-        const rawData = await fs.promises.readFile(filePath, 'utf8');
-        return JSON.parse(rawData) as T;
-    }
-    
-    // ---- 路径构建工具 ----
-    /**
-     * 构建步骤相关的路径信息
-     */
-    buildStepPaths(basePath: string, stepIdx: number): StepPaths {
-        const stepDir = path.join(basePath, 'hiperf', `step${stepIdx}`);
-        return {
-            stepDir,
-            perfDataPath: path.join(stepDir, 'perf.data'),
-            dbPath: path.join(stepDir, 'perf.db'),
-            htracePath: path.join(basePath, 'htrace', `step${stepIdx}`, 'trace.htrace'),
-        };
-    }
+    // 注：loadJsonFile, buildStepPaths 已在基类中实现
     
     // ---- TestSceneInfo 构建工具 ----
     /**
@@ -214,37 +154,7 @@ export class PerfAnalysisService {
             traceFile: stepPaths.htracePath,
         };
     }
-    
-    // ---- 并发控制工具 ----
-    /**
-     * 并发执行任务，支持批次控制
-     */
-    async executeConcurrentTasks<T, R>(
-        items: Array<T>,
-        taskFn: (item: T, index: number) => Promise<R>,
-        maxConcurrency = 4
-    ): Promise<Array<R>> {
-        const results = new Array<R>(items.length);
-    
-        for (let i = 0; i < items.length; i += maxConcurrency) {
-            const batch = items.slice(i, i + maxConcurrency);
-            const batchPromises = batch.map(async (item, batchIndex) => {
-                const actualIndex = i + batchIndex;
-                const result = await taskFn(item, actualIndex);
-                return { index: actualIndex, result };
-            });
-    
-            const batchResults = await Promise.all(batchPromises);
-            batchResults.forEach(({ index, result }) => {
-                results[index] = result;
-            });
-    
-            logger.debug(`完成批次 ${Math.floor(i / maxConcurrency) + 1}/${Math.ceil(items.length / maxConcurrency)}`);
-        }
-    
-        return results;
-    }
-    
+
     // ---- 轮次处理相关 ----
     /**
      * 处理轮次选择逻辑
@@ -414,28 +324,41 @@ export class PerfAnalysisService {
         const srcUiStepDir = path.join(sourceRound, 'ui', `step${stepIdx}`);
         const destUiStepDir = path.join(destPath, 'ui', `step${stepIdx}`);
 
-        await Promise.all([
+        const copyTasks = [
             copyDirectory(srcStepPaths.stepDir, destStepPaths.stepDir),
             copyDirectory(path.dirname(srcStepPaths.htracePath), path.dirname(destStepPaths.htracePath)),
             copyDirectory(srcResultDir, destResultDir),
-            copyDirectory(srcUiStepDir, destUiStepDir)
-        ]);
+            copyDirectory(srcUiStepDir, destUiStepDir),
+        ];
+
+        // 复制memory目录（如果存在）
+        if (srcStepPaths.memoryHtracePath && destStepPaths.memoryHtracePath) {
+            const srcMemoryDir = path.dirname(srcStepPaths.memoryHtracePath);
+            if (fs.existsSync(srcMemoryDir)) {
+                const destMemoryDir = path.dirname(destStepPaths.memoryHtracePath);
+                copyTasks.push(copyDirectory(srcMemoryDir, destMemoryDir));
+            }
+        }
+
+        await Promise.all(copyTasks);
     }
     
     // ---- 负载分析/报告生成 ----
     
     /**
-     * 生成负载分析报告
+     * 生成负载分析报告（联合分析模式）
+     * 同时生成负载数据和内存数据
      */
     async generatePerfJson(inputPath: string, testInfo: TestReportInfo, steps: Steps, timeRanges?: Array<TimeRange>): Promise<void> {
         const outputDir = path.join(inputPath, 'report');
         const perfDataPaths = this.getPerfDataPaths(inputPath, steps);
         const perfDbPaths = await this.getPerfDbPaths(inputPath, steps);
         const htracePaths = this.getHtracePaths(inputPath, steps);
-    
+        const memoryDbPaths = await this.getMemoryDbPaths(inputPath, steps);
+
         const perfAnalyzer = new PerfAnalyzer('');
         const testSceneInfo = this.buildTestSceneInfo(testInfo);
-    
+
         let round: Round = { steps: [] };
         for (let i = 0; i < steps.length; i++) {
             const stepPaths: StepPaths = {
@@ -443,23 +366,70 @@ export class PerfAnalysisService {
                 perfDataPath: perfDataPaths[i],
                 dbPath: perfDbPaths[i],
                 htracePath: htracePaths[i],
+                memoryHtracePath: memoryDbPaths[i] ? memoryDbPaths[i].replace('.db', '.htrace') : '',
+                memoryDbPath: memoryDbPaths[i] || '',
             };
             const group = this.buildTestStepGroup(inputPath, steps[i], stepPaths);
             round.steps.push(group);
         }
-    
+
         testSceneInfo.rounds.push(round);
-    
+
         // 如果有时间范围过滤，使用第一个时间范围（支持多个时间范围的功能可以后续扩展）
         const timeRange = timeRanges && timeRanges.length > 0 ? timeRanges[0] : undefined;
         if (timeRange) {
             logger.info(`Using time range filter: ${timeRange.startTime} - ${timeRange.endTime} nanoseconds`);
         }
-    
+
         await perfAnalyzer.analyze(testSceneInfo, outputDir, timeRange);
         await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
         await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
+
+        // 注意：内存分析已由 Python 完成，SA 不再处理内存数据
     }
+
+    /**
+     * 生成负载分析报告（仅负载分析模式）
+     * 只生成负载数据，不分析内存数据
+     */
+    async generatePerfJsonOnly(inputPath: string, testInfo: TestReportInfo, steps: Steps, timeRanges?: Array<TimeRange>): Promise<void> {
+        const outputDir = path.join(inputPath, 'report');
+        const perfDataPaths = this.getPerfDataPaths(inputPath, steps);
+        const perfDbPaths = await this.getPerfDbPaths(inputPath, steps);
+        const htracePaths = this.getHtracePaths(inputPath, steps);
+
+        const perfAnalyzer = new PerfAnalyzer('');
+        const testSceneInfo = this.buildTestSceneInfo(testInfo);
+
+        let round: Round = { steps: [] };
+        for (let i = 0; i < steps.length; i++) {
+            const stepPaths: StepPaths = {
+                stepDir: '',
+                perfDataPath: perfDataPaths[i],
+                dbPath: perfDbPaths[i],
+                htracePath: htracePaths[i],
+                memoryHtracePath: '',
+                memoryDbPath: '',
+            };
+            const group = this.buildTestStepGroup(inputPath, steps[i], stepPaths);
+            round.steps.push(group);
+        }
+
+        testSceneInfo.rounds.push(round);
+
+        const timeRange = timeRanges && timeRanges.length > 0 ? timeRanges[0] : undefined;
+        if (timeRange) {
+            logger.info(`Using time range filter: ${timeRange.startTime} - ${timeRange.endTime} nanoseconds`);
+        }
+
+        await perfAnalyzer.analyze(testSceneInfo, outputDir, timeRange);
+        await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
+        await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
+
+        logger.info('负载分析完成，未生成内存数据');
+    }
+
+
     
     /**
      * 获取 perf.data 路径数组
@@ -510,12 +480,15 @@ export class PerfAnalysisService {
             if (fs.existsSync(stepPaths.htracePath)) {
                 return stepPaths.htracePath;
             }
-    
+
             // 如果都找不到，返回默认路径
             logger.warn(`未找到步骤 ${step.stepIdx} 的 trace.htrace 文件`);
             return stepPaths.htracePath;
         });
     }
+
+    // 注：getMemoryDbPaths 已在基类中实现
+    // 注：内存分析已完全迁移到 Python，SA 不再处理内存分析逻辑
     
     // ---- 兼容性模式支持 ----
     /**

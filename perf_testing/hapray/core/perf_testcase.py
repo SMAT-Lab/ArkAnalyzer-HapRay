@@ -597,12 +597,14 @@ CONFIG"""
 
         local_perf_path = os.path.join(perf_step_dir, Config.get('hiperf.data_filename', 'perf.data'))
         local_trace_path = os.path.join(trace_step_dir, 'trace.htrace')
+        local_memory_path = os.path.join(memory_step_dir, 'memory.htrace')
 
         self._ensure_directories_exist(perf_step_dir, trace_step_dir, memory_step_dir)
         self._save_process_info(perf_step_dir)
 
         self._transfer_perf_data(device_file, local_perf_path)
         self._transfer_trace_data(device_file, local_trace_path)
+        self._transfer_memory_data(device_file, local_memory_path)
         self._transfer_redundant_data(trace_step_dir)
 
     def _collect_step_information(self) -> list:
@@ -721,6 +723,22 @@ CONFIG"""
             Log.info(f'Trace data saved: {local_path}')
         else:
             Log.error(f'Failed to transfer trace data: {local_path}')
+
+    def _transfer_memory_data(self, remote_path: str, local_path: str):
+        """Transfer memory data from device to host"""
+        if not Config.get('memory.enable'):
+            return
+
+        # Memory data is also in .htrace format
+        if not self.driver.has_file(f'{remote_path}.htrace'):
+            Log.warning(f'Memory data file not found: {remote_path}.htrace')
+            return
+
+        self.driver.pull_file(f'{remote_path}.htrace', local_path)
+        if os.path.exists(local_path):
+            Log.info(f'Memory data saved: {local_path}')
+        else:
+            Log.error(f'Failed to transfer memory data: {local_path}')
 
     def _transfer_redundant_data(self, trace_step_dir: str):
         if not self._redundant_mode_status:

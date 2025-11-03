@@ -14,7 +14,7 @@ from hapray.core.common.exe_utils import ExeUtils
 def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_name, **kwargs):
     """
     SIMPLE模式下创建目录结构、testInfo.json、pids.json、steps.json
-    支持多个perf和trace文件，每个文件对应一个step目录
+    支持多个perf、trace和memory文件，每个文件对应一个step目录
 
     Args:
         report_dir: 报告目录
@@ -24,9 +24,12 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         **kwargs: 可选参数
             pids: 进程ID列表，默认为空列表
             steps_file_path: 可选的steps.json文件路径，如果提供则使用该文件
+            memory_paths: memory文件路径列表，默认为空列表
     """
     pids = kwargs.get('pids', [])
     steps_file_path = kwargs.get('steps_file_path', '')
+    memory_paths = kwargs.get('memory_paths', [])
+
     # 检查输入文件是否存在
     for perf_path in perf_paths:
         if not os.path.exists(perf_path):
@@ -34,9 +37,12 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     for trace_path in trace_paths:
         if not os.path.exists(trace_path):
             raise FileNotFoundError(f'Trace file not found: {trace_path}')
+    for memory_path in memory_paths:
+        if not os.path.exists(memory_path):
+            raise FileNotFoundError(f'Memory data file not found: {memory_path}')
 
-    # 确保perf和trace文件数量一致
-    max_files = max(len(perf_paths), len(trace_paths))
+    # 确保perf、trace和memory文件数量一致
+    max_files = max(len(perf_paths), len(trace_paths), len(memory_paths))
 
     # 创建基础目录
     report_report_dir = os.path.join(report_dir, 'report')
@@ -45,18 +51,21 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     # 创建基础目录结构
     hiperf_base_dir = os.path.join(report_dir, 'hiperf')
     htrace_base_dir = os.path.join(report_dir, 'htrace')
+    memory_base_dir = os.path.join(report_dir, 'memory')
 
-    _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir)
+    _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir, memory_base_dir)
 
     # 处理多个文件，每个文件对应一个step目录
     for i in range(max_files):
         step_num = i + 1
         hiperf_step_dir = os.path.join(hiperf_base_dir, f'step{step_num}')
         htrace_step_dir = os.path.join(htrace_base_dir, f'step{step_num}')
+        memory_step_dir = os.path.join(memory_base_dir, f'step{step_num}')
 
         # 创建step目录
         os.makedirs(hiperf_step_dir, exist_ok=True)
         os.makedirs(htrace_step_dir, exist_ok=True)
+        os.makedirs(memory_step_dir, exist_ok=True)
 
         # 处理perf文件
         if i < len(perf_paths):
@@ -65,6 +74,10 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         # 处理trace文件
         if i < len(trace_paths):
             _process_trace_file(trace_paths[i], htrace_step_dir)
+
+        # 处理memory文件
+        if i < len(memory_paths):
+            _process_memory_file(memory_paths[i], memory_step_dir)
 
         # 创建testInfo.json
         test_info = {
@@ -161,13 +174,23 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
     return result
 
 
-def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir):
+def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir, memory_base_dir=None):
     """创建基础目录结构"""
     if not os.path.exists(report_report_dir):
         os.makedirs(report_report_dir)
         os.makedirs(hiperf_base_dir)
         os.makedirs(htrace_base_dir)
-        logging.info('Base directories created: %s, %s, %s', hiperf_base_dir, htrace_base_dir, report_report_dir)
+        if memory_base_dir:
+            os.makedirs(memory_base_dir)
+            logging.info(
+                'Base directories created: %s, %s, %s, %s',
+                hiperf_base_dir,
+                htrace_base_dir,
+                memory_base_dir,
+                report_report_dir,
+            )
+        else:
+            logging.info('Base directories created: %s, %s, %s', hiperf_base_dir, htrace_base_dir, report_report_dir)
 
 
 def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name, pids):
@@ -197,6 +220,27 @@ def _process_trace_file(trace_path, htrace_step_dir):
     target_htrace_file = os.path.join(htrace_step_dir, 'trace.htrace')
     shutil.copy2(trace_path, target_htrace_file)
     logging.info('Copied %s to %s', trace_path, target_htrace_file)
+
+
+def _process_memory_file(memory_path, memory_step_dir):
+    """处理单个memory文件"""
+    if not os.path.exists(memory_path):
+        logging.warning('Memory file not found: %s', memory_path)
+        return
+
+    target_memory_file = os.path.join(memory_step_dir, 'memory.htrace')
+    shutil.copy2(memory_path, target_memory_file)
+    logging.info('Copied %s to %s', memory_path, target_memory_file)
+
+    # 检查是否存在对应的.db文件
+    memory_dir = os.path.dirname(memory_path)
+    memory_basename = os.path.splitext(os.path.basename(memory_path))[0]
+    source_db_file = os.path.join(memory_dir, f'{memory_basename}.db')
+
+    if os.path.exists(source_db_file):
+        target_db_file = os.path.join(memory_step_dir, 'memory.db')
+        shutil.copy2(source_db_file, target_db_file)
+        logging.info('Copied existing memory DB file %s to %s', source_db_file, target_db_file)
 
 
 def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files):
