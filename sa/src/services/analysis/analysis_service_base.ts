@@ -17,7 +17,6 @@ import fs from 'fs';
 import path from 'path';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
 import type { Step } from '../../core/perf/perf_analyzer';
-import { traceStreamerCmd } from '../external/trace_streamer';
 import type { GlobalConfig } from '../../config/types';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -55,14 +54,14 @@ export interface TestReportInfo {
 
 /**
  * 步骤路径信息
+ *
+ * 注意：memory 数据从 htracePath 对应的 trace.htrace 中获取
  */
 export interface StepPaths {
     stepDir: string;
     perfDataPath: string;
     dbPath: string;
     htracePath: string;
-    memoryHtracePath?: string;
-    memoryDbPath?: string;
 }
 
 /**
@@ -137,16 +136,17 @@ export abstract class AnalysisServiceBase {
     // ---- 路径构建工具 ----
     /**
      * 构建步骤相关的路径信息
+     *
+     * 注意：memory 数据从 trace.htrace 中获取
      */
     buildStepPaths(basePath: string, stepIdx: number): StepPaths {
         const stepDir = path.join(basePath, 'hiperf', `step${stepIdx}`);
+        const htraceStepDir = path.join(basePath, 'htrace', `step${stepIdx}`);
         return {
             stepDir,
             perfDataPath: path.join(stepDir, 'perf.data'),
             dbPath: path.join(stepDir, 'perf.db'),
-            htracePath: path.join(basePath, 'htrace', `step${stepIdx}`, 'trace.htrace'),
-            memoryHtracePath: path.join(basePath, 'memory', `step${stepIdx}`, 'memory.htrace'),
-            memoryDbPath: path.join(basePath, 'memory', `step${stepIdx}`, 'memory.db'),
+            htracePath: path.join(htraceStepDir, 'trace.htrace'),
         };
     }
 
@@ -175,39 +175,6 @@ export abstract class AnalysisServiceBase {
             });
 
             logger.debug(`完成批次 ${Math.floor(i / maxConcurrency) + 1}/${Math.ceil(items.length / maxConcurrency)}`);
-        }
-
-        return results;
-    }
-
-    // ---- 获取数据库路径工具 ----
-    /**
-     * 获取 memory.db 路径数组
-     */
-    async getMemoryDbPaths(inputPath: string, steps: Steps): Promise<Array<string>> {
-        const results: Array<string> = [];
-
-        for (const step of steps) {
-            const stepPaths = this.buildStepPaths(inputPath, step.stepIdx);
-
-            if (!stepPaths.memoryDbPath || !stepPaths.memoryHtracePath) {
-                continue;
-            }
-
-            // 如果memory.db已存在，直接使用
-            if (fs.existsSync(stepPaths.memoryDbPath)) {
-                results.push(stepPaths.memoryDbPath);
-                continue;
-            }
-
-            // 如果memory.htrace存在，使用trace_streamer转换
-            if (fs.existsSync(stepPaths.memoryHtracePath)) {
-                logger.info(`Converting memory.htrace to memory.db for step ${step.stepIdx}`);
-                await traceStreamerCmd(stepPaths.memoryHtracePath, stepPaths.memoryDbPath);
-                results.push(stepPaths.memoryDbPath);
-            } else {
-                logger.warn(`未找到步骤 ${step.stepIdx} 的 memory 数据文件`);
-            }
         }
 
         return results;

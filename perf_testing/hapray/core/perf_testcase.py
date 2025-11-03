@@ -190,14 +190,16 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         return self.get_case_report_path()
 
     def setup(self):
-        """common setup"""
+        """common setup
+
+        注意：不再创建 memory 目录，memory 数据从 trace.htrace 中获取
+        """
         Log.info('PerfTestCase setup')
         self.bundle_info = get_bundle_info(self.driver, self.app_package)
         self.module_name = self.bundle_info.get('entryModuleName')
 
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-        os.makedirs(os.path.join(self.report_path, 'memory'), exist_ok=True)
         self.stop_app()
         self.driver.wake_up_display()
         self.driver.swipe_to_home()
@@ -590,21 +592,21 @@ CONFIG"""
         Log.info('Performance collection completed %s', result)
 
     def _save_performance_data(self, device_file: str, step_id: int):
-        """Save performance, trace, and memory data to report directory"""
+        """Save performance and trace data to report directory
+
+        注意：memory 数据已包含在 trace.htrace 中，不再单独保存
+        """
         perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
         trace_step_dir = os.path.join(self.report_path, 'htrace', f'step{step_id}')
-        memory_step_dir = os.path.join(self.report_path, 'memory', f'step{step_id}')
 
         local_perf_path = os.path.join(perf_step_dir, Config.get('hiperf.data_filename', 'perf.data'))
         local_trace_path = os.path.join(trace_step_dir, 'trace.htrace')
-        local_memory_path = os.path.join(memory_step_dir, 'memory.htrace')
 
-        self._ensure_directories_exist(perf_step_dir, trace_step_dir, memory_step_dir)
+        self._ensure_directories_exist(perf_step_dir, trace_step_dir)
         self._save_process_info(perf_step_dir)
 
         self._transfer_perf_data(device_file, local_perf_path)
         self._transfer_trace_data(device_file, local_trace_path)
-        self._transfer_memory_data(device_file, local_memory_path)
         self._transfer_redundant_data(trace_step_dir)
 
     def _collect_step_information(self) -> list:
@@ -723,22 +725,6 @@ CONFIG"""
             Log.info(f'Trace data saved: {local_path}')
         else:
             Log.error(f'Failed to transfer trace data: {local_path}')
-
-    def _transfer_memory_data(self, remote_path: str, local_path: str):
-        """Transfer memory data from device to host"""
-        if not Config.get('memory.enable'):
-            return
-
-        # Memory data is also in .htrace format
-        if not self.driver.has_file(f'{remote_path}.htrace'):
-            Log.warning(f'Memory data file not found: {remote_path}.htrace')
-            return
-
-        self.driver.pull_file(f'{remote_path}.htrace', local_path)
-        if os.path.exists(local_path):
-            Log.info(f'Memory data saved: {local_path}')
-        else:
-            Log.error(f'Failed to transfer memory data: {local_path}')
 
     def _transfer_redundant_data(self, trace_step_dir: str):
         if not self._redundant_mode_status:
