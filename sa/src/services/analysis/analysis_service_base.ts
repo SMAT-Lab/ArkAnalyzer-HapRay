@@ -137,16 +137,21 @@ export abstract class AnalysisServiceBase {
     // ---- 路径构建工具 ----
     /**
      * 构建步骤相关的路径信息
+     *
+     * 注意：memory 数据现在从 trace.htrace 中获取，不再使用单独的 memory 目录
+     * memoryHtracePath 和 memoryDbPath 已废弃，保留用于向后兼容
      */
     buildStepPaths(basePath: string, stepIdx: number): StepPaths {
         const stepDir = path.join(basePath, 'hiperf', `step${stepIdx}`);
+        const htraceStepDir = path.join(basePath, 'htrace', `step${stepIdx}`);
         return {
             stepDir,
             perfDataPath: path.join(stepDir, 'perf.data'),
             dbPath: path.join(stepDir, 'perf.db'),
-            htracePath: path.join(basePath, 'htrace', `step${stepIdx}`, 'trace.htrace'),
-            memoryHtracePath: path.join(basePath, 'memory', `step${stepIdx}`, 'memory.htrace'),
-            memoryDbPath: path.join(basePath, 'memory', `step${stepIdx}`, 'memory.db'),
+            htracePath: path.join(htraceStepDir, 'trace.htrace'),
+            // 已废弃：memory 数据从 trace.htrace 中获取
+            memoryHtracePath: path.join(htraceStepDir, 'trace.htrace'),
+            memoryDbPath: path.join(htraceStepDir, 'trace.db'),
         };
     }
 
@@ -182,7 +187,12 @@ export abstract class AnalysisServiceBase {
 
     // ---- 获取数据库路径工具 ----
     /**
-     * 获取 memory.db 路径数组
+     * 获取包含 memory 数据的 trace.db 路径数组
+     *
+     * 注意：memory 数据现在从 trace.htrace 中获取，不再使用单独的 memory 目录
+     * 此方法已废弃，保留用于向后兼容。实际的 memory 分析由 Python 端处理。
+     *
+     * @deprecated Memory analysis is now handled by Python, which reads from trace.htrace directly
      */
     async getMemoryDbPaths(inputPath: string, steps: Steps): Promise<Array<string>> {
         const results: Array<string> = [];
@@ -194,19 +204,19 @@ export abstract class AnalysisServiceBase {
                 continue;
             }
 
-            // 如果memory.db已存在，直接使用
+            // trace.db 已存在，直接使用（实际上就是 trace.db）
             if (fs.existsSync(stepPaths.memoryDbPath)) {
                 results.push(stepPaths.memoryDbPath);
                 continue;
             }
 
-            // 如果memory.htrace存在，使用trace_streamer转换
+            // 如果 trace.htrace 存在，使用 trace_streamer 转换
             if (fs.existsSync(stepPaths.memoryHtracePath)) {
-                logger.info(`Converting memory.htrace to memory.db for step ${step.stepIdx}`);
+                logger.info(`Converting trace.htrace to trace.db for step ${step.stepIdx}`);
                 await traceStreamerCmd(stepPaths.memoryHtracePath, stepPaths.memoryDbPath);
                 results.push(stepPaths.memoryDbPath);
             } else {
-                logger.warn(`未找到步骤 ${step.stepIdx} 的 memory 数据文件`);
+                logger.warn(`未找到步骤 ${step.stepIdx} 的 trace 数据文件`);
             }
         }
 

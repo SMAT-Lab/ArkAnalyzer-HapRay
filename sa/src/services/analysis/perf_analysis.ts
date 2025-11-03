@@ -331,14 +331,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
             copyDirectory(srcUiStepDir, destUiStepDir),
         ];
 
-        // 复制memory目录（如果存在）
-        if (srcStepPaths.memoryHtracePath && destStepPaths.memoryHtracePath) {
-            const srcMemoryDir = path.dirname(srcStepPaths.memoryHtracePath);
-            if (fs.existsSync(srcMemoryDir)) {
-                const destMemoryDir = path.dirname(destStepPaths.memoryHtracePath);
-                copyTasks.push(copyDirectory(srcMemoryDir, destMemoryDir));
-            }
-        }
+        // 注：memory 数据已包含在 htrace 目录中，不需要单独复制
 
         await Promise.all(copyTasks);
     }
