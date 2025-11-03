@@ -17,7 +17,9 @@ import json
 import logging
 import os
 import platform
+import sqlite3
 import subprocess
+import time
 from typing import Optional
 
 from hapray.core.common.common_utils import CommonUtils
@@ -99,13 +101,11 @@ class ExeUtils:
             True if database is valid, False if corrupted
         """
         try:
-            import sqlite3
-
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
             # Run SQLite's built-in integrity check
-            cursor.execute("PRAGMA integrity_check")
+            cursor.execute('PRAGMA integrity_check')
             result = cursor.fetchone()
             if result[0] != 'ok':
                 logger.warning('Database integrity check failed for %s: %s', db_path, result[0])
@@ -113,7 +113,7 @@ class ExeUtils:
                 return False
 
             # Try to query the native_hook table which is critical for memory analysis
-            cursor.execute("SELECT COUNT(*) FROM native_hook")
+            cursor.execute('SELECT COUNT(*) FROM native_hook')
             count = cursor.fetchone()[0]
             logger.info('Database %s has %d native_hook records', db_path, count)
 
@@ -319,13 +319,13 @@ class ExeUtils:
             log_file_path = output_db.replace('.db', '_conversion.log')
             try:
                 with open(log_file_path, 'w', encoding='utf-8') as log_file:
-                    result = subprocess.run(
+                    subprocess.run(
                         cmd,
                         check=True,
                         stdout=log_file,
                         stderr=subprocess.STDOUT,  # Merge stderr into stdout
                         timeout=3600,  # 1 hour timeout
-                        cwd=os.path.dirname(os.path.abspath(data_file))  # Run in htrace directory
+                        cwd=os.path.dirname(os.path.abspath(data_file)),  # Run in htrace directory
                     )
                 success = True
                 logger.info('Conversion log saved to: %s', log_file_path)
@@ -337,7 +337,7 @@ class ExeUtils:
                 # Log the conversion output for debugging
                 if os.path.exists(log_file_path):
                     try:
-                        with open(log_file_path, 'r', encoding='utf-8') as f:
+                        with open(log_file_path, encoding='utf-8') as f:
                             log_content = f.read()
                             logger.error('Conversion output: %s', log_content[-1000:])  # Last 1000 chars
                     except Exception:
@@ -360,7 +360,6 @@ class ExeUtils:
                 return False
 
             # Wait a moment for file system to flush
-            import time
             time.sleep(0.5)
 
             # Verify database integrity
