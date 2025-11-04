@@ -157,11 +157,11 @@ v-if="dataType === 'symbol'" v-model="symbolNameQuery" placeholder="根据符号
           {{ formatBytes(row.curMem) }}
         </template>
       </el-table-column> -->
-      <el-table-column prop="avgMem" label="平均内存" width="120" sortable>
+      <!-- <el-table-column prop="avgMem" label="平均内存" width="120" sortable>
         <template #default="{ row }">
           {{ formatBytes(row.avgMem) }}
         </template>
-      </el-table-column>
+      </el-table-column> -->
       <el-table-column prop="totalAllocMem" label="分配内存" width="120" sortable>
         <template #default="{ row }">
           {{ formatBytes(row.totalAllocMem) }}
