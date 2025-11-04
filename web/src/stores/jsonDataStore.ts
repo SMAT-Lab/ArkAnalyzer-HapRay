@@ -506,6 +506,9 @@ export interface JSONData {
   perf?: PerfData; // 负载数据（可选）
   trace?: TraceData;
   more?: MoreData;
+  ui?: {
+    animate?: UIAnimateData; // UI 动画数据
+  };
   dataType?: DataType; // 数据类型标记，用于前台判断显示哪些页面
 }
 
@@ -903,6 +906,87 @@ export function safeProcessFaultTreeData(data: FaultTreeData | null | undefined)
   return result;
 }
 
+// ==================== UI 动画数据类型 ====================
+
+// 图像动画区域
+export interface ImageAnimationRegion {
+  component: {
+    type: string;
+    bounds_rect: [number, number, number, number];
+    path: string;
+    attributes: Record<string, unknown>;
+    id: string;
+  };
+  comparison_result?: {
+    similarity_percentage: number;
+    hash_distance: number;
+  };
+  is_animation: boolean;
+  animation_type?: string;
+  region?: [number, number, number, number];
+  similarity?: number;
+}
+
+// 元素树动画区域
+export interface TreeAnimationRegion {
+  component: {
+    type: string;
+    bounds_rect: [number, number, number, number];
+    path: string;
+    attributes: Record<string, unknown>;
+    id: string;
+  };
+  is_animation: boolean;
+  comparison_result?: Array<{
+    attribute: string;
+    value1: string;
+    value2: string;
+  }>;
+  animate_type?: string;
+}
+
+export interface UIAnimatePhaseData {
+  image_animations?: {
+    animation_regions: ImageAnimationRegion[];
+    animation_count: number;
+  };
+  tree_animations?: {
+    animation_regions: TreeAnimationRegion[];
+    animation_count: number;
+  };
+  marked_images_base64?: string[]; // base64 编码的图片
+  marked_images_paths?: string[]; // 原始图片路径（调试用）
+  error?: string;
+}
+
+export interface UIAnimateStepData {
+  start_phase?: UIAnimatePhaseData;
+  end_phase?: UIAnimatePhaseData;
+  summary?: {
+    total_animations: number;
+    start_phase_animations: number;
+    end_phase_animations: number;
+    start_phase_tree_changes: number;
+    end_phase_tree_changes: number;
+    has_animations: boolean;
+  };
+  error?: string;
+}
+
+export interface UIAnimateData {
+  [stepKey: string]: UIAnimateStepData; // step1, step2, etc.
+}
+
+// 压缩后的 UI 动画数据类型
+export interface CompressedUIAnimateStepData {
+  compressed: true;
+  data: string; // base64 编码的压缩数据
+}
+
+export interface CompressedUIAnimateData {
+  [stepKey: string]: CompressedUIAnimateStepData | UIAnimateStepData;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
   version: string | null;
@@ -923,6 +1007,7 @@ interface JsonDataState {
   compareMark: string | null;
   flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
   nativeMemoryData: NativeMemoryData | null; // Native Memory数据
+  uiAnimateData: UIAnimateData | null; // UI 动画数据
 }
 
 /**
@@ -1011,6 +1096,7 @@ export const useJsonDataStore = defineStore('config', {
     compareMark: null,
     flameGraph: null,
     nativeMemoryData: null,
+    uiAnimateData: null,
   }),
 
   actions: {
@@ -1149,6 +1235,60 @@ export const useJsonDataStore = defineStore('config', {
       return decompressed;
     },
 
+    /**
+     * 解压缩 UI 动画数据
+     * 参考内存数据的解压缩逻辑
+     */
+    decompressUIAnimateData(uiAnimateData: CompressedUIAnimateData): UIAnimateData {
+      if (!uiAnimateData || typeof uiAnimateData !== 'object') {
+        return uiAnimateData as UIAnimateData;
+      }
+
+      const decompressed: UIAnimateData = {};
+
+      for (const [stepKey, stepData] of Object.entries(uiAnimateData)) {
+        if (typeof stepData === 'object' && stepData !== null && 'compressed' in stepData && stepData.compressed) {
+          // 解压缩步骤数据
+          const compressedStepData = stepData as CompressedUIAnimateStepData;
+          try {
+            const compressedData = compressedStepData.data;
+
+            // Base64解码
+            const binaryString = atob(compressedData);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // 使用pako解压缩
+            const decompressedBytes = pako.inflate(bytes);
+
+            // 使用 TextDecoder 进行解码
+            const decoder = new TextDecoder('utf-8');
+            const decompressedStr = decoder.decode(decompressedBytes);
+
+            // 解析 JSON
+            const stepDataParsed = JSON.parse(decompressedStr) as UIAnimateStepData;
+
+            decompressed[stepKey] = stepDataParsed;
+
+            console.log(`解压缩UI动画数据 ${stepKey}: ${compressedData.length} -> ${decompressedBytes.length} 字节`);
+          } catch (error) {
+            console.error(`解压缩UI动画数据失败 ${stepKey}:`, error);
+            // 解压缩失败时，返回空数据
+            decompressed[stepKey] = {
+              error: `解压缩失败: ${error}`,
+            };
+          }
+        } else {
+          // 未压缩的数据直接使用
+          decompressed[stepKey] = stepData as UIAnimateStepData;
+        }
+      }
+
+      return decompressed;
+    },
+
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
@@ -1195,6 +1335,14 @@ export const useJsonDataStore = defineStore('config', {
         } else {
           this.nativeMemoryData = null;
         }
+      }
+
+      // 加载 UI 动画数据
+      if (jsonData.ui && jsonData.ui.animate) {
+        // 可能需要解压缩
+        this.uiAnimateData = this.decompressUIAnimateData(jsonData.ui.animate as CompressedUIAnimateData);
+      } else {
+        this.uiAnimateData = null;
       }
 
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {

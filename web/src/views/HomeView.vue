@@ -59,6 +59,7 @@
           <FaultTreeAnalysis v-else-if="showPage.startsWith('fault_tree_step_')" :step="getFaultTreeStepId(showPage)" />
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
           <PerfNativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
+          <PerfUIAnimate v-else-if="showPage.startsWith('ui_animate_step_')" :step-id="getUIAnimateStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
           <CompareOverview v-else-if="showPage === 'compare_overview'" @navigate="changeContent" />
@@ -147,6 +148,7 @@ import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
 import PerfNativeMemory from '@/components/PerfNativeMemory.vue';
+import PerfUIAnimate from '@/components/PerfUIAnimate.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
@@ -253,6 +255,12 @@ const getMemoryStepId = (pageId: string): number => {
   return match ? parseInt(match[1]) : 1;
 };
 
+// 从UI动画页面ID中提取步骤ID
+const getUIAnimateStepId = (pageId: string): number => {
+  const match = pageId.match(/ui_animate_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
 // 动态获取步骤页面标题
 const getStepPageTitle = (pageId: string): string => {
   const stepId = getStepId(pageId);
@@ -347,6 +355,18 @@ const getMemoryStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / Memory分析`;
 };
 
+// 动态获取UI动画步骤页面标题
+const getUIAnimateStepPageTitle = (pageId: string): string => {
+  const stepId = getUIAnimateStepId(pageId);
+  return `步骤${stepId} UI 动画分析`;
+};
+
+// 动态获取UI动画步骤页面面包屑
+const getUIAnimateStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getUIAnimateStepId(pageId);
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / UI 动画分析`;
+};
+
 const getPageTitle = () => {
   if (showPage.value.startsWith('perf_step_')) {
     return getStepPageTitle(showPage.value);
@@ -365,6 +385,9 @@ const getPageTitle = () => {
   }
   if (showPage.value.startsWith('memory_step_')) {
     return getMemoryStepPageTitle(showPage.value);
+  }
+  if (showPage.value.startsWith('ui_animate_step_')) {
+    return getUIAnimateStepPageTitle(showPage.value);
   }
   return pageTitles[showPage.value] || '未知页面';
 };
@@ -387,6 +410,9 @@ const getBreadcrumb = () => {
   }
   if (showPage.value.startsWith('memory_step_')) {
     return getMemoryStepPageBreadcrumb(showPage.value);
+  }
+  if (showPage.value.startsWith('ui_animate_step_')) {
+    return getUIAnimateStepPageBreadcrumb(showPage.value);
   }
   return breadcrumbMap[showPage.value] || '首页';
 };
@@ -413,7 +439,8 @@ const shouldShowSteps = () => {
          showPage.value.startsWith('fault_tree_step_') ||
          showPage.value.startsWith('compare_step_') ||
          showPage.value.startsWith('flame_step_') ||
-         showPage.value.startsWith('memory_step_');
+         showPage.value.startsWith('memory_step_') ||
+         showPage.value.startsWith('ui_animate_step_');
 };
 
 // 获取当前步骤信息（计算属性）
