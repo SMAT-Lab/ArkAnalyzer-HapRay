@@ -88,6 +88,13 @@
               </el-icon>
               <span>Memory分析</span>
             </el-menu-item>
+
+            <el-menu-item :index="`ui_animate_step_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <VideoPlay />
+              </el-icon>
+              <span>UI 动画分析</span>
+            </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
       </el-sub-menu>

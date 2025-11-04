@@ -9,12 +9,15 @@
     </div>
 
     <!-- 调用链信息表格 -->
-    <div v-if="selectedCallchains.length > 0" style="margin-top: 20px;">
+    <div v-if="hasSelectedTimePoint" style="margin-top: 20px;">
       <h4 style="margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #333;">
         <i class="el-icon-link" style="margin-right: 5px;"></i>
-        当前时间点调用链信息 ({{ selectedCallchains.length }} 条)
+        当前时间点调用链信息
       </h4>
+
+      <!-- 有调用链数据 -->
       <el-table
+        v-if="selectedCallchains.length > 0"
         :data="selectedCallchains"
         border
         stripe
@@ -34,6 +37,26 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 无调用链数据（callchain_id=-1） -->
+      <el-alert
+        v-else
+        title="该时间点的内存事件没有调用链信息"
+        type="info"
+        :closable="false"
+        show-icon
+      >
+        <template #default>
+          <div style="font-size: 13px; color: #606266;">
+            <p style="margin: 0 0 8px 0;">
+              <strong>原因：</strong>当前选中的时间点包含的内存事件（通常是释放事件）在数据采集时未记录调用栈信息。
+            </p>
+            <p style="margin: 0;">
+              <strong>事件详情：</strong>{{ selectedRecordsSummary }}
+            </p>
+          </div>
+        </template>
+      </el-alert>
     </div>
   </div>
 </template>
@@ -78,32 +101,105 @@ const selectedCallchains = computed(() => {
     (record) => record.relativeTs === props.selectedTimePoint
   );
 
+  // 创建 callchainId -> eventType 的映射，用于判断是分配还是释放
+  const callchainEventTypeMap = new Map<number, string>();
+  selectedRecords.forEach((record) => {
+    if (!callchainEventTypeMap.has(record.callchainId)) {
+      callchainEventTypeMap.set(record.callchainId, record.eventType);
+    }
+  });
+
   // 收集所有调用链ID
   const callchainIds = new Set(selectedRecords.map((r) => r.callchainId));
 
   // 获取调用链详细信息
-  const result: CallchainRecord[] = [];
+  interface CallchainWithId extends CallchainRecord {
+    callchainId: number;
+    is_alloc: boolean;
+  }
+  const result: CallchainWithId[] = [];
 
   if (Array.isArray(props.callchains)) {
-    // 数组格式：直接过滤
-    result.push(...props.callchains.filter((c) => callchainIds.has(c.callchainId)));
+    // 数组格式：直接过滤（这种格式应该已经有 callchainId）
+    props.callchains.forEach((c) => {
+      if (callchainIds.has(c.callchainId)) {
+        const eventType = callchainEventTypeMap.get(c.callchainId) || '';
+        const isAlloc = eventType === 'AllocEvent' || eventType === 'MmapEvent';
+        result.push({
+          ...c,
+          callchainId: c.callchainId,
+          is_alloc: isAlloc,
+        });
+      }
+    });
   } else {
-    // 字典格式：按 callchainId 查找
+    // 字典格式：按 callchainId 查找，需要手动添加 callchainId 字段
     callchainIds.forEach((id) => {
       const chains = props.callchains![id];
       if (chains && Array.isArray(chains)) {
-        result.push(...chains);
+        const eventType = callchainEventTypeMap.get(id) || '';
+        const isAlloc = eventType === 'AllocEvent' || eventType === 'MmapEvent';
+        chains.forEach((chain) => {
+          result.push({
+            ...chain,
+            callchainId: id,
+            is_alloc: isAlloc,
+          });
+        });
       }
     });
   }
 
-  // 按深度排序
+  // 按调用链ID和深度排序
   return result.sort((a, b) => {
     if (a.callchainId !== b.callchainId) {
       return a.callchainId - b.callchainId;
     }
     return a.depth - b.depth;
   });
+});
+
+// 是否选中了时间点
+const hasSelectedTimePoint = computed(() => {
+  return props.selectedTimePoint !== null;
+});
+
+// 选中时间点的记录摘要（用于无调用链时显示）
+const selectedRecordsSummary = computed(() => {
+  if (props.selectedTimePoint === null) {
+    return '';
+  }
+
+  const selectedRecords = props.records.filter(
+    (record) => record.relativeTs === props.selectedTimePoint
+  );
+
+  if (selectedRecords.length === 0) {
+    return '无记录';
+  }
+
+  // 统计事件类型
+  const eventTypeCounts = new Map<string, number>();
+  let totalSize = 0;
+
+  selectedRecords.forEach((record) => {
+    const eventType = record.eventType;
+    eventTypeCounts.set(eventType, (eventTypeCounts.get(eventType) || 0) + 1);
+    totalSize += record.heapSize;
+  });
+
+  // 构建摘要字符串
+  const eventTypeStr = Array.from(eventTypeCounts.entries())
+    .map(([type, count]) => `${type}×${count}`)
+    .join(', ');
+
+  const sizeStr = totalSize >= 1024 * 1024
+    ? `${(totalSize / (1024 * 1024)).toFixed(2)} MB`
+    : totalSize >= 1024
+    ? `${(totalSize / 1024).toFixed(2)} KB`
+    : `${totalSize} B`;
+
+  return `${eventTypeStr}，总大小 ${sizeStr}`;
 });
 
 // 使用 computed 缓存处理后的数据
@@ -231,14 +327,14 @@ async function initChart() {
   const isVeryLargeDataset = chartData.length > 50000;
 
   // 超大数据集时，默认只显示更少的数据
-  let defaultZoomEnd;
-  if (isVeryLargeDataset) {
-    defaultZoomEnd = Math.min(100, (100 / chartData.length) * 100); // 只显示 100 个事件
-  } else if (isLargeDataset) {
-    defaultZoomEnd = Math.min(100, (200 / chartData.length) * 100); // 显示 200 个事件
-  } else {
-    defaultZoomEnd = Math.min(100, (500 / chartData.length) * 100); // 显示 500 个事件
-  }
+  // let defaultZoomEnd;
+  // if (isVeryLargeDataset) {
+  //   defaultZoomEnd = Math.min(100, (100 / chartData.length) * 100); // 只显示 100 个事件
+  // } else if (isLargeDataset) {
+  //   defaultZoomEnd = Math.min(100, (200 / chartData.length) * 100); // 显示 200 个事件
+  // } else {
+  //   defaultZoomEnd = Math.min(100, (500 / chartData.length) * 100); // 显示 500 个事件
+  // }
 
   const option: echarts.EChartsOption = {
     animation: !isLargeDataset, // 大数据集时禁用动画
@@ -320,39 +416,14 @@ async function initChart() {
     grid: {
       left: '3%',
       right: '4%',
-      bottom: '15%',
+      bottom: '10%',
       top: '20%',
       containLabel: true,
     },
-    dataZoom: [
-      {
-        type: 'slider',
-        show: true,
-        xAxisIndex: [0],
-        start: 0,
-        end: defaultZoomEnd,
-        bottom: '5%',
-        height: 20,
-        filterMode: 'filter', // 过滤数据以提高性能
-        throttle: isVeryLargeDataset ? 300 : (isLargeDataset ? 200 : 100), // 超大数据集时进一步增加节流时间
-        minValueSpan: isVeryLargeDataset ? 50 : 10, // 超大数据集时限制最小缩放范围
-      },
-      {
-        type: 'inside',
-        xAxisIndex: [0],
-        start: 0,
-        end: defaultZoomEnd,
-        filterMode: 'filter',
-        throttle: isVeryLargeDataset ? 300 : (isLargeDataset ? 200 : 100),
-        zoomOnMouseWheel: true,
-        moveOnMouseMove: true,
-        minValueSpan: isVeryLargeDataset ? 50 : 10,
-      },
-    ],
     xAxis: {
       type: 'category',
       data: chartData.map((_, index) => index), // 使用索引而不是格式化的时间字符串
-      name: '事件序号',
+      name: '相对时间',
       nameLocation: 'middle',
       nameGap: 30,
       axisLabel: {
@@ -470,9 +541,9 @@ async function initChart() {
   };
 
     chartInstance.setOption(option, {
-      notMerge: true, // 不合并，直接替换
+      replaceMerge: ['series'], // 只替换 series，保留其他配置
       lazyUpdate: isVeryLargeDataset, // 超大数据集时使用延迟更新
-      silent: isVeryLargeDataset, // 超大数据集时静默更新，不触发事件
+      silent: false, // 不静默更新，确保样式正确应用
     });
 
     // 添加点击事件监听
