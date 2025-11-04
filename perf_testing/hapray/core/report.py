@@ -82,6 +82,14 @@ class ReportData:
         # 特殊处理内存数据：按步骤单独压缩
         cleaned_result = self._compress_native_memory_by_steps(cleaned_result)
 
+        # 特殊处理UI动画数据：按步骤单独压缩
+        cleaned_result = self._compress_ui_animate_by_steps(cleaned_result)
+
+        # 删除重复的 memory_analysis 字段（已经被压缩到 native_memory 中）
+        if 'more' in cleaned_result and 'memory_analysis' in cleaned_result['more']:
+            del cleaned_result['more']['memory_analysis']
+            logging.info('Removed duplicate memory_analysis field (data is in native_memory)')
+
         json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
             f.write(json_str)
@@ -305,6 +313,65 @@ class ReportData:
         data['more']['native_memory'] = compressed_native_memory
         return data
 
+    def _compress_ui_animate_by_steps(self, data):
+        """按步骤压缩UI动画数据，避免字符串过长
+
+        UI动画数据包含大量base64编码的图片，需要压缩以减小文件大小
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有UI动画数据
+        if 'ui' not in data or 'animate' not in data['ui']:
+            return data
+
+        ui_animate_data = data['ui']['animate']
+        if not isinstance(ui_animate_data, dict):
+            return data
+
+        # 按步骤压缩UI动画数据
+        compressed_ui_animate = {}
+
+        for step_key, step_data in ui_animate_data.items():
+            if isinstance(step_data, dict):
+                try:
+                    # 将整个步骤数据转换为 JSON 字符串
+                    step_json = json.dumps(step_data)
+                    original_size = len(step_json)
+
+                    # 压缩步骤数据
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    base64_bytes = base64.b64encode(compressed_bytes)
+                    compressed_step = base64_bytes.decode('ascii')
+
+                    # 使用压缩后的数据
+                    compressed_ui_animate[step_key] = {
+                        'compressed': True,  # 标记为已压缩
+                        'data': compressed_step,  # 压缩后的数据
+                    }
+
+                    # 记录压缩效果
+                    compressed_size = len(compressed_step)
+                    compression_ratio = (1 - compressed_size / original_size) * 100
+                    logging.info(
+                        'UI动画数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
+                    )
+                except Exception as e:
+                    logging.warning('压缩UI动画数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_ui_animate[step_key] = step_data
+            else:
+                # 非预期格式的数据保持不变
+                compressed_ui_animate[step_key] = step_data
+
+        # 更新数据结构
+        data['ui']['animate'] = compressed_ui_animate
+        return data
+
     def load_perf_data(self, path, required: bool = True):
         """加载性能数据
 
@@ -387,6 +454,16 @@ class ReportData:
             self.result['more']['flame_graph'] = flame_graph_data
         elif required:
             logging.warning('Flame graph data not found at %s', flame_graph_path)
+
+        # 加载 UI 动画数据
+        if 'ui' not in self.result:
+            self.result['ui'] = {}
+
+        ui_animate_path = os.path.join(report_dir, 'ui_animate.json')
+        ui_animate_data = self._load_json_safe(ui_animate_path, default={})
+        if ui_animate_data:
+            self.result['ui']['animate'] = ui_animate_data
+            logging.info(f'Loaded UI Animate data: {len(ui_animate_data)} steps')
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""

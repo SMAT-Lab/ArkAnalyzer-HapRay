@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import base64
 import json
 import os
 import re
@@ -429,3 +430,78 @@ class UIAnimateAnalyzer(BaseAnalyzer):
             'end_phase_tree_changes': end_tree_count,
             'has_animations': (start_image_count + end_image_count) > 0,
         }
+
+    def _convert_images_to_base64(self, step_result: dict[str, Any]) -> dict[str, Any]:
+        """将图片路径转换为 base64 编码
+
+        Args:
+            step_result: 步骤结果
+
+        Returns:
+            转换后的结果
+        """
+        result = step_result.copy()
+
+        # 处理 start_phase 和 end_phase
+        for phase in ['start_phase', 'end_phase']:
+            if phase in result and isinstance(result[phase], dict):
+                phase_data = result[phase]
+                if 'marked_images' in phase_data and isinstance(phase_data['marked_images'], list):
+                    base64_images = []
+                    for img_path in phase_data['marked_images']:
+                        if os.path.exists(img_path):
+                            try:
+                                with open(img_path, 'rb') as f:
+                                    img_data = f.read()
+                                    base64_str = base64.b64encode(img_data).decode('ascii')
+                                    base64_images.append(base64_str)
+                            except Exception as e:
+                                self.logger.warning(f'转换图片 {img_path} 为 base64 失败: {e}')
+                        else:
+                            self.logger.warning(f'图片文件不存在: {img_path}')
+
+                    # 替换为 base64 数据
+                    phase_data['marked_images_base64'] = base64_images
+                    # 保留原始路径用于调试
+                    phase_data['marked_images_paths'] = phase_data.pop('marked_images')
+
+        return result
+
+    def write_report(self, result: dict):
+        """重写 write_report 方法，在写入前转换图片为 base64
+
+        Args:
+            result: 分析结果字典
+        """
+        if not self.results:
+            self.logger.warning('No results to write. Skipping report generation for %s', self.report_path)
+            return
+
+        try:
+            # 转换所有步骤的图片为 base64
+            converted_results = {}
+            for step_key, step_data in self.results.items():
+                if isinstance(step_data, dict) and not step_data.get('error'):
+                    converted_results[step_key] = self._convert_images_to_base64(step_data)
+                else:
+                    converted_results[step_key] = step_data
+
+            # 写入文件
+            file_path = os.path.join(self.scene_dir, 'report', self.report_path.replace('/', '_') + '.json')
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(converted_results, f, ensure_ascii=False)
+            self.logger.info('Report successfully written to %s', file_path)
+        except Exception as e:
+            self.logger.exception('Failed to write report: %s', str(e))
+
+        # 更新结果字典
+        dict_path = self.report_path.split('/')
+        v = result
+        for key in dict_path:
+            if key == dict_path[-1]:
+                break
+            if key not in v:
+                v[key] = {}
+            v = v[key]
+        v[dict_path[-1]] = converted_results
