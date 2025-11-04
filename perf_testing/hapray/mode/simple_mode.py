@@ -16,6 +16,8 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     SIMPLE模式下创建目录结构、testInfo.json、pids.json、steps.json
     支持多个perf和trace文件，每个文件对应一个step目录
 
+    注意：memory 数据从 trace.htrace 中获取，不再需要单独的 memory 目录
+
     Args:
         report_dir: 报告目录
         perf_paths: perf文件路径列表
@@ -27,6 +29,7 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     """
     pids = kwargs.get('pids', [])
     steps_file_path = kwargs.get('steps_file_path', '')
+
     # 检查输入文件是否存在
     for perf_path in perf_paths:
         if not os.path.exists(perf_path):
@@ -42,7 +45,7 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     report_report_dir = os.path.join(report_dir, 'report')
     target_db_files = []
 
-    # 创建基础目录结构
+    # 创建基础目录结构（不再创建 memory 目录）
     hiperf_base_dir = os.path.join(report_dir, 'hiperf')
     htrace_base_dir = os.path.join(report_dir, 'htrace')
 
@@ -162,7 +165,10 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
 
 
 def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir):
-    """创建基础目录结构"""
+    """创建基础目录结构
+
+    注意：不再创建 memory 目录，memory 数据从 trace.htrace 中获取
+    """
     if not os.path.exists(report_report_dir):
         os.makedirs(report_report_dir)
         os.makedirs(hiperf_base_dir)

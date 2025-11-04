@@ -38,7 +38,7 @@ class XVM:
     def install_xvm(self):
         if self._has_install_xvm():
             return
-        local_path = os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox/third-party/xvm')
+        local_path = os.path.join(CommonUtils.get_project_root(), 'sa-cmd/third-party/xvm')
         self.driver.push_file(local_path, f'/data/app/el1/bundle/public/{self.testcase.app_package}')
         self.driver.shell(f'chmod +x /data/app/el1/bundle/public/{self.testcase.app_package}/xvm/bin/*')
 

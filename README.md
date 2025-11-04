@@ -12,6 +12,7 @@ For more detailed information, please refer to the following documents:
 - [用例执行预置条件](docs/用例执行预置条件.md) - Test Case Prerequisites
 - [鸿蒙应用覆盖率](docs/鸿蒙应用覆盖率.md) - ArkTs Coverage Analysis
 - [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md) - SO Optimization Detection
+- [HAP静态分析器](staticanalyzer/README.md) - HAP Static Analysis Tool
 
 ## Build
 ```
@@ -32,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides five main commands: `perf` for performance testing, `opt` for optimization detection, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
+The tool provides six main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -44,11 +45,15 @@ Options:
 - `--circles`: Sample CPU cycles instead of default events
 - `--round <N>`: Number of test rounds to execute (default: 5)
 - `--no-trace`: Disable trace capturing
+- `--no-perf`: Disable perf capturing (for memory-only mode)
+- `--memory`: Enable Memory profiling using hiprofiler nativehook plugin
 - `--devices <device_serial_numbers...>`: Device serial numbers (e.g., HX1234567890)
+- `--manual`: Enable manual testing mode with interactive 30-second performance data collection
+- `--app`: Target application bundle name for manual testing (performance data will be collected for 30 seconds)
 
 Requirements:
-- hdc and node must be in PATH (from Command Line Tools for HarmonyOS) 
-  
+- hdc and node must be in PATH (from Command Line Tools for HarmonyOS)
+
 Example:
 ```bash
 # Run specific test cases with symbol files
@@ -56,7 +61,30 @@ python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir 
 
 # Run specific test cases sample CPU cycles
 python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
+
+# Run manual testing
+python -m scripts.main perf --manual --app your_app_bundle_name
+
+# Memory profiling (memory only)
+python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace --no-perf
+
+# Mixed collection: perf + trace + memory
+python -m scripts.main perf --run_testcases .*_xhs_.* --memory
+
+# Mixed collection: perf + memory (no trace)
+python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace
 ```
+
+**Memory Collection Modes:**
+1. **Memory Only**: Use `--memory --no-trace --no-perf` to collect only Memory data
+2. **Perf + Trace + Memory**: Use `--memory` (default includes perf and trace)
+3. **Perf + Memory**: Use `--memory --no-trace` to collect perf and memory without trace
+
+The Memory profiling uses HarmonyOS hiprofiler_cmd with nativehook plugin to collect:
+- Memory allocation/deallocation events
+- Call stacks with configurable depth (default: 20)
+- Malloc/free matching for leak detection
+- Offline symbolization support
 
 #### Simplified Test Execution (`prepare`)
 ```bash
@@ -114,6 +142,28 @@ python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx
 python -m scripts.main opt -i apk_files/ -o multi_apk_report.xlsx -j4
 ```
 For more detailed information about Optimization Detection, please refer to [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md)
+
+#### Static Analysis (`static`)
+```bash
+python -m scripts.main static -i <hap_file> [-o <output_directory>] [options]
+```
+Options:
+- `-i/--input <path>`: HAP file path to analyze (required)
+- `-o/--output <path>`: Output directory for analysis results (default: ./static-output)
+- `--include-details`: Include detailed analysis information
+
+Features:
+- **Framework Detection**: Automatically identifies technology stacks (React Native, Flutter, Unity, etc.)
+- **SO File Analysis**: Deep analysis of native libraries and their optimization opportunities
+- **Resource Analysis**: Comprehensive scanning of JavaScript, images, and other resources
+- **Hermes Bytecode Detection**: Specialized detection for React Native Hermes engine bytecode
+- **Nested Archive Support**: Recursive analysis of compressed files within HAP packages
+
+Example:
+```bash
+# Generate all output formats
+python -m scripts.main static -i app.hap -o ./static-output
+```
 
 #### Update Reports (`update`)
 ```bash
