@@ -127,7 +127,31 @@ class ArkUITreeParser:
 
             i += 1
 
+        # 组件属性解析完成后，生成 bounds_rect（若可计算）
+        self._finalize_component(component)
+
         return i
+
+    def _finalize_component(self, component: ArkUIComponent):
+        """在组件所有属性解析完毕后生成派生属性，如 bounds_rect"""
+        attrs = component.attributes or {}
+        try:
+            left = attrs.get('left')
+            top = attrs.get('top')
+            width = attrs.get('width')
+            height = attrs.get('height')
+            # 仅当四个字段都存在且为数字时生成
+            if all(v is not None for v in [left, top, width, height]):
+                # 宽高可能是浮点，保证为整数
+                left = int(float(left))
+                top = int(float(top))
+                width = int(float(width))
+                height = int(float(height))
+                attrs['bounds_rect'] = (left, top, left + width, top + height)
+                component.attributes = attrs
+        except Exception:
+            # 静默失败，不影响整体解析
+            pass
 
     def _is_attribute_line(self, line: str) -> bool:
         """判断是否为属性行"""
@@ -443,7 +467,7 @@ class ArkUITreeComparator:
                 {
                     'component': {
                         'type': comp_name,
-                        'bounds_rect': self._parse_bounds(comp1.get('attributes', {})),
+                        'bounds_rect': comp1.get('attributes', {}).get('bounds_rect', ''),
                         'path': current_path,
                         'attributes': comp1.get('attributes', {}),
                         'id': comp1.get('attributes', {}).get('id', ''),
@@ -472,7 +496,7 @@ class ArkUITreeComparator:
                     {
                         'component': {
                             'type': comp_name,
-                            'bounds_rect': self._parse_bounds(comp.get('attributes', {})),
+                            'bounds_rect': comp.get('attributes', {}).get('bounds_rect', ''),
                             'path': f'{current_path}/{comp_name}',
                             'attributes': comp.get('attributes', {}),
                             'id': comp.get('attributes', {}).get('id', ''),
@@ -491,7 +515,7 @@ class ArkUITreeComparator:
                     {
                         'component': {
                             'type': comp_name,
-                            'bounds_rect': self._parse_bounds(comp.get('attributes', {})),
+                            'bounds_rect': comp.get('attributes', {}).get('bounds_rect', ''),
                             'path': f'{current_path}/{comp_name}',
                             'attributes': comp.get('attributes', {}),
                             'id': comp.get('attributes', {}).get('id', ''),
@@ -501,14 +525,6 @@ class ArkUITreeComparator:
                         'animate_type': 'attribute_animate',
                     }
                 )
-
-    def _parse_bounds(self, attrs: dict[str, Any]) -> Optional[tuple[int, int, int, int]]:
-        left = attrs['left']
-        top = attrs['top']
-        width = attrs['width']
-        height = attrs['height']
-
-        return left, top, left + width, top + height
 
     def _compare_attributes(self, comp1: dict[str, Any], comp2: dict[str, Any]) -> list[dict[str, Any]]:
         """
