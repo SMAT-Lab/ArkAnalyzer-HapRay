@@ -7,6 +7,34 @@
         <div style="font-size: 12px; color: #666;">数据量较大，请稍候</div>
       </div>
     </div>
+
+    <!-- 调用链信息表格 -->
+    <div v-if="selectedCallchains.length > 0" style="margin-top: 20px;">
+      <h4 style="margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #333;">
+        <i class="el-icon-link" style="margin-right: 5px;"></i>
+        当前时间点调用链信息 ({{ selectedCallchains.length }} 条)
+      </h4>
+      <el-table
+        :data="selectedCallchains"
+        border
+        stripe
+        size="small"
+        max-height="400"
+        style="width: 100%;"
+      >
+        <el-table-column prop="callchainId" label="调用链ID" width="100" align="center" />
+        <el-table-column prop="depth" label="深度" width="80" align="center" />
+        <el-table-column prop="file" label="文件" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="symbol" label="符号" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="is_alloc" label="类型" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.is_alloc ? 'success' : 'danger'" size="small">
+              {{ row.is_alloc ? '分配' : '释放' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
 
@@ -14,20 +42,69 @@
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import * as echarts from 'echarts';
 import type { CallbackDataParams } from 'echarts/types/dist/shared';
-import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
+import type { NativeMemoryRecord, CallchainRecord } from '@/stores/jsonDataStore';
+import { calculateCumulativeMemory } from '@/utils/nativeMemoryUtil';
 
 interface Props {
   records: NativeMemoryRecord[];
   height?: string;
+  selectedTimePoint?: number | null; // 当前选中的时间点
+  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据
 }
 
 const props = withDefaults(defineProps<Props>(), {
   height: '300px',
+  selectedTimePoint: null,
+  callchains: undefined,
 });
+
+// 定义 emit 事件
+const emit = defineEmits<{
+  'time-point-selected': [timePoint: number | null];
+}>();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 const isLoading = ref(false);
+
+// 计算选中时间点的调用链信息
+const selectedCallchains = computed(() => {
+  if (props.selectedTimePoint === null || !props.callchains) {
+    return [];
+  }
+
+  // 找到选中时间点的所有记录
+  const selectedRecords = props.records.filter(
+    (record) => record.relativeTs === props.selectedTimePoint
+  );
+
+  // 收集所有调用链ID
+  const callchainIds = new Set(selectedRecords.map((r) => r.callchainId));
+
+  // 获取调用链详细信息
+  const result: CallchainRecord[] = [];
+
+  if (Array.isArray(props.callchains)) {
+    // 数组格式：直接过滤
+    result.push(...props.callchains.filter((c) => callchainIds.has(c.callchainId)));
+  } else {
+    // 字典格式：按 callchainId 查找
+    callchainIds.forEach((id) => {
+      const chains = props.callchains![id];
+      if (chains && Array.isArray(chains)) {
+        result.push(...chains);
+      }
+    });
+  }
+
+  // 按深度排序
+  return result.sort((a, b) => {
+    if (a.callchainId !== b.callchainId) {
+      return a.callchainId - b.callchainId;
+    }
+    return a.depth - b.depth;
+  });
+});
 
 // 使用 computed 缓存处理后的数据
 const processedData = computed(() => {
@@ -43,20 +120,22 @@ const processedData = computed(() => {
     };
   }
 
-  // 按时间排序记录（使用更快的排序算法）
+  // 按时间排序记录
   const sortedRecords = [...props.records].sort((a, b) => a.relativeTs - b.relativeTs);
 
-  // 直接使用 record.allHeapSize（后端已经计算好的累积内存值）
+  // 计算当前内存
+  const recordsWithCumulative = calculateCumulativeMemory(sortedRecords);
+
+  // 计算最大最小值
   let maxMemory = -Infinity;
   let minMemory = Infinity;
 
   // 对于超大数据集（> 50000），使用更激进的优化策略
-  const isVeryLargeDataset = sortedRecords.length > 50000;
+  const isVeryLargeDataset = recordsWithCumulative.length > 50000;
 
-  // 如果数据量超大，只保留关键字段以减少内存占用
-  const chartData = sortedRecords.map((record, index) => {
-    // 使用后端提供的 allHeapSize
-    const currentMemory = record.allHeapSize;
+  // 构建图表数据
+  const chartData = recordsWithCumulative.map((record, index) => {
+    const currentMemory = record.cumulativeMemory;
 
     // 更新最大最小值
     if (currentMemory > maxMemory) maxMemory = currentMemory;
@@ -67,7 +146,7 @@ const processedData = computed(() => {
       return {
         index,
         relativeTs: record.relativeTs,
-        allHeapSize: currentMemory,
+        cumulativeMemory: currentMemory,
         heapSize: record.heapSize,
         eventType: record.eventType,
         // 其他字段在 tooltip 时从原始数据获取
@@ -77,7 +156,7 @@ const processedData = computed(() => {
     return {
       index,
       relativeTs: record.relativeTs,
-      allHeapSize: currentMemory,
+      cumulativeMemory: currentMemory,
       heapSize: record.heapSize,
       eventType: record.eventType,
       subEventType: record.subEventType,
@@ -88,7 +167,7 @@ const processedData = computed(() => {
     };
   });
 
-  const finalMemory = chartData[chartData.length - 1]?.allHeapSize || 0;
+  const finalMemory = chartData[chartData.length - 1]?.cumulativeMemory || 0;
 
   // 预计算颜色映射范围
   const memoryRange = maxMemory - minMemory;
@@ -167,15 +246,18 @@ async function initChart() {
     animationDurationUpdate: isVeryLargeDataset ? 0 : 300,
     title: {
       text: `内存时间线 (共 ${chartData.length.toLocaleString()} 个事件)`,
-      subtext: `峰值: ${formatBytes(maxMemory)} | 最低: ${formatBytes(minMemory)} | 最终: ${formatBytes(finalMemory)}`,
+      subtext: props.selectedTimePoint !== null
+        ? `🔸 选中时间点: ${formatTime(props.selectedTimePoint)} | 🔴 峰值: ${formatBytes(maxMemory)} | 最低: ${formatBytes(minMemory)} | 最终: ${formatBytes(finalMemory)}`
+        : `🔴 峰值: ${formatBytes(maxMemory)} | 最低: ${formatBytes(minMemory)} | 最终: ${formatBytes(finalMemory)}`,
       left: 'center',
       textStyle: {
         fontSize: 16,
         fontWeight: 600,
       },
       subtextStyle: {
-        fontSize: 12,
-        color: '#666',
+        fontSize: 13,
+        color: props.selectedTimePoint !== null ? '#ff9800' : '#666',
+        fontWeight: props.selectedTimePoint !== null ? 'bold' : 'normal',
       },
     },
     tooltip: {
@@ -195,7 +277,7 @@ async function initChart() {
           '<div style="padding: 8px; max-width: 300px;">',
           `<div style="font-weight: bold; margin-bottom: 8px;">事件 #${dataItem.index + 1}</div>`,
           `<div><strong>时间:</strong> ${formatTime(dataItem.relativeTs)}</div>`,
-          `<div><strong>累积内存:</strong> ${formatBytes(dataItem.allHeapSize)}</div>`,
+          `<div><strong>当前内存:</strong> ${formatBytes(dataItem.cumulativeMemory)}</div>`,
           `<div><strong>事件类型:</strong> ${dataItem.eventType}</div>`,
         ];
 
@@ -287,7 +369,7 @@ async function initChart() {
     },
     yAxis: {
       type: 'value',
-      name: '累积内存',
+      name: '当前内存',
       nameLocation: 'middle',
       nameGap: 60,
       axisLabel: {
@@ -296,32 +378,90 @@ async function initChart() {
     },
     series: [
       {
-        name: '累积内存',
+        name: '当前内存',
         type: 'line', // 改用折线图，性能更好
-        data: chartData.map(item => item.allHeapSize),
-        sampling: 'lttb', // 使用 LTTB 采样算法，大幅提升性能
-        symbol: 'none', // 不显示数据点标记
+        data: chartData.map((item) => {
+          // 找到峰值点的索引
+          const isPeak = item.cumulativeMemory === maxMemory;
+          // 找到选中点的索引
+          const isSelected = props.selectedTimePoint !== null && item.relativeTs === props.selectedTimePoint;
+
+          // 根据状态返回不同的配置
+          if (isPeak) {
+            return {
+              value: item.cumulativeMemory,
+              itemStyle: {
+                // 峰值点标红 - 更加突出
+                color: '#ff0000',
+                borderColor: '#fff',
+                borderWidth: 3,
+                shadowBlur: 20,
+                shadowColor: 'rgba(255, 0, 0, 0.8)',
+              },
+              symbolSize: 18,
+              // 添加标签显示
+              label: {
+                show: true,
+                position: 'top',
+                formatter: () => '● 峰值',
+                color: '#ff0000',
+                fontWeight: 'bold',
+                fontSize: 12,
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                padding: [4, 8],
+                borderRadius: 4,
+                borderColor: '#ff0000',
+                borderWidth: 1,
+              },
+            };
+          } else if (isSelected) {
+            return {
+              value: item.cumulativeMemory,
+              itemStyle: {
+                // 选中点标黄 - 更加醒目
+                color: '#FFD700',
+                borderColor: '#fff',
+                borderWidth: 5,
+                shadowBlur: 30,
+                shadowColor: 'rgba(255, 215, 0, 1)',
+              },
+              symbolSize: 24,
+              // 添加标签显示
+              label: {
+                show: true,
+                position: 'top',
+                formatter: () => '● 已选中',
+                color: '#FFD700',
+                fontWeight: 'bold',
+                fontSize: 12,
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                padding: [4, 8],
+                borderRadius: 4,
+                borderColor: '#FFD700',
+                borderWidth: 1,
+              },
+            };
+          } else {
+            return {
+              value: item.cumulativeMemory,
+              symbolSize: isVeryLargeDataset ? 4 : (isLargeDataset ? 6 : 8),
+            };
+          }
+        }),
+        // 不使用 sampling，避免丢失自定义样式
+        symbol: 'circle', // 显示圆形数据点标记，以便点击
+        showSymbol: true, // 始终显示数据点
         lineStyle: {
           width: isVeryLargeDataset ? 0.8 : (isLargeDataset ? 1 : 1.5), // 超大数据集时使用更细的线条
           color: '#3498db',
         },
-        areaStyle: isLargeDataset ? undefined : { // 大数据集时不显示区域填充
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(52, 152, 219, 0.3)' },
-              { offset: 1, color: 'rgba(52, 152, 219, 0.05)' },
-            ],
-          },
-        },
+        // 不使用 areaStyle，避免影响数据点显示
         emphasis: {
-          disabled: isLargeDataset, // 大数据集时禁用高亮
+          disabled: false, // 启用高亮，以便点击时有视觉反馈
+          focus: 'self',
+          scale: false, // 禁用缩放，避免影响自定义样式
         },
-        // large 属性在 line 系列中不支持，使用 sampling 和 progressive 代替
+        // 使用 progressive 渲染优化大数据集性能
         progressive: isVeryLargeDataset ? 500 : (isLargeDataset ? 1000 : 0), // 超大数据集时使用更小的批次
         progressiveThreshold: isVeryLargeDataset ? 500 : 1000, // 超大数据集时降低阈值
         progressiveChunkMode: 'mod' as const, // 使用 mod 渲染模式
@@ -335,11 +475,92 @@ async function initChart() {
       silent: isVeryLargeDataset, // 超大数据集时静默更新，不触发事件
     });
 
+    // 添加点击事件监听
+    chartInstance.off('click'); // 先移除旧的监听器
+    chartInstance.on('click', (params: { componentType?: string; dataIndex?: number }) => {
+      if (params.componentType === 'series' && typeof params.dataIndex === 'number') {
+        const dataIndex = params.dataIndex;
+        const dataItem = chartData[dataIndex];
+        if (dataItem) {
+          // 如果点击的是已选中的点，则取消选择
+          if (props.selectedTimePoint === dataItem.relativeTs) {
+            emit('time-point-selected', null);
+          } else {
+            emit('time-point-selected', dataItem.relativeTs);
+          }
+        }
+      }
+    });
+
+    // 如果有选中的时间点，添加标记线
+    if (props.selectedTimePoint !== null) {
+      updateMarkLine(chartData);
+    }
+
     // 隐藏加载状态
     isLoading.value = false;
   } catch (error) {
     console.error('初始化图表失败:', error);
     isLoading.value = false;
+  }
+}
+
+// 更新标记线
+function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory: number }>) {
+  if (!chartInstance || props.selectedTimePoint === null) return;
+
+  // 找到最接近选中时间点的数据索引
+  let closestIndex = 0;
+  let minDiff = Math.abs(chartData[0].relativeTs - props.selectedTimePoint);
+
+  for (let i = 1; i < chartData.length; i++) {
+    const diff = Math.abs(chartData[i].relativeTs - props.selectedTimePoint);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestIndex = i;
+    }
+    // 如果时间已经超过选中点，可以提前退出
+    if (chartData[i].relativeTs > props.selectedTimePoint) {
+      break;
+    }
+  }
+
+  // 获取当前配置
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const option = chartInstance.getOption() as any;
+  if (option && option.series && option.series[0]) {
+    const series = option.series[0];
+    const selectedMemory = chartData[closestIndex]?.cumulativeMemory || 0;
+    series.markLine = {
+      silent: false,
+      symbol: ['none', 'arrow'],
+      symbolSize: [0, 8],
+      label: {
+        show: true,
+        position: 'end',
+        formatter: `选中: ${formatTime(props.selectedTimePoint)}\n内存: ${formatBytes(selectedMemory)}`,
+        color: '#333',
+        backgroundColor: '#FFD700',
+        padding: [6, 10],
+        borderRadius: 4,
+        fontSize: 12,
+        fontWeight: 'bold',
+      },
+      lineStyle: {
+        color: '#FFD700',
+        width: 3,
+        type: 'solid',
+        shadowBlur: 10,
+        shadowColor: 'rgba(255, 215, 0, 0.5)',
+      },
+      data: [
+        {
+          xAxis: closestIndex,
+        },
+      ],
+    };
+
+    chartInstance.setOption(option);
   }
 }
 
@@ -363,6 +584,16 @@ watch(
     }
   },
   { deep: false }
+);
+
+// 监听 selectedTimePoint 的变化，更新标记线
+watch(
+  () => props.selectedTimePoint,
+  () => {
+    if (chartInstance && processedData.value.chartData.length > 0) {
+      updateMarkLine(processedData.value.chartData);
+    }
+  }
 );
 
 // 监听窗口大小变化（使用防抖）

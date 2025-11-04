@@ -242,10 +242,13 @@ class ReportData:
                                 len(compressed_chunk),
                             )
 
-                        # 保留统计信息，使用分块压缩数据
+                        # 保留统计信息和其他字段，使用分块压缩数据
                         compressed_step_data = {
                             'stats': step_data.get('stats', {}),
+                            'peak_time': step_data.get('peak_time'),  # 峰值时间点
+                            'peak_value': step_data.get('peak_value'),  # 峰值内存值
                             'records': compressed_chunks,  # 压缩后的记录块数组
+                            'callchains': step_data.get('callchains'),  # 调用链数据
                             'compressed': True,  # 标记为已压缩
                             'chunked': True,  # 标记为分块压缩
                             'chunk_count': len(compressed_chunks),  # 块数量
@@ -269,10 +272,13 @@ class ReportData:
                         base64_bytes = base64.b64encode(compressed_bytes)
                         compressed_records = base64_bytes.decode('ascii')
 
-                        # 保留统计信息，压缩记录数据
+                        # 保留统计信息和其他字段，压缩记录数据
                         compressed_step_data = {
                             'stats': step_data.get('stats', {}),
+                            'peak_time': step_data.get('peak_time'),  # 峰值时间点
+                            'peak_value': step_data.get('peak_value'),  # 峰值内存值
                             'records': compressed_records,  # 压缩后的记录
+                            'callchains': step_data.get('callchains'),  # 调用链数据
                             'compressed': True,  # 标记为已压缩
                         }
                         compressed_native_memory[step_key] = compressed_step_data
@@ -332,9 +338,9 @@ class ReportData:
         if 'more' not in self.result:
             self.result['more'] = {}
 
-        # 加载native_memory.json文件
-        native_memory_path = os.path.join(report_dir, 'native_memory.json')
-        native_memory_data = self._load_json_safe(native_memory_path, default={})
+        # 加载more_memory_analysis.json 文件
+        new_memory_path = os.path.join(report_dir, 'more_memory_analysis.json')
+        native_memory_data = self._load_json_safe(new_memory_path, default={})
 
         if native_memory_data:
             self.result['more']['native_memory'] = native_memory_data
