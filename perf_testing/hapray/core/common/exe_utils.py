@@ -17,7 +17,9 @@ import json
 import logging
 import os
 import platform
+import sqlite3
 import subprocess
+import time
 from typing import Optional
 
 from hapray.core.common.common_utils import CommonUtils
@@ -52,7 +54,7 @@ def _get_trace_streamer_path() -> str:
         raise OSError(f'Unsupported operating system: {system}')
 
     # Construct full path to the executable
-    tool_path = os.path.join(project_root, 'hapray-toolbox', 'third-party', 'trace_streamer_binary', executable)
+    tool_path = os.path.join(project_root, 'sa-cmd', 'third-party', 'trace_streamer_binary', executable)
 
     # Validate executable exists
     if not os.path.exists(tool_path):
@@ -68,8 +70,8 @@ def _get_trace_streamer_path() -> str:
 class ExeUtils:
     """Utility class for executing external commands and tools"""
 
-    # Path to the hapray-cmd.js script
-    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'hapray-toolbox', 'hapray-cmd.js'))
+    # Path to the hapray-sa-cmd script
+    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'hapray-sa-cmd'))
 
     # Path to the trace streamer executable
     trace_streamer_path = _get_trace_streamer_path()
@@ -89,6 +91,39 @@ class ExeUtils:
         return os.path.join(cache_dir, f'.{db_name}_so_dir_cache.json')
 
     @staticmethod
+    def _check_db_integrity(db_path: str) -> bool:
+        """Check if a SQLite database file is valid and not corrupted.
+
+        Args:
+            db_path: Path to the database file
+
+        Returns:
+            True if database is valid, False if corrupted
+        """
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # Run SQLite's built-in integrity check
+            cursor.execute('PRAGMA integrity_check')
+            result = cursor.fetchone()
+            if result[0] != 'ok':
+                logger.warning('Database integrity check failed for %s: %s', db_path, result[0])
+                conn.close()
+                return False
+
+            # Try to query the native_hook table which is critical for memory analysis
+            cursor.execute('SELECT COUNT(*) FROM native_hook')
+            count = cursor.fetchone()[0]
+            logger.info('Database %s has %d native_hook records', db_path, count)
+
+            conn.close()
+            return True
+        except Exception as e:
+            logger.warning('Database integrity check failed for %s: %s', db_path, str(e))
+            return False
+
+    @staticmethod
     def _should_regenerate_db(output_db: str, so_dir: Optional[str]) -> bool:
         """Check if the database should be regenerated based on so_dir changes.
 
@@ -101,6 +136,11 @@ class ExeUtils:
         """
         # If database doesn't exist, always regenerate
         if not os.path.exists(output_db):
+            return True
+
+        # Check database integrity
+        if not ExeUtils._check_db_integrity(output_db):
+            logger.warning('Database %s is corrupted, will regenerate', output_db)
             return True
 
         cache_file = ExeUtils._get_so_dir_cache_file(output_db)
@@ -149,7 +189,7 @@ class ExeUtils:
 
     @staticmethod
     def build_hapray_cmd(args: list[str]) -> list[str]:
-        """Constructs a command for executing hapray-cmd.js.
+        """Constructs a command for executing hapray-sa-cmd.
 
         Args:
             args: Arguments to pass to the hapray command
@@ -275,15 +315,62 @@ class ExeUtils:
                 logger.info('Converting htrace to DB: %s -> %s', data_file, output_db)
 
             # Execute conversion with extended timeout for large data files
-            success, _, stderr = ExeUtils.execute_command(cmd, timeout=3600)  # 1 hour timeout
+            # Redirect stdout and stderr to log file to avoid buffer issues
+            log_file_path = output_db.replace('.db', '_conversion.log')
+            try:
+                with open(log_file_path, 'w', encoding='utf-8') as log_file:
+                    subprocess.run(
+                        cmd,
+                        check=True,
+                        stdout=log_file,
+                        stderr=subprocess.STDOUT,  # Merge stderr into stdout
+                        timeout=3600,  # 1 hour timeout
+                        cwd=os.path.dirname(os.path.abspath(data_file)),  # Run in htrace directory
+                    )
+                success = True
+                logger.info('Conversion log saved to: %s', log_file_path)
+            except subprocess.TimeoutExpired:
+                logger.error('Conversion timed out after 3600 seconds: %s', ' '.join(cmd))
+                success = False
+            except subprocess.CalledProcessError as e:
+                logger.error('Conversion failed with code %d: %s', e.returncode, ' '.join(cmd))
+                # Log the conversion output for debugging
+                if os.path.exists(log_file_path):
+                    try:
+                        with open(log_file_path, encoding='utf-8') as f:
+                            log_content = f.read()
+                            logger.error('Conversion output: %s', log_content[-1000:])  # Last 1000 chars
+                    except Exception:
+                        pass
+                success = False
+            except FileNotFoundError:
+                logger.error('trace_streamer not found: %s', ExeUtils.trace_streamer_path)
+                return False
+            except Exception as e:
+                logger.error('Unexpected error during conversion: %s', str(e))
+                success = False
 
             if not success:
-                logger.error('Conversion failed for %s: %s', data_file, stderr)
+                logger.error('Conversion failed for %s', data_file)
                 return False
 
             # Verify output file was created
             if not os.path.exists(output_db):
                 logger.error('Output DB file not created: %s', output_db)
+                return False
+
+            # Wait a moment for file system to flush
+            time.sleep(0.5)
+
+            # Verify database integrity
+            if not ExeUtils._check_db_integrity(output_db):
+                logger.error('Generated database is corrupted: %s', output_db)
+                # Delete corrupted database
+                try:
+                    os.remove(output_db)
+                    logger.info('Deleted corrupted database: %s', output_db)
+                except Exception as e:
+                    logger.warning('Failed to delete corrupted database %s: %s', output_db, str(e))
                 return False
 
             # Update cache with current so_dir state

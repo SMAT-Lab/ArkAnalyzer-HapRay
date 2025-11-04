@@ -254,12 +254,28 @@ class PerfAction:
         parser.add_argument('--circles', action='store_true', help='Enable CPU cycle sampling')
         parser.add_argument('--round', type=int, default=5, help='Number of test rounds')
         parser.add_argument('--no-trace', action='store_true', help='Disable trace capturing')
+        parser.add_argument('--no-perf', action='store_true', help='Disable perf capturing (for memory-only mode)')
+        parser.add_argument(
+            '--memory',
+            action='store_true',
+            help='Enable Memory profiling using hiprofiler nativehook plugin',
+        )
         parser.add_argument('--devices', nargs='+', default=None, help='Device serial numbers (e.g., HX1234567890)')
         parser.add_argument(
             '--hapflow',
             type=str,
             metavar='HOMECHECK_DIR',
             help='Enable HapFlow pipeline and specify Homecheck root directory',
+        )
+        parser.add_argument(
+            '--manual',
+            action='store_true',
+            help='Enable manual testing mode with interactive 30-second performance data collection',
+        )
+        parser.add_argument(
+            '--app',
+            default=None,
+            help='Target application bundle name for manual testing (performance data will be collected for 30 seconds)',
         )
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
@@ -276,7 +292,30 @@ class PerfAction:
             Config.set('hiperf.event', 'raw-cpu-cycles')
         if parsed_args.so_dir is not None:
             Config.set('so_dir', parsed_args.so_dir)
+        if parsed_args.manual:
+            Config.set('run_testcases', ['PerformanceDynamic_Manual'])
+            Config.set('app', parsed_args.app)
+
+        # Configure collection modes
         Config.set('trace.enable', not parsed_args.no_trace)
+        Config.set('memory.enable', parsed_args.memory)
+
+        # Validate collection mode combinations
+        if parsed_args.no_trace and parsed_args.no_perf and not parsed_args.memory:
+            logging.error(
+                'Invalid configuration: All collection modes are disabled. Enable at least one of: perf, trace, or memory'
+            )
+            return None
+
+        # Log collection mode
+        modes = []
+        if not parsed_args.no_perf:
+            modes.append('perf')
+        if not parsed_args.no_trace:
+            modes.append('trace')
+        if parsed_args.memory:
+            modes.append('memory')
+        logging.info('Collection modes enabled: %s', ', '.join(modes))
 
         so_dir = Config.get('so_dir', None)
         if so_dir is not None:

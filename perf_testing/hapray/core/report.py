@@ -29,6 +29,7 @@ from hapray.analyze import analyze_data
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.config.config import Config
 
 
 class DataType(enum.Enum):
@@ -54,12 +55,20 @@ class ReportData:
         }
 
     @classmethod
-    def from_paths(cls, scene_dir: str, result: dict):
-        """从文件路径加载数据"""
+    def from_paths(cls, scene_dir: str, result: dict, load_memory: bool = True):
+        """从文件路径加载数据
+
+        Args:
+            scene_dir: 场景目录路径
+            result: 分析结果字典
+            load_memory: 是否加载内存数据（默认True，支持仅负载分析模式）
+        """
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         data = cls(scene_dir, result)
         data.load_perf_data(perf_data_path)
         data.load_trace_data(scene_dir)
+        if load_memory:
+            data.load_native_memory_data(scene_dir)
         return data
 
     def __str__(self):
@@ -69,6 +78,17 @@ class ReportData:
 
         # 特殊处理火焰图数据：按步骤单独压缩
         cleaned_result = self._compress_flame_graph_by_steps(cleaned_result)
+
+        # 特殊处理内存数据：按步骤单独压缩
+        cleaned_result = self._compress_native_memory_by_steps(cleaned_result)
+
+        # 特殊处理UI动画数据：按步骤单独压缩
+        cleaned_result = self._compress_ui_animate_by_steps(cleaned_result)
+
+        # 删除重复的 memory_analysis 字段（已经被压缩到 native_memory 中）
+        if 'more' in cleaned_result and 'memory_analysis' in cleaned_result['more']:
+            del cleaned_result['more']['memory_analysis']
+            logging.info('Removed duplicate memory_analysis field (data is in native_memory)')
 
         json_str = json.dumps(cleaned_result)
         with open(os.path.join(self.scene_dir, 'report', 'hapray_report.json'), 'w', encoding='utf-8') as f:
@@ -158,10 +178,213 @@ class ReportData:
         data['more']['flame_graph'] = compressed_flame_graph
         return data
 
-    def load_perf_data(self, path):
+    def _compress_native_memory_by_steps(self, data):
+        """按步骤压缩内存数据，避免字符串过长
+
+        参考火焰图的压缩逻辑，对每个步骤的内存记录进行压缩
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有内存数据
+        if 'more' not in data or 'native_memory' not in data['more']:
+            return data
+
+        native_memory_data = data['more']['native_memory']
+        if not isinstance(native_memory_data, dict):
+            return data
+
+        # 按步骤压缩内存数据
+        compressed_native_memory = {}
+
+        for step_key, step_data in native_memory_data.items():
+            if isinstance(step_data, dict) and 'records' in step_data:
+                try:
+                    records = step_data['records']
+                    records_count = len(records)
+
+                    # 将记录数组转换为 JSON 字符串
+                    records_json = json.dumps(records)
+                    original_size = len(records_json)
+
+                    # 检查数据大小，如果超过 500MB，使用分块压缩
+                    # JavaScript 字符串最大长度约 512MB，我们使用 500MB 作为阈值
+                    MAX_CHUNK_SIZE = 500 * 1024 * 1024  # 500MB
+
+                    if original_size > MAX_CHUNK_SIZE:
+                        # 分块压缩
+                        logging.info(
+                            '内存数据过大 %s: %d 字节 (%d 条记录)，使用分块压缩',
+                            step_key,
+                            original_size,
+                            records_count,
+                        )
+
+                        # 计算每块的记录数（确保每块 JSON 大小不超过 MAX_CHUNK_SIZE）
+                        avg_record_size = original_size / records_count if records_count > 0 else 1
+                        chunk_record_count = max(1, int(MAX_CHUNK_SIZE / avg_record_size))
+
+                        # 分块压缩
+                        compressed_chunks = []
+                        total_compressed_size = 0
+
+                        for i in range(0, records_count, chunk_record_count):
+                            chunk = records[i : i + chunk_record_count]
+                            chunk_json = json.dumps(chunk)
+                            chunk_size = len(chunk_json)
+
+                            # 压缩块
+                            compressed_bytes = zlib.compress(chunk_json.encode('utf-8'), level=9)
+                            base64_bytes = base64.b64encode(compressed_bytes)
+                            compressed_chunk = base64_bytes.decode('ascii')
+
+                            compressed_chunks.append(compressed_chunk)
+                            total_compressed_size += len(compressed_chunk)
+
+                            logging.info(
+                                '  分块 %d/%d: %d 条记录, %d -> %d 字节',
+                                len(compressed_chunks),
+                                (records_count + chunk_record_count - 1) // chunk_record_count,
+                                len(chunk),
+                                chunk_size,
+                                len(compressed_chunk),
+                            )
+
+                        # 保留统计信息和其他字段，使用分块压缩数据
+                        compressed_step_data = {
+                            'stats': step_data.get('stats', {}),
+                            'peak_time': step_data.get('peak_time'),  # 峰值时间点
+                            'peak_value': step_data.get('peak_value'),  # 峰值内存值
+                            'records': compressed_chunks,  # 压缩后的记录块数组
+                            'callchains': step_data.get('callchains'),  # 调用链数据
+                            'compressed': True,  # 标记为已压缩
+                            'chunked': True,  # 标记为分块压缩
+                            'chunk_count': len(compressed_chunks),  # 块数量
+                            'total_records': records_count,  # 总记录数
+                        }
+                        compressed_native_memory[step_key] = compressed_step_data
+
+                        # 记录压缩效果
+                        compression_ratio = (1 - total_compressed_size / original_size) * 100
+                        logging.info(
+                            '内存数据分块压缩完成 %s: %d -> %d 字节 (压缩率: %.1f%%), %d 个块',
+                            step_key,
+                            original_size,
+                            total_compressed_size,
+                            compression_ratio,
+                            len(compressed_chunks),
+                        )
+                    else:
+                        # 单块压缩（原有逻辑）
+                        compressed_bytes = zlib.compress(records_json.encode('utf-8'), level=9)
+                        base64_bytes = base64.b64encode(compressed_bytes)
+                        compressed_records = base64_bytes.decode('ascii')
+
+                        # 保留统计信息和其他字段，压缩记录数据
+                        compressed_step_data = {
+                            'stats': step_data.get('stats', {}),
+                            'peak_time': step_data.get('peak_time'),  # 峰值时间点
+                            'peak_value': step_data.get('peak_value'),  # 峰值内存值
+                            'records': compressed_records,  # 压缩后的记录
+                            'callchains': step_data.get('callchains'),  # 调用链数据
+                            'compressed': True,  # 标记为已压缩
+                        }
+                        compressed_native_memory[step_key] = compressed_step_data
+
+                        # 记录压缩效果
+                        compressed_size = len(compressed_records)
+                        compression_ratio = (1 - compressed_size / original_size) * 100
+                        logging.info(
+                            '内存数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                            step_key,
+                            original_size,
+                            compressed_size,
+                            compression_ratio,
+                        )
+                except Exception as e:
+                    logging.warning('压缩内存数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_native_memory[step_key] = step_data
+            else:
+                # 非预期格式的数据保持不变
+                compressed_native_memory[step_key] = step_data
+
+        # 更新数据结构
+        data['more']['native_memory'] = compressed_native_memory
+        return data
+
+    def _compress_ui_animate_by_steps(self, data):
+        """按步骤压缩UI动画数据，避免字符串过长
+
+        UI动画数据包含大量base64编码的图片，需要压缩以减小文件大小
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有UI动画数据
+        if 'ui' not in data or 'animate' not in data['ui']:
+            return data
+
+        ui_animate_data = data['ui']['animate']
+        if not isinstance(ui_animate_data, dict):
+            return data
+
+        # 按步骤压缩UI动画数据
+        compressed_ui_animate = {}
+
+        for step_key, step_data in ui_animate_data.items():
+            if isinstance(step_data, dict):
+                try:
+                    # 将整个步骤数据转换为 JSON 字符串
+                    step_json = json.dumps(step_data)
+                    original_size = len(step_json)
+
+                    # 压缩步骤数据
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    base64_bytes = base64.b64encode(compressed_bytes)
+                    compressed_step = base64_bytes.decode('ascii')
+
+                    # 使用压缩后的数据
+                    compressed_ui_animate[step_key] = {
+                        'compressed': True,  # 标记为已压缩
+                        'data': compressed_step,  # 压缩后的数据
+                    }
+
+                    # 记录压缩效果
+                    compressed_size = len(compressed_step)
+                    compression_ratio = (1 - compressed_size / original_size) * 100
+                    logging.info(
+                        'UI动画数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
+                    )
+                except Exception as e:
+                    logging.warning('压缩UI动画数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_ui_animate[step_key] = step_data
+            else:
+                # 非预期格式的数据保持不变
+                compressed_ui_animate[step_key] = step_data
+
+        # 更新数据结构
+        data['ui']['animate'] = compressed_ui_animate
+        return data
+
+    def load_perf_data(self, path, required: bool = True):
+        """加载性能数据
+
+        Args:
+            path: hiperf_info.json 文件路径
+            required: 是否必须存在（默认True，支持仅内存分析模式设为False）
+        """
         self.perf_data = self._load_json_safe(path, default=[])
         if len(self.perf_data) == 0:
-            raise FileNotFoundError(f'hiperf_info.json not found: {path}')
+            if required:
+                raise FileNotFoundError(f'hiperf_info.json not found: {path}')
+            logging.warning('hiperf_info.json not found: %s, skipping perf data loading', path)
+            return
         first_entry = self.perf_data[0]
         self.result['perf']['steps'] = first_entry.get('steps', [])
         self.result['perf']['har'] = first_entry.get('har', {})
@@ -174,8 +397,29 @@ class ReportData:
             'timestamp': first_entry.get('timestamp', 0),
         }
 
-    def load_trace_data(self, scene_dir: str):
-        """加载 trace 相关数据"""
+    def load_native_memory_data(self, scene_dir: str):
+        """加载Native Memory数据（类似trace_frames.json的格式）"""
+        report_dir = os.path.join(scene_dir, 'report')
+
+        # 确保 more 字段存在
+        if 'more' not in self.result:
+            self.result['more'] = {}
+
+        # 加载more_memory_analysis.json 文件
+        new_memory_path = os.path.join(report_dir, 'more_memory_analysis.json')
+        native_memory_data = self._load_json_safe(new_memory_path, default={})
+
+        if native_memory_data:
+            self.result['more']['native_memory'] = native_memory_data
+            logging.info(f'Loaded Native Memory data: {len(native_memory_data)} steps')
+
+    def load_trace_data(self, scene_dir: str, required: bool = False):
+        """加载 trace 相关数据
+
+        Args:
+            scene_dir: 场景目录路径
+            required: 是否必须存在（默认False，支持仅内存分析模式）
+        """
         report_dir = os.path.join(scene_dir, 'report')
 
         # 确保 trace 字段存在
@@ -200,7 +444,7 @@ class ReportData:
             if data:  # 只有当数据不为空时才添加
                 self.result['trace'][key] = data
 
-        # 加载火焰图数据
+        # 加载火焰图数据和Native Memory数据
         if 'more' not in self.result:
             self.result['more'] = {}
 
@@ -208,6 +452,18 @@ class ReportData:
         flame_graph_data = self._load_json_safe(flame_graph_path, default={})
         if flame_graph_data:
             self.result['more']['flame_graph'] = flame_graph_data
+        elif required:
+            logging.warning('Flame graph data not found at %s', flame_graph_path)
+
+        # 加载 UI 动画数据
+        if 'ui' not in self.result:
+            self.result['ui'] = {}
+
+        ui_animate_path = os.path.join(report_dir, 'ui_animate.json')
+        ui_animate_data = self._load_json_safe(ui_animate_path, default={})
+        if ui_animate_data:
+            self.result['ui']['animate'] = ui_animate_data
+            logging.info(f'Loaded UI Animate data: {len(ui_animate_data)} steps')
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""
@@ -281,7 +537,7 @@ class ReportGenerator:
             logging.error('No scene directories provided for round selection')
             return False
 
-        args = ['dbtools', '--choose', '-i', scene_dir]
+        args = ['perf', '--choose', '-i', scene_dir]
 
         logging.debug('Selecting round with command: %s', ' '.join(args))
         return ExeUtils.execute_hapray_cmd(args)
@@ -291,7 +547,7 @@ class ReportGenerator:
         try:
             json_data_str = self._build_json_data(scene_dir, result)
 
-            template_path = os.path.join(self.perf_testing_dir, 'hapray-toolbox', 'res', 'report_template.html')
+            template_path = os.path.join(self.perf_testing_dir, 'sa-cmd', 'res', 'report_template.html')
             output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
 
             # Create directory structure if needed
@@ -311,7 +567,33 @@ class ReportGenerator:
 
     @staticmethod
     def _build_json_data(scene_dir: str, result: dict) -> str:
-        return str(ReportData.from_paths(scene_dir, result))
+        """构建JSON数据，支持三种分析模式
+
+        Args:
+            scene_dir: 场景目录路径
+            result: 分析结果字典
+
+        Returns:
+            Base64编码的压缩JSON字符串
+        """
+        # 从配置中获取分析模式，默认为 'all'
+        analysis_mode = Config.get('analysis_mode', 'all')
+
+        # 根据分析模式决定是否加载内存数据
+        load_memory = analysis_mode in ['all', 'memory']
+
+        # 根据分析模式决定是否加载性能数据
+        load_perf = analysis_mode in ['all', 'perf']
+
+        # 创建 ReportData 实例
+        report_data = ReportData.from_paths(scene_dir, result, load_memory=load_memory)
+
+        # 如果是仅内存分析模式，不加载性能数据
+        if not load_perf:
+            report_data.perf_data = []
+            report_data.result['perf']['steps'] = []
+
+        return str(report_data)
 
     @staticmethod
     def _inject_json_to_html(json_data_str: str, placeholder: str, html_path: str, output_path: str) -> None:
