@@ -5,8 +5,24 @@
       <el-empty description="暂无内存分析数据" />
     </div>
 
+    <!-- 计算中提示（顶部加载条） -->
+    <div v-if="isCalculating" style="position: sticky; top: 0; z-index: 1000; background: linear-gradient(90deg, #409EFF 0%, #67C23A 100%); color: white; padding: 12px 20px; border-radius: 4px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); animation: pulse 1.5s ease-in-out infinite;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <i class="el-icon-loading" style="font-size: 18px;"></i>
+        <span style="font-size: 14px; font-weight: 500;">正在使用多线程并行计算内存数据...</span>
+      </div>
+    </div>
+
+    <!-- 饼图计算中提示 -->
+    <div v-if="isPieChartLoading" style="position: sticky; top: 0; z-index: 1000; background: linear-gradient(90deg, #E6A23C 0%, #F56C6C 100%); color: white; padding: 12px 20px; border-radius: 4px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); animation: pulse 1.5s ease-in-out infinite;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <i class="el-icon-loading" style="font-size: 18px;"></i>
+        <span style="font-size: 14px; font-weight: 500;">正在分片计算饼图数据，请稍候...</span>
+      </div>
+    </div>
+
     <!-- 内存数据展示（仅当有数据时显示） -->
-    <template v-else>
+    <template v-if="hasData">
     <!-- 时间点信息面板 -->
     <el-row v-if="selectedTimePoint !== null" :gutter="20" class="time-point-info-panel">
       <el-col :span="24">
@@ -303,7 +319,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import NativeMemoryTable from './NativeMemoryTable.vue';
 import PieChart from './PieChart.vue';
 import MemoryTimelineChart from './MemoryTimelineChart.vue';
@@ -322,6 +338,7 @@ import {
   getCategoryName,
   calculateMemoryStats,
 } from '@/utils/nativeMemoryUtil.ts';
+import { getMemoryWorkerManager } from '@/utils/memoryWorkerManager.ts';
 
 // Props
 const props = defineProps<{
@@ -331,6 +348,20 @@ const props = defineProps<{
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
 const nativeMemoryData = jsonDataStore.nativeMemoryData;
+
+// Worker 管理器
+const workerManager = getMemoryWorkerManager();
+
+// 加载状态
+const isCalculating = ref(false);
+
+// 使用 ref 存储聚合数据（由 Worker 计算）
+const mergedThreadMemoryData = ref<any[]>([]);
+const mergedFileMemoryData = ref<any[]>([]);
+const mergedSymbolMemoryData = ref<any[]>([]);
+const mergedComponentMemoryData = ref<any[]>([]);
+const mergedFileCategoryMemoryData = ref<any[]>([]);
+const mergedSymbolCategoryMemoryData = ref<any[]>([]);
 
 // 检查是否有数据
 const hasData = computed(() => {
@@ -356,25 +387,163 @@ const currentStepCallchains = computed(() => {
   return stepData?.callchains;
 });
 
-// 聚合数据（支持时间点过滤）
-const mergedThreadMemoryData = computed(() =>
-  aggregateByThread(nativeMemoryData, props.stepId, selectedTimePoint.value)
-);
-const mergedFileMemoryData = computed(() =>
-  aggregateByFile(nativeMemoryData, props.stepId, selectedTimePoint.value)
-);
-const mergedSymbolMemoryData = computed(() =>
-  aggregateBySymbol(nativeMemoryData, props.stepId, selectedTimePoint.value)
-);
-const mergedComponentMemoryData = computed(() =>
-  aggregateByComponent(nativeMemoryData, props.stepId, selectedTimePoint.value)
-);
-const mergedFileCategoryMemoryData = computed(() =>
-  aggregateByFileCategory(nativeMemoryData, props.stepId, selectedTimePoint.value)
-);
-const mergedSymbolCategoryMemoryData = computed(() =>
-  aggregateBySymbolCategory(nativeMemoryData, props.stepId, selectedTimePoint.value)
-);
+/**
+ * 使用 Worker 异步计算聚合数据
+ * 优化：对于超大数据量，使用分块处理避免序列化阻塞
+ */
+async function calculateAggregatedData() {
+  if (!currentStepRecords.value.length) {
+    // 清空数据
+    mergedThreadMemoryData.value = [];
+    mergedFileMemoryData.value = [];
+    mergedSymbolMemoryData.value = [];
+    mergedComponentMemoryData.value = [];
+    mergedFileCategoryMemoryData.value = [];
+    mergedSymbolCategoryMemoryData.value = [];
+    return;
+  }
+
+  const recordCount = currentStepRecords.value.length;
+  console.log(`开始计算内存数据聚合，记录数: ${recordCount}`);
+
+  // 对于大数据量，显示加载提示
+  if (recordCount > 10000) {
+    isCalculating.value = true;
+  }
+
+  try {
+    const startTime = performance.now();
+
+    // 优化：对于超大数据量（> 500k），使用分块处理
+    const CHUNK_SIZE = 100000; // 每块 10 万条记录
+    const useChunking = recordCount > 500000;
+
+    if (useChunking) {
+      console.log(`数据量过大 (${recordCount} 条)，使用分块处理，每块 ${CHUNK_SIZE} 条`);
+
+      // 分块处理：将数据分成多个块，逐块计算并合并结果
+      const chunks = Math.ceil(recordCount / CHUNK_SIZE);
+      console.log(`总共分为 ${chunks} 块`);
+
+      // 初始化结果容器
+      const threadMap = new Map();
+      const fileMap = new Map();
+      const symbolMap = new Map();
+
+      // 逐块处理，避免一次性传输大量数据
+      for (let i = 0; i < chunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, recordCount);
+        const chunk = currentStepRecords.value.slice(start, end);
+
+        console.log(`处理第 ${i + 1}/${chunks} 块: ${start} - ${end} (${chunk.length} 条)`);
+
+        // 使用 requestAnimationFrame 让浏览器有机会渲染
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        // 并行计算当前块的聚合数据
+        const [threadData, fileData, symbolData] = await Promise.all([
+          workerManager.aggregateByThread(chunk, props.stepId, selectedTimePoint.value),
+          workerManager.aggregateByFile(chunk, props.stepId, selectedTimePoint.value),
+          workerManager.aggregateBySymbol(chunk, props.stepId, selectedTimePoint.value),
+        ]);
+
+        // 合并结果到 Map 中
+        threadData.forEach((item: any) => {
+          const key = item.thread || 'Unknown';
+          if (!threadMap.has(key)) {
+            threadMap.set(key, item);
+          } else {
+            const existing = threadMap.get(key);
+            existing.eventNum += item.eventNum;
+            existing.allocEventNum += item.allocEventNum;
+            existing.freeEventNum += item.freeEventNum;
+            existing.peakMem = Math.max(existing.peakMem, item.peakMem);
+            existing.totalAllocMem += item.totalAllocMem;
+            existing.totalFreeMem += item.totalFreeMem;
+          }
+        });
+
+        fileData.forEach((item: any) => {
+          const key = item.file || 'Unknown';
+          if (!fileMap.has(key)) {
+            fileMap.set(key, item);
+          } else {
+            const existing = fileMap.get(key);
+            existing.eventNum += item.eventNum;
+            existing.allocEventNum += item.allocEventNum;
+            existing.freeEventNum += item.freeEventNum;
+            existing.peakMem = Math.max(existing.peakMem, item.peakMem);
+            existing.totalAllocMem += item.totalAllocMem;
+            existing.totalFreeMem += item.totalFreeMem;
+          }
+        });
+
+        symbolData.forEach((item: any) => {
+          const key = item.symbol || 'Unknown';
+          if (!symbolMap.has(key)) {
+            symbolMap.set(key, item);
+          } else {
+            const existing = symbolMap.get(key);
+            existing.eventNum += item.eventNum;
+            existing.allocEventNum += item.allocEventNum;
+            existing.freeEventNum += item.freeEventNum;
+            existing.peakMem = Math.max(existing.peakMem, item.peakMem);
+            existing.totalAllocMem += item.totalAllocMem;
+            existing.totalFreeMem += item.totalFreeMem;
+          }
+        });
+      }
+
+      // 转换 Map 为数组并排序
+      mergedThreadMemoryData.value = Array.from(threadMap.values()).sort((a, b) => b.peakMem - a.peakMem);
+      mergedFileMemoryData.value = Array.from(fileMap.values()).sort((a, b) => b.peakMem - a.peakMem);
+      mergedSymbolMemoryData.value = Array.from(symbolMap.values()).sort((a, b) => b.peakMem - a.peakMem);
+
+      console.log(`分块处理完成: 线程 ${mergedThreadMemoryData.value.length} 项, 文件 ${mergedFileMemoryData.value.length} 项, 符号 ${mergedSymbolMemoryData.value.length} 项`);
+    } else {
+      // 数据量不大，直接并行计算
+      const [threadData, fileData, symbolData] = await Promise.all([
+        workerManager.aggregateByThread(currentStepRecords.value, props.stepId, selectedTimePoint.value),
+        workerManager.aggregateByFile(currentStepRecords.value, props.stepId, selectedTimePoint.value),
+        workerManager.aggregateBySymbol(currentStepRecords.value, props.stepId, selectedTimePoint.value),
+      ]);
+
+      mergedThreadMemoryData.value = threadData;
+      mergedFileMemoryData.value = fileData;
+      mergedSymbolMemoryData.value = symbolData;
+    }
+
+    // 对于 Worker 中未实现的聚合函数，使用原有的同步方法
+    // 这些计算相对较快，可以在主线程中执行
+    // 使用 requestIdleCallback 在空闲时执行，避免阻塞
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(() => {
+        mergedComponentMemoryData.value = aggregateByComponent(nativeMemoryData, props.stepId, selectedTimePoint.value);
+        mergedFileCategoryMemoryData.value = aggregateByFileCategory(nativeMemoryData, props.stepId, selectedTimePoint.value);
+        mergedSymbolCategoryMemoryData.value = aggregateBySymbolCategory(nativeMemoryData, props.stepId, selectedTimePoint.value);
+      }, { timeout: 1000 });
+    } else {
+      mergedComponentMemoryData.value = aggregateByComponent(nativeMemoryData, props.stepId, selectedTimePoint.value);
+      mergedFileCategoryMemoryData.value = aggregateByFileCategory(nativeMemoryData, props.stepId, selectedTimePoint.value);
+      mergedSymbolCategoryMemoryData.value = aggregateBySymbolCategory(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    }
+
+    const endTime = performance.now();
+    console.log(`内存数据聚合计算完成，耗时: ${(endTime - startTime).toFixed(2)}ms`);
+  } catch (error) {
+    console.error('Worker 计算失败，回退到同步计算:', error);
+    // 如果 Worker 失败，回退到同步计算
+    mergedThreadMemoryData.value = aggregateByThread(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    mergedFileMemoryData.value = aggregateByFile(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    mergedSymbolMemoryData.value = aggregateBySymbol(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    mergedComponentMemoryData.value = aggregateByComponent(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    mergedFileCategoryMemoryData.value = aggregateByFileCategory(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    mergedSymbolCategoryMemoryData.value = aggregateBySymbolCategory(nativeMemoryData, props.stepId, selectedTimePoint.value);
+  } finally {
+    isCalculating.value = false;
+  }
+}
 
 // 工具函数：安全排序（按峰值内存排序）
 function sortByMaxMem<T extends { peakMem: number }>(arr: T[]): T[] {
@@ -459,42 +628,6 @@ function formatTime(ns: number): string {
   return `${(ns / 1000000000).toFixed(2)} s`;
 }
 
-// 监听时间点变化，重新计算钻取数据
-watch(selectedTimePoint, () => {
-  // 重新计算进程饼图钻取数据
-  if (processPieDrilldownStack.value.length > 0) {
-    processPieDataStack.value = [];
-    for (let i = 0; i < processPieDrilldownStack.value.length; i++) {
-      const name = processPieDrilldownStack.value[i];
-      const stack = processPieDrilldownStack.value.slice(0, i + 1);
-      const data = getProcessPieDrilldownData(name, stack);
-      processPieDataStack.value.push(data);
-    }
-  }
-
-  // 重新计算分类饼图钻取数据
-  if (categoryPieDrilldownStack.value.length > 0) {
-    categoryPieDataStack.value = [];
-    for (let i = 0; i < categoryPieDrilldownStack.value.length; i++) {
-      const name = categoryPieDrilldownStack.value[i];
-      const stack = categoryPieDrilldownStack.value.slice(0, i + 1);
-      const data = getCategoryPieDrilldownData(name, stack);
-      categoryPieDataStack.value.push(data);
-    }
-  }
-
-  // 重新计算事件类型饼图钻取数据
-  if (eventTypePieDrilldownStack.value.length > 0) {
-    eventTypePieDataStack.value = [];
-    for (let i = 0; i < eventTypePieDrilldownStack.value.length; i++) {
-      const name = eventTypePieDrilldownStack.value[i];
-      const stack = eventTypePieDrilldownStack.value.slice(0, i + 1);
-      const data = getEventTypePieDrilldownData(name, stack);
-      eventTypePieDataStack.value.push(data);
-    }
-  }
-});
-
 // 饼图数据和钻取栈
 const processPieDrilldownStack = ref<string[]>([]);
 const processPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
@@ -505,32 +638,145 @@ const categoryPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ nam
 const eventTypePieDrilldownStack = ref<string[]>([]);
 const eventTypePieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
 
-// 使用 computed 让饼图数据自动响应 selectedTimePoint 的变化
-const processPieData = computed(() => {
-  if (processPieDrilldownStack.value.length === 0) {
-    return nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
-  }
-  // 如果有钻取，使用钻取数据
-  return processPieDataStack.value[processPieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
-});
+/**
+ * 不使用缓存，每次都重新计算
+ */
+async function getCachedPieData(
+  type: 'process' | 'category' | 'eventType',
+  stepId: number,
+  timePoint: number | null,
+  calculator: () => Promise<any>
+): Promise<any> {
+  console.log(`[饼图计算] 开始计算 ${type} 饼图数据`);
 
-const categoryPieData = computed(() => {
-  if (categoryPieDrilldownStack.value.length === 0) {
-    return nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
-  }
-  // 如果有钻取，使用钻取数据
-  return categoryPieDataStack.value[categoryPieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
-});
+  // 每次都重新计算，不使用缓存
+  const data = await calculator();
 
-const eventTypePieData = computed(() => {
-  if (eventTypePieDrilldownStack.value.length === 0) {
-    return nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
-  }
-  // 如果有钻取，使用钻取数据
-  return eventTypePieDataStack.value[eventTypePieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
-});
+  console.log(`[饼图计算] ${type} 饼图数据计算完成`);
 
-// 饼图数据现在是 computed，会自动响应 selectedTimePoint 的变化，不需要手动更新
+  return data;
+}
+
+// 饼图数据使用 ref 存储，异步加载
+const processPieData = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }>({ legendData: [], seriesData: [] });
+const categoryPieData = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }>({ legendData: [], seriesData: [] });
+const eventTypePieData = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }>({ legendData: [], seriesData: [] });
+
+// 饼图加载状态
+const isPieChartLoading = ref(false);
+
+// 当前加载任务的 ID，用于取消过期的加载任务
+let currentLoadTaskId = 0;
+
+/**
+ * 加载饼图数据（包括钻取数据的重新计算）
+ */
+async function loadPieChartData() {
+  // 生成新的任务 ID
+  const taskId = ++currentLoadTaskId;
+  console.log(`[饼图加载] 开始加载饼图数据 (任务 ${taskId})`);
+
+  // 如果已经在加载，取消之前的加载
+  if (isPieChartLoading.value) {
+    console.log(`[饼图加载] 取消之前的加载任务`);
+  }
+
+  isPieChartLoading.value = true;
+
+  try {
+    // 在每个关键步骤检查任务是否已过期
+    const checkTaskValid = () => {
+      if (taskId !== currentLoadTaskId) {
+        console.log(`[饼图加载] 任务 ${taskId} 已过期，停止加载`);
+        throw new Error('Task cancelled');
+      }
+    };
+
+    // 如果有钻取，需要重新计算钻取数据
+    if (processPieDrilldownStack.value.length > 0) {
+      checkTaskValid();
+      processPieDataStack.value = [];
+      for (let i = 0; i < processPieDrilldownStack.value.length; i++) {
+        checkTaskValid();
+        const name = processPieDrilldownStack.value[i];
+        const stack = processPieDrilldownStack.value.slice(0, i + 1);
+        const data = await getProcessPieDrilldownData(name, stack);
+        processPieDataStack.value.push(data);
+      }
+    }
+
+    if (categoryPieDrilldownStack.value.length > 0) {
+      checkTaskValid();
+      categoryPieDataStack.value = [];
+      for (let i = 0; i < categoryPieDrilldownStack.value.length; i++) {
+        checkTaskValid();
+        const name = categoryPieDrilldownStack.value[i];
+        const stack = categoryPieDrilldownStack.value.slice(0, i + 1);
+        const data = await getCategoryPieDrilldownData(name, stack);
+        categoryPieDataStack.value.push(data);
+      }
+    }
+
+    if (eventTypePieDrilldownStack.value.length > 0) {
+      checkTaskValid();
+      eventTypePieDataStack.value = [];
+      for (let i = 0; i < eventTypePieDrilldownStack.value.length; i++) {
+        checkTaskValid();
+        const name = eventTypePieDrilldownStack.value[i];
+        const stack = eventTypePieDrilldownStack.value.slice(0, i + 1);
+        const data = await getEventTypePieDrilldownData(name, stack);
+        eventTypePieDataStack.value.push(data);
+      }
+    }
+
+    checkTaskValid();
+    console.log('[饼图加载] 开始并行加载三个饼图');
+    // 并行加载三个饼图的数据
+    const [processData, categoryData, eventTypeData] = await Promise.all([
+      processPieDrilldownStack.value.length === 0
+        ? getCachedPieData('process', props.stepId, selectedTimePoint.value, () =>
+            nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value)
+          )
+        : Promise.resolve(processPieDataStack.value[processPieDataStack.value.length - 1] || { legendData: [], seriesData: [] }),
+
+      categoryPieDrilldownStack.value.length === 0
+        ? getCachedPieData('category', props.stepId, selectedTimePoint.value, () =>
+            nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value)
+          )
+        : Promise.resolve(categoryPieDataStack.value[categoryPieDataStack.value.length - 1] || { legendData: [], seriesData: [] }),
+
+      eventTypePieDrilldownStack.value.length === 0
+        ? getCachedPieData('eventType', props.stepId, selectedTimePoint.value, () =>
+            nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value)
+          )
+        : Promise.resolve(eventTypePieDataStack.value[eventTypePieDataStack.value.length - 1] || { legendData: [], seriesData: [] })
+    ]);
+
+    checkTaskValid();
+    processPieData.value = processData;
+    categoryPieData.value = categoryData;
+    eventTypePieData.value = eventTypeData;
+
+    console.log(`[饼图加载] 任务 ${taskId} 饼图数据加载完成`);
+  } catch (error: any) {
+    if (error.message === 'Task cancelled') {
+      console.log(`[饼图加载] 任务 ${taskId} 已取消`);
+    } else {
+      console.error(`[饼图加载] 任务 ${taskId} 加载失败:`, error);
+    }
+  } finally {
+    // 只有当前任务才能清除加载状态
+    if (taskId === currentLoadTaskId) {
+      isPieChartLoading.value = false;
+    }
+  }
+}
+
+// 防抖定时器
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 是否已经初始化过
+let isInitialized = false;
 
 // 监听stepId变化，重新加载数据
 watch(() => props.stepId, () => {
@@ -542,7 +788,55 @@ watch(() => props.stepId, () => {
   categoryPieDataStack.value = [];
   eventTypePieDrilldownStack.value = [];
   eventTypePieDataStack.value = [];
-}, { immediate: true });
+  // 清除 Worker 缓存
+  workerManager.clearCache(props.stepId);
+  // 触发重新计算
+  if (isInitialized) {
+    calculateAggregatedData();
+    loadPieChartData(); // 重新加载饼图数据
+  }
+});
+
+// 监听时间点变化，重新计算聚合数据和饼图数据
+watch(() => selectedTimePoint.value, () => {
+  // 使用防抖避免频繁计算
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  debounceTimer = setTimeout(() => {
+    calculateAggregatedData();
+    loadPieChartData(); // 异步加载饼图数据
+  }, 100); // 100ms 防抖
+});
+
+// 组件挂载时初始化（使用 nextTick 延迟执行，避免阻塞渲染）
+onMounted(() => {
+  // 使用 requestIdleCallback 在浏览器空闲时执行，避免阻塞主线程
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => {
+      isInitialized = true;
+      calculateAggregatedData();
+      loadPieChartData(); // 初始化时加载饼图数据
+    }, { timeout: 500 }); // 最多延迟 500ms
+  } else {
+    // 降级方案：使用 setTimeout
+    setTimeout(() => {
+      isInitialized = true;
+      calculateAggregatedData();
+      loadPieChartData(); // 初始化时加载饼图数据
+    }, 100);
+  }
+});
+
+// 组件卸载时清理
+onUnmounted(() => {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  // 注意：不要在这里销毁 Worker 管理器，因为它是单例
+  // 只清除当前步骤的缓存
+  workerManager.clearCache(props.stepId);
+});
 
 // 监听selectedTimePoint变化，清除钻取栈
 watch(selectedTimePoint, () => {
@@ -556,10 +850,10 @@ watch(selectedTimePoint, () => {
 });
 
 // 进程饼图钻取逻辑（支持多层下钻）
-function getProcessPieDrilldownData(name: string, stack: string[]) {
+async function getProcessPieDrilldownData(name: string, stack: string[]): Promise<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }> {
   // 层级：0-进程 1-线程 2-文件 3-符号
   if (stack.length === 0) {
-    const data = nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    const data = await nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
@@ -673,20 +967,30 @@ function getProcessPieDrilldownData(name: string, stack: string[]) {
   }
 }
 
-function handleProcessPieDrilldown(name: string) {
+async function handleProcessPieDrilldown(name: string) {
   const newStack = [...processPieDrilldownStack.value, name];
-  const newData = getProcessPieDrilldownData(name, newStack);
+  const newData = await getProcessPieDrilldownData(name, newStack);
   if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(processPieData.value)) {
     return;
   }
   processPieDrilldownStack.value = newStack;
   processPieDataStack.value.push(newData);
+  // 更新显示的饼图数据
+  processPieData.value = newData;
 }
 
 function handleProcessPieDrillup() {
   if (processPieDrilldownStack.value.length === 0) return;
   processPieDrilldownStack.value.pop();
   processPieDataStack.value.pop();
+  // 更新显示的饼图数据
+  processPieData.value = processPieDataStack.value.length > 0
+    ? processPieDataStack.value[processPieDataStack.value.length - 1]
+    : { legendData: [], seriesData: [] };
+  // 如果回到顶层，重新加载数据
+  if (processPieDrilldownStack.value.length === 0) {
+    loadPieChartData();
+  }
 }
 
 function handleProcessBreadcrumbClick(index: number) {
@@ -700,10 +1004,10 @@ function handleProcessBreadcrumbClick(index: number) {
 }
 
 // 分类饼图钻取逻辑（支持多层下钻）
-function getCategoryPieDrilldownData(name: string, stack: string[]) {
+async function getCategoryPieDrilldownData(name: string, stack: string[]): Promise<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }> {
   // 层级：0-大类 1-小类 2-文件 3-符号
   if (stack.length === 0) {
-    const data = nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    const data = await nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
@@ -822,20 +1126,30 @@ function getCategoryPieDrilldownData(name: string, stack: string[]) {
   }
 }
 
-function handleCategoryPieDrilldown(name: string) {
+async function handleCategoryPieDrilldown(name: string) {
   const newStack = [...categoryPieDrilldownStack.value, name];
-  const newData = getCategoryPieDrilldownData(name, newStack);
+  const newData = await getCategoryPieDrilldownData(name, newStack);
   if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(categoryPieData.value)) {
     return;
   }
   categoryPieDrilldownStack.value = newStack;
   categoryPieDataStack.value.push(newData);
+  // 更新显示的饼图数据
+  categoryPieData.value = newData;
 }
 
 function handleCategoryPieDrillup() {
   if (categoryPieDrilldownStack.value.length === 0) return;
   categoryPieDrilldownStack.value.pop();
   categoryPieDataStack.value.pop();
+  // 更新显示的饼图数据
+  categoryPieData.value = categoryPieDataStack.value.length > 0
+    ? categoryPieDataStack.value[categoryPieDataStack.value.length - 1]
+    : { legendData: [], seriesData: [] };
+  // 如果回到顶层，重新加载数据
+  if (categoryPieDrilldownStack.value.length === 0) {
+    loadPieChartData();
+  }
 }
 
 function handleCategoryBreadcrumbClick(index: number) {
@@ -850,10 +1164,10 @@ function handleCategoryBreadcrumbClick(index: number) {
 
 // 饼图钻取逻辑（事件类型维度）
 // 使用 totalMem（总分配内存）而不是 curMem
-function getEventTypePieDrilldownData(name: string, stack: string[]) {
+async function getEventTypePieDrilldownData(name: string, stack: string[]): Promise<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }> {
   // 层级：0-事件类型 1-线程 2-文件 3-符号
   if (stack.length === 0) {
-    const data = nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    const data = await nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
@@ -972,20 +1286,30 @@ function getEventTypePieDrilldownData(name: string, stack: string[]) {
   }
 }
 
-function handleEventTypePieDrilldown(name: string) {
+async function handleEventTypePieDrilldown(name: string) {
   const newStack = [...eventTypePieDrilldownStack.value, name];
-  const newData = getEventTypePieDrilldownData(name, newStack);
+  const newData = await getEventTypePieDrilldownData(name, newStack);
   if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(eventTypePieData.value)) {
     return;
   }
   eventTypePieDrilldownStack.value = newStack;
   eventTypePieDataStack.value.push(newData);
+  // 更新显示的饼图数据
+  eventTypePieData.value = newData;
 }
 
 function handleEventTypePieDrillup() {
   if (eventTypePieDrilldownStack.value.length === 0) return;
   eventTypePieDrilldownStack.value.pop();
   eventTypePieDataStack.value.pop();
+  // 更新显示的饼图数据
+  eventTypePieData.value = eventTypePieDataStack.value.length > 0
+    ? eventTypePieDataStack.value[eventTypePieDataStack.value.length - 1]
+    : { legendData: [], seriesData: [] };
+  // 如果回到顶层，重新加载数据
+  if (eventTypePieDrilldownStack.value.length === 0) {
+    loadPieChartData();
+  }
 }
 
 function handleEventTypeBreadcrumbClick(index: number) {
@@ -1026,21 +1350,21 @@ function getBreadcrumbLabel(dimension: 'process' | 'category' | 'eventType', lev
 const filteredThreadMemoryDataDrill = computed(() => {
   const drilldownLevel = processPieDrilldownStack.value.length;
   if (drilldownLevel === 0) {
-    return sortByMaxMem(mergedThreadMemoryData.value);
+    return sortByMaxMem(mergedThreadMemoryData.value || []);
   }
   // 根据进程过滤
   const processName = processPieDrilldownStack.value[0];
-  return sortByMaxMem(mergedThreadMemoryData.value.filter(item => item.process === processName));
+  return sortByMaxMem((mergedThreadMemoryData.value || []).filter(item => item.process === processName));
 });
 
 const filteredFileMemoryDataDrill = computed(() => {
   const drilldownLevel = processPieDrilldownStack.value.length;
   if (drilldownLevel === 0) {
-    return sortByMaxMem(mergedFileMemoryData.value);
+    return sortByMaxMem(mergedFileMemoryData.value || []);
   }
   // 根据进程过滤
   const processName = processPieDrilldownStack.value[0];
-  let filtered = mergedFileMemoryData.value.filter(item => item.process === processName);
+  let filtered = (mergedFileMemoryData.value || []).filter(item => item.process === processName);
 
   // 如果下钻到线程，再根据线程过滤
   if (drilldownLevel >= 2) {
@@ -1054,11 +1378,11 @@ const filteredFileMemoryDataDrill = computed(() => {
 const filteredSymbolMemoryDataDrill = computed(() => {
   const drilldownLevel = processPieDrilldownStack.value.length;
   if (drilldownLevel === 0) {
-    return sortByMaxMem(mergedSymbolMemoryData.value);
+    return sortByMaxMem(mergedSymbolMemoryData.value || []);
   }
   // 根据进程过滤
   const processName = processPieDrilldownStack.value[0];
-  let filtered = mergedSymbolMemoryData.value.filter(item => item.process === processName);
+  let filtered = (mergedSymbolMemoryData.value || []).filter(item => item.process === processName);
 
   // 如果下钻到线程，再根据线程过滤
   if (drilldownLevel >= 2) {
@@ -1079,21 +1403,21 @@ const filteredSymbolMemoryDataDrill = computed(() => {
 const filteredComponentMemoryDataDrill = computed(() => {
   const drilldownLevel = categoryPieDrilldownStack.value.length;
   if (drilldownLevel === 0) {
-    return sortByMaxMem(mergedComponentMemoryData.value);
+    return sortByMaxMem(mergedComponentMemoryData.value || []);
   }
   // 根据大类过滤
   const categoryName = categoryPieDrilldownStack.value[0];
-  return sortByMaxMem(mergedComponentMemoryData.value.filter(item => item.category === categoryName));
+  return sortByMaxMem((mergedComponentMemoryData.value || []).filter(item => item.category === categoryName));
 });
 
 const filteredFileCategoryMemoryDataDrill = computed(() => {
   const drilldownLevel = categoryPieDrilldownStack.value.length;
   if (drilldownLevel === 0) {
-    return sortByMaxMem(mergedFileCategoryMemoryData.value);
+    return sortByMaxMem(mergedFileCategoryMemoryData.value || []);
   }
   // 根据大类过滤
   const categoryName = categoryPieDrilldownStack.value[0];
-  let filtered = mergedFileCategoryMemoryData.value.filter(item => item.category === categoryName);
+  let filtered = (mergedFileCategoryMemoryData.value || []).filter(item => item.category === categoryName);
 
   // 如果下钻到小类，再根据小类过滤
   if (drilldownLevel >= 2) {
@@ -1107,11 +1431,11 @@ const filteredFileCategoryMemoryDataDrill = computed(() => {
 const filteredSymbolCategoryMemoryDataDrill = computed(() => {
   const drilldownLevel = categoryPieDrilldownStack.value.length;
   if (drilldownLevel === 0) {
-    return sortByMaxMem(mergedSymbolCategoryMemoryData.value);
+    return sortByMaxMem(mergedSymbolCategoryMemoryData.value || []);
   }
   // 根据大类过滤
   const categoryName = categoryPieDrilldownStack.value[0];
-  let filtered = mergedSymbolCategoryMemoryData.value.filter(item => item.category === categoryName);
+  let filtered = (mergedSymbolCategoryMemoryData.value || []).filter(item => item.category === categoryName);
 
   // 如果下钻到小类，再根据小类过滤
   if (drilldownLevel >= 2) {
@@ -1466,6 +1790,16 @@ const categoryTableData = computed(() => {
   font-weight: 700;
   color: #303133;
   word-break: break-all;
+}
+
+/* 加载动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
 }
 </style>
 
