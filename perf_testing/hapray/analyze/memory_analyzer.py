@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import os
 from typing import Any, Optional
 
@@ -200,3 +201,142 @@ class MemoryAnalyzer(BaseAnalyzer):
                 ws_sub.set_column(0, 4, 18)
 
         # 写完Excel无需返回；父类已将结构写入JSON
+        
+        # 保存到SQLite数据库
+        self._save_results_to_db()
+
+    def _save_results_to_db(self):
+        """将 self.results 保存到 SQLite 数据库文件
+        
+        数据库文件保存在 scene_dir/report/memory_results.db
+        创建两个表：
+        1. memory_results: 存储每个 step 的汇总信息
+        2. memory_records: 存储每条记录的详细信息
+        """
+        if not self.results:
+            return
+        
+        import sqlite3
+        
+        # 数据库文件路径
+        report_dir = os.path.join(self.scene_dir, 'report')
+        os.makedirs(report_dir, exist_ok=True)
+        db_path = os.path.join(report_dir, 'memory_results.db')
+        
+        # 连接数据库
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 创建 memory_results 表（汇总信息）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS memory_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                step_name TEXT NOT NULL,
+                peak_time REAL,
+                records_count INTEGER,
+                data_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(step_name)
+            )
+        ''')
+        
+        # 创建 memory_records 表（详细记录）
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS memory_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                step_name TEXT NOT NULL,
+                pid INTEGER,
+                process TEXT,
+                tid INTEGER,
+                thread TEXT,
+                fileId INTEGER,
+                file TEXT,
+                symbolId INTEGER,
+                symbol TEXT,
+                eventType TEXT,
+                subEventType TEXT,
+                addr TEXT,
+                callchainId INTEGER,
+                heapSize INTEGER,
+                relativeTs INTEGER,
+                componentName TEXT,
+                componentCategory TEXT,
+                categoryName TEXT,
+                subCategoryName TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # 创建索引以提高查询性能
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_memory_records_step_name 
+            ON memory_records(step_name)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_memory_records_callchainId 
+            ON memory_records(callchainId)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_memory_records_relativeTs 
+            ON memory_records(relativeTs)
+        ''')
+        
+        # 插入或更新数据
+        for step_name, step_data in self.results.items():
+            if not isinstance(step_data, dict):
+                continue
+            
+            records = step_data.get('records') or []
+            peak_time = (step_data.get('peak_time') or 0) if records else 0
+            records_count = len(records) if records else 0
+            data_json = json.dumps(step_data, ensure_ascii=False)
+            
+            # 插入汇总信息
+            cursor.execute('''
+                INSERT OR REPLACE INTO memory_results 
+                (step_name, peak_time, records_count, data_json)
+                VALUES (?, ?, ?, ?)
+            ''', (step_name, peak_time, records_count, data_json))
+            
+            # 删除该 step 的旧记录（如果存在）
+            cursor.execute('DELETE FROM memory_records WHERE step_name = ?', (step_name,))
+            
+            # 插入每条记录的详细信息
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                
+                cursor.execute('''
+                    INSERT INTO memory_records (
+                        step_name, pid, process, tid, thread,
+                        fileId, file, symbolId, symbol,
+                        eventType, subEventType, addr, callchainId,
+                        heapSize, relativeTs,
+                        componentName, componentCategory,
+                        categoryName, subCategoryName
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    step_name,
+                    record.get('pid'),
+                    record.get('process'),
+                    record.get('tid'),
+                    record.get('thread'),
+                    record.get('fileId'),
+                    record.get('file'),
+                    record.get('symbolId'),
+                    record.get('symbol'),
+                    record.get('eventType'),
+                    record.get('subEventType'),
+                    record.get('addr'),
+                    record.get('callchainId'),
+                    record.get('heapSize'),
+                    record.get('relativeTs'),
+                    record.get('componentName'),
+                    record.get('componentCategory'),
+                    record.get('categoryName'),
+                    record.get('subCategoryName'),
+                ))
+        
+        # 提交并关闭
+        conn.commit()
+        conn.close()

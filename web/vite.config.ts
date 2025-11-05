@@ -5,16 +5,20 @@ import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import injectJson from './vite-plugin-inject-json';
 import inlineDb from './vite-plugin-inline-db';
+import resolveNodeModules from './vite-plugin-resolve-node-modules';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [vue() as PluginOption, vueDevTools() as PluginOption, injectJson, inlineDb() as PluginOption, viteSingleFile() as PluginOption],
+  plugins: [vue() as PluginOption, vueDevTools() as PluginOption, resolveNodeModules() as PluginOption, injectJson, inlineDb() as PluginOption, viteSingleFile() as PluginOption],
   resolve: {
     alias: {
       '@': resolve('src'),
     },
+  },
+  optimizeDeps: {
+    exclude: ['sql.js'],
   },
   build: {
     assetsInlineLimit: 100000000,
@@ -22,18 +26,9 @@ export default defineConfig({
     cssCodeSplit: false,
     reportCompressedSize: false,
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        dbWorker: resolve(__dirname, 'src/dbWorker.ts'),
-      },
+      input: resolve(__dirname, 'index.html'),
       output: {
-        inlineDynamicImports: (chunkInfo) => {
-          // dbWorker 不内联，其他都内联
-          return chunkInfo.name !== 'dbWorker';
-        },
-        entryFileNames: (chunkInfo) => {
-          return chunkInfo.name === 'dbWorker' ? 'dbWorker.js' : 'assets/[name]-[hash].js';
-        },
+        entryFileNames: 'assets/[name]-[hash].js',
       },
     },
   },
@@ -41,7 +36,7 @@ export default defineConfig({
     format: 'es',
     rollupOptions: {
       output: {
-        entryFileNames: 'dbWorker.js',
+        entryFileNames: 'dbServiceWorker.js',
       },
     },
   },

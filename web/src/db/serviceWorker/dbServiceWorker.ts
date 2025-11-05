@@ -1,21 +1,36 @@
 /**
- * SQLite Worker - 在 Worker 线程中提供 SQLite API
+ * SQLite Service Worker - 在 Worker 线程中提供数据库服务
  * 使用 sql.js 在 Web Worker 中执行数据库操作
+ * 
+ * 职责：处理来自主线程的消息，执行数据库操作
  */
 
 // 注意：这些 import 会在构建时被 vite 处理
 // 在最终的内联版本中，这些库的代码会被内联到 Worker 中
-import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
+import initSqlJs from 'sql.js';
+import type { Database, SqlJsStatic } from 'sql.js';
 import pako from 'pako';
+import * as serviceApi from './serviceApi';
 
-// Worker 消息类型定义
-interface WorkerRequest {
+/**
+ * Worker 消息类型定义
+ */
+export type WorkerMessageType = 
+  | 'init' 
+  | 'exec' 
+  | 'query' 
+  | 'close'
+  | 'memory.queryByComponent'
+  | 'memory.queryResults'
+  | 'memory.queryRecords';
+
+export interface WorkerRequest {
   id: string;
-  type: 'init' | 'exec' | 'query' | 'close';
+  type: WorkerMessageType;
   payload?: any;
 }
 
-interface WorkerResponse {
+export interface WorkerResponse {
   id: string;
   type: 'success' | 'error';
   payload?: any;
@@ -90,6 +105,37 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>) {
           type: 'success',
           payload: { message: '数据库初始化成功' },
         } as WorkerResponse);
+        break;
+      }
+
+      // 业务请求：内存数据 - 按组件与时间分组聚合
+      case 'memory.queryByComponent': {
+        if (!db) {
+          throw new Error('数据库未初始化');
+        }
+        const { stepName } = payload || {};
+        const result = await serviceApi.queryMemoryRecordsByComponent(db, stepName);
+        self.postMessage({ id, type: 'success', payload: { result } } as WorkerResponse);
+        break;
+      }
+
+      case 'memory.queryResults': {
+        if (!db) {
+          throw new Error('数据库未初始化');
+        }
+        const { stepName } = payload || {};
+        const result = await serviceApi.queryMemoryResults(db, stepName);
+        self.postMessage({ id, type: 'success', payload: { result } } as WorkerResponse);
+        break;
+      }
+
+      case 'memory.queryRecords': {
+        if (!db) {
+          throw new Error('数据库未初始化');
+        }
+        const { stepName, limit } = payload || {};
+        const result = await serviceApi.queryMemoryRecords(db, stepName, limit);
+        self.postMessage({ id, type: 'success', payload: { result } } as WorkerResponse);
         break;
       }
 

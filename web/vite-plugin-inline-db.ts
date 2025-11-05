@@ -8,47 +8,57 @@ import path from 'path';
 export default function inlineDbPlugin(): Plugin {
   // 获取项目根目录（web 目录）
   const projectRoot = path.resolve(__dirname);
+  // node_modules 在项目根目录（web 的父目录）
+  const rootNodeModules = path.resolve(projectRoot, '../node_modules');
+  const localNodeModules = path.resolve(projectRoot, 'node_modules');
+  
+  // 辅助函数：查找文件，优先在根目录的 node_modules，其次在本地 node_modules
+  function findFile(...relativePaths: string[]): string | null {
+    for (const relativePath of relativePaths) {
+      const rootPath = path.resolve(rootNodeModules, relativePath);
+      if (fs.existsSync(rootPath)) {
+        return rootPath;
+      }
+      const localPath = path.resolve(localNodeModules, relativePath);
+      if (fs.existsSync(localPath)) {
+        return localPath;
+      }
+    }
+    return null;
+  }
   
   return {
     name: 'inline-db',
     transformIndexHtml: {
-      enforce: 'post',
-      transform(html, ctx) {
+      order: 'post',
+      handler(html, ctx) {
         // 读取 sql.js WASM 文件并转为 base64
-        const wasmPath = path.resolve(projectRoot, 'node_modules/sql.js/dist/sql-wasm.wasm');
+        const wasmPath = findFile('sql.js/dist/sql-wasm.wasm');
         let wasmBase64 = '';
-        if (fs.existsSync(wasmPath)) {
+        if (wasmPath) {
           const wasmBuffer = fs.readFileSync(wasmPath);
           wasmBase64 = wasmBuffer.toString('base64');
-        } else {
-          console.warn('[inline-db] sql.js WASM file not found at:', wasmPath);
         }
 
         // 读取 sql.js worker 文件
-        const workerPath = path.resolve(projectRoot, 'node_modules/sql.js/dist/worker.sql-wasm.js');
+        const workerPath = findFile('sql.js/dist/worker.sql-wasm.js');
         let sqlWorkerCode = '';
-        if (fs.existsSync(workerPath)) {
+        if (workerPath) {
           sqlWorkerCode = fs.readFileSync(workerPath, 'utf-8');
-        } else {
-          console.warn('[inline-db] sql.js worker file not found at:', workerPath);
         }
 
         // 读取 sql.js 主文件
-        const sqlJsPath = path.resolve(projectRoot, 'node_modules/sql.js/dist/sql-wasm.js');
+        const sqlJsPath = findFile('sql.js/dist/sql-wasm.js');
         let sqlJsCode = '';
-        if (fs.existsSync(sqlJsPath)) {
+        if (sqlJsPath) {
           sqlJsCode = fs.readFileSync(sqlJsPath, 'utf-8');
-        } else {
-          console.warn('[inline-db] sql.js main file not found at:', sqlJsPath);
         }
 
         // 读取 pako 文件（UMD 版本）
-        const pakoPath = path.resolve(projectRoot, 'node_modules/pako/dist/pako.min.js');
+        const pakoPath = findFile('pako/dist/pako.min.js', 'pako/dist/pako.js', 'pako/pako.min.js');
         let pakoCode = '';
-        if (fs.existsSync(pakoPath)) {
+        if (pakoPath) {
           pakoCode = fs.readFileSync(pakoPath, 'utf-8');
-        } else {
-          console.warn('[inline-db] pako file not found at:', pakoPath);
         }
 
         // 读取编译后的 dbWorker（需要在构建后读取）
@@ -110,9 +120,9 @@ export default function inlineDbPlugin(): Plugin {
       },
     },
     generateBundle(options, bundle) {
-      // 在构建完成后，查找 dbWorker 的 bundle 并内联
+      // 在构建完成后，查找 dbServiceWorker 的 bundle 并内联
       const dbWorkerFile = Object.keys(bundle).find((fileName) => 
-        fileName.includes('dbWorker') && fileName.endsWith('.js')
+        (fileName.includes('dbServiceWorker') || fileName.includes('dbWorker')) && fileName.endsWith('.js')
       );
       
       if (dbWorkerFile && bundle[dbWorkerFile].type === 'chunk') {
@@ -139,9 +149,9 @@ export default function inlineDbPlugin(): Plugin {
       if (fs.existsSync(htmlFile)) {
         let html = fs.readFileSync(htmlFile, 'utf-8');
         
-        // 查找 dbWorker bundle
+        // 查找 dbServiceWorker bundle
         const dbWorkerFile = Object.keys(bundle).find((fileName) => 
-          fileName.includes('dbWorker') && fileName.endsWith('.js')
+          (fileName.includes('dbServiceWorker') || fileName.includes('dbWorker')) && fileName.endsWith('.js')
         );
         
         if (dbWorkerFile && bundle[dbWorkerFile].type === 'chunk') {
