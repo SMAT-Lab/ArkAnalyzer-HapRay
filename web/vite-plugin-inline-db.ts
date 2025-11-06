@@ -33,6 +33,8 @@ export default function inlineDbPlugin(): Plugin {
       order: 'post',
       handler(html, ctx) {
         // 读取 sql.js WASM 文件并转为 base64
+        // 注意：sql.js 和 pako 会在构建时自动打包到 dbServiceWorker.js 中，不需要单独内联
+        // 只需要内联 WASM 文件，因为 Worker 中需要用它来初始化 sql.js
         const wasmPath = findFile('sql.js/dist/sql-wasm.wasm');
         let wasmBase64 = '';
         if (wasmPath) {
@@ -40,172 +42,67 @@ export default function inlineDbPlugin(): Plugin {
           wasmBase64 = wasmBuffer.toString('base64');
         }
 
-        // 读取 sql.js worker 文件
-        const workerPath = findFile('sql.js/dist/worker.sql-wasm.js');
-        let sqlWorkerCode = '';
-        if (workerPath) {
-          sqlWorkerCode = fs.readFileSync(workerPath, 'utf-8');
-        }
-
-        // 读取 sql.js 主文件
-        const sqlJsPath = findFile('sql.js/dist/sql-wasm.js');
-        let sqlJsCode = '';
-        if (sqlJsPath) {
-          sqlJsCode = fs.readFileSync(sqlJsPath, 'utf-8');
-        }
-
-        // 读取 pako 文件（UMD 版本）
-        const pakoPath = findFile('pako/dist/pako.min.js', 'pako/dist/pako.js', 'pako/pako.min.js');
-        let pakoCode = '';
-        if (pakoPath) {
-          pakoCode = fs.readFileSync(pakoPath, 'utf-8');
-        }
-
-        // 读取编译后的 dbWorker（需要在构建后读取）
-        // 这里我们将在 generateBundle 阶段处理
-
         // 构建内联脚本
-        let inlineScripts = `
-  <script>
-    // 内联 sql.js WASM 文件（base64）
-    window.__sqlWasmBase64 = '${wasmBase64}';
-    
-    // 内联 sql.js worker 代码
-    (function() {
-      const sqlWorkerCode = ${JSON.stringify(sqlWorkerCode)};
-      // 修改 locateFile 以使用内联的 WASM
-      const modifiedCode = sqlWorkerCode.replace(
-        /locateFile:\s*function\s*\([^)]*\)\s*\{[^}]*\}/,
-        \`locateFile: function(file) {
-          if (file === 'sql-wasm.wasm') {
-            const wasmBase64 = window.__sqlWasmBase64;
-            const binaryString = atob(wasmBase64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            return URL.createObjectURL(new Blob([bytes], { type: 'application/wasm' }));
-          }
-          return 'https://sql.js.org/dist/' + file;
-        }\`
-      );
-      window.__sqlWorkerCode = modifiedCode;
-    })();
-    
-    // 内联 sql.js 主文件
-    window.__sqlJsCode = ${JSON.stringify(sqlJsCode)};
-    
-    // 内联 pako
-    window.__pakoCode = ${JSON.stringify(pakoCode)};
-  </script>`;
-
+        // 只内联 WASM 文件，sql.js 和 pako 已经在 dbServiceWorker.js 中打包
         // 将内联脚本插入到 </head> 之前
-        html = html.replace('</head>', `${inlineScripts}\n</head>`);
+        html = html.replace('SQL_WASM_BASE64_PLACEHOLDER', wasmBase64);
         return html;
       },
     },
-    generateBundle(options, bundle) {
-      // 在构建完成后，查找 dbServiceWorker 的 bundle 并内联
-      const dbWorkerFile = Object.keys(bundle).find((fileName) => 
-        (fileName.includes('dbServiceWorker') || fileName.includes('dbWorker')) && fileName.endsWith('.js')
-      );
-      
-      if (dbWorkerFile && bundle[dbWorkerFile].type === 'chunk') {
-        const dbWorkerCode = (bundle[dbWorkerFile] as any).code;
-        // 将 dbWorker 代码存储到全局变量中
-        const dbWorkerScript = `
-  <script>
-    // 内联 dbWorker 代码
-    window.__dbWorkerCode = ${JSON.stringify(dbWorkerCode)};
-  </script>`;
-        
-        // 这里需要在 HTML 生成后添加，所以我们在 transformIndexHtml 中处理
-        // 但 transformIndexHtml 在 generateBundle 之前执行
-        // 所以我们需要在 writeBundle 阶段处理
-      }
-    },
-    writeBundle(options, bundle) {
-      // 在文件写入后，修改 HTML 文件
-      // 注意：如果使用了 vite-plugin-singlefile，HTML 文件可能已经被处理
-      // 我们需要找到最终输出的 HTML 文件
-      const outputDir = options.dir || path.resolve(projectRoot, 'dist');
-      const htmlFile = path.resolve(outputDir, 'index.html');
-      
-      if (fs.existsSync(htmlFile)) {
-        let html = fs.readFileSync(htmlFile, 'utf-8');
-        
-        // 查找 dbServiceWorker bundle
-        const dbWorkerFile = Object.keys(bundle).find((fileName) => 
-          (fileName.includes('dbServiceWorker') || fileName.includes('dbWorker')) && fileName.endsWith('.js')
-        );
-        
-        if (dbWorkerFile && bundle[dbWorkerFile].type === 'chunk') {
-          // 读取编译后的 dbWorker 文件内容
-          const dbWorkerFilePath = path.resolve(outputDir, dbWorkerFile);
-          let dbWorkerCode = '';
-          
-          if (fs.existsSync(dbWorkerFilePath)) {
-            dbWorkerCode = fs.readFileSync(dbWorkerFilePath, 'utf-8');
-            
-            // 将 dbWorker 代码内联到 HTML
-            const dbWorkerScript = `
-  <script>
-    // 内联 dbWorker 代码
-    window.__dbWorkerCode = ${JSON.stringify(dbWorkerCode)};
-  </script>`;
-            
-            // 在 </head> 之前插入（如果还没有）
-            if (!html.includes('__dbWorkerCode')) {
-              html = html.replace('</head>', `${dbWorkerScript}\n</head>`);
-            }
-            
-            // 删除 dbWorker 的 script 标签引用（如果存在）
-            html = html.replace(new RegExp(`<script[^>]*src=["'].*${dbWorkerFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*></script>`, 'g'), '');
-            
-            fs.writeFileSync(htmlFile, html, 'utf-8');
-          }
-        }
-      }
-    },
-    closeBundle() {
-      // 在所有构建完成后，确保 dbWorker 代码被内联到 HTML
-      // 这个钩子在 vite-plugin-singlefile 处理之后执行
-      const outputDir = path.resolve(projectRoot, 'dist');
-      const htmlFile = path.resolve(outputDir, 'index.html');
-      
-      if (fs.existsSync(htmlFile)) {
-        let html = fs.readFileSync(htmlFile, 'utf-8');
-        
-        // 检查是否已经包含 __dbWorkerCode
-        if (!html.includes('__dbWorkerCode')) {
-          // 查找 dbServiceWorker.js 文件
-          const dbWorkerFile = 'dbServiceWorker.js';
-          const dbWorkerFilePath = path.resolve(outputDir, dbWorkerFile);
-          
-          if (fs.existsSync(dbWorkerFilePath)) {
-            const dbWorkerCode = fs.readFileSync(dbWorkerFilePath, 'utf-8');
-            
-            // 将 dbWorker 代码内联到 HTML
-            const dbWorkerScript = `
-  <script>
-    // 内联 dbWorker 代码
-    window.__dbWorkerCode = ${JSON.stringify(dbWorkerCode)};
-  </script>`;
-            
-            // 在 </head> 之前插入
-            html = html.replace('</head>', `${dbWorkerScript}\n</head>`);
-            
-            // 删除 dbWorker 的 script 标签引用（如果存在）
-            html = html.replace(new RegExp(`<script[^>]*src=["'].*${dbWorkerFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*></script>`, 'gi'), '');
-            
-            fs.writeFileSync(htmlFile, html, 'utf-8');
-            console.log('✅ dbWorker 代码已内联到 HTML');
-          } else {
-            console.warn('⚠️ dbServiceWorker.js 文件未找到');
-          }
-        }
-      }
-    },
+    
+     closeBundle() {
+       // 在所有构建完成后，替换 DB_WORKER_CODE_PLACEHOLDER
+       // 这个钩子在 vite-plugin-singlefile 处理之后执行
+       const outputDir = path.resolve(projectRoot, 'dist');
+       const htmlFile = path.resolve(outputDir, 'index.html');
+       
+       console.log('[inline-db] closeBundle - checking HTML file:', htmlFile);
+       console.log('[inline-db] closeBundle - HTML file exists:', fs.existsSync(htmlFile));
+       
+       if (fs.existsSync(htmlFile)) {
+         let html = fs.readFileSync(htmlFile, 'utf-8');
+         
+         // 检查是否包含占位符
+         const hasPlaceholder = html.includes('DB_WORKER_CODE_PLACEHOLDER');
+         console.log('[inline-db] closeBundle - HTML contains DB_WORKER_CODE_PLACEHOLDER:', hasPlaceholder);
+         
+         if (hasPlaceholder) {
+             // 如果 writeBundle 中没有保存，尝试从文件系统读取
+             const dbWorkerFile = 'dbServiceWorker.js';
+             const dbWorkerFilePath = path.resolve(outputDir, dbWorkerFile);
+             
+             if (fs.existsSync(dbWorkerFilePath)) {
+               const code = fs.readFileSync(dbWorkerFilePath, 'utf-8');
+               html = html.replace(
+                 'DB_WORKER_CODE_PLACEHOLDER',
+                 code
+               );
+               fs.writeFileSync(htmlFile, html, 'utf-8');
+               console.log('[inline-db] closeBundle - ✅ 从文件系统读取并替换 DB_WORKER_CODE_PLACEHOLDER');
+             } else {
+               console.warn('[inline-db] closeBundle - ⚠️ dbServiceWorker.js 文件未找到，且 writeBundle 中未保存代码');
+               console.warn('[inline-db] closeBundle - 文件路径:', dbWorkerFilePath);
+               // 列出 dist 目录中的所有文件
+               if (fs.existsSync(outputDir)) {
+                 const files = fs.readdirSync(outputDir);
+                 console.log('[inline-db] closeBundle - dist 目录中的文件:', files);
+               }
+             }
+           
+         } else {
+           // 检查是否已经包含实际的代码（不是占位符）
+           const hasActualCode = html.includes('window.__dbWorkerCode') && 
+                                 !html.includes('DB_WORKER_CODE_PLACEHOLDER');
+           if (hasActualCode) {
+             console.log('[inline-db] closeBundle - __dbWorkerCode 已存在实际代码，跳过');
+           } else {
+             console.log('[inline-db] closeBundle - 未找到 DB_WORKER_CODE_PLACEHOLDER，可能已被其他插件处理');
+           }
+         }
+       } else {
+         console.warn('[inline-db] closeBundle - HTML 文件不存在:', htmlFile);
+       }
+     },
   };
 }
 

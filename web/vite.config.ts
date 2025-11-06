@@ -3,24 +3,30 @@ import { resolve } from 'path';
 import { defineConfig, PluginOption } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
-import injectJson from './vite-plugin-inject-json';
 import inlineDb from './vite-plugin-inline-db';
 import resolveNodeModules from './vite-plugin-resolve-node-modules';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+import injectData from './vite-plugin-inject-data';
 
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [vue() as PluginOption, vueDevTools() as PluginOption, resolveNodeModules() as PluginOption, injectJson, inlineDb() as PluginOption, viteSingleFile() as PluginOption],
+  // 插件执行顺序：injectData 必须在最后执行（在 vite-plugin-singlefile 之后）
+  plugins: [
+    vue() as PluginOption,
+    vueDevTools() as PluginOption,
+    resolveNodeModules() as PluginOption,
+    inlineDb() as PluginOption,
+    viteSingleFile() as PluginOption,
+    injectData() as PluginOption, // 最后执行，替换占位符
+  ],
   resolve: {
     alias: {
       '@': resolve('src'),
     },
   },
-  optimizeDeps: {
-    exclude: ['sql.js'],
-  },
   build: {
+    minify: true, // 禁用 JS 压缩
     assetsInlineLimit: 100000000,
     chunkSizeWarningLimit: 100000000,
     cssCodeSplit: false,

@@ -40,71 +40,135 @@ export interface WorkerResponse {
 let SQL: SqlJsStatic | null = null;
 let db: Database | null = null;
 
+// ⚠️ 重要：立即设置 onmessage 处理器，确保不会错过任何消息
+// 这必须在所有其他代码之前执行（在 import 之后）
+console.log('[dbServiceWorker] ⚡ Worker 脚本开始执行...');
+console.log('[dbServiceWorker] ⚡ 立即设置 onmessage 处理器...');
+
 // 初始化 SQL.js
 async function initSQL(wasmBase64?: string) {
+  console.log('[dbServiceWorker] initSQL 开始，wasmBase64 长度:', wasmBase64?.length || 0);
+  
   if (!SQL) {
-    SQL = await initSqlJs({
-      locateFile: (file: string) => {
-        // 如果提供了 WASM base64 数据，使用它
-        if (file === 'sql-wasm.wasm' && wasmBase64) {
-          // 从 base64 创建 Blob URL
-          const binaryString = atob(wasmBase64);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+    console.log('[dbServiceWorker] SQL.js 未初始化，开始初始化...');
+    try {
+      SQL = await initSqlJs({
+        locateFile: (file: string) => {
+          console.log('[dbServiceWorker] locateFile 被调用，文件:', file);
+          // 如果提供了 WASM base64 数据，使用它
+          if (file === 'sql-wasm.wasm' && wasmBase64) {
+            console.log('[dbServiceWorker] 使用内联 WASM 数据');
+            // 从 base64 创建 Blob URL
+            const binaryString = atob(wasmBase64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/wasm' }));
+            console.log('[dbServiceWorker] 创建 Blob URL:', blobUrl);
+            return blobUrl;
           }
-          return URL.createObjectURL(new Blob([bytes], { type: 'application/wasm' }));
-        }
-        // 否则使用 CDN
-        return `https://sql.js.org/dist/${file}`;
-      },
-    });
+          // 否则使用 CDN
+          const cdnUrl = `https://sql.js.org/dist/${file}`;
+          console.log('[dbServiceWorker] 使用 CDN URL:', cdnUrl);
+          return cdnUrl;
+        },
+      });
+      console.log('[dbServiceWorker] SQL.js 初始化成功');
+    } catch (error) {
+      console.error('[dbServiceWorker] SQL.js 初始化失败:', error);
+      throw error;
+    }
+  } else {
+    console.log('[dbServiceWorker] SQL.js 已初始化，跳过');
   }
   return SQL;
 }
 
-// 处理消息
+// 处理消息 - 立即设置，确保不会错过消息
 self.onmessage = async function (e: MessageEvent<WorkerRequest>) {
   const { id, type, payload } = e.data;
+  
+  console.log('[dbServiceWorker] 收到消息:', { id, type, payloadKeys: payload ? Object.keys(payload) : [] });
 
   try {
     switch (type) {
       case 'init': {
+        console.log('[dbServiceWorker] 开始处理 init 请求，id:', id);
         // 初始化数据库
         // payload.dbData: base64 编码的 gzip 压缩的数据库文件（可选）
         // payload.wasmBase64: WASM 文件的 base64 编码（可选，用于内联 WASM）
         const { dbData, wasmBase64 } = payload || {};
+        console.log('[dbServiceWorker] init 参数 - dbData 长度:', dbData?.length || 0);
+        console.log('[dbServiceWorker] init 参数 - wasmBase64 长度:', wasmBase64?.length || 0);
+        console.log('[dbServiceWorker] init 参数 - dbData 前100字符:', dbData?.substring(0, 100));
+        console.log('[dbServiceWorker] init 参数 - wasmBase64 前100字符:', wasmBase64?.substring(0, 100));
         
+        console.log('[dbServiceWorker] 步骤1: 开始初始化 SQL.js...');
+        const startTime = performance.now();
         await initSQL(wasmBase64);
+        const sqlInitTime = performance.now() - startTime;
+        console.log('[dbServiceWorker] SQL.js 初始化完成，耗时:', sqlInitTime.toFixed(2), 'ms');
         
         if (!SQL) {
+          console.error('[dbServiceWorker] SQL.js 初始化失败：SQL 为 null');
           throw new Error('SQL.js 初始化失败');
         }
+        console.log('[dbServiceWorker] SQL.js 初始化成功，SQL 对象:', typeof SQL);
 
         if (dbData) {
-          // dbData 是 base64 编码的 gzip 压缩的数据库文件
-          // 1. 解码 base64 字符串
-          const binaryString = atob(dbData);
-          const compressedBytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            compressedBytes[i] = binaryString.charCodeAt(i);
+          console.log('[dbServiceWorker] 步骤2: 开始处理数据库数据...');
+          console.log('[dbServiceWorker] dbData 类型:', typeof dbData);
+          console.log('[dbServiceWorker] dbData 长度:', dbData.length);
+          
+          try {
+            // dbData 是 base64 编码的 gzip 压缩的数据库文件
+            // 1. 解码 base64 字符串
+            console.log('[dbServiceWorker] 步骤2.1: 开始解码 base64...');
+            const decodeStartTime = performance.now();
+            const binaryString = atob(dbData);
+            const compressedBytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              compressedBytes[i] = binaryString.charCodeAt(i);
+            }
+            const decodeTime = performance.now() - decodeStartTime;
+            console.log('[dbServiceWorker] base64 解码完成，耗时:', decodeTime.toFixed(2), 'ms');
+            console.log('[dbServiceWorker] 压缩数据大小:', compressedBytes.length, 'bytes');
+
+            // 2. 使用 pako 解压 gzip
+            console.log('[dbServiceWorker] 步骤2.2: 开始解压 gzip...');
+            const inflateStartTime = performance.now();
+            const decompressedBytes = pako.inflate(compressedBytes);
+            const inflateTime = performance.now() - inflateStartTime;
+            console.log('[dbServiceWorker] gzip 解压完成，耗时:', inflateTime.toFixed(2), 'ms');
+            console.log('[dbServiceWorker] 解压后数据大小:', decompressedBytes.length, 'bytes');
+
+            // 3. 创建数据库
+            console.log('[dbServiceWorker] 步骤2.3: 开始创建数据库...');
+            const dbCreateStartTime = performance.now();
+            db = new SQL.Database(decompressedBytes);
+            const dbCreateTime = performance.now() - dbCreateStartTime;
+            console.log('[dbServiceWorker] 数据库创建完成，耗时:', dbCreateTime.toFixed(2), 'ms');
+            console.log('[dbServiceWorker] 数据库对象:', typeof db);
+          } catch (dbError) {
+            console.error('[dbServiceWorker] 处理数据库数据时出错:', dbError);
+            throw dbError;
           }
-
-          // 2. 使用 pako 解压 gzip
-          const decompressedBytes = pako.inflate(compressedBytes);
-
-          // 3. 创建数据库
-          db = new SQL.Database(decompressedBytes);
         } else {
-          // 创建空数据库
+          console.log('[dbServiceWorker] 步骤2: 创建空数据库...');
           db = new SQL.Database();
+          console.log('[dbServiceWorker] 空数据库创建完成');
         }
 
-        self.postMessage({
+        console.log('[dbServiceWorker] 步骤3: 发送成功响应...');
+        const response: WorkerResponse = {
           id,
           type: 'success',
           payload: { message: '数据库初始化成功' },
-        } as WorkerResponse);
+        };
+        console.log('[dbServiceWorker] 响应内容:', response);
+        self.postMessage(response);
+        console.log('[dbServiceWorker] 响应已发送，id:', id);
         break;
       }
 
@@ -193,14 +257,53 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>) {
       }
 
       default:
+        console.error('[dbServiceWorker] 未知的消息类型:', type);
         throw new Error(`未知的消息类型: ${type}`);
     }
   } catch (error) {
-    self.postMessage({
+    console.error('[dbServiceWorker] 处理消息时出错:', error);
+    console.error('[dbServiceWorker] 错误详情:', {
+      id,
+      type,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    });
+    const errorResponse: WorkerResponse = {
       id,
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
-    } as WorkerResponse);
+    };
+    console.log('[dbServiceWorker] 发送错误响应:', errorResponse);
+    self.postMessage(errorResponse);
+    console.log('[dbServiceWorker] 错误响应已发送，id:', id);
   }
 };
+
+// Worker 启动日志 - 在文件最顶部执行，确保立即输出
+try {
+  console.log('[dbServiceWorker] Worker 已启动');
+  console.log('[dbServiceWorker] Worker 环境:', {
+    self: typeof self,
+    importScripts: typeof (self as any).importScripts,
+    location: typeof location !== 'undefined' ? location.href : 'undefined',
+  });
+  
+  // 验证 onmessage 是否已设置
+  console.log('[dbServiceWorker] onmessage 已设置:', typeof self.onmessage === 'function');
+  
+  // 添加全局错误处理
+  self.onerror = (error) => {
+    console.error('[dbServiceWorker] ❌ Worker 全局错误:', error);
+    return false;
+  };
+  
+  // 添加未捕获的 Promise 错误处理
+  self.addEventListener('unhandledrejection', (event) => {
+    console.error('[dbServiceWorker] ❌ 未处理的 Promise 拒绝:', event.reason);
+  });
+  
+  console.log('[dbServiceWorker] ✅ Worker 初始化完成，等待消息...');
+} catch (error) {
+  console.error('[dbServiceWorker] ❌ Worker 启动时出错:', error);
+}
 

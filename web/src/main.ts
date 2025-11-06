@@ -33,6 +33,8 @@ declare global {
         baseMark: string;
         compareMark: string;
         dataType: string;
+        __dbWorkerCode: string;
+        __sqlWasmBase64: string;
     }
 }
 
@@ -48,7 +50,8 @@ function getDataFromScript(id: string): string {
     }
     return '';
 }
-
+window.__dbWorkerCode = getDataFromScript('dbWorkerCode');
+window.__sqlWasmBase64 = getDataFromScript('sqlWasmBase64');
 window.dbData = getDataFromScript('dbData');
 if (window.dbData) {
     (async function initDatabase() {
