@@ -25,18 +25,18 @@ from hapray.core.common.exe_utils import ExeUtils
 # Configuration constants
 MAX_WORKERS = 8  # Optimal for I/O-bound tasks
 ANALYZER_CLASSES = [
-    'ComponentReusableAnalyzer',
-    'PerfAnalyzer',
+    # 'ComponentReusableAnalyzer',
+    # 'PerfAnalyzer',
     'MemoryAnalyzer',  # 独立的内存分析器，参考 PerfAnalyzer 的结构
-    'FrameLoadAnalyzer',  # 提前执行，作为数据收集前驱
-    'EmptyFrameAnalyzer',  # 使用缓存的帧负载数据
-    'FrameDropAnalyzer',  # 使用缓存的帧负载数据
-    'VSyncAnomalyAnalyzer',  # VSync异常分析器
-    'ColdStartAnalyzer',
-    'GCAnalyzer',
-    'FaultTreeAnalyzer',
-    'CovAnalyzer',
-    'UIAnimateAnalyzer',
+    # 'FrameLoadAnalyzer',  # 提前执行，作为数据收集前驱
+    # 'EmptyFrameAnalyzer',  # 使用缓存的帧负载数据
+    # 'FrameDropAnalyzer',  # 使用缓存的帧负载数据
+    # 'VSyncAnomalyAnalyzer',  # VSync异常分析器
+    # 'ColdStartAnalyzer',
+    # 'GCAnalyzer',
+    # 'FaultTreeAnalyzer',
+    # 'CovAnalyzer',
+    # 'UIAnimateAnalyzer',
     # Add more analyzers here
 ]
 

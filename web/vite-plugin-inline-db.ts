@@ -101,21 +101,6 @@ export default function inlineDbPlugin(): Plugin {
 
         // 将内联脚本插入到 </head> 之前
         html = html.replace('</head>', `${inlineScripts}\n</head>`);
-
-        // 添加 db 文件占位符（如果还没有）
-        if (!html.includes('DB_DATA_PLACEHOLDER')) {
-          const scriptMatch = html.match(/<script[^>]*>([\s\S]*?window\.compareMark[^;]*;[\s\S]*?)<\/script>/);
-          if (scriptMatch) {
-            html = html.replace(
-              scriptMatch[0],
-              scriptMatch[0].replace(
-                'window.compareMark',
-                `window.dbData = 'DB_DATA_PLACEHOLDER';\n    window.compareMark`
-              )
-            );
-          }
-        }
-
         return html;
       },
     },
@@ -178,9 +163,45 @@ export default function inlineDbPlugin(): Plugin {
             html = html.replace(new RegExp(`<script[^>]*src=["'].*${dbWorkerFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*></script>`, 'g'), '');
             
             fs.writeFileSync(htmlFile, html, 'utf-8');
+          }
+        }
+      }
+    },
+    closeBundle() {
+      // 在所有构建完成后，确保 dbWorker 代码被内联到 HTML
+      // 这个钩子在 vite-plugin-singlefile 处理之后执行
+      const outputDir = path.resolve(projectRoot, 'dist');
+      const htmlFile = path.resolve(outputDir, 'index.html');
+      
+      if (fs.existsSync(htmlFile)) {
+        let html = fs.readFileSync(htmlFile, 'utf-8');
+        
+        // 检查是否已经包含 __dbWorkerCode
+        if (!html.includes('__dbWorkerCode')) {
+          // 查找 dbServiceWorker.js 文件
+          const dbWorkerFile = 'dbServiceWorker.js';
+          const dbWorkerFilePath = path.resolve(outputDir, dbWorkerFile);
+          
+          if (fs.existsSync(dbWorkerFilePath)) {
+            const dbWorkerCode = fs.readFileSync(dbWorkerFilePath, 'utf-8');
             
-            // 可选：删除 dbWorker.js 文件（因为已经内联到 HTML）
-            // fs.unlinkSync(dbWorkerFilePath);
+            // 将 dbWorker 代码内联到 HTML
+            const dbWorkerScript = `
+  <script>
+    // 内联 dbWorker 代码
+    window.__dbWorkerCode = ${JSON.stringify(dbWorkerCode)};
+  </script>`;
+            
+            // 在 </head> 之前插入
+            html = html.replace('</head>', `${dbWorkerScript}\n</head>`);
+            
+            // 删除 dbWorker 的 script 标签引用（如果存在）
+            html = html.replace(new RegExp(`<script[^>]*src=["'].*${dbWorkerFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*></script>`, 'gi'), '');
+            
+            fs.writeFileSync(htmlFile, html, 'utf-8');
+            console.log('✅ dbWorker 代码已内联到 HTML');
+          } else {
+            console.warn('⚠️ dbServiceWorker.js 文件未找到');
           }
         }
       }
