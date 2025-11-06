@@ -18,6 +18,7 @@ import json
 import os
 import re
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.ui_detector.arkui_tree_parser import compare_arkui_trees, parse_arkui_tree
@@ -353,8 +354,8 @@ class UIAnimateAnalyzer(BaseAnalyzer):
             'backgroundColor',
             'backgroundImage',
             'visible',
-            'url',
             'value',
+            'url',
         }
 
         animation_differences = []
@@ -367,6 +368,27 @@ class UIAnimateAnalyzer(BaseAnalyzer):
 
                 # 检查是否为动画相关属性
                 if any(anim_attr in attr_name.lower() for anim_attr in animation_related_attrs):
+                    # 对于 url 属性，需要验证值是否符合URL规范
+                    if 'url' in attr_name.lower():
+                        value1 = attr_diff.get('value1')
+                        value2 = attr_diff.get('value2')
+
+                        # 只有当至少一个值是有效的URL时才包含此差异
+                        is_valid_url = False
+                        for value in [value1, value2]:
+                            if value and isinstance(value, str):
+                                try:
+                                    result = urlparse(value)
+                                    # 检查是否有scheme和netloc（基本URL验证）
+                                    if result.scheme and result.netloc:
+                                        is_valid_url = True
+                                        break
+                                except Exception:
+                                    pass
+
+                        if not is_valid_url:
+                            continue
+
                     animation_attrs.append(attr_diff)
 
             if animation_attrs:
@@ -431,41 +453,35 @@ class UIAnimateAnalyzer(BaseAnalyzer):
             'has_animations': (start_image_count + end_image_count) > 0,
         }
 
-    def _convert_images_to_base64(self, step_result: dict[str, Any]) -> dict[str, Any]:
-        """将图片路径转换为 base64 编码
+    def _convert_images_to_base64(self):
+        """将 self.results 中的图片路径转换为 base64 编码"""
+        # 遍历所有步骤的结果
+        for _step_key, step_data in self.results.items():
+            if not isinstance(step_data, dict) or step_data.get('error'):
+                continue
 
-        Args:
-            step_result: 步骤结果
+            # 处理 start_phase 和 end_phase
+            for phase in ['start_phase', 'end_phase']:
+                if phase in step_data and isinstance(step_data[phase], dict):
+                    phase_data = step_data[phase]
+                    if 'marked_images' in phase_data and isinstance(phase_data['marked_images'], list):
+                        base64_images = []
+                        for img_path in phase_data['marked_images']:
+                            if os.path.exists(img_path):
+                                try:
+                                    with open(img_path, 'rb') as f:
+                                        img_data = f.read()
+                                        base64_str = base64.b64encode(img_data).decode('ascii')
+                                        base64_images.append(base64_str)
+                                except Exception as e:
+                                    self.logger.warning(f'转换图片 {img_path} 为 base64 失败: {e}')
+                            else:
+                                self.logger.warning(f'图片文件不存在: {img_path}')
 
-        Returns:
-            转换后的结果
-        """
-        result = step_result.copy()
-
-        # 处理 start_phase 和 end_phase
-        for phase in ['start_phase', 'end_phase']:
-            if phase in result and isinstance(result[phase], dict):
-                phase_data = result[phase]
-                if 'marked_images' in phase_data and isinstance(phase_data['marked_images'], list):
-                    base64_images = []
-                    for img_path in phase_data['marked_images']:
-                        if os.path.exists(img_path):
-                            try:
-                                with open(img_path, 'rb') as f:
-                                    img_data = f.read()
-                                    base64_str = base64.b64encode(img_data).decode('ascii')
-                                    base64_images.append(base64_str)
-                            except Exception as e:
-                                self.logger.warning(f'转换图片 {img_path} 为 base64 失败: {e}')
-                        else:
-                            self.logger.warning(f'图片文件不存在: {img_path}')
-
-                    # 替换为 base64 数据
-                    phase_data['marked_images_base64'] = base64_images
-                    # 保留原始路径用于调试
-                    phase_data['marked_images_paths'] = phase_data.pop('marked_images')
-
-        return result
+                        # 替换为 base64 数据
+                        phase_data['marked_images_base64'] = base64_images
+                        # 保留原始路径用于调试
+                        phase_data['marked_images_paths'] = phase_data.pop('marked_images')
 
     def write_report(self, result: dict):
         """重写 write_report 方法，在写入前转换图片为 base64
@@ -479,29 +495,9 @@ class UIAnimateAnalyzer(BaseAnalyzer):
 
         try:
             # 转换所有步骤的图片为 base64
-            converted_results = {}
-            for step_key, step_data in self.results.items():
-                if isinstance(step_data, dict) and not step_data.get('error'):
-                    converted_results[step_key] = self._convert_images_to_base64(step_data)
-                else:
-                    converted_results[step_key] = step_data
-
-            # 写入文件
-            file_path = os.path.join(self.scene_dir, 'report', self.report_path.replace('/', '_') + '.json')
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(converted_results, f, ensure_ascii=False)
-            self.logger.info('Report successfully written to %s', file_path)
+            self._convert_images_to_base64()
         except Exception as e:
-            self.logger.exception('Failed to write report: %s', str(e))
+            self.logger.exception('Failed to convert images to base64: %s', str(e))
 
-        # 更新结果字典
-        dict_path = self.report_path.split('/')
-        v = result
-        for key in dict_path:
-            if key == dict_path[-1]:
-                break
-            if key not in v:
-                v[key] = {}
-            v = v[key]
-        v[dict_path[-1]] = converted_results
+        # 调用基类的 write_report 方法
+        super().write_report(result)
