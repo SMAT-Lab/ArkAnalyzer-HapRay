@@ -403,7 +403,27 @@ const processedData = computed(() => {
       }
       subCategoryMap.get(record.subCategoryName)!.push(record);
     });
-    seriesGroups = Array.from(subCategoryMap.entries()).map(([name, records]) => ({ name, records }));
+
+    let allSeriesGroups = Array.from(subCategoryMap.entries()).map(([name, records]) => ({ name, records }));
+
+    // 性能优化：如果小分类数量过多，只显示内存占用最大的前 20 个
+    const MAX_SERIES_IN_CATEGORY_VIEW = 20;
+    if (allSeriesGroups.length > MAX_SERIES_IN_CATEGORY_VIEW) {
+      console.warn(`[MemoryTimeline] 小分类数量过多 (${allSeriesGroups.length})，只显示内存占用最大的前 ${MAX_SERIES_IN_CATEGORY_VIEW} 个`);
+
+      // 计算每个小分类的最终内存占用
+      const seriesWithFinalMemory = allSeriesGroups.map(group => {
+        const recordsWithCumulative = calculateCumulativeMemory(group.records);
+        const finalMemory = recordsWithCumulative[recordsWithCumulative.length - 1]?.cumulativeMemory || 0;
+        return { ...group, finalMemory };
+      });
+
+      // 按最终内存降序排序，取前 N 个
+      seriesWithFinalMemory.sort((a, b) => Math.abs(b.finalMemory) - Math.abs(a.finalMemory));
+      seriesGroups = seriesWithFinalMemory.slice(0, MAX_SERIES_IN_CATEGORY_VIEW);
+    } else {
+      seriesGroups = allSeriesGroups;
+    }
   } else {
     // 小类视图：显示单条总线
     seriesGroups = [{ name: selectedSubCategory.value, records: filteredRecords }];
@@ -846,7 +866,10 @@ async function initChart() {
         // 根据当前层级决定点击行为
         if (drillDownLevel.value === 'overview') {
           // 总览视图：点击线条下钻到大类
-          drillDownToCategory(seriesName);
+          // 过滤掉"总内存"线的点击，因为它不是一个真正的分类
+          if (seriesName !== '总内存') {
+            drillDownToCategory(seriesName);
+          }
         } else if (drillDownLevel.value === 'category') {
           // 大类视图：点击线条下钻到小类
           drillDownToSubCategory(seriesName);
