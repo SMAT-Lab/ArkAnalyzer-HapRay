@@ -26,7 +26,8 @@ export default defineConfig({
     },
   },
   build: {
-    minify: true, // 禁用 JS 压缩
+    // 仅在开发环境关闭 minify，生产环境启用压缩
+    minify: process.env.NODE_ENV === 'development' ? false : 'esbuild',
     assetsInlineLimit: 100000000,
     chunkSizeWarningLimit: 100000000,
     cssCodeSplit: false,

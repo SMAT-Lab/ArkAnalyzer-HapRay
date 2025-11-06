@@ -9,8 +9,14 @@
 // 在最终的内联版本中，这些库的代码会被内联到 Worker 中
 import initSqlJs from 'sql.js';
 import type { Database, SqlJsStatic } from 'sql.js';
-import pako from 'pako';
+// 使用命名导入 inflate，确保在 minify 后也能正常工作
+import { inflate as pakoInflate } from 'pako';
 import * as serviceApi from './serviceApi';
+
+// 为了兼容性和调试，创建一个 pako 对象
+const pako = {
+  inflate: pakoInflate,
+};
 
 /**
  * Worker 消息类型定义
@@ -137,11 +143,44 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>) {
 
             // 2. 使用 pako 解压 gzip
             console.log('[dbServiceWorker] 步骤2.2: 开始解压 gzip...');
+            console.log('[dbServiceWorker] pako 对象:', typeof pako, pako ? Object.keys(pako) : 'null');
+            console.log('[dbServiceWorker] pako.inflate 类型:', typeof pako?.inflate);
+            console.log('[dbServiceWorker] pakoInflate 类型:', typeof pakoInflate);
+            console.log('[dbServiceWorker] 压缩数据前4字节:', Array.from(compressedBytes.slice(0, 4)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            
             const inflateStartTime = performance.now();
-            const decompressedBytes = pako.inflate(compressedBytes);
-            const inflateTime = performance.now() - inflateStartTime;
-            console.log('[dbServiceWorker] gzip 解压完成，耗时:', inflateTime.toFixed(2), 'ms');
-            console.log('[dbServiceWorker] 解压后数据大小:', decompressedBytes.length, 'bytes');
+            let decompressedBytes: Uint8Array;
+            try {
+              // 检查是否是有效的 gzip 数据（gzip 文件头：1f 8b）
+              if (compressedBytes.length < 2 || compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) {
+                console.error('[dbServiceWorker] ❌ 无效的 gzip 数据！前2字节:', 
+                  '0x' + compressedBytes[0]?.toString(16).padStart(2, '0'), 
+                  '0x' + compressedBytes[1]?.toString(16).padStart(2, '0'));
+                throw new Error('Invalid gzip data: expected 0x1f 0x8b header');
+              }
+              
+              // 直接使用 pakoInflate 函数，避免通过对象访问
+              const inflateFn = pakoInflate || pako?.inflate;
+              if (!inflateFn || typeof inflateFn !== 'function') {
+                throw new Error('pako.inflate is not available or not a function');
+              }
+              
+              console.log('[dbServiceWorker] 调用 inflate 函数...');
+              decompressedBytes = inflateFn(compressedBytes);
+              const inflateTime = performance.now() - inflateStartTime;
+              console.log('[dbServiceWorker] ✅ gzip 解压完成，耗时:', inflateTime.toFixed(2), 'ms');
+              console.log('[dbServiceWorker] 解压后数据大小:', decompressedBytes.length, 'bytes');
+            } catch (inflateError) {
+              const inflateTime = performance.now() - inflateStartTime;
+              console.error('[dbServiceWorker] ❌ gzip 解压失败，耗时:', inflateTime.toFixed(2), 'ms');
+              console.error('[dbServiceWorker] 解压错误类型:', typeof inflateError);
+              console.error('[dbServiceWorker] 解压错误:', inflateError);
+              console.error('[dbServiceWorker] 解压错误消息:', inflateError instanceof Error ? inflateError.message : String(inflateError));
+              console.error('[dbServiceWorker] 解压错误堆栈:', inflateError instanceof Error ? inflateError.stack : 'No stack');
+              console.error('[dbServiceWorker] 压缩数据长度:', compressedBytes.length);
+              console.error('[dbServiceWorker] 压缩数据前10字节:', Array.from(compressedBytes.slice(0, 10)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+              throw new Error(`Gzip decompression failed: ${inflateError instanceof Error ? inflateError.message : String(inflateError)}`);
+            }
 
             // 3. 创建数据库
             console.log('[dbServiceWorker] 步骤2.3: 开始创建数据库...');
@@ -151,7 +190,15 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>) {
             console.log('[dbServiceWorker] 数据库创建完成，耗时:', dbCreateTime.toFixed(2), 'ms');
             console.log('[dbServiceWorker] 数据库对象:', typeof db);
           } catch (dbError) {
-            console.error('[dbServiceWorker] 处理数据库数据时出错:', dbError);
+            console.error('[dbServiceWorker] ❌ 处理数据库数据时出错');
+            console.error('[dbServiceWorker] 错误类型:', typeof dbError);
+            console.error('[dbServiceWorker] 错误对象:', dbError);
+            console.error('[dbServiceWorker] 错误消息:', dbError instanceof Error ? dbError.message : String(dbError));
+            console.error('[dbServiceWorker] 错误堆栈:', dbError instanceof Error ? dbError.stack : 'No stack');
+            console.error('[dbServiceWorker] 错误名称:', dbError instanceof Error ? dbError.name : 'Unknown');
+            if (dbError instanceof Error && (dbError as any).cause) {
+              console.error('[dbServiceWorker] 错误原因:', (dbError as any).cause);
+            }
             throw dbError;
           }
         } else {
