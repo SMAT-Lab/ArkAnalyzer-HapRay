@@ -38,8 +38,8 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         if not os.path.exists(trace_path):
             raise FileNotFoundError(f'Trace file not found: {trace_path}')
 
-    # 确保perf和trace文件数量一致，如果trace_paths为空则只使用perf文件数量
-    max_files = max(len(perf_paths), len(trace_paths)) if trace_paths else len(perf_paths)
+    # 确保perf和trace文件数量一致
+    max_files = max(len(perf_paths), len(trace_paths))
 
     # 创建基础目录
     report_report_dir = os.path.join(report_dir, 'report')
@@ -47,7 +47,7 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
 
     # 创建基础目录结构（不再创建 memory 目录）
     hiperf_base_dir = os.path.join(report_dir, 'hiperf')
-    htrace_base_dir = os.path.join(report_dir, 'htrace') if trace_paths else None
+    htrace_base_dir = os.path.join(report_dir, 'htrace')
 
     _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir)
 
@@ -55,18 +55,18 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     for i in range(max_files):
         step_num = i + 1
         hiperf_step_dir = os.path.join(hiperf_base_dir, f'step{step_num}')
+        htrace_step_dir = os.path.join(htrace_base_dir, f'step{step_num}')
 
         # 创建step目录
         os.makedirs(hiperf_step_dir, exist_ok=True)
+        os.makedirs(htrace_step_dir, exist_ok=True)
 
         # 处理perf文件
         if i < len(perf_paths):
             _process_perf_file(perf_paths[i], hiperf_step_dir, target_db_files, package_name, pids)
 
-        # 处理trace文件（仅当提供了trace文件时）
-        if trace_paths and i < len(trace_paths):
-            htrace_step_dir = os.path.join(htrace_base_dir, f'step{step_num}')
-            os.makedirs(htrace_step_dir, exist_ok=True)
+        # 处理trace文件
+        if i < len(trace_paths):
             _process_trace_file(trace_paths[i], htrace_step_dir)
 
         # 创建testInfo.json
@@ -168,16 +168,12 @@ def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir
     """创建基础目录结构
 
     注意：不再创建 memory 目录，memory 数据从 trace.htrace 中获取
-    htrace_base_dir 可以为 None，表示不创建 htrace 目录
     """
     if not os.path.exists(report_report_dir):
         os.makedirs(report_report_dir)
         os.makedirs(hiperf_base_dir)
-        if htrace_base_dir:
-            os.makedirs(htrace_base_dir)
-            logging.info('Base directories created: %s, %s, %s', hiperf_base_dir, htrace_base_dir, report_report_dir)
-        else:
-            logging.info('Base directories created: %s, %s (htrace skipped)', hiperf_base_dir, report_report_dir)
+        os.makedirs(htrace_base_dir)
+        logging.info('Base directories created: %s, %s, %s', hiperf_base_dir, htrace_base_dir, report_report_dir)
 
 
 def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name, pids):

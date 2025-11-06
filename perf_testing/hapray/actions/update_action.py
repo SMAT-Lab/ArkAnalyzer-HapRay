@@ -67,7 +67,7 @@ class UpdateAction:
             '--traces',
             nargs='+',
             default=[],
-            help='SIMPLE mode optional trace paths (supports multiple files). If not provided, only perf analysis will be performed',
+            help='SIMPLE mode need trace paths (supports multiple files)',
         )
         parser.add_argument(
             '--package-name',
@@ -101,8 +101,8 @@ class UpdateAction:
             trace_paths = parsed_args.traces
             pids = parsed_args.pids
 
-            if not perf_paths:
-                logging.error('SIMPLE mode requires --perfs parameter')
+            if not perf_paths or not trace_paths:
+                logging.error('SIMPLE mode requires both --perfs and --traces parameters')
                 return
 
             if not parsed_args.package_name:
@@ -138,11 +138,7 @@ class UpdateAction:
 
     @staticmethod
     def find_testcase_dirs(report_dir):
-        """Identifies valid test case directories in the report directory.
-
-        A valid test case directory must have at least a 'hiperf' subdirectory.
-        The 'htrace' subdirectory is optional (for perf-only mode).
-        """
+        """Identifies valid test case directories in the report directory."""
         testcase_dirs = []
         round_dir_pattern = re.compile(r'.*_round\d$')
 
@@ -151,12 +147,14 @@ class UpdateAction:
                 continue
 
             full_path = os.path.join(report_dir, entry)
-            # Check if directory has hiperf (htrace is optional)
-            if os.path.isdir(full_path) and os.path.exists(os.path.join(full_path, 'hiperf')):
+            if os.path.isdir(full_path) and all(
+                os.path.exists(os.path.join(full_path, subdir)) for subdir in ['hiperf', 'htrace']
+            ):
                 testcase_dirs.append(full_path)
 
-        # If no subdirectories found, check if report_dir itself is a test case directory
-        if not testcase_dirs and os.path.exists(os.path.join(report_dir, 'hiperf')):
+        if not testcase_dirs and all(
+            os.path.exists(os.path.join(report_dir, subdir)) for subdir in ['hiperf', 'htrace']
+        ):
             testcase_dirs.append(report_dir)
 
         return testcase_dirs
