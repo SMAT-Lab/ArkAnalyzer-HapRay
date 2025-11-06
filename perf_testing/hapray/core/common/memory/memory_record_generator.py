@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import logging
+from collections import defaultdict
 from typing import Any
 
 from .memory_classifier import MemoryClassifier
@@ -65,8 +66,6 @@ class MemoryRecordGenerator:
         Returns:
             内存记录列表
         """
-        from collections import defaultdict
-
         # 构建映射
         process_map = {p['id']: p for p in processes}
         thread_map = {t['id']: t for t in threads}

@@ -4,13 +4,13 @@
  */
 
 import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
-// @ts-ignore - Vite 会处理 ?worker&inline 导入
+// Vite 会处理 ?worker&inline 导入
 import MemoryWorker from '@/workers/memoryCalculation.worker.ts?worker&inline';
 
 interface WorkerTask {
   type: string;
-  payload: any;
-  resolve: (result: any) => void;
+  payload: Record<string, unknown>;
+  resolve: (result: unknown) => void;
   reject: (error: Error) => void;
 }
 
@@ -35,7 +35,7 @@ export class MemoryWorkerManager {
   private taskQueue: WorkerTask[] = [];
   private pendingTasks = new Map<number, WorkerTask>();
   private requestIdCounter = 0;
-  private cache = new Map<string, any>();
+  private cache = new Map<string, unknown>();
   private workerBusy: boolean[] = [];
 
   constructor(workerCount: number = navigator.hardwareConcurrency || 4) {
@@ -109,11 +109,11 @@ export class MemoryWorkerManager {
   /**
    * 序列化数据，确保可以被 Worker 克隆
    */
-  private serializePayload(payload: any): any {
+  private serializePayload(payload: Record<string, unknown>): Record<string, unknown> {
     try {
       // 使用 JSON 序列化/反序列化来清理数据
       // 这会移除不可序列化的属性（如函数、循环引用等）
-      return JSON.parse(JSON.stringify(payload));
+      return JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
     } catch (error) {
       console.error('Failed to serialize payload:', error);
       throw new Error('Payload contains non-serializable data');
@@ -157,7 +157,7 @@ export class MemoryWorkerManager {
   /**
    * 优化 payload，只传输必要的字段
    */
-  private optimizePayload(type: string, payload: any): any {
+  private optimizePayload(type: string, payload: Record<string, unknown>): Record<string, unknown> {
     // 如果没有 records，直接返回
     if (!payload.records || !Array.isArray(payload.records)) {
       return payload;
@@ -175,8 +175,8 @@ export class MemoryWorkerManager {
     }
 
     // 优化记录数组，只保留必要字段
-    const optimizedRecords = payload.records.map((record: any) => {
-      const optimized: any = {};
+    const optimizedRecords = payload.records.map((record: Record<string, unknown>) => {
+      const optimized: Record<string, unknown> = {};
       for (const field of necessaryFields) {
         if (field in record) {
           optimized[field] = record[field];
@@ -218,13 +218,13 @@ export class MemoryWorkerManager {
   /**
    * 提交任务到 Worker
    */
-  private submitTask<T>(type: string, payload: any, cacheKey?: CacheKey): Promise<T> {
+  private submitTask<T>(type: string, payload: Record<string, unknown>, cacheKey?: CacheKey): Promise<T> {
     // 检查缓存
     if (cacheKey) {
       const key = this.getCacheKey(cacheKey);
       if (this.cache.has(key)) {
         console.log(`缓存命中: ${key}`);
-        return Promise.resolve(this.cache.get(key));
+        return Promise.resolve(this.cache.get(key) as T);
       }
     }
 
@@ -241,7 +241,7 @@ export class MemoryWorkerManager {
             const key = this.getCacheKey(cacheKey);
             this.cache.set(key, result);
           }
-          resolve(result);
+          resolve(result as T);
         },
         reject,
       };
@@ -263,7 +263,7 @@ export class MemoryWorkerManager {
     records: NativeMemoryRecord[],
     stepId: number,
     timePoint: number | null
-  ): Promise<any[]> {
+  ): Promise<Record<string, unknown>[]> {
     return this.submitTask('aggregateByProcess', { records, timePoint }, {
       type: 'process',
       stepId,
@@ -278,7 +278,7 @@ export class MemoryWorkerManager {
     records: NativeMemoryRecord[],
     stepId: number,
     timePoint: number | null
-  ): Promise<any[]> {
+  ): Promise<Record<string, unknown>[]> {
     return this.submitTask('aggregateByThread', { records, timePoint }, {
       type: 'thread',
       stepId,
@@ -293,7 +293,7 @@ export class MemoryWorkerManager {
     records: NativeMemoryRecord[],
     stepId: number,
     timePoint: number | null
-  ): Promise<any[]> {
+  ): Promise<Record<string, unknown>[]> {
     return this.submitTask('aggregateByFile', { records, timePoint }, {
       type: 'file',
       stepId,
@@ -308,7 +308,7 @@ export class MemoryWorkerManager {
     records: NativeMemoryRecord[],
     stepId: number,
     timePoint: number | null
-  ): Promise<any[]> {
+  ): Promise<Record<string, unknown>[]> {
     return this.submitTask('aggregateBySymbol', { records, timePoint }, {
       type: 'symbol',
       stepId,
@@ -324,10 +324,10 @@ export class MemoryWorkerManager {
     stepId: number,
     timePoint: number | null
   ): Promise<{
-    byProcess: any[];
-    byThread: any[];
-    byFile: any[];
-    bySymbol: any[];
+    byProcess: Record<string, unknown>[];
+    byThread: Record<string, unknown>[];
+    byFile: Record<string, unknown>[];
+    bySymbol: Record<string, unknown>[];
   }> {
     const [byProcess, byThread, byFile, bySymbol] = await Promise.all([
       this.aggregateByProcess(records, stepId, timePoint),
