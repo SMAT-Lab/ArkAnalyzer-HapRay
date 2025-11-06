@@ -1187,6 +1187,13 @@ export const useJsonDataStore = defineStore('config', {
               averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
             };
 
+            // 优化：对记录按时间排序，以便后续使用二分查找
+            console.log(`对 ${stepKey} 的 ${records.length} 条记录按时间排序...`);
+            const sortStartTime = performance.now();
+            records.sort((a, b) => a.relativeTs - b.relativeTs);
+            const sortEndTime = performance.now();
+            console.log(`排序完成，耗时: ${(sortEndTime - sortStartTime).toFixed(2)}ms`);
+
             decompressed[stepKey] = {
               peak_time: compressedStepData.peak_time,
               peak_value: compressedStepData.peak_value,
@@ -1222,11 +1229,21 @@ export const useJsonDataStore = defineStore('config', {
             averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
           };
 
+          // 优化：对记录按时间排序，以便后续使用二分查找
+          const records = rawStepData.records || [];
+          if (records.length > 0) {
+            console.log(`对 ${stepKey} 的 ${records.length} 条记录按时间排序...`);
+            const sortStartTime = performance.now();
+            records.sort((a, b) => a.relativeTs - b.relativeTs);
+            const sortEndTime = performance.now();
+            console.log(`排序完成，耗时: ${(sortEndTime - sortStartTime).toFixed(2)}ms`);
+          }
+
           decompressed[stepKey] = {
             peak_time: rawStepData.peak_time,
             peak_value: rawStepData.peak_value,
             stats: stats,
-            records: rawStepData.records || [],
+            records: records,
             callchains: rawStepData.callchains,
           };
         }
@@ -1289,6 +1306,47 @@ export const useJsonDataStore = defineStore('config', {
       return decompressed;
     },
 
+    /**
+     * 解压缩 trace 数据字段（如 frames、emptyFrame 等）
+     * 这些字段可能被压缩为 { compressed: true, data: "base64..." } 格式
+     */
+    decompressTraceField<T>(fieldData: T | { compressed: boolean; data: string }): T {
+      // 检查是否是压缩格式
+      if (typeof fieldData === 'object' && fieldData !== null && 'compressed' in fieldData && fieldData.compressed) {
+        try {
+          const compressedData = (fieldData as { compressed: boolean; data: string }).data;
+
+          // Base64解码
+          const binaryString = atob(compressedData);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+
+          // 使用pako解压缩
+          const decompressedBytes = pako.inflate(bytes);
+
+          // 使用 TextDecoder 进行解码
+          const decoder = new TextDecoder('utf-8');
+          const decompressedStr = decoder.decode(decompressedBytes);
+
+          // 解析 JSON
+          const decompressedData = JSON.parse(decompressedStr) as T;
+
+          console.log(`解压缩 trace 数据: ${compressedData.length} -> ${decompressedBytes.length} 字节`);
+
+          return decompressedData;
+        } catch (error) {
+          console.error('解压缩 trace 数据失败:', error);
+          // 解压缩失败时，返回原数据
+          return fieldData as T;
+        }
+      }
+
+      // 未压缩的数据直接返回
+      return fieldData as T;
+    },
+
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
@@ -1298,15 +1356,27 @@ export const useJsonDataStore = defineStore('config', {
       this.compareMark = window.compareMark;
 
       if (jsonData.trace) {
+        // 解压缩可能被压缩的 trace 数据字段
+        const decompressedTrace = {
+          frames: this.decompressTraceField(jsonData.trace.frames),
+          emptyFrame: this.decompressTraceField(jsonData.trace.emptyFrame),
+          componentReuse: jsonData.trace.componentReuse, // 这个字段通常不大，不需要压缩
+          coldStart: jsonData.trace.coldStart,
+          gc_thread: jsonData.trace.gc_thread,
+          frameLoads: this.decompressTraceField(jsonData.trace.frameLoads),
+          vsyncAnomaly: this.decompressTraceField(jsonData.trace.vsyncAnomaly),
+          faultTree: jsonData.trace.faultTree,
+        };
+
         // 安全处理所有 trace 相关数据
-        this.frameData = safeProcessFrameData(jsonData.trace.frames);
-        this.emptyFrameData = safeProcessEmptyFrameData(jsonData.trace.emptyFrame);
-        this.componentResuData = safeProcessComponentResuData(jsonData.trace.componentReuse);
-        this.coldStartData = safeProcessColdStartData(jsonData.trace.coldStart);
-        this.gcThreadData = safeProcessGcThreadData(jsonData.trace.gc_thread);
-        this.frameLoadsData = safeProcessFrameLoadsData(jsonData.trace.frameLoads);
-        this.vsyncAnomalyData = safeProcessVSyncAnomalyData(jsonData.trace.vsyncAnomaly);
-        this.faultTreeData = safeProcessFaultTreeData(jsonData.trace.faultTree);
+        this.frameData = safeProcessFrameData(decompressedTrace.frames);
+        this.emptyFrameData = safeProcessEmptyFrameData(decompressedTrace.emptyFrame);
+        this.componentResuData = safeProcessComponentResuData(decompressedTrace.componentReuse);
+        this.coldStartData = safeProcessColdStartData(decompressedTrace.coldStart);
+        this.gcThreadData = safeProcessGcThreadData(decompressedTrace.gc_thread);
+        this.frameLoadsData = safeProcessFrameLoadsData(decompressedTrace.frameLoads);
+        this.vsyncAnomalyData = safeProcessVSyncAnomalyData(decompressedTrace.vsyncAnomaly);
+        this.faultTreeData = safeProcessFaultTreeData(decompressedTrace.faultTree);
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
