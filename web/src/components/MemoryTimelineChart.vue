@@ -4,7 +4,7 @@
     <div v-if="drillDownLevel !== 'overview'" style="margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px;">
       <el-breadcrumb separator="/">
         <el-breadcrumb-item>
-          <a href="#" @click.prevent="resetDrillDown" style="color: #409eff; text-decoration: none;">
+          <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="resetDrillDown">
             <i class="el-icon-s-home"></i> 总览
           </a>
         </el-breadcrumb-item>
@@ -12,7 +12,7 @@
           <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
         </el-breadcrumb-item>
         <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
-          <a href="#" @click.prevent="backToCategory" style="color: #409eff; text-decoration: none;">
+          <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
             {{ selectedCategory }}
           </a>
         </el-breadcrumb-item>

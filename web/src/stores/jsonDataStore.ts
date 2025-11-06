@@ -1310,11 +1310,11 @@ export const useJsonDataStore = defineStore('config', {
      * 解压缩 trace 数据字段（如 frames、emptyFrame 等）
      * 这些字段可能被压缩为 { compressed: true, data: "base64..." } 格式
      */
-    decompressTraceField(fieldData: any): any {
+    decompressTraceField<T>(fieldData: T | { compressed: boolean; data: string }): T {
       // 检查是否是压缩格式
       if (typeof fieldData === 'object' && fieldData !== null && 'compressed' in fieldData && fieldData.compressed) {
         try {
-          const compressedData = fieldData.data;
+          const compressedData = (fieldData as { compressed: boolean; data: string }).data;
 
           // Base64解码
           const binaryString = atob(compressedData);
@@ -1331,7 +1331,7 @@ export const useJsonDataStore = defineStore('config', {
           const decompressedStr = decoder.decode(decompressedBytes);
 
           // 解析 JSON
-          const decompressedData = JSON.parse(decompressedStr);
+          const decompressedData = JSON.parse(decompressedStr) as T;
 
           console.log(`解压缩 trace 数据: ${compressedData.length} -> ${decompressedBytes.length} 字节`);
 
@@ -1339,12 +1339,12 @@ export const useJsonDataStore = defineStore('config', {
         } catch (error) {
           console.error('解压缩 trace 数据失败:', error);
           // 解压缩失败时，返回原数据
-          return fieldData;
+          return fieldData as T;
         }
       }
 
       // 未压缩的数据直接返回
-      return fieldData;
+      return fieldData as T;
     },
 
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {

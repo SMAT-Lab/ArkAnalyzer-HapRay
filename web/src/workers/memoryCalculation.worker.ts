@@ -15,19 +15,17 @@ function getCategoryName(category: number | string): string {
   const categoryNum = typeof category === 'string' ? parseInt(category) : category;
   return ComponentCategory[categoryNum] || `Unknown(${category})`;
 }
-
 /**
  * 获取事件类型名称
  */
-function getEventTypeName(eventType: string, subEventType: string): string {
-  if (eventType === 'AllocEvent' || eventType === 'FreeEvent') {
-    return 'AllocEvent';
-  } else if (eventType === 'MmapEvent' || eventType === 'MunmapEvent') {
-    return subEventType && subEventType.trim() !== '' ? subEventType : 'Other MmapEvent';
-  }
-  return eventType || 'Unknown';
-}
-
+// function getEventTypeName(eventType: string, subEventType: string): string {
+//   if (eventType === 'AllocEvent' || eventType === 'FreeEvent') {
+//     return 'AllocEvent';
+//   } else if (eventType === 'MmapEvent' || eventType === 'MunmapEvent') {
+//     return subEventType && subEventType.trim() !== '' ? subEventType : 'Other MmapEvent';
+//   }
+//   return eventType || 'Unknown';
+// }
 /**
  * 按时间点过滤记录
  * 优化：假设数据已按时间排序，使用二分查找快速定位
@@ -159,7 +157,7 @@ function aggregateByProcess(records: NativeMemoryRecord[], timePoint: number | n
     processMap.get(processName)!.push(item);
   });
 
-  const result: any[] = [];
+  const result: Array<Record<string, unknown>> = [];
   processMap.forEach((records, processName) => {
     const stats = calculateMemoryStats(records);
     result.push({
@@ -168,7 +166,7 @@ function aggregateByProcess(records: NativeMemoryRecord[], timePoint: number | n
     });
   });
 
-  return result.sort((a, b) => b.peakMem - a.peakMem);
+  return result.sort((a, b) => (b.peakMem as number) - (a.peakMem as number));
 }
 
 /**
@@ -186,12 +184,12 @@ function aggregateByThread(records: NativeMemoryRecord[], timePoint: number | nu
     threadMap.get(key)!.push(item);
   });
 
-  const result: any[] = [];
+  const result: Array<Record<string, unknown>> = [];
   threadMap.forEach((records, key) => {
     const [processName, threadName] = key.split('|');
     const stats = calculateMemoryStats(records);
     const firstRecord = records[0];
-    
+
     result.push({
       process: processName,
       thread: threadName,
@@ -203,7 +201,7 @@ function aggregateByThread(records: NativeMemoryRecord[], timePoint: number | nu
     });
   });
 
-  return result.sort((a, b) => b.peakMem - a.peakMem);
+  return result.sort((a, b) => (b.peakMem as number) - (a.peakMem as number));
 }
 
 /**
@@ -221,12 +219,12 @@ function aggregateByFile(records: NativeMemoryRecord[], timePoint: number | null
     fileMap.get(key)!.push(item);
   });
 
-  const result: any[] = [];
+  const result: Array<Record<string, unknown>> = [];
   fileMap.forEach((records, key) => {
     const [processName, threadName, fileName] = key.split('|');
     const stats = calculateMemoryStats(records);
     const firstRecord = records[0];
-    
+
     result.push({
       process: processName,
       thread: threadName,
@@ -239,7 +237,7 @@ function aggregateByFile(records: NativeMemoryRecord[], timePoint: number | null
     });
   });
 
-  return result.sort((a, b) => b.peakMem - a.peakMem);
+  return result.sort((a, b) => (b.peakMem as number) - (a.peakMem as number));
 }
 
 /**
@@ -257,12 +255,12 @@ function aggregateBySymbol(records: NativeMemoryRecord[], timePoint: number | nu
     symbolMap.get(key)!.push(item);
   });
 
-  const result: any[] = [];
+  const result: Array<Record<string, unknown>> = [];
   symbolMap.forEach((records, key) => {
     const [processName, threadName, fileName, symbolName] = key.split('|');
     const stats = calculateMemoryStats(records);
     const firstRecord = records[0];
-    
+
     result.push({
       process: processName,
       thread: threadName,
@@ -276,7 +274,7 @@ function aggregateBySymbol(records: NativeMemoryRecord[], timePoint: number | nu
     });
   });
 
-  return result.sort((a, b) => b.peakMem - a.peakMem);
+  return result.sort((a, b) => (b.peakMem as number) - (a.peakMem as number));
 }
 
 // ============ Worker 消息处理 ============
@@ -285,7 +283,7 @@ self.onmessage = (e: MessageEvent) => {
   const { type, payload, requestId } = e.data;
 
   try {
-    let result: any;
+    let result: Array<Record<string, unknown>>;
 
     switch (type) {
       case 'aggregateByProcess':
