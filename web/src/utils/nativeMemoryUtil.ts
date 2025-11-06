@@ -290,8 +290,7 @@ export interface EventTypeMemoryItem {
 
 /**
  * 根据时间点过滤记录
- * 优化：使用二分查找快速定位，假设数据已按时间排序
- * @param records 原始记录数组（必须已按 relativeTs 排序）
+ * @param records 原始记录数组
  * @param timePoint 时间点（纳秒），如果为null则返回所有记录
  * @returns 过滤后的记录数组
  */
@@ -299,59 +298,16 @@ export function filterRecordsByTime(records: NativeMemoryRecord[], timePoint: nu
   if (timePoint === null) {
     return records;
   }
-
-  // 优化：使用二分查找找到第一个 > timePoint 的位置
-  // 假设数据已经按 relativeTs 排序（在 jsonDataStore 加载时已排序）
-  let left = 0;
-  let right = records.length;
-
-  while (left < right) {
-    const mid = Math.floor((left + right) / 2);
-    if (records[mid].relativeTs <= timePoint) {
-      left = mid + 1;
-    } else {
-      right = mid;
-    }
-  }
-
-  // left 就是第一个 > timePoint 的位置，返回 [0, left) 的记录
-  return records.slice(0, left);
-}
-
-/**
- * 使用二分查找找到时间点对应的记录索引
- * @param records 原始记录数组（必须已按 relativeTs 排序）
- * @param timePoint 时间点（纳秒），如果为null则返回数组长度
- * @returns 第一个 > timePoint 的位置索引
- */
-export function findTimePointIndex(records: NativeMemoryRecord[], timePoint: number | null): number {
-  if (timePoint === null) {
-    return records.length;
-  }
-
-  let left = 0;
-  let right = records.length;
-
-  while (left < right) {
-    const mid = Math.floor((left + right) / 2);
-    if (records[mid].relativeTs <= timePoint) {
-      left = mid + 1;
-    } else {
-      right = mid;
-    }
-  }
-
-  return left;
+  return records.filter(record => record.relativeTs <= timePoint);
 }
 
 // 处理Native Memory数据生成进程负载饼状图所需数据
 // 按进程维度计算峰值内存，用于饼图展示
-// 优化：使用分片处理，避免一次性遍历大量数据导致主线程阻塞
-export async function nativeMemory2ProcessPieChartData(
+export function nativeMemory2ProcessPieChartData(
   nativeMemoryData: NativeMemoryData | null,
   currentStepIndex: number,
   timePoint: number | null = null
-): Promise<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }> {
+) {
   if (!nativeMemoryData) {
     return { legendData: [], seriesData: [] };
   }
@@ -362,66 +318,24 @@ export async function nativeMemory2ProcessPieChartData(
     return { legendData: [], seriesData: [] };
   }
 
-  const records = stepData.records;
+  // 根据时间点过滤记录
+  const filteredRecords = filterRecordsByTime(stepData.records, timePoint);
 
-  // 优化：使用二分查找找到时间点对应的索引
-  const endIndex = findTimePointIndex(records, timePoint);
+  // 按进程分组
+  const processRecordsMap = new Map<string, NativeMemoryRecord[]>();
 
-  // 按进程分组，直接计算每个进程的内存统计
-  const processStatsMap = new Map<string, { currentMem: number; peakMem: number }>();
-
-  // 分片处理：每次处理 1000 条记录，避免阻塞主线程
-  const CHUNK_SIZE = 1000;
-  const totalChunks = Math.ceil(endIndex / CHUNK_SIZE);
-
-  console.log(`[进程饼图] 开始分片处理: ${endIndex} 条记录，分为 ${totalChunks} 片`);
-
-  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-    const start = chunkIndex * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, endIndex);
-
-    // 处理当前分片
-    for (let i = start; i < end; i++) {
-      const item = records[i];
-      const processName = item.process || "Unknown Process";
-
-      if (!processStatsMap.has(processName)) {
-        processStatsMap.set(processName, { currentMem: 0, peakMem: 0 });
-      }
-
-      const stats = processStatsMap.get(processName)!;
-
-      // 根据事件类型更新当前内存
-      if (item.eventType === 'AllocEvent' || item.eventType === 'MmapEvent') {
-        stats.currentMem += item.heapSize;
-      } else if (item.eventType === 'FreeEvent' || item.eventType === 'MunmapEvent') {
-        stats.currentMem -= item.heapSize;
-      }
-
-      // 更新峰值
-      if (stats.currentMem > stats.peakMem) {
-        stats.peakMem = stats.currentMem;
-      }
+  filteredRecords.forEach(item => {
+    const processName = item.process || "Unknown Process";
+    if (!processRecordsMap.has(processName)) {
+      processRecordsMap.set(processName, []);
     }
+    processRecordsMap.get(processName)!.push(item);
+  });
 
-    // 每处理完一个分片，让出主线程给浏览器渲染
-    // 每 50 片输出一次进度
-    if ((chunkIndex + 1) % 50 === 0 || chunkIndex === totalChunks - 1) {
-      console.log(`[进程饼图] 进度: ${chunkIndex + 1}/${totalChunks} (${((chunkIndex + 1) / totalChunks * 100).toFixed(1)}%)`);
-    }
-
-    if (chunkIndex < totalChunks - 1) {
-      // 使用 setTimeout 让出主线程，给浏览器更多时间响应
-      await new Promise(resolve => setTimeout(resolve, 5));
-    }
-  }
-
-  console.log(`[进程饼图] 分片处理完成`);
-
-
-  // 构建结果数组
+  // 计算每个进程的峰值内存
   const processEntries: [string, number][] = [];
-  processStatsMap.forEach((stats, processName) => {
+  processRecordsMap.forEach((records, processName) => {
+    const stats = calculateMemoryStats(records);
     if (stats.peakMem > 0) {
       processEntries.push([processName, stats.peakMem]);
     }
@@ -438,12 +352,11 @@ export async function nativeMemory2ProcessPieChartData(
 
 // 处理Native Memory数据生成分类负载饼状图所需数据（按大类聚合）
 // 按大分类维度计算峰值内存，用于饼图展示
-// 优化：使用分片处理，避免一次性遍历大量数据导致主线程阻塞
-export async function nativeMemory2CategoryPieChartData(
+export function nativeMemory2CategoryPieChartData(
   nativeMemoryData: NativeMemoryData | null,
   currentStepIndex: number,
   timePoint: number | null = null
-): Promise<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }> {
+) {
   if (!nativeMemoryData) {
     return { legendData: [], seriesData: [] };
   }
@@ -454,64 +367,24 @@ export async function nativeMemory2CategoryPieChartData(
     return { legendData: [], seriesData: [] };
   }
 
-  const records = stepData.records;
+  // 根据时间点过滤记录
+  const filteredRecords = filterRecordsByTime(stepData.records, timePoint);
 
-  // 优化：使用二分查找找到时间点对应的索引
-  const endIndex = findTimePointIndex(records, timePoint);
+  // 按大分类分组
+  const categoryRecordsMap = new Map<number, NativeMemoryRecord[]>();
 
-  // 按大分类分组，直接计算每个分类的内存统计
-  const categoryStatsMap = new Map<number, { currentMem: number; peakMem: number }>();
-
-  // 分片处理：每次处理 1000 条记录，避免阻塞主线程
-  const CHUNK_SIZE = 1000;
-  const totalChunks = Math.ceil(endIndex / CHUNK_SIZE);
-
-  console.log(`[分类饼图] 开始分片处理: ${endIndex} 条记录，分为 ${totalChunks} 片`);
-
-  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-    const start = chunkIndex * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, endIndex);
-
-    // 处理当前分片
-    for (let i = start; i < end; i++) {
-      const item = records[i];
-      const category = item.componentCategory;
-
-      if (!categoryStatsMap.has(category)) {
-        categoryStatsMap.set(category, { currentMem: 0, peakMem: 0 });
-      }
-
-      const stats = categoryStatsMap.get(category)!;
-
-      // 根据事件类型更新当前内存
-      if (item.eventType === 'AllocEvent' || item.eventType === 'MmapEvent') {
-        stats.currentMem += item.heapSize;
-      } else if (item.eventType === 'FreeEvent' || item.eventType === 'MunmapEvent') {
-        stats.currentMem -= item.heapSize;
-      }
-
-      // 更新峰值
-      if (stats.currentMem > stats.peakMem) {
-        stats.peakMem = stats.currentMem;
-      }
+  filteredRecords.forEach(item => {
+    const category = item.componentCategory;
+    if (!categoryRecordsMap.has(category)) {
+      categoryRecordsMap.set(category, []);
     }
+    categoryRecordsMap.get(category)!.push(item);
+  });
 
-    // 每处理完一个分片，让出主线程给浏览器渲染
-    // 每 50 片输出一次进度
-    if ((chunkIndex + 1) % 50 === 0 || chunkIndex === totalChunks - 1) {
-      console.log(`[分类饼图] 进度: ${chunkIndex + 1}/${totalChunks} (${((chunkIndex + 1) / totalChunks * 100).toFixed(1)}%)`);
-    }
-
-    if (chunkIndex < totalChunks - 1) {
-      await new Promise(resolve => setTimeout(resolve, 5));
-    }
-  }
-
-  console.log(`[分类饼图] 分片处理完成`);
-
-  // 构建结果数组
+  // 计算每个大分类的峰值内存
   const categoryEntries: [string, number][] = [];
-  categoryStatsMap.forEach((stats, category) => {
+  categoryRecordsMap.forEach((records, category) => {
+    const stats = calculateMemoryStats(records);
     if (stats.peakMem > 0) {
       categoryEntries.push([getCategoryName(category), stats.peakMem]);
     }
@@ -528,12 +401,11 @@ export async function nativeMemory2CategoryPieChartData(
 
 // 处理Native Memory数据生成事件类型负载饼状图所需数据
 // 按事件类型维度计算峰值内存，用于饼图展示
-// 优化：使用分片处理，避免一次性遍历大量数据导致主线程阻塞
-export async function nativeMemory2EventTypePieChartData(
+export function nativeMemory2EventTypePieChartData(
   nativeMemoryData: NativeMemoryData | null,
   currentStepIndex: number,
   timePoint: number | null = null
-): Promise<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }> {
+) {
   if (!nativeMemoryData) {
     return { legendData: [], seriesData: [] };
   }
@@ -544,64 +416,24 @@ export async function nativeMemory2EventTypePieChartData(
     return { legendData: [], seriesData: [] };
   }
 
-  const records = stepData.records;
+  // 根据时间点过滤记录
+  const filteredRecords = filterRecordsByTime(stepData.records, timePoint);
 
-  // 优化：使用二分查找找到时间点对应的索引
-  const endIndex = findTimePointIndex(records, timePoint);
+  // 按事件类型分组
+  const eventTypeRecordsMap = new Map<string, NativeMemoryRecord[]>();
 
-  // 按事件类型分组，直接计算每个事件类型的内存统计
-  const eventTypeStatsMap = new Map<string, { currentMem: number; peakMem: number }>();
-
-  // 分片处理：每次处理 1000 条记录，避免阻塞主线程
-  const CHUNK_SIZE = 1000;
-  const totalChunks = Math.ceil(endIndex / CHUNK_SIZE);
-
-  console.log(`[事件类型饼图] 开始分片处理: ${endIndex} 条记录，分为 ${totalChunks} 片`);
-
-  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-    const start = chunkIndex * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, endIndex);
-
-    // 处理当前分片
-    for (let i = start; i < end; i++) {
-      const item = records[i];
-      const eventTypeName = getEventTypeName(item.eventType, item.subEventType);
-
-      if (!eventTypeStatsMap.has(eventTypeName)) {
-        eventTypeStatsMap.set(eventTypeName, { currentMem: 0, peakMem: 0 });
-      }
-
-      const stats = eventTypeStatsMap.get(eventTypeName)!;
-
-      // 根据事件类型更新当前内存
-      if (item.eventType === 'AllocEvent' || item.eventType === 'MmapEvent') {
-        stats.currentMem += item.heapSize;
-      } else if (item.eventType === 'FreeEvent' || item.eventType === 'MunmapEvent') {
-        stats.currentMem -= item.heapSize;
-      }
-
-      // 更新峰值
-      if (stats.currentMem > stats.peakMem) {
-        stats.peakMem = stats.currentMem;
-      }
+  filteredRecords.forEach(item => {
+    const eventTypeName = getEventTypeName(item.eventType, item.subEventType);
+    if (!eventTypeRecordsMap.has(eventTypeName)) {
+      eventTypeRecordsMap.set(eventTypeName, []);
     }
+    eventTypeRecordsMap.get(eventTypeName)!.push(item);
+  });
 
-    // 每处理完一个分片，让出主线程给浏览器渲染
-    // 每 50 片输出一次进度
-    if ((chunkIndex + 1) % 50 === 0 || chunkIndex === totalChunks - 1) {
-      console.log(`[事件类型饼图] 进度: ${chunkIndex + 1}/${totalChunks} (${((chunkIndex + 1) / totalChunks * 100).toFixed(1)}%)`);
-    }
-
-    if (chunkIndex < totalChunks - 1) {
-      await new Promise(resolve => setTimeout(resolve, 5));
-    }
-  }
-
-  console.log(`[事件类型饼图] 分片处理完成`);
-
-  // 构建结果数组
+  // 计算每个事件类型的峰值内存
   const eventTypeEntries: [string, number][] = [];
-  eventTypeStatsMap.forEach((stats, eventTypeName) => {
+  eventTypeRecordsMap.forEach((records, eventTypeName) => {
+    const stats = calculateMemoryStats(records);
     if (stats.peakMem > 0) {
       eventTypeEntries.push([eventTypeName, stats.peakMem]);
     }

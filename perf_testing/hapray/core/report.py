@@ -85,9 +85,6 @@ class ReportData:
         # 特殊处理UI动画数据：按步骤单独压缩
         cleaned_result = self._compress_ui_animate_by_steps(cleaned_result)
 
-        # 特殊处理 trace 数据：压缩大数据字段
-        cleaned_result = self._compress_trace_data(cleaned_result)
-
         # 删除重复的 memory_analysis 字段（已经被压缩到 native_memory 中）
         if 'more' in cleaned_result and 'memory_analysis' in cleaned_result['more']:
             del cleaned_result['more']['memory_analysis']
@@ -373,68 +370,6 @@ class ReportData:
 
         # 更新数据结构
         data['ui']['animate'] = compressed_ui_animate
-        return data
-
-    def _compress_trace_data(self, data):
-        """压缩 trace 数据中的大字段（如 frames、emptyFrame 等）
-
-        这些数据通常包含大量的帧数据，需要压缩以减小 HTML 文件大小
-        """
-        if not isinstance(data, dict):
-            return data
-
-        # 检查是否有 trace 数据
-        if 'trace' not in data or not isinstance(data['trace'], dict):
-            return data
-
-        trace_data = data['trace']
-
-        # 需要压缩的 trace 字段列表（这些字段通常包含大量数据）
-        compress_fields = ['frames', 'emptyFrame', 'frameLoads', 'vsyncAnomaly']
-
-        for field in compress_fields:
-            if field not in trace_data:
-                continue
-
-            field_data = trace_data[field]
-            if not isinstance(field_data, dict):
-                continue
-
-            try:
-                # 将字段数据转换为 JSON 字符串
-                field_json = json.dumps(field_data)
-                original_size = len(field_json)
-
-                # 只压缩大于 100KB 的数据
-                if original_size < 100 * 1024:
-                    continue
-
-                # 压缩数据
-                compressed_bytes = zlib.compress(field_json.encode('utf-8'), level=9)
-                base64_bytes = base64.b64encode(compressed_bytes)
-                compressed_data = base64_bytes.decode('ascii')
-
-                # 替换为压缩后的数据
-                trace_data[field] = {
-                    'compressed': True,
-                    'data': compressed_data,
-                }
-
-                # 记录压缩效果
-                compressed_size = len(compressed_data)
-                compression_ratio = (1 - compressed_size / original_size) * 100
-                logging.info(
-                    'Trace 数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
-                    field,
-                    original_size,
-                    compressed_size,
-                    compression_ratio,
-                )
-            except Exception as e:
-                logging.warning('压缩 trace 数据失败 %s: %s', field, str(e))
-                # 压缩失败时保持原数据
-                continue
-
         return data
 
     def load_perf_data(self, path, required: bool = True):
