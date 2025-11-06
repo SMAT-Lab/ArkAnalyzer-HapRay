@@ -459,17 +459,22 @@ function formatTime(ns: number): string {
   return `${(ns / 1000000000).toFixed(2)} s`;
 }
 
-// 监听时间点变化，重新计算钻取数据
-watch(selectedTimePoint, () => {
+// 监听时间点变化，重新计算钻取数据和加载饼图数据
+watch(selectedTimePoint, async () => {
+  // 重新加载顶层饼图数据
+  await loadPieChartData();
+
   // 重新计算进程饼图钻取数据
   if (processPieDrilldownStack.value.length > 0) {
     processPieDataStack.value = [];
     for (let i = 0; i < processPieDrilldownStack.value.length; i++) {
       const name = processPieDrilldownStack.value[i];
       const stack = processPieDrilldownStack.value.slice(0, i + 1);
-      const data = getProcessPieDrilldownData(name, stack);
+      const data = await getProcessPieDrilldownData(name, stack);
       processPieDataStack.value.push(data);
     }
+    // 更新当前显示的饼图数据
+    processPieData.value = processPieDataStack.value[processPieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
   }
 
   // 重新计算分类饼图钻取数据
@@ -478,9 +483,11 @@ watch(selectedTimePoint, () => {
     for (let i = 0; i < categoryPieDrilldownStack.value.length; i++) {
       const name = categoryPieDrilldownStack.value[i];
       const stack = categoryPieDrilldownStack.value.slice(0, i + 1);
-      const data = getCategoryPieDrilldownData(name, stack);
+      const data = await getCategoryPieDrilldownData(name, stack);
       categoryPieDataStack.value.push(data);
     }
+    // 更新当前显示的饼图数据
+    categoryPieData.value = categoryPieDataStack.value[categoryPieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
   }
 
   // 重新计算事件类型饼图钻取数据
@@ -489,9 +496,11 @@ watch(selectedTimePoint, () => {
     for (let i = 0; i < eventTypePieDrilldownStack.value.length; i++) {
       const name = eventTypePieDrilldownStack.value[i];
       const stack = eventTypePieDrilldownStack.value.slice(0, i + 1);
-      const data = getEventTypePieDrilldownData(name, stack);
+      const data = await getEventTypePieDrilldownData(name, stack);
       eventTypePieDataStack.value.push(data);
     }
+    // 更新当前显示的饼图数据
+    eventTypePieData.value = eventTypePieDataStack.value[eventTypePieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
   }
 });
 
@@ -505,35 +514,31 @@ const categoryPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ nam
 const eventTypePieDrilldownStack = ref<string[]>([]);
 const eventTypePieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
 
-// 使用 computed 让饼图数据自动响应 selectedTimePoint 的变化
-const processPieData = computed(() => {
+// 饼图数据使用 ref 存储，因为数据获取函数是异步的
+const processPieData = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }>({ legendData: [], seriesData: [] });
+const categoryPieData = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }>({ legendData: [], seriesData: [] });
+const eventTypePieData = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }>({ legendData: [], seriesData: [] });
+
+// 异步加载饼图数据
+async function loadPieChartData() {
+  // 加载进程饼图数据（如果没有钻取，则加载顶层数据）
   if (processPieDrilldownStack.value.length === 0) {
-    return nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    processPieData.value = await nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
   }
-  // 如果有钻取，使用钻取数据
-  return processPieDataStack.value[processPieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
-});
 
-const categoryPieData = computed(() => {
+  // 加载分类饼图数据（如果没有钻取，则加载顶层数据）
   if (categoryPieDrilldownStack.value.length === 0) {
-    return nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    categoryPieData.value = await nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
   }
-  // 如果有钻取，使用钻取数据
-  return categoryPieDataStack.value[categoryPieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
-});
 
-const eventTypePieData = computed(() => {
+  // 加载事件类型饼图数据（如果没有钻取，则加载顶层数据）
   if (eventTypePieDrilldownStack.value.length === 0) {
-    return nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    eventTypePieData.value = await nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
   }
-  // 如果有钻取，使用钻取数据
-  return eventTypePieDataStack.value[eventTypePieDataStack.value.length - 1] || { legendData: [], seriesData: [] };
-});
-
-// 饼图数据现在是 computed，会自动响应 selectedTimePoint 的变化，不需要手动更新
+}
 
 // 监听stepId变化，重新加载数据
-watch(() => props.stepId, () => {
+watch(() => props.stepId, async () => {
   selectedTimePoint.value = null; // 切换步骤时清除时间点选择
   // 清除钻取栈
   processPieDrilldownStack.value = [];
@@ -542,24 +547,15 @@ watch(() => props.stepId, () => {
   categoryPieDataStack.value = [];
   eventTypePieDrilldownStack.value = [];
   eventTypePieDataStack.value = [];
+  // 重新加载饼图数据
+  await loadPieChartData();
 }, { immediate: true });
 
-// 监听selectedTimePoint变化，清除钻取栈
-watch(selectedTimePoint, () => {
-  // 清除钻取栈，因为过滤条件变化了
-  processPieDrilldownStack.value = [];
-  processPieDataStack.value = [];
-  categoryPieDrilldownStack.value = [];
-  categoryPieDataStack.value = [];
-  eventTypePieDrilldownStack.value = [];
-  eventTypePieDataStack.value = [];
-});
-
 // 进程饼图钻取逻辑（支持多层下钻）
-function getProcessPieDrilldownData(name: string, stack: string[]) {
+async function getProcessPieDrilldownData(name: string, stack: string[]) {
   // 层级：0-进程 1-线程 2-文件 3-符号
   if (stack.length === 0) {
-    const data = nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    const data = await nativeMemory2ProcessPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
@@ -673,14 +669,16 @@ function getProcessPieDrilldownData(name: string, stack: string[]) {
   }
 }
 
-function handleProcessPieDrilldown(name: string) {
+async function handleProcessPieDrilldown(name: string) {
   const newStack = [...processPieDrilldownStack.value, name];
-  const newData = getProcessPieDrilldownData(name, newStack);
+  const newData = await getProcessPieDrilldownData(name, newStack);
   if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(processPieData.value)) {
     return;
   }
   processPieDrilldownStack.value = newStack;
   processPieDataStack.value.push(newData);
+  // 更新饼图数据
+  processPieData.value = newData;
 }
 
 function handleProcessPieDrillup() {
@@ -700,10 +698,10 @@ function handleProcessBreadcrumbClick(index: number) {
 }
 
 // 分类饼图钻取逻辑（支持多层下钻）
-function getCategoryPieDrilldownData(name: string, stack: string[]) {
+async function getCategoryPieDrilldownData(name: string, stack: string[]) {
   // 层级：0-大类 1-小类 2-文件 3-符号
   if (stack.length === 0) {
-    const data = nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    const data = await nativeMemory2CategoryPieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
@@ -822,14 +820,16 @@ function getCategoryPieDrilldownData(name: string, stack: string[]) {
   }
 }
 
-function handleCategoryPieDrilldown(name: string) {
+async function handleCategoryPieDrilldown(name: string) {
   const newStack = [...categoryPieDrilldownStack.value, name];
-  const newData = getCategoryPieDrilldownData(name, newStack);
+  const newData = await getCategoryPieDrilldownData(name, newStack);
   if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(categoryPieData.value)) {
     return;
   }
   categoryPieDrilldownStack.value = newStack;
   categoryPieDataStack.value.push(newData);
+  // 更新饼图数据
+  categoryPieData.value = newData;
 }
 
 function handleCategoryPieDrillup() {
@@ -850,10 +850,10 @@ function handleCategoryBreadcrumbClick(index: number) {
 
 // 饼图钻取逻辑（事件类型维度）
 // 使用 totalMem（总分配内存）而不是 curMem
-function getEventTypePieDrilldownData(name: string, stack: string[]) {
+async function getEventTypePieDrilldownData(name: string, stack: string[]) {
   // 层级：0-事件类型 1-线程 2-文件 3-符号
   if (stack.length === 0) {
-    const data = nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
+    const data = await nativeMemory2EventTypePieChartData(nativeMemoryData, props.stepId, selectedTimePoint.value);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
@@ -972,14 +972,16 @@ function getEventTypePieDrilldownData(name: string, stack: string[]) {
   }
 }
 
-function handleEventTypePieDrilldown(name: string) {
+async function handleEventTypePieDrilldown(name: string) {
   const newStack = [...eventTypePieDrilldownStack.value, name];
-  const newData = getEventTypePieDrilldownData(name, newStack);
+  const newData = await getEventTypePieDrilldownData(name, newStack);
   if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(eventTypePieData.value)) {
     return;
   }
   eventTypePieDrilldownStack.value = newStack;
   eventTypePieDataStack.value.push(newData);
+  // 更新饼图数据
+  eventTypePieData.value = newData;
 }
 
 function handleEventTypePieDrillup() {
