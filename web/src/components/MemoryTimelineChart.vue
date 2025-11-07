@@ -11,13 +11,21 @@
         <el-breadcrumb-item v-if="drillDownLevel === 'category'">
           <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
         </el-breadcrumb-item>
-        <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
+        <el-breadcrumb-item v-if="drillDownLevel === 'subCategory' || drillDownLevel === 'file'">
           <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
             {{ selectedCategory }}
           </a>
         </el-breadcrumb-item>
         <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
           <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
+        </el-breadcrumb-item>
+        <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+          <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToSubCategory">
+            {{ selectedSubCategory }}
+          </a>
+        </el-breadcrumb-item>
+        <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+          <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
         </el-breadcrumb-item>
       </el-breadcrumb>
     </div>
@@ -175,10 +183,11 @@ let chartInstance: echarts.ECharts | null = null;
 const isLoading = ref(false);
 
 // 下钻状态管理
-type DrillDownLevel = 'overview' | 'category' | 'subCategory';
+type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'file';
 const drillDownLevel = ref<DrillDownLevel>('overview');
 const selectedCategory = ref<string>('');
 const selectedSubCategory = ref<string>('');
+const selectedFile = ref<string>('');
 
 // Tooltip 数据
 interface TooltipItem {
@@ -318,12 +327,20 @@ function resetDrillDown() {
   drillDownLevel.value = 'overview';
   selectedCategory.value = '';
   selectedSubCategory.value = '';
+  selectedFile.value = '';
   emit('time-point-selected', null);
 }
 
 function backToCategory() {
   drillDownLevel.value = 'category';
   selectedSubCategory.value = '';
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+}
+
+function backToSubCategory() {
+  drillDownLevel.value = 'subCategory';
+  selectedFile.value = '';
   emit('time-point-selected', null);
 }
 
@@ -331,12 +348,20 @@ function drillDownToCategory(categoryName: string) {
   drillDownLevel.value = 'category';
   selectedCategory.value = categoryName;
   selectedSubCategory.value = '';
+  selectedFile.value = '';
   emit('time-point-selected', null);
 }
 
 function drillDownToSubCategory(subCategoryName: string) {
   drillDownLevel.value = 'subCategory';
   selectedSubCategory.value = subCategoryName;
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+}
+
+function drillDownToFile(fileName: string) {
+  drillDownLevel.value = 'file';
+  selectedFile.value = fileName;
   emit('time-point-selected', null);
 }
 
@@ -367,6 +392,13 @@ const processedData = computed(() => {
     // 只保留选中小类的数据
     filteredRecords = sortedRecords.filter(
       r => r.categoryName === selectedCategory.value && r.subCategoryName === selectedSubCategory.value
+    );
+  } else if (drillDownLevel.value === 'file') {
+    // 只保留选中文件的数据
+    filteredRecords = sortedRecords.filter(
+      r => r.categoryName === selectedCategory.value &&
+           r.subCategoryName === selectedSubCategory.value &&
+           r.file === selectedFile.value
     );
   }
 
@@ -424,9 +456,43 @@ const processedData = computed(() => {
     } else {
       seriesGroups = allSeriesGroups;
     }
+  } else if (drillDownLevel.value === 'subCategory') {
+    // 小类视图：按文件分组
+    const fileMap = new Map<string, typeof sortedRecords>();
+    filteredRecords.forEach(record => {
+      // 只处理有文件信息的记录，过滤掉 file 为 null 的记录
+      if (record.file && record.file !== 'N/A') {
+        const fileName = record.file;
+        if (!fileMap.has(fileName)) {
+          fileMap.set(fileName, []);
+        }
+        fileMap.get(fileName)!.push(record);
+      }
+    });
+
+    const allSeriesGroups = Array.from(fileMap.entries()).map(([name, records]) => ({ name, records }));
+
+    // 性能优化：如果文件数量过多，只显示内存占用最大的前 20 个
+    const MAX_SERIES_IN_SUBCATEGORY_VIEW = 20;
+    if (allSeriesGroups.length > MAX_SERIES_IN_SUBCATEGORY_VIEW) {
+      console.warn(`[MemoryTimeline] 文件数量过多 (${allSeriesGroups.length})，只显示内存占用最大的前 ${MAX_SERIES_IN_SUBCATEGORY_VIEW} 个`);
+
+      // 计算每个文件的最终内存占用
+      const seriesWithFinalMemory = allSeriesGroups.map(group => {
+        const recordsWithCumulative = calculateCumulativeMemory(group.records);
+        const finalMemory = recordsWithCumulative[recordsWithCumulative.length - 1]?.cumulativeMemory || 0;
+        return { ...group, finalMemory };
+      });
+
+      // 按最终内存降序排序，取前 N 个
+      seriesWithFinalMemory.sort((a, b) => Math.abs(b.finalMemory) - Math.abs(a.finalMemory));
+      seriesGroups = seriesWithFinalMemory.slice(0, MAX_SERIES_IN_SUBCATEGORY_VIEW);
+    } else {
+      seriesGroups = allSeriesGroups;
+    }
   } else {
-    // 小类视图：显示单条总线
-    seriesGroups = [{ name: selectedSubCategory.value, records: filteredRecords }];
+    // 文件视图：显示单条总线
+    seriesGroups = [{ name: selectedFile.value, records: filteredRecords }];
   }
 
   // 对于超大数据集（> 50000），使用更激进的优化策略
@@ -607,8 +673,10 @@ async function initChart() {
           title += ` - 总览 (总内存 + ${seriesData.length - 1} 个大类)`;
         } else if (drillDownLevel.value === 'category') {
           title += ` - ${selectedCategory.value} (${seriesData.length} 个小类)`;
+        } else if (drillDownLevel.value === 'subCategory') {
+          title += ` - ${selectedCategory.value} / ${selectedSubCategory.value} (${seriesData.length} 个文件)`;
         } else {
-          title += ` - ${selectedCategory.value} / ${selectedSubCategory.value}`;
+          title += ` - ${selectedCategory.value} / ${selectedSubCategory.value} / ${selectedFile.value}`;
         }
         return title;
       })(),
@@ -618,6 +686,8 @@ async function initChart() {
           hint = '💡 点击线条查看大类详情 | ';
         } else if (drillDownLevel.value === 'category') {
           hint = '💡 点击线条查看小类详情 | ';
+        } else if (drillDownLevel.value === 'subCategory') {
+          hint = '💡 点击线条查看文件详情 | ';
         } else {
           hint = '💡 点击数据点选择时间点 | ';
         }
@@ -885,8 +955,11 @@ async function initChart() {
         } else if (drillDownLevel.value === 'category') {
           // 大类视图：点击线条下钻到小类
           drillDownToSubCategory(seriesName);
+        } else if (drillDownLevel.value === 'subCategory') {
+          // 小类视图：点击线条下钻到文件
+          drillDownToFile(seriesName);
         } else {
-          // 小类视图：点击数据点选择时间点
+          // 文件视图：点击数据点选择时间点
           const dataItem = seriesData[seriesIndex]?.data[dataIndex];
           if (dataItem) {
             // 如果点击的是已选中的点，则取消选择
@@ -1006,7 +1079,7 @@ watch(
 
 // 监听下钻状态的变化，重新初始化图表
 watch(
-  [drillDownLevel, selectedCategory, selectedSubCategory],
+  [drillDownLevel, selectedCategory, selectedSubCategory, selectedFile],
   () => {
     if (chartInstance) {
       initChart();
