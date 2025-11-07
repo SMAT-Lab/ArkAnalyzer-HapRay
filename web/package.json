@@ -17,7 +17,8 @@
     "build:debug": "cross-env NODE_ENV=development vite build",
     "type-check": "vue-tsc --build",
     "lint": "eslint src --ext .ts,.vue",
-    "lint:fix": "eslint src --ext .ts,.vue --fix"
+    "lint:fix": "eslint src --ext .ts,.vue --fix",
+    "gen-test-html": "npm run build && node scripts/replace-from-html.js"
   },
   "dependencies": {
     "axios": "^1.12.2",

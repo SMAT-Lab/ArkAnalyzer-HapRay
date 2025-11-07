@@ -76,17 +76,75 @@ export async function queryMemoryRecords(
   limit?: number
 ): Promise<SqlRow[]> {
   const { sql, params } = MemoryDao.buildQueryMemoryRecords(stepId, limit);
-  const stmt = db.prepare(sql);
+  console.log('[serviceApi] queryMemoryRecords - SQL:', sql);
+  console.log('[serviceApi] queryMemoryRecords - Params:', params);
   
+  // Build SQL with parameters for db.exec
+  // Note: Using db.exec directly because Statement.step() has issues with large datasets
+  let execSql = sql;
   if (params && params.length > 0) {
-    stmt.bind(params);
+    let paramIndex = 0;
+    execSql = sql.replace(/\?/g, () => {
+      const param = params[paramIndex++];
+      if (param === null || param === undefined) {
+        return 'NULL';
+      }
+      if (typeof param === 'string') {
+        // Escape single quotes
+        return `'${param.replace(/'/g, "''")}'`;
+      }
+      return String(param);
+    });
   }
   
-  const rows: SqlRow[] = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject({}));
-  }
+  console.log('[serviceApi] queryMemoryRecords - Executing query with db.exec...');
+  const startTime = performance.now();
   
-  stmt.free();
-  return rows;
+  try {
+    const execResult = db.exec(execSql);
+    
+    if (execResult && execResult.length > 0) {
+      const execRows = execResult[0];
+      const execRowCount = execRows.values?.length || 0;
+      const columns = execRows.columns || [];
+      
+      console.log(`[serviceApi] queryMemoryRecords - db.exec returned ${execRowCount} rows, ${columns.length} columns`);
+      
+      if (execRowCount === 0) {
+        console.log('[serviceApi] queryMemoryRecords - No records found');
+        return [];
+      }
+      
+      // Convert exec result to object array
+      const rows: SqlRow[] = [];
+      const conversionStartTime = performance.now();
+      
+      for (let i = 0; i < execRowCount; i++) {
+        const row: SqlRow = {};
+        const values = execRows.values[i];
+        for (let j = 0; j < columns.length; j++) {
+          row[columns[j]] = values[j];
+        }
+        rows.push(row);
+        
+        // Output progress every 50000 records (to avoid too many logs)
+        if ((i + 1) % 50000 === 0) {
+          const elapsed = ((performance.now() - conversionStartTime) / 1000).toFixed(2);
+          console.log(`[serviceApi] queryMemoryRecords - Converted ${i + 1}/${execRowCount} records (${elapsed}s elapsed)...`);
+        }
+      }
+      
+      const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+      const conversionTime = ((performance.now() - conversionStartTime) / 1000).toFixed(2);
+      console.log(`[serviceApi] queryMemoryRecords - Successfully converted ${rows.length} records (conversion: ${conversionTime}s, total: ${totalTime}s)`);
+      
+      return rows;
+    } else {
+      console.log('[serviceApi] queryMemoryRecords - No result from db.exec');
+      return [];
+    }
+  } catch (execError) {
+    console.error('[serviceApi] queryMemoryRecords - db.exec failed:', execError);
+    throw execError;
+  }
 }
