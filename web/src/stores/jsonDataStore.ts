@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { transformNativeMemoryData } from '@/utils/jsonUtil';
 import pako from 'pako';
+import { getDbApi } from '@/utils/dbApi';
 
 // ==================== 类型定义 ====================
 /** 负载事件类型 */
@@ -1307,43 +1307,185 @@ export const useJsonDataStore = defineStore('config', {
     },
 
     /**
-     * 解压缩 trace 数据字段（如 frames、emptyFrame 等）
-     * 这些字段可能被压缩为 { compressed: true, data: "base64..." } 格式
+     * Load native memory data from database
+     * Queries all steps and converts records to NativeMemoryData format
+     * @returns Promise that resolves when data is loaded
+     */
+    async loadNativeMemoryDataFromDb(): Promise<void> {
+      try {
+        const dbApi = getDbApi();
+        
+        // Query all distinct step ids
+        const stepIds = await dbApi.queryMemorySteps();
+        
+        if (stepIds.length === 0) {
+          console.log('[JsonDataStore] No native memory steps found in database');
+          this.nativeMemoryData = null;
+          return;
+        }
+
+        // Load records for each step
+        const nativeMemoryData: NativeMemoryData = {};
+        
+        for (const stepId of stepIds) {
+          const records = await dbApi.queryMemoryRecords(stepId);
+          
+          // Convert database records to NativeMemoryRecord format
+          const nativeRecords: NativeMemoryRecord[] = records.map((row) => {
+            // Convert componentCategory from string to enum
+            let componentCategory: ComponentCategory = ComponentCategory.UNKNOWN;
+            const categoryStr = String(row.componentCategory || '');
+            if (categoryStr) {
+              const categoryNum = Number(categoryStr);
+              if (!isNaN(categoryNum) && categoryNum in ComponentCategory) {
+                componentCategory = categoryNum as ComponentCategory;
+              }
+            }
+
+            return {
+              pid: Number(row.pid) || 0,
+              process: String(row.process || ''),
+              tid: row.tid !== null && row.tid !== undefined ? Number(row.tid) : null,
+              thread: row.thread !== null && row.thread !== undefined ? String(row.thread) : null,
+              fileId: row.fileId !== null && row.fileId !== undefined ? Number(row.fileId) : null,
+              file: row.file !== null && row.file !== undefined ? String(row.file) : null,
+              symbolId: row.symbolId !== null && row.symbolId !== undefined ? Number(row.symbolId) : null,
+              symbol: row.symbol !== null && row.symbol !== undefined ? String(row.symbol) : null,
+              eventType: String(row.eventType || '') as EventType,
+              subEventType: String(row.subEventType || ''),
+              // addr may be stored as TEXT in database, convert to number
+              addr: row.addr !== null && row.addr !== undefined ? (typeof row.addr === 'string' ? parseInt(row.addr, 16) : Number(row.addr)) || 0 : 0,
+              callchainId: Number(row.callchainId) || 0,
+              heapSize: Number(row.heapSize) || 0,
+              relativeTs: Number(row.relativeTs) || 0,
+              componentName: String(row.componentName || ''),
+              componentCategory: componentCategory,
+              categoryName: String(row.categoryName || ''),
+              subCategoryName: String(row.subCategoryName || ''),
+            };
+          });
+
+          // Sort records by relativeTs
+          nativeRecords.sort((a, b) => a.relativeTs - b.relativeTs);
+
+          // Calculate statistics from records
+          let peak_time: number | undefined;
+          let peak_value: number | undefined;
+          let stats: NativeMemoryStepStats | undefined;
+
+          if (nativeRecords.length > 0) {
+            // Calculate cumulative memory and find peak
+            let cumulativeMemory = 0;
+            let peakMemory = 0;
+            let peakTime = 0;
+            let totalMemory = 0;
+            let allocCount = 0;
+            let freeCount = 0;
+
+            for (const record of nativeRecords) {
+              // Update cumulative memory based on event type
+              if (record.eventType === EventType.AllocEvent || record.eventType === EventType.MmapEvent) {
+                cumulativeMemory += record.heapSize;
+                totalMemory += record.heapSize;
+                allocCount++;
+              } else if (record.eventType === EventType.FreeEvent || record.eventType === EventType.MunmapEvent) {
+                cumulativeMemory -= record.heapSize;
+                freeCount++;
+              }
+
+              // Track peak
+              if (cumulativeMemory > peakMemory) {
+                peakMemory = cumulativeMemory;
+                peakTime = record.relativeTs;
+              }
+            }
+
+            // Calculate average memory size
+            const eventCount = allocCount + freeCount;
+            const averageMemorySize = eventCount > 0 ? totalMemory / eventCount : 0;
+
+            peak_time = peakTime;
+            peak_value = peakMemory;
+
+            // Query peak_time from memory_results table if available
+            const results = await dbApi.queryMemoryResults(stepId);
+            if (results.length > 0) {
+              const result = results[0];
+              const dbPeakTime = result.peak_time !== null && result.peak_time !== undefined ? Number(result.peak_time) : undefined;
+              if (dbPeakTime !== undefined) {
+                peak_time = dbPeakTime;
+              }
+            }
+
+            stats = {
+              peakMemorySize: peakMemory,
+              peakMemoryDuration: 0, // Duration calculation requires additional logic
+              averageMemorySize: averageMemorySize,
+            };
+          } else {
+            // Try to get peak_time from memory_results table even if no records
+            const results = await dbApi.queryMemoryResults(stepId);
+            if (results.length > 0) {
+              const result = results[0];
+              peak_time = result.peak_time !== null && result.peak_time !== undefined ? Number(result.peak_time) : undefined;
+            }
+          }
+
+          nativeMemoryData[`step${stepId}`] = {
+            peak_time,
+            peak_value,
+            stats,
+            records: nativeRecords,
+            callchains: undefined, // Callchains can be loaded separately if needed
+          };
+        }
+
+        this.nativeMemoryData = nativeMemoryData;
+        console.log(`[JsonDataStore] Loaded native memory data for ${stepIds.length} steps from database`);
+      } catch (error) {
+        console.error('[JsonDataStore] Error loading native memory data from database:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Decompress trace data fields (e.g., frames, emptyFrame, etc.)
+     * These fields may be compressed in the format { compressed: true, data: "base64..." }
      */
     decompressTraceField<T>(fieldData: T | { compressed: boolean; data: string }): T {
-      // 检查是否是压缩格式
+      // Check if data is in compressed format
       if (typeof fieldData === 'object' && fieldData !== null && 'compressed' in fieldData && fieldData.compressed) {
         try {
           const compressedData = (fieldData as { compressed: boolean; data: string }).data;
 
-          // Base64解码
+          // Decode base64
           const binaryString = atob(compressedData);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
           }
 
-          // 使用pako解压缩
+          // Decompress using pako
           const decompressedBytes = pako.inflate(bytes);
 
-          // 使用 TextDecoder 进行解码
+          // Decode using TextDecoder
           const decoder = new TextDecoder('utf-8');
           const decompressedStr = decoder.decode(decompressedBytes);
 
-          // 解析 JSON
+          // Parse JSON
           const decompressedData = JSON.parse(decompressedStr) as T;
 
-          console.log(`解压缩 trace 数据: ${compressedData.length} -> ${decompressedBytes.length} 字节`);
+          console.log(`[JsonDataStore] Decompressed trace data: ${compressedData.length} -> ${decompressedBytes.length} bytes`);
 
           return decompressedData;
         } catch (error) {
-          console.error('解压缩 trace 数据失败:', error);
-          // 解压缩失败时，返回原数据
+          console.error('[JsonDataStore] Failed to decompress trace data:', error);
+          // Return original data if decompression fails
           return fieldData as T;
         }
       }
 
-      // 未压缩的数据直接返回
+      // Return uncompressed data directly
       return fieldData as T;
     },
 
@@ -1356,11 +1498,11 @@ export const useJsonDataStore = defineStore('config', {
       this.compareMark = window.compareMark;
 
       if (jsonData.trace) {
-        // 解压缩可能被压缩的 trace 数据字段
+        // Decompress potentially compressed trace data fields
         const decompressedTrace = {
           frames: this.decompressTraceField(jsonData.trace.frames),
           emptyFrame: this.decompressTraceField(jsonData.trace.emptyFrame),
-          componentReuse: jsonData.trace.componentReuse, // 这个字段通常不大，不需要压缩
+          componentReuse: jsonData.trace.componentReuse, // This field is usually small, no compression needed
           coldStart: jsonData.trace.coldStart,
           gc_thread: jsonData.trace.gc_thread,
           frameLoads: this.decompressTraceField(jsonData.trace.frameLoads),
@@ -1368,7 +1510,7 @@ export const useJsonDataStore = defineStore('config', {
           faultTree: jsonData.trace.faultTree,
         };
 
-        // 安全处理所有 trace 相关数据
+        // Safely process all trace-related data
         this.frameData = safeProcessFrameData(decompressedTrace.frames);
         this.emptyFrameData = safeProcessEmptyFrameData(decompressedTrace.emptyFrame);
         this.componentResuData = safeProcessComponentResuData(decompressedTrace.componentReuse);
@@ -1389,27 +1531,21 @@ export const useJsonDataStore = defineStore('config', {
         this.faultTreeData = getDefaultFaultTreeData();
       }
       if (jsonData.more) {
-        // 火焰图 - 按步骤组织的数据，每个步骤已单独压缩
+        // Flame graph - Data organized by step, each step is separately compressed
         this.flameGraph = jsonData.more.flame_graph || null;
-        // Native Memory数据 - 按步骤组织的数据（类似trace_frames.json）
-        // 如果是原始的分层格式，需要转换为平铺格式
-        if (jsonData.more.native_memory) {
-          const nativeMemData = jsonData.more.native_memory;
-          // 检查是否是分层格式（有process_dimension字段）
-          if (typeof nativeMemData === 'object' && 'process_dimension' in nativeMemData) {
-            this.nativeMemoryData = transformNativeMemoryData(nativeMemData);
-          } else {
-            // 已经是平铺格式，但可能需要解压缩
-            this.nativeMemoryData = this.decompressNativeMemoryData(nativeMemData);
-          }
-        } else {
+        // Native Memory data - Load from database, no longer read from JSON
+        // Database should be initialized before calling this method
+        this.loadNativeMemoryDataFromDb().catch((error) => {
+          console.error('[JsonDataStore] Failed to load native memory data from database:', error);
           this.nativeMemoryData = null;
-        }
+        });
+      } else {
+        this.nativeMemoryData = null;
       }
 
-      // 加载 UI 动画数据
+      // Load UI animation data
       if (jsonData.ui && jsonData.ui.animate) {
-        // 可能需要解压缩
+        // May need decompression
         this.uiAnimateData = this.decompressUIAnimateData(jsonData.ui.animate as CompressedUIAnimateData);
       } else {
         this.uiAnimateData = null;
