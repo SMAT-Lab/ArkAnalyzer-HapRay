@@ -1,6 +1,37 @@
 version: "1.0.0"
 description: "技术栈检测配置文件 - 基于 framework-patterns.json 扩展"
 
+# JavaScript 文件识别配置
+javascriptDetection:
+  # 文件扩展名
+  extensions:
+    - "js"
+    - "mjs"
+    - "cjs"
+
+  # 内容特征模式（正则表达式）
+  contentPatterns:
+    - "\\bfunction\\s+\\w+\\s*\\("           # function 函数定义
+    - "\\bconst\\s+\\w+\\s*="                # const 变量声明
+    - "\\blet\\s+\\w+\\s*="                  # let 变量声明
+    - "\\bvar\\s+\\w+\\s*="                  # var 变量声明
+    - "\\bclass\\s+\\w+"                     # class 类定义
+    - "\\bimport\\s+.*\\s+from\\s+['\"]"     # import 语句
+    - "\\bexport\\s+(default\\s+)?\\w+"      # export 语句
+    - "\\bmodule\\.exports\\s*="             # CommonJS exports
+    - "\\brequire\\s*\\(['\"]"               # CommonJS require
+    - "=>\\s*\\{"                            # 箭头函数
+
+  # 压缩代码检测阈值
+  minificationThresholds:
+    avgLineLength: 200      # 平均行长度阈值
+    maxLineLength: 500      # 最大行长度阈值
+    whitespaceRatio: 0.05   # 空白字符比例阈值
+    maxLines: 10            # 最大行数阈值
+
+  # 最小内容长度（字节）
+  minContentLength: 10
+
 # 二进制魔数配置（可根据需要扩展/修改）
 binaryMagicNumbers:
   # ELF (Linux 可执行文件/库)

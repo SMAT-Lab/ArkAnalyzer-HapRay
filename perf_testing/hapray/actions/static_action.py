@@ -56,6 +56,11 @@ class StaticAction:
             default='auto',
             help='Number of parallel jobs for analysis (default: auto, uses CPU core count)',
         )
+        parser.add_argument(
+            '--beautify-js',
+            action='store_true',
+            help='Beautify minified JavaScript files and save to output directory',
+        )
 
         parsed_args = parser.parse_args(args)
 
@@ -89,6 +94,10 @@ class StaticAction:
         # 添加并发数参数
         if parsed_args.jobs != 'auto':
             cmd.extend(['-j', parsed_args.jobs])
+
+        # 添加 JS 美化参数
+        if parsed_args.beautify_js:
+            cmd.append('--beautify-js')
 
         if parsed_args.include_details:
             # 新CLI默认包含详细信息，不需要额外参数
@@ -143,6 +152,7 @@ Static Analysis Action:
   - Resource files and their types
   - JavaScript files and Hermes bytecode
   - Archive files and nested content analysis
+  - Beautify minified JavaScript files (optional)
 
 Examples:
   # Basic analysis (generates all formats by default)
@@ -156,6 +166,9 @@ Examples:
 
   # Analysis with auto concurrency (uses CPU core count)
   python main.py static -i app.hap -o ./output -j auto
+
+  # Analysis with JS beautification (formats minified JS files)
+  python main.py static -i app.hap -o ./output --beautify-js
 
 Note: The static analysis now uses the hapray hap command internally.
 """

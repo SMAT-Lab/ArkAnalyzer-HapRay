@@ -11,6 +11,22 @@ export interface TechStackConfig {
     excludes: Array<ExcludeRule>;
     detections: Array<DetectionRule>;
     binaryMagicNumbers?: Array<BinaryMagicEntry>;
+    javascriptDetection?: JavaScriptDetectionConfig;
+}
+
+/**
+ * JavaScript 文件检测配置
+ */
+export interface JavaScriptDetectionConfig {
+    extensions: Array<string>;
+    contentPatterns: Array<string>;
+    minificationThresholds: {
+        avgLineLength: number;
+        maxLineLength: number;
+        whitespaceRatio: number;
+        maxLines: number;
+    };
+    minContentLength: number;
 }
 
 /**

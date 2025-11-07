@@ -29,6 +29,7 @@ import { Hap, type TechStackDetection } from '../../core/hap/hap_parser';
 import { ZipUtils } from '../../utils/zip_utils';
 import { isBinaryFile } from '../../utils/file_utils';
 import type { FileDetectionResult, FileInfo } from '../../core/techstack/types';
+import { JsBeautifier } from '../../utils/js_beautifier';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
@@ -46,11 +47,13 @@ interface HapAnalysisOptions {
 
 export class HapAnalysisService {
     private verbose: boolean;
+    private beautifyJs: boolean;
     private detectorEngine: DetectorEngine;
     private detectorInitialized = false;
 
     constructor(options: HapAnalysisOptions = {}) {
         this.verbose = options.verbose ?? false;
+        this.beautifyJs = options.beautifyJs ?? false;
         this.detectorEngine = DetectorEngine.getInstance();
     }
 
@@ -436,7 +439,7 @@ export class HapAnalysisService {
      * @param zipData ZIP二进制数据
      * @param outputDir 输出目录
      */
-    public async analyzeZipData(sourceLabel: string, zipData: Buffer, _outputDir?: string): Promise<Hap> {
+    public async analyzeZipData(sourceLabel: string, zipData: Buffer, outputDir?: string): Promise<Hap> {
         if (this.verbose) {
             logger.info(`开始分析：${sourceLabel}`);
         }
@@ -451,6 +454,11 @@ export class HapAnalysisService {
 
             // 执行分析
             const analysisResult = await this.performAnalysis(zip, sourceLabel);
+
+            // 如果启用了 JS 美化功能，处理 JS 文件
+            if (this.beautifyJs && outputDir) {
+                await this.beautifyJsFiles(zip, sourceLabel, outputDir);
+            }
 
             if (this.verbose) {
                 this.logAnalysisResults(analysisResult);
@@ -1496,5 +1504,75 @@ export class HapAnalysisService {
             totalDetections,
             techStackCounts
         };
+    }
+
+    /**
+     * 美化 ZIP 包中的 JS 文件并保存到输出目录
+     * @param zip JSZip 实例
+     * @param sourceLabel 源标识（用于日志）
+     * @param outputDir 输出目录
+     */
+    private async beautifyJsFiles(zip: JSZip, sourceLabel: string, outputDir: string): Promise<void> {
+        logger.info('🎨 Starting JS beautification...');
+        const startTime = Date.now();
+
+        try {
+            // 创建美化后的 JS 文件输出目录
+            const beautifiedDir = path.join(outputDir, 'beautified-js');
+            ensureDirectoryExists(beautifiedDir);
+
+            let processedCount = 0;
+            let beautifiedCount = 0;
+            let skippedCount = 0;
+
+            // 遍历 ZIP 中的所有文件
+            for (const [filePath, zipEntry] of Object.entries(zip.files)) {
+                // 跳过目录
+                if (zipEntry.dir) {
+                    continue;
+                }
+
+                try {
+                    // 读取文件内容
+                    const content = await zipEntry.async('nodebuffer');
+
+                    // 检查是否为 JS 文件
+                    if (!JsBeautifier.isJavaScriptContent(content, filePath)) {
+                        continue;
+                    }
+
+                    processedCount++;
+
+                    // 尝试美化文件
+                    const beautified = JsBeautifier.beautifyFile(content, filePath, false);
+
+                    if (beautified) {
+                        // 保存美化后的文件
+                        const outputPath = path.join(beautifiedDir, filePath);
+                        const outputFileDir = path.dirname(outputPath);
+                        ensureDirectoryExists(outputFileDir);
+
+                        fs.writeFileSync(outputPath, beautified, 'utf-8');
+                        beautifiedCount++;
+                        logger.info(`  ✓ Beautified: ${filePath}`);
+                    } else {
+                        skippedCount++;
+                        logger.info(`  - Skipped (not minified): ${filePath}`);
+                    }
+                } catch (error) {
+                    logger.warn(`  ✗ Failed to beautify ${filePath}: ${error}`);
+                    skippedCount++;
+                }
+            }
+
+            const duration = Date.now() - startTime;
+            logger.info(`✅ JS beautification completed in ${duration}ms`);
+            logger.info(`   - Total JS files: ${processedCount}`);
+            logger.info(`   - Beautified: ${beautifiedCount}`);
+            logger.info(`   - Skipped: ${skippedCount}`);
+            logger.info(`   - Output directory: ${beautifiedDir}`);
+        } catch (error) {
+            logger.error(`❌ JS beautification failed: ${error}`);
+        }
     }
 }
