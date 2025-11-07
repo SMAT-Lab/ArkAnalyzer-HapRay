@@ -866,18 +866,19 @@ async function initChart() {
         // 根据当前层级决定点击行为
         if (drillDownLevel.value === 'overview') {
           // 总览视图：点击"总内存"线选择时间点，点击其他线下钻到大类
-          if (seriesName === '总内存') {
-            // 点击总内存线上的点，选择时间点
-            const dataItem = seriesData[seriesIndex]?.data[dataIndex];
-            if (dataItem) {
-              // 如果点击的是已选中的点，则取消选择
-              if (props.selectedTimePoint === dataItem.relativeTs) {
-                emit('time-point-selected', null);
-              } else {
-                emit('time-point-selected', dataItem.relativeTs);
-              }
-            }
-          } else {
+          // if (seriesName === '总内存') {
+          //   // 点击总内存线上的点，选择时间点
+          //   const dataItem = seriesData[seriesIndex]?.data[dataIndex];
+          //   if (dataItem) {
+          //     // 如果点击的是已选中的点，则取消选择
+          //     if (props.selectedTimePoint === dataItem.relativeTs) {
+          //       emit('time-point-selected', null);
+          //     } else {
+          //       emit('time-point-selected', dataItem.relativeTs);
+          //     }
+          //   }
+          // } else {
+          if (seriesName !== '总内存') {
             // 点击其他分类线，下钻到大类
             drillDownToCategory(seriesName);
           }
