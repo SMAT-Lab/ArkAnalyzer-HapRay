@@ -18,9 +18,43 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from hapray.analyze import BaseAnalyzer
+from hapray.analyze.base_analyzer import BaseAnalyzer, BaseModel
 from hapray.core.common.memory import MemoryAnalyzerCore
 from hapray.core.common.memory.memory_aggregator import MemoryAggregator
+
+
+class MemoryResultModel(BaseModel):
+    """内存分析汇总结果模型"""
+
+    table_name = 'memory_results'
+    fields = {'peak_time': 'REAL', 'records_count': 'INTEGER', 'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'}
+
+
+class MemoryRecordModel(BaseModel):
+    """内存分析详细记录模型"""
+
+    table_name = 'memory_records'
+    fields = {
+        'pid': 'INTEGER',
+        'process': 'TEXT',
+        'tid': 'INTEGER',
+        'thread': 'TEXT',
+        'fileId': 'INTEGER',
+        'file': 'TEXT',
+        'symbolId': 'INTEGER',
+        'symbol': 'TEXT',
+        'eventType': 'TEXT',
+        'subEventType': 'TEXT',
+        'addr': 'TEXT',
+        'callchainId': 'INTEGER',
+        'heapSize': 'INTEGER',
+        'relativeTs': 'INTEGER',
+        'componentName': 'TEXT',
+        'componentCategory': 'TEXT',
+        'categoryName': 'TEXT',
+        'subCategoryName': 'TEXT',
+        'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+    }
 
 
 class MemoryAnalyzer(BaseAnalyzer):
@@ -200,3 +234,100 @@ class MemoryAnalyzer(BaseAnalyzer):
                 ws_sub.set_column(0, 4, 18)
 
         # 写完Excel无需返回；父类已将结构写入JSON
+
+        # 保存到SQLite数据库
+        self._save_results_to_db()
+
+    def _save_results_to_db(self):
+        """将 self.results 保存到 SQLite 数据库文件
+
+        数据库文件保存在 scene_dir/report/hapray_report.db（与其他分析器共享）
+        使用 Model 类创建两个表：
+        1. memory_results: 存储每个 step 的汇总信息
+        2. memory_records: 存储每条记录的详细信息
+        """
+        if not self.results:
+            return
+
+        try:
+            # 创建表（基于模型类）
+            self.create_model_table(MemoryResultModel)
+            self.create_model_table(MemoryRecordModel)
+
+            # 为 memory_results 表添加唯一约束（每个 step_id 只有一行）
+            # 注意：create_model_table 已经创建了普通 step_id 索引
+            # 我们需要删除普通索引，然后创建唯一索引
+            # 或者直接使用唯一索引覆盖（如果支持的话）
+            try:
+                # 尝试删除可能存在的普通索引
+                self.exec_sql('DROP INDEX IF EXISTS idx_memory_results_step_id')
+                # 创建唯一索引（实现唯一约束效果）
+                self.create_index('idx_memory_results_step_id', 'memory_results', 'step_id', unique=True)
+            except Exception:
+                # 如果操作失败，尝试创建唯一索引（IF NOT EXISTS 会处理已存在的情况）
+                self.create_index('idx_memory_results_step_id_unique', 'memory_results', 'step_id', unique=True)
+
+            # 创建额外的索引以提高查询性能
+            # step_id 索引已由 create_model_table 自动创建
+            self.create_index('idx_memory_records_callchainId', 'memory_records', 'callchainId')
+            self.create_index('idx_memory_records_relativeTs', 'memory_records', 'relativeTs')
+            self.create_index('idx_memory_records_componentName', 'memory_records', 'componentName')
+
+            # 保存数据
+            for step_name, step_data in self.results.items():
+                if not isinstance(step_data, dict):
+                    continue
+
+                # 转换 step_name 为 step_id (INTEGER)
+                step_id = self.step_dir_to_step_id(step_name)
+
+                # 准备汇总数据
+                records = step_data.get('records') or []
+                peak_time = (step_data.get('peak_time') or 0) if records else 0
+                records_count = len(records) if records else 0
+
+                # 保存汇总信息（使用 replace=True 实现 INSERT OR REPLACE）
+                result_model = MemoryResultModel(
+                    peak_time=peak_time,
+                    records_count=records_count,
+                )
+                self.save_model(step_id, result_model, replace=True)
+
+                # 删除该 step 的旧记录（如果存在）
+                self.exec_sql('DELETE FROM memory_records WHERE step_id = ?', (step_id,))
+
+                # 批量保存详细记录
+                if records:
+                    record_models = []
+                    for record in records:
+                        if not isinstance(record, dict):
+                            continue
+
+                        record_model = MemoryRecordModel(
+                            pid=record.get('pid'),
+                            process=record.get('process'),
+                            tid=record.get('tid'),
+                            thread=record.get('thread'),
+                            fileId=record.get('fileId'),
+                            file=record.get('file'),
+                            symbolId=record.get('symbolId'),
+                            symbol=record.get('symbol'),
+                            eventType=record.get('eventType'),
+                            subEventType=record.get('subEventType'),
+                            addr=record.get('addr'),
+                            callchainId=record.get('callchainId'),
+                            heapSize=record.get('heapSize'),
+                            relativeTs=record.get('relativeTs'),
+                            componentName=record.get('componentName'),
+                            componentCategory=record.get('componentCategory'),
+                            categoryName=record.get('categoryName'),
+                            subCategoryName=record.get('subCategoryName'),
+                        )
+                        record_models.append(record_model)
+
+                    if record_models:
+                        self.batch_save_models(step_id, record_models, replace=False)
+
+            self.logger.info('Memory analysis results saved to database: %s', self.get_db_path())
+        except Exception as e:
+            self.logger.exception('Failed to save memory analysis results to database: %s', str(e))
