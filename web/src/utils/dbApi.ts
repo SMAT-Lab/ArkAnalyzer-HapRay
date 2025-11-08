@@ -67,6 +67,63 @@ export class DbApi {
   }
 
   /**
+   * Query overview level timeline data (aggregated by time point and category)
+   * @param stepId - Step id
+   * @returns Overview timeline data array
+   */
+  async queryOverviewTimeline(stepId: number): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryOverviewTimeline', { stepId });
+  }
+
+  /**
+   * Query category level records (for specific category)
+   * @param stepId - Step id
+   * @param categoryName - Category name
+   * @returns Category records array
+   */
+  async queryCategoryRecords(stepId: number, categoryName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryCategoryRecords', { stepId, categoryName });
+  }
+
+  /**
+   * Query subcategory level records (for specific subcategory)
+   * @param stepId - Step id
+   * @param categoryName - Category name
+   * @param subCategoryName - Subcategory name
+   * @returns Subcategory records array
+   */
+  async querySubCategoryRecords(
+    stepId: number,
+    categoryName: string,
+    subCategoryName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.querySubCategoryRecords', {
+      stepId,
+      categoryName,
+      subCategoryName,
+    });
+  }
+
+  /**
+   * Query all unique categories for a step
+   * @param stepId - Step id
+   * @returns Array of category names
+   */
+  async queryCategories(stepId: number): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryCategories', { stepId });
+  }
+
+  /**
+   * Query all unique subcategories for a category
+   * @param stepId - Step id
+   * @param categoryName - Category name
+   * @returns Array of subcategory names
+   */
+  async querySubCategories(stepId: number, categoryName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.querySubCategories', { stepId, categoryName });
+  }
+
+  /**
    * Query summary information from memory_results table
    *
    * @param stepId - Step name (optional, for filtering specific step)
@@ -83,6 +140,74 @@ export class DbApi {
   async queryMemorySteps(): Promise<number[]> {
     const results = await this.query('SELECT DISTINCT step_id FROM memory_records WHERE step_id IS NOT NULL ORDER BY step_id');
     return results.map((row: SqlRow) => Number(row.step_id) || 0);
+  }
+
+  /**
+   * Query timeline data (aggregated by time point)
+   *
+   * @param stepId - Step id
+   * @param categoryName - Category name filter (optional)
+   * @param subCategoryName - Sub-category name filter (optional)
+   * @returns Timeline data array
+   */
+  async queryTimelineData(
+    stepId: number,
+    categoryName?: string,
+    subCategoryName?: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryTimelineData', {
+      stepId,
+      categoryName,
+      subCategoryName,
+    });
+  }
+
+  /**
+   * Query records at a specific time point
+   *
+   * @param stepId - Step id
+   * @param relativeTs - Time point (in 10ms units)
+   * @returns Records array at the specified time point
+   */
+  async queryRecordsAtTimePoint(stepId: number, relativeTs: number): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryRecordsAtTimePoint', {
+      stepId,
+      relativeTs,
+    });
+  }
+
+  /**
+   * Query category statistics
+   *
+   * @param stepId - Step id
+   * @param relativeTs - Time point filter (optional, null means all time)
+   * @returns Category statistics array
+   */
+  async queryCategoryStats(stepId: number, relativeTs?: number | null): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryCategoryStats', {
+      stepId,
+      relativeTs,
+    });
+  }
+
+  /**
+   * Query sub-category statistics
+   *
+   * @param stepId - Step id
+   * @param categoryName - Category name filter
+   * @param relativeTs - Time point filter (optional, null means all time)
+   * @returns Sub-category statistics array
+   */
+  async querySubCategoryStats(
+    stepId: number,
+    categoryName: string,
+    relativeTs?: number | null
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.querySubCategoryStats', {
+      stepId,
+      categoryName,
+      relativeTs,
+    });
   }
 
   /**

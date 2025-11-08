@@ -62,7 +62,7 @@
             </span>
           </h3>
           <MemoryTimelineChart
-            :records="currentStepRecords"
+            :step-id="`step${props.stepId}`"
             :callchains="currentStepCallchains"
             :selected-time-point="selectedTimePoint"
             height="350px"
@@ -288,7 +288,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 // import NativeMemoryTable from './NativeMemoryTable.vue';
 // import PieChart from './PieChart.vue';
 import MemoryTimelineChart from './MemoryTimelineChart.vue';
@@ -317,12 +317,12 @@ const props = defineProps<{
 const jsonDataStore = useJsonDataStore();
 const nativeMemoryData = jsonDataStore.nativeMemoryData;
 
-// 检查是否有数据
+// 检查是否有数据（只需要检查 stepData 是否存在，不检查 records 长度）
 const hasData = computed(() => {
   if (!nativeMemoryData) return false;
   const stepKey = `step${props.stepId}`;
   const stepData = nativeMemoryData[stepKey];
-  return stepData && stepData.records && stepData.records.length > 0;
+  return stepData !== undefined;
 });
 
 // 获取当前步骤的所有记录
@@ -378,6 +378,11 @@ function handleTimePointSelected(timePoint: number | null) {
 function clearTimePointSelection() {
   selectedTimePoint.value = null;
 }
+
+// 监听 stepId 变化，清除时间点选择
+watch(() => props.stepId, () => {
+  selectedTimePoint.value = null; // 切换步骤时清除时间点选择
+});
 
 // 计算选中时间点的统计信息
 const selectedTimePointMemory = computed(() => {
