@@ -27,7 +27,7 @@ class MemoryResultModel(BaseModel):
     """Memory analysis summary result model"""
 
     table_name = 'memory_results'
-    fields = {'peak_time': 'REAL', 'records_count': 'INTEGER', 'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'}
+    fields = {'peak_time': 'REAL', 'records_count': 'INTEGER'}
 
 
 class MemoryRecordModel(BaseModel):
@@ -53,7 +53,6 @@ class MemoryRecordModel(BaseModel):
         'componentCategory': 'TEXT',
         'categoryName': 'TEXT',
         'subCategoryName': 'TEXT',
-        'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
     }
 
 
@@ -105,9 +104,7 @@ class MemoryAnalyzer(BaseAnalyzer):
           - Call get_unreleased_by_callchain to aggregate unreleased memory for each point
           - Write to scene_dir/report/memory_report.xlsx with multiple sheets
         """
-        # Write parent class JSON report first
-        super().write_report(result)
-
+       
         if not self.results:
             return
 
