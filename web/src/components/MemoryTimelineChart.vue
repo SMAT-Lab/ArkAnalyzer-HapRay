@@ -150,10 +150,39 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import * as echarts from 'echarts';
 import type { CallbackDataParams } from 'echarts/types/dist/shared';
 import type { NativeMemoryRecord, CallchainRecord } from '@/stores/jsonDataStore';
-import { calculateCumulativeMemory } from '@/utils/nativeMemoryUtil';
+import { useJsonDataStore } from '@/stores/jsonDataStore';
+
+const jsonDataStore = useJsonDataStore();
+
+// 时间线数据处理结果类型
+interface TimelineProcessedData {
+  chartData: Array<{
+    index: number;
+    relativeTs: number;
+    cumulativeMemory: number;
+  }>;
+  seriesData: Array<{
+    name: string;
+    data: Array<{
+      index: number;
+      relativeTs: number;
+      cumulativeMemory: number;
+      heapSize: number;
+      eventType: string;
+      eventCount?: number;  // 聚合的事件数量
+      eventDetails?: string;  // 聚合的事件详情
+    }>;
+  }>;
+  maxMemory: number;
+  minMemory: number;
+  finalMemory: number;
+  threshold30: number;
+  threshold60: number;
+}
+
 
 interface Props {
-  records: NativeMemoryRecord[];
+  stepId: string; // 步骤 ID，例如 "step1"
   height?: string;
   selectedTimePoint?: number | null; // 当前选中的时间点
   callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据
@@ -174,11 +203,16 @@ const chartContainer = ref<HTMLDivElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 const isLoading = ref(false);
 
+// 当前加载的记录数据（按需加载）
+const currentRecords = ref<NativeMemoryRecord[]>([]);
+
 // 下钻状态管理
 type DrillDownLevel = 'overview' | 'category' | 'subCategory';
 const drillDownLevel = ref<DrillDownLevel>('overview');
 const selectedCategory = ref<string>('');
 const selectedSubCategory = ref<string>('');
+
+
 
 // Tooltip 数据
 interface TooltipItem {
@@ -203,14 +237,12 @@ const tooltipData = ref<TooltipData | null>(null);
 
 // 计算选中时间点的调用链信息
 const selectedCallchains = computed(() => {
-  if (props.selectedTimePoint === null || !props.callchains) {
+  if (props.selectedTimePoint === null || !props.callchains || currentRecords.value.length === 0) {
     return [];
   }
 
-  // 找到选中时间点的所有记录
-  const selectedRecords = props.records.filter(
-    (record) => record.relativeTs === props.selectedTimePoint
-  );
+  // 过滤出选中时间点的记录
+  const selectedRecords = currentRecords.value.filter((r: NativeMemoryRecord) => r.relativeTs === props.selectedTimePoint);
 
   // 创建 callchainId -> eventType 的映射，用于判断是分配还是释放
   const callchainEventTypeMap = new Map<number, string>();
@@ -277,13 +309,12 @@ const hasSelectedTimePoint = computed(() => {
 
 // 选中时间点的记录摘要（用于无调用链时显示）
 const selectedRecordsSummary = computed(() => {
-  if (props.selectedTimePoint === null) {
+  if (props.selectedTimePoint === null || currentRecords.value.length === 0) {
     return '';
   }
 
-  const selectedRecords = props.records.filter(
-    (record) => record.relativeTs === props.selectedTimePoint
-  );
+  // 过滤出选中时间点的记录
+  const selectedRecords = currentRecords.value.filter((r: NativeMemoryRecord) => r.relativeTs === props.selectedTimePoint);
 
   if (selectedRecords.length === 0) {
     return '无记录';
@@ -340,10 +371,45 @@ function drillDownToSubCategory(subCategoryName: string) {
   emit('time-point-selected', null);
 }
 
-// 使用 computed 缓存处理后的数据
-const processedData = computed(() => {
-  // 如果数据为空，直接返回
-  if (!props.records || props.records.length === 0) {
+// 使用 ref 存储处理后的数据（由 Worker 异步计算）
+const processedData = ref<TimelineProcessedData>({
+  chartData: [],
+  seriesData: [],
+  maxMemory: 0,
+  minMemory: 0,
+  finalMemory: 0,
+  threshold30: 0,
+  threshold60: 0,
+});
+
+// 加载状态
+const isLoadingData = ref(false);
+
+/**
+ * 计算累计内存
+ */
+function calculateCumulativeMemory(records: NativeMemoryRecord[]) {
+  let currentTotal = 0;
+  return records.map(record => {
+    const eventType = record.eventType;
+    const size = record.heapSize || 0;
+    if (eventType === 'AllocEvent' || eventType === 'MmapEvent') {
+      currentTotal += size;
+    } else if (eventType === 'FreeEvent' || eventType === 'MunmapEvent') {
+      currentTotal -= size;
+    }
+    return {
+      ...record,
+      cumulativeMemory: currentTotal,
+    };
+  });
+}
+
+/**
+ * 处理时间线数据（主线程版本）
+ */
+function processTimelineDataSync(): TimelineProcessedData {
+  if (currentRecords.value.length === 0) {
     return {
       chartData: [],
       seriesData: [],
@@ -355,16 +421,14 @@ const processedData = computed(() => {
     };
   }
 
-  // 按时间排序记录（优化：避免不必要的复制）
-  const sortedRecords = props.records.slice().sort((a, b) => a.relativeTs - b.relativeTs);
+  // 按时间排序记录
+  const sortedRecords = currentRecords.value.slice().sort((a, b) => a.relativeTs - b.relativeTs);
 
   // 根据下钻层级过滤数据
   let filteredRecords = sortedRecords;
   if (drillDownLevel.value === 'category') {
-    // 只保留选中大类的数据
     filteredRecords = sortedRecords.filter(r => r.categoryName === selectedCategory.value);
   } else if (drillDownLevel.value === 'subCategory') {
-    // 只保留选中小类的数据
     filteredRecords = sortedRecords.filter(
       r => r.categoryName === selectedCategory.value && r.subCategoryName === selectedSubCategory.value
     );
@@ -373,18 +437,17 @@ const processedData = computed(() => {
   // 根据下钻层级决定如何分组数据
   interface SeriesGroup {
     name: string;
-    records: typeof sortedRecords;
+    records: NativeMemoryRecord[];
   }
 
   let seriesGroups: SeriesGroup[] = [];
 
   if (drillDownLevel.value === 'overview') {
     // 总览：先添加总内存线，再添加各大类线
-    // 1. 总内存线（所有数据）
     seriesGroups.push({ name: '总内存', records: filteredRecords });
 
-    // 2. 按大类分组（排除 UNKNOWN）
-    const categoryMap = new Map<string, typeof sortedRecords>();
+    // 按大类分组（排除 UNKNOWN）
+    const categoryMap = new Map<string, NativeMemoryRecord[]>();
     filteredRecords.forEach(record => {
       if (record.categoryName !== 'UNKNOWN') {
         if (!categoryMap.has(record.categoryName)) {
@@ -396,7 +459,7 @@ const processedData = computed(() => {
     seriesGroups.push(...Array.from(categoryMap.entries()).map(([name, records]) => ({ name, records })));
   } else if (drillDownLevel.value === 'category') {
     // 大类视图：按小类分组
-    const subCategoryMap = new Map<string, typeof sortedRecords>();
+    const subCategoryMap = new Map<string, NativeMemoryRecord[]>();
     filteredRecords.forEach(record => {
       if (!subCategoryMap.has(record.subCategoryName)) {
         subCategoryMap.set(record.subCategoryName, []);
@@ -409,16 +472,12 @@ const processedData = computed(() => {
     // 性能优化：如果小分类数量过多，只显示内存占用最大的前 20 个
     const MAX_SERIES_IN_CATEGORY_VIEW = 20;
     if (allSeriesGroups.length > MAX_SERIES_IN_CATEGORY_VIEW) {
-      console.warn(`[MemoryTimeline] 小分类数量过多 (${allSeriesGroups.length})，只显示内存占用最大的前 ${MAX_SERIES_IN_CATEGORY_VIEW} 个`);
-
-      // 计算每个小分类的最终内存占用
       const seriesWithFinalMemory = allSeriesGroups.map(group => {
         const recordsWithCumulative = calculateCumulativeMemory(group.records);
         const finalMemory = recordsWithCumulative[recordsWithCumulative.length - 1]?.cumulativeMemory || 0;
         return { ...group, finalMemory };
       });
 
-      // 按最终内存降序排序，取前 N 个
       seriesWithFinalMemory.sort((a, b) => Math.abs(b.finalMemory) - Math.abs(a.finalMemory));
       seriesGroups = seriesWithFinalMemory.slice(0, MAX_SERIES_IN_CATEGORY_VIEW);
     } else {
@@ -429,64 +488,32 @@ const processedData = computed(() => {
     seriesGroups = [{ name: selectedSubCategory.value, records: filteredRecords }];
   }
 
-  // 对于超大数据集（> 50000），使用更激进的优化策略
-  const isVeryLargeDataset = filteredRecords.length > 50000;
-
-  // 为每个系列计算累计内存
-  interface SeriesData {
-    name: string;
-    data: Array<{
-      index: number;
-      relativeTs: number;
-      cumulativeMemory: number;
-      heapSize: number;
-      eventType: string;
-      subEventType?: string;
-      process?: string;
-      thread?: string;
-      file?: string;
-      symbol?: string;
-    }>;
-  }
-
-  const seriesData: SeriesData[] = [];
-  let maxMemory = -Infinity;
-  let minMemory = Infinity;
-
-  // 收集所有唯一时间点（不进行采样，使用全部数据）
+  // 收集所有唯一时间点
   const allTimePoints = new Set<number>();
   filteredRecords.forEach(record => allTimePoints.add(record.relativeTs));
   const sortedTimePoints = Array.from(allTimePoints).sort((a, b) => a - b);
 
+  // 为每个系列计算累计内存
+  const seriesData: TimelineProcessedData['seriesData'] = [];
+  let maxMemory = -Infinity;
+  let minMemory = Infinity;
+
   seriesGroups.forEach(group => {
     const recordsWithCumulative = calculateCumulativeMemory(group.records);
 
-    // 创建时间点到记录的映射（优化：避免每次都用 find）
     const timeToRecordMap = new Map<number, typeof recordsWithCumulative[0]>();
     recordsWithCumulative.forEach(record => {
       timeToRecordMap.set(record.relativeTs, record);
     });
 
-    // 为每个时间点填充数据（如果该系列在该时间点没有数据，使用前一个时间点的值）
     let lastMemory = 0;
     const data = sortedTimePoints.map((ts, index) => {
       const originalRecord = timeToRecordMap.get(ts);
       const memory = originalRecord?.cumulativeMemory ?? lastMemory;
       lastMemory = memory;
 
-      // 更新最大最小值
       if (memory > maxMemory) maxMemory = memory;
       if (memory < minMemory) minMemory = memory;
-
-      if (isVeryLargeDataset) {
-        return {
-          index,
-          relativeTs: ts,
-          cumulativeMemory: memory,
-          heapSize: originalRecord?.heapSize || 0,
-          eventType: originalRecord?.eventType || '',
-        };
-      }
 
       return {
         index,
@@ -494,37 +521,35 @@ const processedData = computed(() => {
         cumulativeMemory: memory,
         heapSize: originalRecord?.heapSize || 0,
         eventType: originalRecord?.eventType || '',
-        subEventType: originalRecord?.subEventType,
-        process: originalRecord?.process,
-        thread: originalRecord?.thread || 'N/A',
-        file: originalRecord?.file || 'N/A',
-        symbol: originalRecord?.symbol || 'N/A',
+        eventCount: originalRecord?.eventCount,
+        eventDetails: originalRecord?.eventDetails,
       };
     });
 
     seriesData.push({ name: group.name, data });
   });
 
-  // 构建图表数据（用于兼容性）
+  // 构建图表数据
   const chartData = sortedTimePoints.map((ts, index) => {
-    // 计算该时间点所有系列的总内存
     let totalMemory = 0;
-    seriesData.forEach(series => {
-      totalMemory += series.data[index]?.cumulativeMemory || 0;
-    });
+
+    if (drillDownLevel.value === 'overview' && seriesData.length > 0) {
+      totalMemory = seriesData[0].data[index]?.cumulativeMemory || 0;
+    } else {
+      seriesData.forEach(series => {
+        totalMemory += series.data[index]?.cumulativeMemory || 0;
+      });
+    }
 
     return {
       index,
       relativeTs: ts,
       cumulativeMemory: totalMemory,
-      heapSize: 0,
-      eventType: '',
     };
   });
 
   const finalMemory = chartData[chartData.length - 1]?.cumulativeMemory || 0;
 
-  // 预计算颜色映射范围
   const memoryRange = maxMemory - minMemory;
   const threshold30 = minMemory + memoryRange * 0.3;
   const threshold60 = minMemory + memoryRange * 0.6;
@@ -538,7 +563,85 @@ const processedData = computed(() => {
     threshold30,
     threshold60,
   };
-});
+}
+
+/**
+ * 加载当前层级的数据
+ */
+async function loadCurrentLevelData() {
+  try {
+    isLoading.value = true;
+    console.log(`[MemoryTimelineChart] Loading data for level: ${drillDownLevel.value}, step: ${props.stepId}`);
+
+    // 根据下钻级别加载不同的数据
+    if (drillDownLevel.value === 'overview') {
+      // 总览层级：加载聚合后的时间线数据
+      currentRecords.value = await jsonDataStore.loadOverviewTimeline(props.stepId);
+    } else if (drillDownLevel.value === 'category') {
+      // 大类层级：加载指定大类的记录
+      currentRecords.value = await jsonDataStore.loadCategoryRecords(props.stepId, selectedCategory.value);
+    } else if (drillDownLevel.value === 'subCategory') {
+      // 小类层级：加载指定小类的记录
+      currentRecords.value = await jsonDataStore.loadSubCategoryRecords(
+        props.stepId,
+        selectedCategory.value,
+        selectedSubCategory.value
+      );
+    }
+
+    console.log(`[MemoryTimelineChart] Loaded ${currentRecords.value.length} records for ${drillDownLevel.value} level`);
+  } catch (error) {
+    console.error('[MemoryTimelineChart] Failed to load data:', error);
+    currentRecords.value = [];
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+/**
+ * 加载处理后的数据
+ */
+async function loadProcessedData() {
+  if (currentRecords.value.length === 0) {
+    processedData.value = {
+      chartData: [],
+      seriesData: [],
+      maxMemory: 0,
+      minMemory: 0,
+      finalMemory: 0,
+      threshold30: 0,
+      threshold60: 0,
+    };
+    return;
+  }
+
+  try {
+    isLoadingData.value = true;
+    console.log(`[MemoryTimelineChart] Processing ${currentRecords.value.length} records...`);
+
+    // 使用 setTimeout 让 UI 有机会更新
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // 在主线程中处理数据
+    const result = processTimelineDataSync();
+
+    processedData.value = result;
+    console.log(`[MemoryTimelineChart] Data processed successfully`);
+  } catch (error) {
+    console.error('[MemoryTimelineChart] Failed to process timeline data:', error);
+    processedData.value = {
+      chartData: [],
+      seriesData: [],
+      maxMemory: 0,
+      minMemory: 0,
+      finalMemory: 0,
+      threshold30: 0,
+      threshold60: 0,
+    };
+  } finally {
+    isLoadingData.value = false;
+  }
+}
 
 // 格式化字节大小
 function formatBytes(bytes: number): string {
@@ -549,13 +652,13 @@ function formatBytes(bytes: number): string {
   return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
 }
 
-// 格式化时间（毫秒转秒）
-function formatTime(ns: number): string {
-  const ms = ns / 1000000; // 纳秒转毫秒
-  if (ms < 1000) {
-    return ms.toFixed(2) + ' ms';
+// 格式化时间（秒）
+function formatTime(seconds: number): string {
+  // relativeTs 在 store 中已经从纳秒转换为秒了
+  if (seconds < 1) {
+    return (seconds * 1000).toFixed(2) + ' ms';
   }
-  return (ms / 1000).toFixed(2) + ' s';
+  return seconds.toFixed(2) + ' s';
 }
 
 // 初始化图表
@@ -657,60 +760,197 @@ async function initChart() {
       },
     },
     tooltip: {
-      trigger: 'axis',
+      trigger: 'axis', // 使用 axis 触发，显示所有系列的信息
       axisPointer: {
         type: 'line',
+        snap: true, // 自动吸附到数据点
+        label: {
+          show: false, // 不显示轴上的标签，避免额外的 DOM 操作
+        },
       },
-      // 简化tooltip，只显示基本信息
-      formatter: (params: CallbackDataParams | CallbackDataParams[]) => {
-        const paramsArray = Array.isArray(params) ? params : [params];
-        if (!paramsArray || paramsArray.length === 0) {
-          tooltipData.value = null;
-          return '';
-        }
+      confine: true, // 限制 tooltip 在图表区域内
+      appendToBody: false, // 不附加到 body，避免 DOM 操作问题
+      // 显示详细的聚合信息
+      formatter: (params: any) => {
+        try {
+          // 安全检查：确保 params 存在且是有效的
+          if (!params) {
+            tooltipData.value = null;
+            return '';
+          }
 
-        // 更新 tooltipData 用于下方显示详细信息
-        const firstParam = paramsArray[0];
-        const dataIndex = firstParam.dataIndex as number;
-        const timePoint = seriesData[0]?.data[dataIndex]?.relativeTs;
+          const paramsArray = Array.isArray(params) ? params : [params];
+          if (paramsArray.length === 0) {
+            tooltipData.value = null;
+            return '';
+          }
 
-        if (timePoint !== undefined) {
+          // 获取第一个有效参数来确定时间点
+          const firstParam = paramsArray.find(p => p && typeof p === 'object' && typeof p.dataIndex === 'number');
+          if (!firstParam) {
+            tooltipData.value = null;
+            return '';
+          }
+
+          const dataIndex = firstParam.dataIndex;
+          if (typeof dataIndex !== 'number') {
+            tooltipData.value = null;
+            return '';
+          }
+
+          // 获取时间点（从第一个系列获取）
+          const firstDataItem = seriesData[0]?.data?.[dataIndex];
+          if (!firstDataItem) {
+            tooltipData.value = null;
+            return '';
+          }
+
+          const timePoint = firstDataItem.relativeTs;
+          if (timePoint === undefined) {
+            tooltipData.value = null;
+            return '';
+          }
+
+          // 构建 tooltip HTML - 显示所有系列的信息
+          let tooltipHtml = `<div style="padding: 8px; min-width: 250px; max-height: 400px; overflow-y: auto;">`;
+          tooltipHtml += `<div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">时间: ${formatTime(timePoint)}</div>`;
+
+          // 定义颜色数组
+          const colors = ['#333333', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+
+          // 收集所有系列的信息用于下方显示
           const items: TooltipItem[] = [];
 
-          paramsArray.forEach((param) => {
-            const seriesIndex = param.seriesIndex ?? 0;
+          // 遍历所有系列，显示每个系列的信息
+          for (let i = 0; i < paramsArray.length; i++) {
+            const param = paramsArray[i];
+            if (!param || typeof param !== 'object') continue;
+
+            const seriesIndex = param.seriesIndex;
+            if (typeof seriesIndex !== 'number') continue;
+
             const seriesName = param.seriesName ?? '';
-            const dataItem = seriesData[seriesIndex]?.data[dataIndex];
+            const color = colors[seriesIndex % colors.length];
+            const dataItem = seriesData[seriesIndex]?.data?.[dataIndex];
 
-            if (dataItem) {
-              const item: TooltipItem = {
-                seriesName,
-                color: param.color as string,
-                cumulativeMemory: formatBytes(dataItem.cumulativeMemory),
-              };
+            if (!dataItem) continue;
 
-              if (!isVeryLargeDataset) {
-                if (dataItem.eventType) item.eventType = dataItem.eventType;
-                if (dataItem.subEventType) item.subEventType = dataItem.subEventType;
-                if (dataItem.heapSize) item.heapSize = formatBytes(dataItem.heapSize);
-                if (dataItem.process) item.process = dataItem.process;
-                if (dataItem.thread && dataItem.thread !== 'N/A') item.thread = dataItem.thread;
-                if (dataItem.file && dataItem.file !== 'N/A') item.file = dataItem.file;
-                if (dataItem.symbol && dataItem.symbol !== 'N/A') item.symbol = dataItem.symbol;
+            // 添加到 tooltip HTML
+            tooltipHtml += `<div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed #eee;">`;
+            tooltipHtml += `<div style="display: flex; align-items: center; margin-bottom: 4px;">`;
+            tooltipHtml += `<span style="display: inline-block; width: 10px; height: 10px; background-color: ${color}; margin-right: 6px; border-radius: 2px;"></span>`;
+            tooltipHtml += `<span style="font-weight: bold;">${seriesName}</span>`;
+            tooltipHtml += `</div>`;
+            tooltipHtml += `<div style="margin-left: 16px; font-size: 12px;">`;
+            tooltipHtml += `<div>当前内存: <span style="color: ${color}; font-weight: bold;">${formatBytes(dataItem.cumulativeMemory)}</span></div>`;
+
+            // 对于总内存线（overview 层级的第一条线），需要汇总所有分类的聚合事件
+            const isTotalMemorySeries = drillDownLevel.value === 'overview' && seriesIndex === 0;
+
+            if (isTotalMemorySeries) {
+              // 汇总所有分类在该时间点的聚合事件
+              let totalEventCount = 0;
+              const totalEventStats = new Map<string, { count: number; totalSize: number }>();
+
+              // 遍历所有分类线（跳过第一条总内存线）
+              for (let j = 1; j < seriesData.length; j++) {
+                const categoryDataItem = seriesData[j]?.data?.[dataIndex];
+                if (categoryDataItem && categoryDataItem.eventCount && categoryDataItem.eventDetails) {
+                  totalEventCount += categoryDataItem.eventCount;
+
+                  const events = categoryDataItem.eventDetails.split('|').filter(e => e);
+                  events.forEach(eventStr => {
+                    const [eventType, sizeStr] = eventStr.split(':');
+                    const size = parseInt(sizeStr) || 0;
+                    const stat = totalEventStats.get(eventType) || { count: 0, totalSize: 0 };
+                    stat.count++;
+                    stat.totalSize += size;
+                    totalEventStats.set(eventType, stat);
+                  });
+                }
               }
 
-              items.push(item);
-            }
-          });
+              if (totalEventCount > 0) {
+                tooltipHtml += `<div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #eee;">`;
+                tooltipHtml += `<div style="color: #666;">聚合事件数: ${totalEventCount}</div>`;
 
+                if (totalEventStats.size > 0) {
+                  tooltipHtml += `<div style="margin-top: 2px; font-size: 11px;">`;
+                  totalEventStats.forEach((stat, eventType) => {
+                    tooltipHtml += `<div style="color: #888;">• ${eventType}: ${stat.count}次, ${formatBytes(stat.totalSize)}</div>`;
+                  });
+                  tooltipHtml += `</div>`;
+                }
+                tooltipHtml += `</div>`;
+              }
+            } else {
+              // 显示当前线的聚合事件信息
+              if (dataItem.eventCount !== undefined && dataItem.eventCount > 0) {
+                tooltipHtml += `<div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #eee;">`;
+                tooltipHtml += `<div style="color: #666;">聚合事件数: ${dataItem.eventCount}</div>`;
+
+                // 解析并显示事件详情
+                if (dataItem.eventDetails) {
+                  const events = dataItem.eventDetails.split('|').filter(e => e);
+                  if (events.length > 0) {
+                    // 统计事件类型
+                    const eventStats = new Map<string, { count: number; totalSize: number }>();
+                    events.forEach(eventStr => {
+                      const [eventType, sizeStr] = eventStr.split(':');
+                      const size = parseInt(sizeStr) || 0;
+                      const stat = eventStats.get(eventType) || { count: 0, totalSize: 0 };
+                      stat.count++;
+                      stat.totalSize += size;
+                      eventStats.set(eventType, stat);
+                    });
+
+                    tooltipHtml += `<div style="margin-top: 2px; font-size: 11px;">`;
+                    eventStats.forEach((stat, eventType) => {
+                      tooltipHtml += `<div style="color: #888;">• ${eventType}: ${stat.count}次, ${formatBytes(stat.totalSize)}</div>`;
+                    });
+                    tooltipHtml += `</div>`;
+                  }
+                }
+                tooltipHtml += `</div>`;
+              } else if (dataItem.eventType) {
+                // 非聚合数据，显示单个事件信息
+                tooltipHtml += `<div style="margin-top: 2px; font-size: 11px; color: #888;">`;
+                tooltipHtml += `事件类型: ${dataItem.eventType}`;
+                if (dataItem.heapSize) {
+                  tooltipHtml += `, 内存变化: ${formatBytes(dataItem.heapSize)}`;
+                }
+                tooltipHtml += `</div>`;
+              }
+            }
+
+            tooltipHtml += `</div>`;
+            tooltipHtml += `</div>`;
+
+            // 添加到下方显示的数据
+            items.push({
+              seriesName: seriesName,
+              color: color,
+              cumulativeMemory: formatBytes(dataItem.cumulativeMemory),
+              eventType: dataItem.eventType,
+              heapSize: dataItem.heapSize ? formatBytes(dataItem.heapSize) : undefined,
+            });
+          }
+
+          tooltipHtml += `<div style="margin-top: 8px; padding-top: 4px; border-top: 1px solid #ccc; font-size: 11px; color: #999;">详细信息见下方</div>`;
+          tooltipHtml += `</div>`;
+
+          // 更新下方显示的数据
           tooltipData.value = {
             timePoint: formatTime(timePoint),
             items,
           };
-        }
 
-        // 返回简化的tooltip内容
-        return `<div style="padding: 4px;">时间: ${formatTime(timePoint)}<br/>详细信息见下方</div>`;
+          return tooltipHtml;
+        } catch (error) {
+          console.error('[MemoryTimelineChart] Tooltip formatter error:', error);
+          tooltipData.value = null;
+          return '';
+        }
       },
     },
     grid: {
@@ -758,7 +998,17 @@ async function initChart() {
       return {
         name: series.name,
         type: 'line',
-        data: series.data.map((item) => {
+        // 添加 datasetIndex 以确保 ECharts 能正确识别数据
+        datasetIndex: seriesIndex,
+        data: series.data.map((item, itemIndex) => {
+          // 安全检查：确保 item 存在且有效
+          if (!item || typeof item.cumulativeMemory !== 'number') {
+            return {
+              value: 0,
+              symbolSize: 0,
+            };
+          }
+
           // 找到峰值点的索引
           const isPeak = item.cumulativeMemory === maxMemory;
           // 找到选中点的索引（在总览视图中只在总内存线上显示，在其他视图中显示）
@@ -770,6 +1020,9 @@ async function initChart() {
           if (isPeak) {
             return {
               value: item.cumulativeMemory,
+              // 添加额外的元数据以帮助 ECharts 识别
+              dataIndex: itemIndex,
+              seriesIndex: seriesIndex,
               itemStyle: {
                 color: '#ff0000',
                 borderColor: '#fff',
@@ -795,6 +1048,9 @@ async function initChart() {
           } else if (isSelected) {
             return {
               value: item.cumulativeMemory,
+              // 添加额外的元数据以帮助 ECharts 识别
+              dataIndex: itemIndex,
+              seriesIndex: seriesIndex,
               itemStyle: {
                 color: '#FFD700',
                 borderColor: '#fff',
@@ -820,6 +1076,9 @@ async function initChart() {
           } else {
             return {
               value: item.cumulativeMemory,
+              // 添加额外的元数据以帮助 ECharts 识别
+              dataIndex: itemIndex,
+              seriesIndex: seriesIndex,
               symbolSize: isVeryLargeDataset ? 4 : (isLargeDataset ? 6 : 8),
             };
           }
@@ -858,45 +1117,71 @@ async function initChart() {
     // 添加点击事件监听
     chartInstance.off('click'); // 先移除旧的监听器
     chartInstance.on('click', (params: { componentType?: string; dataIndex?: number; seriesIndex?: number; seriesName?: string }) => {
-      if (params.componentType === 'series' && typeof params.dataIndex === 'number') {
-        const dataIndex = params.dataIndex;
-        const seriesIndex = params.seriesIndex ?? 0;
-        const seriesName = params.seriesName ?? '';
+      try {
+        // 安全检查：确保 params 有效
+        if (!params || typeof params !== 'object') {
+          return;
+        }
 
-        // 根据当前层级决定点击行为
-        if (drillDownLevel.value === 'overview') {
-          // 总览视图：点击"总内存"线选择时间点，点击其他线下钻到大类
-          // if (seriesName === '总内存') {
-          //   // 点击总内存线上的点，选择时间点
-          //   const dataItem = seriesData[seriesIndex]?.data[dataIndex];
-          //   if (dataItem) {
-          //     // 如果点击的是已选中的点，则取消选择
-          //     if (props.selectedTimePoint === dataItem.relativeTs) {
-          //       emit('time-point-selected', null);
-          //     } else {
-          //       emit('time-point-selected', dataItem.relativeTs);
-          //     }
-          //   }
-          // } else {
-          if (seriesName !== '总内存') {
-            // 点击其他分类线，下钻到大类
-            drillDownToCategory(seriesName);
+        if (params.componentType === 'series' && typeof params.dataIndex === 'number') {
+          const dataIndex = params.dataIndex;
+          const seriesIndex = params.seriesIndex ?? 0;
+          const seriesName = params.seriesName ?? '';
+
+          // 安全检查：确保 seriesIndex 和 dataIndex 在有效范围内
+          if (seriesIndex < 0 || seriesIndex >= seriesData.length) {
+            console.warn('[MemoryTimelineChart] Invalid seriesIndex:', seriesIndex);
+            return;
           }
-        } else if (drillDownLevel.value === 'category') {
-          // 大类视图：点击线条下钻到小类
-          drillDownToSubCategory(seriesName);
-        } else {
-          // 小类视图：点击数据点选择时间点
-          const dataItem = seriesData[seriesIndex]?.data[dataIndex];
-          if (dataItem) {
-            // 如果点击的是已选中的点，则取消选择
-            if (props.selectedTimePoint === dataItem.relativeTs) {
-              emit('time-point-selected', null);
-            } else {
-              emit('time-point-selected', dataItem.relativeTs);
+
+          const seriesDataItem = seriesData[seriesIndex];
+          if (!seriesDataItem || !seriesDataItem.data) {
+            console.warn('[MemoryTimelineChart] Invalid series data:', seriesIndex);
+            return;
+          }
+
+          if (dataIndex < 0 || dataIndex >= seriesDataItem.data.length) {
+            console.warn('[MemoryTimelineChart] Invalid dataIndex:', dataIndex);
+            return;
+          }
+
+          // 根据当前层级决定点击行为
+          if (drillDownLevel.value === 'overview') {
+            // 总览视图：点击"总内存"线选择时间点，点击其他线下钻到大类
+            // if (seriesName === '总内存') {
+            //   // 点击总内存线上的点，选择时间点
+            //   const dataItem = seriesData[seriesIndex]?.data[dataIndex];
+            //   if (dataItem) {
+            //     // 如果点击的是已选中的点，则取消选择
+            //     if (props.selectedTimePoint === dataItem.relativeTs) {
+            //       emit('time-point-selected', null);
+            //     } else {
+            //       emit('time-point-selected', dataItem.relativeTs);
+            //     }
+            //   }
+            // } else {
+            if (seriesName !== '总内存') {
+              // 点击其他分类线，下钻到大类
+              drillDownToCategory(seriesName);
+            }
+          } else if (drillDownLevel.value === 'category') {
+            // 大类视图：点击线条下钻到小类
+            drillDownToSubCategory(seriesName);
+          } else {
+            // 小类视图：点击数据点选择时间点
+            const dataItem = seriesData[seriesIndex]?.data[dataIndex];
+            if (dataItem) {
+              // 如果点击的是已选中的点，则取消选择
+              if (props.selectedTimePoint === dataItem.relativeTs) {
+                emit('time-point-selected', null);
+              } else {
+                emit('time-point-selected', dataItem.relativeTs);
+              }
             }
           }
         }
+      } catch (error) {
+        console.error('[MemoryTimelineChart] Click event error:', error);
       }
     });
 
@@ -972,28 +1257,6 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
   }
 }
 
-// 监听 processedData 的变化，而不是直接监听 records
-// 由于 computed 已经做了缓存，这里不需要额外的防抖
-watch(
-  processedData,
-  () => {
-    if (chartInstance) {
-      // 使用 requestIdleCallback 在浏览器空闲时更新，避免阻塞主线程
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-          initChart();
-        }, { timeout: 1000 });
-      } else {
-        // 降级方案
-        requestAnimationFrame(() => {
-          initChart();
-        });
-      }
-    }
-  },
-  { deep: false }
-);
-
 // 监听 selectedTimePoint 的变化，更新标记线
 watch(
   () => props.selectedTimePoint,
@@ -1004,10 +1267,30 @@ watch(
   }
 );
 
-// 监听下钻状态的变化，重新初始化图表
+// 监听 stepId 变化，重新加载数据
+watch(
+  () => props.stepId,
+  async () => {
+    // 重置下钻状态
+    drillDownLevel.value = 'overview';
+    selectedCategory.value = '';
+    selectedSubCategory.value = '';
+
+    // 加载新步骤的数据
+    await loadCurrentLevelData();
+    await loadProcessedData();
+    if (chartInstance) {
+      initChart();
+    }
+  }
+);
+
+// 监听下钻状态的变化，重新加载数据并初始化图表
 watch(
   [drillDownLevel, selectedCategory, selectedSubCategory],
-  () => {
+  async () => {
+    await loadCurrentLevelData();
+    await loadProcessedData();
     if (chartInstance) {
       initChart();
     }
@@ -1028,7 +1311,13 @@ const handleResize = () => {
   }, 200); // 200ms 防抖
 };
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载当前层级的数据
+  await loadCurrentLevelData();
+
+  // 然后处理数据
+  await loadProcessedData();
+
   // 使用 requestAnimationFrame 延迟初始化，避免阻塞页面渲染
   requestAnimationFrame(() => {
     initChart();

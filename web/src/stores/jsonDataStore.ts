@@ -115,6 +115,9 @@ export interface NativeMemoryRecord {
   componentCategory: ComponentCategory;  // 组件分类（大类编号）
   categoryName: string;  // 大类名称（如 'APP_ABC', 'SYS_SDK'）
   subCategoryName: string;  // 小类名称（如包名、文件名、线程名）
+  // 聚合信息（仅用于 overview 层级）
+  eventCount?: number;  // 聚合的事件数量
+  eventDetails?: string;  // 聚合的事件详情（格式：eventType:heapSize|eventType:heapSize|...）
 }
 
 // Native Memory步骤统计信息
@@ -1307,143 +1310,237 @@ export const useJsonDataStore = defineStore('config', {
     },
 
     /**
-     * Load native memory data from database
-     * Queries all steps and converts records to NativeMemoryData format
+     * Load native memory data from database (summary only, no records)
+     * Queries all steps and loads only metadata
      * @returns Promise that resolves when data is loaded
      */
     async loadNativeMemoryDataFromDb(): Promise<void> {
       try {
         const dbApi = getDbApi();
-        
+
         // Query all distinct step ids
         const stepIds = await dbApi.queryMemorySteps();
-        
+
         if (stepIds.length === 0) {
           console.log('[JsonDataStore] No native memory steps found in database');
           this.nativeMemoryData = null;
           return;
         }
 
-        // Load records for each step
+        // Load summary for each step (not all records)
         const nativeMemoryData: NativeMemoryData = {};
-        
+
         for (const stepId of stepIds) {
-          const records = await dbApi.queryMemoryRecords(stepId);
-          
-          // Convert database records to NativeMemoryRecord format
-          const nativeRecords: NativeMemoryRecord[] = records.map((row) => {
-            // Convert componentCategory from string to enum
-            let componentCategory: ComponentCategory = ComponentCategory.UNKNOWN;
-            const categoryStr = String(row.componentCategory || '');
-            if (categoryStr) {
-              const categoryNum = Number(categoryStr);
-              if (!isNaN(categoryNum) && categoryNum in ComponentCategory) {
-                componentCategory = categoryNum as ComponentCategory;
-              }
-            }
+          console.log(`[JsonDataStore] Loading memory metadata for step ${stepId}...`);
 
-            return {
-              pid: Number(row.pid) || 0,
-              process: String(row.process || ''),
-              tid: row.tid !== null && row.tid !== undefined ? Number(row.tid) : null,
-              thread: row.thread !== null && row.thread !== undefined ? String(row.thread) : null,
-              fileId: row.fileId !== null && row.fileId !== undefined ? Number(row.fileId) : null,
-              file: row.file !== null && row.file !== undefined ? String(row.file) : null,
-              symbolId: row.symbolId !== null && row.symbolId !== undefined ? Number(row.symbolId) : null,
-              symbol: row.symbol !== null && row.symbol !== undefined ? String(row.symbol) : null,
-              eventType: String(row.eventType || '') as EventType,
-              subEventType: String(row.subEventType || ''),
-              // addr may be stored as TEXT in database, convert to number
-              addr: row.addr !== null && row.addr !== undefined ? (typeof row.addr === 'string' ? parseInt(row.addr, 16) : Number(row.addr)) || 0 : 0,
-              callchainId: Number(row.callchainId) || 0,
-              heapSize: Number(row.heapSize) || 0,
-              relativeTs: Number(row.relativeTs) || 0,
-              componentName: String(row.componentName || ''),
-              componentCategory: componentCategory,
-              categoryName: String(row.categoryName || ''),
-              subCategoryName: String(row.subCategoryName || ''),
-            };
-          });
-
-          // Sort records by relativeTs
-          nativeRecords.sort((a, b) => a.relativeTs - b.relativeTs);
-
-          // Calculate statistics from records
+          // Query peak_time from memory_results table if available
           let peak_time: number | undefined;
           let peak_value: number | undefined;
-          let stats: NativeMemoryStepStats | undefined;
 
-          if (nativeRecords.length > 0) {
-            // Calculate cumulative memory and find peak
-            let cumulativeMemory = 0;
-            let peakMemory = 0;
-            let peakTime = 0;
-            let totalMemory = 0;
-            let allocCount = 0;
-            let freeCount = 0;
-
-            for (const record of nativeRecords) {
-              // Update cumulative memory based on event type
-              if (record.eventType === EventType.AllocEvent || record.eventType === EventType.MmapEvent) {
-                cumulativeMemory += record.heapSize;
-                totalMemory += record.heapSize;
-                allocCount++;
-              } else if (record.eventType === EventType.FreeEvent || record.eventType === EventType.MunmapEvent) {
-                cumulativeMemory -= record.heapSize;
-                freeCount++;
-              }
-
-              // Track peak
-              if (cumulativeMemory > peakMemory) {
-                peakMemory = cumulativeMemory;
-                peakTime = record.relativeTs;
-              }
-            }
-
-            // Calculate average memory size
-            const eventCount = allocCount + freeCount;
-            const averageMemorySize = eventCount > 0 ? totalMemory / eventCount : 0;
-
-            peak_time = peakTime;
-            peak_value = peakMemory;
-
-            // Query peak_time from memory_results table if available
-            const results = await dbApi.queryMemoryResults(stepId);
-            if (results.length > 0) {
-              const result = results[0];
-              const dbPeakTime = result.peak_time !== null && result.peak_time !== undefined ? Number(result.peak_time) : undefined;
-              if (dbPeakTime !== undefined) {
-                peak_time = dbPeakTime;
-              }
-            }
-
-            stats = {
-              peakMemorySize: peakMemory,
-              peakMemoryDuration: 0, // Duration calculation requires additional logic
-              averageMemorySize: averageMemorySize,
-            };
-          } else {
-            // Try to get peak_time from memory_results table even if no records
+          try {
             const results = await dbApi.queryMemoryResults(stepId);
             if (results.length > 0) {
               const result = results[0];
               peak_time = result.peak_time !== null && result.peak_time !== undefined ? Number(result.peak_time) : undefined;
+              peak_value = result.peak_value !== null && result.peak_value !== undefined ? Number(result.peak_value) : undefined;
             }
+          } catch (error) {
+            console.warn(`[JsonDataStore] Failed to query memory_results for step ${stepId}:`, error);
           }
 
+          // Don't load records initially - they will be loaded on demand
           nativeMemoryData[`step${stepId}`] = {
             peak_time,
             peak_value,
-            stats,
-            records: nativeRecords,
-            callchains: undefined, // Callchains can be loaded separately if needed
+            stats: undefined,
+            records: [], // Empty initially
+            callchains: undefined,
           };
+
+          console.log(`[JsonDataStore] Loaded metadata for step ${stepId}`);
         }
 
         this.nativeMemoryData = nativeMemoryData;
-        console.log(`[JsonDataStore] Loaded native memory data for ${stepIds.length} steps from database`);
+        console.log(`[JsonDataStore] Loaded native memory metadata for ${stepIds.length} steps from database`);
       } catch (error) {
         console.error('[JsonDataStore] Error loading native memory data from database:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Load overview level timeline data (aggregated by time point and category)
+     * 加载总览层级数据：查询聚合后的时间线数据（按 10ms 时间点和大类分组）
+     * @param stepId - Step ID (e.g., "step1")
+     * @returns Promise that resolves to array of aggregated timeline records
+     */
+    async loadOverviewTimeline(stepId: string): Promise<NativeMemoryRecord[]> {
+      try {
+        const dbApi = getDbApi();
+        const stepNum = parseInt(stepId.replace('step', ''));
+
+        console.log(`[JsonDataStore] Loading overview timeline for ${stepId}...`);
+        const startTime = performance.now();
+
+        // Query aggregated timeline data (timePoint10ms, categoryName, netSize)
+        const timelineResult = await dbApi.queryOverviewTimeline(stepNum);
+
+        console.log(`[JsonDataStore] Query returned ${timelineResult.length} aggregated rows`);
+        if (timelineResult.length > 0) {
+          console.log(`[JsonDataStore] First row sample:`, timelineResult[0]);
+        }
+
+        // Convert aggregated timeline data to pseudo-records for chart rendering
+        // Each row represents the net memory change at a specific time point for a category
+        const nativeRecords: NativeMemoryRecord[] = timelineResult.map((row: any) => ({
+          pid: 0,
+          process: '',
+          tid: null,
+          thread: null,
+          fileId: null,
+          file: null,
+          symbolId: null,
+          symbol: null,
+          eventType: (Number(row.netSize) >= 0 ? 'AllocEvent' : 'FreeEvent') as EventType,
+          subEventType: '',
+          addr: 0,
+          callchainId: 0,
+          heapSize: Math.abs(Number(row.netSize) || 0), // Use absolute value of netSize
+          relativeTs: (Number(row.timePoint10ms) || 0) * 0.01, // Convert 10ms units to seconds
+          componentName: '',
+          componentCategory: 0,
+          categoryName: String(row.categoryName || ''),
+          subCategoryName: '',
+          // 聚合信息
+          eventCount: Number(row.eventCount) || 0,
+          eventDetails: String(row.eventDetails || ''),
+        }));
+
+        // Sort by time and category
+        nativeRecords.sort((a, b) => {
+          if (a.relativeTs !== b.relativeTs) {
+            return a.relativeTs - b.relativeTs;
+          }
+          return a.categoryName.localeCompare(b.categoryName);
+        });
+
+        const endTime = performance.now();
+        console.log(`[JsonDataStore] Loaded ${nativeRecords.length} aggregated timeline records for ${stepId} in ${(endTime - startTime).toFixed(2)}ms`);
+
+        return nativeRecords;
+      } catch (error) {
+        console.error(`[JsonDataStore] Error loading overview timeline for ${stepId}:`, error);
+        throw error;
+      }
+    },
+
+    /**
+     * Load category level records for a step
+     * 加载大类层级数据：查询指定大类的所有记录
+     * @param stepId - Step ID (e.g., "step1")
+     * @param categoryName - Category name
+     * @returns Promise that resolves to array of records
+     */
+    async loadCategoryRecords(stepId: string, categoryName: string): Promise<NativeMemoryRecord[]> {
+      try {
+        const dbApi = getDbApi();
+        const stepNum = parseInt(stepId.replace('step', ''));
+
+        console.log(`[JsonDataStore] Loading category records for ${stepId}, category: ${categoryName}...`);
+        const startTime = performance.now();
+
+        // Query aggregated category records (by subcategory and time)
+        const recordsResult = await dbApi.queryCategoryRecords(stepNum, categoryName);
+
+        // Convert aggregated data to pseudo-records for chart rendering
+        const nativeRecords: NativeMemoryRecord[] = recordsResult.map((row: any) => ({
+          pid: 0,
+          process: '',
+          tid: null,
+          thread: null,
+          fileId: null,
+          file: null,
+          symbolId: null,
+          symbol: null,
+          eventType: (Number(row.netSize) >= 0 ? 'AllocEvent' : 'FreeEvent') as EventType,
+          subEventType: '',
+          addr: 0,
+          callchainId: 0,
+          heapSize: Math.abs(Number(row.netSize) || 0),
+          relativeTs: (Number(row.timePoint10ms) || 0) * 0.01, // Convert 10ms units to seconds
+          componentName: '',
+          componentCategory: 0,
+          categoryName: categoryName,
+          subCategoryName: String(row.subCategoryName || ''),
+          // 聚合信息
+          eventCount: Number(row.eventCount) || 0,
+          eventDetails: String(row.eventDetails || ''),
+        }));
+
+        const endTime = performance.now();
+        console.log(`[JsonDataStore] Loaded ${nativeRecords.length} aggregated category records for ${stepId}/${categoryName} in ${(endTime - startTime).toFixed(2)}ms`);
+
+        return nativeRecords;
+      } catch (error) {
+        console.error(`[JsonDataStore] Error loading category records for ${stepId}/${categoryName}:`, error);
+        throw error;
+      }
+    },
+
+    /**
+     * Load subcategory level records for a step
+     * 加载小类层级数据：查询指定小类的所有记录（包含完整信息）
+     * @param stepId - Step ID (e.g., "step1")
+     * @param categoryName - Category name
+     * @param subCategoryName - Subcategory name
+     * @returns Promise that resolves to array of records
+     */
+    async loadSubCategoryRecords(
+      stepId: string,
+      categoryName: string,
+      subCategoryName: string
+    ): Promise<NativeMemoryRecord[]> {
+      try {
+        const dbApi = getDbApi();
+        const stepNum = parseInt(stepId.replace('step', ''));
+
+        console.log(`[JsonDataStore] Loading subcategory records for ${stepId}, category: ${categoryName}, subcategory: ${subCategoryName}...`);
+        const startTime = performance.now();
+
+        // Query subcategory records (full details)
+        const recordsResult = await dbApi.querySubCategoryRecords(stepNum, categoryName, subCategoryName);
+
+        // Convert to NativeMemoryRecord format (full fields)
+        const nativeRecords: NativeMemoryRecord[] = recordsResult.map((row: any) => ({
+          pid: Number(row.pid) || 0,
+          process: String(row.process || ''),
+          tid: row.tid !== null && row.tid !== undefined ? Number(row.tid) : null,
+          thread: row.thread !== null && row.thread !== undefined ? String(row.thread) : null,
+          fileId: row.fileId !== null && row.fileId !== undefined ? Number(row.fileId) : null,
+          file: row.file !== null && row.file !== undefined ? String(row.file) : null,
+          symbolId: row.symbolId !== null && row.symbolId !== undefined ? Number(row.symbolId) : null,
+          symbol: row.symbol !== null && row.symbol !== undefined ? String(row.symbol) : null,
+          eventType: String(row.eventType || '') as EventType,
+          subEventType: String(row.subEventType || ''),
+          addr: row.addr !== null && row.addr !== undefined ? (typeof row.addr === 'string' ? parseInt(row.addr, 16) : Number(row.addr)) || 0 : 0,
+          callchainId: Number(row.callchainId) || 0,
+          heapSize: Number(row.heapSize) || 0,
+          relativeTs: Number(row.relativeTs) / 1000000000 || 0,
+          componentName: String(row.componentName || ''),
+          componentCategory: Number(row.componentCategory) || 0,
+          categoryName: categoryName,
+          subCategoryName: subCategoryName,
+        }));
+
+        // Sort by time
+        nativeRecords.sort((a, b) => a.relativeTs - b.relativeTs);
+
+        const endTime = performance.now();
+        console.log(`[JsonDataStore] Loaded ${nativeRecords.length} subcategory records for ${stepId}/${categoryName}/${subCategoryName} in ${(endTime - startTime).toFixed(2)}ms`);
+
+        return nativeRecords;
+      } catch (error) {
+        console.error(`[JsonDataStore] Error loading subcategory records for ${stepId}/${categoryName}/${subCategoryName}:`, error);
         throw error;
       }
     },

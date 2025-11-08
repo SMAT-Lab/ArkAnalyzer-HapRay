@@ -29,7 +29,16 @@ export type WorkerMessageType =
   | 'close'
   | 'memory.queryByComponent'
   | 'memory.queryResults'
-  | 'memory.queryRecords';
+  | 'memory.queryRecords'
+  | 'memory.queryOverviewTimeline'
+  | 'memory.queryCategoryRecords'
+  | 'memory.querySubCategoryRecords'
+  | 'memory.queryCategories'
+  | 'memory.querySubCategories'
+  | 'memory.queryTimelineData'
+  | 'memory.queryRecordsAtTimePoint'
+  | 'memory.queryCategoryStats'
+  | 'memory.querySubCategoryStats';
 
 /**
  * Worker request interface
@@ -250,6 +259,108 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
         }
         const { stepId, limit } = (payload as { stepId?: number; limit?: number }) || {};
         const result = await serviceApi.queryMemoryRecords(db, stepId, limit);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryOverviewTimeline': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId } = (payload as { stepId: number }) || {};
+        const result = await serviceApi.queryOverviewTimeline(db, stepId);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryCategoryRecords': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, categoryName } = (payload as { stepId: number; categoryName: string }) || {};
+        const result = await serviceApi.queryCategoryRecords(db, stepId, categoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.querySubCategoryRecords': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, categoryName, subCategoryName } = (payload as {
+          stepId: number;
+          categoryName: string;
+          subCategoryName: string;
+        }) || {};
+        const result = await serviceApi.querySubCategoryRecords(db, stepId, categoryName, subCategoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryCategories': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId } = (payload as { stepId: number }) || {};
+        const result = await serviceApi.queryCategories(db, stepId);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.querySubCategories': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, categoryName } = (payload as { stepId: number; categoryName: string }) || {};
+        const result = await serviceApi.querySubCategories(db, stepId, categoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryTimelineData': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, categoryName, subCategoryName } = (payload as {
+          stepId: number;
+          categoryName?: string;
+          subCategoryName?: string;
+        }) || {};
+        const result = await serviceApi.queryTimelineData(db, stepId, categoryName, subCategoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryRecordsAtTimePoint': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, relativeTs } = (payload as { stepId: number; relativeTs: number }) || {};
+        const result = await serviceApi.queryRecordsAtTimePoint(db, stepId, relativeTs);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryCategoryStats': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, relativeTs } = (payload as { stepId: number; relativeTs?: number | null }) || {};
+        const result = await serviceApi.queryCategoryStats(db, stepId, relativeTs);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.querySubCategoryStats': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, categoryName, relativeTs } = (payload as {
+          stepId: number;
+          categoryName: string;
+          relativeTs?: number | null;
+        }) || {};
+        const result = await serviceApi.querySubCategoryStats(db, stepId, categoryName, relativeTs);
         sendSuccessResponse(id, { result });
         break;
       }
