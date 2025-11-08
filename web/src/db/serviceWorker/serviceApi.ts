@@ -64,6 +64,78 @@ export async function queryMemoryResults(db: Database, stepId?: number): Promise
 }
 
 /**
+ * Query overview level timeline data (aggregated by time point and category)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @returns Overview timeline data array (timePoint10ms, categoryName, netSize)
+ */
+export async function queryOverviewTimeline(db: Database, stepId: number): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryOverviewTimeline(stepId);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query category level records (for specific category)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param categoryName - Category name
+ * @returns Category records array
+ */
+export async function queryCategoryRecords(
+  db: Database,
+  stepId: number,
+  categoryName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryCategoryRecords(stepId, categoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query subcategory level records (for specific subcategory)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param categoryName - Category name
+ * @param subCategoryName - Subcategory name
+ * @returns Subcategory records array
+ */
+export async function querySubCategoryRecords(
+  db: Database,
+  stepId: number,
+  categoryName: string,
+  subCategoryName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQuerySubCategoryRecords(stepId, categoryName, subCategoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query all unique categories for a step
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @returns Array of category names
+ */
+export async function queryCategories(db: Database, stepId: number): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryCategories(stepId);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query all unique subcategories for a category
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param categoryName - Category name
+ * @returns Array of subcategory names
+ */
+export async function querySubCategories(
+  db: Database,
+  stepId: number,
+  categoryName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQuerySubCategories(stepId, categoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
  * Query memory records (detailed event records)
  * @param db - Database instance
  * @param stepId - Step id (optional, for filtering specific step)
@@ -147,4 +219,148 @@ export async function queryMemoryRecords(
     console.error('[serviceApi] queryMemoryRecords - db.exec failed:', execError);
     throw execError;
   }
+}
+
+/**
+ * Execute query with parameters (helper function)
+ * @param db - Database instance
+ * @param sql - SQL query string
+ * @param params - Query parameters
+ * @returns Query result rows
+ */
+function executeQueryWithParams(db: Database, sql: string, params: (string | number | null)[]): SqlRow[] {
+  const stmt = db.prepare(sql);
+
+  if (params && params.length > 0) {
+    stmt.bind(params);
+  }
+
+  const rows: SqlRow[] = [];
+  while (stmt.step()) {
+    rows.push(stmt.getAsObject({}));
+  }
+
+  stmt.free();
+  return rows;
+}
+
+/**
+ * Execute SQL query with parameters using db.exec (more reliable for column names)
+ * @param db - Database instance
+ * @param sql - SQL query string
+ * @param params - Query parameters
+ * @returns Query result rows
+ */
+function executeQueryWithExec(db: Database, sql: string, params: (string | number | null)[]): SqlRow[] {
+  // Build SQL with parameters for db.exec
+  let execSql = sql;
+  if (params && params.length > 0) {
+    let paramIndex = 0;
+    execSql = sql.replace(/\?/g, () => {
+      const param = params[paramIndex++];
+      if (param === null || param === undefined) {
+        return 'NULL';
+      }
+      if (typeof param === 'string') {
+        // Escape single quotes
+        return `'${param.replace(/'/g, "''")}'`;
+      }
+      return String(param);
+    });
+  }
+
+  const execResult = db.exec(execSql);
+
+  if (execResult && execResult.length > 0) {
+    const execRows = execResult[0];
+    const execRowCount = execRows.values?.length || 0;
+    const columns = execRows.columns || [];
+
+    if (execRowCount === 0) {
+      return [];
+    }
+
+    // Convert exec result to object array
+    const rows: SqlRow[] = [];
+    for (let i = 0; i < execRowCount; i++) {
+      const row: SqlRow = {};
+      const values = execRows.values[i];
+      for (let j = 0; j < columns.length; j++) {
+        row[columns[j]] = values[j];
+      }
+      rows.push(row);
+    }
+
+    return rows;
+  } else {
+    return [];
+  }
+}
+
+/**
+ * Query timeline data (aggregated by time point)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param categoryName - Category name filter (optional)
+ * @param subCategoryName - Sub-category name filter (optional)
+ * @returns Timeline data array
+ */
+export async function queryTimelineData(
+  db: Database,
+  stepId: number,
+  categoryName?: string,
+  subCategoryName?: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryTimelineData(stepId, categoryName, subCategoryName);
+  return executeQueryWithParams(db, sql, params);
+}
+
+/**
+ * Query records at a specific time point
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param relativeTs - Time point (in 10ms units)
+ * @returns Records array at the specified time point
+ */
+export async function queryRecordsAtTimePoint(
+  db: Database,
+  stepId: number,
+  relativeTs: number
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryRecordsAtTimePoint(stepId, relativeTs);
+  return executeQueryWithParams(db, sql, params);
+}
+
+/**
+ * Query category statistics
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param relativeTs - Time point filter (optional, null means all time)
+ * @returns Category statistics array
+ */
+export async function queryCategoryStats(
+  db: Database,
+  stepId: number,
+  relativeTs?: number | null
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryCategoryStats(stepId, relativeTs);
+  return executeQueryWithParams(db, sql, params);
+}
+
+/**
+ * Query sub-category statistics
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param categoryName - Category name filter
+ * @param relativeTs - Time point filter (optional, null means all time)
+ * @returns Sub-category statistics array
+ */
+export async function querySubCategoryStats(
+  db: Database,
+  stepId: number,
+  categoryName: string,
+  relativeTs?: number | null
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQuerySubCategoryStats(stepId, categoryName, relativeTs);
+  return executeQueryWithParams(db, sql, params);
 }
