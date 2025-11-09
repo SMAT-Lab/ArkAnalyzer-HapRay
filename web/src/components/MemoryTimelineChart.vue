@@ -36,6 +36,7 @@
 <script lang="ts" setup>
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
+import type { LineSeriesOption } from 'echarts';
 import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
 import { useJsonDataStore } from '@/stores/jsonDataStore';
 
@@ -65,6 +66,17 @@ interface TimelineProcessedData {
   finalMemory: number;
   threshold30: number;
   threshold60: number;
+}
+
+interface AxisTooltipItem {
+  seriesIndex?: number;
+  dataIndex?: number;
+  seriesName?: string;
+  componentType?: string;
+  value?: unknown;
+  axisValue?: string | number;
+  axisIndex?: number;
+  [key: string]: unknown;
 }
 
 type SeriesDataEntry = TimelineProcessedData['seriesData'][number];
@@ -484,11 +496,12 @@ function getLineWidth(isTotalSeries: boolean, isLargeDataset: boolean, isVeryLar
   return isLargeDataset ? 1 : 1.5;
 }
 
-function createPeakPointConfig(value: number, itemIndex: number, seriesIndex: number) {
+type LineSeriesData = NonNullable<LineSeriesOption['data']>;
+type LineSeriesDataItem = LineSeriesData[number];
+
+function createPeakPointConfig(value: number): LineSeriesDataItem {
   return {
     value,
-    dataIndex: itemIndex,
-    seriesIndex,
     itemStyle: {
       color: '#ff0000',
       borderColor: '#fff',
@@ -513,11 +526,9 @@ function createPeakPointConfig(value: number, itemIndex: number, seriesIndex: nu
   };
 }
 
-function createSelectedPointConfig(value: number, itemIndex: number, seriesIndex: number) {
+function createSelectedPointConfig(value: number): LineSeriesDataItem {
   return {
     value,
-    dataIndex: itemIndex,
-    seriesIndex,
     itemStyle: {
       color: '#FFD700',
       borderColor: '#fff',
@@ -544,35 +555,55 @@ function createSelectedPointConfig(value: number, itemIndex: number, seriesIndex
 
 function createNormalPointConfig(
   value: number,
-  itemIndex: number,
-  seriesIndex: number,
   isLargeDataset: boolean,
   isVeryLargeDataset: boolean
-) {
+): LineSeriesDataItem {
   return {
     value,
-    dataIndex: itemIndex,
-    seriesIndex,
     symbolSize: getSymbolSize(isLargeDataset, isVeryLargeDataset),
   };
 }
 
-function resolveTooltipParam(params: unknown, targetSeriesIndex: number | null) {
+function isAxisTooltipItem(param: unknown): param is AxisTooltipItem {
+  if (!param || typeof param !== 'object') {
+    return false;
+  }
+  const candidate = param as AxisTooltipItem;
+  return typeof candidate.dataIndex === 'number';
+}
+
+function isSeriesClickParam(
+  param: unknown
+): param is AxisTooltipItem & Required<Pick<AxisTooltipItem, 'dataIndex'>> {
+  if (!isAxisTooltipItem(param)) {
+    return false;
+  }
+  const candidate = param as AxisTooltipItem;
+  return (typeof candidate.componentType === 'string' || candidate.componentType === undefined) && typeof candidate.dataIndex === 'number';
+}
+
+function resolveTooltipParam(
+  params: unknown,
+  targetSeriesIndex: number | null
+): AxisTooltipItem | null {
   const paramsArray = Array.isArray(params) ? params : [params];
   if (paramsArray.length === 0) {
     return null;
   }
 
+  const tooltipItems = paramsArray.filter(isAxisTooltipItem);
+  if (tooltipItems.length === 0) {
+    return null;
+  }
+
   if (typeof targetSeriesIndex === 'number') {
-    const matched = paramsArray.find(
-      p => p && typeof p === 'object' && (p as any).seriesIndex === targetSeriesIndex && typeof (p as any).dataIndex === 'number'
-    );
+    const matched = tooltipItems.find(item => item.seriesIndex === targetSeriesIndex);
     if (matched) {
       return matched;
     }
   }
 
-  return paramsArray.find(p => p && typeof p === 'object' && typeof (p as any).dataIndex === 'number') ?? null;
+  return tooltipItems[0] ?? null;
 }
 
 function buildSeriesPoint(
@@ -581,7 +612,7 @@ function buildSeriesPoint(
   seriesIndex: number,
   params: ChartOptionParams,
   isTotalSeries: boolean
-) {
+): LineSeriesDataItem {
   if (!item || typeof item.cumulativeMemory !== 'number') {
     return {
       value: 0,
@@ -597,35 +628,36 @@ function buildSeriesPoint(
     (drillLevel !== 'overview' || isTotalSeries);
 
   if (isPeakPoint) {
-    return createPeakPointConfig(item.cumulativeMemory, itemIndex, seriesIndex);
+    return createPeakPointConfig(item.cumulativeMemory);
   }
 
   if (isSelectedPoint) {
-    return createSelectedPointConfig(item.cumulativeMemory, itemIndex, seriesIndex);
+    return createSelectedPointConfig(item.cumulativeMemory);
   }
 
   return createNormalPointConfig(
     item.cumulativeMemory,
-    itemIndex,
-    seriesIndex,
     isLargeDataset,
     isVeryLargeDataset
   );
 }
 
-function buildSeriesOptions(seriesData: TimelineProcessedData['seriesData'], params: ChartOptionParams) {
+function buildSeriesOptions(
+  seriesData: TimelineProcessedData['seriesData'],
+  params: ChartOptionParams
+): LineSeriesOption[] {
   const { drillLevel, isLargeDataset, isVeryLargeDataset } = params;
 
   return seriesData.map((series, seriesIndex) => {
     const isTotalSeries = drillLevel === 'overview' && seriesIndex === 0;
     const seriesColor = getSeriesColor(seriesIndex, isTotalSeries);
+    const dataItems = series.data
+      .map((item, itemIndex) => buildSeriesPoint(item, itemIndex, seriesIndex, params, isTotalSeries)) as LineSeriesData;
 
     return {
       name: series.name,
-      type: 'line',
-      data: series.data.map((item, itemIndex) =>
-        buildSeriesPoint(item, itemIndex, seriesIndex, params, isTotalSeries)
-      ),
+      type: 'line' as const,
+      data: dataItems,
       symbol: 'circle',
       showSymbol: true,
       lineStyle: {
@@ -753,16 +785,16 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
       },
       confine: true,
       appendToBody: false,
-      formatter: (params: unknown) => {
+      formatter: (params: AxisTooltipItem | AxisTooltipItem[] | unknown) => {
         try {
           const resolved = resolveTooltipParam(params, activeSeriesIndex.value);
-          if (!resolved || typeof (resolved as any).dataIndex !== 'number') {
+          if (!resolved || typeof resolved.dataIndex !== 'number') {
             return '';
           }
 
-          const seriesIndex = typeof (resolved as any).seriesIndex === 'number' ? (resolved as any).seriesIndex : 0;
-          const seriesName = (resolved as any).seriesName ?? '';
-          const dataIndex = (resolved as any).dataIndex;
+          const seriesIndex = typeof resolved.seriesIndex === 'number' ? resolved.seriesIndex : 0;
+          const seriesName = resolved.seriesName ?? '';
+          const dataIndex = resolved.dataIndex;
           const dataItem = seriesData[seriesIndex]?.data?.[dataIndex];
 
           if (!dataItem) {
@@ -833,22 +865,14 @@ function registerChartEvents(seriesData: TimelineProcessedData['seriesData']) {
   chartInstance.on('click', params => handleChartClick(params, seriesData));
 }
 
-function handleChartClick(
-  params: { componentType?: string; dataIndex?: number; seriesIndex?: number; seriesName?: string } | unknown,
-  seriesData: TimelineProcessedData['seriesData']
-) {
-  if (
-    !params ||
-    typeof params !== 'object' ||
-    (params as any).componentType !== 'series' ||
-    typeof (params as any).dataIndex !== 'number'
-  ) {
+function handleChartClick(params: unknown, seriesData: TimelineProcessedData['seriesData']) {
+  if (!isSeriesClickParam(params) || params.componentType !== 'series') {
     return;
   }
 
-  const seriesIndex = typeof (params as any).seriesIndex === 'number' ? (params as any).seriesIndex : 0;
-  const dataIndex = (params as any).dataIndex as number;
-  const seriesName = ((params as any).seriesName ?? '') as string;
+  const seriesIndex = typeof params.seriesIndex === 'number' ? params.seriesIndex : 0;
+  const dataIndex = params.dataIndex;
+  const seriesName = params.seriesName ?? '';
 
   if (seriesIndex < 0 || seriesIndex >= seriesData.length) {
     return;
@@ -953,12 +977,13 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
   }
 
   // 获取当前配置
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const option = chartInstance.getOption() as any;
-  if (option && option.series && option.series[0]) {
-    const series = option.series[0];
+  const option = chartInstance.getOption() as echarts.EChartsOption;
+  if (option && Array.isArray(option.series) && option.series[0]) {
+    const series = option.series[0] as echarts.SeriesOption & {
+      markLine?: echarts.MarkLineComponentOption;
+    };
     const selectedMemory = chartData[closestIndex]?.cumulativeMemory || 0;
-    series.markLine = {
+    const markLine: echarts.MarkLineComponentOption = {
       silent: false,
       symbol: ['none', 'arrow'],
       symbolSize: [0, 8],
@@ -986,6 +1011,7 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
         },
       ],
     };
+    series.markLine = markLine;
 
     chartInstance.setOption(option);
   }
