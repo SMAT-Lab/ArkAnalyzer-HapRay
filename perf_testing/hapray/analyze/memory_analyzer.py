@@ -399,16 +399,26 @@ class MemoryAnalyzer(BaseAnalyzer):
                 category_dict.value AS categoryName,
                 sub_category_dict.value AS subCategoryName
             FROM memory_records_raw AS raw
-            LEFT JOIN memory_data_dicts AS proc_dict ON raw.processId = proc_dict.dictId
-            LEFT JOIN memory_data_dicts AS thread_dict ON raw.threadId = thread_dict.dictId
-            LEFT JOIN memory_data_dicts AS file_dict ON raw.fileId = file_dict.dictId
-            LEFT JOIN memory_data_dicts AS symbol_dict ON raw.symbolId = symbol_dict.dictId
-            LEFT JOIN memory_data_dicts AS event_dict ON raw.eventTypeId = event_dict.dictId
-            LEFT JOIN memory_data_dicts AS sub_event_dict ON raw.subEventTypeId = sub_event_dict.dictId
-            LEFT JOIN memory_data_dicts AS comp_name_dict ON raw.componentNameId = comp_name_dict.dictId
-            LEFT JOIN memory_data_dicts AS comp_category_dict ON raw.componentCategoryId = comp_category_dict.dictId
-            LEFT JOIN memory_data_dicts AS category_dict ON raw.categoryNameId = category_dict.dictId
-            LEFT JOIN memory_data_dicts AS sub_category_dict ON raw.subCategoryNameId = sub_category_dict.dictId
+            LEFT JOIN memory_data_dicts AS proc_dict
+                ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS thread_dict
+                ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS file_dict
+                ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS symbol_dict
+                ON raw.symbolId = symbol_dict.dictId AND symbol_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS event_dict
+                ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS sub_event_dict
+                ON raw.subEventTypeId = sub_event_dict.dictId AND sub_event_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS comp_name_dict
+                ON raw.componentNameId = comp_name_dict.dictId AND comp_name_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS comp_category_dict
+                ON raw.componentCategoryId = comp_category_dict.dictId AND comp_category_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS category_dict
+                ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+            LEFT JOIN memory_data_dicts AS sub_category_dict
+                ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
         """
         # 先删除旧视图，再创建新视图，保证列定义更新
         self.exec_sql('DROP VIEW IF EXISTS memory_records')
@@ -448,7 +458,9 @@ class MemoryAnalyzer(BaseAnalyzer):
 
     def _create_memory_data_dict_indexes(self):
         """Create indexes for memory_data_dicts table to improve query performance"""
-        self.create_index('idx_memory_data_dicts_dictId', 'memory_data_dicts', 'dictId')
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_data_dicts_dictId')
+        self.create_index('idx_memory_data_dicts_step_dict', 'memory_data_dicts', 'step_id, dictId')
+        self.create_index('idx_memory_data_dicts_value', 'memory_data_dicts', 'value')
 
     def _save_step_data_to_db(self, step_id: int, step_data: dict):
         """Save step data to database
