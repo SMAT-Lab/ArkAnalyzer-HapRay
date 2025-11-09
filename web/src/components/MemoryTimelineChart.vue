@@ -37,10 +37,8 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
 import type { LineSeriesOption } from 'echarts';
-import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
-import { useJsonDataStore } from '@/stores/jsonDataStore';
-
-const jsonDataStore = useJsonDataStore();
+import type { NativeMemoryRecord } from '@/stores/nativeMemory';
+import { fetchOverviewTimeline, fetchCategoryRecords, fetchSubCategoryRecords } from '@/stores/nativeMemory';
 
 // 时间线数据处理结果类型
 interface TimelineProcessedData {
@@ -383,13 +381,13 @@ async function loadCurrentLevelData() {
     // 根据下钻级别加载不同的数据
     if (drillDownLevel.value === 'overview') {
       // 总览层级：加载聚合后的时间线数据
-      currentRecords.value = await jsonDataStore.loadOverviewTimeline(props.stepId);
+      currentRecords.value = await fetchOverviewTimeline(props.stepId);
     } else if (drillDownLevel.value === 'category') {
       // 大类层级：加载指定大类的记录
-      currentRecords.value = await jsonDataStore.loadCategoryRecords(props.stepId, selectedCategory.value);
+      currentRecords.value = await fetchCategoryRecords(props.stepId, selectedCategory.value);
     } else if (drillDownLevel.value === 'subCategory') {
       // 小类层级：加载指定小类的记录
-      currentRecords.value = await jsonDataStore.loadSubCategoryRecords(
+      currentRecords.value = await fetchSubCategoryRecords(
         props.stepId,
         selectedCategory.value,
         selectedSubCategory.value
