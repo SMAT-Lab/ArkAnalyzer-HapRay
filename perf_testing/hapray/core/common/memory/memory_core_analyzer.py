@@ -86,6 +86,7 @@ class MemoryAnalyzerCore:
                 'peak_value': gen_result.get('peak_value', 0),
                 'records': records,
                 'callchains': self.record_generator.generate_callchain(data['callchains'], data['data_dict']),
+                'dataDict': data.get('data_dict', {}),
             }
 
             step_time = time.time() - step_start

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import pako from 'pako';
 import { getDbApi } from '@/utils/dbApi';
+import type { SqlRow } from '@/db/client/dbClient';
 
 // ==================== 类型定义 ====================
 /** 负载事件类型 */
@@ -1392,29 +1393,34 @@ export const useJsonDataStore = defineStore('config', {
 
         // Convert aggregated timeline data to pseudo-records for chart rendering
         // Each row represents the net memory change at a specific time point for a category
-        const nativeRecords: NativeMemoryRecord[] = timelineResult.map((row: any) => ({
-          pid: 0,
-          process: '',
-          tid: null,
-          thread: null,
-          fileId: null,
-          file: null,
-          symbolId: null,
-          symbol: null,
-          eventType: (Number(row.netSize) >= 0 ? 'AllocEvent' : 'FreeEvent') as EventType,
-          subEventType: '',
-          addr: 0,
-          callchainId: 0,
-          heapSize: Math.abs(Number(row.netSize) || 0), // Use absolute value of netSize
-          relativeTs: (Number(row.timePoint10ms) || 0) * 0.01, // Convert 10ms units to seconds
-          componentName: '',
-          componentCategory: 0,
-          categoryName: String(row.categoryName || ''),
-          subCategoryName: '',
-          // 聚合信息
-          eventCount: Number(row.eventCount) || 0,
-          eventDetails: String(row.eventDetails || ''),
-        }));
+        const nativeRecords: NativeMemoryRecord[] = timelineResult.map((row: SqlRow) => {
+          const netSize = Number(row.netSize ?? 0);
+          const timePoint10ms = Number(row.timePoint10ms ?? 0);
+          const category = String(row.categoryName ?? '');
+          return {
+            pid: 0,
+            process: '',
+            tid: null,
+            thread: null,
+            fileId: null,
+            file: null,
+            symbolId: null,
+            symbol: null,
+            eventType: (netSize >= 0 ? 'AllocEvent' : 'FreeEvent') as EventType,
+            subEventType: '',
+            addr: 0,
+            callchainId: 0,
+            heapSize: Math.abs(netSize), // Use absolute value of netSize
+            relativeTs: timePoint10ms * 0.01, // Convert 10ms units to seconds
+            componentName: '',
+            componentCategory: 0,
+            categoryName: category,
+            subCategoryName: '',
+            // 聚合信息
+            eventCount: Number(row.eventCount ?? 0),
+            eventDetails: String(row.eventDetails ?? ''),
+          };
+        });
 
         // Sort by time and category
         nativeRecords.sort((a, b) => {
@@ -1453,29 +1459,34 @@ export const useJsonDataStore = defineStore('config', {
         const recordsResult = await dbApi.queryCategoryRecords(stepNum, categoryName);
 
         // Convert aggregated data to pseudo-records for chart rendering
-        const nativeRecords: NativeMemoryRecord[] = recordsResult.map((row: any) => ({
-          pid: 0,
-          process: '',
-          tid: null,
-          thread: null,
-          fileId: null,
-          file: null,
-          symbolId: null,
-          symbol: null,
-          eventType: (Number(row.netSize) >= 0 ? 'AllocEvent' : 'FreeEvent') as EventType,
-          subEventType: '',
-          addr: 0,
-          callchainId: 0,
-          heapSize: Math.abs(Number(row.netSize) || 0),
-          relativeTs: (Number(row.timePoint10ms) || 0) * 0.01, // Convert 10ms units to seconds
-          componentName: '',
-          componentCategory: 0,
-          categoryName: categoryName,
-          subCategoryName: String(row.subCategoryName || ''),
-          // 聚合信息
-          eventCount: Number(row.eventCount) || 0,
-          eventDetails: String(row.eventDetails || ''),
-        }));
+        const nativeRecords: NativeMemoryRecord[] = recordsResult.map((row: SqlRow) => {
+          const netSize = Number(row.netSize ?? 0);
+          const timePoint10ms = Number(row.timePoint10ms ?? 0);
+          const subCategory = String(row.subCategoryName ?? '');
+          return {
+            pid: 0,
+            process: '',
+            tid: null,
+            thread: null,
+            fileId: null,
+            file: null,
+            symbolId: null,
+            symbol: null,
+            eventType: (netSize >= 0 ? 'AllocEvent' : 'FreeEvent') as EventType,
+            subEventType: '',
+            addr: 0,
+            callchainId: 0,
+            heapSize: Math.abs(netSize),
+            relativeTs: timePoint10ms * 0.01, // Convert 10ms units to seconds
+            componentName: '',
+            componentCategory: 0,
+            categoryName: categoryName,
+            subCategoryName: subCategory,
+            // 聚合信息
+            eventCount: Number(row.eventCount ?? 0),
+            eventDetails: String(row.eventDetails ?? ''),
+          };
+        });
 
         const endTime = performance.now();
         console.log(`[JsonDataStore] Loaded ${nativeRecords.length} aggregated category records for ${stepId}/${categoryName} in ${(endTime - startTime).toFixed(2)}ms`);
@@ -1511,26 +1522,46 @@ export const useJsonDataStore = defineStore('config', {
         const recordsResult = await dbApi.querySubCategoryRecords(stepNum, categoryName, subCategoryName);
 
         // Convert to NativeMemoryRecord format (full fields)
-        const nativeRecords: NativeMemoryRecord[] = recordsResult.map((row: any) => ({
-          pid: Number(row.pid) || 0,
-          process: String(row.process || ''),
-          tid: row.tid !== null && row.tid !== undefined ? Number(row.tid) : null,
-          thread: row.thread !== null && row.thread !== undefined ? String(row.thread) : null,
-          fileId: row.fileId !== null && row.fileId !== undefined ? Number(row.fileId) : null,
-          file: row.file !== null && row.file !== undefined ? String(row.file) : null,
-          symbolId: row.symbolId !== null && row.symbolId !== undefined ? Number(row.symbolId) : null,
-          symbol: row.symbol !== null && row.symbol !== undefined ? String(row.symbol) : null,
-          eventType: String(row.eventType || '') as EventType,
-          subEventType: String(row.subEventType || ''),
-          addr: row.addr !== null && row.addr !== undefined ? (typeof row.addr === 'string' ? parseInt(row.addr, 16) : Number(row.addr)) || 0 : 0,
-          callchainId: Number(row.callchainId) || 0,
-          heapSize: Number(row.heapSize) || 0,
-          relativeTs: Number(row.relativeTs) / 1000000000 || 0,
-          componentName: String(row.componentName || ''),
-          componentCategory: Number(row.componentCategory) || 0,
-          categoryName: categoryName,
-          subCategoryName: subCategoryName,
-        }));
+        const nativeRecords: NativeMemoryRecord[] = recordsResult.map((row: SqlRow) => {
+          const pid = Number(row.pid ?? 0);
+          const tidValue = row.tid;
+          const threadValue = row.thread;
+          const fileIdValue = row.fileId;
+          const fileValue = row.file;
+          const symbolIdValue = row.symbolId;
+          const symbolValue = row.symbol;
+          const addrValue = row.addr;
+          const componentCategoryValue = Number(row.componentCategory ?? ComponentCategory.UNKNOWN);
+          const relativeTsValue = Number(row.relativeTs ?? 0);
+          const parsedAddr =
+            addrValue !== null && addrValue !== undefined
+              ? typeof addrValue === 'string'
+                ? parseInt(addrValue, 16)
+                : Number(addrValue)
+              : 0;
+          return {
+            pid,
+            process: String(row.process ?? ''),
+            tid: tidValue !== null && tidValue !== undefined ? Number(tidValue) : null,
+            thread: threadValue !== null && threadValue !== undefined ? String(threadValue) : null,
+            fileId: fileIdValue !== null && fileIdValue !== undefined ? Number(fileIdValue) : null,
+            file: fileValue !== null && fileValue !== undefined ? String(fileValue) : null,
+            symbolId: symbolIdValue !== null && symbolIdValue !== undefined ? Number(symbolIdValue) : null,
+            symbol: symbolValue !== null && symbolValue !== undefined ? String(symbolValue) : null,
+            eventType: String(row.eventType ?? '') as EventType,
+            subEventType: String(row.subEventType ?? ''),
+            addr: Number.isFinite(parsedAddr) ? parsedAddr : 0,
+            callchainId: Number(row.callchainId ?? 0),
+            heapSize: Number(row.heapSize ?? 0),
+            relativeTs: relativeTsValue ? relativeTsValue / 1_000_000_000 : 0,
+            componentName: String(row.componentName ?? ''),
+            componentCategory: Number.isFinite(componentCategoryValue)
+              ? (componentCategoryValue as ComponentCategory)
+              : ComponentCategory.UNKNOWN,
+            categoryName: categoryName,
+            subCategoryName: subCategoryName,
+          };
+        });
 
         // Sort by time
         nativeRecords.sort((a, b) => a.relativeTs - b.relativeTs);
