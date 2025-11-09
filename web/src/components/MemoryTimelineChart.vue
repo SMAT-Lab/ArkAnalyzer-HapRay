@@ -1,44 +1,60 @@
 <template>
-  <div style="position: relative; width: 100%;">
-    <!-- 面包屑导航 -->
-    <div v-if="drillDownLevel !== 'overview'" style="margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px;">
-      <el-breadcrumb separator="/">
-        <el-breadcrumb-item>
-          <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="resetDrillDown">
-            <i class="el-icon-s-home"></i> 总览
-          </a>
-        </el-breadcrumb-item>
-        <el-breadcrumb-item v-if="drillDownLevel === 'category'">
-          <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
-        </el-breadcrumb-item>
-        <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
-          <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
-            {{ selectedCategory }}
-          </a>
-        </el-breadcrumb-item>
-        <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
-          <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
-        </el-breadcrumb-item>
-      </el-breadcrumb>
-    </div>
+  <div class="memory-timeline-chart">
+    <div style="position: relative; width: 100%;">
+      <!-- 面包屑导航 -->
+      <div
+        v-if="drillDownLevel !== 'overview'"
+        style="margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px;"
+      >
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item>
+            <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="resetDrillDown">
+              <i class="el-icon-s-home"></i> 总览
+            </a>
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-if="drillDownLevel === 'category'">
+            <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
+            <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
+              {{ selectedCategory }}
+            </a>
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
+            <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+      </div>
 
-    <div ref="chartContainer" :style="{ height, width: '100%' }"></div>
-    <div v-if="isLoading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000;">
-      <div style="text-align: center;">
-        <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">正在加载图表...</div>
-        <div style="font-size: 12px; color: #666;">数据量较大，请稍候</div>
+      <div ref="chartContainer" :style="{ height, width: '100%' }"></div>
+      <div
+        v-if="isLoading"
+        style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000;"
+      >
+        <div style="text-align: center;">
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">正在加载图表...</div>
+          <div style="font-size: 12px; color: #666;">数据量较大，请稍候</div>
+        </div>
       </div>
     </div>
-
+    <MemoryOutstandingFlameGraph
+      v-if="shouldShowOutstandingFlameGraph"
+      :step-id="props.stepId"
+      :selected-time-point="props.selectedTimePoint"
+      :drill-level="drillDownLevel"
+      :selected-category="selectedCategory"
+      :selected-sub-category="selectedSubCategory"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
 import type { LineSeriesOption } from 'echarts';
 import type { NativeMemoryRecord } from '@/stores/nativeMemory';
 import { fetchOverviewTimeline, fetchCategoryRecords, fetchSubCategoryRecords } from '@/stores/nativeMemory';
+import MemoryOutstandingFlameGraph from './MemoryOutstandingFlameGraph.vue';
 
 // 时间线数据处理结果类型
 interface TimelineProcessedData {
@@ -135,6 +151,8 @@ const drillDownLevel = ref<DrillDownLevel>('overview');
 const selectedCategory = ref<string>('');
 const selectedSubCategory = ref<string>('');
 const activeSeriesIndex = ref<number | null>(null);
+
+const shouldShowOutstandingFlameGraph = computed(() => drillDownLevel.value !== 'overview');
 
 // 下钻导航函数
 function resetDrillDown() {
@@ -580,6 +598,15 @@ function isSeriesClickParam(
   return (typeof candidate.componentType === 'string' || candidate.componentType === undefined) && typeof candidate.dataIndex === 'number';
 }
 
+function getNativeClickDetail(param: unknown): number {
+  if (!param || typeof param !== 'object') {
+    return 1;
+  }
+  const candidate = param as { event?: { event?: { detail?: number } } };
+  const detail = candidate.event?.event?.detail;
+  return typeof detail === 'number' ? detail : 1;
+}
+
 function resolveTooltipParam(
   params: unknown,
   targetSeriesIndex: number | null
@@ -848,6 +875,7 @@ function registerChartEvents(seriesData: TimelineProcessedData['seriesData']) {
 
   chartInstance.off('mouseover');
   chartInstance.off('mouseout');
+  chartInstance.off('dblclick');
 
   chartInstance.on('mouseover', { seriesType: 'line' }, (event: { seriesIndex?: number }) => {
     if (event && typeof event.seriesIndex === 'number') {
@@ -861,6 +889,7 @@ function registerChartEvents(seriesData: TimelineProcessedData['seriesData']) {
 
   chartInstance.off('click');
   chartInstance.on('click', params => handleChartClick(params, seriesData));
+  chartInstance.on('dblclick', params => handleChartDoubleClick(params));
 }
 
 function handleChartClick(params: unknown, seriesData: TimelineProcessedData['seriesData']) {
@@ -868,10 +897,13 @@ function handleChartClick(params: unknown, seriesData: TimelineProcessedData['se
     return;
   }
 
+  const clickDetail = getNativeClickDetail(params);
+  if (clickDetail > 1) {
+    return;
+  }
+
   const seriesIndex = typeof params.seriesIndex === 'number' ? params.seriesIndex : 0;
   const dataIndex = params.dataIndex;
-  const seriesName = params.seriesName ?? '';
-
   if (seriesIndex < 0 || seriesIndex >= seriesData.length) {
     return;
   }
@@ -881,6 +913,27 @@ function handleChartClick(params: unknown, seriesData: TimelineProcessedData['se
   if (!dataItem) {
     return;
   }
+
+  if (drillDownLevel.value === 'overview') {
+    return;
+  }
+
+  const nextSelected = props.selectedTimePoint === dataItem.relativeTs ? null : dataItem.relativeTs;
+
+  if (nextSelected === null) {
+    console.log('[MemoryTimelineChart] Cleared selected time point');
+  } else {
+    console.log('[MemoryTimelineChart] Selected time point:', nextSelected);
+  }
+  emit('time-point-selected', nextSelected);
+}
+
+function handleChartDoubleClick(params: unknown) {
+  if (!isSeriesClickParam(params) || params.componentType !== 'series') {
+    return;
+  }
+
+  const seriesName = params.seriesName ?? '';
 
   if (drillDownLevel.value === 'overview') {
     if (seriesName && seriesName !== '总内存') {
@@ -893,11 +946,7 @@ function handleChartClick(params: unknown, seriesData: TimelineProcessedData['se
     if (seriesName) {
       drillDownToSubCategory(seriesName);
     }
-    return;
   }
-
-  const nextSelected = props.selectedTimePoint === dataItem.relativeTs ? null : dataItem.relativeTs;
-  emit('time-point-selected', nextSelected);
 }
 
 // 初始化图表
@@ -1097,6 +1146,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.memory-timeline-chart {
+  display: flex;
+  flex-direction: column;
+}
+
 /* 图表容器样式 */
 </style>
 

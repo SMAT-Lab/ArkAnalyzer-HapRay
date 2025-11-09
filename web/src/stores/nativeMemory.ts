@@ -27,14 +27,21 @@ export interface NativeMemoryStepStats {
   averageMemorySize: number;
 }
 
-// Callchain 数据结构
-export interface CallchainRecord {
+// 调用栈帧数据结构
+export interface CallchainFrame {
   callchainId: number;
   depth: number;
-  file: string;
-  symbol: string;
-  is_alloc: boolean;
+  ip: number | null;
+  symbolId: number | null;
+  symbol: string | null;
+  fileId: number | null;
+  file: string | null;
+  offset: number | null;
+  symbolOffset: number | null;
+  vaddr: number | null;
 }
+
+export type CallchainFrameMap = Record<number, CallchainFrame[]>;
 
 /**
  * Native Memory 记录接口
@@ -80,7 +87,7 @@ export interface NativeMemoryStepData {
   peak_value?: number; // 峰值内存值（字节）
   stats?: NativeMemoryStepStats;
   records: NativeMemoryRecord[];
-  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据（数组或字典格式）
+  callchains?: CallchainFrame[] | CallchainFrameMap; // 调用链数据（数组或字典格式）
 }
 
 // Native Memory压缩数据类型
@@ -90,7 +97,7 @@ export interface CompressedNativeMemoryStepData {
   peak_value?: number; // 峰值内存值（字节）
   stats?: NativeMemoryStepStats;
   records: string | string[]; // Base64编码的压缩数据（单块或多块）
-  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据（通常不压缩）
+  callchains?: CallchainFrame[] | CallchainFrameMap; // 调用链数据（通常不压缩）
   chunked?: boolean; // 是否为分块压缩
   chunk_count?: number; // 块数量
   total_records?: number; // 总记录数
@@ -197,6 +204,79 @@ export class NativeMemoryService {
     return records;
   }
 
+  async fetchRecordsUpToTime(
+    stepId: string,
+    relativeTsSeconds: number,
+    categoryName?: string,
+    subCategoryName?: string
+  ): Promise<NativeMemoryRecord[]> {
+    const stepNum = this.parseStepId(stepId);
+    const relativeTsNs = Math.floor(relativeTsSeconds * 1_000_000_000);
+    const startTime = performance.now();
+
+    console.log(
+      `${LOG_PREFIX} Loading records up to ${relativeTsSeconds.toFixed(3)}s for ${stepId}, category ${categoryName ?? 'ALL'}, subCategory ${subCategoryName ?? 'ALL'}.`
+    );
+
+    const rows = await getDbApi().queryRecordsUpTo(stepNum, relativeTsNs, categoryName, subCategoryName);
+    const records = rows.map((row) => this.mapRawRecordRow(row));
+    this.sortByTimestamp(records, `${stepId}/recordsUpTo`);
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(
+      `${LOG_PREFIX} Loaded ${records.length} record(s) up to ${relativeTsSeconds.toFixed(3)}s for ${stepId} in ${duration}ms.`
+    );
+
+    return records;
+  }
+
+  async fetchCallchainFrames(stepId: string, callchainIds: number[]): Promise<CallchainFrameMap> {
+    if (callchainIds.length === 0) {
+      return {};
+    }
+
+    const stepNum = this.parseStepId(stepId);
+    const startTime = performance.now();
+
+    console.log(`${LOG_PREFIX} Loading ${callchainIds.length} callchain frame set(s) for ${stepId}.`);
+
+    const rows = await getDbApi().queryCallchainFrames(stepNum, callchainIds);
+    const map: CallchainFrameMap = {};
+
+    rows.forEach((row) => {
+      const callchainId = Number(row.callchainId ?? row.callchainID ?? 0);
+      if (!callchainId) {
+        return;
+      }
+
+      if (!map[callchainId]) {
+        map[callchainId] = [];
+      }
+
+      map[callchainId].push({
+        callchainId,
+        depth: Number(row.depth ?? 0),
+        ip: this.toNullableNumber(row.ip),
+        symbolId: this.toNullableNumber(row.symbolId),
+        symbol: this.toOptionalString(row.symbol),
+        fileId: this.toNullableNumber(row.fileId),
+        file: this.toOptionalString(row.file),
+        offset: this.toNullableNumber(row.offset),
+        symbolOffset: this.toNullableNumber(row.symbolOffset),
+        vaddr: this.toNullableNumber(row.vaddr),
+      });
+    });
+
+    Object.values(map).forEach((frames) => {
+      frames.sort((a, b) => a.depth - b.depth);
+    });
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`${LOG_PREFIX} Loaded callchain frames for ${stepId} in ${duration}ms.`);
+
+    return map;
+  }
+
   private sortByTimestamp(records: NativeMemoryRecord[], context: string): void {
     if (records.length <= 1) {
       return;
@@ -268,6 +348,14 @@ export class NativeMemoryService {
   }
 
   private mapSubCategoryRow(row: SqlRow, categoryName: string, subCategoryName: string): NativeMemoryRecord {
+    return this.mapRawRecordRow({
+      ...row,
+      categoryName,
+      subCategoryName,
+    });
+  }
+
+  private mapRawRecordRow(row: SqlRow): NativeMemoryRecord {
     const pid = Number(row.pid ?? 0);
     const tidValue = row.tid;
     const threadValue = row.thread;
@@ -279,6 +367,8 @@ export class NativeMemoryService {
     const componentCategoryValue = Number(row.componentCategory ?? ComponentCategory.UNKNOWN);
     const relativeTsValue = Number(row.relativeTs ?? 0);
     const parsedAddr = this.parseAddress(addrValue);
+    const categoryName = String(row.categoryName ?? '');
+    const subCategoryName = String(row.subCategoryName ?? '');
 
     return {
       pid,
@@ -363,4 +453,17 @@ export function fetchSubCategoryRecords(
   subCategoryName: string
 ): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchSubCategoryRecords(stepId, categoryName, subCategoryName);
+}
+
+export function fetchRecordsUpToTime(
+  stepId: string,
+  relativeTsSeconds: number,
+  categoryName?: string,
+  subCategoryName?: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchRecordsUpToTime(stepId, relativeTsSeconds, categoryName, subCategoryName);
+}
+
+export function fetchCallchainFrames(stepId: string, callchainIds: number[]): Promise<CallchainFrameMap> {
+  return nativeMemoryService.fetchCallchainFrames(stepId, callchainIds);
 }
