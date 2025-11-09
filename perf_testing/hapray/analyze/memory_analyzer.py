@@ -27,11 +27,41 @@ class MemoryResultModel(BaseModel):
     """Memory analysis summary result model"""
 
     table_name = 'memory_results'
-    fields = {'peak_time': 'REAL', 'records_count': 'INTEGER', 'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'}
+    fields = {'peak_time': 'REAL', 'records_count': 'INTEGER'}
+
+
+class MemoryRecordStorageModel(BaseModel):
+    """Memory analysis detailed record storage model
+
+    数据以紧凑结构存储，仅保留字典 ID，避免重复字符串占用空间。
+    """
+
+    table_name = 'memory_records_raw'
+    fields = {
+        'pid': 'INTEGER',
+        'processId': 'INTEGER',
+        'tid': 'INTEGER',
+        'threadId': 'INTEGER',
+        'fileId': 'INTEGER',
+        'symbolId': 'INTEGER',
+        'eventTypeId': 'INTEGER',
+        'subEventTypeId': 'INTEGER',
+        'addr': 'INTEGER',
+        'callchainId': 'INTEGER',
+        'heapSize': 'INTEGER',
+        'relativeTs': 'INTEGER',
+        'componentNameId': 'INTEGER',
+        'componentCategoryId': 'INTEGER',
+        'categoryNameId': 'INTEGER',
+        'subCategoryNameId': 'INTEGER',
+    }
 
 
 class MemoryRecordModel(BaseModel):
-    """Memory analysis detailed record model"""
+    """Memory analysis detailed record model (view)
+
+    通过视图 `memory_records` 联表 `memory_data_dicts`，提供与原表一致的查询列。
+    """
 
     table_name = 'memory_records'
     fields = {
@@ -45,7 +75,7 @@ class MemoryRecordModel(BaseModel):
         'symbol': 'TEXT',
         'eventType': 'TEXT',
         'subEventType': 'TEXT',
-        'addr': 'TEXT',
+        'addr': 'INTEGER',
         'callchainId': 'INTEGER',
         'heapSize': 'INTEGER',
         'relativeTs': 'INTEGER',
@@ -53,7 +83,50 @@ class MemoryRecordModel(BaseModel):
         'componentCategory': 'TEXT',
         'categoryName': 'TEXT',
         'subCategoryName': 'TEXT',
-        'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+    }
+
+
+class MemoryCallchainStorageModel(BaseModel):
+    """Memory analysis callchain frame storage model"""
+
+    table_name = 'memory_callchains_raw'
+    fields = {
+        'callchainId': 'INTEGER',
+        'depth': 'INTEGER',
+        'ip': 'TEXT',
+        'symbolId': 'INTEGER',
+        'fileId': 'INTEGER',
+        'offset': 'INTEGER',
+        'symbolOffset': 'INTEGER',
+        'vaddr': 'TEXT',
+    }
+
+
+class MemoryCallchainModel(BaseModel):
+    """Memory analysis callchain frame view model"""
+
+    table_name = 'memory_callchains'
+    fields = {
+        'callchainId': 'INTEGER',
+        'depth': 'INTEGER',
+        'ip': 'TEXT',
+        'symbolId': 'INTEGER',
+        'symbol': 'TEXT',
+        'fileId': 'INTEGER',
+        'file': 'TEXT',
+        'offset': 'INTEGER',
+        'symbolOffset': 'INTEGER',
+        'vaddr': 'TEXT',
+    }
+
+
+class MemoryDataDictModel(BaseModel):
+    """Memory analysis data_dict model"""
+
+    table_name = 'memory_data_dicts'
+    fields = {
+        'dictId': 'INTEGER',
+        'value': 'TEXT',
     }
 
 
@@ -105,8 +178,6 @@ class MemoryAnalyzer(BaseAnalyzer):
           - Call get_unreleased_by_callchain to aggregate unreleased memory for each point
           - Write to scene_dir/report/memory_report.xlsx with multiple sheets
         """
-        # Write parent class JSON report first
-        super().write_report(result)
 
         if not self.results:
             return
@@ -157,25 +228,27 @@ class MemoryAnalyzer(BaseAnalyzer):
         rows = []
         for callchain_id, group in (unreleased_data or {}).items():
             for alloc in group.get('allocs', []) or []:
-                rows.append({
-                    'point': point,
-                    'step': step_name,
-                    'callchainId': callchain_id,
-                    'size': alloc.get('size'),
-                    'count': alloc.get('count'),
-                    'pid': alloc.get('pid'),
-                    'process': alloc.get('process'),
-                    'tid': alloc.get('tid'),
-                    'thread': alloc.get('thread'),
-                    'fileId': alloc.get('fileId'),
-                    'file': alloc.get('file'),
-                    'symbolId': alloc.get('symbolId'),
-                    'symbol': alloc.get('symbol'),
-                    'relativeTs': alloc.get('relativeTs'),
-                    'componentCategory': alloc.get('componentCategory'),
-                    'categoryName': alloc.get('categoryName'),
-                    'subCategoryName': alloc.get('subCategoryName'),
-                })
+                rows.append(
+                    {
+                        'point': point,
+                        'step': step_name,
+                        'callchainId': callchain_id,
+                        'size': alloc.get('size'),
+                        'count': alloc.get('count'),
+                        'pid': alloc.get('pid'),
+                        'process': alloc.get('process'),
+                        'tid': alloc.get('tid'),
+                        'thread': alloc.get('thread'),
+                        'fileId': alloc.get('fileId'),
+                        'file': alloc.get('file'),
+                        'symbolId': alloc.get('symbolId'),
+                        'symbol': alloc.get('symbol'),
+                        'relativeTs': alloc.get('relativeTs'),
+                        'componentCategory': alloc.get('componentCategory'),
+                        'categoryName': alloc.get('categoryName'),
+                        'subCategoryName': alloc.get('subCategoryName'),
+                    }
+                )
         return rows
 
     def _write_excel_sheets(self, writer: pd.ExcelWriter, all_rows: list[dict]):
@@ -233,11 +306,7 @@ class MemoryAnalyzer(BaseAnalyzer):
         if not required_cols.issubset(set(df.columns)):
             return pd.DataFrame([])
 
-        return (
-            df.groupby(groupby_cols, as_index=False)['size']
-            .sum()
-            .rename(columns={'size': 'totalSize'})
-        )
+        return df.groupby(groupby_cols, as_index=False)['size'].sum().rename(columns={'size': 'totalSize'})
 
     def _save_results_to_db(self):
         """Save self.results to SQLite database file
@@ -253,7 +322,13 @@ class MemoryAnalyzer(BaseAnalyzer):
         try:
             # Create tables (based on model classes)
             self.create_model_table(MemoryResultModel)
-            self.create_model_table(MemoryRecordModel)
+            self.create_model_table(MemoryRecordStorageModel)
+            self.create_model_table(MemoryCallchainStorageModel)
+            self.create_model_table(MemoryDataDictModel)
+
+            # 先构建紧凑存储表，再创建兼容视图
+            self._create_memory_records_view()
+            self._create_memory_callchains_view()
 
             # Add unique constraint to memory_results table (only one row per step_id)
             # Note: create_model_table has already created a regular step_id index
@@ -263,6 +338,8 @@ class MemoryAnalyzer(BaseAnalyzer):
             # Create additional indexes to improve query performance
             # step_id index is automatically created by create_model_table
             self._create_memory_records_indexes()
+            self._create_memory_callchains_indexes()
+            self._create_memory_data_dict_indexes()
 
             # Save data
             for step_name, step_data in self.results.items():
@@ -288,10 +365,90 @@ class MemoryAnalyzer(BaseAnalyzer):
             self.create_index('idx_memory_results_step_id_unique', 'memory_results', 'step_id', unique=True)
 
     def _create_memory_records_indexes(self):
-        """Create indexes for memory_records table to improve query performance"""
-        self.create_index('idx_memory_records_callchainId', 'memory_records', 'callchainId')
-        self.create_index('idx_memory_records_relativeTs', 'memory_records', 'relativeTs')
-        self.create_index('idx_memory_records_componentName', 'memory_records', 'componentName')
+        """Create indexes for memory_records_raw table to improve query performance"""
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_callchainId')
+        self.create_index('idx_memory_records_callchainId', 'memory_records_raw', 'callchainId')
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_relativeTs')
+        self.create_index('idx_memory_records_relativeTs', 'memory_records_raw', 'relativeTs')
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_componentName')
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_componentNameId')
+        self.create_index('idx_memory_records_componentNameId', 'memory_records_raw', 'componentNameId')
+
+    def _create_memory_records_view(self):
+        """Create or refresh view for memory_records"""
+        view_sql = """
+            CREATE VIEW IF NOT EXISTS memory_records AS
+            SELECT
+                raw.step_id AS step_id,
+                raw.pid AS pid,
+                proc_dict.value AS process,
+                raw.tid AS tid,
+                thread_dict.value AS thread,
+                raw.fileId AS fileId,
+                file_dict.value AS file,
+                raw.symbolId AS symbolId,
+                symbol_dict.value AS symbol,
+                event_dict.value AS eventType,
+                sub_event_dict.value AS subEventType,
+                raw.addr AS addr,
+                raw.callchainId AS callchainId,
+                raw.heapSize AS heapSize,
+                raw.relativeTs AS relativeTs,
+                comp_name_dict.value AS componentName,
+                comp_category_dict.value AS componentCategory,
+                category_dict.value AS categoryName,
+                sub_category_dict.value AS subCategoryName
+            FROM memory_records_raw AS raw
+            LEFT JOIN memory_data_dicts AS proc_dict ON raw.processId = proc_dict.dictId
+            LEFT JOIN memory_data_dicts AS thread_dict ON raw.threadId = thread_dict.dictId
+            LEFT JOIN memory_data_dicts AS file_dict ON raw.fileId = file_dict.dictId
+            LEFT JOIN memory_data_dicts AS symbol_dict ON raw.symbolId = symbol_dict.dictId
+            LEFT JOIN memory_data_dicts AS event_dict ON raw.eventTypeId = event_dict.dictId
+            LEFT JOIN memory_data_dicts AS sub_event_dict ON raw.subEventTypeId = sub_event_dict.dictId
+            LEFT JOIN memory_data_dicts AS comp_name_dict ON raw.componentNameId = comp_name_dict.dictId
+            LEFT JOIN memory_data_dicts AS comp_category_dict ON raw.componentCategoryId = comp_category_dict.dictId
+            LEFT JOIN memory_data_dicts AS category_dict ON raw.categoryNameId = category_dict.dictId
+            LEFT JOIN memory_data_dicts AS sub_category_dict ON raw.subCategoryNameId = sub_category_dict.dictId
+        """
+        # 先删除旧视图，再创建新视图，保证列定义更新
+        self.exec_sql('DROP VIEW IF EXISTS memory_records')
+        self.exec_sql(view_sql)
+
+    def _create_memory_callchains_view(self):
+        """Create or refresh view for memory_callchains"""
+        view_sql = """
+            CREATE VIEW IF NOT EXISTS memory_callchains AS
+            SELECT
+                raw.step_id AS step_id,
+                raw.callchainId AS callchainId,
+                raw.depth AS depth,
+                raw.ip AS ip,
+                raw.symbolId AS symbolId,
+                symbol_dict.value AS symbol,
+                raw.fileId AS fileId,
+                file_dict.value AS file,
+                raw.offset AS offset,
+                raw.symbolOffset AS symbolOffset,
+                raw.vaddr AS vaddr
+            FROM memory_callchains_raw AS raw
+            LEFT JOIN memory_data_dicts AS symbol_dict ON raw.symbolId = symbol_dict.dictId
+            LEFT JOIN memory_data_dicts AS file_dict ON raw.fileId = file_dict.dictId
+        """
+        # 删除旧视图及同名遗留表，确保列定义更新
+        self.exec_sql('DROP VIEW IF EXISTS memory_callchains')
+        self.exec_sql('DROP TABLE IF EXISTS memory_callchains')
+        self.exec_sql(view_sql)
+
+    def _create_memory_callchains_indexes(self):
+        """Create indexes for memory_callchains table to improve query performance"""
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_callchains_callchainId')
+        self.create_index('idx_memory_callchains_callchainId', 'memory_callchains_raw', 'callchainId')
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_callchains_depth')
+        self.create_index('idx_memory_callchains_depth', 'memory_callchains_raw', 'depth')
+
+    def _create_memory_data_dict_indexes(self):
+        """Create indexes for memory_data_dicts table to improve query performance"""
+        self.create_index('idx_memory_data_dicts_dictId', 'memory_data_dicts', 'dictId')
 
     def _save_step_data_to_db(self, step_id: int, step_data: dict):
         """Save step data to database
@@ -313,48 +470,132 @@ class MemoryAnalyzer(BaseAnalyzer):
         self.save_model(step_id, result_model, replace=True)
 
         # Delete old records for this step (if exist)
-        self.exec_sql('DELETE FROM memory_records WHERE step_id = ?', (step_id,))
+        self.exec_sql('DELETE FROM memory_records_raw WHERE step_id = ?', (step_id,))
+        self.exec_sql('DELETE FROM memory_callchains_raw WHERE step_id = ?', (step_id,))
+        self.exec_sql('DELETE FROM memory_data_dicts WHERE step_id = ?', (step_id,))
 
         # Batch save detailed records
+        data_dict = dict(step_data.get('dataDict') or {})
         if records:
-            record_models = self._create_record_models(records)
+            record_models, data_dict = self._create_record_models(records, data_dict)
             if record_models:
                 self.batch_save_models(step_id, record_models, replace=False)
 
-    def _create_record_models(self, records: list[dict]) -> list[MemoryRecordModel]:
-        """Create MemoryRecordModel instances from record dictionaries
+        callchains = step_data.get('callchains') or {}
+        if callchains:
+            callchain_models = self._create_callchain_models(callchains)
+            if callchain_models:
+                self.batch_save_models(step_id, callchain_models, replace=False)
+
+        if data_dict:
+            data_dict_models = self._create_data_dict_models(data_dict)
+            if data_dict_models:
+                self.batch_save_models(step_id, data_dict_models, replace=False)
+
+    def _create_record_models(
+        self, records: list[dict], data_dict: dict[int, str]
+    ) -> tuple[list[MemoryRecordStorageModel], dict[int, str]]:
+        """Create MemoryRecordStorageModel instances from record dictionaries
 
         Args:
             records: List of record dictionaries
+            data_dict: Dictionary of existing dictId -> value mappings (will be extended)
 
         Returns:
-            List of MemoryRecordModel instances
+            Tuple of (list of MemoryRecordStorageModel instances, updated data_dict)
         """
-        record_models = []
+        record_models: list[MemoryRecordStorageModel] = []
+        if not isinstance(data_dict, dict):
+            data_dict = {}
+
+        inverse_map = {value: dict_id for dict_id, value in data_dict.items() if value is not None}
+        next_dict_id = (max(data_dict.keys()) + 1) if data_dict else 1
+
+        def to_dict_id(value: Optional[Any]) -> Optional[int]:
+            nonlocal next_dict_id
+            if value is None:
+                return None
+            value_str = str(value) if not isinstance(value, str) else value
+            existing = inverse_map.get(value_str)
+            if existing is not None:
+                return existing
+            dict_id = next_dict_id
+            next_dict_id += 1
+            data_dict[dict_id] = value_str
+            inverse_map[value_str] = dict_id
+            return dict_id
+
         for record in records:
             if not isinstance(record, dict):
                 continue
 
-            record_model = MemoryRecordModel(
+            record_model = MemoryRecordStorageModel(
                 pid=record.get('pid'),
-                process=record.get('process'),
+                processId=to_dict_id(record.get('process')),
                 tid=record.get('tid'),
-                thread=record.get('thread'),
+                threadId=to_dict_id(record.get('thread')),
                 fileId=record.get('fileId'),
-                file=record.get('file'),
                 symbolId=record.get('symbolId'),
-                symbol=record.get('symbol'),
-                eventType=record.get('eventType'),
-                subEventType=record.get('subEventType'),
+                eventTypeId=to_dict_id(record.get('eventType')),
+                subEventTypeId=to_dict_id(record.get('subEventType')),
                 addr=record.get('addr'),
                 callchainId=record.get('callchainId'),
                 heapSize=record.get('heapSize'),
                 relativeTs=record.get('relativeTs'),
-                componentName=record.get('componentName'),
-                componentCategory=record.get('componentCategory'),
-                categoryName=record.get('categoryName'),
-                subCategoryName=record.get('subCategoryName'),
+                componentNameId=to_dict_id(record.get('componentName')),
+                componentCategoryId=to_dict_id(record.get('componentCategory')),
+                categoryNameId=to_dict_id(record.get('categoryName')),
+                subCategoryNameId=to_dict_id(record.get('subCategoryName')),
             )
             record_models.append(record_model)
 
-        return record_models
+        return record_models, data_dict
+
+    def _create_callchain_models(self, callchains: dict[int, list[dict]]) -> list[MemoryCallchainStorageModel]:
+        """Create MemoryCallchainStorageModel instances from callchain dictionaries
+
+        Args:
+            callchains: Mapping of callchainId to frame list
+
+        Returns:
+            List of MemoryCallchainStorageModel instances
+        """
+        models: list[MemoryCallchainStorageModel] = []
+        for callchain_id, frames in callchains.items():
+            if not isinstance(frames, list):
+                continue
+
+            for frame in frames:
+                if not isinstance(frame, dict):
+                    continue
+
+                model = MemoryCallchainStorageModel(
+                    callchainId=callchain_id,
+                    depth=frame.get('depth'),
+                    ip=frame.get('ip'),
+                    symbolId=frame.get('symbolId'),
+                    fileId=frame.get('fileId'),
+                    offset=frame.get('offset'),
+                    symbolOffset=frame.get('symbolOffset'),
+                    vaddr=frame.get('vaddr'),
+                )
+                models.append(model)
+        return models
+
+    def _create_data_dict_models(self, data_dict: dict[int, str]) -> list[MemoryDataDictModel]:
+        """Create MemoryDataDictModel instances from data_dict mapping
+
+        Args:
+            data_dict: Mapping from native data_dict id to text
+
+        Returns:
+            List of MemoryDataDictModel instances
+        """
+        models: list[MemoryDataDictModel] = []
+        for dict_id, value in data_dict.items():
+            model = MemoryDataDictModel(
+                dictId=dict_id,
+                value=value,
+            )
+            models.append(model)
+        return models
