@@ -3,7 +3,7 @@
  * 用于在后台线程中执行内存数据的聚合和统计计算，避免阻塞主线程
  */
 
-import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
+import type { NativeMemoryRecord } from '@/stores/nativeMemory';
 import { ComponentCategory } from '@/stores/jsonDataStore';
 
 // ============ 工具函数 ============

@@ -3,7 +3,7 @@
  * 管理 Web Worker 的创建、消息传递和生命周期
  */
 
-import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
+import type { NativeMemoryRecord } from '@/stores/nativeMemory';
 
 // Worker 请求类型
 export type WorkerRequestType =
