@@ -15,6 +15,7 @@ limitations under the License.
 
 import base64
 import enum
+import gzip
 import json
 import logging
 import os
@@ -611,6 +612,7 @@ class ReportGenerator:
         """Create the final HTML report"""
         try:
             json_data_str = self._build_json_data(scene_dir, result)
+            db_data_str = self._build_db_data(scene_dir)
 
             template_path = os.path.join(self.perf_testing_dir, 'sa-cmd', 'res', 'report_template.html')
             output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
@@ -618,10 +620,12 @@ class ReportGenerator:
             # Create directory structure if needed
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-            # Inject performance data
+            # Inject data (support multiple placeholders)
             self._inject_json_to_html(
-                json_data_str=json_data_str,
-                placeholder='JSON_DATA_PLACEHOLDER',
+                placeholders={
+                    'JSON_DATA_PLACEHOLDER': json_data_str,
+                    'DB_DATA_PLACEHOLDER': db_data_str,
+                },
                 html_path=template_path,
                 output_path=output_path,
             )
@@ -661,8 +665,63 @@ class ReportGenerator:
         return str(report_data)
 
     @staticmethod
-    def _inject_json_to_html(json_data_str: str, placeholder: str, html_path: str, output_path: str) -> None:
-        """Inject JSON data into an HTML template"""
+    def _build_db_data(scene_dir: str) -> str:
+        """构建数据库文件数据（gzip+base64编码）
+
+        Args:
+            scene_dir: 场景目录路径
+
+        Returns:
+            Base64编码的gzip压缩数据库文件字符串，如果文件不存在则返回空字符串
+        """
+        # 数据库文件路径
+        db_path = os.path.join(scene_dir, 'report', 'hapray_report.db')
+
+        # 检查数据库文件是否存在
+        if not os.path.exists(db_path):
+            logging.warning('Database file not found: %s, returning empty string', db_path)
+            return ''
+
+        try:
+            # 读取数据库文件
+            with open(db_path, 'rb') as f:
+                db_data = f.read()
+
+            # 使用 gzip 压缩
+            compressed_data = gzip.compress(db_data, compresslevel=9)
+
+            # Base64 编码
+            base64_data = base64.b64encode(compressed_data).decode('ascii')
+
+            # 记录压缩效果
+            original_size = len(db_data)
+            compressed_size = len(compressed_data)
+            base64_size = len(base64_data)
+            compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
+
+            logging.info(
+                'Database file processed: %s -> %d bytes (compressed: %d, base64: %d, compression ratio: %.1f%%)',
+                db_path,
+                original_size,
+                compressed_size,
+                base64_size,
+                compression_ratio,
+            )
+
+            return base64_data
+        except Exception as e:
+            logging.error('Failed to build database data: %s', str(e))
+            return ''
+
+    @staticmethod
+    def _inject_json_to_html(placeholders: dict[str, str], html_path: str, output_path: str) -> None:
+        """Inject data into an HTML template (support multiple placeholders)
+
+        Args:
+            placeholders: 占位符字典，key 为占位符字符串，value 为要替换的值
+            html_path: HTML 模板文件路径
+            output_path: 输出 HTML 文件路径
+        """
         # Validate path
         if not os.path.exists(html_path):
             raise FileNotFoundError(f'HTML template not found: {html_path}')
@@ -671,14 +730,15 @@ class ReportGenerator:
         with open(html_path, encoding='utf-8') as f:
             html_content = f.read()
 
-        # Inject JSON into HTML
-        updated_html = html_content.replace(placeholder, json_data_str)
+        # Replace all placeholders
+        for placeholder, value in placeholders.items():
+            html_content = html_content.replace(placeholder, value)
 
         # Save the updated HTML
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(updated_html)
+            f.write(html_content)
 
-        logging.debug('Injected %s into %s', json_data_str, output_path)
+        logging.debug('Injected %d placeholders into %s', len(placeholders), output_path)
 
 
 def merge_summary_info(directory: str) -> list[dict[str, Any]]:
