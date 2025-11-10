@@ -63,7 +63,11 @@ interface FlameGraphNode {
   name: string;
   value: number;
   children?: FlameGraphNode[];
-  tooltip?: string;
+  file?: string;
+  symbol?: string;
+  mergeCount?: number;
+  allocCount?: number;
+  freeCount?: number;
 }
 
 interface OutstandingFlameGraphProps {
@@ -152,23 +156,7 @@ interface OutstandingEntry {
   value: number;
   allocCount: number;
   freeCount: number;
-  tooltip?: string;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const absBytes = Math.abs(bytes);
-  const unitIndex = Math.min(
-    Math.floor(Math.log(absBytes) / Math.log(1024)),
-    units.length - 1,
-  );
-  const formatted = (absBytes / 1024 ** unitIndex).toFixed(
-    unitIndex === 0 ? 0 : 2,
-  );
-  return `${formatted} ${units[unitIndex]}`;
+  mergeCount: number;
 }
 
 function getFrameLabel(frame: CallchainFrame, index: number): string {
@@ -184,33 +172,14 @@ function getFrameLabel(frame: CallchainFrame, index: number): string {
   return `Frame #${index}`;
 }
 
-function buildLeafTooltip(
-  callchainId: number,
-  entry: OutstandingEntry,
-  frames: CallchainFrame[] | undefined,
-): string {
-  const parts = [
-    `<div>Callchain ID：${callchainId}</div>`,
-    `<div>未释放内存：${formatBytes(entry.value)}</div>`,
-    `<div>分配次数：${entry.allocCount}</div>`,
-    `<div>释放次数：${entry.freeCount}</div>`,
-  ];
-
-  const topFrame = frames?.[frames.length - 1];
-  if (topFrame?.file) {
-    parts.push(`<div>文件：${topFrame.file}</div>`);
-  }
-  if (topFrame?.symbol) {
-    parts.push(`<div>符号：${topFrame.symbol}</div>`);
-  }
-
-  return parts.join('');
-}
-
 interface TreeAccumulator {
   name: string;
   value: number;
-  tooltip?: string;
+  mergeCount: number;
+  file?: string;
+  symbol?: string;
+  allocCount: number;
+  freeCount: number;
   children: Map<string, TreeAccumulator>;
 }
 
@@ -218,7 +187,11 @@ function createTreeNode(name: string): TreeAccumulator {
   return {
     name,
     value: 0,
-    tooltip: undefined,
+    mergeCount: 0,
+    file: undefined,
+    symbol: undefined,
+    allocCount: 0,
+    freeCount: 0,
     children: new Map<string, TreeAccumulator>(),
   };
 }
@@ -242,8 +215,21 @@ function insertCallchainIntoTree(
       currentLevel.set(label, node);
     }
     node.value += entry.value;
+    node.mergeCount += entry.mergeCount;
+
+    const frame = pathFrames?.[idx];
+    if (frame) {
+      if (frame.file) {
+        node.file = frame.file;
+      }
+      if (frame.symbol) {
+        node.symbol = frame.symbol;
+      }
+    }
+
     if (idx === labels.length - 1) {
-      node.tooltip = entry.tooltip;
+      node.allocCount += entry.allocCount;
+      node.freeCount += entry.freeCount;
     }
     currentLevel = node.children;
   });
@@ -259,12 +245,22 @@ function transformTreeToFlameNodes(
     const flameNode: FlameGraphNode = {
       name: node.name,
       value: node.value,
+      mergeCount: node.mergeCount,
     };
     if (children.length > 0) {
       flameNode.children = children.sort((a, b) => b.value - a.value);
     }
-    if (node.tooltip) {
-      flameNode.tooltip = node.tooltip;
+    if (node.file) {
+      flameNode.file = node.file;
+    }
+    if (node.symbol) {
+      flameNode.symbol = node.symbol;
+    }
+    if (node.allocCount > 0) {
+      flameNode.allocCount = node.allocCount;
+    }
+    if (node.freeCount > 0) {
+      flameNode.freeCount = node.freeCount;
     }
     flameNodes.push(flameNode);
   });
@@ -286,11 +282,13 @@ function calculateOutstanding(
         value: 0,
         allocCount: 0,
         freeCount: 0,
+        mergeCount: 0,
       });
     }
 
     const entry = outstandingMap.get(callchainId)!;
     const size = record.heapSize || 0;
+    entry.mergeCount += 1;
 
     if (
       record.eventType === EventType.AllocEvent ||
@@ -327,7 +325,6 @@ function buildFlameGraphData(
     const frames = entry.callchainId
       ? callchainFrames[entry.callchainId]
       : undefined;
-    entry.tooltip = buildLeafTooltip(entry.callchainId, entry, frames);
     insertCallchainIntoTree(root, frames, entry);
   });
 
