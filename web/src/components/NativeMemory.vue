@@ -61,8 +61,22 @@
               :height="TIMELINE_CHART_HEIGHT"
               @time-point-selected="handleTimePointSelected"
               @time-point-stats-updated="handleTimePointStatsUpdated"
+              @drill-state-change="handleDrillStateChange"
             />
           </div>
+        </el-col>
+      </el-row>
+
+      <el-row v-if="shouldShowOutstandingFlameGraph" :gutter="20">
+        <el-col :span="24">
+          <MemoryOutstandingFlameGraph
+            :step-id="stepKey"
+            :selected-time-point="selectedTimePoint"
+            :drill-level="drillState.drillLevel"
+            :selected-category="drillState.selectedCategory"
+            :selected-sub-category="drillState.selectedSubCategory"
+            :selected-file="drillState.selectedFile"
+          />
         </el-col>
       </el-row>
     </template>
@@ -72,11 +86,14 @@
 <script lang="ts" setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import MemoryTimelineChart from './MemoryTimelineChart.vue';
+import MemoryOutstandingFlameGraph from './MemoryOutstandingFlameGraph.vue';
 import { loadNativeMemoryMetadataFromDb } from '@/stores/nativeMemory';
 import type { NativeMemoryData } from '@/stores/nativeMemory';
 
 const TIMELINE_CHART_HEIGHT = '350px';
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+
+type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'file';
 
 interface TimePointStats {
   eventCount: number;
@@ -103,6 +120,26 @@ const selectedTimePointEventCount = computed(() => selectedTimePointStats.value.
 const selectedTimePointAllocCount = computed(() => selectedTimePointStats.value.allocCount);
 const selectedTimePointFreeCount = computed(() => selectedTimePointStats.value.freeCount);
 
+interface DrillState {
+  drillLevel: DrillDownLevel;
+  selectedCategory: string;
+  selectedSubCategory: string;
+  selectedFile: string;
+}
+
+const DEFAULT_DRILL_STATE: DrillState = Object.freeze({
+  drillLevel: 'overview' as DrillDownLevel,
+  selectedCategory: '',
+  selectedSubCategory: '',
+  selectedFile: '',
+});
+
+const drillState = ref<DrillState>({ ...DEFAULT_DRILL_STATE });
+
+const shouldShowOutstandingFlameGraph = computed(
+  () => drillState.value.drillLevel !== 'overview',
+);
+
 onMounted(() => {
   void ensureNativeMemoryDataLoaded();
 });
@@ -112,6 +149,7 @@ watch(
   () => {
     selectedTimePoint.value = null;
     selectedTimePointStats.value = createEmptyTimePointStats();
+    resetDrillState();
   }
 );
 
@@ -139,6 +177,10 @@ function handleTimePointStatsUpdated(stats: TimePointStats) {
   selectedTimePointStats.value = stats;
 }
 
+function handleDrillStateChange(state: DrillState) {
+  drillState.value = { ...DEFAULT_DRILL_STATE, ...state };
+}
+
 function clearTimePointSelection() {
   selectedTimePoint.value = null;
   selectedTimePointStats.value = createEmptyTimePointStats();
@@ -151,6 +193,10 @@ function createEmptyTimePointStats(): TimePointStats {
     freeCount: 0,
     netMemory: 0,
   };
+}
+
+function resetDrillState() {
+  drillState.value = { ...DEFAULT_DRILL_STATE };
 }
 
 function formatBytes(bytes: number): string {
