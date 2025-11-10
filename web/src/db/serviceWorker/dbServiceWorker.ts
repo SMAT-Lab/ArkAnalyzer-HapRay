@@ -33,6 +33,9 @@ export type WorkerMessageType =
   | 'memory.queryOverviewTimeline'
   | 'memory.queryCategoryRecords'
   | 'memory.querySubCategoryRecords'
+  | 'memory.queryProcessRecords'
+  | 'memory.queryThreadRecords'
+  | 'memory.queryFileRecords'
   | 'memory.queryCategories'
   | 'memory.querySubCategories'
   | 'memory.queryTimelineData'
@@ -269,8 +272,8 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
         if (!db) {
           throw new Error('Database not initialized');
         }
-        const { stepId } = (payload as { stepId: number }) || {};
-        const result = await serviceApi.queryOverviewTimeline(db, stepId);
+        const { stepId, groupBy } = (payload as { stepId: number; groupBy?: 'category' | 'process' }) || {};
+        const result = await serviceApi.queryOverviewTimeline(db, stepId, groupBy);
         sendSuccessResponse(id, { result });
         break;
       }
@@ -295,6 +298,45 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
           subCategoryName: string;
         }) || {};
         const result = await serviceApi.querySubCategoryRecords(db, stepId, categoryName, subCategoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryProcessRecords': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, processName } = (payload as { stepId: number; processName: string }) || {};
+        const result = await serviceApi.queryProcessRecords(db, stepId, processName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryThreadRecords': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, processName, threadName } = (payload as {
+          stepId: number;
+          processName: string;
+          threadName: string;
+        }) || {};
+        const result = await serviceApi.queryThreadRecords(db, stepId, processName, threadName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryFileRecords': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, processName, threadName, fileName } = (payload as {
+          stepId: number;
+          processName: string;
+          threadName: string;
+          fileName: string;
+        }) || {};
+        const result = await serviceApi.queryFileRecords(db, stepId, processName, threadName, fileName);
         sendSuccessResponse(id, { result });
         break;
       }

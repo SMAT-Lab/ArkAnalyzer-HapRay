@@ -67,12 +67,13 @@ export class DbApi {
   }
 
   /**
-   * Query overview level timeline data (aggregated by time point and category)
+   * Query overview level timeline data (aggregated by time point and category/process)
    * @param stepId - Step id
+   * @param groupBy - Group by field: 'category' or 'process'
    * @returns Overview timeline data array
    */
-  async queryOverviewTimeline(stepId: number): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.queryOverviewTimeline', { stepId });
+  async queryOverviewTimeline(stepId: number, groupBy: 'category' | 'process' = 'category'): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryOverviewTimeline', { stepId, groupBy });
   }
 
   /**
@@ -101,6 +102,57 @@ export class DbApi {
       stepId,
       categoryName,
       subCategoryName,
+    });
+  }
+
+  /**
+   * Query process level records (for specific process)
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @returns Process records array
+   */
+  async queryProcessRecords(stepId: number, processName: string): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryProcessRecords', { stepId, processName });
+  }
+
+  /**
+   * Query thread level records (for specific thread)
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @returns Thread records array
+   */
+  async queryThreadRecords(
+    stepId: number,
+    processName: string,
+    threadName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryThreadRecords', {
+      stepId,
+      processName,
+      threadName,
+    });
+  }
+
+  /**
+   * Query file level records (for specific file)
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @param fileName - File name
+   * @returns File records array
+   */
+  async queryFileRecords(
+    stepId: number,
+    processName: string,
+    threadName: string,
+    fileName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryFileRecords', {
+      stepId,
+      processName,
+      threadName,
+      fileName,
     });
   }
 
