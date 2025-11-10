@@ -66,7 +66,7 @@ interface FlameGraphNode {
 }
 
 interface OutstandingFlameGraphProps {
-  stepId: string;
+  stepId: number;
   selectedTimePoint: number | null;
   drillLevel: DrillDownLevel;
   viewMode?: ViewMode;
