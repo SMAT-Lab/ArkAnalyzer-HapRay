@@ -83,20 +83,22 @@ export class MemoryDao {
    * 包含事件详情用于 tooltip 显示
    *
    * @param stepId - Step id
+   * @param groupBy - Group by field: 'category' or 'process'
    * @returns SQL statement and parameters
    */
-  static buildQueryOverviewTimeline(stepId: number): QueryResult {
+  static buildQueryOverviewTimeline(stepId: number, groupBy: 'category' | 'process' = 'category'): QueryResult {
+    const groupField = groupBy === 'process' ? 'process' : 'categoryName';
     const sql = `
       SELECT
         CAST(relativeTs / 10000000 AS INTEGER) as timePoint10ms,
-        categoryName,
+        ${groupField} as groupName,
         SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize,
         COUNT(*) as eventCount,
         GROUP_CONCAT(eventType || ':' || heapSize, '|') as eventDetails
       FROM memory_records
       WHERE step_id = ?
-      GROUP BY timePoint10ms, categoryName
-      ORDER BY timePoint10ms, categoryName
+      GROUP BY timePoint10ms, ${groupField}
+      ORDER BY timePoint10ms, ${groupField}
     `;
     const params: SqlParam[] = [stepId];
     return { sql, params };
@@ -166,6 +168,81 @@ export class MemoryDao {
       ORDER BY categoryName
     `;
     const params: SqlParam[] = [stepId];
+    return { sql, params };
+  }
+
+  /**
+   * Build SQL query for process level (aggregated by thread and time)
+   * 查询进程层级数据：按线程和时间聚合
+   *
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @returns SQL statement and parameters
+   */
+  static buildQueryProcessRecords(stepId: number, processName: string): QueryResult {
+    const sql = `
+      SELECT
+        CAST(relativeTs / 10000000 AS INTEGER) as timePoint10ms,
+        thread,
+        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize,
+        COUNT(*) as eventCount,
+        GROUP_CONCAT(eventType || ':' || heapSize, '|') as eventDetails
+      FROM memory_records
+      WHERE step_id = ? AND process = ?
+      GROUP BY timePoint10ms, thread
+      ORDER BY timePoint10ms, thread
+    `;
+    const params: SqlParam[] = [stepId, processName];
+    return { sql, params };
+  }
+
+  /**
+   * Build SQL query for thread level (aggregated by file and time)
+   * 查询线程层级数据：按文件和时间聚合
+   *
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @returns SQL statement and parameters
+   */
+  static buildQueryThreadRecords(
+    stepId: number,
+    processName: string,
+    threadName: string
+  ): QueryResult {
+    const sql = `
+      SELECT *
+      FROM memory_records
+      WHERE step_id = ? AND process = ? AND thread = ?
+      ORDER BY relativeTs
+    `;
+    const params: SqlParam[] = [stepId, processName, threadName];
+    return { sql, params };
+  }
+
+  /**
+   * Build SQL query for file level (records of a specific file in a thread)
+   * 查询文件层级数据：返回指定文件的所有记录
+   *
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @param fileName - File name
+   * @returns SQL statement and parameters
+   */
+  static buildQueryFileRecords(
+    stepId: number,
+    processName: string,
+    threadName: string,
+    fileName: string
+  ): QueryResult {
+    const sql = `
+      SELECT *
+      FROM memory_records
+      WHERE step_id = ? AND process = ? AND thread = ? AND file LIKE ?
+      ORDER BY relativeTs
+    `;
+    const params: SqlParam[] = [stepId, processName, threadName, `%${fileName}`];
     return { sql, params };
   }
 

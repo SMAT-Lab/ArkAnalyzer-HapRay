@@ -153,17 +153,17 @@ export class NativeMemoryService {
     return nativeMemoryData;
   }
 
-  async fetchOverviewTimeline(stepId: string): Promise<NativeMemoryRecord[]> {
+  async fetchOverviewTimeline(stepId: string, groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
     const stepNum = this.parseStepId(stepId);
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading overview timeline for ${stepId}.`);
+    console.log(`${LOG_PREFIX} Loading overview timeline for ${stepId}, groupBy: ${groupBy}.`);
 
-    const rows = await getDbApi().queryOverviewTimeline(stepNum);
+    const rows = await getDbApi().queryOverviewTimeline(stepNum, groupBy);
 
     console.log(`${LOG_PREFIX} Overview query returned ${rows.length} aggregated row(s).`);
 
-    const records = rows.map((row) => this.mapOverviewRow(row));
+    const records = rows.map((row) => this.mapOverviewRow(row, groupBy));
     this.sortByTimestamp(records, stepId);
 
     const duration = (performance.now() - startTime).toFixed(2);
@@ -200,6 +200,54 @@ export class NativeMemoryService {
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} Subcategory records ready for ${stepId}/${categoryName}/${subCategoryName} in ${duration}ms.`);
+
+    return records;
+  }
+
+  async fetchProcessRecords(stepId: string, processName: string): Promise<NativeMemoryRecord[]> {
+    const stepNum = this.parseStepId(stepId);
+    const startTime = performance.now();
+
+    console.log(`${LOG_PREFIX} Loading process records for ${stepId}, process ${processName}.`);
+
+    const rows = await getDbApi().queryProcessRecords(stepNum, processName);
+    const records = rows.map((row) => this.mapProcessRow(row, processName));
+    this.sortByTimestamp(records, `${stepId}/${processName}`);
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`${LOG_PREFIX} Process records ready for ${stepId}/${processName} in ${duration}ms.`);
+
+    return records;
+  }
+
+  async fetchThreadRecords(stepId: string, processName: string, threadName: string): Promise<NativeMemoryRecord[]> {
+    const stepNum = this.parseStepId(stepId);
+    const startTime = performance.now();
+
+    console.log(`${LOG_PREFIX} Loading thread records for ${stepId}, process ${processName}, thread ${threadName}.`);
+
+    const rows = await getDbApi().queryThreadRecords(stepNum, processName, threadName);
+    const records = rows.map((row) => this.mapThreadRow(row, processName, threadName));
+    this.sortByTimestamp(records, `${stepId}/${processName}/${threadName}`);
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`${LOG_PREFIX} Thread records ready for ${stepId}/${processName}/${threadName} in ${duration}ms.`);
+
+    return records;
+  }
+
+  async fetchFileRecords(stepId: string, processName: string, threadName: string, fileName: string): Promise<NativeMemoryRecord[]> {
+    const stepNum = this.parseStepId(stepId);
+    const startTime = performance.now();
+
+    console.log(`${LOG_PREFIX} Loading file records for ${stepId}, process ${processName}, thread ${threadName}, file ${fileName}.`);
+
+    const rows = await getDbApi().queryFileRecords(stepNum, processName, threadName, fileName);
+    const records = rows.map((row) => this.mapFileRow(row, processName, threadName, fileName));
+    this.sortByTimestamp(records, `${stepId}/${processName}/${threadName}/${fileName}`);
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`${LOG_PREFIX} File records ready for ${stepId}/${processName}/${threadName}/${fileName} in ${duration}ms.`);
 
     return records;
   }
@@ -289,14 +337,14 @@ export class NativeMemoryService {
     console.log(`${LOG_PREFIX} Sorted ${records.length} record(s) for ${context} in ${duration}ms.`);
   }
 
-  private mapOverviewRow(row: SqlRow): NativeMemoryRecord {
+  private mapOverviewRow(row: SqlRow, groupBy: 'category' | 'process' = 'category'): NativeMemoryRecord {
     const netSize = Number(row.netSize ?? 0);
     const timePoint10ms = Number(row.timePoint10ms ?? 0);
-    const category = String(row.categoryName ?? '');
+    const groupName = String(row.groupName ?? '');
 
     return {
       pid: 0,
-      process: '',
+      process: groupBy === 'process' ? groupName : '',
       tid: null,
       thread: null,
       fileId: null,
@@ -311,7 +359,7 @@ export class NativeMemoryService {
       relativeTs: timePoint10ms * 0.01,
       componentName: '',
       componentCategory: ComponentCategory.UNKNOWN,
-      categoryName: category,
+      categoryName: groupBy === 'category' ? groupName : '',
       subCategoryName: '',
       eventCount: Number(row.eventCount ?? 0),
       eventDetails: String(row.eventDetails ?? ''),
@@ -352,6 +400,52 @@ export class NativeMemoryService {
       ...row,
       categoryName,
       subCategoryName,
+    });
+  }
+
+  private mapProcessRow(row: SqlRow, processName: string): NativeMemoryRecord {
+    const netSize = Number(row.netSize ?? 0);
+    const timePoint10ms = Number(row.timePoint10ms ?? 0);
+    const thread = String(row.thread ?? '');
+
+    return {
+      pid: 0,
+      process: processName,
+      tid: null,
+      thread,
+      fileId: null,
+      file: null,
+      symbolId: null,
+      symbol: null,
+      eventType: netSize >= 0 ? EventType.AllocEvent : EventType.FreeEvent,
+      subEventType: '',
+      addr: 0,
+      callchainId: 0,
+      heapSize: Math.abs(netSize),
+      relativeTs: timePoint10ms * 0.01,
+      componentName: '',
+      componentCategory: ComponentCategory.UNKNOWN,
+      categoryName: '',
+      subCategoryName: '',
+      eventCount: Number(row.eventCount ?? 0),
+      eventDetails: String(row.eventDetails ?? ''),
+    };
+  }
+
+  private mapThreadRow(row: SqlRow, processName: string, threadName: string): NativeMemoryRecord {
+    return this.mapRawRecordRow({
+      ...row,
+      process: processName,
+      thread: threadName,
+    });
+  }
+
+  private mapFileRow(row: SqlRow, processName: string, threadName: string, fileName: string): NativeMemoryRecord {
+    return this.mapRawRecordRow({
+      ...row,
+      process: processName,
+      thread: threadName,
+      file: fileName,
     });
   }
 
@@ -439,8 +533,8 @@ export function loadNativeMemoryMetadataFromDb(): Promise<NativeMemoryData | nul
   return nativeMemoryService.loadMetadata();
 }
 
-export function fetchOverviewTimeline(stepId: string): Promise<NativeMemoryRecord[]> {
-  return nativeMemoryService.fetchOverviewTimeline(stepId);
+export function fetchOverviewTimeline(stepId: string, groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchOverviewTimeline(stepId, groupBy);
 }
 
 export function fetchCategoryRecords(stepId: string, categoryName: string): Promise<NativeMemoryRecord[]> {
@@ -453,6 +547,27 @@ export function fetchSubCategoryRecords(
   subCategoryName: string
 ): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchSubCategoryRecords(stepId, categoryName, subCategoryName);
+}
+
+export function fetchProcessRecords(stepId: string, processName: string): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchProcessRecords(stepId, processName);
+}
+
+export function fetchThreadRecords(
+  stepId: string,
+  processName: string,
+  threadName: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchThreadRecords(stepId, processName, threadName);
+}
+
+export function fetchFileRecords(
+  stepId: string,
+  processName: string,
+  threadName: string,
+  fileName: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchFileRecords(stepId, processName, threadName, fileName);
 }
 
 export function fetchRecordsUpToTime(
