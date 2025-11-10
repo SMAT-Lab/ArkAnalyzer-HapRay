@@ -5,63 +5,6 @@
     </div>
 
     <template v-else>
-      <el-row v-if="selectedTimePoint !== null" :gutter="20" class="time-point-info-panel">
-        <el-col :span="24">
-          <el-alert type="info" :closable="false" show-icon>
-            <template #title>
-              <div class="time-point-info-content">
-                <div class="time-point-info-meta">
-                  <span class="time-point-info-label">
-                    <i class="el-icon-time time-point-info-icon"></i>
-                    已选中时间点
-                  </span>
-                  <span>
-                    <strong>时间:</strong> {{ formatTime(selectedTimePoint) }}
-                  </span>
-                  <span>
-                    <strong>当前内存:</strong> {{ formatBytes(pointContext.memoryAtPoint || selectedTimePointMemory) }}
-                  </span>
-                  <span v-if="pointContext.seriesName">
-                    <strong>选中系列:</strong> {{ pointContext.seriesName }}
-                  </span>
-                  <template v-if="drillState.viewMode === 'category'">
-                    <span v-if="drillState.selectedCategory">
-                      <strong>大类:</strong> {{ drillState.selectedCategory }}
-                    </span>
-                    <span v-if="drillState.selectedSubCategory">
-                      <strong>小类:</strong> {{ drillState.selectedSubCategory }}
-                    </span>
-                    <span v-if="drillState.selectedFile">
-                      <strong>文件:</strong> {{ drillState.selectedFile }}
-                    </span>
-                  </template>
-                  <template v-else>
-                    <span v-if="drillState.selectedProcess">
-                      <strong>进程:</strong> {{ drillState.selectedProcess }}
-                    </span>
-                    <span v-if="drillState.selectedThread">
-                      <strong>线程:</strong> {{ drillState.selectedThread }}
-                    </span>
-                    <span v-if="drillState.selectedFile">
-                      <strong>文件:</strong> {{ drillState.selectedFile }}
-                    </span>
-                  </template>
-            
-                </div>
-                <el-button
-                  type="danger"
-                  size="small"
-                  class="time-point-clear-button"
-                  @click="clearTimePointSelection"
-                >
-                  清除选择
-                </el-button>
-              </div>
-            </template>
-          </el-alert>
-        </el-col>
-      </el-row>
-
       <el-row :gutter="20">
         <el-col :span="24">
           <div class="data-panel">
@@ -87,6 +30,62 @@
 
       <el-row v-if="shouldShowOutstandingFlameGraph" :gutter="20">
         <el-col :span="24">
+          <el-row v-if="selectedTimePoint !== null" :gutter="20" class="time-point-info-panel">
+            <el-col :span="24">
+              <el-alert type="info" :closable="false" show-icon>
+                <template #title>
+                  <div class="time-point-info-content">
+                    <div class="time-point-info-meta">
+                      <span class="time-point-info-label">
+                        <i class="el-icon-time time-point-info-icon"></i>
+                        已选中时间点
+                      </span>
+                      <span>
+                        <strong>时间:</strong> {{ formatTime(selectedTimePoint) }}
+                      </span>
+                      <span>
+                        <strong>当前内存:</strong> {{ formatBytes(pointContext.memoryAtPoint || selectedTimePointMemory) }}
+                      </span>
+                      <span v-if="pointContext.seriesName">
+                        <strong>选中系列:</strong> {{ pointContext.seriesName }}
+                      </span>
+                      <template v-if="drillState.viewMode === 'category'">
+                        <span v-if="drillState.selectedCategory">
+                          <strong>大类:</strong> {{ drillState.selectedCategory }}
+                        </span>
+                        <span v-if="drillState.selectedSubCategory">
+                          <strong>小类:</strong> {{ drillState.selectedSubCategory }}
+                        </span>
+                        <span v-if="drillState.selectedFile">
+                          <strong>文件:</strong> {{ drillState.selectedFile }}
+                        </span>
+                      </template>
+                      <template v-else>
+                        <span v-if="drillState.selectedProcess">
+                          <strong>进程:</strong> {{ drillState.selectedProcess }}
+                        </span>
+                        <span v-if="drillState.selectedThread">
+                          <strong>线程:</strong> {{ drillState.selectedThread }}
+                        </span>
+                        <span v-if="drillState.selectedFile">
+                          <strong>文件:</strong> {{ drillState.selectedFile }}
+                        </span>
+                      </template>
+                
+                    </div>
+                    <el-button
+                      type="danger"
+                      size="small"
+                      class="time-point-clear-button"
+                      @click="clearTimePointSelection"
+                    >
+                      清除选择
+                    </el-button>
+                  </div>
+                </template>
+              </el-alert>
+            </el-col>
+          </el-row>
           <MemoryOutstandingFlameGraph
             :step-id="props.stepId"
             :selected-time-point="selectedTimePoint"

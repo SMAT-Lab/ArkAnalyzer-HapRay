@@ -1252,7 +1252,7 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
       },
     },
     legend: {
-      type: 'scroll',
+      type: 'plain',
       orient: 'horizontal',
       bottom: 0,
       left: 'center',
@@ -1260,11 +1260,14 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
       textStyle: {
         fontSize: 12,
       },
-      pageButtonItemGap: 5,
-      pageButtonGap: 20,
-      pageIconSize: 12,
-      pageTextStyle: {
-        fontSize: 12,
+      itemWidth: 25,
+      itemHeight: 14,
+      itemGap: 10,
+      // 允许图例自动换行显示，设置合适的宽度让图例自动换行
+      width: '90%',
+      formatter: (name: string) => {
+        // 如果名称太长，可以截断
+        return name.length > 15 ? name.substring(0, 15) + '...' : name;
       },
     },
     // Place the legend hint above the legend area, centered, to avoid overlapping x-axis
@@ -1317,6 +1320,7 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
     grid: {
       left: '3%',
       right: '3%',
+      bottom: '20%', // 为多行图例留出足够的底部空间
       top: '15%',
       containLabel: true,
     },
