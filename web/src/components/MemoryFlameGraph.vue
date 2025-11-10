@@ -39,7 +39,11 @@ interface FlameGraphNode extends FlamegraphDatum {
   name: string;
   value: number;
   children?: FlameGraphNode[];
-  tooltip?: string;
+  file?: string;
+  symbol?: string;
+  mergeCount?: number;
+  allocCount?: number;
+  freeCount?: number;
   callchainId?: number;
   depth?: number;
 }
@@ -111,21 +115,19 @@ function resolveHeight(height: string | undefined): number {
 }
 
 function buildTooltipHtml(node: FlameGraphNodeRect): string {
-  const ancestors = node.ancestors().reverse();
-  const pathItems = ancestors
-    .slice(1)
-    .map((item: FlameGraphNodeRect) => item.data.name)
-    .filter((name): name is string => typeof name === 'string' && name.length > 0);
-  const path = pathItems.join(' → ');
   const nodeValue = node.data.value ?? 0;
-  const baseSections = [
-    `<div class="tooltip-title">${path || '调用链'}</div>`,
+  const name = (node.data.symbol as string | undefined) ?? (node.data.name as string | undefined) ?? '未知符号';
+  const file = (node.data.file as string | undefined) ?? '未知文件';
+  const mergeCount = typeof node.data.mergeCount === 'number' ? node.data.mergeCount : 0;
+
+  const sections = [
+    `<div class="tooltip-title">${name}</div>`,
     `<div class="tooltip-section"><span class="label">${props.unitLabel}：</span><span class="value">${formatBytes(nodeValue)}</span></div>`,
+    `<div class="tooltip-section"><span class="label">文件：</span><span class="value">${file}</span></div>`,
+    `<div class="tooltip-section"><span class="label">合并次数：</span><span class="value">${mergeCount}</span></div>`,
   ];
-  if (node.data.tooltip) {
-    baseSections.push(`<div class="tooltip-section">${node.data.tooltip}</div>`);
-  }
-  return ['<div class="flame-tooltip">', ...baseSections, '</div>'].join('');
+
+  return ['<div class="flame-tooltip">', ...sections, '</div>'].join('');
 }
 
 function buildLabel(node: FlameGraphNodeRect): string {
