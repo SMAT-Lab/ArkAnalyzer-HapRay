@@ -1,13 +1,8 @@
 import { defineStore } from 'pinia';
-import { transformNativeMemoryData } from '@/utils/jsonUtil';
 import pako from 'pako';
+import type { NativeMemoryData } from './nativeMemory';
 
 // ==================== 类型定义 ====================
-/** 负载事件类型 */
-export enum PerfEvent {
-  CYCLES_EVENT = 0,
-  INSTRUCTION_EVENT = 1,
-}
 
 /** 组件分类 */
 export enum ComponentCategory {
@@ -21,6 +16,12 @@ export enum ComponentCategory {
   WEB = 7,
   KMP = 8,
   UNKNOWN = -1,
+}
+
+/** 负载事件类型 */
+export enum PerfEvent {
+  CYCLES_EVENT = 0,
+  INSTRUCTION_EVENT = 1,
 }
 
 /** 来源类型 */
@@ -39,131 +40,6 @@ export interface BasicInfo {
   scene: string;
   timestamp: number;
 }
-
-// 内存类型枚举
-export enum MemType {
-  Process = 0,
-  Thread = 1,
-  File = 2,
-  Symbol = 3,
-}
-
-// 事件类型枚举
-export enum EventType {
-  AllocEvent = 'AllocEvent',
-  FreeEvent = 'FreeEvent',
-  MmapEvent = 'MmapEvent',
-  MunmapEvent = 'MunmapEvent',
-}
-
-/**
- * Native Memory 数据记录
- * 每条记录代表一个维度的内存统计信息
- *
- * 字段说明：
- * - stepIdx: 步骤ID
- * - pid: 进程ID（如果该维度包含进程信息，否则为null）
- * - process: 进程名称（如果该维度包含进程信息，否则为null）
- * - tid: 线程ID（如果该维度包含线程信息，否则为null）
- * - thread: 线程名称（如果该维度包含线程信息，否则为null）
- * - fileId: 文件ID（如果该维度包含文件信息，否则为null）
- * - file: 文件路径（如果该维度包含文件信息，否则为null）
- * - symbolId: 符号ID（如果该维度包含符号信息，否则为null）
- * - symbol: 符号名称（如果该维度包含符号信息，否则为null）
- * - eventType: 事件类型（AllocEvent/FreeEvent/MmapEvent/MunmapEvent）
- * - subEventType: 子事件类型（从data_dict表查询）
- * - eventNum: 满足该维度条件的数据条目数
- * - maxMem: 峰值内存
- * - curMem: 当前heap_size累加的结果值
- * - avgMem: 平均值 = (totalMem - transientMem) / eventNum
- * - totalMem: 所有加eventType的合
- * - transientMem: 所有减eventType的合
- * - start_ts: 第一个事件的时间戳
- * - componentName: 组件名称
- * - componentCategory: 组件分类
- */
-/**
- * Native Memory 记录接口
- *
- * 后端生成的平铺记录，每条记录对应一个内存事件
- * 不包含聚合统计信息，所有统计需要在前端实时计算
- */
-export interface NativeMemoryRecord {
-  // 进程维度信息
-  pid: number;
-  process: string;
-  // 线程维度信息
-  tid: number | null;
-  thread: string | null;
-  // 文件维度信息
-  fileId: number | null;
-  file: string | null;
-  // 符号维度信息
-  symbolId: number | null;
-  symbol: string | null;
-  // 事件信息
-  eventType: EventType;
-  subEventType: string;
-  addr: number;  // 内存地址
-  callchainId: number;  // 调用链 ID
-  // 内存大小（单次分配/释放的大小）
-  heapSize: number;
-  // 相对时间戳（相对于 trace 开始时间，纳秒）
-  relativeTs: number;
-  // 分类信息
-  componentName: string;  // 组件名称（小类名称）
-  componentCategory: ComponentCategory;  // 组件分类（大类编号）
-  categoryName: string;  // 大类名称（如 'APP_ABC', 'SYS_SDK'）
-  subCategoryName: string;  // 小类名称（如包名、文件名、线程名）
-}
-
-// Native Memory步骤统计信息
-export interface NativeMemoryStepStats {
-  peakMemorySize: number;
-  peakMemoryDuration: number;
-  averageMemorySize: number;
-}
-
-// 后端返回的统计信息（使用下划线命名）
-interface BackendNativeMemoryStepStats {
-  peak_memory_size?: number;
-  peak_memory_duration?: number;
-  average_memory_size?: number;
-}
-
-// Callchain 数据结构
-export interface CallchainRecord {
-  callchainId: number;
-  depth: number;
-  file: string;
-  symbol: string;
-  is_alloc: boolean;
-}
-
-// Native Memory数据类型（包含统计信息和平铺记录）
-export interface NativeMemoryStepData {
-  peak_time?: number; // 峰值时间点（纳秒）
-  peak_value?: number; // 峰值内存值（字节）
-  stats?: NativeMemoryStepStats;
-  records: NativeMemoryRecord[];
-  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据（数组或字典格式）
-}
-
-// Native Memory压缩数据类型
-export interface CompressedNativeMemoryStepData {
-  compressed: true;
-  peak_time?: number; // 峰值时间点（纳秒）
-  peak_value?: number; // 峰值内存值（字节）
-  stats?: NativeMemoryStepStats;
-  records: string | string[]; // Base64编码的压缩数据（单块或多块）
-  callchains?: CallchainRecord[] | Record<number, CallchainRecord[]>; // 调用链数据（通常不压缩）
-  chunked?: boolean; // 是否为分块压缩
-  chunk_count?: number; // 块数量
-  total_records?: number; // 总记录数
-}
-
-export type NativeMemoryData = Record<string, NativeMemoryStepData>;
-export type CompressedNativeMemoryData = Record<string, CompressedNativeMemoryStepData | NativeMemoryStepData>;
 
 interface PerfDataStep {
   step_name: string;
@@ -1006,7 +882,6 @@ interface JsonDataState {
   baseMark: string | null;
   compareMark: string | null;
   flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
-  nativeMemoryData: NativeMemoryData | null; // Native Memory数据
   uiAnimateData: UIAnimateData | null; // UI 动画数据
 }
 
@@ -1095,163 +970,10 @@ export const useJsonDataStore = defineStore('config', {
     baseMark: null,
     compareMark: null,
     flameGraph: null,
-    nativeMemoryData: null,
     uiAnimateData: null,
   }),
 
   actions: {
-    /**
-     * 解压缩内存数据
-     * 参考火焰图的解压缩逻辑
-     */
-    decompressNativeMemoryData(nativeMemData: CompressedNativeMemoryData): NativeMemoryData {
-      if (!nativeMemData || typeof nativeMemData !== 'object') {
-        return nativeMemData as NativeMemoryData;
-      }
-
-      const decompressed: NativeMemoryData = {};
-
-      for (const [stepKey, stepData] of Object.entries(nativeMemData)) {
-        if (typeof stepData === 'object' && stepData !== null && 'compressed' in stepData && stepData.compressed) {
-          // 解压缩记录数据
-          const compressedStepData = stepData as CompressedNativeMemoryStepData;
-          try {
-            const compressedRecords = compressedStepData.records;
-
-            // 检查是否为分块压缩
-            const isChunked = 'chunked' in compressedStepData && compressedStepData.chunked;
-
-            let records: NativeMemoryRecord[] = [];
-
-            if (isChunked && Array.isArray(compressedRecords)) {
-              // 分块解压缩
-              console.log(`解压缩分块内存数据 ${stepKey}: ${compressedStepData.chunk_count} 个块, ${compressedStepData.total_records} 条记录`);
-
-              for (let i = 0; i < compressedRecords.length; i++) {
-                const compressedChunk = compressedRecords[i];
-
-                try {
-                  // Base64解码
-                  const binaryString = atob(compressedChunk);
-                  const bytes = new Uint8Array(binaryString.length);
-                  for (let j = 0; j < binaryString.length; j++) {
-                    bytes[j] = binaryString.charCodeAt(j);
-                  }
-
-                  // 使用pako解压缩为 Uint8Array（避免字符串长度限制）
-                  const decompressedBytes = pako.inflate(bytes);
-
-                  // 使用 TextDecoder 进行流式解码（支持大数据）
-                  const decoder = new TextDecoder('utf-8');
-                  const decompressedStr = decoder.decode(decompressedBytes);
-
-                  // 解析 JSON
-                  const chunkRecords = JSON.parse(decompressedStr) as NativeMemoryRecord[];
-                  records = records.concat(chunkRecords);
-
-                  console.log(`  解压缩块 ${i + 1}/${compressedRecords.length}: ${compressedChunk.length} -> ${decompressedBytes.length} 字节, ${chunkRecords.length} 条记录`);
-                } catch (chunkError) {
-                  console.error(`解压缩块 ${i + 1}/${compressedRecords.length} 失败:`, chunkError);
-                  // 继续处理下一个块
-                }
-              }
-
-              console.log(`分块解压缩完成 ${stepKey}: 总共 ${records.length} 条记录`);
-            } else if (typeof compressedRecords === 'string') {
-              // 单块解压缩（原有逻辑）
-              // Base64解码
-              const binaryString = atob(compressedRecords);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-              }
-
-              // 使用pako解压缩为 Uint8Array（避免字符串长度限制）
-              const decompressedBytes = pako.inflate(bytes);
-
-              // 使用 TextDecoder 进行流式解码（支持大数据）
-              const decoder = new TextDecoder('utf-8');
-              const decompressedStr = decoder.decode(decompressedBytes);
-
-              // 解析 JSON
-              records = JSON.parse(decompressedStr) as NativeMemoryRecord[];
-
-              console.log(`解压缩内存数据 ${stepKey}: ${compressedRecords.length} -> ${decompressedBytes.length} 字节`);
-            }
-
-            // 恢复原始格式，转换 stats 字段名（后端使用下划线，前端使用驼峰）
-            const rawStats = (compressedStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
-            const stats: NativeMemoryStepStats = {
-              peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
-              peakMemoryDuration: rawStats.peak_memory_duration || rawStats.peakMemoryDuration || 0,
-              averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
-            };
-
-            // 优化：对记录按时间排序，以便后续使用二分查找
-            console.log(`对 ${stepKey} 的 ${records.length} 条记录按时间排序...`);
-            const sortStartTime = performance.now();
-            records.sort((a, b) => a.relativeTs - b.relativeTs);
-            const sortEndTime = performance.now();
-            console.log(`排序完成，耗时: ${(sortEndTime - sortStartTime).toFixed(2)}ms`);
-
-            decompressed[stepKey] = {
-              peak_time: compressedStepData.peak_time,
-              peak_value: compressedStepData.peak_value,
-              stats: stats,
-              records: records,
-              callchains: compressedStepData.callchains,
-            };
-          } catch (error) {
-            console.error(`解压缩内存数据失败 ${stepKey}:`, error);
-            // 解压缩失败时返回空数据
-            const rawStats = (compressedStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
-            const stats: NativeMemoryStepStats = {
-              peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
-              peakMemoryDuration: rawStats.peak_memory_duration || rawStats.peakMemoryDuration || 0,
-              averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
-            };
-
-            decompressed[stepKey] = {
-              peak_time: compressedStepData.peak_time,
-              peak_value: compressedStepData.peak_value,
-              stats: stats,
-              records: [],
-              callchains: compressedStepData.callchains,
-            };
-          }
-        } else {
-          // 未压缩的数据，需要转换 stats 字段名
-          const rawStepData = stepData as NativeMemoryStepData & { stats?: BackendNativeMemoryStepStats & NativeMemoryStepStats };
-          const rawStats = (rawStepData.stats || {}) as BackendNativeMemoryStepStats & NativeMemoryStepStats;
-          const stats: NativeMemoryStepStats = {
-            peakMemorySize: rawStats.peak_memory_size || rawStats.peakMemorySize || 0,
-            peakMemoryDuration: rawStats.peak_memory_duration || rawStats.peakMemoryDuration || 0,
-            averageMemorySize: rawStats.average_memory_size || rawStats.averageMemorySize || 0,
-          };
-
-          // 优化：对记录按时间排序，以便后续使用二分查找
-          const records = rawStepData.records || [];
-          if (records.length > 0) {
-            console.log(`对 ${stepKey} 的 ${records.length} 条记录按时间排序...`);
-            const sortStartTime = performance.now();
-            records.sort((a, b) => a.relativeTs - b.relativeTs);
-            const sortEndTime = performance.now();
-            console.log(`排序完成，耗时: ${(sortEndTime - sortStartTime).toFixed(2)}ms`);
-          }
-
-          decompressed[stepKey] = {
-            peak_time: rawStepData.peak_time,
-            peak_value: rawStepData.peak_value,
-            stats: stats,
-            records: records,
-            callchains: rawStepData.callchains,
-          };
-        }
-      }
-
-      return decompressed;
-    },
-
     /**
      * 解压缩 UI 动画数据
      * 参考内存数据的解压缩逻辑
@@ -1307,43 +1029,43 @@ export const useJsonDataStore = defineStore('config', {
     },
 
     /**
-     * 解压缩 trace 数据字段（如 frames、emptyFrame 等）
-     * 这些字段可能被压缩为 { compressed: true, data: "base64..." } 格式
+     * Decompress trace data fields (e.g., frames, emptyFrame, etc.)
+     * These fields may be compressed in the format { compressed: true, data: "base64..." }
      */
     decompressTraceField<T>(fieldData: T | { compressed: boolean; data: string }): T {
-      // 检查是否是压缩格式
+      // Check if data is in compressed format
       if (typeof fieldData === 'object' && fieldData !== null && 'compressed' in fieldData && fieldData.compressed) {
         try {
           const compressedData = (fieldData as { compressed: boolean; data: string }).data;
 
-          // Base64解码
+          // Decode base64
           const binaryString = atob(compressedData);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
           }
 
-          // 使用pako解压缩
+          // Decompress using pako
           const decompressedBytes = pako.inflate(bytes);
 
-          // 使用 TextDecoder 进行解码
+          // Decode using TextDecoder
           const decoder = new TextDecoder('utf-8');
           const decompressedStr = decoder.decode(decompressedBytes);
 
-          // 解析 JSON
+          // Parse JSON
           const decompressedData = JSON.parse(decompressedStr) as T;
 
-          console.log(`解压缩 trace 数据: ${compressedData.length} -> ${decompressedBytes.length} 字节`);
+          console.log(`[JsonDataStore] Decompressed trace data: ${compressedData.length} -> ${decompressedBytes.length} bytes`);
 
           return decompressedData;
         } catch (error) {
-          console.error('解压缩 trace 数据失败:', error);
-          // 解压缩失败时，返回原数据
+          console.error('[JsonDataStore] Failed to decompress trace data:', error);
+          // Return original data if decompression fails
           return fieldData as T;
         }
       }
 
-      // 未压缩的数据直接返回
+      // Return uncompressed data directly
       return fieldData as T;
     },
 
@@ -1356,11 +1078,11 @@ export const useJsonDataStore = defineStore('config', {
       this.compareMark = window.compareMark;
 
       if (jsonData.trace) {
-        // 解压缩可能被压缩的 trace 数据字段
+        // Decompress potentially compressed trace data fields
         const decompressedTrace = {
           frames: this.decompressTraceField(jsonData.trace.frames),
           emptyFrame: this.decompressTraceField(jsonData.trace.emptyFrame),
-          componentReuse: jsonData.trace.componentReuse, // 这个字段通常不大，不需要压缩
+          componentReuse: jsonData.trace.componentReuse, // This field is usually small, no compression needed
           coldStart: jsonData.trace.coldStart,
           gc_thread: jsonData.trace.gc_thread,
           frameLoads: this.decompressTraceField(jsonData.trace.frameLoads),
@@ -1368,7 +1090,7 @@ export const useJsonDataStore = defineStore('config', {
           faultTree: jsonData.trace.faultTree,
         };
 
-        // 安全处理所有 trace 相关数据
+        // Safely process all trace-related data
         this.frameData = safeProcessFrameData(decompressedTrace.frames);
         this.emptyFrameData = safeProcessEmptyFrameData(decompressedTrace.emptyFrame);
         this.componentResuData = safeProcessComponentResuData(decompressedTrace.componentReuse);
@@ -1389,27 +1111,15 @@ export const useJsonDataStore = defineStore('config', {
         this.faultTreeData = getDefaultFaultTreeData();
       }
       if (jsonData.more) {
-        // 火焰图 - 按步骤组织的数据，每个步骤已单独压缩
+        // Flame graph - Data organized by step, each step is separately compressed
         this.flameGraph = jsonData.more.flame_graph || null;
-        // Native Memory数据 - 按步骤组织的数据（类似trace_frames.json）
-        // 如果是原始的分层格式，需要转换为平铺格式
-        if (jsonData.more.native_memory) {
-          const nativeMemData = jsonData.more.native_memory;
-          // 检查是否是分层格式（有process_dimension字段）
-          if (typeof nativeMemData === 'object' && 'process_dimension' in nativeMemData) {
-            this.nativeMemoryData = transformNativeMemoryData(nativeMemData);
-          } else {
-            // 已经是平铺格式，但可能需要解压缩
-            this.nativeMemoryData = this.decompressNativeMemoryData(nativeMemData);
-          }
-        } else {
-          this.nativeMemoryData = null;
-        }
+      } else {
+        this.flameGraph = null;
       }
 
-      // 加载 UI 动画数据
+      // Load UI animation data
       if (jsonData.ui && jsonData.ui.animate) {
-        // 可能需要解压缩
+        // May need decompression
         this.uiAnimateData = this.decompressUIAnimateData(jsonData.ui.animate as CompressedUIAnimateData);
       } else {
         this.uiAnimateData = null;

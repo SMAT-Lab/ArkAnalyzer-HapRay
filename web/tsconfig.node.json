@@ -6,7 +6,8 @@
     "cypress.config.*",
     "nightwatch.conf.*",
     "playwright.config.*",
-    "vite-plugin-inject-json.ts"
+    "vite-plugin-inject-data.ts",
+    "vite-plugin-inline-db.ts"
   ],
   "compilerOptions": {
     "composite": true,

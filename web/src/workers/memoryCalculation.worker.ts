@@ -3,7 +3,7 @@
  * 用于在后台线程中执行内存数据的聚合和统计计算，避免阻塞主线程
  */
 
-import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
+import type { NativeMemoryRecord } from '@/stores/nativeMemory';
 import { ComponentCategory } from '@/stores/jsonDataStore';
 
 // ============ 工具函数 ============
@@ -277,13 +277,208 @@ function aggregateBySymbol(records: NativeMemoryRecord[], timePoint: number | nu
   return result.sort((a, b) => (b.peakMem as number) - (a.peakMem as number));
 }
 
+/**
+ * 计算时间线图表数据
+ * 根据下钻级别和过滤条件处理记录，返回图表所需的系列数据
+ */
+function processTimelineData(
+  records: NativeMemoryRecord[],
+  drillDownLevel: 'overview' | 'category' | 'subCategory',
+  selectedCategory: string,
+  selectedSubCategory: string
+) {
+  // 按时间排序记录
+  const sortedRecords = records.slice().sort((a, b) => a.relativeTs - b.relativeTs);
+
+  // 根据下钻层级过滤数据
+  let filteredRecords = sortedRecords;
+  if (drillDownLevel === 'category') {
+    filteredRecords = sortedRecords.filter(r => r.categoryName === selectedCategory);
+  } else if (drillDownLevel === 'subCategory') {
+    filteredRecords = sortedRecords.filter(
+      r => r.categoryName === selectedCategory && r.subCategoryName === selectedSubCategory
+    );
+  }
+
+  // 根据下钻层级决定如何分组数据
+  interface SeriesGroup {
+    name: string;
+    records: NativeMemoryRecord[];
+  }
+
+  let seriesGroups: SeriesGroup[] = [];
+
+  if (drillDownLevel === 'overview') {
+    // 总览：先添加总内存线，再添加各大类线
+    seriesGroups.push({ name: '总内存', records: filteredRecords });
+
+    // 按大类分组（排除 UNKNOWN）
+    const categoryMap = new Map<string, NativeMemoryRecord[]>();
+    filteredRecords.forEach(record => {
+      if (record.categoryName !== 'UNKNOWN') {
+        if (!categoryMap.has(record.categoryName)) {
+          categoryMap.set(record.categoryName, []);
+        }
+        categoryMap.get(record.categoryName)!.push(record);
+      }
+    });
+    seriesGroups.push(...Array.from(categoryMap.entries()).map(([name, records]) => ({ name, records })));
+  } else if (drillDownLevel === 'category') {
+    // 大类视图：按小类分组
+    const subCategoryMap = new Map<string, NativeMemoryRecord[]>();
+    filteredRecords.forEach(record => {
+      if (!subCategoryMap.has(record.subCategoryName)) {
+        subCategoryMap.set(record.subCategoryName, []);
+      }
+      subCategoryMap.get(record.subCategoryName)!.push(record);
+    });
+
+    const allSeriesGroups = Array.from(subCategoryMap.entries()).map(([name, records]) => ({ name, records }));
+
+    // 性能优化：如果小分类数量过多，只显示内存占用最大的前 20 个
+    const MAX_SERIES_IN_CATEGORY_VIEW = 20;
+    if (allSeriesGroups.length > MAX_SERIES_IN_CATEGORY_VIEW) {
+      // 计算每个小分类的最终内存占用
+      const seriesWithFinalMemory = allSeriesGroups.map(group => {
+        const recordsWithCumulative = calculateCumulativeMemoryInWorker(group.records);
+        const finalMemory = recordsWithCumulative[recordsWithCumulative.length - 1]?.cumulativeMemory || 0;
+        return { ...group, finalMemory };
+      });
+
+      // 按最终内存降序排序，取前 N 个
+      seriesWithFinalMemory.sort((a, b) => Math.abs(b.finalMemory) - Math.abs(a.finalMemory));
+      seriesGroups = seriesWithFinalMemory.slice(0, MAX_SERIES_IN_CATEGORY_VIEW);
+    } else {
+      seriesGroups = allSeriesGroups;
+    }
+  } else {
+    // 小类视图：显示单条总线
+    seriesGroups = [{ name: selectedSubCategory, records: filteredRecords }];
+  }
+
+  // 收集所有唯一时间点
+  const allTimePoints = new Set<number>();
+  filteredRecords.forEach(record => allTimePoints.add(record.relativeTs));
+  const sortedTimePoints = Array.from(allTimePoints).sort((a, b) => a - b);
+
+  // 为每个系列计算累计内存
+  const seriesData: Array<{
+    name: string;
+    data: Array<{
+      index: number;
+      relativeTs: number;
+      cumulativeMemory: number;
+      heapSize: number;
+      eventType: string;
+    }>;
+  }> = [];
+
+  let maxMemory = -Infinity;
+  let minMemory = Infinity;
+
+  seriesGroups.forEach(group => {
+    const recordsWithCumulative = calculateCumulativeMemoryInWorker(group.records);
+
+    // 创建时间点到记录的映射
+    const timeToRecordMap = new Map<number, typeof recordsWithCumulative[0]>();
+    recordsWithCumulative.forEach(record => {
+      timeToRecordMap.set(record.relativeTs, record);
+    });
+
+    // 为每个时间点填充数据
+    let lastMemory = 0;
+    const data = sortedTimePoints.map((ts, index) => {
+      const originalRecord = timeToRecordMap.get(ts);
+      const memory = originalRecord?.cumulativeMemory ?? lastMemory;
+      lastMemory = memory;
+
+      // 更新最大最小值
+      if (memory > maxMemory) maxMemory = memory;
+      if (memory < minMemory) minMemory = memory;
+
+      return {
+        index,
+        relativeTs: ts,
+        cumulativeMemory: memory,
+        heapSize: originalRecord?.heapSize || 0,
+        eventType: originalRecord?.eventType || '',
+      };
+    });
+
+    seriesData.push({ name: group.name, data });
+  });
+
+  // 构建图表数据
+  // 在 overview 模式下，chartData 使用第一个系列（总内存）的数据
+  // 在其他模式下，chartData 使用所有系列的累计
+  const chartData = sortedTimePoints.map((ts, index) => {
+    let totalMemory = 0;
+
+    if (drillDownLevel === 'overview' && seriesData.length > 0) {
+      // 总览模式：使用第一个系列（总内存）的数据
+      totalMemory = seriesData[0].data[index]?.cumulativeMemory || 0;
+    } else {
+      // 其他模式：累加所有系列
+      seriesData.forEach(series => {
+        totalMemory += series.data[index]?.cumulativeMemory || 0;
+      });
+    }
+
+    return {
+      index,
+      relativeTs: ts,
+      cumulativeMemory: totalMemory,
+    };
+  });
+
+  const finalMemory = chartData[chartData.length - 1]?.cumulativeMemory || 0;
+
+  // 预计算颜色映射范围
+  const memoryRange = maxMemory - minMemory;
+  const threshold30 = minMemory + memoryRange * 0.3;
+  const threshold60 = minMemory + memoryRange * 0.6;
+
+  return {
+    chartData,
+    seriesData,
+    maxMemory,
+    minMemory,
+    finalMemory,
+    threshold30,
+    threshold60,
+  };
+}
+
+/**
+ * 计算累计内存（Worker 内部版本）
+ */
+function calculateCumulativeMemoryInWorker(records: NativeMemoryRecord[]) {
+  let currentTotal = 0;
+
+  return records.map(record => {
+    const eventType = record.eventType;
+    const size = record.heapSize || 0;
+
+    if (eventType === 'AllocEvent' || eventType === 'MmapEvent') {
+      currentTotal += size;
+    } else if (eventType === 'FreeEvent' || eventType === 'MunmapEvent') {
+      currentTotal -= size;
+    }
+
+    return {
+      ...record,
+      cumulativeMemory: currentTotal,
+    };
+  });
+}
+
 // ============ Worker 消息处理 ============
 
 self.onmessage = (e: MessageEvent) => {
   const { type, payload, requestId } = e.data;
 
   try {
-    let result: Array<Record<string, unknown>>;
+    let result: unknown;
 
     switch (type) {
       case 'aggregateByProcess':
@@ -297,6 +492,14 @@ self.onmessage = (e: MessageEvent) => {
         break;
       case 'aggregateBySymbol':
         result = aggregateBySymbol(payload.records, payload.timePoint);
+        break;
+      case 'processTimelineData':
+        result = processTimelineData(
+          payload.records,
+          payload.drillDownLevel,
+          payload.selectedCategory,
+          payload.selectedSubCategory
+        );
         break;
       default:
         throw new Error(`Unknown worker task type: ${type}`);

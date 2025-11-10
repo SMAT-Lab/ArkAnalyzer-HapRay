@@ -58,7 +58,7 @@
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
           <FaultTreeAnalysis v-else-if="showPage.startsWith('fault_tree_step_')" :step="getFaultTreeStepId(showPage)" />
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
-          <PerfNativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
+          <NativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
           <PerfUIAnimate v-else-if="showPage.startsWith('ui_animate_step_')" :step-id="getUIAnimateStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
@@ -147,7 +147,7 @@ import FaultTreeCompare from '@/components/compare/FaultTreeCompare.vue';
 import PerfSingle from '@/components/PerfSingle.vue';
 import PerfMulti from '@/components/PerfMulti.vue';
 import FlameGraph from '@/components/FlameGraph.vue';
-import PerfNativeMemory from '@/components/PerfNativeMemory.vue';
+import NativeMemory from '@/components/NativeMemory.vue';
 import PerfUIAnimate from '@/components/PerfUIAnimate.vue';
 import ComponentsDeps from '@/components/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
