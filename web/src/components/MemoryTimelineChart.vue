@@ -1,65 +1,101 @@
 <template>
   <div class="memory-timeline-chart">
     <div style="position: relative; width: 100%;">
-      <!-- 模式切换按钮 -->
-      <div style="position: absolute; top: 10px; right: 10px; z-index: 100;">
-        <el-radio-group v-model="viewMode" size="small" @change="handleViewModeChange">
+      <div
+        style="position: absolute; top: 10px; right: 10px; z-index: 100;"
+      >
+        <el-radio-group
+          v-model="viewMode"
+          size="small"
+          @change="handleViewModeChange"
+        >
           <el-radio-button label="category">分类模式</el-radio-button>
           <el-radio-button label="process">进程模式</el-radio-button>
         </el-radio-group>
       </div>
 
-      <!-- 面包屑导航 -->
       <div
         v-if="drillDownLevel !== 'overview'"
         style="margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px;"
       >
         <el-breadcrumb separator="/">
           <el-breadcrumb-item>
-            <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="resetDrillDown">
+            <a
+              href="#"
+              style="color: #409eff; text-decoration: none;"
+              @click.prevent="resetDrillDown"
+            >
               <i class="el-icon-s-home"></i> 总览
             </a>
           </el-breadcrumb-item>
-          <!-- 分类模式面包屑 -->
+
           <template v-if="viewMode === 'category'">
             <el-breadcrumb-item v-if="drillDownLevel === 'category'">
               <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
             </el-breadcrumb-item>
-            <el-breadcrumb-item v-if="drillDownLevel === 'subCategory' || drillDownLevel === 'file'">
-              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
+
+            <el-breadcrumb-item
+              v-if="drillDownLevel === 'subCategory' || drillDownLevel === 'file'"
+            >
+              <a
+                href="#"
+                style="color: #409eff; text-decoration: none;"
+                @click.prevent="backToCategory"
+              >
                 {{ selectedCategory }}
               </a>
             </el-breadcrumb-item>
+
             <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
               <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
             </el-breadcrumb-item>
+
             <el-breadcrumb-item v-if="drillDownLevel === 'file'">
-              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToSubCategory">
+              <a
+                href="#"
+                style="color: #409eff; text-decoration: none;"
+                @click.prevent="backToSubCategory"
+              >
                 {{ selectedSubCategory }}
               </a>
             </el-breadcrumb-item>
+
             <el-breadcrumb-item v-if="drillDownLevel === 'file'">
               <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
             </el-breadcrumb-item>
           </template>
-          <!-- 进程模式面包屑 -->
+
           <template v-else>
             <el-breadcrumb-item v-if="drillDownLevel === 'process'">
               <span style="font-weight: 600; color: #333;">{{ selectedProcess }}</span>
             </el-breadcrumb-item>
-            <el-breadcrumb-item v-if="drillDownLevel === 'thread' || drillDownLevel === 'file'">
-              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToProcess">
+
+            <el-breadcrumb-item
+              v-if="drillDownLevel === 'thread' || drillDownLevel === 'file'"
+            >
+              <a
+                href="#"
+                style="color: #409eff; text-decoration: none;"
+                @click.prevent="backToProcess"
+              >
                 {{ selectedProcess }}
               </a>
             </el-breadcrumb-item>
+
             <el-breadcrumb-item v-if="drillDownLevel === 'thread'">
               <span style="font-weight: 600; color: #333;">{{ selectedThread }}</span>
             </el-breadcrumb-item>
+
             <el-breadcrumb-item v-if="drillDownLevel === 'file'">
-              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToThread">
+              <a
+                href="#"
+                style="color: #409eff; text-decoration: none;"
+                @click.prevent="backToThread"
+              >
                 {{ selectedThread }}
               </a>
             </el-breadcrumb-item>
+
             <el-breadcrumb-item v-if="drillDownLevel === 'file'">
               <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
             </el-breadcrumb-item>
@@ -78,17 +114,6 @@
         </div>
       </div>
     </div>
-    <MemoryOutstandingFlameGraph
-      v-if="shouldShowOutstandingFlameGraph"
-      :step-id="props.stepId"
-      :selected-time-point="props.selectedTimePoint"
-      :drill-level="drillDownLevel"
-      :view-mode="viewMode"
-      :selected-category="selectedCategory"
-      :selected-sub-category="selectedSubCategory"
-      :selected-process="selectedProcess"
-      :selected-thread="selectedThread"
-    />
   </div>
 </template>
 
@@ -102,11 +127,10 @@ import {
   fetchCategoryRecords,
   fetchSubCategoryRecords,
   fetchProcessRecords,
-  fetchThreadRecords
+  fetchThreadRecords,
 } from '@/stores/nativeMemory';
-import MemoryOutstandingFlameGraph from './MemoryOutstandingFlameGraph.vue';
 
-// 时间线数据处理结果类型
+// Timeline processed data shape
 interface TimelineProcessedData {
   chartData: Array<{
     index: number;
@@ -121,8 +145,8 @@ interface TimelineProcessedData {
       cumulativeMemory: number;
       heapSize: number;
       eventType: string;
-      eventCount?: number;  // 聚合的事件数量
-      eventDetails?: string;  // 聚合的事件详情
+      eventCount?: number;  // Aggregated event count
+      eventDetails?: string;  // Aggregated event details
     }>;
   }>;
   maxMemory: number;
@@ -167,6 +191,10 @@ interface ChartOptionParams {
   drillLevel: DrillDownLevel;
   selectedCategory: string;
   selectedSubCategory: string;
+  selectedProcess: string;
+  selectedThread: string;
+  selectedFile: string;
+  mode: ViewMode;
   isLargeDataset: boolean;
   isVeryLargeDataset: boolean;
 }
@@ -180,9 +208,9 @@ const MAX_SERIES_IN_CATEGORY_VIEW = 10;
 const MAX_SERIES_IN_FILE_VIEW = 15;
 
 interface Props {
-  stepId: string; // 步骤 ID，例如 "step1"
+  stepId: string; // Step identifier, e.g., "step1"
   height?: string;
-  selectedTimePoint?: number | null; // 当前选中的时间点
+  selectedTimePoint?: number | null; // Currently selected time point
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -190,25 +218,39 @@ const props = withDefaults(defineProps<Props>(), {
   selectedTimePoint: null,
 });
 
-// 定义 emit 事件
+// Event emitters
 const emit = defineEmits<{
   'time-point-selected': [timePoint: number | null];
   'time-point-stats-updated': [stats: TimePointStats];
+  'drill-state-change': [state: {
+    drillLevel: DrillDownLevel;
+    viewMode: ViewMode;
+    selectedCategory: string;
+    selectedSubCategory: string;
+    selectedProcess: string;
+    selectedThread: string;
+    selectedFile: string;
+  }];
 }>();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 const isLoading = ref(false);
 
-// 当前加载的记录数据（按需加载）
+// Lazily loaded records for the current drill-down scope
 const currentRecords = ref<NativeMemoryRecord[]>([]);
 
 // 视图模式：分类模式 vs 进程模式
 type ViewMode = 'category' | 'process';
-const viewMode = ref<ViewMode>('category');
+type DrillDownLevel =
+  | 'overview'
+  | 'category'
+  | 'subCategory'
+  | 'process'
+  | 'thread'
+  | 'file';
 
-// 下钻状态管理
-type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file';
+const viewMode = ref<ViewMode>('category');
 const drillDownLevel = ref<DrillDownLevel>('overview');
 
 // 分类模式状态
@@ -219,18 +261,46 @@ const selectedSubCategory = ref<string>('');
 const selectedProcess = ref<string>('');
 const selectedThread = ref<string>('');
 const selectedFile = ref<string>('');
-
 const activeSeriesIndex = ref<number | null>(null);
+let isLegendSelectionSyncing = false;
+let legendDrillDownLock = false;
 
-const shouldShowOutstandingFlameGraph = computed(() => drillDownLevel.value !== 'overview');
+const shouldShowOutstandingFlameGraph = computed(
+  () => drillDownLevel.value !== 'overview' && props.selectedTimePoint !== null,
+);
 
-// 模式切换处理
+const emitDrillStateChange = () => {
+  emit('drill-state-change', {
+    drillLevel: drillDownLevel.value,
+    viewMode: viewMode.value,
+    selectedCategory: selectedCategory.value,
+    selectedSubCategory: selectedSubCategory.value,
+    selectedProcess: selectedProcess.value,
+    selectedThread: selectedThread.value,
+    selectedFile: selectedFile.value,
+  });
+};
+
+watch(
+  [
+    viewMode,
+    drillDownLevel,
+    selectedCategory,
+    selectedSubCategory,
+    selectedProcess,
+    selectedThread,
+    selectedFile,
+  ],
+  () => {
+    emitDrillStateChange();
+  },
+  { immediate: true },
+);
+
 function handleViewModeChange() {
-  // 切换模式时重置到总览
   resetDrillDown();
 }
 
-// 下钻导航函数
 function resetDrillDown() {
   drillDownLevel.value = 'overview';
   selectedCategory.value = '';
@@ -262,6 +332,7 @@ function drillDownToCategory(categoryName: string) {
   drillDownLevel.value = 'category';
   selectedCategory.value = categoryName;
   selectedSubCategory.value = '';
+  selectedFile.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -269,18 +340,11 @@ function drillDownToCategory(categoryName: string) {
 function drillDownToSubCategory(subCategoryName: string) {
   drillDownLevel.value = 'subCategory';
   selectedSubCategory.value = subCategoryName;
+  selectedFile.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
 
-function drillDownToCategoryFile(fileName: string) {
-  drillDownLevel.value = 'file';
-  selectedFile.value = fileName;
-  emit('time-point-selected', null);
-  emit('time-point-stats-updated', createEmptyTimePointStats());
-}
-
-// 进程模式导航
 function backToProcess() {
   drillDownLevel.value = 'process';
   selectedThread.value = '';
@@ -378,11 +442,11 @@ function calculateTimePointStats(records: NativeMemoryRecord[], timePoint: numbe
   return stats;
 }
 
-// 加载状态
+// Loading state
 const isLoadingData = ref(false);
 
 /**
- * 计算累计内存
+ * Calculate cumulative memory for each record.
  */
 function calculateCumulativeMemory(records: NativeMemoryRecord[]) {
   let currentTotal = 0;
@@ -418,7 +482,7 @@ function selectTopGroupsByFinalMemory(groups: SeriesGroup[], limit: number): Ser
 }
 
 /**
- * 处理时间线数据（主线程版本）
+ * Process timeline data on the main thread.
  */
 function processTimelineDataSync(): TimelineProcessedData {
   if (currentRecords.value.length === 0) {
@@ -433,7 +497,7 @@ function processTimelineDataSync(): TimelineProcessedData {
     };
   }
 
-  // 按时间排序记录
+  // Sort records by time
   const sortedRecords = currentRecords.value.slice().sort((a, b) => a.relativeTs - b.relativeTs);
 
   // 根据下钻层级和模式过滤数据
@@ -621,12 +685,12 @@ function processTimelineDataSync(): TimelineProcessedData {
     }
   }
 
-  // 收集所有唯一时间点
+  // Collect unique timeline points
   const allTimePoints = new Set<number>();
   filteredRecords.forEach(record => allTimePoints.add(record.relativeTs));
   const sortedTimePoints = Array.from(allTimePoints).sort((a, b) => a - b);
 
-  // 为每个系列计算累计内存
+  // Compute cumulative memory for each series
   const seriesData: TimelineProcessedData['seriesData'] = [];
   let maxMemory = -Infinity;
   let minMemory = Infinity;
@@ -662,7 +726,7 @@ function processTimelineDataSync(): TimelineProcessedData {
     seriesData.push({ name: group.name, data });
   });
 
-  // 构建图表数据
+  // Build chart-ready data
   const chartData = sortedTimePoints.map((ts, index) => {
     let totalMemory = 0;
 
@@ -699,7 +763,7 @@ function processTimelineDataSync(): TimelineProcessedData {
 }
 
 /**
- * 加载当前层级的数据
+ * Load records for the current drill-down level.
  */
 async function loadCurrentLevelData() {
   try {
@@ -758,7 +822,7 @@ async function loadCurrentLevelData() {
 }
 
 /**
- * 加载处理后的数据
+ * Load and process timeline data.
  */
 async function loadProcessedData() {
   if (currentRecords.value.length === 0) {
@@ -768,10 +832,10 @@ async function loadProcessedData() {
 
   try {
     isLoadingData.value = true;
-    // 使用 setTimeout 让 UI 有机会更新
+    // Allow the UI a short window to update before heavy processing
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    // 在主线程中处理数据
+    // Process data on the main thread
     const result = processTimelineDataSync();
 
     processedData.value = result;
@@ -783,7 +847,13 @@ async function loadProcessedData() {
   }
 }
 
-// 格式化字节大小
+async function refreshTimelineChart(): Promise<void> {
+  await loadCurrentLevelData();
+  await loadProcessedData();
+  await renderChart();
+}
+
+// Format bytes for tooltip display
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -792,9 +862,9 @@ function formatBytes(bytes: number): string {
   return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
 }
 
-// 格式化时间（秒）
+// Format time values (seconds)
 function formatTime(seconds: number): string {
-  // relativeTs 在 store 中已经从纳秒转换为秒了
+  // relativeTs is already converted from nanoseconds to seconds in the store
   if (seconds < 1) {
     return (seconds * 1000).toFixed(2) + ' ms';
   }
@@ -935,14 +1005,6 @@ function isSeriesClickParam(
   return (typeof candidate.componentType === 'string' || candidate.componentType === undefined) && typeof candidate.dataIndex === 'number';
 }
 
-function getNativeClickDetail(param: unknown): number {
-  if (!param || typeof param !== 'object') {
-    return 1;
-  }
-  const candidate = param as { event?: { event?: { detail?: number } } };
-  const detail = candidate.event?.event?.detail;
-  return typeof detail === 'number' ? detail : 1;
-}
 
 function resolveTooltipParam(
   params: unknown,
@@ -1047,7 +1109,8 @@ function buildChartTitle(
   selectedCategoryName: string,
   selectedSubCategoryName: string,
   selectedProcessName: string,
-  selectedThreadName: string
+  selectedThreadName: string,
+  selectedFileName: string,
 ): string {
   let title = '内存时间线';
 
@@ -1063,6 +1126,9 @@ function buildChartTitle(
       title += ` - ${selectedCategoryName} (${seriesCount} 个小类)`;
     } else if (drillLevel === 'subCategory') {
       title += ` - ${selectedCategoryName} / ${selectedSubCategoryName} (${seriesCount} 个文件)`;
+    } else if (drillLevel === 'file') {
+      const fileLabel = selectedFileName || '未选择文件';
+      title += ` - ${selectedCategoryName} / ${selectedSubCategoryName} / ${fileLabel}`;
     }
   } else {
     if (drillLevel === 'process') {
@@ -1070,7 +1136,8 @@ function buildChartTitle(
     } else if (drillLevel === 'thread') {
       title += ` - ${selectedProcessName} / ${selectedThreadName} (${seriesCount} 个文件)`;
     } else if (drillLevel === 'file') {
-      title += ` - ${selectedProcessName} / ${selectedThreadName} / 文件详情`;
+      const fileLabel = selectedFileName || '文件详情';
+      title += ` - ${selectedProcessName} / ${selectedThreadName} / ${fileLabel}`;
     }
   }
 
@@ -1083,7 +1150,8 @@ function buildChartSubtext(
   selectedTimePoint: number | null,
   maxMemory: number,
   minMemory: number,
-  finalMemory: number
+  finalMemory: number,
+  selectedFileName: string
 ): string {
   const hints: string[] = [];
 
@@ -1131,6 +1199,10 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
     drillLevel,
     selectedCategory,
     selectedSubCategory,
+    selectedProcess,
+    selectedThread,
+    selectedFile,
+    mode,
     isLargeDataset,
     isVeryLargeDataset,
   } = params;
@@ -1143,19 +1215,21 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
       text: buildChartTitle(
         drillLevel,
         seriesData.length,
-        viewMode.value,
+        mode,
         selectedCategory,
         selectedSubCategory,
-        selectedProcess.value,
-        selectedThread.value
+        selectedProcess,
+        selectedThread,
+        selectedFile,
       ),
       subtext: buildChartSubtext(
         drillLevel,
-        viewMode.value,
+        mode,
         selectedTimePoint,
         maxMemory,
         minMemory,
-        finalMemory
+        finalMemory,
+        selectedFile,
       ),
       left: 'center',
       textStyle: {
@@ -1184,6 +1258,20 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
         fontSize: 12,
       },
     },
+    graphic: [
+      {
+        type: 'text',
+        right: 10,
+        top: '12%',
+        style: {
+          text: '提示：点击图例可下钻',
+          fill: '#666',
+          fontSize: 12,
+          fontWeight: 400,
+        },
+        silent: true,
+      },
+    ],
     tooltip: {
       trigger: 'axis',
       axisPointer: {
@@ -1258,7 +1346,7 @@ function registerChartEvents(seriesData: TimelineProcessedData['seriesData']) {
 
   chartInstance.off('mouseover');
   chartInstance.off('mouseout');
-  chartInstance.off('dblclick');
+  chartInstance.off('click');
 
   chartInstance.on('mouseover', { seriesType: 'line' }, (event: { seriesIndex?: number }) => {
     if (event && typeof event.seriesIndex === 'number') {
@@ -1270,18 +1358,16 @@ function registerChartEvents(seriesData: TimelineProcessedData['seriesData']) {
     activeSeriesIndex.value = null;
   });
 
-  chartInstance.off('click');
-  chartInstance.on('click', params => handleChartClick(params, seriesData));
-  chartInstance.on('dblclick', params => handleChartDoubleClick(params));
+  chartInstance.on('click', { seriesType: 'line' }, params => handleChartSingleClick(params, seriesData));
+  chartInstance.on('legendselectchanged', params => handleLegendDrillDown(params as LegendClickEvent));
 }
 
-function handleChartClick(params: unknown, seriesData: TimelineProcessedData['seriesData']) {
-  if (!isSeriesClickParam(params) || params.componentType !== 'series') {
+function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedData['seriesData']) {
+  if (!isSeriesClickParam(params)) {
     return;
   }
 
-  const clickDetail = getNativeClickDetail(params);
-  if (clickDetail > 1) {
+  if (params.componentType && params.componentType !== 'series') {
     return;
   }
 
@@ -1312,57 +1398,91 @@ function handleChartClick(params: unknown, seriesData: TimelineProcessedData['se
   emit('time-point-stats-updated', calculateTimePointStats(currentRecords.value, nextSelected));
 }
 
-function handleChartDoubleClick(params: unknown) {
-  if (!isSeriesClickParam(params) || params.componentType !== 'series') {
+type LegendClickEvent = {
+  selected: Record<string, boolean>;
+  name: string;
+};
+
+function handleLegendDrillDown(params: LegendClickEvent) {
+  if (!params || typeof params !== 'object' || isLegendSelectionSyncing || legendDrillDownLock) {
     return;
   }
 
-  const seriesName = params.seriesName ?? '';
-  console.log('[MemoryTimelineChart] Double click:', {
-    drillDownLevel: drillDownLevel.value,
-    viewMode: viewMode.value,
-    seriesName,
-  });
+  legendDrillDownLock = true;
+
+  const seriesName = params.name;
+  const skip = drillDownBySeriesName(seriesName);
+
+  if (
+    chartInstance &&
+    seriesName &&
+    !skip &&
+    params.selected &&
+    params.selected[seriesName] === false
+  ) {
+    try {
+      isLegendSelectionSyncing = true;
+      chartInstance.dispatchAction({
+        type: 'legendSelect',
+        name: seriesName,
+      });
+    } finally {
+      isLegendSelectionSyncing = false;
+    }
+  }
+
+  const releaseLock = () => {
+    legendDrillDownLock = false;
+  };
+
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(releaseLock);
+  } else {
+    setTimeout(releaseLock, 0);
+  }
+}
+
+function drillDownBySeriesName(seriesName: string): boolean {
+  if (!seriesName) {
+    return false;
+  }
 
   if (drillDownLevel.value === 'overview') {
-    if (seriesName && seriesName !== '总内存') {
-      if (viewMode.value === 'category') {
-        drillDownToCategory(seriesName);
-      } else {
-        drillDownToProcess(seriesName);
-      }
+    if (seriesName === '总内存') {
+      return false;
     }
-    return;
+    if (viewMode.value === 'category') {
+      drillDownToCategory(seriesName);
+    } else {
+      drillDownToProcess(seriesName);
+    }
+    return true;
   }
 
   if (viewMode.value === 'category') {
     if (drillDownLevel.value === 'category') {
-      if (seriesName) {
-        console.log('[MemoryTimelineChart] Drilling down to subCategory:', seriesName);
-        drillDownToSubCategory(seriesName);
-      }
-    } else if (drillDownLevel.value === 'subCategory') {
-      if (seriesName) {
-        console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
-        drillDownToCategoryFile(seriesName);
-      }
+      drillDownToSubCategory(seriesName);
+      return true;
+    }
+    if (drillDownLevel.value === 'subCategory') {
+      drillDownToFile(seriesName);
+      return true;
     }
   } else {
     if (drillDownLevel.value === 'process') {
-      if (seriesName) {
-        console.log('[MemoryTimelineChart] Drilling down to thread:', seriesName);
-        drillDownToThread(seriesName);
-      }
-    } else if (drillDownLevel.value === 'thread') {
-      if (seriesName) {
-        console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
-        drillDownToFile(seriesName);
-      }
+      drillDownToThread(seriesName);
+      return true;
+    }
+    if (drillDownLevel.value === 'thread') {
+      drillDownToFile(seriesName);
+      return true;
     }
   }
+
+  return false;
 }
 
-// 初始化图表
+// Initialize chart
 async function renderChart() {
   if (!chartContainer.value) return;
 
@@ -1393,6 +1513,10 @@ async function renderChart() {
       drillLevel: drillDownLevel.value,
       selectedCategory: selectedCategory.value,
       selectedSubCategory: selectedSubCategory.value,
+      selectedProcess: selectedProcess.value,
+      selectedThread: selectedThread.value,
+      selectedFile: selectedFile.value,
+      mode: viewMode.value,
       isLargeDataset,
       isVeryLargeDataset,
     });
@@ -1410,17 +1534,17 @@ async function renderChart() {
       updateMarkLine(chartData);
     }
   } catch (error) {
-    console.error('初始化图表失败:', error);
+    console.error('Failed to initialize chart:', error);
   } finally {
     isLoading.value = false;
   }
 }
 
-// 更新标记线
+// Update mark line that highlights the selected point
 function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory: number }>) {
   if (!chartInstance || props.selectedTimePoint === null) return;
 
-  // 找到最接近选中时间点的数据索引
+  // Find the closest index around the selected time point
   let closestIndex = 0;
   let minDiff = Math.abs(chartData[0].relativeTs - props.selectedTimePoint);
 
@@ -1430,13 +1554,13 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
       minDiff = diff;
       closestIndex = i;
     }
-    // 如果时间已经超过选中点，可以提前退出
+    // Stop searching once we pass the selected time point
     if (chartData[i].relativeTs > props.selectedTimePoint) {
       break;
     }
   }
 
-  // 获取当前配置
+  // Retrieve current chart options
   const option = chartInstance.getOption() as echarts.EChartsOption;
   if (option && Array.isArray(option.series) && option.series[0]) {
     const series = option.series[0] as echarts.SeriesOption & {
@@ -1477,7 +1601,7 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
   }
 }
 
-// 监听 selectedTimePoint 的变化，更新标记线
+// Sync mark line when the selected time point changes
 watch(
   () => props.selectedTimePoint,
   (newValue) => {
@@ -1491,37 +1615,29 @@ watch(
   }
 );
 
-// 监听 stepId 变化，重新加载数据
+// Reload data when the step id changes
 watch(
   () => props.stepId,
   async () => {
-    // 重置下钻状态
+    // Reset drill-down state
     drillDownLevel.value = 'overview';
     selectedCategory.value = '';
     selectedSubCategory.value = '';
+    selectedFile.value = '';
 
-    // 加载新步骤的数据
-    await loadCurrentLevelData();
-    await loadProcessedData();
-    if (chartInstance) {
-      renderChart();
-    }
+    await refreshTimelineChart();
   }
 );
 
-// 监听下钻状态的变化，重新加载数据并初始化图表
+// Reload data whenever drill-down state changes
 watch(
   [viewMode, drillDownLevel, selectedCategory, selectedSubCategory, selectedProcess, selectedThread, selectedFile],
   async () => {
-    await loadCurrentLevelData();
-    await loadProcessedData();
-    if (chartInstance) {
-      renderChart();
-    }
+    await refreshTimelineChart();
   }
 );
 
-// 监听窗口大小变化（使用防抖）
+// Debounced window resize handling
 let resizeTimer: number | null = null;
 const handleResize = () => {
   if (resizeTimer) {
@@ -1532,17 +1648,17 @@ const handleResize = () => {
       chartInstance.resize();
     }
     resizeTimer = null;
-  }, 200); // 200ms 防抖
+  }, 200); // 200ms debounce
 };
 
 onMounted(async () => {
-  // 先加载当前层级的数据
+  // Load current-level data first
   await loadCurrentLevelData();
 
-  // 然后处理数据
+  // Then process the dataset
   await loadProcessedData();
 
-  // 使用 requestAnimationFrame 延迟初始化，避免阻塞页面渲染
+  // Delay initialization slightly to avoid blocking rendering
   requestAnimationFrame(() => {
     renderChart();
   });
@@ -1568,6 +1684,6 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-/* 图表容器样式 */
+/* Chart container styles */
 </style>
 
