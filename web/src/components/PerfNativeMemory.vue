@@ -288,11 +288,12 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 // import NativeMemoryTable from './NativeMemoryTable.vue';
 // import PieChart from './PieChart.vue';
 import MemoryTimelineChart from './MemoryTimelineChart.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import { loadNativeMemoryMetadataFromDb } from '@/stores/nativeMemory';
+import type { NativeMemoryData, NativeMemoryRecord } from '@/stores/nativeMemory';
 import {
   // nativeMemory2ProcessPieChartData,
   // nativeMemory2CategoryPieChartData,
@@ -313,31 +314,53 @@ const props = defineProps<{
   stepId: number;
 }>();
 
-// 获取存储实例
-const jsonDataStore = useJsonDataStore();
-const nativeMemoryData = jsonDataStore.nativeMemoryData;
+
+const nativeMemoryData = ref<NativeMemoryData | null>(null);
+const nativeMemoryError = ref<unknown>(null);
+const isNativeMemoryLoading = ref(false);
+
+async function ensureNativeMemoryDataLoaded() {
+  if (nativeMemoryData.value || isNativeMemoryLoading.value) return;
+  try {
+    isNativeMemoryLoading.value = true;
+    nativeMemoryData.value = await loadNativeMemoryMetadataFromDb();
+  } catch (error) {
+    nativeMemoryError.value = error;
+    nativeMemoryData.value = null;
+    console.error('[PerfNativeMemory] Failed to load native memory metadata:', error);
+  } finally {
+    isNativeMemoryLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  void ensureNativeMemoryDataLoaded();
+});
 
 // 检查是否有数据（只需要检查 stepData 是否存在，不检查 records 长度）
 const hasData = computed(() => {
-  if (!nativeMemoryData) return false;
+  const data = nativeMemoryData.value;
+  if (!data) return false;
   const stepKey = `step${props.stepId}`;
-  const stepData = nativeMemoryData[stepKey];
+  const stepData = data[stepKey];
   return stepData !== undefined;
 });
 
 // 获取当前步骤的所有记录
 const currentStepRecords = computed(() => {
-  if (!nativeMemoryData) return [];
+  const data = nativeMemoryData.value;
+  if (!data) return [];
   const stepKey = `step${props.stepId}`;
-  const stepData = nativeMemoryData[stepKey];
+  const stepData = data[stepKey];
   return stepData?.records || [];
 });
 
 // 获取当前步骤的调用链数据
 const currentStepCallchains = computed(() => {
-  if (!nativeMemoryData) return undefined;
+  const data = nativeMemoryData.value;
+  if (!data) return undefined;
   const stepKey = `step${props.stepId}`;
-  const stepData = nativeMemoryData[stepKey];
+  const stepData = data[stepKey];
   return stepData?.callchains;
 });
 
@@ -413,12 +436,12 @@ const selectedTimePointMemory = computed(() => {
 
 const selectedTimePointEventCount = computed(() => {
   if (selectedTimePoint.value === null || !currentStepRecords.value.length) return 0;
-  return currentStepRecords.value.filter(r => r.relativeTs <= selectedTimePoint.value!).length;
+  return currentStepRecords.value.filter((r: NativeMemoryRecord) => r.relativeTs <= selectedTimePoint.value!).length;
 });
 
 const selectedTimePointAllocCount = computed(() => {
   if (selectedTimePoint.value === null || !currentStepRecords.value.length) return 0;
-  return currentStepRecords.value.filter(r =>
+  return currentStepRecords.value.filter((r: NativeMemoryRecord) =>
     r.relativeTs <= selectedTimePoint.value! &&
     (r.eventType === 'AllocEvent' || r.eventType === 'MmapEvent')
   ).length;
@@ -426,7 +449,7 @@ const selectedTimePointAllocCount = computed(() => {
 
 const selectedTimePointFreeCount = computed(() => {
   if (selectedTimePoint.value === null || !currentStepRecords.value.length) return 0;
-  return currentStepRecords.value.filter(r =>
+  return currentStepRecords.value.filter((r: NativeMemoryRecord) =>
     r.relativeTs <= selectedTimePoint.value! &&
     (r.eventType === 'FreeEvent' || r.eventType === 'MunmapEvent')
   ).length;

@@ -302,6 +302,74 @@ export class MemoryDao {
   }
 
   /**
+   * Build SQL query for records up to specific timestamp with optional filters
+   *
+   * @param stepId - Step id
+   * @param relativeTsUpperBound - Upper bound (inclusive) for relative timestamp in nanoseconds
+   * @param categoryName - Optional category filter
+   * @param subCategoryName - Optional sub-category filter
+   * @returns SQL statement and parameters
+   */
+  static buildQueryRecordsUpToTime(
+    stepId: number,
+    relativeTsUpperBound: number,
+    categoryName?: string,
+    subCategoryName?: string
+  ): QueryResult {
+    let sql = `
+      SELECT *
+      FROM memory_records
+      WHERE step_id = ? AND relativeTs <= ?
+    `;
+    const params: SqlParam[] = [stepId, relativeTsUpperBound];
+
+    if (categoryName) {
+      sql += ' AND categoryName = ?';
+      params.push(categoryName);
+    }
+
+    if (subCategoryName) {
+      sql += ' AND subCategoryName = ?';
+      params.push(subCategoryName);
+    }
+
+    sql += ' ORDER BY relativeTs';
+
+    return { sql, params };
+  }
+
+  /**
+   * Build SQL query for callchain frames of specified callchain ids
+   *
+   * @param stepId - Step id
+   * @param callchainIds - List of callchain ids
+   * @returns SQL statement and parameters
+   */
+  static buildQueryCallchainFrames(stepId: number, callchainIds: number[]): QueryResult {
+    if (!callchainIds.length) {
+      return {
+        sql: `
+          SELECT callchainId, depth, ip, symbolId, symbol, fileId, file, offset, symbolOffset, vaddr
+          FROM memory_callchains
+          WHERE 1 = 0
+        `,
+        params: [],
+      };
+    }
+
+    const placeholders = callchainIds.map(() => '?').join(', ');
+    const sql = `
+      SELECT callchainId, depth, ip, symbolId, symbol, fileId, file, offset, symbolOffset, vaddr
+      FROM memory_callchains
+      WHERE step_id = ? AND callchainId IN (${placeholders})
+      ORDER BY callchainId, depth
+    `;
+    const params: SqlParam[] = [stepId, ...callchainIds];
+
+    return { sql, params };
+  }
+
+  /**
    * Build SQL query for category statistics
    *
    * @param stepId - Step id

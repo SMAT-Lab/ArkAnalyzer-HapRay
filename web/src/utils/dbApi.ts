@@ -177,6 +177,43 @@ export class DbApi {
   }
 
   /**
+   * Query records up to a specific timestamp (inclusive) with optional category filters
+   *
+   * @param stepId - Step id
+   * @param relativeTs - Timestamp upper bound in nanoseconds
+   * @param categoryName - Optional category name filter
+   * @param subCategoryName - Optional subcategory name filter
+   * @returns Matching records ordered by relativeTs
+   */
+  async queryRecordsUpTo(
+    stepId: number,
+    relativeTs: number,
+    categoryName?: string,
+    subCategoryName?: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryRecordsUpTo', {
+      stepId,
+      relativeTs,
+      categoryName,
+      subCategoryName,
+    });
+  }
+
+  /**
+   * Query callchain frames for specified callchain ids
+   *
+   * @param stepId - Step id
+   * @param callchainIds - Callchain id list
+   * @returns Callchain frame rows ordered by callchainId and depth
+   */
+  async queryCallchainFrames(stepId: number, callchainIds: number[]): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryCallchainFrames', {
+      stepId,
+      callchainIds,
+    });
+  }
+
+  /**
    * Query category statistics
    *
    * @param stepId - Step id

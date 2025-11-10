@@ -3,7 +3,7 @@
  * 管理 Web Worker 的创建、任务分发和结果缓存
  */
 
-import type { NativeMemoryRecord } from '@/stores/jsonDataStore';
+import type { NativeMemoryRecord } from '@/stores/nativeMemory';
 // Vite 会处理 ?worker&inline 导入
 import MemoryWorker from '@/workers/memoryCalculation.worker.ts?worker&inline';
 
