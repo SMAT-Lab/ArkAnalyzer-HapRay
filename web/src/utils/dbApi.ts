@@ -220,25 +220,56 @@ export class DbApi {
   }
 
   /**
-   * Query records up to a specific timestamp (inclusive) with optional category filters
+   * Query records up to a specific timestamp (inclusive) with category filters
+   * Used for category view mode
    *
    * @param stepId - Step id
    * @param relativeTs - Timestamp upper bound in nanoseconds
    * @param categoryName - Optional category name filter
    * @param subCategoryName - Optional subcategory name filter
+   * @param fileName - Optional file name filter (supports LIKE pattern matching)
    * @returns Matching records ordered by relativeTs
    */
-  async queryRecordsUpTo(
+  async queryRecordsUpToByCategory(
     stepId: number,
     relativeTs: number,
     categoryName?: string,
-    subCategoryName?: string
+    subCategoryName?: string,
+    fileName?: string
   ): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.queryRecordsUpTo', {
+    return await this.client.request<SqlRow[]>('memory.queryRecordsUpToByCategory', {
       stepId,
       relativeTs,
       categoryName,
       subCategoryName,
+      fileName,
+    });
+  }
+
+  /**
+   * Query records up to a specific timestamp (inclusive) with process/thread filters
+   * Used for process view mode
+   *
+   * @param stepId - Step id
+   * @param relativeTs - Timestamp upper bound in nanoseconds
+   * @param processName - Optional process name filter
+   * @param threadName - Optional thread name filter
+   * @param fileName - Optional file name filter (supports LIKE pattern matching)
+   * @returns Matching records ordered by relativeTs
+   */
+  async queryRecordsUpToByProcess(
+    stepId: number,
+    relativeTs: number,
+    processName?: string,
+    threadName?: string,
+    fileName?: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryRecordsUpToByProcess', {
+      stepId,
+      relativeTs,
+      processName,
+      threadName,
+      fileName,
     });
   }
 

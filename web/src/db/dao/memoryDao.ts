@@ -87,18 +87,23 @@ export class MemoryDao {
    * @returns SQL statement and parameters
    */
   static buildQueryOverviewTimeline(stepId: number, groupBy: 'category' | 'process' = 'category'): QueryResult {
-    const groupField = groupBy === 'process' ? 'process' : 'categoryName';
+    const isProcessGroup = groupBy === 'process';
+    const groupFieldId = isProcessGroup ? 'processId' : 'categoryNameId';
+    const groupDictAlias = isProcessGroup ? 'proc_dict' : 'category_dict';
+    
     const sql = `
       SELECT
-        CAST(relativeTs / 10000000 AS INTEGER) as timePoint10ms,
-        ${groupField} as groupName,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize,
-        COUNT(*) as eventCount,
-        GROUP_CONCAT(eventType || ':' || heapSize, '|') as eventDetails
-      FROM memory_records
-      WHERE step_id = ?
-      GROUP BY timePoint10ms, ${groupField}
-      ORDER BY timePoint10ms, ${groupField}
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        ${groupDictAlias}.value as groupName,
+        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
+      FROM memory_records_raw AS raw
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS ${groupDictAlias}
+        ON raw.${groupFieldId} = ${groupDictAlias}.dictId AND ${groupDictAlias}.step_id = raw.step_id
+      WHERE raw.step_id = ?
+      GROUP BY timePoint10ms, ${groupDictAlias}.value
+      ORDER BY timePoint10ms, ${groupDictAlias}.value
     `;
     const params: SqlParam[] = [stepId];
     return { sql, params };
@@ -115,15 +120,19 @@ export class MemoryDao {
   static buildQueryCategoryRecords(stepId: number, categoryName: string): QueryResult {
     const sql = `
       SELECT
-        CAST(relativeTs / 10000000 AS INTEGER) as timePoint10ms,
-        subCategoryName,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize,
-        COUNT(*) as eventCount,
-        GROUP_CONCAT(eventType || ':' || heapSize, '|') as eventDetails
-      FROM memory_records
-      WHERE step_id = ? AND categoryName = ?
-      GROUP BY timePoint10ms, subCategoryName
-      ORDER BY timePoint10ms, subCategoryName
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        sub_category_dict.value as subCategoryName,
+        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
+      FROM memory_records_raw AS raw
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS category_dict
+        ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_category_dict
+        ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND category_dict.value = ?
+      GROUP BY timePoint10ms, sub_category_dict.value
+      ORDER BY timePoint10ms, sub_category_dict.value
     `;
     const params: SqlParam[] = [stepId, categoryName];
     return { sql, params };
@@ -182,15 +191,19 @@ export class MemoryDao {
   static buildQueryProcessRecords(stepId: number, processName: string): QueryResult {
     const sql = `
       SELECT
-        CAST(relativeTs / 10000000 AS INTEGER) as timePoint10ms,
-        thread,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize,
-        COUNT(*) as eventCount,
-        GROUP_CONCAT(eventType || ':' || heapSize, '|') as eventDetails
-      FROM memory_records
-      WHERE step_id = ? AND process = ?
-      GROUP BY timePoint10ms, thread
-      ORDER BY timePoint10ms, thread
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        thread_dict.value as thread,
+        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
+      FROM memory_records_raw AS raw
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS proc_dict
+        ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS thread_dict
+        ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND proc_dict.value = ?
+      GROUP BY timePoint10ms, thread_dict.value
+      ORDER BY timePoint10ms, thread_dict.value
     `;
     const params: SqlParam[] = [stepId, processName];
     return { sql, params };
@@ -211,10 +224,22 @@ export class MemoryDao {
     threadName: string
   ): QueryResult {
     const sql = `
-      SELECT *
-      FROM memory_records
-      WHERE step_id = ? AND process = ? AND thread = ?
-      ORDER BY relativeTs
+      SELECT
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        file_dict.value as file,
+        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
+      FROM memory_records_raw AS raw
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS proc_dict
+        ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS thread_dict
+        ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND proc_dict.value = ? AND thread_dict.value = ?
+      GROUP BY timePoint10ms, file_dict.value
+      ORDER BY timePoint10ms, file_dict.value
     `;
     const params: SqlParam[] = [stepId, processName, threadName];
     return { sql, params };
@@ -379,38 +404,134 @@ export class MemoryDao {
   }
 
   /**
-   * Build SQL query for records up to specific timestamp with optional filters
+   * Build SQL query for records up to specific timestamp with category filters
+   * Used for category view mode
    *
    * @param stepId - Step id
    * @param relativeTsUpperBound - Upper bound (inclusive) for relative timestamp in nanoseconds
    * @param categoryName - Optional category filter
    * @param subCategoryName - Optional sub-category filter
+   * @param fileName - Optional file name filter (supports LIKE pattern matching)
    * @returns SQL statement and parameters
    */
-  static buildQueryRecordsUpToTime(
+  static buildQueryRecordsUpToTimeByCategory(
     stepId: number,
     relativeTsUpperBound: number,
     categoryName?: string,
-    subCategoryName?: string
+    subCategoryName?: string,
+    fileName?: string
   ): QueryResult {
     let sql = `
-      SELECT *
-      FROM memory_records
-      WHERE step_id = ? AND relativeTs <= ?
+      SELECT
+        raw.fileId AS fileId,
+        file_dict.value AS file,
+        event_dict.value AS eventType,
+        raw.addr AS addr,
+        raw.callchainId AS callchainId,
+        raw.heapSize AS heapSize,
+        raw.relativeTs AS relativeTs,
+        comp_name_dict.value AS componentName,
+        comp_category_dict.value AS componentCategory,
+        category_dict.value AS categoryName,
+        sub_category_dict.value AS subCategoryName
+      FROM memory_records_raw AS raw
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS comp_name_dict
+        ON raw.componentNameId = comp_name_dict.dictId AND comp_name_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS comp_category_dict
+        ON raw.componentCategoryId = comp_category_dict.dictId AND comp_category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS category_dict
+        ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_category_dict
+        ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND raw.relativeTs <= ?
     `;
     const params: SqlParam[] = [stepId, relativeTsUpperBound];
 
     if (categoryName) {
-      sql += ' AND categoryName = ?';
+      sql += ' AND category_dict.value = ?';
       params.push(categoryName);
     }
 
     if (subCategoryName) {
-      sql += ' AND subCategoryName = ?';
+      sql += ' AND sub_category_dict.value = ?';
       params.push(subCategoryName);
     }
 
-    sql += ' ORDER BY relativeTs';
+    if (fileName) {
+      sql += ' AND file_dict.value LIKE ?';
+      params.push(`%${fileName}`);
+    }
+
+    sql += ' ORDER BY raw.relativeTs';
+
+    return { sql, params };
+  }
+
+  /**
+   * Build SQL query for records up to specific timestamp with process/thread filters
+   * Used for process view mode
+   *
+   * @param stepId - Step id
+   * @param relativeTsUpperBound - Upper bound (inclusive) for relative timestamp in nanoseconds
+   * @param processName - Optional process name filter
+   * @param threadName - Optional thread name filter
+   * @param fileName - Optional file name filter (supports LIKE pattern matching)
+   * @returns SQL statement and parameters
+   */
+  static buildQueryRecordsUpToTimeByProcess(
+    stepId: number,
+    relativeTsUpperBound: number,
+    processName?: string,
+    threadName?: string,
+    fileName?: string
+  ): QueryResult {
+    let sql = `
+      SELECT
+        raw.pid AS pid,
+        proc_dict.value AS process,
+        raw.tid AS tid,
+        thread_dict.value AS thread,
+        raw.fileId AS fileId,
+        file_dict.value AS file,
+        event_dict.value AS eventType,
+        raw.addr AS addr,
+        raw.callchainId AS callchainId,
+        raw.heapSize AS heapSize,
+        raw.relativeTs AS relativeTs
+      FROM memory_records_raw AS raw
+      LEFT JOIN memory_data_dicts AS proc_dict
+        ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS thread_dict
+        ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+
+      WHERE raw.step_id = ? AND raw.relativeTs <= ?
+    `;
+    const params: SqlParam[] = [stepId, relativeTsUpperBound];
+
+    if (processName) {
+      sql += ' AND proc_dict.value = ?';
+      params.push(processName);
+    }
+
+    if (threadName) {
+      sql += ' AND thread_dict.value = ?';
+      params.push(threadName);
+    }
+
+    if (fileName) {
+      sql += ' AND file_dict.value LIKE ?';
+      params.push(`%${fileName}`);
+    }
+
+    sql += ' ORDER BY raw.relativeTs';
 
     return { sql, params };
   }

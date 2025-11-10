@@ -472,22 +472,60 @@ export async function queryRecordsAtTimePoint(
 }
 
 /**
- * Query records up to a specified timestamp (inclusive) with optional category filters
+ * Query records up to a specified timestamp (inclusive) with category filters
+ * Used for category view mode
  * @param db - Database instance
  * @param stepId - Step id
  * @param relativeTsUpperBound - Upper bound for relative timestamp (nanoseconds)
  * @param categoryName - Category filter (optional)
  * @param subCategoryName - Subcategory filter (optional)
+ * @param fileName - File name filter (optional, supports LIKE pattern matching)
  * @returns Matching records ordered by relativeTs
  */
-export async function queryRecordsUpToTime(
+export async function queryRecordsUpToTimeByCategory(
   db: Database,
   stepId: number,
   relativeTsUpperBound: number,
   categoryName?: string,
-  subCategoryName?: string
+  subCategoryName?: string,
+  fileName?: string
 ): Promise<SqlRow[]> {
-  const { sql, params } = MemoryDao.buildQueryRecordsUpToTime(stepId, relativeTsUpperBound, categoryName, subCategoryName);
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToTimeByCategory(
+    stepId,
+    relativeTsUpperBound,
+    categoryName,
+    subCategoryName,
+    fileName
+  );
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query records up to a specified timestamp (inclusive) with process/thread filters
+ * Used for process view mode
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param relativeTsUpperBound - Upper bound for relative timestamp (nanoseconds)
+ * @param processName - Process name filter (optional)
+ * @param threadName - Thread name filter (optional)
+ * @param fileName - File name filter (optional, supports LIKE pattern matching)
+ * @returns Matching records ordered by relativeTs
+ */
+export async function queryRecordsUpToTimeByProcess(
+  db: Database,
+  stepId: number,
+  relativeTsUpperBound: number,
+  processName?: string,
+  threadName?: string,
+  fileName?: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToTimeByProcess(
+    stepId,
+    relativeTsUpperBound,
+    processName,
+    threadName,
+    fileName
+  );
   return executeQueryWithExec(db, sql, params);
 }
 

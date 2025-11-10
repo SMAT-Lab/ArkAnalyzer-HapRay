@@ -42,7 +42,8 @@ export type WorkerMessageType =
   | 'memory.queryRecordsAtTimePoint'
   | 'memory.queryCategoryStats'
   | 'memory.querySubCategoryStats'
-  | 'memory.queryRecordsUpTo'
+  | 'memory.queryRecordsUpToByCategory'
+  | 'memory.queryRecordsUpToByProcess'
   | 'memory.queryCallchainFrames';
 
 /**
@@ -471,17 +472,48 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
         break;
       }
 
-      case 'memory.queryRecordsUpTo': {
+      case 'memory.queryRecordsUpToByCategory': {
         if (!db) {
           throw new Error('Database not initialized');
         }
-        const { stepId, relativeTs, categoryName, subCategoryName } = (payload as {
+        const { stepId, relativeTs, categoryName, subCategoryName, fileName } = (payload as {
           stepId: number;
           relativeTs: number;
           categoryName?: string;
           subCategoryName?: string;
+          fileName?: string;
         }) || {};
-        const result = await serviceApi.queryRecordsUpToTime(db, stepId, relativeTs, categoryName, subCategoryName);
+        const result = await serviceApi.queryRecordsUpToTimeByCategory(
+          db,
+          stepId,
+          relativeTs,
+          categoryName,
+          subCategoryName,
+          fileName
+        );
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryRecordsUpToByProcess': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, relativeTs, processName, threadName, fileName } = (payload as {
+          stepId: number;
+          relativeTs: number;
+          processName?: string;
+          threadName?: string;
+          fileName?: string;
+        }) || {};
+        const result = await serviceApi.queryRecordsUpToTimeByProcess(
+          db,
+          stepId,
+          relativeTs,
+          processName,
+          threadName,
+          fileName
+        );
         sendSuccessResponse(id, { result });
         break;
       }
