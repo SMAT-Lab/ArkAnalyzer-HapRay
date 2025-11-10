@@ -10,19 +10,6 @@
  */
 type SqlParam = string | number | null;
 
-/**
- * SQL query result row type
- */
-type SqlRow = Record<string, unknown>;
-
-/**
- * Memory record query result grouped by component
- */
-export interface MemoryRecordByComponent {
-  componentName: string | null;
-  relativeTs: number;
-  totalHeapSize: number;
-}
 
 /**
  * Query result with SQL and parameters
@@ -37,46 +24,6 @@ interface QueryResult {
  * Defines memory-related data access methods
  */
 export class MemoryDao {
-  /**
-   * Build SQL query for memory_records table (grouped by componentName and relativeTs, aggregated by heapSize)
-   *
-   * @param stepId - Step id (optional, for filtering specific step)
-   * @returns SQL statement and parameters
-   */
-  static buildQueryMemoryRecordsByComponent(stepId?: number): QueryResult {
-    let sql = `
-      SELECT 
-        componentName,
-        relativeTs,
-        SUM(heapSize) as totalHeapSize
-      FROM memory_records
-    `;
-    const params: SqlParam[] = [];
-
-    if (stepId) {
-      sql += ' WHERE step_id = ?';
-      params.push(stepId);
-    }
-
-    sql += ' GROUP BY componentName, relativeTs ORDER BY relativeTs, componentName';
-
-    return { sql, params };
-  }
-
-  /**
-   * Format query result data
-   *
-   * @param results - Raw query results
-   * @returns Formatted data
-   */
-  static formatMemoryRecordsByComponent(results: SqlRow[]): MemoryRecordByComponent[] {
-    return results.map((row: SqlRow) => ({
-      componentName: (typeof row.componentName === 'string' ? row.componentName : null),
-      relativeTs: Number(row.relativeTs) || 0,
-      totalHeapSize: Number(row.totalHeapSize) || 0,
-    }));
-  }
-
   /**
    * Build SQL query for overview level (aggregated timeline data for total and categories)
    * 查询总览层级数据：返回聚合后的时间线数据（总内存 + 各大类）
@@ -291,32 +238,6 @@ export class MemoryDao {
   }
 
   /**
-   * Build SQL query for all records in memory_records table
-   *
-   * @param stepId - Step id (optional, for filtering specific step)
-   * @param limit - Limit number of returned records (optional)
-   * @returns SQL statement and parameters
-   */
-  static buildQueryMemoryRecords(stepId?: number, limit?: number): QueryResult {
-    let sql = 'SELECT * FROM memory_records';
-    const params: SqlParam[] = [];
-
-    if (stepId !== undefined && stepId !== null) {
-      sql += ' WHERE step_id = ?';
-      params.push(stepId);
-    }
-
-    sql += ' ORDER BY relativeTs';
-
-    if (limit !== undefined && limit !== null) {
-      sql += ' LIMIT ?';
-      params.push(limit);
-    }
-
-    return { sql, params };
-  }
-
-  /**
    * Build SQL query for memory_results table
    *
    * @param stepId - Step id (optional, for filtering specific step)
@@ -332,73 +253,6 @@ export class MemoryDao {
     }
 
     sql += ' ORDER BY step_id';
-
-    return { sql, params };
-  }
-
-  /**
-   * Build SQL query for timeline data (aggregated by time point)
-   * Groups records by relativeTs (in 10ms units) and calculates cumulative memory
-   *
-   * Note: relativeTs in database is in nanoseconds, we convert to 10ms units (0.01 seconds)
-   * Conversion: nanoseconds / 10,000,000 = 10ms units
-   *
-   * @param stepId - Step id
-   * @param categoryName - Category name filter (optional)
-   * @param subCategoryName - Sub-category name filter (optional)
-   * @returns SQL statement and parameters
-   */
-  static buildQueryTimelineData(
-    stepId: number,
-    categoryName?: string,
-    subCategoryName?: string
-  ): QueryResult {
-    let sql = `
-      SELECT
-        CAST(relativeTs / 10000000 AS INTEGER) as timePoint10ms,
-        COUNT(*) as eventCount,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN 1 ELSE 0 END) as allocCount,
-        SUM(CASE WHEN eventType IN ('FreeEvent', 'MunmapEvent') THEN 1 ELSE 0 END) as freeCount,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize
-      FROM memory_records
-      WHERE step_id = ?
-    `;
-    const params: SqlParam[] = [stepId];
-
-    if (categoryName) {
-      sql += ' AND categoryName = ?';
-      params.push(categoryName);
-    }
-
-    if (subCategoryName) {
-      sql += ' AND subCategoryName = ?';
-      params.push(subCategoryName);
-    }
-
-    sql += ' GROUP BY timePoint10ms ORDER BY timePoint10ms';
-
-    return { sql, params };
-  }
-
-  /**
-   * Build SQL query for records at a specific time point
-   *
-   * @param stepId - Step id
-   * @param timePoint10ms - Time point in 10ms units (0.01 seconds)
-   * @returns SQL statement and parameters
-   */
-  static buildQueryRecordsAtTimePoint(stepId: number, timePoint10ms: number): QueryResult {
-    // Convert 10ms units back to nanoseconds for database query
-    // timePoint10ms * 10,000,000 = nanoseconds
-    const minNs = timePoint10ms * 10000000;
-    const maxNs = (timePoint10ms + 1) * 10000000;
-
-    const sql = `
-      SELECT * FROM memory_records
-      WHERE step_id = ? AND relativeTs >= ? AND relativeTs < ?
-      ORDER BY relativeTs, eventType, heapSize DESC
-    `;
-    const params: SqlParam[] = [stepId, minNs, maxNs];
 
     return { sql, params };
   }
@@ -567,68 +421,4 @@ export class MemoryDao {
     return { sql, params };
   }
 
-  /**
-   * Build SQL query for category statistics
-   *
-   * @param stepId - Step id
-   * @param relativeTs - Time point filter (optional, null means all time)
-   * @returns SQL statement and parameters
-   */
-  static buildQueryCategoryStats(stepId: number, relativeTs?: number | null): QueryResult {
-    let sql = `
-      SELECT
-        categoryName,
-        COUNT(*) as eventCount,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE 0 END) as allocSize,
-        SUM(CASE WHEN eventType IN ('FreeEvent', 'MunmapEvent') THEN heapSize ELSE 0 END) as freeSize,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize
-      FROM memory_records
-      WHERE step_id = ?
-    `;
-    const params: SqlParam[] = [stepId];
-
-    if (relativeTs !== undefined && relativeTs !== null) {
-      sql += ' AND relativeTs <= ?';
-      params.push(relativeTs);
-    }
-
-    sql += ' GROUP BY categoryName ORDER BY netSize DESC';
-
-    return { sql, params };
-  }
-
-  /**
-   * Build SQL query for sub-category statistics
-   *
-   * @param stepId - Step id
-   * @param categoryName - Category name filter
-   * @param relativeTs - Time point filter (optional, null means all time)
-   * @returns SQL statement and parameters
-   */
-  static buildQuerySubCategoryStats(
-    stepId: number,
-    categoryName: string,
-    relativeTs?: number | null
-  ): QueryResult {
-    let sql = `
-      SELECT
-        subCategoryName,
-        COUNT(*) as eventCount,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE 0 END) as allocSize,
-        SUM(CASE WHEN eventType IN ('FreeEvent', 'MunmapEvent') THEN heapSize ELSE 0 END) as freeSize,
-        SUM(CASE WHEN eventType IN ('AllocEvent', 'MmapEvent') THEN heapSize ELSE -heapSize END) as netSize
-      FROM memory_records
-      WHERE step_id = ? AND categoryName = ?
-    `;
-    const params: SqlParam[] = [stepId, categoryName];
-
-    if (relativeTs !== undefined && relativeTs !== null) {
-      sql += ' AND relativeTs <= ?';
-      params.push(relativeTs);
-    }
-
-    sql += ' GROUP BY subCategoryName ORDER BY netSize DESC';
-
-    return { sql, params };
-  }
 }

@@ -4,7 +4,6 @@
  */
 
 import { DbClient, type SqlParam, type SqlRow } from '../db/client/dbClient';
-import type { MemoryRecordByComponent } from '../db/dao/memoryDao';
 
 /**
  * Database API class
@@ -43,27 +42,6 @@ export class DbApi {
    */
   async query(sql: string, params?: SqlParam[]): Promise<SqlRow[]> {
     return await this.client.query(sql, params);
-  }
-
-  /**
-   * Query memory_records table, grouped by componentName and relativeTs, aggregated by heapSize
-   * New flow: Directly send built-in business message to Worker, Worker calls DAO and executes SQLite
-   * @param stepId - Step name (optional, for filtering specific step)
-   * @returns Memory records grouped by component
-   */
-  async queryMemoryRecordsByComponent(stepId?: number): Promise<MemoryRecordByComponent[]> {
-    return await this.client.request<MemoryRecordByComponent[]>('memory.queryByComponent', { stepId });
-  }
-
-  /**
-   * Query all records in memory_records table (optional filtering)
-   *
-   * @param stepId - Step name (optional, for filtering specific step)
-   * @param limit - Limit number of returned records (optional)
-   * @returns Query result array
-   */
-  async queryMemoryRecords(stepId?: number, limit?: number): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.queryRecords', { stepId, limit });
   }
 
   /**
@@ -186,40 +164,6 @@ export class DbApi {
   }
 
   /**
-   * Query timeline data (aggregated by time point)
-   *
-   * @param stepId - Step id
-   * @param categoryName - Category name filter (optional)
-   * @param subCategoryName - Sub-category name filter (optional)
-   * @returns Timeline data array
-   */
-  async queryTimelineData(
-    stepId: number,
-    categoryName?: string,
-    subCategoryName?: string
-  ): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.queryTimelineData', {
-      stepId,
-      categoryName,
-      subCategoryName,
-    });
-  }
-
-  /**
-   * Query records at a specific time point
-   *
-   * @param stepId - Step id
-   * @param relativeTs - Time point (in 10ms units)
-   * @returns Records array at the specified time point
-   */
-  async queryRecordsAtTimePoint(stepId: number, relativeTs: number): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.queryRecordsAtTimePoint', {
-      stepId,
-      relativeTs,
-    });
-  }
-
-  /**
    * Query records up to a specific timestamp (inclusive) with category filters
    * Used for category view mode
    *
@@ -284,40 +228,6 @@ export class DbApi {
     return await this.client.request<SqlRow[]>('memory.queryCallchainFrames', {
       stepId,
       callchainIds,
-    });
-  }
-
-  /**
-   * Query category statistics
-   *
-   * @param stepId - Step id
-   * @param relativeTs - Time point filter (optional, null means all time)
-   * @returns Category statistics array
-   */
-  async queryCategoryStats(stepId: number, relativeTs?: number | null): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.queryCategoryStats', {
-      stepId,
-      relativeTs,
-    });
-  }
-
-  /**
-   * Query sub-category statistics
-   *
-   * @param stepId - Step id
-   * @param categoryName - Category name filter
-   * @param relativeTs - Time point filter (optional, null means all time)
-   * @returns Sub-category statistics array
-   */
-  async querySubCategoryStats(
-    stepId: number,
-    categoryName: string,
-    relativeTs?: number | null
-  ): Promise<SqlRow[]> {
-    return await this.client.request<SqlRow[]>('memory.querySubCategoryStats', {
-      stepId,
-      categoryName,
-      relativeTs,
     });
   }
 
