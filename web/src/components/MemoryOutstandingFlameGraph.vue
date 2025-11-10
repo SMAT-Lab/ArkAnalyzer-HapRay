@@ -47,7 +47,8 @@ import MemoryFlameGraph from '@/components/MemoryFlameGraph.vue';
 import {
   EventType,
   fetchCallchainFrames,
-  fetchRecordsUpToTime,
+  fetchRecordsUpToTimeByCategory,
+  fetchRecordsUpToTimeByProcess,
 } from '@/stores/nativeMemory';
 import type {
   CallchainFrame,
@@ -168,13 +169,6 @@ function formatBytes(bytes: number): string {
     unitIndex === 0 ? 0 : 2,
   );
   return `${formatted} ${units[unitIndex]}`;
-}
-
-function normalizeFileName(fileName?: string | null): string | null {
-  if (!fileName || fileName === 'N/A') {
-    return null;
-  }
-  return fileName;
 }
 
 function getFrameLabel(frame: CallchainFrame, index: number): string {
@@ -356,6 +350,9 @@ async function refreshData(): Promise<void> {
   try {
     let category: string | undefined;
     let subCategory: string | undefined;
+    let process: string | undefined;
+    let thread: string | undefined;
+    let file: string | undefined;
 
     if (props.viewMode === 'category') {
       category =
@@ -368,76 +365,42 @@ async function refreshData(): Promise<void> {
         props.drillLevel === 'subCategory' || props.drillLevel === 'file'
           ? props.selectedSubCategory
           : undefined;
+      file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+    } else {
+      process =
+        props.drillLevel === 'process' ||
+        props.drillLevel === 'thread' ||
+        props.drillLevel === 'file'
+          ? props.selectedProcess
+          : undefined;
+      thread =
+        props.drillLevel === 'thread' || props.drillLevel === 'file'
+          ? props.selectedThread
+          : undefined;
+      file = props.drillLevel === 'file' ? props.selectedFile : undefined;
     }
 
-    const records = await fetchRecordsUpToTime(
-      props.stepId,
-      props.selectedTimePoint!,
-      category,
-      subCategory,
-    );
+    const records =
+      props.viewMode === 'category'
+        ? await fetchRecordsUpToTimeByCategory(
+            props.stepId,
+            props.selectedTimePoint!,
+            category,
+            subCategory,
+            file,
+          )
+        : await fetchRecordsUpToTimeByProcess(
+            props.stepId,
+            props.selectedTimePoint!,
+            process,
+            thread,
+            file,
+          );
     if (token !== requestToken) {
       return;
     }
 
-    let filteredRecords = records;
-
-    if (props.viewMode === 'category') {
-    // 在分类模式中：
-    // - category 层级：seriesName 对应小类，需要进一步按 subCategoryName 过滤
-    // - subCategory / file 层级：seriesName 多为文件名，file 过滤已在下方处理
-    if (props.drillLevel === 'category' && props.selectedSeriesName) {
-      filteredRecords = filteredRecords.filter(
-        record =>
-          record.categoryName === props.selectedCategory &&
-          record.subCategoryName === props.selectedSeriesName,
-      );
-    }
-      if (props.drillLevel === 'file' && props.selectedFile) {
-        const targetFile = props.selectedFile;
-        filteredRecords = records.filter(
-          record => normalizeFileName(record.file) === targetFile,
-        );
-      }
-    } else {
-    // 在进程模式中：
-    // - process 层级：seriesName 对应线程名
-    // - thread 层级：seriesName 多为文件名，file 过滤已在下方处理
-      if (props.drillLevel === 'process' && props.selectedProcess) {
-      filteredRecords = filteredRecords.filter(
-          record => record.process === props.selectedProcess,
-        );
-      if (props.selectedSeriesName) {
-        filteredRecords = filteredRecords.filter(
-          record => (record.thread || 'Unknown Thread') === props.selectedSeriesName,
-        );
-      }
-      } else if (
-        props.drillLevel === 'thread' &&
-        props.selectedProcess &&
-        props.selectedThread
-      ) {
-      filteredRecords = filteredRecords.filter(
-          record =>
-            record.process === props.selectedProcess &&
-            record.thread === props.selectedThread,
-        );
-      } else if (
-        props.drillLevel === 'file' &&
-        props.selectedProcess &&
-        props.selectedThread &&
-        props.selectedFile
-      ) {
-        filteredRecords = records.filter(
-          record =>
-            record.process === props.selectedProcess &&
-            record.thread === props.selectedThread &&
-            normalizeFileName(record.file) === props.selectedFile,
-        );
-      }
-    }
-
-    const outstandingEntries = calculateOutstanding(filteredRecords);
+    const outstandingEntries = calculateOutstanding(records);
     if (outstandingEntries.length === 0) {
       infoMessage.value = '选中时间点前没有未释放的调用链。';
       return;
