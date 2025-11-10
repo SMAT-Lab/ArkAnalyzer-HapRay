@@ -38,7 +38,9 @@ export type WorkerMessageType =
   | 'memory.queryTimelineData'
   | 'memory.queryRecordsAtTimePoint'
   | 'memory.queryCategoryStats'
-  | 'memory.querySubCategoryStats';
+  | 'memory.querySubCategoryStats'
+  | 'memory.queryRecordsUpTo'
+  | 'memory.queryCallchainFrames';
 
 /**
  * Worker request interface
@@ -361,6 +363,31 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
           relativeTs?: number | null;
         }) || {};
         const result = await serviceApi.querySubCategoryStats(db, stepId, categoryName, relativeTs);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryRecordsUpTo': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, relativeTs, categoryName, subCategoryName } = (payload as {
+          stepId: number;
+          relativeTs: number;
+          categoryName?: string;
+          subCategoryName?: string;
+        }) || {};
+        const result = await serviceApi.queryRecordsUpToTime(db, stepId, relativeTs, categoryName, subCategoryName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryCallchainFrames': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, callchainIds } = (payload as { stepId: number; callchainIds: number[] }) || {};
+        const result = await serviceApi.queryCallchainFrames(db, stepId, Array.isArray(callchainIds) ? callchainIds : []);
         sendSuccessResponse(id, { result });
         break;
       }

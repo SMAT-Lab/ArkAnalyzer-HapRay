@@ -332,6 +332,42 @@ export async function queryRecordsAtTimePoint(
 }
 
 /**
+ * Query records up to a specified timestamp (inclusive) with optional category filters
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param relativeTsUpperBound - Upper bound for relative timestamp (nanoseconds)
+ * @param categoryName - Category filter (optional)
+ * @param subCategoryName - Subcategory filter (optional)
+ * @returns Matching records ordered by relativeTs
+ */
+export async function queryRecordsUpToTime(
+  db: Database,
+  stepId: number,
+  relativeTsUpperBound: number,
+  categoryName?: string,
+  subCategoryName?: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToTime(stepId, relativeTsUpperBound, categoryName, subCategoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query callchain frames for specified callchain ids
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param callchainIds - List of callchain ids
+ * @returns Callchain frame rows ordered by callchainId and depth
+ */
+export async function queryCallchainFrames(
+  db: Database,
+  stepId: number,
+  callchainIds: number[]
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryCallchainFrames(stepId, callchainIds);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
  * Query category statistics
  * @param db - Database instance
  * @param stepId - Step id

@@ -1,5 +1,6 @@
-import type { NativeMemoryData, NativeMemoryRecord } from '@/stores/jsonDataStore';
-import { ComponentCategory, MemType } from '@/stores/jsonDataStore';
+import type { NativeMemoryData, NativeMemoryRecord } from '@/stores/nativeMemory';
+import { MemType } from '@/stores/nativeMemory';
+import { ComponentCategory } from '@/stores/jsonDataStore';
 
 /**
  * 计算当前内存数据
