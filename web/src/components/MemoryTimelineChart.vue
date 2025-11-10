@@ -82,6 +82,13 @@ interface TimelineProcessedData {
   threshold60: number;
 }
 
+interface TimePointStats {
+  eventCount: number;
+  allocCount: number;
+  freeCount: number;
+  netMemory: number;
+}
+
 interface AxisTooltipItem {
   seriesIndex?: number;
   dataIndex?: number;
@@ -136,6 +143,7 @@ const props = withDefaults(defineProps<Props>(), {
 // 定义 emit 事件
 const emit = defineEmits<{
   'time-point-selected': [timePoint: number | null];
+  'time-point-stats-updated': [stats: TimePointStats];
 }>();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
@@ -160,12 +168,14 @@ function resetDrillDown() {
   selectedCategory.value = '';
   selectedSubCategory.value = '';
   emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
 }
 
 function backToCategory() {
   drillDownLevel.value = 'category';
   selectedSubCategory.value = '';
   emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
 }
 
 function drillDownToCategory(categoryName: string) {
@@ -173,12 +183,14 @@ function drillDownToCategory(categoryName: string) {
   selectedCategory.value = categoryName;
   selectedSubCategory.value = '';
   emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
 }
 
 function drillDownToSubCategory(subCategoryName: string) {
   drillDownLevel.value = 'subCategory';
   selectedSubCategory.value = subCategoryName;
   emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
 }
 
 // 使用 ref 存储处理后的数据（由 Worker 异步计算）
@@ -195,6 +207,49 @@ function createEmptyProcessedData(): TimelineProcessedData {
 }
 
 const processedData = ref<TimelineProcessedData>(createEmptyProcessedData());
+
+function createEmptyTimePointStats(): TimePointStats {
+  return {
+    eventCount: 0,
+    allocCount: 0,
+    freeCount: 0,
+    netMemory: 0,
+  };
+}
+
+function calculateTimePointStats(records: NativeMemoryRecord[], timePoint: number | null): TimePointStats {
+  const stats = createEmptyTimePointStats();
+
+  if (timePoint === null || records.length === 0) {
+    return stats;
+  }
+
+  for (const record of records) {
+    if (record.relativeTs > timePoint) {
+      break;
+    }
+
+    stats.eventCount += 1;
+
+    const heapSize = record.heapSize ?? 0;
+    switch (record.eventType) {
+      case 'AllocEvent':
+      case 'MmapEvent':
+        stats.allocCount += 1;
+        stats.netMemory += heapSize;
+        break;
+      case 'FreeEvent':
+      case 'MunmapEvent':
+        stats.freeCount += 1;
+        stats.netMemory -= heapSize;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return stats;
+}
 
 // 加载状态
 const isLoadingData = ref(false);
@@ -417,6 +472,10 @@ async function loadCurrentLevelData() {
     currentRecords.value = [];
   } finally {
     isLoading.value = false;
+    emit(
+      'time-point-stats-updated',
+      calculateTimePointStats(currentRecords.value, props.selectedTimePoint ?? null)
+    );
   }
 }
 
@@ -926,6 +985,7 @@ function handleChartClick(params: unknown, seriesData: TimelineProcessedData['se
     console.log('[MemoryTimelineChart] Selected time point:', nextSelected);
   }
   emit('time-point-selected', nextSelected);
+  emit('time-point-stats-updated', calculateTimePointStats(currentRecords.value, nextSelected));
 }
 
 function handleChartDoubleClick(params: unknown) {
@@ -1067,7 +1127,11 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
 // 监听 selectedTimePoint 的变化，更新标记线
 watch(
   () => props.selectedTimePoint,
-  () => {
+  (newValue) => {
+    emit(
+      'time-point-stats-updated',
+      calculateTimePointStats(currentRecords.value, newValue ?? null)
+    );
     if (chartInstance && processedData.value.chartData.length > 0) {
       updateMarkLine(processedData.value.chartData);
     }
