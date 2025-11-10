@@ -110,185 +110,165 @@ export type CompressedNativeMemoryData = Record<string, CompressedNativeMemorySt
  * 原生内存相关操作集合
  */
 export class NativeMemoryService {
-  async loadMetadata(): Promise<NativeMemoryData | null> {
+  async loadMetadata(stepId: number): Promise<NativeMemoryStepData | null> {
     const dbApi = getDbApi();
-    const stepIds = await dbApi.queryMemorySteps();
+    console.log(`${LOG_PREFIX} Loading memory metadata for step ${stepId}.`);
 
-    if (stepIds.length === 0) {
-      console.log(`${LOG_PREFIX} No native memory steps found in database.`);
+    let peak_time: number | undefined;
+    let peak_value: number | undefined;
+
+    try {
+      const results = await dbApi.queryMemoryResults(stepId);
+      if (results.length > 0) {
+        const result = results[0];
+        peak_time = this.toOptionalNumber(result.peak_time);
+        peak_value = this.toOptionalNumber(result.peak_value);
+      }
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} Failed to query memory_results for step ${stepId}.`, error);
       return null;
     }
 
-    const nativeMemoryData: NativeMemoryData = {};
+    const stepData: NativeMemoryStepData = {
+      peak_time,
+      peak_value,
+      stats: undefined,
+      records: [],
+      callchains: undefined,
+    };
 
-    for (const stepId of stepIds) {
-      console.log(`${LOG_PREFIX} Loading memory metadata for step ${stepId}.`);
-
-      let peak_time: number | undefined;
-      let peak_value: number | undefined;
-
-      try {
-        const results = await dbApi.queryMemoryResults(stepId);
-        if (results.length > 0) {
-          const result = results[0];
-          peak_time = this.toOptionalNumber(result.peak_time);
-          peak_value = this.toOptionalNumber(result.peak_value);
-        }
-      } catch (error) {
-        console.warn(`${LOG_PREFIX} Failed to query memory_results for step ${stepId}.`, error);
-      }
-
-      nativeMemoryData[`step${stepId}`] = {
-        peak_time,
-        peak_value,
-        stats: undefined,
-        records: [],
-        callchains: undefined,
-      };
-
-      console.log(`${LOG_PREFIX} Metadata loaded for step ${stepId}.`);
-    }
-
-    console.log(`${LOG_PREFIX} Loaded native memory metadata for ${stepIds.length} step(s).`);
-    return nativeMemoryData;
+    console.log(`${LOG_PREFIX} Metadata loaded for step ${stepId}.`);
+    return stepData;
   }
 
-  async fetchOverviewTimeline(stepId: string, groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
+  async fetchOverviewTimeline(stepId: number, groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading overview timeline for ${stepId}, groupBy: ${groupBy}.`);
+    console.log(`${LOG_PREFIX} Loading overview timeline for step ${stepId}, groupBy: ${groupBy}.`);
 
-    const rows = await getDbApi().queryOverviewTimeline(stepNum, groupBy);
+    const rows = await getDbApi().queryOverviewTimeline(stepId, groupBy);
 
     console.log(`${LOG_PREFIX} Overview query returned ${rows.length} aggregated row(s).`);
 
     const records = rows.map((row) => this.mapOverviewRow(row, groupBy));
-    this.sortByTimestamp(records, stepId);
+    this.sortByTimestamp(records, `step${stepId}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} Overview timeline ready for ${stepId} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} Overview timeline ready for step ${stepId} in ${duration}ms.`);
 
     return records;
   }
 
-  async fetchCategoryRecords(stepId: string, categoryName: string): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
+  async fetchCategoryRecords(stepId: number, categoryName: string): Promise<NativeMemoryRecord[]> {
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading category records for ${stepId}, category ${categoryName}.`);
+    console.log(`${LOG_PREFIX} Loading category records for step ${stepId}, category ${categoryName}.`);
 
-    const rows = await getDbApi().queryCategoryRecords(stepNum, categoryName);
+    const rows = await getDbApi().queryCategoryRecords(stepId, categoryName);
     const records = rows.map((row) => this.mapCategoryRow(row, categoryName));
-    this.sortByTimestamp(records, `${stepId}/${categoryName}`);
+    this.sortByTimestamp(records, `step${stepId}/${categoryName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} Category records ready for ${stepId}/${categoryName} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} Category records ready for step ${stepId}/${categoryName} in ${duration}ms.`);
 
     return records;
   }
 
-  async fetchSubCategoryRecords(stepId: string, categoryName: string, subCategoryName: string): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
+  async fetchSubCategoryRecords(stepId: number, categoryName: string, subCategoryName: string): Promise<NativeMemoryRecord[]> {
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading subcategory records for ${stepId}, category ${categoryName}, subcategory ${subCategoryName}.`);
+    console.log(`${LOG_PREFIX} Loading subcategory records for step ${stepId}, category ${categoryName}, subcategory ${subCategoryName}.`);
 
-    const rows = await getDbApi().querySubCategoryRecords(stepNum, categoryName, subCategoryName);
+    const rows = await getDbApi().querySubCategoryRecords(stepId, categoryName, subCategoryName);
     const records = rows.map((row) => this.mapSubCategoryRow(row, categoryName, subCategoryName));
-    this.sortByTimestamp(records, `${stepId}/${categoryName}/${subCategoryName}`);
+    this.sortByTimestamp(records, `step${stepId}/${categoryName}/${subCategoryName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} Subcategory records ready for ${stepId}/${categoryName}/${subCategoryName} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} Subcategory records ready for step ${stepId}/${categoryName}/${subCategoryName} in ${duration}ms.`);
 
     return records;
   }
 
-  async fetchProcessRecords(stepId: string, processName: string): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
+  async fetchProcessRecords(stepId: number, processName: string): Promise<NativeMemoryRecord[]> {
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading process records for ${stepId}, process ${processName}.`);
+    console.log(`${LOG_PREFIX} Loading process records for step ${stepId}, process ${processName}.`);
 
-    const rows = await getDbApi().queryProcessRecords(stepNum, processName);
+    const rows = await getDbApi().queryProcessRecords(stepId, processName);
     const records = rows.map((row) => this.mapProcessRow(row, processName));
-    this.sortByTimestamp(records, `${stepId}/${processName}`);
+    this.sortByTimestamp(records, `step${stepId}/${processName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} Process records ready for ${stepId}/${processName} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} Process records ready for step ${stepId}/${processName} in ${duration}ms.`);
 
     return records;
   }
 
-  async fetchThreadRecords(stepId: string, processName: string, threadName: string): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
+  async fetchThreadRecords(stepId: number, processName: string, threadName: string): Promise<NativeMemoryRecord[]> {
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading thread records for ${stepId}, process ${processName}, thread ${threadName}.`);
+    console.log(`${LOG_PREFIX} Loading thread records for step ${stepId}, process ${processName}, thread ${threadName}.`);
 
-    const rows = await getDbApi().queryThreadRecords(stepNum, processName, threadName);
+    const rows = await getDbApi().queryThreadRecords(stepId, processName, threadName);
     const records = rows.map((row) => this.mapThreadRow(row, processName, threadName));
-    this.sortByTimestamp(records, `${stepId}/${processName}/${threadName}`);
+    this.sortByTimestamp(records, `step${stepId}/${processName}/${threadName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} Thread records ready for ${stepId}/${processName}/${threadName} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} Thread records ready for step ${stepId}/${processName}/${threadName} in ${duration}ms.`);
 
     return records;
   }
 
-  async fetchFileRecords(stepId: string, processName: string, threadName: string, fileName: string): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
+  async fetchFileRecords(stepId: number, processName: string, threadName: string, fileName: string): Promise<NativeMemoryRecord[]> {
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading file records for ${stepId}, process ${processName}, thread ${threadName}, file ${fileName}.`);
+    console.log(`${LOG_PREFIX} Loading file records for step ${stepId}, process ${processName}, thread ${threadName}, file ${fileName}.`);
 
-    const rows = await getDbApi().queryFileRecords(stepNum, processName, threadName, fileName);
+    const rows = await getDbApi().queryFileRecords(stepId, processName, threadName, fileName);
     const records = rows.map((row) => this.mapFileRow(row, processName, threadName, fileName));
-    this.sortByTimestamp(records, `${stepId}/${processName}/${threadName}/${fileName}`);
+    this.sortByTimestamp(records, `step${stepId}/${processName}/${threadName}/${fileName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} File records ready for ${stepId}/${processName}/${threadName}/${fileName} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} File records ready for step ${stepId}/${processName}/${threadName}/${fileName} in ${duration}ms.`);
 
     return records;
   }
 
   async fetchRecordsUpToTime(
-    stepId: string,
+    stepId: number,
     relativeTsSeconds: number,
     categoryName?: string,
     subCategoryName?: string
   ): Promise<NativeMemoryRecord[]> {
-    const stepNum = this.parseStepId(stepId);
     const relativeTsNs = Math.floor(relativeTsSeconds * 1_000_000_000);
     const startTime = performance.now();
 
     console.log(
-      `${LOG_PREFIX} Loading records up to ${relativeTsSeconds.toFixed(3)}s for ${stepId}, category ${categoryName ?? 'ALL'}, subCategory ${subCategoryName ?? 'ALL'}.`
+      `${LOG_PREFIX} Loading records up to ${relativeTsSeconds.toFixed(3)}s for step ${stepId}, category ${categoryName ?? 'ALL'}, subCategory ${subCategoryName ?? 'ALL'}.`
     );
 
-    const rows = await getDbApi().queryRecordsUpTo(stepNum, relativeTsNs, categoryName, subCategoryName);
+    const rows = await getDbApi().queryRecordsUpTo(stepId, relativeTsNs, categoryName, subCategoryName);
     const records = rows.map((row) => this.mapRawRecordRow(row));
-    this.sortByTimestamp(records, `${stepId}/recordsUpTo`);
+    this.sortByTimestamp(records, `step${stepId}/recordsUpTo`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(
-      `${LOG_PREFIX} Loaded ${records.length} record(s) up to ${relativeTsSeconds.toFixed(3)}s for ${stepId} in ${duration}ms.`
+      `${LOG_PREFIX} Loaded ${records.length} record(s) up to ${relativeTsSeconds.toFixed(3)}s for step ${stepId} in ${duration}ms.`
     );
 
     return records;
   }
 
-  async fetchCallchainFrames(stepId: string, callchainIds: number[]): Promise<CallchainFrameMap> {
+  async fetchCallchainFrames(stepId: number, callchainIds: number[]): Promise<CallchainFrameMap> {
     if (callchainIds.length === 0) {
       return {};
     }
 
-    const stepNum = this.parseStepId(stepId);
     const startTime = performance.now();
 
-    console.log(`${LOG_PREFIX} Loading ${callchainIds.length} callchain frame set(s) for ${stepId}.`);
+    console.log(`${LOG_PREFIX} Loading ${callchainIds.length} callchain frame set(s) for step ${stepId}.`);
 
-    const rows = await getDbApi().queryCallchainFrames(stepNum, callchainIds);
+    const rows = await getDbApi().queryCallchainFrames(stepId, callchainIds);
     const map: CallchainFrameMap = {};
 
     rows.forEach((row) => {
@@ -320,7 +300,7 @@ export class NativeMemoryService {
     });
 
     const duration = (performance.now() - startTime).toFixed(2);
-    console.log(`${LOG_PREFIX} Loaded callchain frames for ${stepId} in ${duration}ms.`);
+    console.log(`${LOG_PREFIX} Loaded callchain frames for step ${stepId} in ${duration}ms.`);
 
     return map;
   }
@@ -488,14 +468,6 @@ export class NativeMemoryService {
     };
   }
 
-  private parseStepId(stepId: string): number {
-    const match = /^step(\d+)$/.exec(stepId);
-    if (!match) {
-      throw new Error(`${LOG_PREFIX} Invalid step id: ${stepId}`);
-    }
-    return Number(match[1]);
-  }
-
   private parseAddress(value: unknown): number {
     if (value === null || value === undefined) {
       return 0;
@@ -529,32 +501,32 @@ export class NativeMemoryService {
 
 export const nativeMemoryService = new NativeMemoryService();
 
-export function loadNativeMemoryMetadataFromDb(): Promise<NativeMemoryData | null> {
-  return nativeMemoryService.loadMetadata();
+export function loadNativeMemoryMetadataFromDb(stepId: number): Promise<NativeMemoryStepData | null> {
+  return nativeMemoryService.loadMetadata(stepId);
 }
 
-export function fetchOverviewTimeline(stepId: string, groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
+export function fetchOverviewTimeline(stepId: number, groupBy: 'category' | 'process' = 'category'): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchOverviewTimeline(stepId, groupBy);
 }
 
-export function fetchCategoryRecords(stepId: string, categoryName: string): Promise<NativeMemoryRecord[]> {
+export function fetchCategoryRecords(stepId: number, categoryName: string): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchCategoryRecords(stepId, categoryName);
 }
 
 export function fetchSubCategoryRecords(
-  stepId: string,
+  stepId: number,
   categoryName: string,
   subCategoryName: string
 ): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchSubCategoryRecords(stepId, categoryName, subCategoryName);
 }
 
-export function fetchProcessRecords(stepId: string, processName: string): Promise<NativeMemoryRecord[]> {
+export function fetchProcessRecords(stepId: number, processName: string): Promise<NativeMemoryRecord[]> {
   return nativeMemoryService.fetchProcessRecords(stepId, processName);
 }
 
 export function fetchThreadRecords(
-  stepId: string,
+  stepId: number,
   processName: string,
   threadName: string
 ): Promise<NativeMemoryRecord[]> {
@@ -562,7 +534,7 @@ export function fetchThreadRecords(
 }
 
 export function fetchFileRecords(
-  stepId: string,
+  stepId: number,
   processName: string,
   threadName: string,
   fileName: string
@@ -571,7 +543,7 @@ export function fetchFileRecords(
 }
 
 export function fetchRecordsUpToTime(
-  stepId: string,
+  stepId: number,
   relativeTsSeconds: number,
   categoryName?: string,
   subCategoryName?: string
@@ -579,6 +551,6 @@ export function fetchRecordsUpToTime(
   return nativeMemoryService.fetchRecordsUpToTime(stepId, relativeTsSeconds, categoryName, subCategoryName);
 }
 
-export function fetchCallchainFrames(stepId: string, callchainIds: number[]): Promise<CallchainFrameMap> {
+export function fetchCallchainFrames(stepId: number, callchainIds: number[]): Promise<CallchainFrameMap> {
   return nativeMemoryService.fetchCallchainFrames(stepId, callchainIds);
 }

@@ -56,7 +56,7 @@
               </span>
             </h3>
             <MemoryTimelineChart
-              :step-id="stepKey"
+              :step-id="props.stepId"
               :selected-time-point="selectedTimePoint"
               :height="TIMELINE_CHART_HEIGHT"
               @time-point-selected="handleTimePointSelected"
@@ -70,7 +70,7 @@
       <el-row v-if="shouldShowOutstandingFlameGraph" :gutter="20">
         <el-col :span="24">
           <MemoryOutstandingFlameGraph
-            :step-id="stepKey"
+            :step-id="props.stepId"
             :selected-time-point="selectedTimePoint"
             :drill-level="drillState.drillLevel"
             :view-mode="drillState.viewMode"
@@ -91,7 +91,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import MemoryTimelineChart from './MemoryTimelineChart.vue';
 import MemoryOutstandingFlameGraph from './MemoryOutstandingFlameGraph.vue';
 import { loadNativeMemoryMetadataFromDb } from '@/stores/nativeMemory';
-import type { NativeMemoryData } from '@/stores/nativeMemory';
+import type { NativeMemoryStepData } from '@/stores/nativeMemory';
 
 const TIMELINE_CHART_HEIGHT = '350px';
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
@@ -108,13 +108,12 @@ interface TimePointStats {
 
 const props = defineProps<{ stepId: number }>();
 
-const nativeMemoryData = ref<NativeMemoryData | null>(null);
+const nativeMemoryData = ref<NativeMemoryStepData | null>(null);
 const isNativeMemoryLoading = ref(false);
 
 const selectedTimePoint = ref<number | null>(null);
 
-const stepKey = computed(() => `step${props.stepId}`);
-const stepData = computed(() => nativeMemoryData.value?.[stepKey.value]);
+const stepData = computed(() => nativeMemoryData.value);
 const hasData = computed(() => Boolean(stepData.value));
 
 const selectedTimePointStats = ref<TimePointStats>(createEmptyTimePointStats());
@@ -162,6 +161,8 @@ watch(
     selectedTimePoint.value = null;
     selectedTimePointStats.value = createEmptyTimePointStats();
     resetDrillState();
+    nativeMemoryData.value = null;
+    void ensureNativeMemoryDataLoaded();
   }
 );
 
@@ -169,7 +170,7 @@ async function ensureNativeMemoryDataLoaded() {
   if (nativeMemoryData.value || isNativeMemoryLoading.value) return;
   try {
     isNativeMemoryLoading.value = true;
-    nativeMemoryData.value = await loadNativeMemoryMetadataFromDb();
+    nativeMemoryData.value = await loadNativeMemoryMetadataFromDb(props.stepId);
   } catch (error) {
     nativeMemoryData.value = null;
     console.error('[NativeMemory] Failed to load native memory metadata:', error);

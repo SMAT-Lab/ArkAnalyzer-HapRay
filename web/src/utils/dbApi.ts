@@ -186,15 +186,6 @@ export class DbApi {
   }
 
   /**
-   * Query all distinct step names from memory_records table
-   * @returns Array of step names
-   */
-  async queryMemorySteps(): Promise<number[]> {
-    const results = await this.query('SELECT DISTINCT step_id FROM memory_records WHERE step_id IS NOT NULL ORDER BY step_id');
-    return results.map((row: SqlRow) => Number(row.step_id) || 0);
-  }
-
-  /**
    * Query timeline data (aggregated by time point)
    *
    * @param stepId - Step id
