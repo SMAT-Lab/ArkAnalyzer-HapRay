@@ -160,13 +160,60 @@ async function handleInit(payload: InitPayload): Promise<void> {
 }
 
 /**
+ * Format SQL with parameters for logging
+ * @param sql - SQL query string
+ * @param params - Query parameters
+ * @returns Formatted SQL string for logging
+ */
+function formatSqlForLogging(sql: string, params: SqlValue[]): string {
+  if (!params || params.length === 0) {
+    return sql;
+  }
+  
+  let formattedSql = sql;
+  let paramIndex = 0;
+  formattedSql = sql.replace(/\?/g, () => {
+    const param = params[paramIndex++];
+    if (param === null || param === undefined) {
+      return 'NULL';
+    }
+    if (typeof param === 'string') {
+      // Truncate long strings for logging
+      const str = param.length > 100 ? param.substring(0, 100) + '...' : param;
+      return `'${str.replace(/'/g, "''")}'`;
+    }
+    if (param instanceof Uint8Array) {
+      return `<Binary: ${param.length} bytes>`;
+    }
+    return String(param);
+  });
+  
+  return formattedSql;
+}
+
+/**
  * Handle exec request
  */
 function handleExec(payload: ExecPayload): void {
   if (!db) {
     throw new Error('Database not initialized');
   }
-  db.run(payload.sql, payload.params || []);
+  
+  const startTime = performance.now();
+  const formattedSql = formatSqlForLogging(payload.sql, payload.params || []);
+  
+  try {
+    db.run(payload.sql, payload.params || []);
+    const duration = performance.now() - startTime;
+    console.log(`[SQL Performance] Exec executed in ${duration.toFixed(2)}ms`);
+    console.log(`[SQL Performance] SQL: ${formattedSql}`);
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SQL Performance] Exec failed after ${duration.toFixed(2)}ms`);
+    console.error(`[SQL Performance] SQL: ${formattedSql}`);
+    console.error(`[SQL Performance] Error:`, error);
+    throw error;
+  }
 }
 
 /**
@@ -177,19 +224,34 @@ function handleQuery(payload: QueryPayload): Record<string, unknown>[] {
     throw new Error('Database not initialized');
   }
 
-  const stmt = db.prepare(payload.sql);
-  if (payload.params) {
-    stmt.bind(payload.params);
-  }
+  const startTime = performance.now();
+  const formattedSql = formatSqlForLogging(payload.sql, payload.params || []);
+  
+  try {
+    const stmt = db.prepare(payload.sql);
+    if (payload.params) {
+      stmt.bind(payload.params);
+    }
 
-  const result: Record<string, unknown>[] = [];
-  while (stmt.step()) {
-    const row = stmt.getAsObject({});
-    result.push(row);
-  }
-  stmt.free();
+    const result: Record<string, unknown>[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject({});
+      result.push(row);
+    }
+    stmt.free();
 
-  return result;
+    const duration = performance.now() - startTime;
+    console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned ${result.length} rows`);
+    console.log(`[SQL Performance] SQL: ${formattedSql}`);
+
+    return result;
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SQL Performance] Query failed after ${duration.toFixed(2)}ms`);
+    console.error(`[SQL Performance] SQL: ${formattedSql}`);
+    console.error(`[SQL Performance] Error:`, error);
+    throw error;
+  }
 }
 
 /**
