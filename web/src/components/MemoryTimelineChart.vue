@@ -1,6 +1,14 @@
 <template>
   <div class="memory-timeline-chart">
     <div style="position: relative; width: 100%;">
+      <!-- 模式切换按钮 -->
+      <div style="position: absolute; top: 10px; right: 10px; z-index: 100;">
+        <el-radio-group v-model="viewMode" size="small" @change="handleViewModeChange">
+          <el-radio-button label="category">分类模式</el-radio-button>
+          <el-radio-button label="process">进程模式</el-radio-button>
+        </el-radio-group>
+      </div>
+
       <!-- 面包屑导航 -->
       <div
         v-if="drillDownLevel !== 'overview'"
@@ -12,17 +20,50 @@
               <i class="el-icon-s-home"></i> 总览
             </a>
           </el-breadcrumb-item>
-          <el-breadcrumb-item v-if="drillDownLevel === 'category'">
-            <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
-          </el-breadcrumb-item>
-          <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
-            <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
-              {{ selectedCategory }}
-            </a>
-          </el-breadcrumb-item>
-          <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
-            <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
-          </el-breadcrumb-item>
+          <!-- 分类模式面包屑 -->
+          <template v-if="viewMode === 'category'">
+            <el-breadcrumb-item v-if="drillDownLevel === 'category'">
+              <span style="font-weight: 600; color: #333;">{{ selectedCategory }}</span>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'subCategory' || drillDownLevel === 'file'">
+              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToCategory">
+                {{ selectedCategory }}
+              </a>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'subCategory'">
+              <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToSubCategory">
+                {{ selectedSubCategory }}
+              </a>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+              <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
+            </el-breadcrumb-item>
+          </template>
+          <!-- 进程模式面包屑 -->
+          <template v-else>
+            <el-breadcrumb-item v-if="drillDownLevel === 'process'">
+              <span style="font-weight: 600; color: #333;">{{ selectedProcess }}</span>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'thread' || drillDownLevel === 'file'">
+              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToProcess">
+                {{ selectedProcess }}
+              </a>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'thread'">
+              <span style="font-weight: 600; color: #333;">{{ selectedThread }}</span>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+              <a href="#" style="color: #409eff; text-decoration: none;" @click.prevent="backToThread">
+                {{ selectedThread }}
+              </a>
+            </el-breadcrumb-item>
+            <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+              <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
+            </el-breadcrumb-item>
+          </template>
         </el-breadcrumb>
       </div>
 
@@ -42,8 +83,11 @@
       :step-id="props.stepId"
       :selected-time-point="props.selectedTimePoint"
       :drill-level="drillDownLevel"
+      :view-mode="viewMode"
       :selected-category="selectedCategory"
       :selected-sub-category="selectedSubCategory"
+      :selected-process="selectedProcess"
+      :selected-thread="selectedThread"
     />
   </div>
 </template>
@@ -53,7 +97,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
 import type { LineSeriesOption } from 'echarts';
 import type { NativeMemoryRecord } from '@/stores/nativeMemory';
-import { fetchOverviewTimeline, fetchCategoryRecords, fetchSubCategoryRecords } from '@/stores/nativeMemory';
+import {
+  fetchOverviewTimeline,
+  fetchCategoryRecords,
+  fetchSubCategoryRecords,
+  fetchProcessRecords,
+  fetchThreadRecords
+} from '@/stores/nativeMemory';
 import MemoryOutstandingFlameGraph from './MemoryOutstandingFlameGraph.vue';
 
 // 时间线数据处理结果类型
@@ -153,27 +203,57 @@ const isLoading = ref(false);
 // 当前加载的记录数据（按需加载）
 const currentRecords = ref<NativeMemoryRecord[]>([]);
 
+// 视图模式：分类模式 vs 进程模式
+type ViewMode = 'category' | 'process';
+const viewMode = ref<ViewMode>('category');
+
 // 下钻状态管理
-type DrillDownLevel = 'overview' | 'category' | 'subCategory';
+type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file';
 const drillDownLevel = ref<DrillDownLevel>('overview');
+
+// 分类模式状态
 const selectedCategory = ref<string>('');
 const selectedSubCategory = ref<string>('');
+
+// 进程模式状态
+const selectedProcess = ref<string>('');
+const selectedThread = ref<string>('');
+const selectedFile = ref<string>('');
+
 const activeSeriesIndex = ref<number | null>(null);
 
 const shouldShowOutstandingFlameGraph = computed(() => drillDownLevel.value !== 'overview');
+
+// 模式切换处理
+function handleViewModeChange() {
+  // 切换模式时重置到总览
+  resetDrillDown();
+}
 
 // 下钻导航函数
 function resetDrillDown() {
   drillDownLevel.value = 'overview';
   selectedCategory.value = '';
   selectedSubCategory.value = '';
+  selectedProcess.value = '';
+  selectedThread.value = '';
+  selectedFile.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
 
+// 分类模式导航
 function backToCategory() {
   drillDownLevel.value = 'category';
   selectedSubCategory.value = '';
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function backToSubCategory() {
+  drillDownLevel.value = 'subCategory';
+  selectedFile.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -189,6 +269,53 @@ function drillDownToCategory(categoryName: string) {
 function drillDownToSubCategory(subCategoryName: string) {
   drillDownLevel.value = 'subCategory';
   selectedSubCategory.value = subCategoryName;
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function drillDownToCategoryFile(fileName: string) {
+  drillDownLevel.value = 'file';
+  selectedFile.value = fileName;
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+// 进程模式导航
+function backToProcess() {
+  drillDownLevel.value = 'process';
+  selectedThread.value = '';
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function backToThread() {
+  drillDownLevel.value = 'thread';
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function drillDownToProcess(processName: string) {
+  drillDownLevel.value = 'process';
+  selectedProcess.value = processName;
+  selectedThread.value = '';
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function drillDownToThread(threadName: string) {
+  drillDownLevel.value = 'thread';
+  selectedThread.value = threadName;
+  selectedFile.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function drillDownToFile(fileName: string) {
+  drillDownLevel.value = 'file';
+  selectedFile.value = fileName;
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -309,63 +436,189 @@ function processTimelineDataSync(): TimelineProcessedData {
   // 按时间排序记录
   const sortedRecords = currentRecords.value.slice().sort((a, b) => a.relativeTs - b.relativeTs);
 
-  // 根据下钻层级过滤数据
+  // 根据下钻层级和模式过滤数据
   let filteredRecords = sortedRecords;
-  if (drillDownLevel.value === 'category') {
-    filteredRecords = sortedRecords.filter(r => r.categoryName === selectedCategory.value);
-  } else if (drillDownLevel.value === 'subCategory') {
-    filteredRecords = sortedRecords.filter(
-      r => r.categoryName === selectedCategory.value && r.subCategoryName === selectedSubCategory.value
-    );
+
+  if (viewMode.value === 'category') {
+    // 分类模式过滤
+    if (drillDownLevel.value === 'category') {
+      filteredRecords = sortedRecords.filter(r => r.categoryName === selectedCategory.value);
+    } else if (drillDownLevel.value === 'subCategory') {
+      filteredRecords = sortedRecords.filter(
+        r => r.categoryName === selectedCategory.value && r.subCategoryName === selectedSubCategory.value
+      );
+    } else if (drillDownLevel.value === 'file') {
+      filteredRecords = sortedRecords.filter(
+        r => r.categoryName === selectedCategory.value &&
+             r.subCategoryName === selectedSubCategory.value &&
+             normalizeFileName(r.file) === selectedFile.value
+      );
+    }
+  } else {
+    // 进程模式过滤
+    if (drillDownLevel.value === 'process') {
+      filteredRecords = sortedRecords.filter(r => r.process === selectedProcess.value);
+    } else if (drillDownLevel.value === 'thread') {
+      filteredRecords = sortedRecords.filter(
+        r => r.process === selectedProcess.value && r.thread === selectedThread.value
+      );
+    } else if (drillDownLevel.value === 'file') {
+      filteredRecords = sortedRecords.filter(
+        r => r.process === selectedProcess.value &&
+             r.thread === selectedThread.value &&
+             normalizeFileName(r.file) === selectedFile.value
+      );
+    }
   }
 
-  // 根据下钻层级决定如何分组数据
+  // 根据下钻层级和模式决定如何分组数据
   let seriesGroups: SeriesGroup[] = [];
 
   if (drillDownLevel.value === 'overview') {
-    // 总览：先添加总内存线，再添加各大类线
+    // 总览：先添加总内存线，再根据模式添加分组线
     seriesGroups.push({ name: '总内存', records: filteredRecords });
 
-    // 按大类分组（排除 UNKNOWN）
-    const categoryMap = new Map<string, NativeMemoryRecord[]>();
-    filteredRecords.forEach(record => {
-      if (record.categoryName !== 'UNKNOWN') {
-        if (!categoryMap.has(record.categoryName)) {
-          categoryMap.set(record.categoryName, []);
+    if (viewMode.value === 'category') {
+      // 分类模式：按大类分组（排除 UNKNOWN）
+      // 数据已经从后端按 categoryName 聚合，直接使用
+      const categoryMap = new Map<string, NativeMemoryRecord[]>();
+      filteredRecords.forEach(record => {
+        const categoryName = record.categoryName;
+        if (categoryName && categoryName !== 'UNKNOWN') {
+          if (!categoryMap.has(categoryName)) {
+            categoryMap.set(categoryName, []);
+          }
+          categoryMap.get(categoryName)!.push(record);
         }
-        categoryMap.get(record.categoryName)!.push(record);
-      }
-    });
-    seriesGroups.push(...Array.from(categoryMap.entries()).map(([name, records]) => ({ name, records })));
-  } else if (drillDownLevel.value === 'category') {
-    // 大类视图：按小类分组
-    const subCategoryMap = new Map<string, NativeMemoryRecord[]>();
-    filteredRecords.forEach(record => {
-      if (!subCategoryMap.has(record.subCategoryName)) {
-        subCategoryMap.set(record.subCategoryName, []);
-      }
-      subCategoryMap.get(record.subCategoryName)!.push(record);
-    });
+      });
+      seriesGroups.push(...Array.from(categoryMap.entries()).map(([name, records]) => ({ name, records })));
+    } else {
+      // 进程模式：按进程分组
+      // 数据已经从后端按 process 聚合，直接使用
+      const processMap = new Map<string, NativeMemoryRecord[]>();
+      filteredRecords.forEach(record => {
+        const processName = record.process;
+        if (processName) {
+          if (!processMap.has(processName)) {
+            processMap.set(processName, []);
+          }
+          processMap.get(processName)!.push(record);
+        }
+      });
+      seriesGroups.push(...Array.from(processMap.entries()).map(([name, records]) => ({ name, records })));
+    }
+  } else if (viewMode.value === 'category') {
+    // 分类模式的下钻
+    if (drillDownLevel.value === 'category') {
+      // 大类视图：按小类分组
+      console.log('[MemoryTimelineChart] Category level - total filtered records:', filteredRecords.length);
 
-    const allSeriesGroups = Array.from(subCategoryMap.entries()).map(([name, records]) => ({ name, records }));
-    seriesGroups = selectTopGroupsByFinalMemory(allSeriesGroups, MAX_SERIES_IN_CATEGORY_VIEW);
+      const subCategoryMap = new Map<string, NativeMemoryRecord[]>();
+      filteredRecords.forEach(record => {
+        if (!subCategoryMap.has(record.subCategoryName)) {
+          subCategoryMap.set(record.subCategoryName, []);
+        }
+        subCategoryMap.get(record.subCategoryName)!.push(record);
+      });
+
+      console.log('[MemoryTimelineChart] Category level - unique subCategories:', Array.from(subCategoryMap.keys()));
+
+      const allSeriesGroups = Array.from(subCategoryMap.entries()).map(([name, records]) => ({ name, records }));
+      seriesGroups = selectTopGroupsByFinalMemory(allSeriesGroups, MAX_SERIES_IN_CATEGORY_VIEW);
+      console.log('[MemoryTimelineChart] Category level - series groups after selection:', seriesGroups.map(g => g.name));
+    } else if (drillDownLevel.value === 'subCategory') {
+      // 小类视图：按文件分组
+      console.log('[MemoryTimelineChart] SubCategory level - total filtered records:', filteredRecords.length);
+
+      // 检查前几条记录的文件信息
+      const sampleRecords = filteredRecords.slice(0, 5);
+      console.log('[MemoryTimelineChart] Sample records:', sampleRecords.map(r => ({
+        file: r.file,
+        normalized: normalizeFileName(r.file),
+        category: r.categoryName,
+        subCategory: r.subCategoryName
+      })));
+
+      const fileMap = new Map<string, NativeMemoryRecord[]>();
+      let nullFileCount = 0;
+
+      filteredRecords.forEach(record => {
+        const fileName = normalizeFileName(record.file);
+        if (!fileName) {
+          nullFileCount++;
+          return;
+        }
+
+        if (!fileMap.has(fileName)) {
+          fileMap.set(fileName, []);
+        }
+        fileMap.get(fileName)!.push(record);
+      });
+
+      console.log('[MemoryTimelineChart] SubCategory level - null/NA files:', nullFileCount);
+      console.log('[MemoryTimelineChart] SubCategory level - unique files:', Array.from(fileMap.keys()));
+
+      const fileSeriesGroups = Array.from(fileMap.entries()).map(([name, records]) => ({ name, records }));
+      seriesGroups = selectTopGroupsByFinalMemory(fileSeriesGroups, MAX_SERIES_IN_FILE_VIEW);
+      console.log('[MemoryTimelineChart] SubCategory level - file groups after selection:', seriesGroups.length, 'files');
+    } else if (drillDownLevel.value === 'file') {
+      // 文件视图：显示单个文件的详细数据
+      seriesGroups = [{ name: selectedFile.value, records: filteredRecords }];
+    }
   } else {
-    // 小类视图：按文件分组
-    const fileMap = new Map<string, NativeMemoryRecord[]>();
-    filteredRecords.forEach(record => {
-      const fileName = normalizeFileName(record.file);
-      if (!fileName) {
-        return;
-      }
+    // 进程模式的下钻
+    if (drillDownLevel.value === 'process') {
+      // 进程视图：按线程分组
+      const threadMap = new Map<string, NativeMemoryRecord[]>();
+      filteredRecords.forEach(record => {
+        const threadName = record.thread || 'Unknown Thread';
+        if (!threadMap.has(threadName)) {
+          threadMap.set(threadName, []);
+        }
+        threadMap.get(threadName)!.push(record);
+      });
 
-      if (!fileMap.has(fileName)) {
-        fileMap.set(fileName, []);
-      }
-      fileMap.get(fileName)!.push(record);
-    });
+      const allSeriesGroups = Array.from(threadMap.entries()).map(([name, records]) => ({ name, records }));
+      seriesGroups = selectTopGroupsByFinalMemory(allSeriesGroups, MAX_SERIES_IN_CATEGORY_VIEW);
+    } else if (drillDownLevel.value === 'thread') {
+      // 线程视图：按文件分组
+      console.log('[MemoryTimelineChart] Thread level - total filtered records:', filteredRecords.length);
 
-    const fileSeriesGroups = Array.from(fileMap.entries()).map(([name, records]) => ({ name, records }));
-    seriesGroups = selectTopGroupsByFinalMemory(fileSeriesGroups, MAX_SERIES_IN_FILE_VIEW);
+      // 检查前几条记录的文件信息
+      const sampleRecords = filteredRecords.slice(0, 5);
+      console.log('[MemoryTimelineChart] Sample records:', sampleRecords.map(r => ({
+        file: r.file,
+        normalized: normalizeFileName(r.file),
+        process: r.process,
+        thread: r.thread
+      })));
+
+      const fileMap = new Map<string, NativeMemoryRecord[]>();
+      let nullFileCount = 0;
+
+      filteredRecords.forEach(record => {
+        const fileName = normalizeFileName(record.file);
+        if (!fileName) {
+          nullFileCount++;
+          return;
+        }
+
+        if (!fileMap.has(fileName)) {
+          fileMap.set(fileName, []);
+        }
+        fileMap.get(fileName)!.push(record);
+      });
+
+      console.log('[MemoryTimelineChart] Thread level - null/NA files:', nullFileCount);
+      console.log('[MemoryTimelineChart] Thread level - unique files:', Array.from(fileMap.keys()));
+
+      const fileSeriesGroups = Array.from(fileMap.entries()).map(([name, records]) => ({ name, records }));
+      seriesGroups = selectTopGroupsByFinalMemory(fileSeriesGroups, MAX_SERIES_IN_FILE_VIEW);
+      console.log('[MemoryTimelineChart] Thread level - file groups after selection:', seriesGroups.length, 'files');
+    } else if (drillDownLevel.value === 'file') {
+      // 文件视图：显示单个文件的详细数据
+      seriesGroups = [{ name: selectedFile.value, records: filteredRecords }];
+    }
   }
 
   // 收集所有唯一时间点
@@ -451,20 +704,45 @@ function processTimelineDataSync(): TimelineProcessedData {
 async function loadCurrentLevelData() {
   try {
     isLoading.value = true;
+    console.log('[MemoryTimelineChart] Loading data for level:', drillDownLevel.value, 'mode:', viewMode.value);
+
     // 根据下钻级别加载不同的数据
     if (drillDownLevel.value === 'overview') {
-      // 总览层级：加载聚合后的时间线数据
-      currentRecords.value = await fetchOverviewTimeline(props.stepId);
-    } else if (drillDownLevel.value === 'category') {
-      // 大类层级：加载指定大类的记录
-      currentRecords.value = await fetchCategoryRecords(props.stepId, selectedCategory.value);
-    } else if (drillDownLevel.value === 'subCategory') {
-      // 小类层级：加载指定小类的记录
-      currentRecords.value = await fetchSubCategoryRecords(
-        props.stepId,
-        selectedCategory.value,
-        selectedSubCategory.value
-      );
+      // 总览层级：根据模式加载不同的聚合数据
+      const groupBy = viewMode.value === 'process' ? 'process' : 'category';
+      currentRecords.value = await fetchOverviewTimeline(props.stepId, groupBy);
+    } else if (viewMode.value === 'category') {
+      // 分类模式
+      if (drillDownLevel.value === 'category') {
+        // 大类层级：加载指定大类的记录
+        currentRecords.value = await fetchCategoryRecords(props.stepId, selectedCategory.value);
+      } else if (drillDownLevel.value === 'subCategory' || drillDownLevel.value === 'file') {
+        // 小类层级和文件层级：加载指定小类的所有记录
+        // 文件层级会在 processTimelineDataSync 中通过前端过滤
+        console.log('[MemoryTimelineChart] Loading subCategory/file data for:', selectedCategory.value, selectedSubCategory.value);
+        currentRecords.value = await fetchSubCategoryRecords(
+          props.stepId,
+          selectedCategory.value,
+          selectedSubCategory.value
+        );
+        console.log('[MemoryTimelineChart] Loaded records:', currentRecords.value.length);
+      }
+    } else if (viewMode.value === 'process') {
+      // 进程模式
+      if (drillDownLevel.value === 'process') {
+        // 进程层级：加载指定进程的记录
+        currentRecords.value = await fetchProcessRecords(props.stepId, selectedProcess.value);
+      } else if (drillDownLevel.value === 'thread' || drillDownLevel.value === 'file') {
+        // 线程层级和文件层级：加载指定线程的所有记录
+        // 文件层级会在 processTimelineDataSync 中通过前端过滤
+        console.log('[MemoryTimelineChart] Loading thread/file data for:', selectedProcess.value, selectedThread.value);
+        currentRecords.value = await fetchThreadRecords(
+          props.stepId,
+          selectedProcess.value,
+          selectedThread.value
+        );
+        console.log('[MemoryTimelineChart] Loaded records:', currentRecords.value.length);
+      }
     }
 
   } catch (error) {
@@ -765,18 +1043,35 @@ function buildSeriesOptions(
 function buildChartTitle(
   drillLevel: DrillDownLevel,
   seriesCount: number,
+  mode: ViewMode,
   selectedCategoryName: string,
-  selectedSubCategoryName: string
+  selectedSubCategoryName: string,
+  selectedProcessName: string,
+  selectedThreadName: string
 ): string {
   let title = '内存时间线';
 
   if (drillLevel === 'overview') {
-    const categoryCount = Math.max(seriesCount - 1, 0);
-    title += ` - 总览 (总内存 + ${categoryCount} 个大类)`;
-  } else if (drillLevel === 'category') {
-    title += ` - ${selectedCategoryName} (${seriesCount} 个小类)`;
+    const groupCount = Math.max(seriesCount - 1, 0);
+    if (mode === 'category') {
+      title += ` - 总览 (总内存 + ${groupCount} 个大类)`;
+    } else {
+      title += ` - 总览 (总内存 + ${groupCount} 个进程)`;
+    }
+  } else if (mode === 'category') {
+    if (drillLevel === 'category') {
+      title += ` - ${selectedCategoryName} (${seriesCount} 个小类)`;
+    } else if (drillLevel === 'subCategory') {
+      title += ` - ${selectedCategoryName} / ${selectedSubCategoryName} (${seriesCount} 个文件)`;
+    }
   } else {
-    title += ` - ${selectedCategoryName} / ${selectedSubCategoryName} (${seriesCount} 个文件)`;
+    if (drillLevel === 'process') {
+      title += ` - ${selectedProcessName} (${seriesCount} 个线程)`;
+    } else if (drillLevel === 'thread') {
+      title += ` - ${selectedProcessName} / ${selectedThreadName} (${seriesCount} 个文件)`;
+    } else if (drillLevel === 'file') {
+      title += ` - ${selectedProcessName} / ${selectedThreadName} / 文件详情`;
+    }
   }
 
   return title;
@@ -784,6 +1079,7 @@ function buildChartTitle(
 
 function buildChartSubtext(
   drillLevel: DrillDownLevel,
+  mode: ViewMode,
   selectedTimePoint: number | null,
   maxMemory: number,
   minMemory: number,
@@ -792,12 +1088,25 @@ function buildChartSubtext(
   const hints: string[] = [];
 
   if (drillLevel === 'overview') {
-    hints.push('💡 点击线条查看大类详情');
-  } else if (drillLevel === 'category') {
-    hints.push('💡 点击线条查看小类详情');
+    if (mode === 'category') {
+      hints.push('💡 双击线条查看大类详情');
+    } else {
+      hints.push('💡 双击线条查看进程详情');
+    }
+  } else if (mode === 'category') {
+    if (drillLevel === 'category') {
+      hints.push('💡 双击线条查看小类详情');
+    } else {
+      hints.push('💡 点击数据点选择时间点');
+      hints.push('📁 图例可按文件筛选');
+    }
   } else {
-    hints.push('💡 点击数据点选择时间点');
-    hints.push('📁 图例可按文件筛选');
+    if (drillLevel === 'process') {
+      hints.push('💡 双击线条查看线程详情');
+    } else {
+      hints.push('💡 点击数据点选择时间点');
+      hints.push('📁 图例可按文件筛选');
+    }
   }
 
   if (selectedTimePoint !== null) {
@@ -831,8 +1140,23 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
     animationDuration: isVeryLargeDataset ? 0 : 300,
     animationDurationUpdate: isVeryLargeDataset ? 0 : 300,
     title: {
-      text: buildChartTitle(drillLevel, seriesData.length, selectedCategory, selectedSubCategory),
-      subtext: buildChartSubtext(drillLevel, selectedTimePoint, maxMemory, minMemory, finalMemory),
+      text: buildChartTitle(
+        drillLevel,
+        seriesData.length,
+        viewMode.value,
+        selectedCategory,
+        selectedSubCategory,
+        selectedProcess.value,
+        selectedThread.value
+      ),
+      subtext: buildChartSubtext(
+        drillLevel,
+        viewMode.value,
+        selectedTimePoint,
+        maxMemory,
+        minMemory,
+        finalMemory
+      ),
       left: 'center',
       textStyle: {
         fontSize: 16,
@@ -994,17 +1318,46 @@ function handleChartDoubleClick(params: unknown) {
   }
 
   const seriesName = params.seriesName ?? '';
+  console.log('[MemoryTimelineChart] Double click:', {
+    drillDownLevel: drillDownLevel.value,
+    viewMode: viewMode.value,
+    seriesName,
+  });
 
   if (drillDownLevel.value === 'overview') {
     if (seriesName && seriesName !== '总内存') {
-      drillDownToCategory(seriesName);
+      if (viewMode.value === 'category') {
+        drillDownToCategory(seriesName);
+      } else {
+        drillDownToProcess(seriesName);
+      }
     }
     return;
   }
 
-  if (drillDownLevel.value === 'category') {
-    if (seriesName) {
-      drillDownToSubCategory(seriesName);
+  if (viewMode.value === 'category') {
+    if (drillDownLevel.value === 'category') {
+      if (seriesName) {
+        console.log('[MemoryTimelineChart] Drilling down to subCategory:', seriesName);
+        drillDownToSubCategory(seriesName);
+      }
+    } else if (drillDownLevel.value === 'subCategory') {
+      if (seriesName) {
+        console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
+        drillDownToCategoryFile(seriesName);
+      }
+    }
+  } else {
+    if (drillDownLevel.value === 'process') {
+      if (seriesName) {
+        console.log('[MemoryTimelineChart] Drilling down to thread:', seriesName);
+        drillDownToThread(seriesName);
+      }
+    } else if (drillDownLevel.value === 'thread') {
+      if (seriesName) {
+        console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
+        drillDownToFile(seriesName);
+      }
     }
   }
 }
@@ -1158,7 +1511,7 @@ watch(
 
 // 监听下钻状态的变化，重新加载数据并初始化图表
 watch(
-  [drillDownLevel, selectedCategory, selectedSubCategory],
+  [viewMode, drillDownLevel, selectedCategory, selectedSubCategory, selectedProcess, selectedThread, selectedFile],
   async () => {
     await loadCurrentLevelData();
     await loadProcessedData();
