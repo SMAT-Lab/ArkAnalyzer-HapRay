@@ -138,9 +138,6 @@ const hasData = computed(() => Boolean(stepData.value));
 const selectedTimePointStats = ref<TimePointStats>(createEmptyTimePointStats());
 
 const selectedTimePointMemory = computed(() => selectedTimePointStats.value.netMemory);
-const selectedTimePointEventCount = computed(() => selectedTimePointStats.value.eventCount);
-const selectedTimePointAllocCount = computed(() => selectedTimePointStats.value.allocCount);
-const selectedTimePointFreeCount = computed(() => selectedTimePointStats.value.freeCount);
 
 interface DrillState {
   drillLevel: DrillDownLevel;

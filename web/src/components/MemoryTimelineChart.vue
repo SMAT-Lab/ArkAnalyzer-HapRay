@@ -118,7 +118,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import * as echarts from 'echarts';
 import type { LineSeriesOption } from 'echarts';
 import type { NativeMemoryRecord } from '@/stores/nativeMemory';
@@ -284,10 +284,6 @@ let legendDrillDownLock = false;
 // 记录点击点所属的系列，便于下游（统计、火焰图）基于正确的系列上下文工作
 const selectedSeriesIndex = ref<number | null>(null);
 const selectedSeriesName = ref<string>('');
-
-const shouldShowOutstandingFlameGraph = computed(
-  () => drillDownLevel.value !== 'overview' && props.selectedTimePoint !== null,
-);
 
 const emitDrillStateChange = () => {
   emit('drill-state-change', {
@@ -1168,8 +1164,7 @@ function buildChartSubtext(
   selectedTimePoint: number | null,
   maxMemory: number,
   minMemory: number,
-  finalMemory: number,
-  selectedFileName: string
+  finalMemory: number
 ): string {
   const hints: string[] = [];
 
@@ -1254,8 +1249,7 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
         selectedTimePoint,
         maxMemory,
         minMemory,
-        finalMemory,
-        selectedFile,
+        finalMemory
       ),
       left: 'center',
       textStyle: {
@@ -1624,14 +1618,19 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
       typeof selectedSeriesIndex.value === 'number' &&
       option.series[selectedSeriesIndex.value]
     ) {
-      const s = option.series[selectedSeriesIndex.value] as echarts.SeriesOption & { data?: Array<any> };
-      const point = Array.isArray(s.data) ? s.data[closestIndex] : null;
-      const value =
-        point && typeof point === 'object' && point !== null && 'value' in point
-          ? (point as any).value
-          : Array.isArray(s.data) && typeof s.data[closestIndex] === 'number'
-          ? (s.data as Array<number>)[closestIndex]
-          : null;
+      const s = option.series[selectedSeriesIndex.value] as echarts.SeriesOption & {
+        data?: Array<number | { value?: number } | LineSeriesDataItem>;
+      };
+      const point = Array.isArray(s.data) ? (s.data[closestIndex] as unknown) : null;
+      let value: number | null = null;
+      if (typeof point === 'number') {
+        value = point as number;
+      } else if (point && typeof point === 'object') {
+        const obj = point as { value?: number };
+        if (typeof obj.value === 'number') {
+          value = obj.value;
+        }
+      }
       if (typeof value === 'number') {
         selectedMemory = value;
       }

@@ -74,7 +74,7 @@ interface OutstandingFlameGraphProps {
   selectedSubCategory: string;
   selectedProcess?: string;
   selectedThread?: string;
-  selectedFile: string;
+  selectedFile?: string;
   // 选中的系列名称（来自时间线图表点击的线），用于进一步过滤（如小类/线程/文件）
   selectedSeriesName?: string;
   maxCallchains?: number;
@@ -370,7 +370,7 @@ async function refreshData(): Promise<void> {
           : undefined;
     }
 
-    let records = await fetchRecordsUpToTime(
+    const records = await fetchRecordsUpToTime(
       props.stepId,
       props.selectedTimePoint!,
       category,
