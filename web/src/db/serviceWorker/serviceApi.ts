@@ -64,13 +64,18 @@ export async function queryMemoryResults(db: Database, stepId?: number): Promise
 }
 
 /**
- * Query overview level timeline data (aggregated by time point and category)
+ * Query overview level timeline data (aggregated by time point and category/process)
  * @param db - Database instance
  * @param stepId - Step id
+ * @param groupBy - Group by field: 'category' or 'process'
  * @returns Overview timeline data array (timePoint10ms, categoryName, netSize)
  */
-export async function queryOverviewTimeline(db: Database, stepId: number): Promise<SqlRow[]> {
-  const { sql, params } = MemoryDao.buildQueryOverviewTimeline(stepId);
+export async function queryOverviewTimeline(
+  db: Database,
+  stepId: number,
+  groupBy: 'category' | 'process' = 'category'
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryOverviewTimeline(stepId, groupBy);
   return executeQueryWithExec(db, sql, params);
 }
 
@@ -105,6 +110,60 @@ export async function querySubCategoryRecords(
   subCategoryName: string
 ): Promise<SqlRow[]> {
   const { sql, params } = MemoryDao.buildQuerySubCategoryRecords(stepId, categoryName, subCategoryName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query process level records (for specific process)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param processName - Process name
+ * @returns Process records array
+ */
+export async function queryProcessRecords(
+  db: Database,
+  stepId: number,
+  processName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryProcessRecords(stepId, processName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query thread level records (for specific thread)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param processName - Process name
+ * @param threadName - Thread name
+ * @returns Thread records array
+ */
+export async function queryThreadRecords(
+  db: Database,
+  stepId: number,
+  processName: string,
+  threadName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryThreadRecords(stepId, processName, threadName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query file level records (for specific file)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param processName - Process name
+ * @param threadName - Thread name
+ * @param fileName - File name
+ * @returns File records array
+ */
+export async function queryFileRecords(
+  db: Database,
+  stepId: number,
+  processName: string,
+  threadName: string,
+  fileName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryFileRecords(stepId, processName, threadName, fileName);
   return executeQueryWithExec(db, sql, params);
 }
 

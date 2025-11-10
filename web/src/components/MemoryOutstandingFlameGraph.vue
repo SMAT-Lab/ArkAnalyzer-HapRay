@@ -48,7 +48,8 @@ import type {
   NativeMemoryRecord,
 } from '@/stores/nativeMemory';
 
-type DrillDownLevel = 'overview' | 'category' | 'subCategory';
+type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file';
+type ViewMode = 'category' | 'process';
 
 interface FlameGraphNode {
   name: string;
@@ -61,13 +62,19 @@ interface OutstandingFlameGraphProps {
   stepId: string;
   selectedTimePoint: number | null;
   drillLevel: DrillDownLevel;
+  viewMode?: ViewMode;
   selectedCategory: string;
   selectedSubCategory: string;
+  selectedProcess?: string;
+  selectedThread?: string;
   maxCallchains?: number;
 }
 
 const props = withDefaults(defineProps<OutstandingFlameGraphProps>(), {
   maxCallchains: 200,
+  viewMode: 'category',
+  selectedProcess: '',
+  selectedThread: '',
 });
 
 const flameGraphData = ref<FlameGraphNode[]>([]);
@@ -87,8 +94,11 @@ watch(
     () => props.stepId,
     () => props.selectedTimePoint,
     () => props.drillLevel,
+    () => props.viewMode,
     () => props.selectedCategory,
     () => props.selectedSubCategory,
+    () => props.selectedProcess,
+    () => props.selectedThread,
     () => props.maxCallchains,
   ],
   () => {
@@ -298,12 +308,18 @@ async function refreshData(): Promise<void> {
   isLoading.value = true;
 
   try {
-    const category =
-      props.drillLevel === 'category' || props.drillLevel === 'subCategory'
-        ? props.selectedCategory
-        : undefined;
-    const subCategory =
-      props.drillLevel === 'subCategory' ? props.selectedSubCategory : undefined;
+    // 根据模式确定过滤条件
+    let category: string | undefined;
+    let subCategory: string | undefined;
+
+    if (props.viewMode === 'category') {
+      category =
+        props.drillLevel === 'category' || props.drillLevel === 'subCategory'
+          ? props.selectedCategory
+          : undefined;
+      subCategory =
+        props.drillLevel === 'subCategory' ? props.selectedSubCategory : undefined;
+    }
 
     const records = await fetchRecordsUpToTime(
       props.stepId,
@@ -315,7 +331,32 @@ async function refreshData(): Promise<void> {
       return;
     }
 
-    const outstandingEntries = calculateOutstanding(records);
+    // 如果是进程模式，需要在前端进一步过滤
+    let filteredRecords = records;
+    if (props.viewMode === 'process') {
+      if (props.drillLevel === 'process') {
+        filteredRecords = records.filter(r => r.process === props.selectedProcess);
+      } else if (props.drillLevel === 'thread') {
+        filteredRecords = records.filter(
+          r => r.process === props.selectedProcess && r.thread === props.selectedThread
+        );
+      } else if (props.drillLevel === 'file') {
+        // 文件层级：需要标准化文件名进行比较
+        const normalizeFileName = (file: string | null): string => {
+          if (!file) return '';
+          const parts = file.split(/[/\\]/);
+          return parts[parts.length - 1] || '';
+        };
+
+        filteredRecords = records.filter(
+          r => r.process === props.selectedProcess &&
+               r.thread === props.selectedThread &&
+               normalizeFileName(r.file) === props.selectedThread
+        );
+      }
+    }
+
+    const outstandingEntries = calculateOutstanding(filteredRecords);
     if (outstandingEntries.length === 0) {
       infoMessage.value = '选中时间点前没有未释放的调用链。';
       return;
