@@ -661,16 +661,6 @@ function processTimelineDataSync(): TimelineProcessedData {
     } else if (drillDownLevel.value === 'thread') {
       // 线程视图：按文件分组
       console.log('[MemoryTimelineChart] Thread level - total filtered records:', filteredRecords.length);
-
-      // 检查前几条记录的文件信息
-      const sampleRecords = filteredRecords.slice(0, 5);
-      console.log('[MemoryTimelineChart] Sample records:', sampleRecords.map(r => ({
-        file: r.file,
-        normalized: normalizeFileName(r.file),
-        process: r.process,
-        thread: r.thread
-      })));
-
       const fileMap = new Map<string, NativeMemoryRecord[]>();
       let nullFileCount = 0;
 
@@ -688,7 +678,6 @@ function processTimelineDataSync(): TimelineProcessedData {
       });
 
       console.log('[MemoryTimelineChart] Thread level - null/NA files:', nullFileCount);
-      console.log('[MemoryTimelineChart] Thread level - unique files:', Array.from(fileMap.keys()));
 
       const fileSeriesGroups = Array.from(fileMap.entries()).map(([name, records]) => ({ name, records }));
       seriesGroups = selectTopGroupsByFinalMemory(fileSeriesGroups, MAX_SERIES_IN_FILE_VIEW);

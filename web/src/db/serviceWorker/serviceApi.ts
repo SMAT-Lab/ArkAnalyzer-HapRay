@@ -12,6 +12,35 @@ import { MemoryDao } from '../dao/memoryDao';
 type SqlRow = Record<string, unknown>;
 
 /**
+ * Format SQL with parameters for logging
+ * @param sql - SQL query string
+ * @param params - Query parameters
+ * @returns Formatted SQL string for logging
+ */
+function formatSqlForLogging(sql: string, params: (string | number | null)[]): string {
+  if (!params || params.length === 0) {
+    return sql;
+  }
+  
+  let formattedSql = sql;
+  let paramIndex = 0;
+  formattedSql = sql.replace(/\?/g, () => {
+    const param = params[paramIndex++];
+    if (param === null || param === undefined) {
+      return 'NULL';
+    }
+    if (typeof param === 'string') {
+      // Truncate long strings for logging
+      const str = param.length > 100 ? param.substring(0, 100) + '...' : param;
+      return `'${str.replace(/'/g, "''")}'`;
+    }
+    return String(param);
+  });
+  
+  return formattedSql;
+}
+
+/**
  * Execute query and return formatted results
  * @param db - Database instance
  * @param buildQuery - Function that builds SQL query with step id parameter
@@ -24,19 +53,35 @@ async function executeQuery(
   stepId?: number
 ): Promise<SqlRow[]> {
   const { sql, params } = buildQuery(stepId);
-  const stmt = db.prepare(sql);
+  const startTime = performance.now();
+  const formattedSql = formatSqlForLogging(sql, params || []);
   
-  if (params && params.length > 0) {
-    stmt.bind(params);
+  try {
+    const stmt = db.prepare(sql);
+    
+    if (params && params.length > 0) {
+      stmt.bind(params);
+    }
+    
+    const rows: SqlRow[] = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject({}));
+    }
+    
+    stmt.free();
+    
+    const duration = performance.now() - startTime;
+    console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned ${rows.length} rows`);
+    console.log(`[SQL Performance] SQL: ${formattedSql}`);
+    
+    return rows;
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SQL Performance] Query failed after ${duration.toFixed(2)}ms`);
+    console.error(`[SQL Performance] SQL: ${formattedSql}`);
+    console.error(`[SQL Performance] Error:`, error);
+    throw error;
   }
-  
-  const rows: SqlRow[] = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject({}));
-  }
-  
-  stmt.free();
-  return rows;
 }
 
 /**
@@ -207,8 +252,7 @@ export async function queryMemoryRecords(
   limit?: number
 ): Promise<SqlRow[]> {
   const { sql, params } = MemoryDao.buildQueryMemoryRecords(stepId, limit);
-  console.log('[serviceApi] queryMemoryRecords - SQL:', sql);
-  console.log('[serviceApi] queryMemoryRecords - Params:', params);
+  const startTime = performance.now();
   
   // Build SQL with parameters for db.exec
   // Note: Using db.exec directly because Statement.step() has issues with large datasets
@@ -227,9 +271,8 @@ export async function queryMemoryRecords(
       return String(param);
     });
   }
-  
-  console.log('[serviceApi] queryMemoryRecords - Executing query with db.exec...');
-  const startTime = performance.now();
+
+  const formattedSql = formatSqlForLogging(sql, params || []);
   
   try {
     const execResult = db.exec(execSql);
@@ -239,10 +282,10 @@ export async function queryMemoryRecords(
       const execRowCount = execRows.values?.length || 0;
       const columns = execRows.columns || [];
       
-      console.log(`[serviceApi] queryMemoryRecords - db.exec returned ${execRowCount} rows, ${columns.length} columns`);
-      
       if (execRowCount === 0) {
-        console.log('[serviceApi] queryMemoryRecords - No records found');
+        const duration = performance.now() - startTime;
+        console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned 0 rows`);
+        console.log(`[SQL Performance] SQL: ${formattedSql}`);
         return [];
       }
       
@@ -257,25 +300,25 @@ export async function queryMemoryRecords(
           row[columns[j]] = values[j];
         }
         rows.push(row);
-        
-        // Output progress every 50000 records (to avoid too many logs)
-        if ((i + 1) % 50000 === 0) {
-          const elapsed = ((performance.now() - conversionStartTime) / 1000).toFixed(2);
-          console.log(`[serviceApi] queryMemoryRecords - Converted ${i + 1}/${execRowCount} records (${elapsed}s elapsed)...`);
-        }
       }
       
-      const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-      const conversionTime = ((performance.now() - conversionStartTime) / 1000).toFixed(2);
-      console.log(`[serviceApi] queryMemoryRecords - Successfully converted ${rows.length} records (conversion: ${conversionTime}s, total: ${totalTime}s)`);
+      const totalDuration = performance.now() - startTime;
+      const conversionDuration = performance.now() - conversionStartTime;
+      console.log(`[SQL Performance] Query executed in ${totalDuration.toFixed(2)}ms (exec: ${(totalDuration - conversionDuration).toFixed(2)}ms, conversion: ${conversionDuration.toFixed(2)}ms), returned ${rows.length} rows`);
+      console.log(`[SQL Performance] SQL: ${formattedSql}`);
       
       return rows;
     } else {
-      console.log('[serviceApi] queryMemoryRecords - No result from db.exec');
+      const duration = performance.now() - startTime;
+      console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned 0 rows`);
+      console.log(`[SQL Performance] SQL: ${formattedSql}`);
       return [];
     }
   } catch (execError) {
-    console.error('[serviceApi] queryMemoryRecords - db.exec failed:', execError);
+    const duration = performance.now() - startTime;
+    console.error(`[SQL Performance] Query failed after ${duration.toFixed(2)}ms`);
+    console.error(`[SQL Performance] SQL: ${formattedSql}`);
+    console.error(`[SQL Performance] Error:`, execError);
     throw execError;
   }
 }
@@ -288,19 +331,35 @@ export async function queryMemoryRecords(
  * @returns Query result rows
  */
 function executeQueryWithParams(db: Database, sql: string, params: (string | number | null)[]): SqlRow[] {
-  const stmt = db.prepare(sql);
+  const startTime = performance.now();
+  const formattedSql = formatSqlForLogging(sql, params || []);
+  
+  try {
+    const stmt = db.prepare(sql);
 
-  if (params && params.length > 0) {
-    stmt.bind(params);
+    if (params && params.length > 0) {
+      stmt.bind(params);
+    }
+
+    const rows: SqlRow[] = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject({}));
+    }
+
+    stmt.free();
+    
+    const duration = performance.now() - startTime;
+    console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned ${rows.length} rows`);
+    console.log(`[SQL Performance] SQL: ${formattedSql}`);
+    
+    return rows;
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SQL Performance] Query failed after ${duration.toFixed(2)}ms`);
+    console.error(`[SQL Performance] SQL: ${formattedSql}`);
+    console.error(`[SQL Performance] Error:`, error);
+    throw error;
   }
-
-  const rows: SqlRow[] = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject({}));
-  }
-
-  stmt.free();
-  return rows;
 }
 
 /**
@@ -311,6 +370,8 @@ function executeQueryWithParams(db: Database, sql: string, params: (string | num
  * @returns Query result rows
  */
 function executeQueryWithExec(db: Database, sql: string, params: (string | number | null)[]): SqlRow[] {
+  const startTime = performance.now();
+  
   // Build SQL with parameters for db.exec
   let execSql = sql;
   if (params && params.length > 0) {
@@ -328,31 +389,51 @@ function executeQueryWithExec(db: Database, sql: string, params: (string | numbe
     });
   }
 
-  const execResult = db.exec(execSql);
+  const formattedSql = formatSqlForLogging(sql, params || []);
+  
+  try {
+    const execResult = db.exec(execSql);
 
-  if (execResult && execResult.length > 0) {
-    const execRows = execResult[0];
-    const execRowCount = execRows.values?.length || 0;
-    const columns = execRows.columns || [];
+    if (execResult && execResult.length > 0) {
+      const execRows = execResult[0];
+      const execRowCount = execRows.values?.length || 0;
+      const columns = execRows.columns || [];
 
-    if (execRowCount === 0) {
+      if (execRowCount === 0) {
+        const duration = performance.now() - startTime;
+        console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned 0 rows`);
+        console.log(`[SQL Performance] SQL: ${formattedSql}`);
+        return [];
+      }
+
+      // Convert exec result to object array
+      const rows: SqlRow[] = [];
+      for (let i = 0; i < execRowCount; i++) {
+        const row: SqlRow = {};
+        const values = execRows.values[i];
+        for (let j = 0; j < columns.length; j++) {
+          row[columns[j]] = values[j];
+        }
+        rows.push(row);
+      }
+
+      const duration = performance.now() - startTime;
+      console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned ${rows.length} rows`);
+      console.log(`[SQL Performance] SQL: ${formattedSql}`);
+
+      return rows;
+    } else {
+      const duration = performance.now() - startTime;
+      console.log(`[SQL Performance] Query executed in ${duration.toFixed(2)}ms, returned 0 rows`);
+      console.log(`[SQL Performance] SQL: ${formattedSql}`);
       return [];
     }
-
-    // Convert exec result to object array
-    const rows: SqlRow[] = [];
-    for (let i = 0; i < execRowCount; i++) {
-      const row: SqlRow = {};
-      const values = execRows.values[i];
-      for (let j = 0; j < columns.length; j++) {
-        row[columns[j]] = values[j];
-      }
-      rows.push(row);
-    }
-
-    return rows;
-  } else {
-    return [];
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    console.error(`[SQL Performance] Query failed after ${duration.toFixed(2)}ms`);
+    console.error(`[SQL Performance] SQL: ${formattedSql}`);
+    console.error(`[SQL Performance] Error:`, error);
+    throw error;
   }
 }
 
@@ -391,22 +472,60 @@ export async function queryRecordsAtTimePoint(
 }
 
 /**
- * Query records up to a specified timestamp (inclusive) with optional category filters
+ * Query records up to a specified timestamp (inclusive) with category filters
+ * Used for category view mode
  * @param db - Database instance
  * @param stepId - Step id
  * @param relativeTsUpperBound - Upper bound for relative timestamp (nanoseconds)
  * @param categoryName - Category filter (optional)
  * @param subCategoryName - Subcategory filter (optional)
+ * @param fileName - File name filter (optional, supports LIKE pattern matching)
  * @returns Matching records ordered by relativeTs
  */
-export async function queryRecordsUpToTime(
+export async function queryRecordsUpToTimeByCategory(
   db: Database,
   stepId: number,
   relativeTsUpperBound: number,
   categoryName?: string,
-  subCategoryName?: string
+  subCategoryName?: string,
+  fileName?: string
 ): Promise<SqlRow[]> {
-  const { sql, params } = MemoryDao.buildQueryRecordsUpToTime(stepId, relativeTsUpperBound, categoryName, subCategoryName);
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToTimeByCategory(
+    stepId,
+    relativeTsUpperBound,
+    categoryName,
+    subCategoryName,
+    fileName
+  );
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query records up to a specified timestamp (inclusive) with process/thread filters
+ * Used for process view mode
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param relativeTsUpperBound - Upper bound for relative timestamp (nanoseconds)
+ * @param processName - Process name filter (optional)
+ * @param threadName - Thread name filter (optional)
+ * @param fileName - File name filter (optional, supports LIKE pattern matching)
+ * @returns Matching records ordered by relativeTs
+ */
+export async function queryRecordsUpToTimeByProcess(
+  db: Database,
+  stepId: number,
+  relativeTsUpperBound: number,
+  processName?: string,
+  threadName?: string,
+  fileName?: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryRecordsUpToTimeByProcess(
+    stepId,
+    relativeTsUpperBound,
+    processName,
+    threadName,
+    fileName
+  );
   return executeQueryWithExec(db, sql, params);
 }
 
