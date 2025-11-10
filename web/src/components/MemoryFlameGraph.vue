@@ -92,6 +92,12 @@ function cloneNodes(nodes: readonly FlameGraphNode[]): FlameGraphNode[] {
   }));
 }
 
+function getNodeValue(frame: unknown): number {
+  const candidate = frame as { data?: { value?: number } };
+  const value = candidate?.data?.value;
+  return typeof value === 'number' ? value : 0;
+}
+
 function resolveHeight(height: string | undefined): number {
   if (!height) {
     return 260;
@@ -134,6 +140,14 @@ function clearFlameGraph(): void {
   }
 }
 
+function scheduleRender(): void {
+  if (props.loading) {
+    clearFlameGraph();
+    return;
+  }
+  nextTick(() => renderFlameGraph());
+}
+
 function renderFlameGraph(): void {
   if (!isMounted || !chartContainer.value) {
     return;
@@ -169,11 +183,7 @@ function renderFlameGraph(): void {
       .minFrameSize(1)
       .tooltip(tooltipInstance)
       .label(buildLabel)
-      .sort((a, b) => {
-        const aValue = a.data.value ?? 0;
-        const bValue = b.data.value ?? 0;
-        return bValue - aValue;
-      });
+      .sort((a, b) => getNodeValue(b) - getNodeValue(a));
   } else {
     flameGraphInstance.height(height).width(width);
   }
@@ -194,9 +204,7 @@ function handleResize(): void {
 watch(
   () => props.data,
   () => {
-    if (!props.loading) {
-      nextTick(() => renderFlameGraph());
-    }
+    scheduleRender();
   },
   { deep: true },
 );
@@ -204,27 +212,21 @@ watch(
 watch(
   () => props.loading,
   () => {
-    if (!props.loading) {
-      nextTick(() => renderFlameGraph());
-    } else {
-      clearFlameGraph();
-    }
+    scheduleRender();
   },
 );
 
 watch(
   () => props.height,
   () => {
-    if (!props.loading) {
-      nextTick(() => renderFlameGraph());
-    }
+    scheduleRender();
   },
 );
 
 onMounted(() => {
   isMounted = true;
   if (!props.loading && hasData.value) {
-    nextTick(() => renderFlameGraph());
+    scheduleRender();
   }
   window.addEventListener('resize', handleResize);
 });
