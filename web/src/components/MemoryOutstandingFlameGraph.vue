@@ -1,35 +1,42 @@
 <template>
   <div class="memory-outstanding-flame-graph">
-    <div
-      v-if="!shouldQuery"
-      class="memory-outstanding-flame-graph__placeholder"
-    >
-      <el-empty description="请选择时间点以查看未释放调用链火焰图" />
-    </div>
-    <div v-else class="memory-outstanding-flame-graph__content">
-      <el-alert
-        v-if="errorMessage"
-        :title="errorMessage"
-        type="error"
-        :closable="false"
-        show-icon
-        class="memory-outstanding-flame-graph__alert"
-      />
-      <el-alert
-        v-else-if="infoMessage && !isLoading"
-        :title="infoMessage"
-        type="info"
-        :closable="false"
-        show-icon
-        class="memory-outstanding-flame-graph__alert"
-      />
-      <MemoryFlameGraph
-        :data="flameGraphData"
-        :loading="isLoading"
-        title="未释放调用链火焰图"
-        unit-label="未释放内存"
-        height="320px"
-      />
+    <div class="memory-outstanding-flame-graph__panel">
+      <div class="memory-outstanding-flame-graph__panel-header">
+        <span class="memory-outstanding-flame-graph__panel-title">
+          未释放调用链火焰图
+        </span>
+      </div>
+      <div
+        v-if="!shouldQuery"
+        class="memory-outstanding-flame-graph__placeholder"
+      >
+        <el-empty description="请选择时间点以查看未释放调用链火焰图" />
+      </div>
+      <div v-else class="memory-outstanding-flame-graph__content">
+        <el-alert
+          v-if="errorMessage"
+          :title="errorMessage"
+          type="error"
+          :closable="false"
+          show-icon
+          class="memory-outstanding-flame-graph__alert"
+        />
+        <el-alert
+          v-else-if="infoMessage && !isLoading"
+          :title="infoMessage"
+          type="info"
+          :closable="false"
+          show-icon
+          class="memory-outstanding-flame-graph__alert"
+        />
+        <MemoryFlameGraph
+          :data="flameGraphData"
+          :loading="isLoading"
+          title=""
+          unit-label="未释放内存"
+          :height="flameGraphHeight"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -67,6 +74,7 @@ interface OutstandingFlameGraphProps {
   selectedSubCategory: string;
   selectedProcess?: string;
   selectedThread?: string;
+  selectedFile: string;
   maxCallchains?: number;
 }
 
@@ -75,6 +83,7 @@ const props = withDefaults(defineProps<OutstandingFlameGraphProps>(), {
   viewMode: 'category',
   selectedProcess: '',
   selectedThread: '',
+  selectedFile: '',
 });
 
 const flameGraphData = ref<FlameGraphNode[]>([]);
@@ -89,6 +98,31 @@ const shouldQuery = computed(
 
 let requestToken = 0;
 
+const MIN_FLAME_GRAPH_HEIGHT = 280;
+const LEVEL_HEIGHT = 28;
+const EXTRA_HEIGHT = 40;
+
+function computeMaxDepth(nodes: readonly FlameGraphNode[], depth = 1): number {
+  if (!nodes || nodes.length === 0) {
+    return depth;
+  }
+  return nodes.reduce((maxDepth, node) => {
+    const childDepth = node.children
+      ? computeMaxDepth(node.children, depth + 1)
+      : depth;
+    return Math.max(maxDepth, childDepth);
+  }, depth);
+}
+
+const flameGraphHeight = computed(() => {
+  if (!flameGraphData.value.length) {
+    return `${MIN_FLAME_GRAPH_HEIGHT}px`;
+  }
+  const depth = computeMaxDepth(flameGraphData.value);
+  const dynamicHeight = depth * LEVEL_HEIGHT + EXTRA_HEIGHT;
+  return `${Math.max(MIN_FLAME_GRAPH_HEIGHT, dynamicHeight)}px`;
+});
+
 watch(
   [
     () => props.stepId,
@@ -99,6 +133,7 @@ watch(
     () => props.selectedSubCategory,
     () => props.selectedProcess,
     () => props.selectedThread,
+    () => props.selectedFile,
     () => props.maxCallchains,
   ],
   () => {
@@ -129,6 +164,13 @@ function formatBytes(bytes: number): string {
     unitIndex === 0 ? 0 : 2,
   );
   return `${formatted} ${units[unitIndex]}`;
+}
+
+function normalizeFileName(fileName?: string | null): string | null {
+  if (!fileName || fileName === 'N/A') {
+    return null;
+  }
+  return fileName;
 }
 
 function getFrameLabel(frame: CallchainFrame, index: number): string {
@@ -308,20 +350,23 @@ async function refreshData(): Promise<void> {
   isLoading.value = true;
 
   try {
-    // 根据模式确定过滤条件
     let category: string | undefined;
     let subCategory: string | undefined;
 
     if (props.viewMode === 'category') {
       category =
-        props.drillLevel === 'category' || props.drillLevel === 'subCategory'
+        props.drillLevel === 'category' ||
+        props.drillLevel === 'subCategory' ||
+        props.drillLevel === 'file'
           ? props.selectedCategory
           : undefined;
       subCategory =
-        props.drillLevel === 'subCategory' ? props.selectedSubCategory : undefined;
+        props.drillLevel === 'subCategory' || props.drillLevel === 'file'
+          ? props.selectedSubCategory
+          : undefined;
     }
 
-    const records = await fetchRecordsUpToTime(
+    let records = await fetchRecordsUpToTime(
       props.stepId,
       props.selectedTimePoint!,
       category,
@@ -331,27 +376,41 @@ async function refreshData(): Promise<void> {
       return;
     }
 
-    // 如果是进程模式，需要在前端进一步过滤
     let filteredRecords = records;
-    if (props.viewMode === 'process') {
-      if (props.drillLevel === 'process') {
-        filteredRecords = records.filter(r => r.process === props.selectedProcess);
-      } else if (props.drillLevel === 'thread') {
-        filteredRecords = records.filter(
-          r => r.process === props.selectedProcess && r.thread === props.selectedThread
-        );
-      } else if (props.drillLevel === 'file') {
-        // 文件层级：需要标准化文件名进行比较
-        const normalizeFileName = (file: string | null): string => {
-          if (!file) return '';
-          const parts = file.split(/[/\\]/);
-          return parts[parts.length - 1] || '';
-        };
 
+    if (props.viewMode === 'category') {
+      if (props.drillLevel === 'file' && props.selectedFile) {
+        const targetFile = props.selectedFile;
         filteredRecords = records.filter(
-          r => r.process === props.selectedProcess &&
-               r.thread === props.selectedThread &&
-               normalizeFileName(r.file) === props.selectedThread
+          record => normalizeFileName(record.file) === targetFile,
+        );
+      }
+    } else {
+      if (props.drillLevel === 'process' && props.selectedProcess) {
+        filteredRecords = records.filter(
+          record => record.process === props.selectedProcess,
+        );
+      } else if (
+        props.drillLevel === 'thread' &&
+        props.selectedProcess &&
+        props.selectedThread
+      ) {
+        filteredRecords = records.filter(
+          record =>
+            record.process === props.selectedProcess &&
+            record.thread === props.selectedThread,
+        );
+      } else if (
+        props.drillLevel === 'file' &&
+        props.selectedProcess &&
+        props.selectedThread &&
+        props.selectedFile
+      ) {
+        filteredRecords = records.filter(
+          record =>
+            record.process === props.selectedProcess &&
+            record.thread === props.selectedThread &&
+            normalizeFileName(record.file) === props.selectedFile,
         );
       }
     }
@@ -392,8 +451,29 @@ async function refreshData(): Promise<void> {
   margin-top: 16px;
 }
 
+.memory-outstanding-flame-graph__panel {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.memory-outstanding-flame-graph__panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.memory-outstanding-flame-graph__panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
 .memory-outstanding-flame-graph__placeholder {
   padding: 24px 0;
+  text-align: center;
 }
 
 .memory-outstanding-flame-graph__content {
