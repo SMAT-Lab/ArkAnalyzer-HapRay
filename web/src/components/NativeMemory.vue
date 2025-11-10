@@ -19,17 +19,34 @@
                     <strong>时间:</strong> {{ formatTime(selectedTimePoint) }}
                   </span>
                   <span>
-                    <strong>当前内存:</strong> {{ formatBytes(selectedTimePointMemory) }}
+                    <strong>当前内存:</strong> {{ formatBytes(pointContext.memoryAtPoint || selectedTimePointMemory) }}
                   </span>
-                  <span>
-                    <strong>事件数:</strong> {{ selectedTimePointEventCount }}
+                  <span v-if="pointContext.seriesName">
+                    <strong>选中系列:</strong> {{ pointContext.seriesName }}
                   </span>
-                  <span>
-                    <strong>分配事件:</strong> {{ selectedTimePointAllocCount }}
-                  </span>
-                  <span>
-                    <strong>释放事件:</strong> {{ selectedTimePointFreeCount }}
-                  </span>
+                  <template v-if="drillState.viewMode === 'category'">
+                    <span v-if="drillState.selectedCategory">
+                      <strong>大类:</strong> {{ drillState.selectedCategory }}
+                    </span>
+                    <span v-if="drillState.selectedSubCategory">
+                      <strong>小类:</strong> {{ drillState.selectedSubCategory }}
+                    </span>
+                    <span v-if="drillState.selectedFile">
+                      <strong>文件:</strong> {{ drillState.selectedFile }}
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span v-if="drillState.selectedProcess">
+                      <strong>进程:</strong> {{ drillState.selectedProcess }}
+                    </span>
+                    <span v-if="drillState.selectedThread">
+                      <strong>线程:</strong> {{ drillState.selectedThread }}
+                    </span>
+                    <span v-if="drillState.selectedFile">
+                      <strong>文件:</strong> {{ drillState.selectedFile }}
+                    </span>
+                  </template>
+            
                 </div>
                 <el-button
                   type="danger"
@@ -62,6 +79,7 @@
               @time-point-selected="handleTimePointSelected"
               @time-point-stats-updated="handleTimePointStatsUpdated"
               @drill-state-change="handleDrillStateChange"
+              @point-selection-context="handlePointSelectionContext"
             />
           </div>
         </el-col>
@@ -79,6 +97,7 @@
             :selected-process="drillState.selectedProcess"
             :selected-thread="drillState.selectedThread"
             :selected-file="drillState.selectedFile"
+            :selected-series-name="pointContext.seriesName"
           />
         </el-col>
       </el-row>
@@ -119,9 +138,6 @@ const hasData = computed(() => Boolean(stepData.value));
 const selectedTimePointStats = ref<TimePointStats>(createEmptyTimePointStats());
 
 const selectedTimePointMemory = computed(() => selectedTimePointStats.value.netMemory);
-const selectedTimePointEventCount = computed(() => selectedTimePointStats.value.eventCount);
-const selectedTimePointAllocCount = computed(() => selectedTimePointStats.value.allocCount);
-const selectedTimePointFreeCount = computed(() => selectedTimePointStats.value.freeCount);
 
 interface DrillState {
   drillLevel: DrillDownLevel;
@@ -150,6 +166,31 @@ const shouldShowOutstandingFlameGraph = computed(
     drillState.value.drillLevel !== 'overview' &&
     selectedTimePoint.value !== null,
 );
+
+// 选中点上下文（来自时间线图表），用于信息栏与火焰图筛选
+const pointContext = ref<{
+  timePoint: number | null;
+  seriesName: string;
+  viewMode: ViewMode;
+  drillLevel: DrillDownLevel;
+  selectedCategory: string;
+  selectedSubCategory: string;
+  selectedProcess: string;
+  selectedThread: string;
+  selectedFile: string;
+  memoryAtPoint: number;
+}>({
+  timePoint: null,
+  seriesName: '',
+  viewMode: 'category',
+  drillLevel: 'overview',
+  selectedCategory: '',
+  selectedSubCategory: '',
+  selectedProcess: '',
+  selectedThread: '',
+  selectedFile: '',
+  memoryAtPoint: 0,
+});
 
 onMounted(() => {
   void ensureNativeMemoryDataLoaded();
@@ -183,6 +224,18 @@ function handleTimePointSelected(timePoint: number | null) {
   selectedTimePoint.value = timePoint;
   if (timePoint === null) {
     selectedTimePointStats.value = createEmptyTimePointStats();
+    pointContext.value = {
+      timePoint: null,
+      seriesName: '',
+      viewMode: 'category',
+      drillLevel: 'overview',
+      selectedCategory: '',
+      selectedSubCategory: '',
+      selectedProcess: '',
+      selectedThread: '',
+      selectedFile: '',
+      memoryAtPoint: 0,
+    };
   }
 }
 
@@ -194,9 +247,25 @@ function handleDrillStateChange(state: DrillState) {
   drillState.value = { ...DEFAULT_DRILL_STATE, ...state };
 }
 
+function handlePointSelectionContext(ctx: typeof pointContext.value) {
+  pointContext.value = { ...ctx };
+}
+
 function clearTimePointSelection() {
   selectedTimePoint.value = null;
   selectedTimePointStats.value = createEmptyTimePointStats();
+  pointContext.value = {
+    timePoint: null,
+    seriesName: '',
+    viewMode: 'category',
+    drillLevel: 'overview',
+    selectedCategory: '',
+    selectedSubCategory: '',
+    selectedProcess: '',
+    selectedThread: '',
+    selectedFile: '',
+    memoryAtPoint: 0,
+  };
 }
 
 function createEmptyTimePointStats(): TimePointStats {

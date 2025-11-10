@@ -74,7 +74,9 @@ interface OutstandingFlameGraphProps {
   selectedSubCategory: string;
   selectedProcess?: string;
   selectedThread?: string;
-  selectedFile: string;
+  selectedFile?: string;
+  // 选中的系列名称（来自时间线图表点击的线），用于进一步过滤（如小类/线程/文件）
+  selectedSeriesName?: string;
   maxCallchains?: number;
 }
 
@@ -84,6 +86,7 @@ const props = withDefaults(defineProps<OutstandingFlameGraphProps>(), {
   selectedProcess: '',
   selectedThread: '',
   selectedFile: '',
+  selectedSeriesName: '',
 });
 
 const flameGraphData = ref<FlameGraphNode[]>([]);
@@ -98,9 +101,10 @@ const shouldQuery = computed(
 
 let requestToken = 0;
 
-const MIN_FLAME_GRAPH_HEIGHT = 280;
-const LEVEL_HEIGHT = 28;
-const EXTRA_HEIGHT = 40;
+// 进一步收紧高度和额外留白，尽量减少顶部空白
+const MIN_FLAME_GRAPH_HEIGHT = 320;
+const LEVEL_HEIGHT = 22;
+const EXTRA_HEIGHT = 0;
 
 function computeMaxDepth(nodes: readonly FlameGraphNode[], depth = 1): number {
   if (!nodes || nodes.length === 0) {
@@ -366,7 +370,7 @@ async function refreshData(): Promise<void> {
           : undefined;
     }
 
-    let records = await fetchRecordsUpToTime(
+    const records = await fetchRecordsUpToTime(
       props.stepId,
       props.selectedTimePoint!,
       category,
@@ -379,6 +383,16 @@ async function refreshData(): Promise<void> {
     let filteredRecords = records;
 
     if (props.viewMode === 'category') {
+    // 在分类模式中：
+    // - category 层级：seriesName 对应小类，需要进一步按 subCategoryName 过滤
+    // - subCategory / file 层级：seriesName 多为文件名，file 过滤已在下方处理
+    if (props.drillLevel === 'category' && props.selectedSeriesName) {
+      filteredRecords = filteredRecords.filter(
+        record =>
+          record.categoryName === props.selectedCategory &&
+          record.subCategoryName === props.selectedSeriesName,
+      );
+    }
       if (props.drillLevel === 'file' && props.selectedFile) {
         const targetFile = props.selectedFile;
         filteredRecords = records.filter(
@@ -386,16 +400,24 @@ async function refreshData(): Promise<void> {
         );
       }
     } else {
+    // 在进程模式中：
+    // - process 层级：seriesName 对应线程名
+    // - thread 层级：seriesName 多为文件名，file 过滤已在下方处理
       if (props.drillLevel === 'process' && props.selectedProcess) {
-        filteredRecords = records.filter(
+      filteredRecords = filteredRecords.filter(
           record => record.process === props.selectedProcess,
         );
+      if (props.selectedSeriesName) {
+        filteredRecords = filteredRecords.filter(
+          record => (record.thread || 'Unknown Thread') === props.selectedSeriesName,
+        );
+      }
       } else if (
         props.drillLevel === 'thread' &&
         props.selectedProcess &&
         props.selectedThread
       ) {
-        filteredRecords = records.filter(
+      filteredRecords = filteredRecords.filter(
           record =>
             record.process === props.selectedProcess &&
             record.thread === props.selectedThread,
@@ -448,21 +470,21 @@ async function refreshData(): Promise<void> {
 
 <style scoped>
 .memory-outstanding-flame-graph {
-  margin-top: 16px;
+  margin-top: 0;
 }
 
 .memory-outstanding-flame-graph__panel {
   background: #ffffff;
   border-radius: 8px;
-  padding: 20px;
+  padding: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .memory-outstanding-flame-graph__panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  /* 顶部区域不展示，避免占据火焰图上方空间 */
+  display: none;
+  margin: 0;
+  padding: 0;
 }
 
 .memory-outstanding-flame-graph__panel-title {
@@ -481,7 +503,7 @@ async function refreshData(): Promise<void> {
 }
 
 .memory-outstanding-flame-graph__alert {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 </style>
 
