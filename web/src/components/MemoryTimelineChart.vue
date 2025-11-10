@@ -9,8 +9,8 @@
           size="small"
           @change="handleViewModeChange"
         >
-          <el-radio-button label="category">分类模式</el-radio-button>
-          <el-radio-button label="process">进程模式</el-radio-button>
+          <el-radio-button value="category">分类模式</el-radio-button>
+          <el-radio-button value="process">进程模式</el-radio-button>
         </el-radio-group>
       </div>
 
@@ -208,7 +208,7 @@ const MAX_SERIES_IN_CATEGORY_VIEW = 10;
 const MAX_SERIES_IN_FILE_VIEW = 15;
 
 interface Props {
-  stepId: string; // Step identifier, e.g., "step1"
+  stepId: number; // Step identifier, e.g., 1
   height?: string;
   selectedTimePoint?: number | null; // Currently selected time point
 }
