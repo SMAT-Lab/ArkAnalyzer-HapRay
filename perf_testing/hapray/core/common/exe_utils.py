@@ -45,7 +45,7 @@ def _get_trace_streamer_path() -> str:
     # Determine OS-specific executable name
     system = platform.system().lower()
     if system == 'windows':
-        executable = 'trace_streamer_window.exe'
+        executable = 'trace_streamer_windows.exe'
     elif system == 'darwin':  # macOS
         executable = 'trace_streamer_mac'
     elif system == 'linux':
