@@ -78,9 +78,9 @@ class FrameDbBasicAccessor:
         frames_df = FrameDbBasicAccessor._standardize_frames_data(frames_df)
 
         # 如果指定了app_pids，返回过滤后的数据
-        if app_pids is not None and isinstance(app_pids, list | tuple) and len(app_pids) > 0:
+        if app_pids is not None and isinstance(app_pids, (list, tuple)) and len(app_pids) > 0:
             # 过滤掉NaN值，确保只包含有效的数字
-            valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, int | float)]
+            valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
             if valid_pids:
                 return frames_df[frames_df['pid'].isin(valid_pids)]
 
