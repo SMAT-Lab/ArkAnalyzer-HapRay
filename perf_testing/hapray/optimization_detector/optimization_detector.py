@@ -14,12 +14,32 @@ from tqdm import tqdm
 from hapray.optimization_detector.file_info import FILE_STATUS_MAPPING, FileInfo
 
 
+class TimeoutError(Exception):
+    """Timeout exception for file analysis"""
+
+    pass
+
+
 class OptimizationDetector:
-    def __init__(self, workers: int = 1):
+    def __init__(self, workers: int = 1, timeout: Optional[int] = None, enable_lto: bool = False):
         self.parallel = workers > 1
         self.workers = min(workers, multiprocessing.cpu_count() - 1)
+        self.timeout = timeout
+        self.enable_lto = enable_lto
         self.model = None
         self.flags_model = files('hapray.optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
+
+        # LTO检测器（延迟加载）
+        self.lto_detector = None
+        if enable_lto:
+            try:
+                from hapray.optimization_detector.lto_detector import LtoDetector  # noqa: PLC0415
+
+                self.lto_detector = LtoDetector()
+                logging.info('LTO detection enabled')
+            except ImportError as e:
+                logging.warning('Failed to load LTO detector: %s. LTO detection disabled.', e)
+                self.enable_lto = False
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> dict[str, dict]:
@@ -66,8 +86,16 @@ class OptimizationDetector:
 
     def detect_optimization(self, file_infos: list[FileInfo]) -> list[tuple[str, pd.DataFrame]]:
         success, failures, flags = self._analyze_files(file_infos)
+
+        # LTO检测
+        lto_results = {}
+        if self.enable_lto and self.lto_detector:
+            logging.info('Running LTO detection on %d files', len(file_infos))
+            lto_results = self._detect_lto(file_infos, flags)
+            logging.info('LTO detection complete')
+
         logging.info('Analysis complete: %s files analyzed, %s files failed', success, failures)
-        return [('optimization', self._collect_results(flags, file_infos))]
+        return [('optimization', self._collect_results(flags, file_infos, lto_results))]
 
     @staticmethod
     def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[list[int]]:
@@ -98,8 +126,11 @@ class OptimizationDetector:
             return [lst[i::n] for i in range(n)]
 
         nped_features_array = list(map(partial(np.array, dtype=np.uint8), chunkify(features_array, self.workers * 10)))
-        with multiprocessing.Pool(self.workers) as pool:
-            y_predict_list = pool.map(partial(OptimizationDetector.apply_model, model=self.model), nped_features_array)
+
+        # For TensorFlow models, avoid multiprocessing (TF models can't be pickled safely)
+        # Use simple list comprehension instead
+        y_predict_list = [OptimizationDetector.apply_model(data, self.model) for data in nped_features_array]
+
         results = []
 
         for y_predict in y_predict_list:
@@ -111,13 +142,55 @@ class OptimizationDetector:
                 results.append((prediction, confidence))
         return results
 
+    def _detect_lto(self, file_infos: list[FileInfo], flags_results: dict) -> dict:
+        """对SO文件进行LTO检测"""
+        lto_results = {}
+
+        for file_info in tqdm(file_infos, desc='Detecting LTO'):
+            try:
+                # 获取优化级别（如果已检测）
+                opt_level = None
+                result = flags_results.get(file_info.file_id)
+                if result:
+                    prediction = result.get('prediction')
+                    opt_level_map = {0: 'O0', 1: 'O1', 2: 'O2', 3: 'O3', 4: 'Os'}
+                    opt_level = opt_level_map.get(prediction, 'O2')
+
+                # 调用LTO检测器
+                lto_result = self.lto_detector.detect(file_info.absolute_path, opt_level)
+                lto_results[file_info.file_id] = lto_result
+
+            except Exception as e:
+                logging.debug('LTO detection failed for %s: %s', file_info.absolute_path, e)
+                lto_results[file_info.file_id] = {'score': None, 'prediction': 'Failed', 'model_used': 'N/A'}
+
+        return lto_results
+
     def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]]]:
-        """Run optimization flag detection on a single file"""
+        """Run optimization flag detection on a single file with optional timeout"""
         # Lazy load model
         if self.model is None:
             self.model = tf.keras.models.load_model(str(self.flags_model))
             self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
-        return file_info, self._run_inference(file_info)
+
+        if self.timeout is None:
+            # No timeout, run normally
+            return file_info, self._run_inference(file_info)
+
+        # Use ThreadPoolExecutor with timeout for cross-platform compatibility
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+        from concurrent.futures import TimeoutError as FutureTimeoutError  # noqa: PLC0415
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self._run_inference, file_info)
+            try:
+                result = future.result(timeout=self.timeout)
+                return file_info, result
+            except FutureTimeoutError:
+                logging.warning('File analysis timeout after %d seconds: %s', self.timeout, file_info.absolute_path)
+                # Cancel the future if possible
+                future.cancel()
+                return file_info, None
 
     def _analyze_files(self, file_infos: list[FileInfo]) -> tuple[int, int, dict]:
         # Filter out analyzed files
@@ -173,7 +246,12 @@ class OptimizationDetector:
 
         return files_with_results, len(file_infos) - files_with_results, flags_results
 
-    def _collect_results(self, flags_results: dict, file_infos: list[FileInfo]) -> pd.DataFrame:
+    def _collect_results(
+        self, flags_results: dict, file_infos: list[FileInfo], lto_results: dict = None
+    ) -> pd.DataFrame:
+        if lto_results is None:
+            lto_results = {}
+
         report_data = []
         for file_info in sorted(file_infos, key=lambda x: x.logical_path):
             result = flags_results.get(file_info.file_id)
@@ -208,5 +286,17 @@ class OptimizationDetector:
                 'File Size (bytes)': file_info.file_size,
                 'Size Optimized': size_optimized,
             }
+
+            # 添加LTO检测列
+            if lto_results and file_info.file_id in lto_results:
+                lto_result = lto_results[file_info.file_id]
+                row['LTO Score'] = f'{lto_result["score"]:.4f}' if lto_result['score'] is not None else 'N/A'
+                row['LTO Prediction'] = lto_result['prediction']
+                row['LTO Model Used'] = lto_result['model_used']
+            elif self.enable_lto:
+                row['LTO Score'] = 'N/A'
+                row['LTO Prediction'] = 'N/A'
+                row['LTO Model Used'] = 'N/A'
+
             report_data.append(row)
         return pd.DataFrame(report_data)
