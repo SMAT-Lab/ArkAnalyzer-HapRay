@@ -141,7 +141,7 @@ plugin_configs {{
   config_data {{
     save_file: false
     smb_pages: 16384
-    max_stack_depth: 20
+    max_stack_depth: {max_stack_depth}
     string_compressed: true
     fp_unwind: true
     blocked: true
@@ -487,6 +487,7 @@ plugin_configs {{
         Returns:
             nativehook 插件配置字符串
         """
+        max_stack_depth = Config.get('memory.max_stack_depth', 100)
         return f"""# nativehook plugin configuration
  plugin_configs {{
   plugin_name: "nativehook"
@@ -494,7 +495,7 @@ plugin_configs {{
   config_data {{
     save_file: false
     smb_pages: 16384
-    max_stack_depth: 20
+    max_stack_depth: {max_stack_depth}
     string_compressed: true
     fp_unwind: true
     blocked: true
@@ -528,7 +529,12 @@ plugin_configs {{
         expand_pids_lines = '\n'.join([f'    expand_pids: {pid}' for pid in pids])
         Log.info(f'Memory collection: {len(pids)} process(es) - PIDs: {pids}')
 
-        return _NATIVE_MEMORY_CONFIG.format(output_path=output_path, duration=duration, expand_pids=expand_pids_lines)
+        # 从配置文件读取 max_stack_depth，默认值为 100
+        max_stack_depth = Config.get('memory.max_stack_depth', 100)
+
+        return _NATIVE_MEMORY_CONFIG.format(
+            output_path=output_path, duration=duration, max_stack_depth=max_stack_depth, expand_pids=expand_pids_lines
+        )
 
     def _build_trace_perf_memory_command(
         self, output_path: str, duration: int, record_args: str, pids: list[int]

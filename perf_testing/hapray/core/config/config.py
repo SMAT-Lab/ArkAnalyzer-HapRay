@@ -13,9 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import os
 import threading
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, Optional
 
 import yaml
@@ -32,6 +34,9 @@ class ConfigObject:
         for key, value in data.items():
             if isinstance(value, dict):
                 setattr(self, key, ConfigObject(value))
+            elif isinstance(value, list):
+                # 保持列表类型不变
+                setattr(self, key, value)
             else:
                 setattr(self, key, value)
 
@@ -88,12 +93,62 @@ class Config:
 
             # 合并配置（用户配置覆盖默认配置）
             merged_config = deep_merge(default_config, user_config)
+
+            # 加载资源配置文件（kind.json等）
+            self._load_resource_configs(merged_config)
+
             self._data = ConfigObject(merged_config)
 
         except FileNotFoundError as e:
             raise ConfigError(f'配置文件未找到: {str(e)}') from e
         except yaml.YAMLError as e:
             raise ConfigError(f'YAML 解析错误: {str(e)}') from e
+
+    def _load_resource_configs(self, config: dict):
+        """加载资源配置文件（从sa-cmd/res目录）"""
+        # 查找sa-cmd/res目录
+        res_dir = self._find_res_directory()
+        if not res_dir:
+            # 如果找不到res目录，使用空配置
+            config.setdefault('perf', {})
+            config['perf'].setdefault('kinds', [])
+            return
+
+        # 初始化perf配置
+        if 'perf' not in config:
+            config['perf'] = {}
+
+        # 加载kind.json
+        kind_json_path = res_dir / 'perf' / 'kind.json'
+        if kind_json_path.exists():
+            try:
+                with open(kind_json_path, encoding='utf-8') as f:
+                    config['perf']['kinds'] = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                # 加载失败时使用空列表
+                config['perf']['kinds'] = []
+                print(f'Warning: Failed to load kind.json: {e}')
+        else:
+            config['perf']['kinds'] = []
+
+    def _find_res_directory(self) -> Optional[Path]:
+        """查找sa-cmd/res目录"""
+        # 从当前文件位置向上查找
+        current_file = Path(__file__).resolve()
+
+        # 尝试多个可能的路径
+        possible_paths = [
+            # 从hapray/core/config向上到项目根目录，然后到sa-cmd/res
+            current_file.parent.parent.parent.parent / 'sa-cmd' / 'res',
+            # 从项目根目录查找
+            Path(os.getcwd()) / 'perf_testing' / 'sa-cmd' / 'res',
+        ]
+
+        for path in possible_paths:
+            if path.exists() and path.is_dir():
+                return path
+
+        return None
 
     def _load_config(self, path) -> dict:
         """加载YAML配置文件"""
