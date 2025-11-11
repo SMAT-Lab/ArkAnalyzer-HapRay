@@ -204,7 +204,21 @@ function insertCallchainIntoTree(
   frames: CallchainFrame[] | undefined,
   entry: OutstandingEntry,
 ): void {
-  const pathFrames = frames && frames.length > 0 ? frames : undefined;
+  let pathFrames = frames && frames.length > 0 ? frames : undefined;
+
+  // 去除重复的帧（基于depth、symbol、file的组合）
+  if (pathFrames) {
+    const seen = new Set<string>();
+    pathFrames = pathFrames.filter(frame => {
+      const key = `${frame.depth}-${frame.symbol || ''}-${frame.file || ''}-${frame.ip || 0}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+
   const labels =
     pathFrames?.map((frame, index) => getFrameLabel(frame, index)) ??
     ['未知调用链'];
@@ -389,6 +403,18 @@ async function refreshData(): Promise<void> {
   const token = ++requestToken;
   isLoading.value = true;
 
+  // 保存当前的状态，避免在异步操作过程中状态改变导致数据不一致
+  const currentDrillLevel = props.drillLevel;
+  const currentViewMode = props.viewMode;
+  const currentSelectedSeriesName = props.selectedSeriesName;
+  const currentSelectedCategory = props.selectedCategory;
+  const currentSelectedSubCategory = props.selectedSubCategory;
+  const currentSelectedProcess = props.selectedProcess;
+  const currentSelectedThread = props.selectedThread;
+  const currentSelectedFile = props.selectedFile;
+  const currentSelectedTimePoint = props.selectedTimePoint!;
+  const currentStepId = props.stepId;
+
   try {
     let category: string | undefined;
     let subCategory: string | undefined;
@@ -396,58 +422,58 @@ async function refreshData(): Promise<void> {
     let thread: string | undefined;
     let file: string | undefined;
 
-    if (props.viewMode === 'category') {
-      if (props.drillLevel === 'overview') {
+    if (currentViewMode === 'category') {
+      if (currentDrillLevel === 'overview') {
         // overview 层级时，根据 selectedSeriesName 设置 category
-        category = props.selectedSeriesName && props.selectedSeriesName !== '总内存'
-          ? props.selectedSeriesName
+        category = currentSelectedSeriesName && currentSelectedSeriesName !== '总内存'
+          ? currentSelectedSeriesName
           : undefined;
       } else {
         category =
-          props.drillLevel === 'category' ||
-          props.drillLevel === 'subCategory' ||
-          props.drillLevel === 'file'
-            ? props.selectedCategory
+          currentDrillLevel === 'category' ||
+          currentDrillLevel === 'subCategory' ||
+          currentDrillLevel === 'file'
+            ? currentSelectedCategory
             : undefined;
         subCategory =
-          props.drillLevel === 'subCategory' || props.drillLevel === 'file'
-            ? props.selectedSubCategory
+          currentDrillLevel === 'subCategory' || currentDrillLevel === 'file'
+            ? currentSelectedSubCategory
             : undefined;
-        file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+        file = currentDrillLevel === 'file' ? currentSelectedFile : undefined;
       }
     } else {
-      if (props.drillLevel === 'overview') {
+      if (currentDrillLevel === 'overview') {
         // overview 层级时，根据 selectedSeriesName 设置 process
-        process = props.selectedSeriesName && props.selectedSeriesName !== '总内存'
-          ? props.selectedSeriesName
+        process = currentSelectedSeriesName && currentSelectedSeriesName !== '总内存'
+          ? currentSelectedSeriesName
           : undefined;
       } else {
         process =
-          props.drillLevel === 'process' ||
-          props.drillLevel === 'thread' ||
-          props.drillLevel === 'file'
-            ? props.selectedProcess
+          currentDrillLevel === 'process' ||
+          currentDrillLevel === 'thread' ||
+          currentDrillLevel === 'file'
+            ? currentSelectedProcess
             : undefined;
         thread =
-          props.drillLevel === 'thread' || props.drillLevel === 'file'
-            ? props.selectedThread
+          currentDrillLevel === 'thread' || currentDrillLevel === 'file'
+            ? currentSelectedThread
             : undefined;
-        file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+        file = currentDrillLevel === 'file' ? currentSelectedFile : undefined;
       }
     }
 
     let records =
-      props.viewMode === 'category'
+      currentViewMode === 'category'
         ? await fetchRecordsUpToTimeByCategory(
-            props.stepId,
-            props.selectedTimePoint!,
+            currentStepId,
+            currentSelectedTimePoint,
             category,
             subCategory,
             file,
           )
         : await fetchRecordsUpToTimeByProcess(
-            props.stepId,
-            props.selectedTimePoint!,
+            currentStepId,
+            currentSelectedTimePoint,
             process,
             thread,
             file,
@@ -457,8 +483,8 @@ async function refreshData(): Promise<void> {
     }
 
     // 根据选中的系列名称进一步过滤记录
-    if (props.selectedSeriesName) {
-      records = filterRecordsBySeriesName(records, props.selectedSeriesName, props.drillLevel, props.viewMode);
+    if (currentSelectedSeriesName) {
+      records = filterRecordsBySeriesName(records, currentSelectedSeriesName, currentDrillLevel, currentViewMode);
     }
 
     const outstandingEntries = calculateOutstanding(records);
@@ -473,14 +499,17 @@ async function refreshData(): Promise<void> {
 
     const frames =
       targetCallchainIds.length > 0
-        ? await fetchCallchainFrames(props.stepId, targetCallchainIds)
+        ? await fetchCallchainFrames(currentStepId, targetCallchainIds)
         : ({} as CallchainFrameMap);
 
     if (token !== requestToken) {
       return;
     }
 
-    flameGraphData.value = buildFlameGraphData(outstandingEntries, frames);
+    const result = buildFlameGraphData(outstandingEntries, frames);
+    if (token === requestToken) {
+      flameGraphData.value = result;
+    }
   } catch (error) {
     console.error('[MemoryOutstandingFlameGraph] 加载火焰图失败:', error);
     errorMessage.value = '加载火焰图失败，请稍后重试。';
