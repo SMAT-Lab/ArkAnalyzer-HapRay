@@ -162,8 +162,9 @@ const drillState = ref<DrillState>({ ...DEFAULT_DRILL_STATE });
 
 const shouldShowOutstandingFlameGraph = computed(
   () =>
-    drillState.value.drillLevel !== 'overview' &&
-    selectedTimePoint.value !== null,
+    selectedTimePoint.value !== null &&
+    (drillState.value.drillLevel !== 'overview' ||
+      (pointContext.value.seriesName && pointContext.value.seriesName !== '总内存')),
 );
 
 // 选中点上下文（来自时间线图表），用于信息栏与火焰图筛选
