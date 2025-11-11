@@ -101,7 +101,9 @@ const infoMessage = ref<string | null>(null);
 
 const shouldQuery = computed(
   () =>
-    props.drillLevel !== 'overview' && props.selectedTimePoint !== null,
+    props.selectedTimePoint !== null &&
+    (props.drillLevel !== 'overview' ||
+      (props.selectedSeriesName && props.selectedSeriesName !== '总内存')),
 );
 
 let requestToken = 0;
@@ -143,6 +145,7 @@ watch(
     () => props.selectedProcess,
     () => props.selectedThread,
     () => props.selectedFile,
+    () => props.selectedSeriesName,
     () => props.maxCallchains,
   ],
   () => {
@@ -269,6 +272,48 @@ function transformTreeToFlameNodes(
   return flameNodes;
 }
 
+function normalizeFileName(fileName?: string | null): string | null {
+  if (!fileName || fileName === 'N/A') {
+    return null;
+  }
+  return fileName;
+}
+
+function filterRecordsBySeriesName(
+  records: NativeMemoryRecord[],
+  seriesName: string,
+  drillLevel: DrillDownLevel,
+  viewMode: ViewMode,
+): NativeMemoryRecord[] {
+  if (!seriesName) {
+    return records;
+  }
+
+  return records.filter(record => {
+    if (viewMode === 'category') {
+      if (drillLevel === 'category') {
+        // 系列名称为小类名称
+        return record.subCategoryName === seriesName;
+      } else if (drillLevel === 'subCategory') {
+        // 系列名称为文件名
+        const normalizedFile = normalizeFileName(record.file);
+        return normalizedFile === seriesName;
+      }
+    } else {
+      if (drillLevel === 'process') {
+        // 系列名称为线程名
+        const threadName = record.thread || 'Unknown Thread';
+        return threadName === seriesName;
+      } else if (drillLevel === 'thread') {
+        // 系列名称为文件名
+        const normalizedFile = normalizeFileName(record.file);
+        return normalizedFile === seriesName;
+      }
+    }
+    return true;
+  });
+}
+
 function calculateOutstanding(
   records: NativeMemoryRecord[],
 ): OutstandingEntry[] {
@@ -352,32 +397,46 @@ async function refreshData(): Promise<void> {
     let file: string | undefined;
 
     if (props.viewMode === 'category') {
-      category =
-        props.drillLevel === 'category' ||
-        props.drillLevel === 'subCategory' ||
-        props.drillLevel === 'file'
-          ? props.selectedCategory
+      if (props.drillLevel === 'overview') {
+        // overview 层级时，根据 selectedSeriesName 设置 category
+        category = props.selectedSeriesName && props.selectedSeriesName !== '总内存'
+          ? props.selectedSeriesName
           : undefined;
-      subCategory =
-        props.drillLevel === 'subCategory' || props.drillLevel === 'file'
-          ? props.selectedSubCategory
-          : undefined;
-      file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+      } else {
+        category =
+          props.drillLevel === 'category' ||
+          props.drillLevel === 'subCategory' ||
+          props.drillLevel === 'file'
+            ? props.selectedCategory
+            : undefined;
+        subCategory =
+          props.drillLevel === 'subCategory' || props.drillLevel === 'file'
+            ? props.selectedSubCategory
+            : undefined;
+        file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+      }
     } else {
-      process =
-        props.drillLevel === 'process' ||
-        props.drillLevel === 'thread' ||
-        props.drillLevel === 'file'
-          ? props.selectedProcess
+      if (props.drillLevel === 'overview') {
+        // overview 层级时，根据 selectedSeriesName 设置 process
+        process = props.selectedSeriesName && props.selectedSeriesName !== '总内存'
+          ? props.selectedSeriesName
           : undefined;
-      thread =
-        props.drillLevel === 'thread' || props.drillLevel === 'file'
-          ? props.selectedThread
-          : undefined;
-      file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+      } else {
+        process =
+          props.drillLevel === 'process' ||
+          props.drillLevel === 'thread' ||
+          props.drillLevel === 'file'
+            ? props.selectedProcess
+            : undefined;
+        thread =
+          props.drillLevel === 'thread' || props.drillLevel === 'file'
+            ? props.selectedThread
+            : undefined;
+        file = props.drillLevel === 'file' ? props.selectedFile : undefined;
+      }
     }
 
-    const records =
+    let records =
       props.viewMode === 'category'
         ? await fetchRecordsUpToTimeByCategory(
             props.stepId,
@@ -395,6 +454,11 @@ async function refreshData(): Promise<void> {
           );
     if (token !== requestToken) {
       return;
+    }
+
+    // 根据选中的系列名称进一步过滤记录
+    if (props.selectedSeriesName) {
+      records = filterRecordsBySeriesName(records, props.selectedSeriesName, props.drillLevel, props.viewMode);
     }
 
     const outstandingEntries = calculateOutstanding(records);
