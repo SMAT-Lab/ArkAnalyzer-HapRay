@@ -36,7 +36,7 @@ class MemoryRecordStorageModel(BaseModel):
     数据以紧凑结构存储，仅保留字典 ID，避免重复字符串占用空间。
     """
 
-    table_name = 'memory_records_raw'
+    table_name = 'memory_records'
     fields = {
         'pid': 'INTEGER',
         'processId': 'INTEGER',
@@ -51,7 +51,7 @@ class MemoryRecordStorageModel(BaseModel):
         'heapSize': 'INTEGER',
         'relativeTs': 'INTEGER',
         'componentNameId': 'INTEGER',
-        'componentCategoryId': 'INTEGER',
+        'componentCategory': 'INTEGER',
         'categoryNameId': 'INTEGER',
         'subCategoryNameId': 'INTEGER',
     }
@@ -61,6 +61,7 @@ class MemoryRecordModel(BaseModel):
     """Memory analysis detailed record model (view)
 
     通过视图 `memory_records` 联表 `memory_data_dicts`，提供与原表一致的查询列。
+    componentCategory 直接存储为 INTEGER 类型，不通过字典表。
     """
 
     table_name = 'memory_records'
@@ -80,7 +81,7 @@ class MemoryRecordModel(BaseModel):
         'heapSize': 'INTEGER',
         'relativeTs': 'INTEGER',
         'componentName': 'TEXT',
-        'componentCategory': 'TEXT',
+        'componentCategory': 'INTEGER',
         'categoryName': 'TEXT',
         'subCategoryName': 'TEXT',
     }
@@ -327,7 +328,6 @@ class MemoryAnalyzer(BaseAnalyzer):
             self.create_model_table(MemoryDataDictModel)
 
             # 先构建紧凑存储表，再创建兼容视图
-            self._create_memory_records_view()
             self._create_memory_callchains_view()
 
             # Add unique constraint to memory_results table (only one row per step_id)
@@ -365,64 +365,17 @@ class MemoryAnalyzer(BaseAnalyzer):
             self.create_index('idx_memory_results_step_id_unique', 'memory_results', 'step_id', unique=True)
 
     def _create_memory_records_indexes(self):
-        """Create indexes for memory_records_raw table to improve query performance"""
+        """Create indexes for memory_records table to improve query performance"""
         self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_callchainId')
-        self.create_index('idx_memory_records_callchainId', 'memory_records_raw', 'callchainId')
+        self.create_index('idx_memory_records_callchainId', 'memory_records', 'callchainId')
         self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_relativeTs')
-        self.create_index('idx_memory_records_relativeTs', 'memory_records_raw', 'relativeTs')
+        self.create_index('idx_memory_records_relativeTs', 'memory_records', 'relativeTs')
         self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_componentName')
         self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_componentNameId')
-        self.create_index('idx_memory_records_componentNameId', 'memory_records_raw', 'componentNameId')
-
-    def _create_memory_records_view(self):
-        """Create or refresh view for memory_records"""
-        view_sql = """
-            CREATE VIEW IF NOT EXISTS memory_records AS
-            SELECT
-                raw.step_id AS step_id,
-                raw.pid AS pid,
-                proc_dict.value AS process,
-                raw.tid AS tid,
-                thread_dict.value AS thread,
-                raw.fileId AS fileId,
-                file_dict.value AS file,
-                raw.symbolId AS symbolId,
-                symbol_dict.value AS symbol,
-                event_dict.value AS eventType,
-                sub_event_dict.value AS subEventType,
-                raw.addr AS addr,
-                raw.callchainId AS callchainId,
-                raw.heapSize AS heapSize,
-                raw.relativeTs AS relativeTs,
-                comp_name_dict.value AS componentName,
-                comp_category_dict.value AS componentCategory,
-                category_dict.value AS categoryName,
-                sub_category_dict.value AS subCategoryName
-            FROM memory_records_raw AS raw
-            LEFT JOIN memory_data_dicts AS proc_dict
-                ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS thread_dict
-                ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS file_dict
-                ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS symbol_dict
-                ON raw.symbolId = symbol_dict.dictId AND symbol_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS event_dict
-                ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS sub_event_dict
-                ON raw.subEventTypeId = sub_event_dict.dictId AND sub_event_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS comp_name_dict
-                ON raw.componentNameId = comp_name_dict.dictId AND comp_name_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS comp_category_dict
-                ON raw.componentCategoryId = comp_category_dict.dictId AND comp_category_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS category_dict
-                ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
-            LEFT JOIN memory_data_dicts AS sub_category_dict
-                ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
-        """
-        # 先删除旧视图，再创建新视图，保证列定义更新
-        self.exec_sql('DROP VIEW IF EXISTS memory_records')
-        self.exec_sql(view_sql)
+        self.create_index('idx_memory_records_componentNameId', 'memory_records', 'componentNameId')
+        # 为 componentCategory 创建索引以提高查询效率
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_records_componentCategory')
+        self.create_index('idx_memory_records_componentCategory', 'memory_records', 'componentCategory')
 
     def _create_memory_callchains_view(self):
         """Create or refresh view for memory_callchains"""
@@ -482,7 +435,7 @@ class MemoryAnalyzer(BaseAnalyzer):
         self.save_model(step_id, result_model, replace=True)
 
         # Delete old records for this step (if exist)
-        self.exec_sql('DELETE FROM memory_records_raw WHERE step_id = ?', (step_id,))
+        self.exec_sql('DELETE FROM memory_records WHERE step_id = ?', (step_id,))
         self.exec_sql('DELETE FROM memory_callchains_raw WHERE step_id = ?', (step_id,))
         self.exec_sql('DELETE FROM memory_data_dicts WHERE step_id = ?', (step_id,))
 
@@ -555,7 +508,7 @@ class MemoryAnalyzer(BaseAnalyzer):
                 heapSize=record.get('heapSize'),
                 relativeTs=record.get('relativeTs'),
                 componentNameId=to_dict_id(record.get('componentName')),
-                componentCategoryId=to_dict_id(record.get('componentCategory')),
+                componentCategory=record.get('componentCategory'),
                 categoryNameId=to_dict_id(record.get('categoryName')),
                 subCategoryNameId=to_dict_id(record.get('subCategoryName')),
             )

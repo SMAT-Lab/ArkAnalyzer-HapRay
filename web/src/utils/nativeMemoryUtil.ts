@@ -5,7 +5,8 @@ import { ComponentCategory } from '@/stores/jsonDataStore';
 /**
  * 计算当前内存数据
  *
- * 根据记录的 heapSize 和 eventType 实时计算每个时间点的当前内存值
+ * 根据记录的 heapSize 实时计算每个时间点的当前内存值
+ * heapSize 存储规则：申请内存为正数，释放内存为负数
  *
  * @param records - 内存记录数组（必须已按 relativeTs 排序）
  * @returns 包含当前内存值的记录数组
@@ -150,16 +151,18 @@ export function calculateMemoryStats(records: NativeMemoryRecord[]): MemoryStats
   for (const record of sortedRecords) {
     eventNum++;
 
-    // 根据事件类型更新当前内存
-    // 分配事件：heapSize 为正数，增加内存
-    // 释放事件：heapSize 为正数，减少内存
-    if (record.eventType === 'AllocEvent' || record.eventType === 'MmapEvent') {
-      currentMem += record.heapSize;
-      totalAllocMem += record.heapSize;
+    // heapSize 存储规则：申请为正数，释放为负数
+    const size = record.heapSize || 0;
+
+    // 直接累加 heapSize（申请为正数，释放为负数）
+    currentMem += size;
+
+    // 统计分配和释放
+    if (size > 0) {
+      totalAllocMem += size;
       allocEventNum++;
-    } else if (record.eventType === 'FreeEvent' || record.eventType === 'MunmapEvent') {
-      currentMem -= record.heapSize;
-      totalFreeMem += record.heapSize;
+    } else if (size < 0) {
+      totalFreeMem += Math.abs(size);
       freeEventNum++;
     }
 
