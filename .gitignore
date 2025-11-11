@@ -34,6 +34,9 @@ perf_testing/files_results_cache/
 # Performance Testing Reports
 perf_testing/scripts/reports/
 
+# Experimental
+experiments_ignore/
+
 # staticanalyzer
 sa/lib
 hapray-sa

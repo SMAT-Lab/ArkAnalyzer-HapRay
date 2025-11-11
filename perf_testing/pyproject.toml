@@ -42,7 +42,9 @@ hapray = [
     "testcases/**/*.yaml",
     "testcases/**/*.json",
     "testcases/**/*.py",
-    "optimization_detector/models/*.h5"
+    "optimization_detector/models/*.h5",
+    "optimization_detector/models/lto/**/*.joblib",
+    "optimization_detector/models/lto/**/*.json"
 ]
 
 [tool.setuptools.data-files]
