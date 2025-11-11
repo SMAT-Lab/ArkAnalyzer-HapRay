@@ -143,6 +143,7 @@ watch(
     () => props.selectedProcess,
     () => props.selectedThread,
     () => props.selectedFile,
+    () => props.selectedSeriesName,
     () => props.maxCallchains,
   ],
   () => {
@@ -269,6 +270,48 @@ function transformTreeToFlameNodes(
   return flameNodes;
 }
 
+function normalizeFileName(fileName?: string | null): string | null {
+  if (!fileName || fileName === 'N/A') {
+    return null;
+  }
+  return fileName;
+}
+
+function filterRecordsBySeriesName(
+  records: NativeMemoryRecord[],
+  seriesName: string,
+  drillLevel: DrillDownLevel,
+  viewMode: ViewMode,
+): NativeMemoryRecord[] {
+  if (!seriesName) {
+    return records;
+  }
+
+  return records.filter(record => {
+    if (viewMode === 'category') {
+      if (drillLevel === 'category') {
+        // 系列名称为小类名称
+        return record.subCategoryName === seriesName;
+      } else if (drillLevel === 'subCategory') {
+        // 系列名称为文件名
+        const normalizedFile = normalizeFileName(record.file);
+        return normalizedFile === seriesName;
+      }
+    } else {
+      if (drillLevel === 'process') {
+        // 系列名称为线程名
+        const threadName = record.thread || 'Unknown Thread';
+        return threadName === seriesName;
+      } else if (drillLevel === 'thread') {
+        // 系列名称为文件名
+        const normalizedFile = normalizeFileName(record.file);
+        return normalizedFile === seriesName;
+      }
+    }
+    return true;
+  });
+}
+
 function calculateOutstanding(
   records: NativeMemoryRecord[],
 ): OutstandingEntry[] {
@@ -377,7 +420,7 @@ async function refreshData(): Promise<void> {
       file = props.drillLevel === 'file' ? props.selectedFile : undefined;
     }
 
-    const records =
+    let records =
       props.viewMode === 'category'
         ? await fetchRecordsUpToTimeByCategory(
             props.stepId,
@@ -395,6 +438,11 @@ async function refreshData(): Promise<void> {
           );
     if (token !== requestToken) {
       return;
+    }
+
+    // 根据选中的系列名称进一步过滤记录
+    if (props.selectedSeriesName) {
+      records = filterRecordsBySeriesName(records, props.selectedSeriesName, props.drillLevel, props.viewMode);
     }
 
     const outstandingEntries = calculateOutstanding(records);
