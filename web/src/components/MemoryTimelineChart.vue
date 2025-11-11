@@ -325,6 +325,8 @@ function resetDrillDown() {
   selectedProcess.value = '';
   selectedThread.value = '';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -334,6 +336,8 @@ function backToCategory() {
   drillDownLevel.value = 'category';
   selectedSubCategory.value = '';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -341,6 +345,8 @@ function backToCategory() {
 function backToSubCategory() {
   drillDownLevel.value = 'subCategory';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -350,6 +356,8 @@ function drillDownToCategory(categoryName: string) {
   selectedCategory.value = categoryName;
   selectedSubCategory.value = '';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -358,6 +366,8 @@ function drillDownToSubCategory(subCategoryName: string) {
   drillDownLevel.value = 'subCategory';
   selectedSubCategory.value = subCategoryName;
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -366,6 +376,8 @@ function backToProcess() {
   drillDownLevel.value = 'process';
   selectedThread.value = '';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -373,6 +385,8 @@ function backToProcess() {
 function backToThread() {
   drillDownLevel.value = 'thread';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -382,6 +396,8 @@ function drillDownToProcess(processName: string) {
   selectedProcess.value = processName;
   selectedThread.value = '';
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -390,6 +406,8 @@ function drillDownToThread(threadName: string) {
   drillDownLevel.value = 'thread';
   selectedThread.value = threadName;
   selectedFile.value = '';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -397,6 +415,8 @@ function drillDownToThread(threadName: string) {
 function drillDownToFile(fileName: string) {
   drillDownLevel.value = 'file';
   selectedFile.value = fileName;
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
   emit('time-point-selected', null);
   emit('time-point-stats-updated', createEmptyTimePointStats());
 }
@@ -1535,11 +1555,11 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
     selectedSeriesName.value = seriesEntry?.name ?? '';
   }
   emit('time-point-selected', nextSelected);
-  
+
   // 在 overview 层级时，根据点击的系列确定上下文信息
   let contextCategory = selectedCategory.value;
   let contextProcess = selectedProcess.value;
-  
+
   if (drillDownLevel.value === 'overview') {
     const seriesName = seriesEntry?.name ?? '';
     // 跳过总内存线（seriesIndex === 0）
@@ -1553,7 +1573,7 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
       }
     }
   }
-  
+
   // Compute stats based on the clicked series only to reflect the correct "current memory"
   const seriesScopedRecords = getSeriesScopedRecordsForName(seriesEntry?.name ?? '');
   emit('time-point-stats-updated', calculateTimePointStats(seriesScopedRecords, nextSelected));

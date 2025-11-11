@@ -95,7 +95,7 @@ class StutteredFrameAnalyzer:
             app_pids: 应用进程ID列表，用于过滤应用相关的帧数据
 
         Returns:
-            dict | None: 分析结果数据，如果没有数据或分析失败则返回None
+            Optional[dict]: 分析结果数据，如果没有数据或分析失败则返回None
         """
         # 从配置获取参数
         if top_n_analysis is None:

@@ -24,7 +24,7 @@ const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 function initTools(): string {
     let toolName = '';
     if (process.platform === 'win32') {
-        toolName = 'trace_streamer_window.exe';
+        toolName = 'trace_streamer_windows.exe';
     } else if (process.platform === 'linux') {
         toolName = 'trace_streamer_linux';
     } else if (process.platform === 'darwin') {
