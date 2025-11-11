@@ -5,7 +5,7 @@
 """
 
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 
 
 class MemoryAggregator:
@@ -23,7 +23,7 @@ class MemoryAggregator:
     def __init__(self):
         pass
 
-    def aggregate_all(self, records: list[dict[str, Any]], time: int | None = None) -> dict[str, Any]:
+    def aggregate_all(self, records: list[dict[str, Any]], time: Optional[int] = None) -> dict[str, Any]:
         """对记录进行所有维度的聚合
 
         Args:
