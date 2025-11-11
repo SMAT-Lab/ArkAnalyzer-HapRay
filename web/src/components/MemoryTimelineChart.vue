@@ -201,6 +201,7 @@ interface ChartOptionParams {
   mode: ViewMode;
   isLargeDataset: boolean;
   isVeryLargeDataset: boolean;
+  selectedSeriesIndex: number | null;
 }
 
 const DEFAULT_CHART_HEIGHT = '420px';
@@ -750,13 +751,49 @@ function processTimelineDataSync(): TimelineProcessedData {
 
   const finalMemory = chartData[chartData.length - 1]?.cumulativeMemory || 0;
 
+  // 对系列按照最大值排序（总览层级时，总内存线保持在第一位）
+  const sortedSeriesData = [...seriesData];
+  if (drillDownLevel.value === 'overview' && sortedSeriesData.length > 0) {
+    // 总览层级：总内存线保持在第一位，其他系列按最大值排序
+    const totalSeries = sortedSeriesData[0];
+    const otherSeries = sortedSeriesData.slice(1);
+    
+    // 计算每个系列的最大值并排序
+    const seriesWithMax = otherSeries.map(series => {
+      let maxValue = -Infinity;
+      for (const item of series.data) {
+        if (typeof item.cumulativeMemory === 'number' && item.cumulativeMemory > maxValue) {
+          maxValue = item.cumulativeMemory;
+        }
+      }
+      return { series, maxValue };
+    });
+    
+    seriesWithMax.sort((a, b) => b.maxValue - a.maxValue);
+    sortedSeriesData.splice(0, sortedSeriesData.length, totalSeries, ...seriesWithMax.map(item => item.series));
+  } else {
+    // 其他层级：所有系列按最大值排序
+    const seriesWithMax = sortedSeriesData.map(series => {
+      let maxValue = -Infinity;
+      for (const item of series.data) {
+        if (typeof item.cumulativeMemory === 'number' && item.cumulativeMemory > maxValue) {
+          maxValue = item.cumulativeMemory;
+        }
+      }
+      return { series, maxValue };
+    });
+    
+    seriesWithMax.sort((a, b) => b.maxValue - a.maxValue);
+    sortedSeriesData.splice(0, sortedSeriesData.length, ...seriesWithMax.map(item => item.series));
+  }
+
   const memoryRange = maxMemory - minMemory;
   const threshold30 = minMemory + memoryRange * 0.3;
   const threshold60 = minMemory + memoryRange * 0.6;
 
   return {
     chartData,
-    seriesData,
+    seriesData: sortedSeriesData,
     maxMemory,
     minMemory,
     finalMemory,
@@ -928,6 +965,8 @@ type LineSeriesDataItem = LineSeriesData[number];
 function createPeakPointConfig(value: number): LineSeriesDataItem {
   return {
     value,
+    symbol: 'circle',
+    symbolSize: 18,
     itemStyle: {
       color: '#ff0000',
       borderColor: '#fff',
@@ -935,19 +974,8 @@ function createPeakPointConfig(value: number): LineSeriesDataItem {
       shadowBlur: 20,
       shadowColor: 'rgba(255, 0, 0, 0.8)',
     },
-    symbolSize: 18,
     label: {
-      show: true,
-      position: 'top',
-      formatter: () => '● 峰值',
-      color: '#ff0000',
-      fontWeight: 'bold',
-      fontSize: 12,
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      padding: [4, 8],
-      borderRadius: 4,
-      borderColor: '#ff0000',
-      borderWidth: 1,
+      show: false,
     },
   };
 }
@@ -955,6 +983,8 @@ function createPeakPointConfig(value: number): LineSeriesDataItem {
 function createSelectedPointConfig(value: number): LineSeriesDataItem {
   return {
     value,
+    symbol: 'circle',
+    symbolSize: 24,
     itemStyle: {
       color: '#FFD700',
       borderColor: '#fff',
@@ -962,7 +992,6 @@ function createSelectedPointConfig(value: number): LineSeriesDataItem {
       shadowBlur: 30,
       shadowColor: 'rgba(255, 215, 0, 1)',
     },
-    symbolSize: 24,
     label: {
       show: true,
       position: 'top',
@@ -1033,12 +1062,26 @@ function resolveTooltipParam(
   return tooltipItems[0] ?? null;
 }
 
+// 浮点数近似比较函数（对于大数值使用相对误差）
+function isApproximatelyEqual(a: number, b: number, epsilon: number = 0.0001): boolean {
+  if (a === b) return true;
+  if (a === 0 || b === 0) {
+    return Math.abs(a - b) < epsilon;
+  }
+  // 对于大数值，使用相对误差比较
+  const relativeError = Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b));
+  return relativeError < epsilon || Math.abs(a - b) < 1; // 允许1字节的绝对误差
+}
+
 function buildSeriesPoint(
   item: SeriesPoint | undefined,
   itemIndex: number,
   seriesIndex: number,
   params: ChartOptionParams,
-  isTotalSeries: boolean
+  isTotalSeries: boolean,
+  isHighestPeakSeries: boolean,
+  seriesPeakValue: number | null,
+  peakIndex: number = -1
 ): LineSeriesDataItem {
   if (!item || typeof item.cumulativeMemory !== 'number') {
     return {
@@ -1047,18 +1090,29 @@ function buildSeriesPoint(
     };
   }
 
-  const { maxMemory, selectedTimePoint, drillLevel, isLargeDataset, isVeryLargeDataset } = params;
-  const isPeakPoint = item.cumulativeMemory === maxMemory;
+  const { selectedTimePoint, drillLevel, isLargeDataset, isVeryLargeDataset, selectedSeriesIndex } = params;
+  
+  // 判断峰值点：只在峰值内存值最高的系列上显示峰值点
+  const isPeakPoint = isHighestPeakSeries && 
+    seriesPeakValue !== null && 
+    (peakIndex === itemIndex || isApproximatelyEqual(item.cumulativeMemory, seriesPeakValue));
+  
+  // 使用近似比较来判断选中点（处理浮点数精度问题）
+  // 在 overview 层级时，只有选中的系列才显示选中点；其他层级时，总内存线或选中的系列显示选中点
   const isSelectedPoint =
     selectedTimePoint !== null &&
-    item.relativeTs === selectedTimePoint &&
-    (drillLevel !== 'overview' || isTotalSeries);
+    isApproximatelyEqual(item.relativeTs, selectedTimePoint) &&
+    (drillLevel === 'overview'
+      ? (selectedSeriesIndex === seriesIndex || (isTotalSeries && selectedSeriesIndex === null))
+      : (isTotalSeries || selectedSeriesIndex === seriesIndex));
 
   if (isPeakPoint) {
+    console.log(`[MemoryTimelineChart] Peak point found: seriesIndex=${seriesIndex}, itemIndex=${itemIndex}, value=${item.cumulativeMemory}, peakValue=${seriesPeakValue}, peakIndex=${peakIndex}`);
     return createPeakPointConfig(item.cumulativeMemory);
   }
 
   if (isSelectedPoint) {
+    console.log(`[MemoryTimelineChart] Selected point found: seriesIndex=${seriesIndex}, relativeTs=${item.relativeTs}, selectedTimePoint=${selectedTimePoint}`);
     return createSelectedPointConfig(item.cumulativeMemory);
   }
 
@@ -1075,11 +1129,81 @@ function buildSeriesOptions(
 ): LineSeriesOption[] {
   const { drillLevel, isLargeDataset, isVeryLargeDataset } = params;
 
+  // 计算每个系列的峰值点（最大值和对应的索引）
+  const seriesPeakInfo = seriesData.map((series, idx) => {
+    if (series.data.length === 0) return { maxValue: null, peakIndex: -1 };
+    let maxValue = -Infinity;
+    let peakIndex = -1;
+    for (let i = 0; i < series.data.length; i++) {
+      const item = series.data[i];
+      if (typeof item.cumulativeMemory === 'number' && item.cumulativeMemory > maxValue) {
+        maxValue = item.cumulativeMemory;
+        peakIndex = i;
+      }
+    }
+    if (maxValue === -Infinity) return { maxValue: null, peakIndex: -1 };
+    console.log(`[MemoryTimelineChart] Series ${idx} (${series.name}) peak value: ${maxValue} at index ${peakIndex}`);
+    return { maxValue, peakIndex };
+  });
+
+  // 找到峰值内存值最高的系列索引
+  let highestPeakSeriesIndex = -1;
+  let highestPeakValue = -Infinity;
+  seriesPeakInfo.forEach((peakInfo, index) => {
+    if (peakInfo.maxValue !== null && peakInfo.maxValue > highestPeakValue) {
+      highestPeakValue = peakInfo.maxValue;
+      highestPeakSeriesIndex = index;
+    }
+  });
+  console.log(`[MemoryTimelineChart] Highest peak series index: ${highestPeakSeriesIndex}, peak value: ${highestPeakValue}`);
+
+  // 确定最上方的系列：总览层级是总内存线（z-index=10），其他层级是数组中最后一个系列（z-index=5）
+  let topSeriesIndex = -1;
+  if (drillLevel === 'overview' && seriesData.length > 0) {
+    // 总览层级：总内存线（seriesIndex === 0）的z-index最高
+    topSeriesIndex = 0;
+  } else if (seriesData.length > 0) {
+    // 其他层级：数组中最后一个系列（排序后最大值最大的系列）
+    topSeriesIndex = seriesData.length - 1;
+  }
+  console.log(`[MemoryTimelineChart] Top series index: ${topSeriesIndex}, drillLevel: ${drillLevel}`);
+
   return seriesData.map((series, seriesIndex) => {
     const isTotalSeries = drillLevel === 'overview' && seriesIndex === 0;
+    const isHighestPeakSeries = seriesIndex === highestPeakSeriesIndex;
     const seriesColor = getSeriesColor(seriesIndex, isTotalSeries);
+    const peakInfo = seriesPeakInfo[seriesIndex];
+    const seriesPeakValue = peakInfo?.maxValue ?? null;
+    const peakIndex = peakInfo?.peakIndex ?? -1;
     const dataItems = series.data
-      .map((item, itemIndex) => buildSeriesPoint(item, itemIndex, seriesIndex, params, isTotalSeries)) as LineSeriesData;
+      .map((item, itemIndex) => buildSeriesPoint(item, itemIndex, seriesIndex, params, isTotalSeries, isHighestPeakSeries, seriesPeakValue, peakIndex)) as LineSeriesData;
+
+    // 只为峰值内存值最高的系列添加峰值点的markPoint
+    let markPoint: echarts.MarkPointComponentOption | undefined = undefined;
+    if (isHighestPeakSeries && peakIndex >= 0 && seriesPeakValue !== null) {
+      console.log(`[MemoryTimelineChart] Adding markPoint for highest peak series ${seriesIndex} (${series.name}): peakIndex=${peakIndex}, peakValue=${seriesPeakValue}`);
+      markPoint = {
+        symbol: 'circle',
+        symbolSize: 18,
+        itemStyle: {
+          color: '#ff0000',
+          borderColor: '#fff',
+          borderWidth: 3,
+          shadowBlur: 20,
+          shadowColor: 'rgba(255, 0, 0, 0.8)',
+        },
+        label: {
+          show: false,
+        },
+        silent: false,
+        data: [
+          {
+            coord: [peakIndex, seriesPeakValue],
+            name: '峰值',
+          },
+        ],
+      };
+    }
 
     return {
       name: series.name,
@@ -1087,6 +1211,7 @@ function buildSeriesOptions(
       data: dataItems,
       symbol: 'circle',
       showSymbol: true,
+      markPoint,
       lineStyle: {
         width: getLineWidth(isTotalSeries, isLargeDataset, isVeryLargeDataset),
         color: seriesColor,
@@ -1159,23 +1284,21 @@ function buildChartSubtext(
 
   if (drillLevel === 'overview') {
     if (mode === 'category') {
-      hints.push('💡 双击线条查看大类详情');
+      hints.push('💡 点击线条上的点查看大类火焰图');
     } else {
-      hints.push('💡 双击线条查看进程详情');
+      hints.push('💡 点击线条上的点查看进程火焰图');
     }
   } else if (mode === 'category') {
     if (drillLevel === 'category') {
-      hints.push('💡 双击线条查看小类详情');
+      hints.push('💡 点击线条上的点查看火焰图');
     } else {
-      hints.push('💡 点击数据点选择时间点');
-      hints.push('📁 图例可按文件筛选');
+      hints.push('💡 点击线条上的点查看火焰图');
     }
   } else {
     if (drillLevel === 'process') {
-      hints.push('💡 双击线条查看线程详情');
+      hints.push('💡 点击线条上的点查看线程火焰图');
     } else {
-      hints.push('💡 点击数据点选择时间点');
-      hints.push('📁 图例可按文件筛选');
+      hints.push('💡 点击线条上的点查看火焰图');
     }
   }
 
@@ -1399,10 +1522,6 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
     return;
   }
 
-  if (drillDownLevel.value === 'overview') {
-    return;
-  }
-
   const nextSelected = props.selectedTimePoint === dataItem.relativeTs ? null : dataItem.relativeTs;
 
   if (nextSelected === null) {
@@ -1416,20 +1535,39 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
     selectedSeriesName.value = seriesEntry?.name ?? '';
   }
   emit('time-point-selected', nextSelected);
+  
+  // 在 overview 层级时，根据点击的系列确定上下文信息
+  let contextCategory = selectedCategory.value;
+  let contextProcess = selectedProcess.value;
+  
+  if (drillDownLevel.value === 'overview') {
+    const seriesName = seriesEntry?.name ?? '';
+    // 跳过总内存线（seriesIndex === 0）
+    if (seriesIndex !== 0 && seriesName && seriesName !== '总内存') {
+      if (viewMode.value === 'category') {
+        // 分类模式：系列名称为大类名称
+        contextCategory = seriesName;
+      } else {
+        // 进程模式：系列名称为进程名称
+        contextProcess = seriesName;
+      }
+    }
+  }
+  
   // Compute stats based on the clicked series only to reflect the correct "current memory"
   const seriesScopedRecords = getSeriesScopedRecordsForName(seriesEntry?.name ?? '');
   emit('time-point-stats-updated', calculateTimePointStats(seriesScopedRecords, nextSelected));
 
-  // 发射选中点上下文，供外部“已选中时间点”与火焰图使用
+  // 发射选中点上下文，供外部"已选中时间点"与火焰图使用
   const memoryAtPoint = typeof dataItem.cumulativeMemory === 'number' ? dataItem.cumulativeMemory : 0;
   emit('point-selection-context', {
     timePoint: nextSelected,
     seriesName: seriesEntry?.name ?? '',
     viewMode: viewMode.value,
     drillLevel: drillDownLevel.value,
-    selectedCategory: selectedCategory.value,
+    selectedCategory: contextCategory,
     selectedSubCategory: selectedSubCategory.value,
-    selectedProcess: selectedProcess.value,
+    selectedProcess: contextProcess,
     selectedThread: selectedThread.value,
     selectedFile: selectedFile.value,
     memoryAtPoint,
@@ -1557,6 +1695,7 @@ async function renderChart() {
       mode: viewMode.value,
       isLargeDataset,
       isVeryLargeDataset,
+      selectedSeriesIndex: selectedSeriesIndex.value,
     });
 
     activeSeriesIndex.value = null;
@@ -1580,7 +1719,26 @@ async function renderChart() {
 
 // Update mark line that highlights the selected point
 function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory: number }>) {
-  if (!chartInstance || props.selectedTimePoint === null) return;
+  if (!chartInstance) return;
+
+  // 读取当前图表配置
+  const option = chartInstance.getOption() as echarts.EChartsOption;
+  if (!option || !Array.isArray(option.series) || option.series.length === 0) return;
+
+  // 如果取消选中，清除所有系列的标线
+  if (props.selectedTimePoint === null) {
+    const updatedSeries = option.series.map(series => {
+      const s = series as echarts.SeriesOption & {
+        markLine?: echarts.MarkLineComponentOption;
+      };
+      if (s.markLine) {
+        s.markLine = undefined;
+      }
+      return s;
+    });
+    chartInstance.setOption({ series: updatedSeries }, { notMerge: false });
+    return;
+  }
 
   // 找到接近选中时间点的索引位置（用于绘制标线）
   let closestIndex = 0;
@@ -1598,68 +1756,47 @@ function updateMarkLine(chartData: Array<{ relativeTs: number; cumulativeMemory:
     }
   }
 
-  // 读取当前图表配置
-  const option = chartInstance.getOption() as echarts.EChartsOption;
-  if (option && Array.isArray(option.series) && option.series[0]) {
-    const series = option.series[0] as echarts.SeriesOption & {
+  // 确定要添加标线的系列：优先使用选中的系列，否则使用第一个系列
+  const targetSeriesIndex = typeof selectedSeriesIndex.value === 'number' && selectedSeriesIndex.value < option.series.length
+    ? selectedSeriesIndex.value
+    : 0;
+
+  // 清除所有系列的标线
+  const updatedSeries = option.series.map((s, index) => {
+    const seriesOption = s as echarts.SeriesOption & {
       markLine?: echarts.MarkLineComponentOption;
     };
-    // Prefer displaying the selected series' memory at this index if available; fallback to total
-    let selectedMemory = chartData[closestIndex]?.cumulativeMemory || 0;
-    if (
-      Array.isArray(option.series) &&
-      typeof selectedSeriesIndex.value === 'number' &&
-      option.series[selectedSeriesIndex.value]
-    ) {
-      const s = option.series[selectedSeriesIndex.value] as echarts.SeriesOption & {
-        data?: Array<number | { value?: number } | LineSeriesDataItem>;
+    if (index === targetSeriesIndex) {
+      // 在目标系列上添加标线
+      const markLine: echarts.MarkLineComponentOption = {
+        silent: false,
+        symbol: ['none', 'none'],
+        symbolSize: [0, 0],
+        label: {
+          show: false,
+        },
+        lineStyle: {
+          color: '#FFD700',
+          width: 2,
+          type: 'solid',
+        },
+        data: [
+          {
+            xAxis: closestIndex,
+          },
+        ],
       };
-      const point = Array.isArray(s.data) ? (s.data[closestIndex] as unknown) : null;
-      let value: number | null = null;
-      if (typeof point === 'number') {
-        value = point as number;
-      } else if (point && typeof point === 'object') {
-        const obj = point as { value?: number };
-        if (typeof obj.value === 'number') {
-          value = obj.value;
-        }
-      }
-      if (typeof value === 'number') {
-        selectedMemory = value;
+      seriesOption.markLine = markLine;
+    } else {
+      // 清除其他系列的标线
+      if (seriesOption.markLine) {
+        seriesOption.markLine = undefined;
       }
     }
-    const markLine: echarts.MarkLineComponentOption = {
-      silent: false,
-      symbol: ['none', 'arrow'],
-      symbolSize: [0, 8],
-      label: {
-        show: true,
-        position: 'end',
-        formatter: `选中: ${formatTime(props.selectedTimePoint)}\n内存: ${formatBytes(selectedMemory)}`,
-        color: '#333',
-        backgroundColor: '#FFD700',
-        padding: [6, 10],
-        borderRadius: 4,
-        fontSize: 12,
-        fontWeight: 'bold',
-      },
-      lineStyle: {
-        color: '#FFD700',
-        width: 3,
-        type: 'solid',
-        shadowBlur: 10,
-        shadowColor: 'rgba(255, 215, 0, 0.5)',
-      },
-      data: [
-        {
-          xAxis: closestIndex,
-        },
-      ],
-    };
-    series.markLine = markLine;
+    return seriesOption;
+  });
 
-    chartInstance.setOption(option);
-  }
+  chartInstance.setOption({ series: updatedSeries }, { notMerge: false });
 }
 
 // 监听选中时间点变化，同步标线与统计信息
