@@ -96,91 +96,137 @@ class LtoDetector:
 
             # 导入必要的类（pickle反序列化需要）
             from lto_feature_pipeline import (  # noqa: PLC0415
-                CompilerProvenanceSVM,  # pickle需要这个类定义
-                LegacyFeatureExtractor,
+                CompilerProvenanceRF,  # 新的RF模型
+                CompilerProvenanceSVM,  # 旧的SVM模型
+                HybridFeatureExtractor,  # 混合特征提取（RF用）
+                LegacyFeatureExtractor,  # Legacy特征提取（SVM用）
             )
 
             self.LegacyFeatureExtractor = LegacyFeatureExtractor
+            self.HybridFeatureExtractor = HybridFeatureExtractor
             self.CompilerProvenanceSVM = CompilerProvenanceSVM
+            self.CompilerProvenanceRF = CompilerProvenanceRF
             logging.debug('Successfully imported from lto_feature_pipeline at %s', lto_demo_path)
 
         except ImportError as e:
             logging.error('Failed to import lto_feature_pipeline: %s', e)
             self.LegacyFeatureExtractor = None
+            self.HybridFeatureExtractor = None
             self.CompilerProvenanceSVM = None
+            self.CompilerProvenanceRF = None
 
-    def _load_model(self, model_name: str) -> tuple[Optional[object], Optional[list]]:
+    def _load_model(self, model_name: str) -> tuple[Optional[object], Optional[list], Optional[str]]:
         """
-        加载指定的SVM模型
+        加载指定的模型（SVM或RF）
 
         Args:
             model_name: 模型名称 (O2/O3/Os)
 
         Returns:
-            (model, feature_names) 或 (None, None)
+            (model, feature_names, model_type) 或 (None, None, None)
         """
         if model_name in self.models:
             return self.models[model_name]
 
         model_dir = self.model_base_dir / model_name
 
-        # 使用joblib格式
+        # 优先使用RF模型（最新），回退到SVM模型
+        rf_path = model_dir / 'rf_model.joblib'
         svm_path = model_dir / 'svm_model.joblib'
         feature_path = model_dir / 'feature_names.json'
 
-        if not svm_path.exists() or not feature_path.exists():
+        # 确定使用哪个模型
+        if rf_path.exists():
+            model_path = rf_path
+            model_type = 'RF'
+            model_class = self.CompilerProvenanceRF
+        elif svm_path.exists():
+            model_path = svm_path
+            model_type = 'SVM'
+            model_class = self.CompilerProvenanceSVM
+        else:
             logging.warning('LTO model not found: %s', model_dir)
             return None, None
 
-        try:
-            # 确保CompilerProvenanceSVM类已导入（pickle反序列化需要）
-            if self.CompilerProvenanceSVM is None:
-                logging.error('CompilerProvenanceSVM not imported, cannot load model')
-                return None, None
+        if not feature_path.exists():
+            logging.warning('Feature names not found: %s', feature_path)
+            return None, None, None
 
-            # 将CompilerProvenanceSVM添加到全局命名空间（pickle需要）
+        try:
+            # 确保模型类已导入（pickle反序列化需要）
+            if model_class is None:
+                logging.error('%s model class not imported, cannot load model', model_type)
+                return None, None, None
+
+            # 将模型类添加到全局命名空间（pickle需要）
             import builtins  # noqa: PLC0415
 
-            if not hasattr(builtins, 'CompilerProvenanceSVM'):
-                builtins.CompilerProvenanceSVM = self.CompilerProvenanceSVM
+            if model_type == 'RF':
+                if not hasattr(builtins, 'CompilerProvenanceRF'):
+                    builtins.CompilerProvenanceRF = self.CompilerProvenanceRF
+                # 同时添加到主模块，因为pickle可能从那里查找
+                if hasattr(sys.modules.get('__main__'), '__dict__'):
+                    sys.modules['__main__'].CompilerProvenanceRF = self.CompilerProvenanceRF
+                if hasattr(sys.modules.get('scripts.main'), '__dict__'):
+                    sys.modules['scripts.main'].CompilerProvenanceRF = self.CompilerProvenanceRF
+            elif model_type == 'SVM':
+                if not hasattr(builtins, 'CompilerProvenanceSVM'):
+                    builtins.CompilerProvenanceSVM = self.CompilerProvenanceSVM
+                if hasattr(sys.modules.get('__main__'), '__dict__'):
+                    sys.modules['__main__'].CompilerProvenanceSVM = self.CompilerProvenanceSVM
+                if hasattr(sys.modules.get('scripts.main'), '__dict__'):
+                    sys.modules['scripts.main'].CompilerProvenanceSVM = self.CompilerProvenanceSVM
 
-            # 加载模型（优先joblib，降级到pickle）
-            model = joblib.load(svm_path)
+            # 加载模型
+            model = joblib.load(model_path)
+            logging.info('Loaded %s model for %s', model_type, model_name)
 
             # 加载特征名称
             with open(feature_path, encoding='utf-8') as f:
                 feature_names = json.load(f).get('feature_names', [])
 
-            # 缓存
-            self.models[model_name] = (model, feature_names)
-            logging.debug('Loaded LTO model: %s', model_name)
+            # 缓存模型（包含类型信息）
+            self.models[model_name] = (model, feature_names, model_type)
+            logging.debug('Loaded %s model %s: %d features', model_type, model_name, len(feature_names))
 
-            return model, feature_names
+            return model, feature_names, model_type
 
         except Exception as e:
             logging.error('Failed to load LTO model %s: %s', model_name, e)
-            return None, None
+            return None, None, None
 
-    def _extract_features(self, so_path: str, feature_names: list) -> Optional[np.ndarray]:
+    def _extract_features(self, so_path: str, feature_names: list, use_hybrid: bool = False) -> Optional[np.ndarray]:
         """
         提取SO文件的特征
 
         Args:
             so_path: SO文件路径
             feature_names: 训练时的特征名称列表
+            use_hybrid: 是否使用混合特征提取器（RF模型需要）
 
         Returns:
             特征向量 或 None
         """
-        if self.LegacyFeatureExtractor is None:
-            return None
+        # 根据模型类型选择特征提取器
+        if use_hybrid:
+            if self.HybridFeatureExtractor is None:
+                logging.error('HybridFeatureExtractor not available')
+                return None
+            extractor_key = 'hybrid'
+            ExtractorClass = self.HybridFeatureExtractor
+        else:
+            if self.LegacyFeatureExtractor is None:
+                logging.error('LegacyFeatureExtractor not available')
+                return None
+            extractor_key = 'legacy'
+            ExtractorClass = self.LegacyFeatureExtractor
 
         try:
             # 创建或获取特征提取器
-            if 'legacy' not in self.feature_extractors:
-                self.feature_extractors['legacy'] = self.LegacyFeatureExtractor()
+            if extractor_key not in self.feature_extractors:
+                self.feature_extractors[extractor_key] = ExtractorClass()
 
-            extractor = self.feature_extractors['legacy']
+            extractor = self.feature_extractors[extractor_key]
 
             # 提取特征
             feat, names, _ = extractor.extract(so_path)
@@ -222,13 +268,16 @@ class LtoDetector:
 
         # 选择模型
         model_name = self.MODEL_MAPPING.get(opt_level, 'O2')
-        model, feature_names = self._load_model(model_name)
+        model, feature_names, model_type = self._load_model(model_name)
 
         if model is None or feature_names is None:
             return {'score': None, 'prediction': 'N/A', 'model_used': 'N/A'}
 
+        # 根据模型类型选择特征提取器
+        use_hybrid = model_type == 'RF'
+
         # 提取特征
-        features = self._extract_features(so_path, feature_names)
+        features = self._extract_features(so_path, feature_names, use_hybrid=use_hybrid)
 
         if features is None:
             return {'score': None, 'prediction': 'Failed', 'model_used': model_name}
@@ -268,11 +317,13 @@ class LtoDetector:
         valid_models = []
 
         for model_name in models_to_use:
-            model, feature_names = self._load_model(model_name)
+            model, feature_names, model_type = self._load_model(model_name)
             if model is None or feature_names is None:
                 continue
 
-            features = self._extract_features(so_path, feature_names)
+            # 根据模型类型选择特征提取器
+            use_hybrid = model_type == 'RF'
+            features = self._extract_features(so_path, feature_names, use_hybrid=use_hybrid)
             if features is None:
                 continue
 

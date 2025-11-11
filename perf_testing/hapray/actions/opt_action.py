@@ -61,9 +61,11 @@ class OptAction:
             help='Timeout in seconds for processing a single file (default: no timeout)',
         )
         parser.add_argument(
-            '--lto',
-            action='store_true',
-            help='Enable LTO (Link-Time Optimization) detection for .so files (default: disabled)',
+            '--no-lto',
+            dest='lto',
+            action='store_false',
+            default=True,
+            help='Disable LTO (Link-Time Optimization) detection for .so files (default: enabled)',
         )
         parsed_args = parser.parse_args(args)
 
