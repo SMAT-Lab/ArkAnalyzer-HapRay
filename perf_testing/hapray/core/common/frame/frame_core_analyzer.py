@@ -110,7 +110,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             app_pids: 应用进程ID列表，用于过滤应用相关的帧数据
 
         Returns:
-            dict | None: 分析结果数据，如果没有数据或分析失败则返回None
+            Optional[dict]: 分析结果数据，如果没有数据或分析失败则返回None
         """
         return self.stuttered_frame_analyzer.analyze_stuttered_frames(
             db_path, perf_db_path, step_id, top_n_analysis, app_pids
