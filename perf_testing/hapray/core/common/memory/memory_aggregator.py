@@ -94,14 +94,14 @@ class MemoryAggregator:
             if addr is None:
                 continue
 
-            evt_type = rec.get('eventType')
+            # heapSize 存储规则：申请为正数，释放为负数
             size = rec.get('heapSize') or 0
 
             # 忽略异常数据
             if not size:
                 continue
 
-            if is_alloc(evt_type):
+            if size > 0:
                 # 记录一次分配作为活跃块，后续 free 按 LIFO 消耗
                 active = {
                     'addr': addr,
@@ -121,9 +121,9 @@ class MemoryAggregator:
                     'subCategoryName': rec.get('subCategoryName'),
                 }
                 addr_to_active_allocs[addr].append(active)
-            elif is_free(evt_type):
-                # 释放：按 LIFO 从该地址的活跃分配中扣减
-                remaining = size
+            elif size < 0:
+                # 释放：按 LIFO 从该地址的活跃分配中扣减（heapSize 为负数，取绝对值）
+                remaining = abs(size)
                 stack = addr_to_active_allocs.get(addr)
                 if not stack:
                     continue
@@ -473,13 +473,13 @@ class MemoryAggregator:
         for record in sorted_records:
             heap_size = record.get('heapSize', 0)
 
-            # 更新当前内存
+            # 更新当前内存（heapSize 已经是正负数形式：申请为正，释放为负）
             current_mem += heap_size
 
             # 更新峰值
             peak_mem = max(peak_mem, current_mem)
 
-            # 统计分配和释放
+            # 统计分配和释放（heapSize 申请为正数，释放为负数）
             if heap_size > 0:
                 total_alloc += heap_size
             else:

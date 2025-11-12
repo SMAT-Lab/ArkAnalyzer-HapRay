@@ -42,10 +42,8 @@ export class MemoryDao {
       SELECT
         (raw.relativeTs / 10000000) as timePoint10ms,
         ${groupDictAlias}.value as groupName,
-        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
-      FROM memory_records_raw AS raw
-      LEFT JOIN memory_data_dicts AS event_dict
-        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
       LEFT JOIN memory_data_dicts AS ${groupDictAlias}
         ON raw.${groupFieldId} = ${groupDictAlias}.dictId AND ${groupDictAlias}.step_id = raw.step_id
       WHERE raw.step_id = ?
@@ -69,10 +67,8 @@ export class MemoryDao {
       SELECT
         (raw.relativeTs / 10000000) as timePoint10ms,
         sub_category_dict.value as subCategoryName,
-        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
-      FROM memory_records_raw AS raw
-      LEFT JOIN memory_data_dicts AS event_dict
-        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
       LEFT JOIN memory_data_dicts AS category_dict
         ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS sub_category_dict
@@ -86,8 +82,8 @@ export class MemoryDao {
   }
 
   /**
-   * Build SQL query for subcategory level (records of a specific subcategory)
-   * 查询小类层级数据：返回指定小类的所有记录
+   * Build SQL query for subcategory level (aggregated by component and time)
+   * 查询小类层级数据：按组件和时间聚合，返回指定小类下所有组件的记录
    *
    * @param stepId - Step id
    * @param categoryName - Category name
@@ -100,10 +96,20 @@ export class MemoryDao {
     subCategoryName: string
   ): QueryResult {
     const sql = `
-      SELECT *
-      FROM memory_records
-      WHERE step_id = ? AND categoryName = ? AND subCategoryName = ?
-      ORDER BY relativeTs
+      SELECT
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        file_dict.value as file,
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
+      LEFT JOIN memory_data_dicts AS category_dict
+        ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_category_dict
+        ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND category_dict.value = ? AND sub_category_dict.value = ?
+      GROUP BY timePoint10ms, file_dict.value
+      ORDER BY timePoint10ms, file_dict.value
     `;
     const params: SqlParam[] = [stepId, categoryName, subCategoryName];
     return { sql, params };
@@ -118,10 +124,12 @@ export class MemoryDao {
    */
   static buildQueryCategories(stepId: number): QueryResult {
     const sql = `
-      SELECT DISTINCT categoryName
-      FROM memory_records
-      WHERE step_id = ? AND categoryName != 'UNKNOWN'
-      ORDER BY categoryName
+      SELECT DISTINCT category_dict.value AS categoryName
+      FROM memory_records AS raw
+      LEFT JOIN memory_data_dicts AS category_dict
+        ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND category_dict.value != 'UNKNOWN'
+      ORDER BY category_dict.value
     `;
     const params: SqlParam[] = [stepId];
     return { sql, params };
@@ -140,10 +148,8 @@ export class MemoryDao {
       SELECT
         (raw.relativeTs / 10000000) as timePoint10ms,
         thread_dict.value as thread,
-        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
-      FROM memory_records_raw AS raw
-      LEFT JOIN memory_data_dicts AS event_dict
-        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
       LEFT JOIN memory_data_dicts AS proc_dict
         ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS thread_dict
@@ -174,10 +180,8 @@ export class MemoryDao {
       SELECT
         (raw.relativeTs / 10000000) as timePoint10ms,
         file_dict.value as file,
-        SUM(CASE WHEN event_dict.value IN ('AllocEvent', 'MmapEvent') THEN raw.heapSize ELSE -raw.heapSize END) as netSize
-      FROM memory_records_raw AS raw
-      LEFT JOIN memory_data_dicts AS event_dict
-        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
       LEFT JOIN memory_data_dicts AS proc_dict
         ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS thread_dict
@@ -209,10 +213,19 @@ export class MemoryDao {
     fileName: string
   ): QueryResult {
     const sql = `
-      SELECT *
-      FROM memory_records
-      WHERE step_id = ? AND process = ? AND thread = ? AND file LIKE ?
-      ORDER BY relativeTs
+      SELECT
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
+      LEFT JOIN memory_data_dicts AS proc_dict
+        ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS thread_dict
+        ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND proc_dict.value = ? AND thread_dict.value = ? AND file_dict.value LIKE ?
+      GROUP BY timePoint10ms
+      ORDER BY timePoint10ms
     `;
     const params: SqlParam[] = [stepId, processName, threadName, `%${fileName}`];
     return { sql, params };
@@ -228,10 +241,14 @@ export class MemoryDao {
    */
   static buildQuerySubCategories(stepId: number, categoryName: string): QueryResult {
     const sql = `
-      SELECT DISTINCT subCategoryName
-      FROM memory_records
-      WHERE step_id = ? AND categoryName = ?
-      ORDER BY subCategoryName
+      SELECT DISTINCT sub_category_dict.value AS subCategoryName
+      FROM memory_records AS raw
+      LEFT JOIN memory_data_dicts AS category_dict
+        ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_category_dict
+        ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND category_dict.value = ?
+      ORDER BY sub_category_dict.value
     `;
     const params: SqlParam[] = [stepId, categoryName];
     return { sql, params };
@@ -285,18 +302,16 @@ export class MemoryDao {
         raw.heapSize AS heapSize,
         raw.relativeTs AS relativeTs,
         comp_name_dict.value AS componentName,
-        comp_category_dict.value AS componentCategory,
+        raw.componentCategory AS componentCategory,
         category_dict.value AS categoryName,
         sub_category_dict.value AS subCategoryName
-      FROM memory_records_raw AS raw
+      FROM memory_records AS raw
       LEFT JOIN memory_data_dicts AS file_dict
         ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS event_dict
         ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS comp_name_dict
         ON raw.componentNameId = comp_name_dict.dictId AND comp_name_dict.step_id = raw.step_id
-      LEFT JOIN memory_data_dicts AS comp_category_dict
-        ON raw.componentCategoryId = comp_category_dict.dictId AND comp_category_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS category_dict
         ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS sub_category_dict
@@ -356,7 +371,7 @@ export class MemoryDao {
         raw.callchainId AS callchainId,
         raw.heapSize AS heapSize,
         raw.relativeTs AS relativeTs
-      FROM memory_records_raw AS raw
+      FROM memory_records AS raw
       LEFT JOIN memory_data_dicts AS proc_dict
         ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
       LEFT JOIN memory_data_dicts AS thread_dict

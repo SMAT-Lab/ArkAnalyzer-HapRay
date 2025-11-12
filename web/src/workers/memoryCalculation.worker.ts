@@ -100,16 +100,18 @@ function calculateMemoryStats(records: NativeMemoryRecord[]): MemoryStats {
 
   for (const record of records) {
     eventNum++;
-    const eventType = record.eventType;
+    // heapSize 存储规则：申请为正数，释放为负数
     const size = record.heapSize || 0;
 
-    if (eventType === 'AllocEvent' || eventType === 'MmapEvent') {
-      currentMem += size;
+    // 直接累加 heapSize（申请为正数，释放为负数）
+    currentMem += size;
+
+    // 统计分配和释放
+    if (size > 0) {
       totalAllocMem += size;
       allocEventNum++;
-    } else if (eventType === 'FreeEvent' || eventType === 'MunmapEvent') {
-      currentMem -= size;
-      totalFreeMem += size;
+    } else if (size < 0) {
+      totalFreeMem += Math.abs(size);
       freeEventNum++;
     }
 
