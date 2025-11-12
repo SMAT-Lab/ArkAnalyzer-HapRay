@@ -57,22 +57,22 @@ Requirements:
 Example:
 ```bash
 # Run specific test cases with symbol files
-python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir debug_symbols
+python -m scripts.main perf --run_testcases ".*_xhs_.*" ".*_jingdong_0010" --so_dir debug_symbols
 
 # Run specific test cases sample CPU cycles
-python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
+python -m scripts.main perf --run_testcases ".*_xhs_.*" ".*_jingdong_0010" --circles
 
 # Run manual testing
 python -m scripts.main perf --manual --app your_app_bundle_name
 
 # Memory profiling (memory only)
-python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace --no-perf
+python -m scripts.main perf --run_testcases ".*_xhs_.*" --memory --no-trace --no-perf
 
 # Mixed collection: perf + trace + memory
-python -m scripts.main perf --run_testcases .*_xhs_.* --memory
+python -m scripts.main perf --run_testcases ".*_xhs_.*" --memory
 
 # Mixed collection: perf + memory (no trace)
-python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace
+python -m scripts.main perf --run_testcases ".*_xhs_.*" --memory --no-trace
 ```
 
 **Memory Collection Modes:**
@@ -111,7 +111,7 @@ python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_
 python -m scripts.main prepare --all_0000
 
 # Execute test cases with regex patterns
-python -m scripts.main prepare --run_testcases .*_jingdong_0000* .*_Douyin_0000* .*_bilibili_0000*
+python -m scripts.main prepare --run_testcases ".*_jingdong_0000*" ".*_Douyin_0000*" ".*_bilibili_0000*"
 
 # Execute on specific device
 python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0000 --device HX1234567890
