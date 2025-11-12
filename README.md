@@ -126,17 +126,21 @@ Options:
 - `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
 - `-j/--jobs <N>`: Number of parallel jobs (default: 1)
 - `-r/--report_dir <path>`: Directory containing reports to analye invoked symbols (optional)
+- `--lto`: Enable LTO (Link-Time Optimization) detection for .so files (optional)
 
 Example:
 ```bash
 # Analyze binaries with 4 parallel jobs
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
 
+# Analyze binaries with LTO detection enabled
+python -m scripts.main opt -i build_output/ -o optimization_report.xlsx --lto
+
 # Analyze binaries and analyze invoked symbols
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
 
-# Analyze APK file
-python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx
+# Analyze APK file with LTO detection
+python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx --lto -j4
 
 # Analyze multiple APK files in a directory
 python -m scripts.main opt -i apk_files/ -o multi_apk_report.xlsx -j4
