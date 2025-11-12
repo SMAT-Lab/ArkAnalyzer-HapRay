@@ -18,6 +18,15 @@ import time
 
 import pandas as pd
 
+from .frame_constants import (
+    FLAG_NO_DRAW,
+    FLAG_NORMAL,
+    FLAG_PROCESS_ERROR,
+    FLAG_STUTTER,
+    FRAME_TYPE_ACTUAL,
+    FRAME_TYPE_EXPECT,
+)
+
 
 class FrameDbBasicAccessor:
     """帧数据访问器 - 负责所有数据库读取和数据标准化
@@ -423,17 +432,17 @@ class FrameDbBasicAccessor:
     @staticmethod
     def get_stuttered_frames(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取卡顿帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag=1, app_pids=app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag=FLAG_STUTTER, app_pids=app_pids)
 
     @staticmethod
     def get_actual_frames(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取实际帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, frame_type=0, app_pids=app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, frame_type=FRAME_TYPE_ACTUAL, app_pids=app_pids)
 
     @staticmethod
     def get_empty_frames(trace_conn, app_pids: list = None) -> pd.DataFrame:
         """获取空帧数据"""
-        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag=2, app_pids=app_pids)
+        return FrameDbBasicAccessor.get_frames_by_filter(trace_conn, flag=FLAG_NO_DRAW, app_pids=app_pids)
 
     @staticmethod
     def get_main_threads(trace_conn) -> pd.DataFrame:
@@ -486,11 +495,11 @@ class FrameDbBasicAccessor:
 
         return {
             'total_frames': len(frames_df),
-            'actual_frames': len(frames_df[frames_df['type'] == 0]),
-            'expect_frames': len(frames_df[frames_df['type'] == 1]),
-            'stuttered_frames': len(frames_df[frames_df['flag'] == 1]),
-            'empty_frames': len(frames_df[frames_df['flag'] == 2]),
-            'normal_frames': len(frames_df[frames_df['flag'] == 0]),
+            'actual_frames': len(frames_df[frames_df['type'] == FRAME_TYPE_ACTUAL]),
+            'expect_frames': len(frames_df[frames_df['type'] == FRAME_TYPE_EXPECT]),
+            'stuttered_frames': len(frames_df[frames_df['flag'] == FLAG_STUTTER]),
+            'empty_frames': len(frames_df[frames_df['flag'] == FLAG_NO_DRAW]),
+            'normal_frames': len(frames_df[frames_df['flag'] == FLAG_NORMAL]),
         }
 
     # ==================== 数据标准化方法 ====================
@@ -541,14 +550,14 @@ class FrameDbBasicAccessor:
         frames_df['end_time'] = frames_df['ts'] + frames_df['dur']
 
         # 添加帧类型标识字段
-        frames_df['is_actual_frame'] = (frames_df['type'] == 0).astype(int)
-        frames_df['is_expect_frame'] = (frames_df['type'] == 1).astype(int)
+        frames_df['is_actual_frame'] = (frames_df['type'] == FRAME_TYPE_ACTUAL).astype(int)
+        frames_df['is_expect_frame'] = (frames_df['type'] == FRAME_TYPE_EXPECT).astype(int)
 
         # 添加帧状态标识字段
-        frames_df['is_normal_frame'] = (frames_df['flag'] == 0).astype(int)  # 不卡顿
-        frames_df['is_stuttered_frame'] = (frames_df['flag'] == 1).astype(int)  # 卡帧
-        frames_df['is_no_draw_frame'] = (frames_df['flag'] == 2).astype(int)  # 不需要绘制
-        frames_df['is_rs_app_abnormal'] = (frames_df['flag'] == 3).astype(int)  # RS与APP异常
+        frames_df['is_normal_frame'] = (frames_df['flag'] == FLAG_NORMAL).astype(int)  # 不卡顿
+        frames_df['is_stuttered_frame'] = (frames_df['flag'] == FLAG_STUTTER).astype(int)  # 卡帧
+        frames_df['is_no_draw_frame'] = (frames_df['flag'] == FLAG_NO_DRAW).astype(int)  # 不需要绘制
+        frames_df['is_rs_app_abnormal'] = (frames_df['flag'] == FLAG_PROCESS_ERROR).astype(int)  # RS与APP异常
 
         return frames_df
 
