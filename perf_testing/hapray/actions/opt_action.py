@@ -67,6 +67,13 @@ class OptAction:
             default=True,
             help='Disable LTO (Link-Time Optimization) detection for .so files (default: enabled)',
         )
+        parser.add_argument(
+            '--no-opt',
+            dest='opt',
+            action='store_false',
+            default=True,
+            help='Disable optimization level (Ox) detection, only run LTO detection (default: enabled)',
+        )
         parsed_args = parser.parse_args(args)
 
         action = OptAction()
@@ -86,7 +93,12 @@ class OptAction:
             with ProcessPoolExecutor(max_workers=2) as executor:
                 futures = []
                 future = executor.submit(
-                    action.run_detection, parsed_args.jobs, file_infos, parsed_args.timeout, parsed_args.lto
+                    action.run_detection,
+                    parsed_args.jobs,
+                    file_infos,
+                    parsed_args.timeout,
+                    parsed_args.lto,
+                    parsed_args.opt,
                 )
                 futures.append(future)
                 if parsed_args.report_dir:
@@ -104,10 +116,10 @@ class OptAction:
             file_collector.cleanup()
 
     @staticmethod
-    def run_detection(jobs, file_infos, timeout=None, enable_lto=False):
+    def run_detection(jobs, file_infos, timeout=None, enable_lto=False, enable_opt=True):
         """Run optimization detection in a separate process"""
         try:
-            detector = OptimizationDetector(jobs, timeout=timeout, enable_lto=enable_lto)
+            detector = OptimizationDetector(jobs, timeout=timeout, enable_lto=enable_lto, enable_opt=enable_opt)
             return detector.detect_optimization(file_infos)
         except Exception as e:
             logging.error('OptimizationDetector error: %s', str(e))
