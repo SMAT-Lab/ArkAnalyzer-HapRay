@@ -164,7 +164,7 @@ const shouldShowOutstandingFlameGraph = computed(
   () =>
     selectedTimePoint.value !== null &&
     (drillState.value.drillLevel !== 'overview' ||
-      (pointContext.value.seriesName && pointContext.value.seriesName !== '总内存')),
+      pointContext.value.seriesName !== ''),
 );
 
 // 选中点上下文（来自时间线图表），用于信息栏与火焰图筛选

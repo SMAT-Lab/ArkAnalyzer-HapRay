@@ -103,7 +103,7 @@ const shouldQuery = computed(
   () =>
     props.selectedTimePoint !== null &&
     (props.drillLevel !== 'overview' ||
-      (props.selectedSeriesName && props.selectedSeriesName !== '总内存')),
+      props.selectedSeriesName !== ''),
 );
 
 let requestToken = 0;
