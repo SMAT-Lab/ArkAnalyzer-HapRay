@@ -21,11 +21,14 @@ class TimeoutError(Exception):
 
 
 class OptimizationDetector:
-    def __init__(self, workers: int = 1, timeout: Optional[int] = None, enable_lto: bool = False):
+    def __init__(
+        self, workers: int = 1, timeout: Optional[int] = None, enable_lto: bool = True, enable_opt: bool = True
+    ):
         self.parallel = workers > 1
         self.workers = min(workers, multiprocessing.cpu_count() - 1)
         self.timeout = timeout
         self.enable_lto = enable_lto
+        self.enable_opt = enable_opt
         self.model = None
         self.flags_model = files('hapray.optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
 
@@ -85,7 +88,14 @@ class OptimizationDetector:
         return results
 
     def detect_optimization(self, file_infos: list[FileInfo]) -> list[tuple[str, pd.DataFrame]]:
-        success, failures, flags = self._analyze_files(file_infos)
+        # 优化级别检测
+        flags = {}
+        success = 0
+        failures = 0
+        if self.enable_opt:
+            success, failures, flags = self._analyze_files(file_infos)
+        else:
+            logging.info('Optimization level detection disabled (--no-opt)')
 
         # LTO检测
         lto_results = {}
@@ -94,7 +104,8 @@ class OptimizationDetector:
             lto_results = self._detect_lto(file_infos, flags)
             logging.info('LTO detection complete')
 
-        logging.info('Analysis complete: %s files analyzed, %s files failed', success, failures)
+        if self.enable_opt:
+            logging.info('Analysis complete: %s files analyzed, %s files failed', success, failures)
         return [('optimization', self._collect_results(flags, file_infos, lto_results))]
 
     @staticmethod
