@@ -7,8 +7,6 @@
 
 import logging
 
-# from typing import Optional  # 未使用
-
 
 class FrameTimeUtils:
     """帧分析时间工具类
