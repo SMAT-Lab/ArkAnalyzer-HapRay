@@ -151,7 +151,6 @@ export class NativeMemoryService {
     console.log(`${LOG_PREFIX} Overview query returned ${rows.length} aggregated row(s).`);
 
     const records = rows.map((row) => this.mapOverviewRow(row, groupBy));
-    this.sortByTimestamp(records, `step${stepId}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} Overview timeline ready for step ${stepId} in ${duration}ms.`);
@@ -166,7 +165,6 @@ export class NativeMemoryService {
 
     const rows = await getDbApi().queryCategoryRecords(stepId, categoryName);
     const records = rows.map((row) => this.mapCategoryRow(row, categoryName));
-    this.sortByTimestamp(records, `step${stepId}/${categoryName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} Category records ready for step ${stepId}/${categoryName} in ${duration}ms.`);
@@ -181,7 +179,6 @@ export class NativeMemoryService {
 
     const rows = await getDbApi().querySubCategoryRecords(stepId, categoryName, subCategoryName);
     const records = rows.map((row) => this.mapSubCategoryRow(row, categoryName, subCategoryName));
-    this.sortByTimestamp(records, `step${stepId}/${categoryName}/${subCategoryName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} Subcategory records ready for step ${stepId}/${categoryName}/${subCategoryName} in ${duration}ms.`);
@@ -196,7 +193,6 @@ export class NativeMemoryService {
 
     const rows = await getDbApi().queryProcessRecords(stepId, processName);
     const records = rows.map((row) => this.mapProcessRow(row, processName));
-    this.sortByTimestamp(records, `step${stepId}/${processName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} Process records ready for step ${stepId}/${processName} in ${duration}ms.`);
@@ -211,7 +207,6 @@ export class NativeMemoryService {
 
     const rows = await getDbApi().queryThreadRecords(stepId, processName, threadName);
     const records = rows.map((row) => this.mapThreadRow(row, processName, threadName));
-    this.sortByTimestamp(records, `step${stepId}/${processName}/${threadName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} Thread records ready for step ${stepId}/${processName}/${threadName} in ${duration}ms.`);
@@ -226,7 +221,6 @@ export class NativeMemoryService {
 
     const rows = await getDbApi().queryFileRecords(stepId, processName, threadName, fileName);
     const records = rows.map((row) => this.mapFileRow(row, processName, threadName, fileName));
-    this.sortByTimestamp(records, `step${stepId}/${processName}/${threadName}/${fileName}`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`${LOG_PREFIX} File records ready for step ${stepId}/${processName}/${threadName}/${fileName} in ${duration}ms.`);
@@ -257,7 +251,6 @@ export class NativeMemoryService {
     );
 
     const records = rows.map((row) => this.mapRawRecordRow(row));
-    this.sortByTimestamp(records, `step${stepId}/recordsUpTo`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(
@@ -290,7 +283,6 @@ export class NativeMemoryService {
     );
 
     const records = rows.map((row) => this.mapRawRecordRow(row));
-    this.sortByTimestamp(records, `step${stepId}/recordsUpTo`);
 
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(
@@ -344,18 +336,6 @@ export class NativeMemoryService {
     console.log(`${LOG_PREFIX} Loaded callchain frames for step ${stepId} in ${duration}ms.`);
 
     return map;
-  }
-
-  private sortByTimestamp(records: NativeMemoryRecord[], context: string): void {
-    if (records.length <= 1) {
-      return;
-    }
-
-    const start = performance.now();
-    records.sort((a, b) => a.relativeTs - b.relativeTs);
-    const duration = (performance.now() - start).toFixed(2);
-
-    console.log(`${LOG_PREFIX} Sorted ${records.length} record(s) for ${context} in ${duration}ms.`);
   }
 
   private mapOverviewRow(row: SqlRow, groupBy: 'category' | 'process' = 'category'): NativeMemoryRecord {
@@ -417,11 +397,30 @@ export class NativeMemoryService {
   }
 
   private mapSubCategoryRow(row: SqlRow, categoryName: string, subCategoryName: string): NativeMemoryRecord {
-    return this.mapRawRecordRow({
-      ...row,
+    const netSize = Number(row.netSize ?? 0);
+    const timePoint10ms = Number(row.timePoint10ms ?? 0);
+    const file = String(row.file ?? '');
+
+    return {
+      pid: 0,
+      process: '',
+      tid: null,
+      thread: null,
+      fileId: null,
+      file,
+      symbolId: null,
+      symbol: null,
+      eventType: netSize >= 0 ? EventType.AllocEvent : EventType.FreeEvent,
+      subEventType: '',
+      addr: 0,
+      callchainId: 0,
+      heapSize: Math.abs(netSize),
+      relativeTs: timePoint10ms * 0.01,
+      componentName: '',
+      componentCategory: ComponentCategory.UNKNOWN,
       categoryName,
       subCategoryName,
-    });
+    };
   }
 
   private mapProcessRow(row: SqlRow, processName: string): NativeMemoryRecord {
