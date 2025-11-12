@@ -17,6 +17,16 @@ import logging
 
 import pandas as pd
 
+from .frame_constants import (
+    FLAG_NO_DRAW,
+    FLAG_NORMAL,
+    FLAG_PROCESS_ERROR,
+    FLAG_STUTTER,
+    FPS_WINDOW_SIZE_MS,
+    FRAME_TYPE_ACTUAL,
+    FRAME_TYPE_EXPECT,
+)
+
 
 class FrameDbAdvancedAccessor:
     """复杂联合查询数据访问层 - 专门处理多表关联的复杂SQL查询
@@ -55,8 +65,8 @@ class FrameDbAdvancedAccessor:
             -- 首先获取符合条件的帧
             SELECT fs.ts, fs.dur, fs.ipid, fs.itid, fs.callstack_id, fs.vsync, fs.flag, fs.type
             FROM frame_slice fs
-            WHERE fs.flag = 2
-            AND fs.type = 0
+            WHERE fs.flag = {FLAG_NO_DRAW}
+            AND fs.type = {FRAME_TYPE_ACTUAL}
         ),
         process_filtered AS (
             -- 通过process表过滤出app_pids中的帧
@@ -101,8 +111,8 @@ class FrameDbAdvancedAccessor:
             LEFT JOIN process p ON fs.ipid = p.ipid
             LEFT JOIN thread t ON fs.itid = t.itid
             LEFT JOIN callstack cs ON fs.callstack_id = cs.id
-            WHERE fs.flag IN (1, 3)  -- 卡顿帧和进程异常帧
-            AND fs.type = 0  -- 实际帧
+            WHERE fs.flag IN ({FLAG_STUTTER}, {FLAG_PROCESS_ERROR})  -- 卡顿帧和进程异常帧
+            AND fs.type = {FRAME_TYPE_ACTUAL}  -- 实际帧
         ),
         frame_context AS (
             -- 添加上下文信息
@@ -248,12 +258,12 @@ class FrameDbAdvancedAccessor:
             p.pid,
             p.name as process_name,
             COUNT(*) as total_frames,
-            SUM(CASE WHEN fs.flag = 0 THEN 1 ELSE 0 END) as normal_frames,
-            SUM(CASE WHEN fs.flag = 1 THEN 1 ELSE 0 END) as stuttered_frames,
-            SUM(CASE WHEN fs.flag = 2 THEN 1 ELSE 0 END) as empty_frames,
-            SUM(CASE WHEN fs.flag = 3 THEN 1 ELSE 0 END) as process_error_frames,
-            SUM(CASE WHEN fs.type = 0 THEN 1 ELSE 0 END) as actual_frames,
-            SUM(CASE WHEN fs.type = 1 THEN 1 ELSE 0 END) as expect_frames,
+            SUM(CASE WHEN fs.flag = {FLAG_NORMAL} THEN 1 ELSE 0 END) as normal_frames,
+            SUM(CASE WHEN fs.flag = {FLAG_STUTTER} THEN 1 ELSE 0 END) as stuttered_frames,
+            SUM(CASE WHEN fs.flag = {FLAG_NO_DRAW} THEN 1 ELSE 0 END) as empty_frames,
+            SUM(CASE WHEN fs.flag = {FLAG_PROCESS_ERROR} THEN 1 ELSE 0 END) as process_error_frames,
+            SUM(CASE WHEN fs.type = {FRAME_TYPE_ACTUAL} THEN 1 ELSE 0 END) as actual_frames,
+            SUM(CASE WHEN fs.type = {FRAME_TYPE_EXPECT} THEN 1 ELSE 0 END) as expect_frames,
             AVG(fs.dur) as avg_frame_duration,
             MAX(fs.dur) as max_frame_duration,
             MIN(fs.dur) as min_frame_duration
@@ -272,7 +282,9 @@ class FrameDbAdvancedAccessor:
             return pd.DataFrame()
 
     @staticmethod
-    def get_frame_timeline_analysis(trace_conn, app_pids: list[int], time_window_ms: int = 1000) -> pd.DataFrame:
+    def get_frame_timeline_analysis(
+        trace_conn, app_pids: list[int], time_window_ms: int = FPS_WINDOW_SIZE_MS
+    ) -> pd.DataFrame:
         """获取帧时间线分析数据
 
         Args:
@@ -311,8 +323,8 @@ class FrameDbAdvancedAccessor:
             SELECT
                 window_id,
                 COUNT(*) as frame_count,
-                SUM(CASE WHEN flag = 1 THEN 1 ELSE 0 END) as stutter_count,
-                SUM(CASE WHEN flag = 2 THEN 1 ELSE 0 END) as empty_count,
+                SUM(CASE WHEN flag = {FLAG_STUTTER} THEN 1 ELSE 0 END) as stutter_count,
+                SUM(CASE WHEN flag = {FLAG_NO_DRAW} THEN 1 ELSE 0 END) as empty_count,
                 AVG(dur) as avg_duration,
                 MIN(ts) as window_start,
                 MAX(ts) as window_end
@@ -394,8 +406,8 @@ class FrameDbAdvancedAccessor:
                 p.pid, p.name as process_name,
                 COUNT(fs.id) as frame_count,
                 AVG(fs.dur) as avg_frame_duration,
-                SUM(CASE WHEN fs.flag = 1 THEN 1 ELSE 0 END) as stutter_count,
-                SUM(CASE WHEN fs.flag = 2 THEN 1 ELSE 0 END) as empty_count
+                SUM(CASE WHEN fs.flag = {FLAG_STUTTER} THEN 1 ELSE 0 END) as stutter_count,
+                SUM(CASE WHEN fs.flag = {FLAG_NO_DRAW} THEN 1 ELSE 0 END) as empty_count
             FROM thread t
             JOIN process p ON t.ipid = p.ipid
             LEFT JOIN frame_slice fs ON t.itid = fs.itid

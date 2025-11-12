@@ -8,19 +8,15 @@ from .excel_utils import ExcelReportSaver
 from .exe_utils import ExeUtils
 from .folder_utils import delete_folder, read_json_arrays_from_dir, scan_folders
 from .frame import (
-    # 兼容性包装器
-    FrameAnalyzer,
     # 核心组件
     FrameAnalyzerCore,
     FrameCacheManager,
 )
 
-# pylint: disable=duplicate-code
 __all__ = [
     # Frame Analyzer 组件
     'FrameAnalyzerCore',
     'FrameCacheManager',
-    'FrameAnalyzer',
     # 工具模块
     'CommonUtils',
     'CoordinateAdapter',
