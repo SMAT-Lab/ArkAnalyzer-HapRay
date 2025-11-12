@@ -20,6 +20,13 @@ from typing import Any
 
 import pandas as pd
 
+from .frame_constants import (
+    CALLCHAIN_ANALYSIS_TIME_THRESHOLD,
+    FRAME_ANALYSIS_TIME_THRESHOLD,
+    VSYNC_EVENT_COUNT_THRESHOLD,
+    VSYNC_SYMBOL_HANDLE,
+    VSYNC_SYMBOL_ON_READABLE,
+)
 from .frame_core_cache_manager import FrameCacheManager
 
 
@@ -106,7 +113,7 @@ class FrameLoadCalculator:
             if callchain_records.empty:
                 # logging.info("未找到callchain_id=%s的记录", callchain_id)
                 total_time = time.time() - callchain_start_time
-                if total_time > 0.01:  # 只记录耗时超过0.01秒的调用链分析
+                if total_time > CALLCHAIN_ANALYSIS_TIME_THRESHOLD:
                     logging.debug(
                         '[%s] 调用链分析耗时: %.6f秒 (无记录), '
                         '缓存检查%.6f秒, 键生成%.6f秒, '
@@ -154,8 +161,8 @@ class FrameLoadCalculator:
             # 总耗时统计
             total_time = time.time() - callchain_start_time
 
-            # 只记录耗时较长的调用链分析（超过0.01秒）
-            if total_time > 0.01:
+            # 只记录耗时较长的调用链分析
+            if total_time > CALLCHAIN_ANALYSIS_TIME_THRESHOLD:
                 logging.debug(
                     '[%s] 调用链分析耗时: %.6f秒, callchain_id: %s, 记录数: %d',
                     step_id,
@@ -184,6 +191,96 @@ class FrameLoadCalculator:
             logging.error('分析调用链失败: %s', str(e))
             return []
 
+    def _get_frame_samples(self, frame: dict, perf_df: pd.DataFrame) -> pd.DataFrame:
+        """获取帧的性能样本数据
+
+        Args:
+            frame: 帧数据
+            perf_df: 性能样本数据
+
+        Returns:
+            pd.DataFrame: 过滤后的样本数据
+        """
+        frame_start_time_ts = frame.get('start_time', frame.get('ts', 0))
+        frame_end_time_ts = frame.get('end_time', frame.get('ts', 0) + frame.get('dur', 0))
+
+        mask = (
+            (perf_df['timestamp_trace'] >= frame_start_time_ts)
+            & (perf_df['timestamp_trace'] <= frame_end_time_ts)
+            & (perf_df['thread_id'] == frame['tid'])
+        )
+        return perf_df[mask]
+
+    def _process_frame_sample(
+        self, sample, perf_conn, callchain_cache: pd.DataFrame, files_cache: pd.DataFrame, step_id: str
+    ) -> tuple[int, dict]:
+        """处理单个帧样本
+
+        Args:
+            sample: 样本数据
+            perf_conn: perf数据库连接
+            callchain_cache: 调用链缓存
+            files_cache: 文件缓存
+            step_id: 步骤ID
+
+        Returns:
+            tuple: (event_count, sample_callchain_dict) 事件计数和调用链信息
+        """
+        if not pd.notna(sample['callchain_id']):
+            return 0, None
+
+        try:
+            callchain_info = self.analyze_perf_callchain(
+                perf_conn, int(sample['callchain_id']), callchain_cache, files_cache, step_id
+            )
+
+            if not callchain_info:
+                return 0, None
+
+            # VSync过滤
+            is_vsync_chain = self._is_vsync_chain(callchain_info, sample['event_count'])
+
+            if is_vsync_chain:
+                return 0, None
+
+            event_count = sample['event_count']
+            sample_callchain = {
+                'timestamp': int(sample['timestamp_trace']),
+                'event_count': int(event_count),
+                'callchain': callchain_info,
+            }
+            return event_count, sample_callchain
+
+        except Exception as e:
+            logging.error('分析调用链时出错: %s', str(e))
+            return 0, None
+
+    def _save_frame_load_to_cache(self, frame: dict, frame_load: int, sample_callchains: list, step_id: str) -> None:
+        """保存帧负载数据到缓存
+
+        Args:
+            frame: 帧数据
+            frame_load: 帧负载值
+            sample_callchains: 样本调用链列表
+            step_id: 步骤ID
+        """
+        if not step_id:
+            return
+
+        frame_load_data = {
+            'ts': frame.get('ts', frame.get('start_time', 0)),
+            'dur': frame.get('dur', frame.get('end_time', 0) - frame.get('start_time', 0)),
+            'frame_load': frame_load,
+            'thread_id': frame.get('tid'),
+            'thread_name': frame.get('thread_name', 'unknown'),
+            'process_name': frame.get('process_name', 'unknown'),
+            'type': frame.get('type', 0),
+            'vsync': frame.get('vsync', 'unknown'),
+            'flag': frame.get('flag'),
+            'sample_callchains': sample_callchains,
+        }
+        FrameCacheManager.add_frame_load(step_id, frame_load_data)
+
     def analyze_single_frame(self, frame, perf_df, perf_conn, step_id):
         """分析单个帧的负载和调用链，返回frame_load和sample_callchains
 
@@ -191,131 +288,56 @@ class FrameLoadCalculator:
         """
         frame_start_time = time.time()
 
-        # 在函数内部获取缓存
+        # 获取缓存
         cache_start = time.time()
         callchain_cache = FrameCacheManager.get_callchain_cache(perf_conn, step_id)
         files_cache = FrameCacheManager.get_files_cache(perf_conn, step_id)
         cache_time = time.time() - cache_start
 
-        frame_load = 0
-        sample_callchains = []
-
-        # 计算帧的开始和结束时间
-        time_calc_start = time.time()
-        frame_start_time_ts = frame.get('start_time', frame.get('ts', 0))
-        frame_end_time_ts = frame.get('end_time', frame.get('ts', 0) + frame.get('dur', 0))
-        time_calc_time = time.time() - time_calc_start
-
-        # 数据过滤
+        # 获取帧样本数据
         filter_start = time.time()
-        mask = (
-            (perf_df['timestamp_trace'] >= frame_start_time_ts)
-            & (perf_df['timestamp_trace'] <= frame_end_time_ts)
-            & (perf_df['thread_id'] == frame['tid'])
-        )
-        frame_samples = perf_df[mask]
+        frame_samples = self._get_frame_samples(frame, perf_df)
         filter_time = time.time() - filter_start
 
         if frame_samples.empty:
-            # logging.info("analyze_single_frame: 帧时间窗口内无样本, ts=%s, 时间窗口=[%s, %s], tid=%s",
-            #              frame.get('ts'), frame_start_time_ts, frame_end_time_ts, frame.get('tid'))
             total_time = time.time() - frame_start_time
-            if total_time > 0.1:  # 只记录耗时超过0.1秒的帧
+            if total_time > FRAME_ANALYSIS_TIME_THRESHOLD:
                 logging.debug(
-                    '[%s] 空帧分析耗时: %.6f秒 (无样本), 缓存%.6f秒, 时间计算%.6f秒, 过滤%.6f秒',
+                    '[%s] 空帧分析耗时: %.6f秒 (无样本), 缓存%.6f秒, 过滤%.6f秒',
                     step_id,
                     total_time,
                     cache_time,
-                    time_calc_time,
                     filter_time,
                 )
-            return frame_load, sample_callchains
-
-        # logging.info("analyze_single_frame: 找到样本, ts=%s, 时间窗口=[%s, %s], tid=%s, 样本数=%s",
-        #              frame.get('ts'), frame_start_time_ts, frame_end_time_ts, frame.get('tid'), len(frame_samples))
+            return 0, []
 
         # 样本分析
         sample_analysis_start = time.time()
-        callchain_analysis_total = 0
-        vsync_filter_total = 0
-        sample_count = 0
+        frame_load = 0
+        sample_callchains = []
 
         for _, sample in frame_samples.iterrows():
-            sample_count += 1
-            if not pd.notna(sample['callchain_id']):
-                continue
+            event_count, sample_callchain = self._process_frame_sample(
+                sample, perf_conn, callchain_cache, files_cache, step_id
+            )
 
-            try:
-                # 调用链分析
-                callchain_start = time.time()
-                callchain_info = self.analyze_perf_callchain(
-                    perf_conn, int(sample['callchain_id']), callchain_cache, files_cache, step_id
-                )
-                callchain_time = time.time() - callchain_start
-                callchain_analysis_total += callchain_time
-
-                if callchain_info and len(callchain_info) > 0:
-                    # VSync过滤
-                    vsync_start = time.time()
-                    is_vsync_chain = False
-                    for i in range(len(callchain_info) - 1):
-                        current_symbol = callchain_info[i]['symbol']
-                        next_symbol = callchain_info[i + 1]['symbol']
-                        event_count = sample['event_count']
-
-                        if not current_symbol or not next_symbol:
-                            continue
-
-                        if self.debug_vsync_enabled and (
-                            'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
-                            and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
-                            and event_count < 2000000
-                        ):
-                            is_vsync_chain = True
-                            break
-                    vsync_time = time.time() - vsync_start
-                    vsync_filter_total += vsync_time
-
-                    if not is_vsync_chain:
-                        frame_load += sample['event_count']
-                        try:
-                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                            sample_callchains.append(
-                                {
-                                    'timestamp': int(sample['timestamp_trace']),
-                                    'event_count': int(sample['event_count']),
-                                    'load_percentage': float(sample_load_percentage),
-                                    'callchain': callchain_info,
-                                }
-                            )
-                        except Exception as e:
-                            logging.error(
-                                '处理样本时出错: %s, sample: %s, frame_load: %s', str(e), sample.to_dict(), frame_load
-                            )
-                            continue
-
-            except Exception as e:
-                logging.error('分析调用链时出错: %s', str(e))
-                continue
+            if event_count > 0 and sample_callchain:
+                frame_load += event_count
+                try:
+                    sample_load_percentage = (event_count / frame_load) * 100
+                    sample_callchain['load_percentage'] = float(sample_load_percentage)
+                    sample_callchains.append(sample_callchain)
+                except Exception as e:
+                    logging.error(
+                        '处理样本时出错: %s, sample: %s, frame_load: %s', str(e), sample.to_dict(), frame_load
+                    )
+                    continue
 
         sample_analysis_time = time.time() - sample_analysis_start
 
         # 保存帧负载数据到缓存
         cache_save_start = time.time()
-        if step_id:
-            frame_load_data = {
-                'ts': frame.get('ts', frame.get('start_time', 0)),
-                'dur': frame.get('dur', frame.get('end_time', 0) - frame.get('start_time', 0)),
-                'frame_load': frame_load,
-                'thread_id': frame.get('tid'),
-                'thread_name': frame.get('thread_name', 'unknown'),
-                'process_name': frame.get('process_name', 'unknown'),
-                'type': frame.get('type', 0),
-                'vsync': frame.get('vsync', 'unknown'),
-                'flag': frame.get('flag'),
-                'sample_callchains': sample_callchains,
-            }
-            FrameCacheManager.add_frame_load(step_id, frame_load_data)
+        self._save_frame_load_to_cache(frame, frame_load, sample_callchains, step_id)
         cache_save_time = time.time() - cache_save_start
 
         # 总耗时统计
@@ -328,22 +350,15 @@ class FrameLoadCalculator:
                 step_id,
                 total_time,
                 len(frame_samples),
-                sample_count,
+                len(sample_callchains),
             )
             logging.debug(
-                '[%s] 各阶段耗时: 缓存获取%.6f秒, 时间计算%.6f秒, 数据过滤%.6f秒, 样本分析%.6f秒, 缓存保存%.6f秒',
+                '[%s] 各阶段耗时: 缓存获取%.6f秒, 数据过滤%.6f秒, 样本分析%.6f秒, 缓存保存%.6f秒',
                 step_id,
                 cache_time,
-                time_calc_time,
                 filter_time,
                 sample_analysis_time,
                 cache_save_time,
-            )
-            logging.debug(
-                '[%s] 样本分析详情: 调用链分析%.6f秒, VSync过滤%.6f秒',
-                step_id,
-                callchain_analysis_total,
-                vsync_filter_total,
             )
 
         return frame_load, sample_callchains
@@ -638,9 +653,9 @@ class FrameLoadCalculator:
                 continue
 
             if (
-                'OHOS::Rosen::VSyncCallBackListener::OnReadable' in current_symbol
-                and 'OHOS::Rosen::VSyncCallBackListener::HandleVsyncCallbacks' in next_symbol
-                and event_count < 2000000
+                VSYNC_SYMBOL_ON_READABLE in current_symbol
+                and VSYNC_SYMBOL_HANDLE in next_symbol
+                and event_count < VSYNC_EVENT_COUNT_THRESHOLD
             ):
                 return True
 

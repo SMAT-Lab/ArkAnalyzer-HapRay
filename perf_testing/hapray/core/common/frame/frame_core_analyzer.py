@@ -14,23 +14,18 @@ limitations under the License.
 """
 
 import logging
-import os
 import sqlite3
 import time
 from typing import Any, Optional
 
 from ...config.config import Config
 from .frame_analyzer_empty import EmptyFrameAnalyzer
-from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_core_cache_manager import FrameCacheManager
 
 # 导入新的模块化组件
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_data_parser import get_frame_type, parse_frame_slice_db, validate_database_compatibility
 from .frame_time_utils import FrameTimeUtils
-
-# 设置环境变量
-os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 
 class FrameAnalyzerCore:  # pylint: disable=duplicate-code
@@ -41,8 +36,7 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
     2. 负载计算 - FrameLoadCalculator
     3. 数据解析 - frame_data_parser
     4. 空帧分析 - EmptyFrameAnalyzer
-    5. 卡顿帧分析 - StutteredFrameAnalyzer
-    6. 核心协调 - 本类
+    5. 核心协调 - 本类
 
     帧标志 (flag) 定义：
     - flag = 0: 实际渲染帧不卡帧（正常帧）
@@ -51,29 +45,15 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
     - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
     """
 
-    # 调试开关配置
-    _debug_vsync_enabled = False  # VSync调试开关
-
-    # 卡顿分级阈值常量
-    FRAME_DURATION = 16.67  # 毫秒，60fps基准帧时长
-    STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧（33.34ms）
-    STUTTER_LEVEL_2_FRAMES = 6  # 2级卡顿阈值：2-6帧（100ms）
-    NS_TO_MS = 1_000_000
-    WINDOW_SIZE_MS = 1000  # fps窗口大小：1s
-
     def __init__(self, debug_vsync_enabled: bool = False):
-        """
-        初始化FrameAnalyzerCore
+        """初始化FrameAnalyzerCore
 
         Args:
             debug_vsync_enabled: VSync调试开关
         """
         self._debug_vsync_enabled = debug_vsync_enabled
-
-        # 初始化各个专门的分析器
         self.load_calculator = FrameLoadCalculator(debug_vsync_enabled)
         self.empty_frame_analyzer = EmptyFrameAnalyzer(debug_vsync_enabled)
-        self.stuttered_frame_analyzer = StutteredFrameAnalyzer(debug_vsync_enabled)
 
     def analyze_empty_frames(
         self, trace_db_path: str, perf_db_path: str, step_id: str = None, app_pids: list = None
@@ -91,76 +71,6 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
             dict: 包含分析结果
         """
         return self.empty_frame_analyzer.analyze_empty_frames(trace_db_path, perf_db_path, app_pids, step_id)
-
-    def analyze_stuttered_frames(
-        self,
-        db_path: str,
-        perf_db_path: str = None,
-        step_id: str = None,
-        top_n_analysis: int = None,
-        app_pids: list = None,
-    ) -> Optional[dict]:
-        """分析卡顿帧数据并计算FPS
-
-        Args:
-            db_path: 数据库文件路径
-            perf_db_path: perf数据库文件路径，用于调用链分析
-            step_id: 步骤ID，用于缓存key
-            top_n_analysis: 进行深度分析的top卡顿帧数量，为None时使用配置文件的值
-            app_pids: 应用进程ID列表，用于过滤应用相关的帧数据
-
-        Returns:
-            Optional[dict]: 分析结果数据，如果没有数据或分析失败则返回None
-        """
-        return self.stuttered_frame_analyzer.analyze_stuttered_frames(
-            db_path, perf_db_path, step_id, top_n_analysis, app_pids
-        )
-
-    def analyze_comprehensive_frames(
-        self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None, top_n_analysis: int = None
-    ) -> dict[str, Any]:
-        """综合分析空帧和卡顿帧
-
-        Args:
-            trace_db_path: trace数据库文件路径
-            perf_db_path: perf数据库文件路径
-            app_pids: 应用进程ID列表
-            step_id: 步骤ID
-            top_n_analysis: 进行深度分析的top卡顿帧数量，为None时使用配置文件的值
-
-        Returns:
-            Dict: 综合分析结果
-        """
-        result = {'empty_frames': None, 'stuttered_frames': None, 'cache_stats': None}
-
-        try:
-            # 分析空帧
-            logging.info('开始分析空帧...')
-            empty_result = self.analyze_empty_frames(trace_db_path, perf_db_path, step_id, app_pids)
-            result['empty_frames'] = empty_result
-
-            # 分析卡顿帧
-
-            actual_top_n = (
-                top_n_analysis if top_n_analysis is not None else Config.get('frame_analysis.top_n_analysis', 10)
-            )
-
-            logging.info('开始分析卡顿帧（轻量模式 TOP %d）...', actual_top_n)
-            stuttered_result = self.analyze_stuttered_frames(
-                trace_db_path, perf_db_path, step_id, top_n_analysis, app_pids
-            )
-            result['stuttered_frames'] = stuttered_result
-
-            # 获取缓存统计
-            result['cache_stats'] = FrameCacheManager.get_cache_stats()
-
-            # logging.info("综合分析完成")
-            return result
-
-        except Exception as e:
-            logging.error('综合分析失败: %s', str(e))
-            result['error'] = str(e)
-            return result
 
     def analyze_frame_loads_fast(
         self, trace_db_path: str, perf_db_path: str, app_pids: list, step_id: str = None
@@ -371,13 +281,8 @@ class FrameAnalyzerCore:  # pylint: disable=duplicate-code
                 'cache_manager': 'FrameCacheManager',
                 'load_calculator': 'FrameLoadCalculator',
                 'empty_frame_analyzer': 'EmptyFrameAnalyzer',
-                'stuttered_frame_analyzer': 'StutteredFrameAnalyzer',
             },
             'constants': {
-                'FRAME_DURATION': self.FRAME_DURATION,
-                'STUTTER_LEVEL_1_FRAMES': self.STUTTER_LEVEL_1_FRAMES,
-                'STUTTER_LEVEL_2_FRAMES': self.STUTTER_LEVEL_2_FRAMES,
-                'NS_TO_MS': self.NS_TO_MS,
-                'WINDOW_SIZE_MS': self.WINDOW_SIZE_MS,
+                'version': '2.0.0',
             },
         }
