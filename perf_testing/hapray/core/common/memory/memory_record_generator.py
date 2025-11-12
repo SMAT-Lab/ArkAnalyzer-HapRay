@@ -158,6 +158,11 @@ class MemoryRecordGenerator:
             if pid is None:
                 continue
 
+            # 获取原始内存大小
+            heap_size = event.get('heap_size') or 0
+            # heapSize 存储规则：申请内存为正数，释放内存为负数
+            heap_size = -abs(heap_size) if is_free else abs(heap_size)
+
             # 创建记录
             record = {
                 # 进程维度信息
@@ -177,8 +182,8 @@ class MemoryRecordGenerator:
                 'subEventType': '',  # 可以从 sub_type_names 获取
                 'addr': event['addr'],
                 'callchainId': event['callchain_id'],
-                # 内存大小（单次分配/释放的大小）
-                'heapSize': event['heap_size'],
+                # 内存大小（申请为正数，释放为负数）
+                'heapSize': heap_size,
                 # 相对时间戳（相对于 trace 开始时间）
                 'relativeTs': event['start_ts'] - trace_start_ts,
                 # 分类信息 - 大类
@@ -191,13 +196,8 @@ class MemoryRecordGenerator:
 
             records.append(record)
 
-            # 计算累计内存变化
-            size = event.get('heap_size') or 0
-            # 兼容字符串/数值类型的事件类型
-            if is_alloc:
-                current_total += size
-            elif is_free:
-                current_total -= size
+            # 计算累计内存变化（heapSize 已经是正负数形式）
+            current_total += heap_size
 
             if current_total > peak_value:
                 peak_value = current_total
