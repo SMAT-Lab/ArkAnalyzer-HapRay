@@ -29,15 +29,12 @@ FRAME_TYPE_ACTUAL = 0  # 实际帧
 FRAME_TYPE_EXPECT = 1  # 期望帧
 
 # ==================== 时间转换常量 ====================
-NANOSECONDS_TO_MILLISECONDS = 1_000_000  # 纳秒到毫秒的转换因子
-NANOSECONDS_TO_SECONDS = 1_000_000_000  # 纳秒到秒的转换因子
 MILLISECONDS_TO_NANOSECONDS = 1_000_000  # 毫秒到纳秒的转换因子
 SECONDS_TO_NANOSECONDS = 1_000_000_000  # 秒到纳秒的转换因子
 
 # ==================== 帧分析常量 ====================
 FRAME_DURATION_MS = 16.67  # 60fps基准帧时长（毫秒）
 FPS_WINDOW_SIZE_MS = 1000  # FPS窗口大小（毫秒）
-LOW_FPS_THRESHOLD = 45  # 低FPS阈值
 
 # ==================== 卡顿分级阈值 ====================
 STUTTER_LEVEL_1_FRAMES = 2  # 1级卡顿阈值：0-2帧（33.34ms）

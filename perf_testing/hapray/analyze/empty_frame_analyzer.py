@@ -59,11 +59,16 @@ class EmptyFrameAnalyzer(BaseAnalyzer):
             return None
 
         try:
+            # 初始化核心分析器，传入数据库路径和参数
+            self.core_analyzer = FrameAnalyzerCore(
+                trace_db_path=trace_db_path,
+                perf_db_path=perf_db_path,
+                app_pids=app_pids,
+                step_dir=step_dir,
+            )
             # 使用核心分析器进行空帧分析
             # 核心分析器负责所有数据库连接和数据处理
-            result = self.core_analyzer.analyze_empty_frames(
-                trace_db_path=trace_db_path, perf_db_path=perf_db_path, step_id=step_dir, app_pids=app_pids
-            )
+            result = self.core_analyzer.analyze_empty_frames()
 
             if result is None:
                 logging.info('No empty frame data found for step %s', step_dir)

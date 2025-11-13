@@ -124,7 +124,6 @@ interface FpsStats {
 }
 
 interface FrameStepData {
-  runtime: string;
   statistics: FrameStatistics;
   stutter_details: {
     ui_stutter: StutterDetail[];
