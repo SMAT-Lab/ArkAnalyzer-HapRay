@@ -124,7 +124,6 @@ interface FpsStats {
 }
 
 interface FrameStepData {
-  runtime: string;
   statistics: FrameStatistics;
   stutter_details: {
     ui_stutter: StutterDetail[];
@@ -500,7 +499,6 @@ function createDefaultVSyncFrameMismatch(): VSyncFrameMismatch {
 /** 获取默认的帧步骤数据 */
 export function getDefaultFrameStepData(): FrameStepData {
   return {
-    runtime: "",
     statistics: {
       total_frames: 0,
       frame_stats: {
