@@ -8,7 +8,7 @@ const version = require('./package.json').version;
 class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
-            let dist = path.resolve(__dirname, '../perf_testing/sa-cmd');
+            let dist = path.resolve(__dirname, '../dist/tools/sa-cmd');
             if (!fs.existsSync(dist)) {
                 return;
             }
@@ -55,7 +55,7 @@ module.exports = {
     },
     output: {
         filename: 'hapray-sa-cmd.js',
-        path: path.resolve(__dirname, '../perf_testing/sa-cmd'),
+        path: path.resolve(__dirname, '../dist/tools/sa-cmd'),
     },
     plugins: [
         new CopyPlugin({
@@ -64,13 +64,9 @@ module.exports = {
                 { from: '../node_modules/bjc/res', to: 'res'},
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
-                { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
-                { from: '../third-party/xvm', to: 'third-party/xvm' },
+                { from: '../third-party/trace_streamer_binary', to: '../trace_streamer_binary' },
+                { from: '../third-party/xvm', to: '../xvm' },
                 { from: '../third-party/report.html', to: 'res/hiperf_report_template.html' },
-                {
-                    from: '../web/dist/index.html',
-                    to: 'res/report_template.html',
-                },
                 {
                     from: 'src/core/elf/demangle-wasm.wasm',
                     to: 'demangle-wasm.wasm'

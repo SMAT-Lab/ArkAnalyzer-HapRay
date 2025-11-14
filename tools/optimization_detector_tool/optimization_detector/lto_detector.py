@@ -3,13 +3,17 @@ LTO (Link-Time Optimization) Detector
 基于SVM的LTO检测器，封装lto_demo的功能供opt指令使用
 """
 
+from __future__ import annotations
+
 import json
 import logging
+import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
+
+from optimization_detector.resource_utils import get_resource_path
 
 try:
     import joblib
@@ -38,61 +42,62 @@ class LtoDetector:
         None: 'O2',  # 未知级别使用O2模型
     }
 
-    def __init__(self, model_base_dir: Optional[Path] = None):
+    def __init__(self, model_base_dir: Path | None = None, lto_demo_path: Path | None = None):
         """
         初始化LTO检测器
 
         Args:
             model_base_dir: 模型目录，默认为package内的models/lto/
+            lto_demo_path: lto_demo目录路径，用于导入特征提取器
         """
         if model_base_dir is None:
-            # 默认模型目录
-            try:
-                from importlib.resources import files  # noqa: PLC0415
-
-                model_base_dir = files('hapray.optimization_detector').joinpath('models/lto')
-            except Exception:  # noqa: S110
-                # 备选：相对路径
-                model_base_dir = Path(__file__).parent / 'models' / 'lto'
+            # 使用资源工具获取模型目录
+            model_base_dir = get_resource_path('models/lto')
 
         self.model_base_dir = Path(model_base_dir)
         self.models = {}  # 缓存已加载的模型
         self.feature_extractors = {}  # 缓存特征提取器
 
         # 导入特征提取器
-        self._import_feature_extractor()
+        self._import_feature_extractor(lto_demo_path)
 
-    def _import_feature_extractor(self):
+    def _import_feature_extractor(self, lto_demo_path: Path | None = None):
         """导入特征提取器和SVM类（pickle反序列化需要）"""
         try:
-            # 查找lto_demo路径（向上查找）
-            current_path = Path(__file__).resolve()
-
-            # 尝试多个可能的路径
-            possible_paths = [
-                # 从perf_testing向上找
-                current_path.parent.parent.parent.parent
-                / 'experiments_ignore'
-                / 'so_detection'
-                / 'lto_demo'
-                / 'lto_demo',
-                # 直接路径
-                Path('experiments_ignore/so_detection/lto_demo/lto_demo'),
-                # 绝对路径
-                Path('D:/projects/ArkAnalyzer-HapRay/experiments_ignore/so_detection/lto_demo/lto_demo'),
-            ]
-
-            lto_demo_path = None
-            for path in possible_paths:
-                if path.exists():
-                    lto_demo_path = path
-                    break
-
             if lto_demo_path is None:
-                raise ImportError('lto_demo directory not found')
+                # 查找lto_demo路径（向上查找）
+                current_path = Path(__file__).resolve()
+
+                # 尝试多个可能的路径
+                possible_paths = [
+                    # 从当前目录向上查找
+                    current_path.parent.parent.parent.parent
+                    / 'experiments_ignore'
+                    / 'so_detection'
+                    / 'lto_demo'
+                    / 'lto_demo',
+                    # 直接路径
+                    Path('experiments_ignore/so_detection/lto_demo/lto_demo'),
+                    # 绝对路径（Windows）
+                    Path('D:/projects/ArkAnalyzer-HapRay/experiments_ignore/so_detection/lto_demo/lto_demo'),
+                    # 环境变量指定的路径
+                    Path(os.environ.get('LTO_DEMO_PATH', '')),
+                ]
+
+                lto_demo_path = None
+                for path in possible_paths:
+                    if path and path.exists():
+                        lto_demo_path = path
+                        break
+            else:
+                lto_demo_path = Path(lto_demo_path)
+
+            if lto_demo_path is None or not lto_demo_path.exists():
+                raise ImportError('lto_demo directory not found. Please set LTO_DEMO_PATH environment variable.')
 
             # 添加到路径
-            sys.path.insert(0, str(lto_demo_path))
+            if str(lto_demo_path) not in sys.path:
+                sys.path.insert(0, str(lto_demo_path))
 
             # 导入必要的类（pickle反序列化需要）
             from lto_feature_pipeline import (  # noqa: PLC0415
@@ -109,13 +114,16 @@ class LtoDetector:
             logging.debug('Successfully imported from lto_feature_pipeline at %s', lto_demo_path)
 
         except ImportError as e:
-            logging.error('Failed to import lto_feature_pipeline: %s', e)
+            logging.warning('Failed to import lto_feature_pipeline: %s. LTO detection may not work properly.', e)
+            logging.info('To enable LTO detection, please:')
+            logging.info('  1. Set LTO_DEMO_PATH environment variable to the lto_demo directory')
+            logging.info('  2. Or install the lto_demo package')
             self.LegacyFeatureExtractor = None
             self.HybridFeatureExtractor = None
             self.CompilerProvenanceSVM = None
             self.CompilerProvenanceRF = None
 
-    def _load_model(self, model_name: str) -> tuple[Optional[object], Optional[list], Optional[str]]:
+    def _load_model(self, model_name: str) -> tuple[object | None, list | None, str | None]:
         """
         加载指定的模型（SVM或RF）
 
@@ -146,7 +154,7 @@ class LtoDetector:
             model_class = self.CompilerProvenanceSVM
         else:
             logging.warning('LTO model not found: %s', model_dir)
-            return None, None
+            return None, None, None
 
         if not feature_path.exists():
             logging.warning('Feature names not found: %s', feature_path)
@@ -195,7 +203,7 @@ class LtoDetector:
             logging.error('Failed to load LTO model %s: %s', model_name, e)
             return None, None, None
 
-    def _extract_features(self, so_path: str, feature_names: list, use_hybrid: bool = False) -> Optional[np.ndarray]:
+    def _extract_features(self, so_path: str, feature_names: list, use_hybrid: bool = False) -> np.ndarray | None:
         """
         提取SO文件的特征
 
@@ -246,7 +254,7 @@ class LtoDetector:
             logging.debug('Feature extraction failed for %s: %s', so_path, e)
             return None
 
-    def detect(self, so_path: str, opt_level: Optional[str] = None) -> dict:
+    def detect(self, so_path: str, opt_level: str | None = None) -> dict:
         """
         检测单个SO文件是否使用LTO
 

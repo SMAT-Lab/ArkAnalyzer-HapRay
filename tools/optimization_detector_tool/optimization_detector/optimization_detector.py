@@ -1,17 +1,20 @@
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import os
 from collections import Counter
 from functools import partial
-from importlib.resources import files
-from typing import Optional
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
 
-from hapray.optimization_detector.file_info import FILE_STATUS_MAPPING, FileInfo
+from optimization_detector.file_info import FILE_STATUS_MAPPING, FileInfo
+from optimization_detector.lto_detector import LtoDetector
+from optimization_detector.resource_utils import get_resource_path
 
 
 class TimeoutError(Exception):
@@ -21,28 +24,19 @@ class TimeoutError(Exception):
 
 
 class OptimizationDetector:
-    def __init__(
-        self, workers: int = 1, timeout: Optional[int] = None, enable_lto: bool = True, enable_opt: bool = True
-    ):
+    def __init__(self, workers: int = 1, timeout: int | None = None, enable_lto: bool = True, enable_opt: bool = True):
         self.parallel = workers > 1
         self.workers = min(workers, multiprocessing.cpu_count() - 1)
         self.timeout = timeout
         self.enable_lto = enable_lto
         self.enable_opt = enable_opt
         self.model = None
-        self.flags_model = files('hapray.optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
+        self.flags_model = get_resource_path('models/aarch64-flag-lstm-converted.h5')
 
-        # LTO检测器（延迟加载）
         self.lto_detector = None
         if enable_lto:
-            try:
-                from hapray.optimization_detector.lto_detector import LtoDetector  # noqa: PLC0415
-
-                self.lto_detector = LtoDetector()
-                logging.info('LTO detection enabled')
-            except ImportError as e:
-                logging.warning('Failed to load LTO detector: %s. LTO detection disabled.', e)
-                self.enable_lto = False
+            self.lto_detector = LtoDetector()
+            logging.info('LTO detection enabled')
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> dict[str, dict]:
@@ -109,7 +103,7 @@ class OptimizationDetector:
         return [('optimization', self._collect_results(flags, file_infos, lto_results))]
 
     @staticmethod
-    def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[list[int]]:
+    def _extract_features(file_info: FileInfo, features: int = 2048) -> list[int] | None:
         data = file_info.extract_dot_text()
         if not data or len(data) == 0:
             return None
@@ -177,11 +171,14 @@ class OptimizationDetector:
 
         return lto_results
 
-    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]]]:
+    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, list[tuple[int, float]] | None]:
         """Run optimization flag detection on a single file with optional timeout"""
         # Lazy load model
         if self.model is None:
-            self.model = tf.keras.models.load_model(str(self.flags_model))
+            model_path = str(self.flags_model)
+            if not Path(model_path).exists():
+                raise FileNotFoundError(f'模型文件未找到: {model_path}')
+            self.model = tf.keras.models.load_model(model_path)
             self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
 
         if self.timeout is None:

@@ -7,9 +7,11 @@
   "workspaces": [
     "web",
     "sa",
-    "perf_testing"
+    "perf_testing",
+    "tools/optimization_detector_tool"
   ],
   "scripts": {
+    "postinstall": "node build/unzip_third-party.js",
     "build": "npm run build --ws",
     "release": "npm pack --ws",
     "lint": "npm run lint --ws",

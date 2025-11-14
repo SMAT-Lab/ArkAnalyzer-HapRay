@@ -6,7 +6,6 @@
     "lib"
   ],
   "scripts": {
-    "postinstall": "node unzip_third-party.js",
     "build": "tsc && webpack --config webpack.config.js",
     "lint": "eslint --ext .ts src",
     "lint:fix": "eslint --ext .ts src --fix",
