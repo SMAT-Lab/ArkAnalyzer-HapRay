@@ -2,8 +2,15 @@
   <div class="memory-timeline-chart">
     <div style="position: relative; width: 100%;">
       <div
-        style="position: absolute; top: 10px; right: 10px; z-index: 100;"
+        style="position: absolute; top: 10px; right: 10px; z-index: 100; display: flex; gap: 15px; align-items: center;"
       >
+        <el-radio-group
+          v-model="yAxisScaleMode"
+          size="small"
+        >
+          <el-radio-button value="linear">均匀刻度</el-radio-button>
+          <el-radio-button value="log">非均匀刻度</el-radio-button>
+        </el-radio-group>
         <el-radio-group
           v-model="viewMode"
           size="small"
@@ -154,6 +161,8 @@ interface TimelineProcessedData {
   finalMemory: number;
   threshold30: number;
   threshold60: number;
+  // 双Y轴相关数据
+  seriesMaxValues: number[];  // 每条系列的最大值
 }
 
 // 单个时间点的统计信息
@@ -208,6 +217,7 @@ interface ChartOptionParams {
   isLargeDataset: boolean;
   isVeryLargeDataset: boolean;
   selectedSeriesIndex: number | null;
+  seriesMaxValues: number[];
 }
 
 const DEFAULT_CHART_HEIGHT = '420px';
@@ -264,8 +274,11 @@ const isLoading = ref(false);
 // 当前下钻范围内的记录（按需加载）
 const currentRecords = ref<NativeMemoryRecord[]>([]);
 
-// 第一层总内存的峰值时间索引（计算一次后保持不变）
-let overviewPeakTimeIndex = -1;
+// 第一层总内存的峰值时间值（relativeTs，计算一次后保持不变）
+let overviewPeakTimeValue: number | null = null;
+
+// Overview 层级的所有时间点（用于确保所有层级的数据点一致）
+let overviewTimePoints: number[] = [];
 
 // 视图模式与下钻层级：分类模式 / 进程模式
 type ViewMode = 'category' | 'process';
@@ -280,6 +293,14 @@ type DrillDownLevel =
 const viewMode = ref<ViewMode>('category');
 const drillDownLevel = ref<DrillDownLevel>('overview');
 
+/**
+ * Y轴刻度模式
+ * - 'linear': 均匀刻度（Y轴不分段，均匀分布）
+ * - 'log': 非均匀刻度（对数刻度，用于显示跨度大的数据）
+ */
+type YAxisScaleMode = 'linear' | 'log';
+const yAxisScaleMode = ref<YAxisScaleMode>('linear');
+
 // 分类模式状态
 const selectedCategory = ref<string>('');
 const selectedSubCategory = ref<string>('');
@@ -290,10 +311,50 @@ const selectedThread = ref<string>('');
 const selectedFile = ref<string>('');
 const activeSeriesIndex = ref<number | null>(null);
 let isLegendSelectionSyncing = false;
-let legendDrillDownLock = false;
 // 记录点击点所属的系列，便于下游（统计、火焰图）基于正确的系列上下文工作
 const selectedSeriesIndex = ref<number | null>(null);
 const selectedSeriesName = ref<string>('');
+
+// ============================================================================
+// 图例事件管理系统
+// ============================================================================
+// 用于检测双击的状态
+interface LegendClickState {
+  lastClickTime: number;
+  lastClickName: string;
+  isProcessing: boolean;
+}
+
+const legendClickState: LegendClickState = {
+  lastClickTime: 0,
+  lastClickName: '',
+  isProcessing: false,
+};
+
+const DOUBLE_CLICK_THRESHOLD = 300; // 毫秒
+
+// 检测是否为双击
+function isLegendDoubleClick(currentName: string, currentTime: number): boolean {
+  const isDouble =
+    legendClickState.lastClickName === currentName &&
+    currentTime - legendClickState.lastClickTime < DOUBLE_CLICK_THRESHOLD;
+
+  // 更新状态
+  legendClickState.lastClickTime = currentTime;
+  legendClickState.lastClickName = currentName;
+
+  return isDouble;
+}
+
+// 设置处理状态
+function setLegendProcessing(processing: boolean) {
+  legendClickState.isProcessing = processing;
+}
+
+// 获取处理状态
+function isLegendProcessing(): boolean {
+  return legendClickState.isProcessing;
+}
 
 const emitDrillStateChange = () => {
   emit('drill-state-change', {
@@ -321,6 +382,18 @@ watch(
     emitDrillStateChange();
   },
   { immediate: true },
+);
+
+/**
+ * 监听Y轴刻度模式变化，重新渲染图表
+ * 当用户切换均匀刻度和非均匀刻度时，重新配置Y轴并渲染图表
+ */
+watch(
+  () => yAxisScaleMode.value,
+  () => {
+    console.log('[MemoryTimelineChart] Y轴刻度模式已切换为:', yAxisScaleMode.value === 'linear' ? '均匀刻度' : '非均匀刻度');
+    renderChart();
+  }
 );
 
 function handleViewModeChange() {
@@ -440,6 +513,7 @@ function createEmptyProcessedData(): TimelineProcessedData {
     finalMemory: 0,
     threshold30: 0,
     threshold60: 0,
+    seriesMaxValues: [],
   };
 }
 
@@ -540,6 +614,7 @@ function processTimelineDataSync(): TimelineProcessedData {
       finalMemory: 0,
       threshold30: 0,
       threshold60: 0,
+      seriesMaxValues: [],
     };
   }
 
@@ -719,9 +794,24 @@ function processTimelineDataSync(): TimelineProcessedData {
   }
 
   // 收集唯一的时间点并排序
-  const allTimePoints = new Set<number>();
-  filteredRecords.forEach(record => allTimePoints.add(record.relativeTs));
-  const sortedTimePoints = Array.from(allTimePoints).sort((a, b) => a - b);
+  // 在 overview 层级时，保存所有时间点供下钻层级使用
+  // 在下钻层级时，使用 overview 层级保存的时间点，确保数据点一致
+  let sortedTimePoints: number[];
+
+  if (drillDownLevel.value === 'overview') {
+    const allTimePoints = new Set<number>();
+    filteredRecords.forEach(record => allTimePoints.add(record.relativeTs));
+    sortedTimePoints = Array.from(allTimePoints).sort((a, b) => a - b);
+    // 保存 overview 层级的时间点
+    overviewTimePoints = sortedTimePoints;
+  } else {
+    // 下钻层级：使用 overview 层级保存的时间点
+    sortedTimePoints = overviewTimePoints.length > 0 ? overviewTimePoints : (() => {
+      const allTimePoints = new Set<number>();
+      filteredRecords.forEach(record => allTimePoints.add(record.relativeTs));
+      return Array.from(allTimePoints).sort((a, b) => a - b);
+    })();
+  }
 
   // 为每条系列计算在各时间点的累计内存
   const seriesData: TimelineProcessedData['seriesData'] = [];
@@ -820,6 +910,17 @@ function processTimelineDataSync(): TimelineProcessedData {
   const threshold30 = minMemory + memoryRange * 0.3;
   const threshold60 = minMemory + memoryRange * 0.6;
 
+  // 计算每条系列的最大值（用于双Y轴判断）
+  const seriesMaxValues = sortedSeriesData.map(series => {
+    let maxValue = -Infinity;
+    for (const item of series.data) {
+      if (typeof item.cumulativeMemory === 'number' && item.cumulativeMemory > maxValue) {
+        maxValue = item.cumulativeMemory;
+      }
+    }
+    return maxValue === -Infinity ? 0 : maxValue;
+  });
+
   return {
     chartData,
     seriesData: sortedSeriesData,
@@ -828,6 +929,7 @@ function processTimelineDataSync(): TimelineProcessedData {
     finalMemory,
     threshold30,
     threshold60,
+    seriesMaxValues,
   };
 }
 
@@ -945,6 +1047,22 @@ function normalizeFileName(fileName?: string | null): string | null {
     return null;
   }
   return fileName;
+}
+
+/**
+ * 为非均匀刻度（对数刻度）调整数值
+ *
+ * 对数刻度不能处理0或负数，所以需要转换为最小正数
+ *
+ * @param value 原始数值
+ * @param minPositiveValue 最小正数值（默认为1）
+ * @returns 调整后的数值
+ */
+function adjustValueForLogScale(value: number, minPositiveValue: number = 1): number {
+  if (value <= 0) {
+    return minPositiveValue;
+  }
+  return value;
 }
 
 function getHighlightColor(seriesIndex: number): string {
@@ -1092,12 +1210,18 @@ function buildSeriesPoint(
 ): LineSeriesDataItem {
   if (!item || typeof item.cumulativeMemory !== 'number') {
     return {
-      value: 0,
+      value: yAxisScaleMode.value === 'linear' ? 0 : 1,
       symbolSize: 0,
     };
   }
 
   const { selectedTimePoint, drillLevel, isLargeDataset, isVeryLargeDataset, selectedSeriesIndex } = params;
+
+  // 对于非均匀刻度，需要处理0和负数
+  const isUniformMode = yAxisScaleMode.value === 'linear';
+  const displayValue = !isUniformMode
+    ? adjustValueForLogScale(item.cumulativeMemory, 1)
+    : item.cumulativeMemory;
 
   // 使用近似比较来判断选中点（处理浮点数精度问题）
   // 在 overview 层级时，只有选中的系列才显示选中点；其他层级时，总内存线或选中的系列显示选中点
@@ -1110,11 +1234,11 @@ function buildSeriesPoint(
 
   if (isSelectedPoint) {
     console.log(`[MemoryTimelineChart] Selected point found: seriesIndex=${seriesIndex}, relativeTs=${item.relativeTs}, selectedTimePoint=${selectedTimePoint}`);
-    return createSelectedPointConfig(item.cumulativeMemory);
+    return createSelectedPointConfig(displayValue);
   }
 
   return createNormalPointConfig(
-    item.cumulativeMemory,
+    displayValue,
     isLargeDataset,
     isVeryLargeDataset
   );
@@ -1125,45 +1249,62 @@ function buildSeriesOptions(
   params: ChartOptionParams,
   peakTimeIndex: number
 ): LineSeriesOption[] {
-  const { drillLevel, isLargeDataset, isVeryLargeDataset } = params;
+  const { drillLevel, isLargeDataset, isVeryLargeDataset, seriesMaxValues } = params;
 
-  return seriesData.map((series, seriesIndex) => {
-    const isTotalSeries = drillLevel === 'overview' && seriesIndex === 0;
-    const seriesColor = getSeriesColor(seriesIndex, isTotalSeries);
+  // 判断是否使用分段Y轴
+  // 只有在非均匀刻度模式下且数据跨度大时，才使用分段Y轴
+  const isUniformMode = yAxisScaleMode.value === 'linear';
+  const canUseSegmentedAxis = shouldUseSegmentedYAxis(seriesMaxValues);
+  const useSegmentedAxis = !isUniformMode && canUseSegmentedAxis;
+
+  // 在非均匀刻度模式下，过滤掉 overview 层级的总内存线（seriesIndex === 0）
+  const filteredSeriesData = seriesData.filter((_, seriesIndex) => {
+    if (!isUniformMode && drillLevel === 'overview' && seriesIndex === 0) {
+      return false;
+    }
+    return true;
+  });
+
+  return filteredSeriesData.map((series) => {
+    // 计算原始的 seriesIndex（用于颜色和其他配置）
+    const originalSeriesIndex = seriesData.indexOf(series);
+    const isTotalSeries = drillLevel === 'overview' && originalSeriesIndex === 0;
+    const seriesColor = getSeriesColor(originalSeriesIndex, isTotalSeries);
+
+    // 如果使用分段Y轴，对数据进行对数变换
     const dataItems = series.data
-      .map((item) => buildSeriesPoint(item, seriesIndex, params, isTotalSeries)) as LineSeriesData;
-
-    // 在第一个系列上添加峰值时间的 markLine（第一个系列始终代表当前层级的总内存）
-    let markLine: echarts.MarkLineComponentOption | undefined = undefined;
-    if (seriesIndex === 0 && peakTimeIndex >= 0) {
-      // 在下钻时，peakTimeIndex 可能超出当前数据范围，需要找到最接近的有效索引
-      let validPeakIndex = peakTimeIndex;
-      if (peakTimeIndex >= series.data.length) {
-        // 如果峰值索引超出范围，使用最后一个数据点
-        validPeakIndex = series.data.length - 1;
-      }
-
-      if (validPeakIndex >= 0 && validPeakIndex < series.data.length) {
-        const peakItem = series.data[validPeakIndex];
-        const peakTimeValue = peakItem?.relativeTs ?? null;
-        if (peakTimeValue !== null) {
-          markLine = {
-            symbol: 'none',
-            lineStyle: {
-              color: '#ff0000',
-              width: 2,
-              type: 'dashed',
-            },
-            label: {
-              show: false,
-            },
-            data: [
-              {
-                xAxis: validPeakIndex,
-              },
-            ],
-          };
+      .map((item) => {
+        const basePoint = buildSeriesPoint(item, originalSeriesIndex, params, isTotalSeries);
+        if (useSegmentedAxis && basePoint && typeof basePoint === 'object' && 'value' in basePoint && typeof basePoint.value === 'number') {
+          return {
+            ...basePoint,
+            value: transformValueForSegmentedAxis(basePoint.value),
+          } as LineSeriesDataItem;
         }
+        return basePoint;
+      }) as LineSeriesData;
+
+    // 在所有系列上添加峰值时间的 markLine（所有系列都显示相同的峰值时间点，来自 overview 层级的总内存线）
+    let markLine: echarts.MarkLineComponentOption | undefined = undefined;
+    if (peakTimeIndex >= 0) {
+      // peakTimeIndex 是基于当前层级的 chartData 计算的，直接使用
+      if (peakTimeIndex < series.data.length) {
+        markLine = {
+          symbol: 'none',
+          lineStyle: {
+            color: '#ff0000',
+            width: 2,
+            type: 'dashed',
+          },
+          label: {
+            show: false,
+          },
+          data: [
+            {
+              xAxis: peakTimeIndex,
+            },
+          ],
+        };
       }
     }
 
@@ -1275,6 +1416,58 @@ function buildChartSubtext(
   return hints.join(' | ');
 }
 
+/**
+ * 计算非均匀刻度（对数刻度）的最小值
+ *
+ * 对数刻度需要找到最小的正数值作为下界
+ *
+ * @param minMemory 数据的最小值
+ * @param maxMemory 数据的最大值
+ * @returns 对数刻度的最小值
+ */
+function calculateLogScaleMin(minMemory: number, maxMemory: number): number {
+  // 如果最小值是0或负数，使用最大值的1/10000作为最小值
+  if (minMemory <= 0) {
+    return Math.max(1, maxMemory / 10000);
+  }
+  // 否则使用最小值的1/10作为下界，确保有足够的显示空间
+  return Math.max(1, minMemory / 10);
+}
+
+/**
+ * 判断是否应该使用分段Y轴
+ * 当数据量级差异大于10倍时，使用分段Y轴
+ */
+function shouldUseSegmentedYAxis(seriesMaxValues: number[]): boolean {
+  if (seriesMaxValues.length <= 1) return false;
+
+  const validValues = seriesMaxValues.filter(v => v > 0);
+  if (validValues.length <= 1) return false;
+
+  const maxVal = Math.max(...validValues);
+  const minVal = Math.min(...validValues);
+
+  return maxVal / minVal > 10;
+}
+
+/**
+ * 使用对数变换来处理不同量级的数据
+ * 这样可以在同一个Y轴上显示大值和小值
+ */
+function transformValueForSegmentedAxis(value: number): number {
+  if (value <= 0) return 0;
+  // 使用对数变换：log10(value)
+  // 这样 1B -> 0, 1KB -> 3, 1MB -> 6, 1GB -> 9
+  return Math.log10(value);
+}
+
+/**
+ * 反向变换，用于显示原始值
+ */
+function inverseTransformValue(logValue: number): number {
+  return Math.pow(10, logValue);
+}
+
 function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
   const {
     chartData,
@@ -1303,25 +1496,37 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
     totalPoints > 36 ? 30 : 0;
 
   // 只在第一次加载总览层级时计算峰值时间，之后保持不变
-  let peakTimeIndex = overviewPeakTimeIndex;
+  let peakTimeValue = overviewPeakTimeValue;
 
-  if (drillLevel === 'overview' && overviewPeakTimeIndex === -1 && chartData.length > 0) {
+  if (drillLevel === 'overview' && overviewPeakTimeValue === null && chartData.length > 0) {
     // 第一次加载总览层级时计算峰值
     let maxValue = -Infinity;
     for (let i = 0; i < chartData.length; i++) {
       const item = chartData[i];
       if (typeof item.cumulativeMemory === 'number' && item.cumulativeMemory > maxValue) {
         maxValue = item.cumulativeMemory;
-        overviewPeakTimeIndex = i;
+        overviewPeakTimeValue = item.relativeTs;
       }
     }
-    peakTimeIndex = overviewPeakTimeIndex;
+    peakTimeValue = overviewPeakTimeValue;
   }
 
-  // 下钻时，如果 peakTimeIndex 超出当前数据范围，调整为最后一个数据点
-  if (peakTimeIndex >= chartData.length && chartData.length > 0) {
-    peakTimeIndex = chartData.length - 1;
+  // 根据峰值时间值找到对应的索引（用于 markLine 的 xAxis）
+  let peakTimeIndex = -1;
+  if (peakTimeValue !== null) {
+    peakTimeIndex = chartData.findIndex(item => item.relativeTs === peakTimeValue);
   }
+
+  // 在非均匀刻度模式下，过滤图例数据（排除 overview 层级的总内存线）
+  const isUniformMode = yAxisScaleMode.value === 'linear';
+  const legendData = seriesData
+    .filter((_, index) => {
+      if (!isUniformMode && drillLevel === 'overview' && index === 0) {
+        return false;
+      }
+      return true;
+    })
+    .map(series => series.name);
 
   return {
     animation: !isLargeDataset,
@@ -1362,7 +1567,7 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
       orient: 'horizontal',
       bottom: 0,
       left: 'center',
-      data: seriesData.map(series => series.name),
+      data: legendData,
       textStyle: {
         fontSize: 12,
       },
@@ -1383,7 +1588,7 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
         left: 'center',
         bottom: 30,
         style: {
-          text: '提示：点击图例可下钻',
+          text: '提示：双击图例可下钻',
           fill: '#666',
           fontSize: 12,
           fontWeight: 400,
@@ -1473,51 +1678,195 @@ function buildChartOption(params: ChartOptionParams): echarts.EChartsOption {
         },
       } as Record<string, unknown>,
     },
-    yAxis: {
-      type: 'value',
-      name: '当前内存',
-      nameLocation: 'middle',
-      nameGap: 70,
-      axisLabel: {
-        formatter: (value: number) => formatBytes(value),
-      },
-    },
+    yAxis: (() => {
+      /**
+       * Y轴配置逻辑
+       *
+       * 根据用户选择的刻度模式配置Y轴：
+       *
+       * 1. 均匀刻度模式（yAxisScaleMode === 'linear'）
+       *    - Y轴始终不分段，使用均匀刻度
+       *    - 适合数据跨度小的情况
+       *
+       * 2. 非均匀刻度模式（yAxisScaleMode === 'log'）
+       *    - 当数据跨度大时（> 10倍），自动使用分段显示
+       *    - 当数据跨度小时，使用对数刻度
+       *    - 适合数据跨度大的情况
+       */
+      const isUniformMode = yAxisScaleMode.value === 'linear';
+      const canUseSegmentedAxis = shouldUseSegmentedYAxis(params.seriesMaxValues);
+      const useSegmentedAxis = !isUniformMode && canUseSegmentedAxis;
+
+      if (useSegmentedAxis) {
+        // ========== 分段Y轴配置（非均匀刻度 + 数据跨度大） ==========
+        // 当用户选择非均匀刻度且数据跨度很大时，自动使用分段显示
+        const validValues = params.seriesMaxValues.filter(v => v > 0);
+        const maxVal = Math.max(...validValues);
+        const minVal = Math.min(...validValues);
+
+        // 计算对数范围
+        const logMax = Math.log10(maxVal);
+        const logMin = Math.log10(minVal);
+
+        return {
+          type: 'value',
+          name: '当前内存 (分段显示)',
+          nameLocation: 'middle',
+          nameGap: 70,
+          axisLabel: {
+            // 将对数值转换回原始值显示
+            formatter: (value: number) => {
+              const originalValue = inverseTransformValue(value);
+              return formatBytes(originalValue);
+            },
+          },
+          min: logMin - 1,
+          max: logMax + 1,
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#e0e0e0',
+              width: 1,
+            },
+          },
+          // 添加分段线来区分不同的量级
+          splitArea: {
+            show: true,
+            areaStyle: {
+              color: ['rgba(250, 250, 250, 0.3)', 'rgba(200, 200, 200, 0.1)'],
+            },
+          },
+        };
+      } else if (isUniformMode) {
+        // ========== 均匀刻度配置（不分段） ==========
+        // 用户选择均匀刻度，Y轴始终不分段，使用均匀刻度
+        return {
+          type: 'value',
+          name: '当前内存 (均匀刻度)',
+          nameLocation: 'middle',
+          nameGap: 70,
+          axisLabel: {
+            formatter: (value: number) => formatBytes(value),
+          },
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#e0e0e0',
+              width: 1,
+            },
+          },
+        };
+      } else {
+        // ========== 非均匀刻度配置（不分段） ==========
+        // 用户选择非均匀刻度但数据跨度小，使用对数刻度
+        return {
+          type: 'log',
+          name: '当前内存 (非均匀刻度)',
+          nameLocation: 'middle',
+          nameGap: 70,
+          axisLabel: {
+            formatter: (value: number) => formatBytes(value),
+          },
+          logBase: 10,
+          min: calculateLogScaleMin(minMemory, maxMemory),
+          max: maxMemory > 0 ? maxMemory : 1,
+          minorTick: {
+            show: true,
+          },
+          minorSplitLine: {
+            show: true,
+            lineStyle: {
+              color: '#f0f0f0',
+              width: 0.5,
+            },
+          },
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: '#e0e0e0',
+              width: 1,
+            },
+          },
+        };
+      }
+    })() as Record<string, unknown>,
     series: buildSeriesOptions(seriesData, params, peakTimeIndex),
   };
 }
 
+/**
+ * 注册图表事件处理器
+ *
+ * 事件类型：
+ * 1. 鼠标事件（mouseover/mouseout）
+ *    - 用于高亮/取消高亮悬停的系列
+ *
+ * 2. 点击事件（click）
+ *    - 用于选择/取消选择时间点
+ *
+ * 3. 图例事件（legendselectchanged）
+ *    - 单击：隐藏/显示线条（ECharts 默认行为）
+ *    - 双击：下钻到该系列的详细数据
+ */
 function registerChartEvents(seriesData: TimelineProcessedData['seriesData']) {
   if (!chartInstance) return;
 
+  // 清除所有之前的事件监听器，避免重复注册
   chartInstance.off('mouseover');
   chartInstance.off('mouseout');
   chartInstance.off('click');
+  chartInstance.off('legendselectchanged');
 
+  // ========== 鼠标悬停事件 ==========
+  // 当鼠标悬停在线条上时，高亮该系列
   chartInstance.on('mouseover', { seriesType: 'line' }, (event: { seriesIndex?: number }) => {
     if (event && typeof event.seriesIndex === 'number') {
       activeSeriesIndex.value = event.seriesIndex;
     }
   });
 
+  // 当鼠标离开线条时，取消高亮
   chartInstance.on('mouseout', { seriesType: 'line' }, () => {
     activeSeriesIndex.value = null;
   });
 
-  chartInstance.on('click', { seriesType: 'line' }, params => handleChartSingleClick(params, seriesData));
-  chartInstance.on('legendselectchanged', params => handleLegendDrillDown(params as LegendClickEvent));
+  // ========== 线条点击事件 ==========
+  // 点击线条上的数据点，选择该时间点
+  // 再次点击同一点可取消选择
+  chartInstance.on('click', { seriesType: 'line' }, params => {
+    handleChartSingleClick(params, seriesData);
+  });
+
+  // ========== 图例点击事件 ==========
+  // 单击图例：隐藏/显示对应的线条（ECharts 默认行为）
+  // 双击图例：下钻到该系列的详细数据
+  chartInstance.on('legendselectchanged', params => {
+    handleLegendDrillDown(params as LegendClickEvent);
+  });
 }
 
+/**
+ * 处理图表线条点击事件
+ * 功能：选择/取消选择时间点
+ * - 首次点击：选择该时间点
+ * - 再次点击同一点：取消选择
+ */
 function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedData['seriesData']) {
+  // 参数验证
   if (!isSeriesClickParam(params)) {
     return;
   }
 
+  // 确保点击的是线条系列，而不是其他组件
   if (params.componentType && params.componentType !== 'series') {
     return;
   }
 
+  // 获取点击的系列和数据点信息
   const seriesIndex = typeof params.seriesIndex === 'number' ? params.seriesIndex : 0;
   const dataIndex = params.dataIndex;
+
+  // 验证系列索引有效性
   if (seriesIndex < 0 || seriesIndex >= seriesData.length) {
     return;
   }
@@ -1528,6 +1877,8 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
     return;
   }
 
+  // ========== 更新选中时间点 ==========
+  // 如果点击的是已选中的点，则取消选择；否则选择该点
   const nextSelected = props.selectedTimePoint === dataItem.relativeTs ? null : dataItem.relativeTs;
 
   if (nextSelected === null) {
@@ -1535,21 +1886,23 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
     selectedSeriesIndex.value = null;
     selectedSeriesName.value = '';
   } else {
-    console.log('[MemoryTimelineChart] Selected time point:', nextSelected);
-    // Remember the clicked series for downstream context (stats, markLine memory, etc.)
+    console.log('[MemoryTimelineChart] Selected time point:', nextSelected, 'from series:', seriesEntry?.name);
+    // 记录点击的系列，用于下游的统计、标线等功能
     selectedSeriesIndex.value = seriesIndex;
     selectedSeriesName.value = seriesEntry?.name ?? '';
   }
+
+  // 发射时间点选择事件
   emit('time-point-selected', nextSelected);
 
-  // 在 overview 层级时，根据点击的系列确定上下文信息
+  // ========== 确定上下文信息 ==========
+  // 在总览层级时，根据点击的系列确定分类/进程上下文
   let contextCategory = selectedCategory.value;
   let contextProcess = selectedProcess.value;
 
   if (drillDownLevel.value === 'overview') {
     const seriesName = seriesEntry?.name ?? '';
-    // 如果点击的是总内存线（seriesIndex === 0），保持当前的分类/进程选择
-    // 否则，根据点击的系列名称更新分类/进程
+    // 如果点击的不是总内存线，则更新上下文
     if (seriesIndex !== 0 && seriesName && seriesName !== '总内存') {
       if (viewMode.value === 'category') {
         // 分类模式：系列名称为大类名称
@@ -1559,15 +1912,15 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
         contextProcess = seriesName;
       }
     }
-    // 如果点击的是总内存线，contextCategory 和 contextProcess 保持为当前值（可能为空）
-    // 这样火焰图会显示所有分类/进程的聚合数据
   }
 
-  // Compute stats based on the clicked series only to reflect the correct "current memory"
+  // ========== 计算统计信息 ==========
+  // 基于点击的系列计算统计信息（分配、释放、净内存等）
   const seriesScopedRecords = getSeriesScopedRecordsForName(seriesEntry?.name ?? '');
   emit('time-point-stats-updated', calculateTimePointStats(seriesScopedRecords, nextSelected));
 
-  // 发射选中点上下文，供外部"已选中时间点"与火焰图使用
+  // ========== 发射选中点上下文 ==========
+  // 供外部组件（如火焰图）使用
   const memoryAtPoint = typeof dataItem.cumulativeMemory === 'number' ? dataItem.cumulativeMemory : 0;
   emit('point-selection-context', {
     timePoint: nextSelected,
@@ -1583,87 +1936,223 @@ function handleChartSingleClick(params: unknown, seriesData: TimelineProcessedDa
   });
 }
 
+/**
+ * 图例点击事件参数类型
+ */
 type LegendClickEvent = {
   selected: Record<string, boolean>;
   name: string;
 };
 
+/**
+ * ============================================================================
+ * 图例事件处理流程说明
+ * ============================================================================
+ *
+ * 当用户点击图例时，ECharts 触发 'legendselectchanged' 事件，流程如下：
+ *
+ * 1. handleLegendDrillDown(params)
+ *    - 接收 ECharts 的 legendselectchanged 事件
+ *    - 检测是否为双击（通过时间间隔判断）
+ *    - 单击：直接返回，允许 ECharts 默认行为（隐藏/显示线条）
+ *    - 双击：调用 handleLegendDoubleClick()
+ *
+ * 2. handleLegendDoubleClick(seriesName, params)
+ *    - 设置处理状态为 true，防止重复处理
+ *    - 调用 drillDownBySeriesName(seriesName) 执行下钻
+ *    - 如果下钻成功且该系列被隐藏，则显示它
+ *    - 最后释放处理状态
+ *
+ * 3. drillDownBySeriesName(seriesName)
+ *    - 根据当前下钻层级和视图模式，决定下钻目标
+ *    - 调用相应的下钻函数（如 drillDownToCategory）
+ *    - 返回是否成功执行了下钻
+ *
+ * 4. 下钻函数（如 drillDownToCategory）
+ *    - 更新下钻层级和选中的分类/进程等状态
+ *    - 触发 watch 监听器，自动加载新数据并重新渲染图表
+ *
+ * ============================================================================
+ * 关键设计点
+ * ============================================================================
+ *
+ * - 单击和双击分离：单击允许 ECharts 默认行为，双击执行下钻
+ * - 处理状态锁：防止在数据加载和渲染期间重复处理事件
+ * - 清晰的日志：每个关键步骤都有日志输出，便于调试
+ * - 模式和层级感知：下钻逻辑根据当前的视图模式和下钻层级动态调整
+ *
+ * ============================================================================
+ */
+
+/**
+ * 验证图例点击事件参数的有效性
+ */
+function isValidLegendClickEvent(params: unknown): params is LegendClickEvent {
+  if (!params || typeof params !== 'object') {
+    return false;
+  }
+  const candidate = params as LegendClickEvent;
+  return typeof candidate.name === 'string' && typeof candidate.selected === 'object';
+}
+
+/**
+ * 处理图例点击事件
+ *
+ * 事件流程：
+ * 1. 验证参数有效性
+ * 2. 检查是否正在处理其他事件（防止并发）
+ * 3. 检测是否为双击
+ * 4. 单击：允许 ECharts 默认行为（隐藏/显示线条）
+ * 5. 双击：执行下钻操作
+ */
 function handleLegendDrillDown(params: LegendClickEvent) {
-  if (!params || typeof params !== 'object' || isLegendSelectionSyncing || legendDrillDownLock) {
+  // 参数验证
+  if (!isValidLegendClickEvent(params)) {
+    console.warn('[MemoryTimelineChart] Invalid legend click event params');
     return;
   }
 
-  legendDrillDownLock = true;
-
-  const seriesName = params.name;
-  const skip = drillDownBySeriesName(seriesName);
-
-  if (
-    chartInstance &&
-    seriesName &&
-    !skip &&
-    params.selected &&
-    params.selected[seriesName] === false
-  ) {
-    try {
-      isLegendSelectionSyncing = true;
-      chartInstance.dispatchAction({
-        type: 'legendSelect',
-        name: seriesName,
-      });
-    } finally {
-      isLegendSelectionSyncing = false;
-    }
+  // 如果正在处理其他事件，则忽略此次点击（防止并发处理）
+  if (isLegendProcessing() || isLegendSelectionSyncing) {
+    console.log('[MemoryTimelineChart] Legend event is being processed, ignoring this click');
+    return;
   }
 
-  const releaseLock = () => {
-    legendDrillDownLock = false;
-  };
+  const seriesName = params.name;
+  const currentTime = Date.now();
 
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(releaseLock);
-  } else {
-    setTimeout(releaseLock, 0);
+  // 检测是否为双击（同一个图例项在短时间内被点击两次）
+  const isDoubleClick = isLegendDoubleClick(seriesName, currentTime);
+
+  // 单击时：允许图例的显示/隐藏功能正常工作（ECharts 默认行为）
+  if (!isDoubleClick) {
+    console.log('[MemoryTimelineChart] Legend single click - show/hide series:', seriesName);
+    return;
+  }
+
+  // 双击时：执行下钻操作
+  console.log('[MemoryTimelineChart] Legend double click - drill down:', seriesName);
+  handleLegendDoubleClick(seriesName, params);
+}
+
+/**
+ * 处理图例双击事件 - 执行下钻操作
+ *
+ * 流程：
+ * 1. 设置处理状态为 true，防止并发处理
+ * 2. 根据系列名称执行下钻操作
+ * 3. 如果下钻成功且该系列被隐藏，则显示它
+ * 4. 使用 requestAnimationFrame 确保 UI 更新完成后再释放处理状态
+ */
+function handleLegendDoubleClick(seriesName: string, params: LegendClickEvent) {
+  // 设置处理状态，防止在数据加载和渲染期间重复处理事件
+  setLegendProcessing(true);
+
+  try {
+    // 根据系列名称执行下钻操作
+    const drillDownSucceeded = drillDownBySeriesName(seriesName);
+
+    // 如果下钻成功且该系列当前被隐藏，则显示它
+    // 这样用户可以立即看到下钻后的数据
+    if (
+      drillDownSucceeded &&
+      chartInstance &&
+      seriesName &&
+      params.selected &&
+      params.selected[seriesName] === false
+    ) {
+      try {
+        isLegendSelectionSyncing = true;
+        chartInstance.dispatchAction({
+          type: 'legendSelect',
+          name: seriesName,
+        });
+        console.log('[MemoryTimelineChart] Restored visibility of series:', seriesName);
+      } catch (error) {
+        console.error('[MemoryTimelineChart] Failed to restore series visibility:', error);
+      } finally {
+        isLegendSelectionSyncing = false;
+      }
+    }
+  } catch (error) {
+    console.error('[MemoryTimelineChart] Error during legend double click handling:', error);
+  } finally {
+    // 使用 requestAnimationFrame 确保 UI 更新完成后再释放处理状态
+    // 这样可以避免在数据加载和渲染期间处理新的事件
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        setLegendProcessing(false);
+      });
+    } else {
+      setTimeout(() => {
+        setLegendProcessing(false);
+      }, 0);
+    }
   }
 }
 
+/**
+ * 根据系列名称执行下钻操作
+ * @param seriesName 系列名称
+ * @returns 是否成功执行了下钻操作
+ */
 function drillDownBySeriesName(seriesName: string): boolean {
+  // 参数验证
   if (!seriesName) {
+    console.warn('[MemoryTimelineChart] Cannot drill down: empty series name');
     return false;
   }
 
+  // ========== 总览层级 ==========
   if (drillDownLevel.value === 'overview') {
+    // 总内存线不支持下钻
     if (seriesName === '总内存') {
+      console.log('[MemoryTimelineChart] Cannot drill down from total memory series');
       return false;
     }
+
+    // 根据视图模式下钻到对应的第一层
     if (viewMode.value === 'category') {
+      console.log('[MemoryTimelineChart] Drilling down to category:', seriesName);
       drillDownToCategory(seriesName);
+      return true;
     } else {
+      console.log('[MemoryTimelineChart] Drilling down to process:', seriesName);
       drillDownToProcess(seriesName);
+      return true;
     }
-    return true;
   }
 
+  // ========== 分类模式下钻 ==========
   if (viewMode.value === 'category') {
     if (drillDownLevel.value === 'category') {
+      console.log('[MemoryTimelineChart] Drilling down to subCategory:', seriesName);
       drillDownToSubCategory(seriesName);
       return true;
     }
     if (drillDownLevel.value === 'subCategory') {
-      drillDownToFile(seriesName);
-      return true;
-    }
-  } else {
-    if (drillDownLevel.value === 'process') {
-      drillDownToThread(seriesName);
-      return true;
-    }
-    if (drillDownLevel.value === 'thread') {
+      console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
       drillDownToFile(seriesName);
       return true;
     }
   }
 
+  // ========== 进程模式下钻 ==========
+  if (viewMode.value === 'process') {
+    if (drillDownLevel.value === 'process') {
+      console.log('[MemoryTimelineChart] Drilling down to thread:', seriesName);
+      drillDownToThread(seriesName);
+      return true;
+    }
+    if (drillDownLevel.value === 'thread') {
+      console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
+      drillDownToFile(seriesName);
+      return true;
+    }
+  }
+
+  // 无法下钻（已到达最深层级）
+  console.log('[MemoryTimelineChart] Cannot drill down further at level:', drillDownLevel.value);
   return false;
 }
 
@@ -1705,6 +2194,7 @@ async function renderChart() {
       isLargeDataset,
       isVeryLargeDataset,
       selectedSeriesIndex: selectedSeriesIndex.value,
+      seriesMaxValues: processedData.value.seriesMaxValues,
     });
 
     activeSeriesIndex.value = null;
