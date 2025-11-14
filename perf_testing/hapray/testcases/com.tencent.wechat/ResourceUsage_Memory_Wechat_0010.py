@@ -30,13 +30,11 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
         def step1():
             time.sleep(2)
 
-        def step2():
             # 2.群聊查看消息（主界面-->群聊窗口）
             self.driver.touch(BY.text('微信用例测试群'))
             self.driver.wait(0.5)
             time.sleep(2)
 
-        def step3():
             # 3.查看聊天记录中的图片（横向滑动3次，2s,停留2s，重复5次）
             comps = self.driver.find_all_components(BY.type('Image'))
             self.driver.touch(comps[3])
@@ -47,7 +45,6 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(self.convert_coordinate(474, 1189))
             self.driver.wait(0.5)
 
-        def step4():
             # 4.查看聊天记录中的视频（2s，播放10s，重复5次）
             # 打开视频
             self.driver.touch(BY.isAfter(BY.key('Video_Play_Btn')).type('Image'))
@@ -76,12 +73,11 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(self.convert_coordinate(96, 157))
             self.driver.wait(0.5)
 
-        def step6():
             # 6.返回微信主界面（2s，停留2s）
             self.driver.touch(BY.isAfter(BY.key('left')).isBefore(BY.key('center')).type('Image'))
             self.driver.wait(0.5)
 
-        def step7():
+
             # 7.查看好友留言（2s，停留2s）
             self.driver.touch(BY.text('测试账号'))
             self.driver.wait(0.5)
@@ -116,6 +112,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(self.convert_coordinate(1000, 1247))
             self.driver.wait(0.5)
             time.sleep(2)
+    
             # 16.点击加号，等待2s
             self.driver.touch(self.convert_coordinate(1026, 1247))
             self.driver.wait(0.5)
@@ -148,6 +145,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(BY.text('取消'))
             self.driver.wait(0.5)
             time.sleep(2)
+        
             # 24.点击加号，等待2s
             self.driver.touch(self.convert_coordinate(1008, 2254))
             self.driver.wait(0.5)
@@ -189,16 +187,16 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.swipe_to_home()
             time.sleep(10)
             # 36.删除后台（等待10s）
-            self.driver.stop_app(self._app_package, 10)
-            time.sleep(10)
+            # self.driver.stop_app(self._app_package, 10)
+            # time.sleep(10)
 
-        self.execute_performance_step('0001&微信首页-点击-页面切换-群聊界面', 3, step1)
-        self.execute_performance_step('0002&群聊界面-点击-应用内操作-群聊界面', 3, step2)
-        self.execute_performance_step('0003&微信首页-点击-群聊界面-应用内操作-群聊界面', 5, step3)
-        self.execute_performance_step('0004&微信首页-点击-应用内操作-群聊界面', 12, step4)
+        self.execute_performance_step('0001&微信首页-点击-页面切换-群聊界面', 120, step1)
+        # self.execute_performance_step('0002&群聊界面-点击-应用内操作-群聊界面', 12, step2)
+        # self.execute_performance_step('0003&微信首页-点击-群聊界面-应用内操作-群聊界面', 16, step3)
+        # self.execute_performance_step('0004&微信首页-点击-应用内操作-群聊界面', 40, step4)
         # self.execute_performance_step('0005&群聊界面-滑动-返回上一层-微信首页', 4, step5)
-        self.execute_performance_step('0006&微信首页-点击-页面切换-群聊界面', 2, step6)
-        self.execute_performance_step('0007&群聊界面-点击-应用内操作-群聊界面', 60, step7)
+        #self.execute_performance_step('0006&微信首页-点击-页面切换-群聊界面', 2, step6)
+        #self.execute_performance_step('0007&群聊界面-点击-应用内操作-群聊界面', 60, step7)
         # self.execute_performance_step('0008&群聊界面-滑动-返回上一级-微信首页', 120, step1)
         # self.execute_performance_step('0009&微信首页-点击-页面切换-好友聊天页面', 120, step1)
         # self.execute_performance_step('00010&好友聊天页面-点击-应用内操作-好友聊天页面拉起输入法', 120, step1)
