@@ -229,11 +229,40 @@ class MemoryDataLoader:
     def _query_data_dict(conn: sqlite3.Connection) -> dict[int, str]:
         """查询 data_dict 表（符号和文件名）"""
         cursor = conn.cursor()
-        cursor.execute('SELECT id, data FROM data_dict')
+        cursor.execute(
+            """
+            SELECT DISTINCT nhf.symbol_id, nhf.file_id
+            FROM native_hook_frame AS nhf
+            WHERE nhf.callchain_id IN (
+                SELECT callchain_id FROM native_hook
+            )
+            """
+        )
 
-        data_dict = {}
-        for row in cursor.fetchall():
-            data_dict[row[0]] = row[1]
+        used_ids: set[int] = set()
+        for symbol_id, file_id in cursor.fetchall():
+            if symbol_id is not None and symbol_id >= 0:
+                used_ids.add(symbol_id)
+            if file_id is not None and file_id >= 0:
+                used_ids.add(file_id)
+
+        if not used_ids:
+            return {}
+
+        data_dict: dict[int, str] = {}
+        ids_list = list(used_ids)
+
+        # SQLite 单条查询的占位符数量有限，分批查询确保安全
+        chunk_size = 500
+        for start in range(0, len(ids_list), chunk_size):
+            chunk = ids_list[start : start + chunk_size]
+            placeholders = ','.join(['?'] * len(chunk))
+            cursor.execute(
+                f'SELECT id, data FROM data_dict WHERE id IN ({placeholders})',
+                chunk,
+            )
+            for row in cursor.fetchall():
+                data_dict[row[0]] = row[1]
 
         return data_dict
 

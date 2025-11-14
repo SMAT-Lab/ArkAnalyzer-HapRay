@@ -1,4 +1,6 @@
-import { ComponentCategory, EventType, type PerfData, type NativeMemoryData, type NativeMemoryRecord, type NativeMemoryStepData } from "@/stores/jsonDataStore";
+import { ComponentCategory, type PerfData } from "@/stores/jsonDataStore";
+import { EventType } from "@/stores/nativeMemory";
+import type { NativeMemoryData, NativeMemoryRecord, NativeMemoryStepData } from "@/stores/nativeMemory";
 import pako from 'pako';
 
 // 定义数据类型接口

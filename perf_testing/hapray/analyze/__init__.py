@@ -28,10 +28,7 @@ ANALYZER_CLASSES = [
     'ComponentReusableAnalyzer',
     'PerfAnalyzer',
     'MemoryAnalyzer',  # 独立的内存分析器，参考 PerfAnalyzer 的结构
-    'FrameLoadAnalyzer',  # 提前执行，作为数据收集前驱
-    'EmptyFrameAnalyzer',  # 使用缓存的帧负载数据
-    'FrameDropAnalyzer',  # 使用缓存的帧负载数据
-    'VSyncAnomalyAnalyzer',  # VSync异常分析器
+    'UnifiedFrameAnalyzer',  # 统一帧分析器（合并了FrameLoadAnalyzer、EmptyFrameAnalyzer、FrameDropAnalyzer、VSyncAnomalyAnalyzer）
     'ColdStartAnalyzer',
     'GCAnalyzer',
     'FaultTreeAnalyzer',
@@ -62,6 +59,16 @@ def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
     """
     total_start_time = time.time()
     logging.info('=== Starting data analysis pipeline for %s ===', scene_dir)
+
+    report_dir = os.path.join(scene_dir, 'report')
+    os.makedirs(report_dir, exist_ok=True)
+    db_path = os.path.join(report_dir, 'hapray_report.db')
+    if os.path.exists(db_path):
+        try:
+            os.remove(db_path)
+            logging.info('Removed stale report database: %s', db_path)
+        except Exception as exc:
+            logging.warning('Failed to remove stale report database %s: %s', db_path, exc)
 
     result = {}
 
