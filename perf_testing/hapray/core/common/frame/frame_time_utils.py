@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 帧分析时间工具类
 
@@ -7,7 +6,13 @@
 
 import logging
 
-# from typing import Optional  # 未使用
+from .frame_constants import (
+    FPS_WINDOW_SIZE_MS,
+    FRAME_DURATION_MS,
+    MILLISECONDS_TO_NANOSECONDS,
+    SECONDS_TO_NANOSECONDS,
+    TIMESTAMP_MAX_NANOSECONDS,
+)
 
 
 class FrameTimeUtils:
@@ -19,15 +24,13 @@ class FrameTimeUtils:
     3. 时间验证和格式化
     """
 
-    # 常用时间常量
-    NS_TO_MS = 1_000_000  # 纳秒到毫秒的转换因子
-    NS_TO_S = 1_000_000_000  # 纳秒到秒的转换因子
-    MS_TO_NS = 1_000_000  # 毫秒到纳秒的转换因子
-    S_TO_NS = 1_000_000_000  # 秒到纳秒的转换因子
-
-    # 帧分析相关常量
-    FRAME_DURATION_60FPS_MS = 16.67  # 60fps基准帧时长（毫秒）
-    WINDOW_SIZE_MS = 1000  # FPS窗口大小（毫秒）
+    # 常用时间常量 - 从frame_constants导入以避免重复
+    NS_TO_MS = MILLISECONDS_TO_NANOSECONDS
+    NS_TO_S = SECONDS_TO_NANOSECONDS
+    MS_TO_NS = MILLISECONDS_TO_NANOSECONDS
+    S_TO_NS = SECONDS_TO_NANOSECONDS
+    FRAME_DURATION_60FPS_MS = FRAME_DURATION_MS
+    WINDOW_SIZE_MS = FPS_WINDOW_SIZE_MS
 
     @staticmethod
     def convert_to_relative_nanoseconds(timestamp_ns: int, first_frame_time_ns: int) -> int:
@@ -52,7 +55,7 @@ class FrameTimeUtils:
         Returns:
             float: 毫秒数
         """
-        return nanoseconds / 1_000_000
+        return nanoseconds / MILLISECONDS_TO_NANOSECONDS
 
     @staticmethod
     def convert_nanoseconds_to_seconds(nanoseconds: int) -> float:
@@ -64,7 +67,7 @@ class FrameTimeUtils:
         Returns:
             float: 秒数
         """
-        return nanoseconds / 1_000_000_000
+        return nanoseconds / SECONDS_TO_NANOSECONDS
 
     @staticmethod
     def convert_milliseconds_to_nanoseconds(milliseconds: float) -> int:
@@ -76,7 +79,7 @@ class FrameTimeUtils:
         Returns:
             int: 纳秒数
         """
-        return int(milliseconds * 1_000_000)
+        return int(milliseconds * MILLISECONDS_TO_NANOSECONDS)
 
     @staticmethod
     def convert_seconds_to_nanoseconds(seconds: float) -> int:
@@ -88,7 +91,7 @@ class FrameTimeUtils:
         Returns:
             int: 纳秒数
         """
-        return int(seconds * 1_000_000_000)
+        return int(seconds * SECONDS_TO_NANOSECONDS)
 
     @staticmethod
     def validate_timestamp(timestamp_ns: int, name: str = 'timestamp') -> bool:
@@ -101,15 +104,12 @@ class FrameTimeUtils:
         Returns:
             bool: 是否有效
         """
-        if timestamp_ns is None:
-            logging.warning('%s 时间戳为 None', name)
-            return False
 
         if timestamp_ns < 0:
             logging.warning('%s 时间戳为负数: %d', name, timestamp_ns)
             return False
 
-        if timestamp_ns > 1_000_000_000_000_000:  # 约31年
+        if timestamp_ns > TIMESTAMP_MAX_NANOSECONDS:
             logging.warning('%s 时间戳过大: %d', name, timestamp_ns)
             return False
 
@@ -143,7 +143,7 @@ class FrameTimeUtils:
         Returns:
             str: 格式化的时间戳字符串
         """
-        seconds = nanoseconds / 1_000_000_000
+        seconds = nanoseconds / SECONDS_TO_NANOSECONDS
         minutes = int(seconds // 60)
         seconds = seconds % 60
 

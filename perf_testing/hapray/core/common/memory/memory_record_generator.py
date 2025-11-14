@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import logging
+from collections import defaultdict
 from typing import Any
 
 from .memory_classifier import MemoryClassifier
@@ -52,6 +53,7 @@ class MemoryRecordGenerator:
         6. 为每条记录计算所有维度的统计信息：
            - 4个基础维度（进程、线程、文件、符号）
            - 3个聚合维度（大分类、小分类、事件类型）
+        7. 释放事件继承对应分配事件的分类信息（通过地址匹配）
 
         Args:
             events: 事件列表
@@ -67,6 +69,10 @@ class MemoryRecordGenerator:
         # 构建映射
         process_map = {p['id']: p for p in processes}
         thread_map = {t['id']: t for t in threads}
+
+        # 地址 -> 分配事件的分类信息（用于释放事件继承分类）
+        # 使用栈结构支持同一地址的多次分配/释放（LIFO）
+        addr_to_alloc_classification: dict[int, list[dict]] = defaultdict(list)
 
         records = []
         # 计算累计内存与峰值（events 已按 start_ts 升序载入）
@@ -101,17 +107,61 @@ class MemoryRecordGenerator:
                 symbol_id = last_symbol_id
                 symbol_name = data_dict.get(last_symbol_id, 'unknown')
 
-            # 分类
-            classification = self.classifier.get_final_classification(
-                file_path=file_path,
-                symbol_name=symbol_name,
-                thread_name=thread.get('name') if thread else None,
-            )
+            evt_type = event.get('event_type')
+            addr = event.get('addr')
+
+            # 判断是分配还是释放
+            is_alloc = evt_type in ('AllocEvent', 'MmapEvent', 0)
+            is_free = evt_type in ('FreeEvent', 'MunmapEvent', 1)
+
+            # 分类逻辑
+            classification = None
+
+            if is_alloc:
+                # 分配事件：正常分类
+                classification = self.classifier.get_final_classification(
+                    file_path=file_path,
+                    symbol_name=symbol_name,
+                    thread_name=thread.get('name') if thread else None,
+                )
+                # 保存分类信息，供后续释放事件使用
+                if addr is not None:
+                    addr_to_alloc_classification[addr].append(classification)
+            elif is_free:
+                # 释放事件：尝试继承对应分配事件的分类信息
+                if addr is not None and addr in addr_to_alloc_classification:
+                    stack = addr_to_alloc_classification[addr]
+                    if stack:
+                        # 使用 LIFO：取最后一次分配的分类信息
+                        classification = stack.pop()
+                        # 如果栈为空，清理该地址
+                        if not stack:
+                            del addr_to_alloc_classification[addr]
+
+                # 如果没有找到对应的分配事件，使用当前信息分类（可能是 UNKNOWN）
+                if classification is None:
+                    classification = self.classifier.get_final_classification(
+                        file_path=file_path,
+                        symbol_name=symbol_name,
+                        thread_name=thread.get('name') if thread else None,
+                    )
+            else:
+                # 其他事件类型：正常分类
+                classification = self.classifier.get_final_classification(
+                    file_path=file_path,
+                    symbol_name=symbol_name,
+                    thread_name=thread.get('name') if thread else None,
+                )
 
             # 构建各维度的 key
             pid = process.get('pid')
             if pid is None:
                 continue
+
+            # 获取原始内存大小
+            heap_size = event.get('heap_size') or 0
+            # heapSize 存储规则：申请内存为正数，释放内存为负数
+            heap_size = -abs(heap_size) if is_free else abs(heap_size)
 
             # 创建记录
             record = {
@@ -132,8 +182,8 @@ class MemoryRecordGenerator:
                 'subEventType': '',  # 可以从 sub_type_names 获取
                 'addr': event['addr'],
                 'callchainId': event['callchain_id'],
-                # 内存大小（单次分配/释放的大小）
-                'heapSize': event['heap_size'],
+                # 内存大小（申请为正数，释放为负数）
+                'heapSize': heap_size,
                 # 相对时间戳（相对于 trace 开始时间）
                 'relativeTs': event['start_ts'] - trace_start_ts,
                 # 分类信息 - 大类
@@ -146,14 +196,8 @@ class MemoryRecordGenerator:
 
             records.append(record)
 
-            # 计算累计内存变化
-            evt_type = event.get('event_type')
-            size = event.get('heap_size') or 0
-            # 兼容字符串/数值类型的事件类型
-            if evt_type in ('AllocEvent', 'MmapEvent', 0):
-                current_total += size
-            elif evt_type in ('FreeEvent', 'MunmapEvent', 1):
-                current_total -= size
+            # 计算累计内存变化（heapSize 已经是正负数形式）
+            current_total += heap_size
 
             if current_total > peak_value:
                 peak_value = current_total

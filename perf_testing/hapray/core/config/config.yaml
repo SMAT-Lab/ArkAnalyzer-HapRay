@@ -8,6 +8,7 @@ trace:
   enable: True
 memory:
   enable: False  # Memory采集开关（通过命令行参数控制）
+  max_stack_depth: 100  # Native Memory采集的最大调用栈深度
 
 # 帧分析配置
 frame_analysis:

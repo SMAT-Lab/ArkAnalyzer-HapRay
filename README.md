@@ -57,22 +57,22 @@ Requirements:
 Example:
 ```bash
 # Run specific test cases with symbol files
-python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --so_dir debug_symbols
+python -m scripts.main perf --run_testcases ".*_xhs_.*" ".*_jingdong_0010" --so_dir debug_symbols
 
 # Run specific test cases sample CPU cycles
-python -m scripts.main perf --run_testcases .*_xhs_.* .*_jingdong_0010 --circles
+python -m scripts.main perf --run_testcases ".*_xhs_.*" ".*_jingdong_0010" --circles
 
 # Run manual testing
 python -m scripts.main perf --manual --app your_app_bundle_name
 
 # Memory profiling (memory only)
-python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace --no-perf
+python -m scripts.main perf --run_testcases ".*_xhs_.*" --memory --no-trace --no-perf
 
 # Mixed collection: perf + trace + memory
-python -m scripts.main perf --run_testcases .*_xhs_.* --memory
+python -m scripts.main perf --run_testcases ".*_xhs_.*" --memory
 
 # Mixed collection: perf + memory (no trace)
-python -m scripts.main perf --run_testcases .*_xhs_.* --memory --no-trace
+python -m scripts.main perf --run_testcases ".*_xhs_.*" --memory --no-trace
 ```
 
 **Memory Collection Modes:**
@@ -111,7 +111,7 @@ python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_
 python -m scripts.main prepare --all_0000
 
 # Execute test cases with regex patterns
-python -m scripts.main prepare --run_testcases .*_jingdong_0000* .*_Douyin_0000* .*_bilibili_0000*
+python -m scripts.main prepare --run_testcases ".*_jingdong_0000*" ".*_Douyin_0000*" ".*_bilibili_0000*"
 
 # Execute on specific device
 python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_jingdong_0000 --device HX1234567890
@@ -126,17 +126,27 @@ Options:
 - `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
 - `-j/--jobs <N>`: Number of parallel jobs (default: 1)
 - `-r/--report_dir <path>`: Directory containing reports to analye invoked symbols (optional)
+- `--no-opt`: Disable optimization level (Ox) detection (default: enabled)
+- `--no-lto`: Disable LTO (Link-Time Optimization) detection (default: enabled)
+
+**Default behavior**: Both Ox and LTO detection are enabled. Use `--no-opt` or `--no-lto` to disable them.
 
 Example:
 ```bash
-# Analyze binaries with 4 parallel jobs
+# Analyze binaries with 4 parallel jobs (Ox + LTO both enabled by default)
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
 
-# Analyze binaries and analyze invoked symbols
+# Disable Ox detection, only run LTO detection
+python -m scripts.main opt -i build_output/ -o lto_only_report.xlsx --no-opt -j4
+
+# Disable LTO detection, only run Ox detection
+python -m scripts.main opt -i build_output/ -o ox_only_report.xlsx --no-lto -j4
+
+# Analyze binaries and analyze invoked symbols (Ox + LTO both enabled)
 python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
 
-# Analyze APK file
-python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx
+# Analyze APK file (Ox + LTO both enabled by default)
+python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx -j4
 
 # Analyze multiple APK files in a directory
 python -m scripts.main opt -i apk_files/ -o multi_apk_report.xlsx -j4

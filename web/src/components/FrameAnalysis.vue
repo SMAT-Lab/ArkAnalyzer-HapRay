@@ -342,40 +342,6 @@ v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
                             <div class="info-label">卡顿负载</div>
                             <div class="info-value">{{ selectedStutter.frame_load }}</div>
                         </div>
-                        <div class="info-item">
-                            <div class="info-label">调用栈数量</div>
-                            <div class="info-value">{{ callstackData.length }}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="callstack-info">
-                    <div class="info-title">
-                        <i class="fas fa-code-branch"></i>
-                        调用栈信息
-                    </div>
-                    <div v-if="callstackData.length > 0" class="callstack-list">
-                        <div v-for="(chain, idx) in callstackData" :key="idx" class="callstack-item">
-                            <div class="callstack-header">
-                                <div class="callstack-timestamp">
-                                    调用栈 {{ idx + 1 }}
-                                </div>
-                                <div class="callstack-load">
-                                    负载: {{ chain.load_percentage.toFixed(2) }}%
-                                </div>
-                            </div>
-                            <div class="callstack-chain">
-                                <div v-for="(call, cidx) in chain.callchain" :key="cidx" class="callstack-frame">
-                                    <i class="fas fa-level-down-alt"></i>
-                                    <div>[{{ call.depth }}] {{ call.path }} - {{ call.symbol }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div v-else class="placeholder">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <h3>未找到调用栈信息</h3>
-                        <p>当前卡顿点没有记录调用栈信息，可能是系统级调用或未捕获的线程</p>
                     </div>
                 </div>
             </div>
@@ -730,8 +696,6 @@ const selectedStutter = ref(null);
 const selectedEmptyFrame = ref(null);
 
 const selectedVSyncAnomaly = ref(null);
-const callstackData = ref([]);
-const callstackThread = ref('');
 
 const activeFilter = ref('all');
 const minTimestamp = ref(0); // 存储最小时间戳
@@ -1541,7 +1505,6 @@ const initCharts = () => {
                     selectedStutter.value = params.data.stutter;
                     selectedEmptyFrame.value = null;
                     selectedVSyncAnomaly.value = null;
-                    findCallstackInfo(params.data.stutter.ts);
                 }
             }
 
@@ -1563,69 +1526,6 @@ const initCharts = () => {
 
     }
 
-};
-
-// 查找调用栈信息
-const findCallstackInfo = (timestamp) => {
-    callstackData.value = [];
-    callstackThread.value = '';
-
-    // 在主线程空帧中查找
-    const mainFrames = emptyFrameData.value.top_frames.main_thread_empty_frames;
-    for (const frame of mainFrames) {
-        if (timestamp >= frame.ts && timestamp <= frame.ts + frame.dur) {
-            if (frame.sample_callchains) {
-                callstackData.value = frame.sample_callchains;
-                callstackThread.value = frame.thread_name;
-                return;
-            }
-        }
-    }
-
-    // 在后台线程中查找
-    const bgThreads = emptyFrameData.value.top_frames.background_thread;
-    for (const thread of bgThreads) {
-        if (timestamp >= thread.ts && timestamp <= thread.ts + thread.dur) {
-            if (thread.sample_callchains) {
-                callstackData.value = thread.sample_callchains;
-                callstackThread.value = thread.thread_name;
-                return;
-            }
-        }
-    }
-
-    // 在卡顿帧ui_stutter里面找
-    const uiStutterCallChains = performanceData.value.stutter_details.ui_stutter;
-    for (const uiStutterCallChain of uiStutterCallChains) {
-        if (timestamp >= uiStutterCallChain.ts && timestamp <= uiStutterCallChain.ts + uiStutterCallChain.actual_duration) {
-            if (uiStutterCallChain.sample_callchains) {
-                callstackData.value = uiStutterCallChain.sample_callchains;
-                return;
-            }
-        }
-    }
-    // 在卡顿帧render_stutter里面找
-    const renderStutterCallChains = performanceData.value.stutter_details.render_stutter;
-    for (const renderStutterCallChain of renderStutterCallChains) {
-        if (timestamp >= renderStutterCallChain.ts && timestamp <= renderStutterCallChain.ts + renderStutterCallChain.actual_duration) {
-            if (renderStutterCallChain.sample_callchains) {
-                callstackData.value = renderStutterCallChain.sample_callchains;
-                return;
-            }
-        }
-    }
-    // 在卡顿帧sceneboard_stutter里面找（如果存在的话）
-    if (performanceData.value.stutter_details.sceneboard_stutter) {
-        const sceneboardStutterCallChains = performanceData.value.stutter_details.sceneboard_stutter;
-        for (const sceneboardStutterCallChain of sceneboardStutterCallChains) {
-            if (timestamp >= sceneboardStutterCallChain.ts && timestamp <= sceneboardStutterCallChain.ts + sceneboardStutterCallChain.actual_duration) {
-                if (sceneboardStutterCallChain.sample_callchains) {
-                    callstackData.value = sceneboardStutterCallChain.sample_callchains;
-                    return;
-                }
-            }
-        }
-    }
 };
 
 onMounted(() => {
