@@ -14,82 +14,64 @@ limitations under the License.
 """
 
 import logging
-import os
-import sqlite3
 from typing import Any, Optional
 
 import pandas as pd
 
-from hapray.analyze.base_analyzer import BaseAnalyzer
-from hapray.core.common.frame.frame_core_cache_manager import FrameCacheManager
+from .frame_core_cache_manager import FrameCacheManager
 
 
-class VSyncAnomalyAnalyzer(BaseAnalyzer):
+class VSyncAnomalyAnalyzer:
     """VSync异常分析器
 
-    专门分析VSync信号的异常情况，包括：
-    1. VSync频率异常检测（过高/过低/不稳定）
-    2. VSync时序异常检测（信号丢失/重复）
-    3. VSync与帧不匹配异常
-    4. VSync异常与其他性能问题的关联分析
-
-    基于现有的frame_slice表缓存机制，复用FrameCacheManager
+    专门用于分析VSync信号的异常情况，包括：
+    1. VSync频率异常检测（高频/低频时间段）
+    2. VSync与帧的不匹配检测
+    3. 异常率统计
     """
 
-    def __init__(self, scene_dir: str):
-        super().__init__(scene_dir, 'trace/vsyncAnomaly')
-
-    def _analyze_impl(
-        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
-    ) -> Optional[dict[str, Any]]:
-        """分析VSync异常
+    def __init__(self, cache_manager: FrameCacheManager = None):
+        """
+        初始化VSync异常分析器
 
         Args:
-            step_dir: 步骤标识符
-            trace_db_path: trace数据库路径
-            perf_db_path: perf数据库路径
-            app_pids: 应用进程ID列表
+            cache_manager: 缓存管理器实例
+        """
+        self.cache_manager = cache_manager
+
+    def analyze_vsync_anomalies(self, app_pids: list) -> Optional[dict[str, Any]]:
+        """分析VSync异常
 
         Returns:
-            Dictionary containing VSync anomaly analysis result for this step, or None if no data
+            Optional[dict[str, Any]]: VSync异常分析结果，如果没有数据或分析失败则返回None
         """
-        if not os.path.exists(trace_db_path):
-            logging.warning('Trace database not found: %s', trace_db_path)
-            return None
 
         try:
-            # 复用现有的缓存机制获取frame_slice数据
-            trace_conn = sqlite3.connect(trace_db_path)
-
             # 使用FrameCacheManager获取已缓存的帧数据
-            frames_df = FrameCacheManager.get_frames_data(trace_conn, step_dir, app_pids)
+            frames_df = self.cache_manager.get_frames_data(app_pids)
 
             if frames_df.empty:
-                logging.info('No frame data found for VSync analysis in step %s', step_dir)
+                logging.info('No frame data found for VSync analysis')
                 return None
 
             # 分析VSync异常
-            result = self._analyze_vsync_anomalies(frames_df, step_dir)
+            result = self._analyze_vsync_anomalies_impl(frames_df)
 
             if result is None:
-                logging.info('No VSync anomaly data found for step %s', step_dir)
+                logging.info('No VSync anomaly data found')
                 return None
 
             return result
 
         except Exception as e:
-            logging.error('VSync anomaly analysis failed for step %s: %s', step_dir, str(e))
+            logging.error('VSync anomaly analysis failed: %s', str(e))
             return None
-        finally:
-            if 'trace_conn' in locals():
-                trace_conn.close()
 
-    def _analyze_vsync_anomalies(self, frames_df: pd.DataFrame, step_id: str) -> Optional[dict[str, Any]]:
-        """分析VSync异常"""
-
+    def _analyze_vsync_anomalies_impl(self, frames_df: pd.DataFrame) -> Optional[dict[str, Any]]:
+        """分析VSync异常实现"""
         try:
             # 获取第一帧时间戳用于相对时间计算
-            first_frame_time = FrameCacheManager.get_first_frame_timestamp(None, step_id)
+            first_frame_time = self.cache_manager.get_first_frame_timestamp()
 
             # 1. 按vsync分组分析
             vsync_groups = self._group_frames_by_vsync(frames_df)
@@ -122,7 +104,6 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
     def _group_frames_by_vsync(self, frames_df: pd.DataFrame) -> pd.DataFrame:
         """按vsync分组帧数据"""
-
         # 过滤掉vsync为空的记录
         valid_frames = frames_df[frames_df['vsync'].notna()].copy()
 
@@ -163,7 +144,6 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
     def _calculate_vsync_intervals(self, vsync_groups: pd.DataFrame, first_frame_time: int) -> list[dict[str, Any]]:
         """计算VSync间隔"""
-
         intervals = []
 
         for i in range(1, len(vsync_groups)):
@@ -187,22 +167,16 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
     def _detect_frequency_anomalies(self, vsync_intervals: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """检测VSync频率异常"""
-
         # 正常VSync频率范围：30-120Hz (8.33ms - 33.3ms间隔)
-        # 频率过高阈值：> 120Hz (间隔 < 8.33ms)
-        # 频率过低阈值：< 30Hz (间隔 > 33.3ms)
         normal_interval_min = 8.33 * 1_000_000  # 8.33ms in ns (120Hz)
         normal_interval_max = 33.3 * 1_000_000  # 33.3ms in ns (30Hz)
 
-        # 只检测时间段异常，移除单个间隔异常检测
-        # 因为单个VSync间隔异常偶然性太大，不能真正反映系统性能问题
         return self._detect_frequency_time_periods(vsync_intervals, normal_interval_min, normal_interval_max)
 
     def _detect_frequency_time_periods(
         self, vsync_intervals: list[dict[str, Any]], normal_interval_min: int, normal_interval_max: int
     ) -> list[dict[str, Any]]:
         """检测VSync频率的时间段异常"""
-
         if len(vsync_intervals) < 3:  # 至少需要3个间隔才能形成时间段
             return []
 
@@ -220,8 +194,8 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                     'type': 'high_frequency_period',
                     'start_vsync': int(period['start_vsync']),
                     'end_vsync': int(period['end_vsync']),
-                    'start_ts': int(period['start_ts']),  # 已经是相对时间戳
-                    'end_ts': int(period['end_ts']),  # 已经是相对时间戳
+                    'start_ts': int(period['start_ts']),
+                    'end_ts': int(period['end_ts']),
                     'duration': int(period['duration']),
                     'interval_count': int(period['interval_count']),
                     'avg_interval': int(period['avg_interval']),
@@ -248,8 +222,8 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                     'type': 'low_frequency_period',
                     'start_vsync': int(period['start_vsync']),
                     'end_vsync': int(period['end_vsync']),
-                    'start_ts': int(period['start_ts']),  # 已经是相对时间戳
-                    'end_ts': int(period['end_ts']),  # 已经是相对时间戳
+                    'start_ts': int(period['start_ts']),
+                    'end_ts': int(period['end_ts']),
                     'duration': int(period['duration']),
                     'interval_count': int(period['interval_count']),
                     'avg_interval': int(period['avg_interval']),
@@ -270,7 +244,6 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
         self, vsync_intervals: list[dict[str, Any]], threshold: int, is_high_freq: bool
     ) -> list[dict[str, Any]]:
         """查找连续的异常时间段"""
-
         periods = []
         current_period = None
 
@@ -322,7 +295,6 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
     def _calculate_period_severity(self, period: dict[str, Any], is_high_freq: bool) -> str:
         """计算时间段异常的严重程度"""
-
         if is_high_freq:
             # 高频异常：根据平均频率和持续时间判断
             avg_freq = 1_000_000_000 / period['avg_interval']
@@ -346,7 +318,6 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
 
     def _detect_frame_mismatches(self, vsync_groups: pd.DataFrame, first_frame_time: int) -> list[dict[str, Any]]:
         """检测VSync与帧的不匹配异常"""
-
         mismatches = []
 
         for _, row in vsync_groups.iterrows():
@@ -361,7 +332,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                         'vsync': int(row['vsync']),
                         'expect_frames': int(expect_frames),
                         'description': f'VSync {int(row["vsync"])} 只有期望帧，没有实际渲染帧',
-                        'ts': int(row['start_time'] - first_frame_time),  # 使用相对时间戳
+                        'ts': int(row['start_time'] - first_frame_time),
                         'thread_name': str(row['thread_name']),
                         'process_name': str(row['process_name']),
                     }
@@ -373,7 +344,7 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
                         'vsync': int(row['vsync']),
                         'actual_frames': int(actual_frames),
                         'description': f'VSync {int(row["vsync"])} 只有实际帧，没有期望帧',
-                        'ts': int(row['start_time'] - first_frame_time),  # 使用相对时间戳
+                        'ts': int(row['start_time'] - first_frame_time),
                         'thread_name': str(row['thread_name']),
                         'process_name': str(row['process_name']),
                     }
@@ -385,7 +356,6 @@ class VSyncAnomalyAnalyzer(BaseAnalyzer):
         self, vsync_groups: pd.DataFrame, frequency_anomalies: list, frame_mismatches: list
     ) -> float:
         """计算异常率"""
-
         total_vsync = len(vsync_groups)
         if total_vsync == 0:
             return 0.0
