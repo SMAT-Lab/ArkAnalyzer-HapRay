@@ -65,9 +65,13 @@ Examples:
 
     parser.add_argument('--jobs', '-j', type=int, default=1, help='Number of parallel jobs (default: 1)')
 
-    parser.add_argument('-w', '--workers', type=int, default=None, help='Number of parallel workers (same as --jobs, for compatibility)')
+    parser.add_argument(
+        '-w', '--workers', type=int, default=None, help='Number of parallel workers (same as --jobs, for compatibility)'
+    )
 
-    parser.add_argument('--timeout', type=int, default=None, help='Timeout in seconds for analyzing a single file (default: no timeout)')
+    parser.add_argument(
+        '--timeout', type=int, default=None, help='Timeout in seconds for analyzing a single file (default: no timeout)'
+    )
 
     parser.add_argument(
         '--no-lto',

@@ -14,8 +14,8 @@
     "postbuild:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && node copy_dist.js",
     "postbuild:unix": "mkdir -p ../dist && rm -rf ../dist/_internal ../dist/ArkAnalyzer-HapRay && cp -a dist/ArkAnalyzer-HapRay/_internal ../dist/ && cp -a dist/ArkAnalyzer-HapRay/ArkAnalyzer-HapRay ../dist/",
     "build:python": "./.venv/bin/pyinstaller -y main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y main.spec",
-    "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint",
-    "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix",
+    "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint || python3 -m ruff check .",
+    "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix || python3 -m ruff check --fix .",
     "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe"
   },
   "author": "",

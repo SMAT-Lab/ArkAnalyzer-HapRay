@@ -4,9 +4,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
+from hapray.core.common.exe_utils import ExeUtils
 from tqdm import tqdm
 
-from hapray.core.common.exe_utils import ExeUtils
 from optimization_detector.file_info import FileInfo
 
 

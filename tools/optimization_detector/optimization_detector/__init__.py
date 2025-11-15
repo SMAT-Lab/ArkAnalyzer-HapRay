@@ -9,4 +9,3 @@ from .file_info import FileCollector
 from .optimization_detector import OptimizationDetector
 
 __all__ = ['FileCollector', 'OptimizationDetector', '__version__']
-

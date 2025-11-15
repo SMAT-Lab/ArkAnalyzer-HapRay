@@ -17,8 +17,8 @@
     "zip:onedir": "cross-env bash ../../scripts/pack.sh opt-detector dist/opt-detector README.md",
     "clean": "rm -rf build/ dist/ *.egg-info optimization_detector.egg-info dist/*.zip",
     "install:dev": "npm run setup",
-    "lint": "./.venv/bin/tox -e ruff || .\\.venv\\Scripts\\tox.exe -e ruff || python -m tox -e ruff || python3 -m tox -e ruff",
-    "lint:fix": "./.venv/bin/tox -e ruff-fix || .\\.venv\\Scripts\\tox.exe -e ruff-fix || python -m tox -e ruff-fix || python3 -m tox -e ruff-fix"
+    "lint": "./.venv/bin/tox -e ruff || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff || python3 -m ruff check .",
+    "lint:fix": "./.venv/bin/tox -e ruff-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff-fix || python3 -m ruff check --fix ."
   },
   "author": "Huawei Device Co., Ltd.",
   "license": "Apache-2.0",

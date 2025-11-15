@@ -27,7 +27,6 @@ import pandas as pd
 
 from hapray import VERSION
 from hapray.analyze import analyze_data
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config

@@ -52,6 +52,7 @@ class ExeUtils:
         """
         project_root = CommonUtils.get_project_root()
         candidates = [
+            os.path.join(project_root, '..', 'tools'),
             os.path.join(project_root, 'tools'),
             os.path.join(project_root, '..', 'dist', 'tools'),
         ]
@@ -61,7 +62,7 @@ class ExeUtils:
                 if relative_segments:
                     return os.path.join(base, *relative_segments)
                 return base
-
+        logging.warning(f"Tools directory not found. project_root: {project_root}")
         if require:
             raise FileNotFoundError(
                 f"Tools directory not found. Checked: {', '.join(os.path.abspath(c) for c in candidates)}"
@@ -80,7 +81,7 @@ class ExeUtils:
             FileNotFoundError: If the executable doesn't exist
         """
         # Get the root directory of the project
-        project_root = CommonUtils.get_project_root()
+        # project_root = CommonUtils.get_project_root()  # Unused variable removed
 
         # Determine OS-specific executable name
         system = platform.system().lower()
