@@ -35,13 +35,6 @@ jobs:
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
             
-          # macOS - x86 (Intel)
-          - os: macos-13
-            arch: x86_64
-            platform: darwin
-            pyinstaller_arch: x86_64
-            package_lock_path: .github/workflows/package-lock.json
-            use_static_python: false
         # 将 node-version 移到每个 item 中
         include:
           - node-version: 18.x
@@ -62,8 +55,8 @@ jobs:
       if: ${{ matrix.item.use_static_python }}
       run: |
         # 下载预编译的静态Python
-        PYTHON_VERSION=3.10.17
-        BUILD_TAG=20250529
+        PYTHON_VERSION=3.11.14
+        BUILD_TAG=20251031
         wget https://github.com/astral-sh/python-build-standalone/releases/download/${BUILD_TAG}/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz
         # 解压到 /opt/python-static
         sudo mkdir -p /opt/python-static
@@ -84,7 +77,7 @@ jobs:
       if: ${{ !matrix.item.use_static_python }}
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
     
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
@@ -98,10 +91,14 @@ jobs:
 
     - name: PyInstaller build
       run: |
+        npm run build
         npm run release
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
-        path: ArkAnalyzer-HapRay-*.zip
+        path: |
+          ArkAnalyzer-HapRay-*.zip
+          tools/optimization_detector/*.zip
+          sa/*.zip
