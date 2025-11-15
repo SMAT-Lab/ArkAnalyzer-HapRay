@@ -10,7 +10,7 @@
     "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
     "setup:unix": "python3 setup_env.py",
     "build": "npm run build:python",
-    "postbuild": "(npm run postbuild:win --if-present 2>/dev/null || true) && npm run postbuild:unix",
+    "postbuild": "npm run postbuild:win --if-present || npm run postbuild:unix",
     "postbuild:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && node copy_dist.js",
     "postbuild:unix": "mkdir -p ../dist && rm -rf ../dist/_internal ../dist/ArkAnalyzer-HapRay && cp -a dist/ArkAnalyzer-HapRay/_internal ../dist/ && cp -a dist/ArkAnalyzer-HapRay/ArkAnalyzer-HapRay ../dist/",
     "build:python": "./.venv/bin/pyinstaller -y main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y main.spec",
