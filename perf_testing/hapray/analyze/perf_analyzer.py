@@ -97,7 +97,7 @@ class PerfAnalyzer(BaseAnalyzer):
     def generate_hiperf_report(perf_path: str) -> Optional[str]:
         """生成火焰图报告，返回原始JSON字符串"""
         report_file = os.path.join(os.path.dirname(perf_path), 'hiperf_report.html')
-        template_file = os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'res', 'hiperf_report_template.html')
+        template_file = os.path.join(ExeUtils.get_tools_dir('web', 'hiperf_report_template.html'))
         if not os.path.exists(template_file):
             logging.warning('Not found file %s', template_file)
             return None
