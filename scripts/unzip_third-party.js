@@ -1,6 +1,7 @@
 const AdmZip = require('adm-zip');
 const path = require('path');
 const fs = require('fs');
+const copyFile = require('./copy_file');
 
 const DIST_TOOLS_DIR = path.join(__dirname, '../dist/tools');
 const TRACE_STREAMER_BIN = ['trace_streamer_linux', 'trace_streamer_mac', 'trace_streamer_windows.exe'];
@@ -61,3 +62,4 @@ function cleanupTraceStreamerBinary(basePath) {
 
 unzipFile('trace_streamer_binary.zip', 'trace_streamer_binary');
 unzipFile('xvm.zip', 'xvm');
+copyFile('third-party/report.html', 'dist/tools/web/hiperf_report_template.html');

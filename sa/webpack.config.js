@@ -86,9 +86,6 @@ module.exports = {
                 { from: '../node_modules/bjc/res', to: 'res'},
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
-                { from: '../third-party/trace_streamer_binary', to: '../trace_streamer_binary' },
-                { from: '../third-party/xvm', to: '../xvm' },
-                { from: '../third-party/report.html', to: 'res/hiperf_report_template.html' },
                 {
                     from: 'src/core/elf/demangle-wasm.wasm',
                     to: 'demangle-wasm.wasm'
