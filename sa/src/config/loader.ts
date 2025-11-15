@@ -146,9 +146,9 @@ const ConfigSchema = z.object({
 });
 
 function getExtToolsRoot(): string {
-    let root = path.join(__dirname, 'third-party');
+    let root = path.join(__dirname, 'tools');
     if (!fs.existsSync(root)) {
-        root = path.join(__dirname, '../../../third-party');
+        root = path.join(__dirname, '../../../dist/tools');
     }
     if (fs.existsSync(root)) {
         return path.resolve(root);

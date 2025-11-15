@@ -11,7 +11,7 @@ import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
 
-from hapray.optimization_detector.file_info import FILE_STATUS_MAPPING, FileInfo
+from .file_info import FILE_STATUS_MAPPING, FileInfo
 
 
 class TimeoutError(Exception):
@@ -30,13 +30,13 @@ class OptimizationDetector:
         self.enable_lto = enable_lto
         self.enable_opt = enable_opt
         self.model = None
-        self.flags_model = files('hapray.optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
+        self.flags_model = files('optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
 
         # LTO检测器（延迟加载）
         self.lto_detector = None
         if enable_lto:
             try:
-                from hapray.optimization_detector.lto_detector import LtoDetector  # noqa: PLC0415
+                from optimization_detector.lto_detector import LtoDetector  # noqa: PLC0415
 
                 self.lto_detector = LtoDetector()
                 logging.info('LTO detection enabled')
