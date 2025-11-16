@@ -415,6 +415,6 @@ class ExeUtils:
 
 
 # Initialize commonly used tool paths after class definition
-ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', 'hapray-sa-cmd'))
+ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', 'hapray-sa-cmd.js'))
 ExeUtils.trace_streamer_path = ExeUtils._get_trace_streamer_path()
 ExeUtils.opt_detector_path = os.path.abspath(ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False))

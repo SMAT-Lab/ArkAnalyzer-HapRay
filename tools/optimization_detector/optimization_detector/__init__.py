@@ -6,6 +6,7 @@
 __version__ = '1.0.0'
 
 from .file_info import FileCollector
+from .invoke_symbols import InvokeSymbols
 from .optimization_detector import OptimizationDetector
 
-__all__ = ['FileCollector', 'OptimizationDetector', '__version__']
+__all__ = ['FileCollector', 'OptimizationDetector', 'InvokeSymbols', '__version__']
