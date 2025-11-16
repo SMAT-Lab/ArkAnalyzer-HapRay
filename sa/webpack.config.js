@@ -2,13 +2,14 @@ const path = require('path');
 const fs = require('fs');
 const CopyPlugin = require('copy-webpack-plugin');
 const archiver = require('archiver');
+const AdmZip = require('adm-zip');
 const { arch } = require('os');
 const version = require('./package.json').version;
 
 class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
-            let dist = path.resolve(__dirname, '../perf_testing/sa-cmd');
+            let dist = path.resolve(__dirname, '../dist/tools/sa-cmd');
             if (!fs.existsSync(dist)) {
                 return;
             }
@@ -18,6 +19,7 @@ class PackPlugin {
             const archive = archiver('zip');
             archive.pipe(outpuZipStream);
 
+            // 打包 sa-cmd 目录内容到根目录
             fs.readdirSync(dist).forEach((filename) => {
                 const realFile = path.resolve(dist, filename);
                 if (fs.statSync(realFile).isDirectory()) {
@@ -26,6 +28,26 @@ class PackPlugin {
                     archive.file(realFile, { name: filename });
                 }
             });
+
+            // 解压 trace_streamer_binary.zip 并打包到 tools 目录
+            const traceStreamerZipPath = path.resolve(__dirname, '../third-party/trace_streamer_binary.zip');
+            if (fs.existsSync(traceStreamerZipPath)) {
+                try {
+                    const zip = new AdmZip(traceStreamerZipPath);
+                    const zipEntries = zip.getEntries();
+                    
+                    zipEntries.forEach((entry) => {
+                        if (!entry.isDirectory) {
+                            const entryPath = entry.entryName;
+                            const content = zip.readFile(entry);
+                            // 将文件添加到 tools/ 目录下
+                            archive.append(content, { name: `tools/${entryPath}` });
+                        }
+                    });
+                } catch (error) {
+                    console.error('Failed to extract trace_streamer_binary.zip:', error);
+                }
+            }
 
             archive.finalize();
         });
@@ -55,7 +77,7 @@ module.exports = {
     },
     output: {
         filename: 'hapray-sa-cmd.js',
-        path: path.resolve(__dirname, '../perf_testing/sa-cmd'),
+        path: path.resolve(__dirname, '../dist/tools/sa-cmd'),
     },
     plugins: [
         new CopyPlugin({
@@ -64,13 +86,6 @@ module.exports = {
                 { from: '../node_modules/bjc/res', to: 'res'},
                 { from: '../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
-                { from: '../third-party/trace_streamer_binary', to: 'third-party/trace_streamer_binary' },
-                { from: '../third-party/xvm', to: 'third-party/xvm' },
-                { from: '../third-party/report.html', to: 'res/hiperf_report_template.html' },
-                {
-                    from: '../web/dist/index.html',
-                    to: 'res/report_template.html',
-                },
                 {
                     from: 'src/core/elf/demangle-wasm.wasm',
                     to: 'demangle-wasm.wasm'
