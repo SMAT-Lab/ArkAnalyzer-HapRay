@@ -112,7 +112,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(self.convert_coordinate(1000, 1247))
             self.driver.wait(0.5)
             time.sleep(2)
-    
+
             # 16.点击加号，等待2s
             self.driver.touch(self.convert_coordinate(1026, 1247))
             self.driver.wait(0.5)
@@ -145,7 +145,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(BY.text('取消'))
             self.driver.wait(0.5)
             time.sleep(2)
-        
+
             # 24.点击加号，等待2s
             self.driver.touch(self.convert_coordinate(1008, 2254))
             self.driver.wait(0.5)
