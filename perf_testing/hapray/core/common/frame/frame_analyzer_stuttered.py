@@ -178,8 +178,7 @@ class StutteredFrameAnalyzer:
 
     def _load_frame_data(self) -> dict:
         """加载帧数据"""
-        data = self.cache_manager.parse_frame_slice_db() if self.cache_manager else {}
-        return data
+        return self.cache_manager.parse_frame_slice_db() if self.cache_manager else {}
 
     def _initialize_stats(self) -> dict:
         """初始化统计信息"""
