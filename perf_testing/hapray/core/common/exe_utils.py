@@ -29,52 +29,82 @@ from hapray.core.config.config import Config
 logger = logging.getLogger(__name__)
 
 
-def _get_trace_streamer_path() -> str:
-    """Gets the path to the trace_streamer executable based on the current OS.
-
-    Returns:
-        Path to the trace_streamer executable
-
-    Raises:
-        OSError: For unsupported operating systems
-        FileNotFoundError: If the executable doesn't exist
-    """
-    # Get the root directory of the project
-    project_root = CommonUtils.get_project_root()
-
-    # Determine OS-specific executable name
-    system = platform.system().lower()
-    if system == 'windows':
-        executable = 'trace_streamer_windows.exe'
-    elif system == 'darwin':  # macOS
-        executable = 'trace_streamer_mac'
-    elif system == 'linux':
-        executable = 'trace_streamer_linux'
-    else:
-        raise OSError(f'Unsupported operating system: {system}')
-
-    # Construct full path to the executable
-    tool_path = os.path.join(project_root, 'sa-cmd', 'third-party', 'trace_streamer_binary', executable)
-
-    # Validate executable exists
-    if not os.path.exists(tool_path):
-        raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
-
-    # Set execute permissions for Unix-like systems
-    if system in ('darwin', 'linux'):
-        os.chmod(tool_path, 0o755)  # rwxr-xr-x
-
-    return tool_path
-
-
 class ExeUtils:
     """Utility class for executing external commands and tools"""
 
-    # Path to the hapray-sa-cmd script
-    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'hapray-sa-cmd'))
+    @staticmethod
+    def get_tools_dir(*relative_segments: str, require: bool = True) -> Optional[str]:
+        """Resolve the tools directory, supporting both source and packaged layouts.
 
-    # Path to the trace streamer executable
-    trace_streamer_path = _get_trace_streamer_path()
+        The resolver first checks <project_root>/tools. If it does not exist, it
+        falls back to <project_root>/../dist/tools for packaged distributions.
+
+        Args:
+            *relative_segments: Optional path segments to append to the tools dir.
+            require: Whether to raise if the directory cannot be resolved.
+
+        Returns:
+            Absolute path to the tools directory (or sub-path within it).
+            Returns None if not found and require is False.
+
+        Raises:
+            FileNotFoundError: If neither candidate tools directory exists.
+        """
+        project_root = CommonUtils.get_project_root()
+        candidates = [
+            os.path.join(project_root, '..', 'tools'),
+            os.path.join(project_root, 'tools'),
+            os.path.join(project_root, '..', 'dist', 'tools'),
+        ]
+
+        for base in candidates:
+            if os.path.isdir(base):
+                if relative_segments:
+                    return os.path.join(base, *relative_segments)
+                return base
+        logging.warning(f'Tools directory not found. project_root: {project_root}')
+        if require:
+            raise FileNotFoundError(
+                f'Tools directory not found. Checked: {", ".join(os.path.abspath(c) for c in candidates)}'
+            )
+        return None
+
+    @staticmethod
+    def _get_trace_streamer_path() -> str:
+        """Gets the path to the trace_streamer executable based on the current OS.
+
+        Returns:
+            Path to the trace_streamer executable
+
+        Raises:
+            OSError: For unsupported operating systems
+            FileNotFoundError: If the executable doesn't exist
+        """
+
+        # Determine OS-specific executable name
+        system = platform.system().lower()
+        if system == 'windows':
+            executable = 'trace_streamer_windows.exe'
+        elif system == 'darwin':  # macOS
+            executable = 'trace_streamer_mac'
+        elif system == 'linux':
+            executable = 'trace_streamer_linux'
+        else:
+            raise OSError(f'Unsupported operating system: {system}')
+
+        # Construct full path to the executable
+        trace_streamer_dir = ExeUtils.get_tools_dir('trace_streamer_binary')
+        tool_path = os.path.join(trace_streamer_dir, executable)
+
+        # Validate executable exists
+        if not os.path.exists(tool_path):
+            raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
+
+        # Set execute permissions for Unix-like systems
+        if system in ('darwin', 'linux'):
+            os.chmod(tool_path, 0o755)  # rwxr-xr-x
+
+        return tool_path
 
     @staticmethod
     def _get_so_dir_cache_file(output_db: str) -> str:
@@ -382,3 +412,9 @@ class ExeUtils:
         except Exception as e:
             logger.exception('Unexpected error during conversion: %s', str(e))
             return False
+
+
+# Initialize commonly used tool paths after class definition
+ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', 'hapray-sa-cmd.js'))
+ExeUtils.trace_streamer_path = ExeUtils._get_trace_streamer_path()
+ExeUtils.opt_detector_path = os.path.abspath(ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False))

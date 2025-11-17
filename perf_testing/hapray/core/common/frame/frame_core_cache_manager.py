@@ -440,8 +440,7 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
     # ==================== Public 接口：缓存管理 ====================
 
     def clear_cache(self) -> None:
-        """清除所有缓存
-        """
+        """清除所有缓存"""
         # 清除所有缓存
         self._frames_cache = None
         self._perf_samples_cache = None

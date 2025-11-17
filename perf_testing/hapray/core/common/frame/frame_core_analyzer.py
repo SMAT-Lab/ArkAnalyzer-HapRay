@@ -14,16 +14,15 @@ limitations under the License.
 """
 
 import logging
-import time
 from typing import Any, Optional
 
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_analyzer_vsync import VSyncAnomalyAnalyzer
-from .frame_core_cache_manager import FrameCacheManager
 
 # 导入新的模块化组件
 from .frame_constants import TOP_FRAMES_FOR_CALLCHAIN
+from .frame_core_cache_manager import FrameCacheManager
 from .frame_core_load_calculator import FrameLoadCalculator
 from .frame_time_utils import FrameTimeUtils
 
@@ -113,8 +112,6 @@ class FrameAnalyzerCore:
         Returns:
             Dict: 帧负载分析结果
         """
-        start_time = time.time()
-
         # 从cache_manager获取参数
         trace_conn = self.cache_manager.trace_conn
         perf_conn = self.cache_manager.perf_conn
@@ -153,9 +150,7 @@ class FrameAnalyzerCore:
                 )
                 processed_top_frames.append(processed_frame)
 
-            result = {'statistics': statistics, 'top_frames': processed_top_frames, 'total_frames': len(frame_loads)}
-
-            return result
+            return {'statistics': statistics, 'top_frames': processed_top_frames, 'total_frames': len(frame_loads)}
 
         except Exception as e:
             logging.error('快速帧负载分析失败: %s', str(e))
