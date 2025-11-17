@@ -1,0 +1,41 @@
+{
+  "name": "optimization-detector",
+  "version": "1.0.0",
+  "description": "二进制文件优化级别和LTO检测工具",
+  "files": [
+    "dist",
+    "optimization_detector"
+  ],
+  "scripts": {
+    "postinstall": "npm run setup",
+    "setup": "npm run setup:win --if-present || npm run setup:unix",
+    "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
+    "setup:unix": "python3 setup_env.py",
+    "build": "npm run build:onedir",
+    "build:onedir": "cross-env bash build.sh && npm run zip:onedir",
+    "build:onefile": "bash build.sh",
+    "zip:onedir": "cross-env bash ../../scripts/pack.sh opt-detector dist/opt-detector README.md",
+    "clean": "rm -rf build/ dist/ *.egg-info optimization_detector.egg-info dist/*.zip",
+    "install:dev": "npm run setup",
+    "lint": "./.venv/bin/tox -e ruff || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff || python3 -m ruff check .",
+    "lint:fix": "./.venv/bin/tox -e ruff-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff-fix || python3 -m ruff check --fix ."
+  },
+  "author": "Huawei Device Co., Ltd.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "binary",
+    "optimization",
+    "detector",
+    "lto",
+    "compiler",
+    "flags"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}
+

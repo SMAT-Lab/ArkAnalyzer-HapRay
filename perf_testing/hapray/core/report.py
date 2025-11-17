@@ -27,7 +27,6 @@ import pandas as pd
 
 from hapray import VERSION
 from hapray.analyze import analyze_data
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
@@ -492,7 +491,6 @@ class ReportGenerator:
             json_data_str = self._build_json_data(scene_dir, result)
             db_data_str = self._build_db_data(scene_dir)
 
-            template_path = os.path.join(self.perf_testing_dir, 'sa-cmd', 'res', 'report_template.html')
             output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
 
             # Create directory structure if needed
@@ -504,7 +502,7 @@ class ReportGenerator:
                     'JSON_DATA_PLACEHOLDER': json_data_str,
                     'DB_DATA_PLACEHOLDER': db_data_str,
                 },
-                html_path=template_path,
+                html_path=self.report_template_path,
                 output_path=output_path,
             )
 

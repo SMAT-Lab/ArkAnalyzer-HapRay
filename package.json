@@ -7,11 +7,13 @@
   "workspaces": [
     "web",
     "sa",
-    "perf_testing"
+    "perf_testing",
+    "tools/optimization_detector"
   ],
   "scripts": {
+    "postinstall": "node scripts/unzip_third-party.js",
     "build": "npm run build --ws",
-    "release": "npm pack --ws",
+    "release": "node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
     "test": "npm run test -w perf_testing"

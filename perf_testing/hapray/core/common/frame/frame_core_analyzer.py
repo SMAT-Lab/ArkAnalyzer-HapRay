@@ -14,7 +14,6 @@ limitations under the License.
 """
 
 import logging
-import time
 from typing import Any, Optional
 
 from .frame_analyzer_empty import EmptyFrameAnalyzer
@@ -152,7 +151,6 @@ class FrameAnalyzerCore:
                 processed_top_frames.append(processed_frame)
 
             return {'statistics': statistics, 'top_frames': processed_top_frames, 'total_frames': len(frame_loads)}
-
 
         except Exception as e:
             logging.error('快速帧负载分析失败: %s', str(e))
