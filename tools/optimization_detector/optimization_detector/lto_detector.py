@@ -50,7 +50,7 @@ class LtoDetector:
             try:
                 from importlib.resources import files  # noqa: PLC0415
 
-                model_base_dir = files('hapray.optimization_detector').joinpath('models/lto')
+                model_base_dir = files('optimization_detector').joinpath('models/lto')
             except Exception:  # noqa: S110
                 # 备选：相对路径
                 model_base_dir = Path(__file__).parent / 'models' / 'lto'

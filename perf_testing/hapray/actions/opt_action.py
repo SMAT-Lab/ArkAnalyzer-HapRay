@@ -15,25 +15,20 @@ limitations under the License.
 
 import argparse
 import logging
-import multiprocessing
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
+import subprocess
 from typing import Optional
 
-import pandas as pd
-
 from hapray import VERSION
-from hapray.core.common.excel_utils import ExcelReportSaver
-from hapray.optimization_detector.file_info import FileCollector
-from hapray.optimization_detector.invoke_symbols import InvokeSymbols
-from hapray.optimization_detector.optimization_detector import OptimizationDetector
+from hapray.core.common.exe_utils import ExeUtils
 
 
 class OptAction:
-    """Handles binary optimization analysis actions."""
+    """Handles binary optimization analysis actions by delegating to opt-detector command."""
 
     @staticmethod
-    def execute(args) -> Optional[list[tuple[str, pd.DataFrame]]]:
-        """Executes binary optimization detection workflow."""
+    def execute(args) -> Optional[int]:
+        """Executes binary optimization detection workflow by calling opt-detector command."""
         parser = argparse.ArgumentParser(
             description='Analyze binary files for optimization flags', prog='ArkAnalyzer-HapRay opt'
         )
@@ -76,66 +71,52 @@ class OptAction:
         )
         parsed_args = parser.parse_args(args)
 
-        action = OptAction()
-        file_collector = FileCollector()
+        # 检查 opt-detector 命令是否可用
+        opt_detector_cmd = ExeUtils.opt_detector_path
+        if not opt_detector_cmd or not os.path.exists(opt_detector_cmd):
+            logging.error('opt-detector executable not found at: %s', opt_detector_cmd)
+            logging.error('请确认仓库已包含 tools/opt_detector/opt-detector，或执行安装脚本生成该工具。')
+            return 1
+
+        # 构建 opt-detector 命令
+        cmd = [
+            opt_detector_cmd,
+            '-i',
+            str(parsed_args.input),
+            '-o',
+            str(parsed_args.output),
+            '-j',
+            str(parsed_args.jobs),
+        ]
+
+        if parsed_args.timeout:
+            cmd.extend(['--timeout', str(parsed_args.timeout)])
+
+        if not parsed_args.lto:
+            cmd.append('--no-lto')
+
+        if not parsed_args.opt:
+            cmd.append('--no-opt')
+
+        if parsed_args.report_dir:
+            cmd.extend(['-r', str(parsed_args.report_dir)])
+
+        logging.info('Executing opt-detector command: %s', ' '.join(cmd))
+
+        # 执行命令（启动后立即返回，不等待进程结束，且主进程退出后子进程继续运行）
         try:
-            logging.info('Collecting binary files from: %s', parsed_args.input)
-            file_infos = file_collector.collect_binary_files(parsed_args.input)
+            process = subprocess.Popen(
+                cmd,
+                start_new_session=True,  # 与主进程分离，避免主进程退出时子进程被终止
+            )
+            logging.info('opt-detector command started (pid=%s).', process.pid)
+            logging.info('分析结果将输出至: %s', parsed_args.output)
+            return 0
 
-            if not file_infos:
-                logging.warning('No valid binary files found')
-                return None
-
-            logging.info('Starting optimization detection on %d files', len(file_infos))
-            if parsed_args.timeout:
-                logging.info('Timeout per file: %d seconds', parsed_args.timeout)
-            multiprocessing.freeze_support()
-            with ProcessPoolExecutor(max_workers=2) as executor:
-                futures = []
-                future = executor.submit(
-                    action.run_detection,
-                    parsed_args.jobs,
-                    file_infos,
-                    parsed_args.timeout,
-                    parsed_args.lto,
-                    parsed_args.opt,
-                )
-                futures.append(future)
-                if parsed_args.report_dir:
-                    future = executor.submit(action.run_invoke_analysis, file_infos, parsed_args.report_dir)
-                    futures.append(future)
-
-                data = []
-                # Wait for all report generation tasks
-                for future in as_completed(futures):
-                    data.extend(future.result())
-                action.generate_excel_report(data, parsed_args.output)
-                logging.info('Analysis report saved to: %s', parsed_args.output)
-                return data
-        finally:
-            file_collector.cleanup()
-
-    @staticmethod
-    def run_detection(jobs, file_infos, timeout=None, enable_lto=False, enable_opt=True):
-        """Run optimization detection in a separate process"""
-        try:
-            detector = OptimizationDetector(jobs, timeout=timeout, enable_lto=enable_lto, enable_opt=enable_opt)
-            return detector.detect_optimization(file_infos)
+        except FileNotFoundError:
+            logging.error('opt-detector command not found. Please install optimization-detector package.')
+            return 1
         except Exception as e:
-            logging.error('OptimizationDetector error: %s', str(e))
-            return []
-
-    @staticmethod
-    def run_invoke_analysis(file_infos, report_dir):
-        """Run invoke symbols analysis in a separate process"""
-        invoke_symbols = InvokeSymbols()
-        return invoke_symbols.analyze(file_infos, report_dir)
-
-    @staticmethod
-    def generate_excel_report(data: list[tuple[str, pd.DataFrame]], output_file: str) -> None:
-        """Generate Excel report using pandas"""
-        report_saver = ExcelReportSaver(output_file)
-        for row in data:
-            report_saver.add_sheet(row[1], row[0])
-        report_saver.save()
-        logging.info('Report saved to %s', output_file)
+            logging.error('Error running opt-detector: %s', str(e))
+            logging.exception('Full traceback:')
+            return 1
