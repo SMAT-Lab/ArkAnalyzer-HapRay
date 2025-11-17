@@ -50,15 +50,26 @@ def camel_to_snake(name: str) -> str:
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
-def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
+def analyze_data(
+    scene_dir: str,
+    time_ranges: list[dict] = None,
+    use_refined_lib_symbol: bool = False,
+    export_comparison: bool = False,
+) -> dict:
     """Main entry point for data analysis pipeline.
 
     Args:
         scene_dir: Root directory containing scene data
         time_ranges: Optional list of time range filters, each containing 'startTime' and 'endTime' in nanoseconds
+        use_refined_lib_symbol: Enable refined mode for memory analysis
+        export_comparison: Export comparison Excel for memory analysis
     """
     total_start_time = time.time()
     logging.info('=== Starting data analysis pipeline for %s ===', scene_dir)
+    if use_refined_lib_symbol:
+        logging.info('Memory analysis refined mode enabled')
+    if export_comparison:
+        logging.info('Memory analysis comparison export enabled')
 
     report_dir = os.path.join(scene_dir, 'report')
     os.makedirs(report_dir, exist_ok=True)
@@ -74,7 +85,12 @@ def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
 
     # Phase 1: Initialize analyzers
     init_start_time = time.time()
-    analyzers = _initialize_analyzers(scene_dir, time_ranges)
+    analyzers = _initialize_analyzers(
+        scene_dir,
+        time_ranges,
+        use_refined_lib_symbol=use_refined_lib_symbol,
+        export_comparison=export_comparison,
+    )
     init_time = time.time() - init_start_time
     logging.info('Phase 1: Analyzer initialization completed in %.2f seconds (%d analyzers)', init_time, len(analyzers))
 
@@ -123,12 +139,19 @@ def analyze_data(scene_dir: str, time_ranges: list[dict] = None) -> dict:
     return result
 
 
-def _initialize_analyzers(scene_dir: str, time_ranges: list[dict] = None) -> list[BaseAnalyzer]:
+def _initialize_analyzers(
+    scene_dir: str,
+    time_ranges: list[dict] = None,
+    use_refined_lib_symbol: bool = False,
+    export_comparison: bool = False,
+) -> list[BaseAnalyzer]:
     """Initialize all registered analyzers.
 
     Args:
         scene_dir: Scene directory path
         time_ranges: Optional list of time range filters
+        use_refined_lib_symbol: Enable refined mode for memory analysis
+        export_comparison: Export comparison Excel for memory analysis
 
     Returns:
         List of initialized analyzer instances
@@ -140,8 +163,24 @@ def _initialize_analyzers(scene_dir: str, time_ranges: list[dict] = None) -> lis
             module = __import__(f'hapray.analyze.{module_name}', fromlist=[analyzer_class])
             cls = getattr(module, analyzer_class)
 
-            # Check if this analyzer supports time ranges (PerfAnalyzer and MemoryAnalyzer)
-            if analyzer_class in ['PerfAnalyzer', 'MemoryAnalyzer'] and time_ranges:
+            # Check if this analyzer supports time ranges and refined mode (MemoryAnalyzer)
+            if analyzer_class == 'MemoryAnalyzer':
+                analyzers.append(
+                    cls(
+                        scene_dir,
+                        time_ranges=time_ranges,
+                        use_refined_lib_symbol=use_refined_lib_symbol,
+                        export_comparison=export_comparison,
+                    )
+                )
+                logging.info(
+                    'Initialized analyzer: %s (refined_mode=%s, export_comparison=%s)',
+                    analyzer_class,
+                    use_refined_lib_symbol,
+                    export_comparison,
+                )
+            # Check if this analyzer supports time ranges (PerfAnalyzer)
+            elif analyzer_class == 'PerfAnalyzer' and time_ranges:
                 analyzers.append(cls(scene_dir, time_ranges))
                 logging.info('Initialized analyzer: %s with %d time ranges', analyzer_class, len(time_ranges))
             else:

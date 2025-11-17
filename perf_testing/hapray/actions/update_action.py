@@ -86,6 +86,18 @@ class UpdateAction:
             default=[],
             help='可选的时间范围过滤，格式为 "startTime-endTime"（纳秒），支持多个时间范围，如: --time-ranges "1000000000-2000000000" "3000000000-4000000000"',
         )
+        parser.add_argument(
+            '--use-refined-lib-symbol',
+            action='store_true',
+            default=False,
+            help='Enable refined mode for memory analysis: use callchain to find real allocation source instead of database default values',
+        )
+        parser.add_argument(
+            '--export-comparison',
+            action='store_true',
+            default=False,
+            help='Export comparison Excel showing differences between original and refined lib_id/symbol_id values',
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -134,7 +146,13 @@ class UpdateAction:
                 logging.info('Time range %d: %d - %d nanoseconds', i + 1, tr['startTime'], tr['endTime'])
 
         logging.info('Found %d test case reports for updating', len(testcase_dirs))
-        UpdateAction.process_reports(testcase_dirs, report_dir, time_ranges)
+        UpdateAction.process_reports(
+            testcase_dirs,
+            report_dir,
+            time_ranges,
+            use_refined_lib_symbol=parsed_args.use_refined_lib_symbol,
+            export_comparison=parsed_args.export_comparison,
+        )
 
     @staticmethod
     def find_testcase_dirs(report_dir):
@@ -197,11 +215,28 @@ class UpdateAction:
         return time_ranges
 
     @staticmethod
-    def process_reports(testcase_dirs, report_dir, time_ranges: list[dict] = None):
-        """Processes reports using parallel execution."""
+    def process_reports(
+        testcase_dirs,
+        report_dir,
+        time_ranges: list[dict] = None,
+        use_refined_lib_symbol: bool = False,
+        export_comparison: bool = False,
+    ):
+        """Processes reports using parallel execution.
+
+        Args:
+            testcase_dirs: List of test case directories to process
+            report_dir: Root report directory
+            time_ranges: Optional time range filters
+            use_refined_lib_symbol: Enable refined mode for memory analysis
+            export_comparison: Export comparison Excel for memory analysis
+        """
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
-            report_generator = ReportGenerator()
+            report_generator = ReportGenerator(
+                use_refined_lib_symbol=use_refined_lib_symbol,
+                export_comparison=export_comparison,
+            )
 
             for case_dir in testcase_dirs:
                 scene_name = os.path.basename(case_dir)

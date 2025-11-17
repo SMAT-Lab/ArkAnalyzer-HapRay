@@ -16,3 +16,39 @@ frame_analysis:
   # 建议值: 5-20，根据性能需求调整
   top_n_analysis: 10
 
+# 调用链精化过滤配置
+callchain_filter:
+  # 系统符号排除规则（正则表达式列表）
+  system_symbols:
+    - '^malloc'
+    - '^free'
+    - '^calloc'
+    - '^realloc'
+    - '^__malloc'
+    - '^__free'
+    - '^pthread_'
+    - '^__pthread_'
+    - '^libc\.so'
+    - '^libc\+\+\.so'
+
+  # 系统库文件排除规则（正则表达式列表）
+  system_libs:
+    - 'libc\.so'
+    - 'libc\+\+\.so'
+    - 'libm\.so'
+    - 'libdl\.so'
+    - 'libpthread\.so'
+    - 'libstdc\+\+\.so'
+    - 'libgcc\.so'
+    - 'libunwind\.so'
+    - 'libcamera\.so'
+    - 'libhilog\.so'
+    - 'libhitracechain\.so'
+
+  # 计算类符号排除规则（正则表达式列表）
+  compute_symbols:
+    - '^std::'
+    - '^__gnu_cxx::'
+    - '^boost::'
+    - 'operator'
+
