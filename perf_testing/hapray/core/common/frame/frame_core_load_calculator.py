@@ -376,7 +376,6 @@ class FrameLoadCalculator:
 
         # 批量计算开始
         for i, (_, frame) in enumerate(frames.iterrows()):
-
             # 使用现有的简单方法，只计算负载值
             frame_load = self.calculate_frame_load_simple(frame, perf_df)
 
@@ -416,7 +415,9 @@ class FrameLoadCalculator:
                     'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,  # 确保类型是整数
                     'vsync': frame.get('vsync', 'unknown'),
                     'flag': int(frame.get('flag', 0)) if pd.notna(frame.get('flag')) else 0,  # 确保flag是整数
-                    'is_main_thread': int(frame.get('is_main_thread', 0)) if pd.notna(frame.get('is_main_thread')) else 0,  # 确保主线程标志是整数
+                    'is_main_thread': int(frame.get('is_main_thread', 0))
+                    if pd.notna(frame.get('is_main_thread'))
+                    else 0,  # 确保主线程标志是整数
                     'sample_callchains': [],  # 空列表，不保存调用链
                 }
             )

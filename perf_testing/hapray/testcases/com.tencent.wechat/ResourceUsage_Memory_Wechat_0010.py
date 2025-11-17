@@ -27,6 +27,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
     def process(self):
         # 1.启动微信停留2秒
         self.start_app()
+
         def step1():
             time.sleep(2)
 
@@ -77,7 +78,6 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(BY.isAfter(BY.key('left')).isBefore(BY.key('center')).type('Image'))
             self.driver.wait(0.5)
 
-
             # 7.查看好友留言（2s，停留2s）
             self.driver.touch(BY.text('测试账号'))
             self.driver.wait(0.5)
@@ -112,7 +112,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(self.convert_coordinate(1000, 1247))
             self.driver.wait(0.5)
             time.sleep(2)
-    
+
             # 16.点击加号，等待2s
             self.driver.touch(self.convert_coordinate(1026, 1247))
             self.driver.wait(0.5)
@@ -145,7 +145,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             self.driver.touch(BY.text('取消'))
             self.driver.wait(0.5)
             time.sleep(2)
-        
+
             # 24.点击加号，等待2s
             self.driver.touch(self.convert_coordinate(1008, 2254))
             self.driver.wait(0.5)
@@ -195,8 +195,8 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
         # self.execute_performance_step('0003&微信首页-点击-群聊界面-应用内操作-群聊界面', 16, step3)
         # self.execute_performance_step('0004&微信首页-点击-应用内操作-群聊界面', 40, step4)
         # self.execute_performance_step('0005&群聊界面-滑动-返回上一层-微信首页', 4, step5)
-        #self.execute_performance_step('0006&微信首页-点击-页面切换-群聊界面', 2, step6)
-        #self.execute_performance_step('0007&群聊界面-点击-应用内操作-群聊界面', 60, step7)
+        # self.execute_performance_step('0006&微信首页-点击-页面切换-群聊界面', 2, step6)
+        # self.execute_performance_step('0007&群聊界面-点击-应用内操作-群聊界面', 60, step7)
         # self.execute_performance_step('0008&群聊界面-滑动-返回上一级-微信首页', 120, step1)
         # self.execute_performance_step('0009&微信首页-点击-页面切换-好友聊天页面', 120, step1)
         # self.execute_performance_step('00010&好友聊天页面-点击-应用内操作-好友聊天页面拉起输入法', 120, step1)
