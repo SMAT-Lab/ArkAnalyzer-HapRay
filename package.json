@@ -1,17 +1,19 @@
 {
   "name": "hapray",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Code-oriented Performance Analysis for OpenHarmony Apps",
   "private": true,
   "files": [],
   "workspaces": [
     "web",
     "sa",
-    "perf_testing"
+    "perf_testing",
+    "tools/optimization_detector"
   ],
   "scripts": {
+    "postinstall": "node scripts/unzip_third-party.js",
     "build": "npm run build --ws",
-    "release": "npm pack --ws",
+    "release": "node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
     "test": "npm run test -w perf_testing"

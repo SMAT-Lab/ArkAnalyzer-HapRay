@@ -50,7 +50,7 @@ class LtoDetector:
             try:
                 from importlib.resources import files  # noqa: PLC0415
 
-                model_base_dir = files('hapray.optimization_detector').joinpath('models/lto')
+                model_base_dir = files('optimization_detector').joinpath('models/lto')
             except Exception:  # noqa: S110
                 # 备选：相对路径
                 model_base_dir = Path(__file__).parent / 'models' / 'lto'
@@ -65,37 +65,8 @@ class LtoDetector:
     def _import_feature_extractor(self):
         """导入特征提取器和SVM类（pickle反序列化需要）"""
         try:
-            # 查找lto_demo路径（向上查找）
-            current_path = Path(__file__).resolve()
-
-            # 尝试多个可能的路径
-            possible_paths = [
-                # 从perf_testing向上找
-                current_path.parent.parent.parent.parent
-                / 'experiments_ignore'
-                / 'so_detection'
-                / 'lto_demo'
-                / 'lto_demo',
-                # 直接路径
-                Path('experiments_ignore/so_detection/lto_demo/lto_demo'),
-                # 绝对路径
-                Path('D:/projects/ArkAnalyzer-HapRay/experiments_ignore/so_detection/lto_demo/lto_demo'),
-            ]
-
-            lto_demo_path = None
-            for path in possible_paths:
-                if path.exists():
-                    lto_demo_path = path
-                    break
-
-            if lto_demo_path is None:
-                raise ImportError('lto_demo directory not found')
-
-            # 添加到路径
-            sys.path.insert(0, str(lto_demo_path))
-
-            # 导入必要的类（pickle反序列化需要）
-            from lto_feature_pipeline import (  # noqa: PLC0415
+            # 直接导入同一目录下的lto_feature_pipeline模块
+            from .lto_feature_pipeline import (  # noqa: PLC0415
                 CompilerProvenanceRF,  # 新的RF模型
                 CompilerProvenanceSVM,  # 旧的SVM模型
                 HybridFeatureExtractor,  # 混合特征提取（RF用）
@@ -106,7 +77,7 @@ class LtoDetector:
             self.HybridFeatureExtractor = HybridFeatureExtractor
             self.CompilerProvenanceSVM = CompilerProvenanceSVM
             self.CompilerProvenanceRF = CompilerProvenanceRF
-            logging.debug('Successfully imported from lto_feature_pipeline at %s', lto_demo_path)
+            logging.debug('Successfully imported from lto_feature_pipeline')
 
         except ImportError as e:
             logging.error('Failed to import lto_feature_pipeline: %s', e)

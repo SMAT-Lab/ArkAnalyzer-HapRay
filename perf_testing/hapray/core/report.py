@@ -27,7 +27,6 @@ import pandas as pd
 
 from hapray import VERSION
 from hapray.analyze import analyze_data
-from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
@@ -399,8 +398,16 @@ class ReportData:
 class ReportGenerator:
     """Generates and updates performance analysis reports"""
 
-    def __init__(self):
-        self.perf_testing_dir = CommonUtils.get_project_root()
+    def __init__(self, use_refined_lib_symbol: bool = False, export_comparison: bool = False):
+        """Initialize ReportGenerator
+
+        Args:
+            use_refined_lib_symbol: Enable refined mode for memory analysis
+            export_comparison: Export comparison Excel for memory analysis
+        """
+        self.report_template_path = os.path.abspath(ExeUtils.get_tools_dir('web', 'report_template.html'))
+        self.use_refined_lib_symbol = use_refined_lib_symbol
+        self.export_comparison = export_comparison
 
     def update_report(self, scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Update an existing performance report
@@ -410,24 +417,56 @@ class ReportGenerator:
             time_ranges: Optional list of time range filters
         """
         return self._generate_report(
-            scene_dirs=[scene_dir], scene_dir=scene_dir, skip_round_selection=True, time_ranges=time_ranges
+            scene_dirs=[scene_dir],
+            scene_dir=scene_dir,
+            skip_round_selection=True,
+            time_ranges=time_ranges,
+            use_refined_lib_symbol=self.use_refined_lib_symbol,
+            export_comparison=self.export_comparison,
         )
 
     def generate_report(self, scene_dirs: list[str], scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Generate a new performance analysis report"""
-        return self._generate_report(scene_dirs, scene_dir, skip_round_selection=False, time_ranges=time_ranges)
+        return self._generate_report(
+            scene_dirs,
+            scene_dir,
+            skip_round_selection=False,
+            time_ranges=time_ranges,
+            use_refined_lib_symbol=self.use_refined_lib_symbol,
+            export_comparison=self.export_comparison,
+        )
 
     def _generate_report(
-        self, scene_dirs: list[str], scene_dir: str, skip_round_selection: bool, time_ranges: list[dict] = None
+        self,
+        scene_dirs: list[str],
+        scene_dir: str,
+        skip_round_selection: bool,
+        time_ranges: list[dict] = None,
+        use_refined_lib_symbol: bool = False,
+        export_comparison: bool = False,
     ) -> bool:
-        """Core method for report generation and updating"""
+        """Core method for report generation and updating
+
+        Args:
+            scene_dirs: List of scene directories
+            scene_dir: Current scene directory
+            skip_round_selection: Whether to skip round selection
+            time_ranges: Optional time range filters
+            use_refined_lib_symbol: Enable refined mode for memory analysis
+            export_comparison: Export comparison Excel for memory analysis
+        """
         # Step 1: Select round (only for new reports)
         if not skip_round_selection and not self._select_round(scene_dirs, scene_dir):
             logging.error('Round selection failed, aborting report generation')
             return False
 
         # Step 2: Analyze data (includes empty frames and frame drops analysis)
-        result = analyze_data(scene_dir, time_ranges)
+        result = analyze_data(
+            scene_dir,
+            time_ranges,
+            use_refined_lib_symbol=use_refined_lib_symbol,
+            export_comparison=export_comparison,
+        )
 
         # Step 3: Generate HTML report
         self._create_html_report(scene_dir, result)
@@ -452,7 +491,6 @@ class ReportGenerator:
             json_data_str = self._build_json_data(scene_dir, result)
             db_data_str = self._build_db_data(scene_dir)
 
-            template_path = os.path.join(self.perf_testing_dir, 'sa-cmd', 'res', 'report_template.html')
             output_path = os.path.join(scene_dir, 'report', 'hapray_report.html')
 
             # Create directory structure if needed
@@ -464,7 +502,7 @@ class ReportGenerator:
                     'JSON_DATA_PLACEHOLDER': json_data_str,
                     'DB_DATA_PLACEHOLDER': db_data_str,
                 },
-                html_path=template_path,
+                html_path=self.report_template_path,
                 output_path=output_path,
             )
 
