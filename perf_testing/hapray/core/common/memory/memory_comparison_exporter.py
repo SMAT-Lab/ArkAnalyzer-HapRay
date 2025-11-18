@@ -35,6 +35,7 @@ class MemoryComparisonExporter:
         original_records: list[dict],
         refined_records: list[dict],
         data_dict: dict[int, str],
+        callchain_cache: dict[int, list[dict]],
     ):
         """导出对比Excel
 
@@ -43,6 +44,7 @@ class MemoryComparisonExporter:
             original_records: 使用原始值的记录列表
             refined_records: 使用refined值的记录列表
             data_dict: 数据字典
+            callchain_cache: 已缓存的调用链数据
         """
         try:
             os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
@@ -61,6 +63,24 @@ class MemoryComparisonExporter:
                     # 设置列宽
                     ws = writer.sheets['Comparison']
                     ws.set_column(0, len(df.columns) - 1, 20)
+
+                    # 创建修改过的调用链数据
+                    callchain_data = self._create_modified_callchain_data(
+                        comparison_data, data_dict, callchain_cache
+                    )
+
+                    # 写入调用链数据
+                    if callchain_data:
+                        df_callchain = pd.DataFrame(callchain_data)
+                        df_callchain.to_excel(writer, sheet_name='ModifiedCallchains', index=False)
+
+                        # 设置列宽
+                        ws_callchain = writer.sheets['ModifiedCallchains']
+                        ws_callchain.set_column(0, len(df_callchain.columns) - 1, 15)
+
+                        logging.info('Modified callchain data exported (%d frames)', len(callchain_data))
+                    else:
+                        logging.info('No modified callchain data to export')
 
                     logging.info('Comparison data exported to %s', output_path)
                 else:
@@ -183,4 +203,76 @@ class MemoryComparisonExporter:
         logging.info('Found %d events with differences out of %d total events',
                      len(comparison_rows), len(all_events))
         return comparison_rows
+
+    def _create_modified_callchain_data(
+        self,
+        comparison_data: list[dict],
+        data_dict: dict[int, str],
+        callchain_cache: dict[int, list[dict]],
+    ) -> list[dict]:
+        """创建修改过的调用链数据
+
+        为每个有差异的调用链创建完整的调用链信息，
+        显示原始值和精化值的对比。
+
+        Args:
+            comparison_data: 对比数据列表
+            data_dict: 数据字典
+            callchain_cache: 已缓存的调用链数据
+
+        Returns:
+            修改过的调用链数据列表
+        """
+        if not callchain_cache:
+            return []
+
+        callchain_rows = []
+
+        # 收集所有有差异的调用链ID
+        callchain_ids = set()
+        for item in comparison_data:
+            callchain_id = item.get('callchainId')
+            if callchain_id and callchain_id > 0:
+                callchain_ids.add(callchain_id)
+
+
+        if not callchain_ids:
+            logging.warning('No valid callchain IDs found in comparison data')
+            return []
+
+        logging.info('Exporting complete callchain info for %d modified callchains from cache', len(callchain_ids))
+
+        # 为每个调用链创建数据
+        for callchain_id in sorted(callchain_ids):
+            # 从缓存中获取调用链帧
+            frames = callchain_cache.get(callchain_id, [])
+
+            if not frames:
+                logging.warning('Callchain %d not found in cache', callchain_id)
+                continue
+
+            # 为每个帧创建一行数据
+            for frame in frames:
+                symbol_id = frame.get('symbol_id')
+                file_id = frame.get('file_id')
+
+                # 获取符号和文件名
+                symbol_name = data_dict.get(symbol_id, 'unknown') if symbol_id else 'unknown'
+                file_path = data_dict.get(file_id, 'unknown') if file_id else 'unknown'
+
+                callchain_rows.append({
+                    'callchainId': callchain_id,
+                    'depth': frame.get('depth', 0),
+                    'symbolId': symbol_id,
+                    'symbol': symbol_name,
+                    'fileId': file_id,
+                    'file': file_path,
+                    'ip': frame.get('ip'),
+                    'offset': frame.get('offset'),
+                    'symbolOffset': frame.get('symbol_offset'),
+                    'vaddr': frame.get('vaddr'),
+                })
+
+        logging.info('Created %d callchain frame records from cache', len(callchain_rows))
+        return callchain_rows
 

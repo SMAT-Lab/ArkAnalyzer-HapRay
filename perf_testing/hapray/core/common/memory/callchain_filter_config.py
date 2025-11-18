@@ -41,58 +41,36 @@ class CallchainFilterConfig:
         if callchain_filter_config is None:
             raise ValueError("callchain_filter configuration section not found in config.yaml")
 
-        # 从配置中读取，必须存在
-        try:
-            self.system_symbols = getattr(callchain_filter_config, 'system_symbols')
-            self.system_libs = getattr(callchain_filter_config, 'system_libs')
-            self.compute_symbols = getattr(callchain_filter_config, 'compute_symbols')
-        except AttributeError as e:
-            missing_attr = str(e).split("'")[1]
-            raise ValueError(f"Missing required configuration: callchain_filter.{missing_attr}")
+        # 从配置中读取 exclude_rules
+        exclude_rules = getattr(callchain_filter_config, 'exclude_rules', None)
 
-        # 编译正则表达式以提高性能
-        self.system_symbols_compiled = [re.compile(pattern) for pattern in self.system_symbols]
-        self.system_libs_compiled = [re.compile(pattern) for pattern in self.system_libs]
-        self.compute_symbols_compiled = [re.compile(pattern) for pattern in self.compute_symbols]
+        # 编译排除规则：文件正则 -> 符号正则列表
+        # 支持YAML锚点和引用，跳过共享符号定义（以shared_开头的属性）
+        self.exclude_rules_compiled: dict[re.Pattern, list[re.Pattern]] = {}
+        if exclude_rules:
+            # exclude_rules 是 ConfigObject 类型，需要遍历其属性
+            for attr_name in dir(exclude_rules):
+                if attr_name.startswith('_'):  # 跳过私有属性
+                    continue
 
-    def should_exclude_symbol(self, symbol: Optional[str]) -> bool:
-        """检查符号是否应该被排除
+                attr_value = getattr(exclude_rules, attr_name)
 
-        Args:
-            symbol: 符号名称
+                # 跳过共享符号定义（以shared_开头的属性）
+                if attr_name.startswith('shared_'):
+                    continue
 
-        Returns:
-            如果应该排除返回True，否则返回False
-        """
-        if not symbol or symbol == 'unknown':
-            return False
-
-        # 检查系统符号
-        for pattern in self.system_symbols_compiled:
-            if pattern.search(symbol):
-                return True
-
-        # 检查计算类符号
-        return any(pattern.search(symbol) for pattern in self.compute_symbols_compiled)
-
-    def should_exclude_lib(self, lib_path: Optional[str]) -> bool:
-        """检查库文件是否应该被排除
-
-        Args:
-            lib_path: 库文件路径
-
-        Returns:
-            如果应该排除返回True，否则返回False
-        """
-        if not lib_path or lib_path == 'unknown':
-            return False
-
-        # 检查系统库
-        return any(pattern.search(lib_path) for pattern in self.system_libs_compiled)
+                # 处理文件模式 -> 符号列表的映射
+                if isinstance(attr_value, list):
+                    file_regex = re.compile(attr_name)
+                    symbol_regexes = [re.compile(pattern) for pattern in attr_value]
+                    self.exclude_rules_compiled[file_regex] = symbol_regexes
 
     def should_exclude(self, symbol: Optional[str], lib_path: Optional[str]) -> bool:
         """检查符号和库是否应该被排除
 
+        新的过滤逻辑：只有当文件路径匹配排除规则中的文件正则，
+        并且符号匹配该文件对应的符号正则列表中的任一模式时，才排除。
+
         Args:
             symbol: 符号名称
             lib_path: 库文件路径
@@ -100,5 +78,16 @@ class CallchainFilterConfig:
         Returns:
             如果应该排除返回True，否则返回False
         """
-        return self.should_exclude_symbol(symbol) or self.should_exclude_lib(lib_path)
+        if not symbol or symbol == 'unknown' or not lib_path or lib_path == 'unknown':
+            return False
+
+        # 检查是否匹配任何排除规则
+        for file_regex, symbol_regexes in self.exclude_rules_compiled.items():
+            if file_regex.search(lib_path):
+                # 文件路径匹配，检查符号是否匹配该文件的排除符号
+                for symbol_regex in symbol_regexes:
+                    if symbol_regex.search(symbol):
+                        return True
+
+        return False
 

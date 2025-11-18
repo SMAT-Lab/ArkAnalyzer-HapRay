@@ -97,6 +97,10 @@ class MemoryRecordGenerator:
                     callchain_frames_map[callchain_id].append(frame)
 
             logging.info('Grouped frames into %d callchains', len(callchain_frames_map))
+
+            # 同时填充 callchain_cache，供后续导出使用
+            self.callchain_cache.update(callchain_frames_map)
+            logging.info('Updated callchain_cache with %d callchains', len(callchain_frames_map))
         except Exception as e:
             logging.error('Failed to preload callchains: %s', str(e))
             return {}

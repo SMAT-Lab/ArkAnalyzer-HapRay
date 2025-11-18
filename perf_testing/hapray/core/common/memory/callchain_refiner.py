@@ -69,7 +69,17 @@ class CallchainRefiner:
             # 找到第一个有效的帧
             return file_id, symbol_id, lib_path, symbol_name
 
-        # 如果所有帧都被排除，返回None
+        # 如果所有帧都被排除，返回最深的帧（调用链底部）的信息，确保数据库文件能生成
+        # 这是为了确保即使过滤后没有匹配，也能生成hapray_report.db文件
+        if sorted_frames:
+            deepest_frame = sorted_frames[0]  # sorted_frames[0] 是最深的帧（depth最大）
+            symbol_id = deepest_frame.get('symbol_id')
+            file_id = deepest_frame.get('file_id')
+            symbol_name = data_dict.get(symbol_id, 'unknown') if symbol_id else None
+            lib_path = data_dict.get(file_id, 'unknown') if file_id else None
+            return file_id, symbol_id, lib_path, symbol_name
+
+        # 如果没有帧，返回None
         return None, None, None, None
 
     def refine_callchain_with_comparison(

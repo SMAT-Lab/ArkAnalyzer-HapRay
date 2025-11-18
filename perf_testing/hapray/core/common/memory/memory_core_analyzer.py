@@ -101,7 +101,9 @@ class MemoryAnalyzerCore:
                 )
                 records = gen_result['refined_records']
                 original_records = gen_result['original_records']
-                self._export_comparison_report(scene_dir, original_records, records, data['data_dict'])
+                # 获取已缓存的调用链数据
+                callchain_cache = self.record_generator.callchain_cache
+                self._export_comparison_report(scene_dir, original_records, records, data['data_dict'], callchain_cache)
             else:
                 # 正常模式：只生成refined值的记录
                 gen_result = self.record_generator.generate_records(
@@ -142,7 +144,7 @@ class MemoryAnalyzerCore:
             }
 
     def _export_comparison_report(
-        self, scene_dir: str, original_records: list[dict], refined_records: list[dict], data_dict: dict[int, str]
+        self, scene_dir: str, original_records: list[dict], refined_records: list[dict], data_dict: dict[int, str], callchain_cache: dict[int, list[dict]]
     ):
         """导出对比报告
 
@@ -151,13 +153,14 @@ class MemoryAnalyzerCore:
             original_records: 原始值的记录列表
             refined_records: refined值的记录列表
             data_dict: 数据字典
+            callchain_cache: 已缓存的调用链数据
         """
         try:
             report_dir = os.path.join(scene_dir, 'report')
             os.makedirs(report_dir, exist_ok=True)
             comparison_path = os.path.join(report_dir, 'memory_comparison.xlsx')
 
-            self.comparison_exporter.export_comparison(comparison_path, original_records, refined_records, data_dict)
+            self.comparison_exporter.export_comparison(comparison_path, original_records, refined_records, data_dict, callchain_cache)
             logging.info('Comparison report exported to %s', comparison_path)
         except Exception as e:
             logging.warning('Failed to export comparison report: %s', str(e))
