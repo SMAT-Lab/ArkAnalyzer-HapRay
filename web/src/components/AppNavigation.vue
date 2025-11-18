@@ -82,7 +82,7 @@
               <span>火焰图分析</span>
             </el-menu-item>
 
-            <el-menu-item :index="`memory_step_${step.id}`" :title="step.step_name">
+            <el-menu-item v-if="getHasMemoryData(step.id)" :index="`memory_step_${step.id}`" :title="step.step_name">
               <el-icon>
                 <Coin />
               </el-icon>
@@ -208,6 +208,7 @@
 <script lang="ts" setup>
 import { ref, watch, computed } from 'vue';
 import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import { getDbApi } from '../utils/dbApi';
 import {
   DataAnalysis,
   Switch,
@@ -264,6 +265,9 @@ watch(() => props.currentPage, (newPage) => {
 const jsonDataStore = useJsonDataStore();
 const perfData = jsonDataStore.perfData;
 
+// 存储每个步骤是否有Memory数据的缓存（使用对象而不是Map以保持响应性）
+const memoryDataCache = ref<Record<number, boolean>>({});
+
 const testSteps = computed(() => {
   if (!perfData?.steps) return [];
   return perfData.steps.map((step, index) => ({
@@ -274,6 +278,44 @@ const testSteps = computed(() => {
     perf_data_path: step.perf_data_path,
   }));
 });
+
+// 检查步骤是否有Memory分析数据
+const checkMemoryData = async (stepId: number): Promise<void> => {
+  // 如果已经检查过，跳过
+  if (stepId in memoryDataCache.value) {
+    return;
+  }
+
+  try {
+    const dbApi = getDbApi();
+    // 检查memory_results表中是否有该步骤的数据
+    const results = await dbApi.queryMemoryResults(stepId);
+
+    // 如果memory_results表中有数据，还需要检查memory_records表中是否有实际的记录
+    if (results && results.length > 0) {
+      // 查询该步骤的memory_records数量
+      const records = await dbApi.queryOverviewTimeline(stepId);
+      memoryDataCache.value[stepId] = records && records.length > 0;
+    } else {
+      memoryDataCache.value[stepId] = false;
+    }
+  } catch (error) {
+    console.warn(`Failed to check memory data for step ${stepId}:`, error);
+    memoryDataCache.value[stepId] = false;
+  }
+};
+
+// 获取步骤是否有Memory数据
+const getHasMemoryData = (stepId: number): boolean => {
+  return memoryDataCache.value[stepId] || false;
+};
+
+// 当步骤改变时，检查Memory数据
+watch(() => testSteps.value, (newSteps) => {
+  newSteps.forEach(step => {
+    void checkMemoryData(step.id);
+  });
+}, { immediate: true });
 
 // 检查是否有对比数据
 const hasCompareData = computed(() => {

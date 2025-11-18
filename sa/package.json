@@ -1,12 +1,11 @@
 {
   "name": "hapray-sa",
-  "version": "1.0.10",
+  "version": "1.2.0",
   "main": "index.js",
   "files": [
     "lib"
   ],
   "scripts": {
-    "postinstall": "node unzip_third-party.js",
     "build": "tsc && webpack --config webpack.config.js",
     "lint": "eslint --ext .ts src",
     "lint:fix": "eslint --ext .ts src --fix",

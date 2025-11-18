@@ -145,10 +145,12 @@ class MemoryAnalyzer(BaseAnalyzer):
     3. Only processes trace.db files that contain native_hook table with data
     """
 
-    def __init__(self, scene_dir: str, time_ranges: list[dict] = None):
+    def __init__(self, scene_dir: str, time_ranges: list[dict] = None, use_refined_lib_symbol: bool = False, export_comparison: bool = False):
         super().__init__(scene_dir, 'more/memory_analysis')
         self.time_ranges = time_ranges
-        self.core_analyzer = MemoryAnalyzerCore()
+        self.use_refined_lib_symbol = use_refined_lib_symbol
+        self.export_comparison = export_comparison
+        self.core_analyzer = MemoryAnalyzerCore(use_refined_lib_symbol, export_comparison)
 
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
