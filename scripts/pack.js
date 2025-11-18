@@ -37,7 +37,7 @@ try {
 }
 
 const zipName = `${zipBase}-${version}.zip`;
-const zipPath = path.join(process.cwd(), 'dist', zipName);
+const zipPath = path.join(process.cwd(), zipName);
 
 // Ensure targets exist
 for (const target of targets) {
@@ -57,68 +57,17 @@ if (fs.existsSync(zipPath)) {
   fs.unlinkSync(zipPath);
 }
 
-// Create temporary directory
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-'));
-
-// Cleanup function
-function cleanup() {
-  try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  } catch (err) {
-    // Ignore cleanup errors
-  }
-}
-
-// Register cleanup on exit
-process.on('exit', cleanup);
-process.on('SIGINT', () => {
-  cleanup();
-  process.exit(1);
-});
-process.on('SIGTERM', () => {
-  cleanup();
-  process.exit(1);
-});
-
-// Copy targets to temporary directory
-for (const target of targets) {
-  const targetPath = path.resolve(process.cwd(), target);
-  const stats = fs.statSync(targetPath);
-  
-  if (stats.isDirectory()) {
-    // Copy directory contents to tmpDir (merge behavior like pack.sh)
-    const entries = fs.readdirSync(targetPath);
-    for (const entry of entries) {
-      const srcPath = path.join(targetPath, entry);
-      const destPath = path.join(tmpDir, entry);
-      const entryStats = fs.statSync(srcPath);
-      if (entryStats.isDirectory()) {
-        fs.cpSync(srcPath, destPath, { recursive: true });
-      } else {
-        fs.copyFileSync(srcPath, destPath);
-      }
-    }
-  } else {
-    // Copy file directly to tmpDir
-    const targetName = path.basename(targetPath);
-    const destPath = path.join(tmpDir, targetName);
-    fs.copyFileSync(targetPath, destPath);
-  }
-}
-
-// Create zip archive
+// Create zip archive directly from targets (no temp directory to avoid file locking issues)
 async function createZip() {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(zipPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
 
     output.on('error', (err) => {
-      cleanup();
       reject(err);
     });
 
     archive.on('error', (err) => {
-      cleanup();
       reject(err);
     });
 
@@ -126,7 +75,6 @@ async function createZip() {
       if (err.code === 'ENOENT') {
         console.warn('Warning:', err);
       } else {
-        cleanup();
         reject(err);
       }
     });
@@ -142,21 +90,46 @@ async function createZip() {
       console.log(`File: ${zipPath}`);
       console.log(`Size: ${fileSizeMB} MB (${fileSizeKB} KB)`);
       
-      cleanup();
       resolve();
     });
 
     archive.pipe(output);
-    archive.directory(tmpDir, false); // Don't include tmpDir itself
+    
+    // Add targets directly to archive
+    for (const target of targets) {
+      const targetPath = path.resolve(process.cwd(), target);
+      const stats = fs.statSync(targetPath);
+      
+      if (stats.isDirectory()) {
+        // Add directory contents directly (merge behavior like pack.sh)
+        const entries = fs.readdirSync(targetPath);
+        for (const entry of entries) {
+          const entryPath = path.join(targetPath, entry);
+          const entryStats = fs.statSync(entryPath);
+          if (entryStats.isDirectory()) {
+            archive.directory(entryPath, entry);
+          } else {
+            archive.file(entryPath, { name: entry });
+          }
+        }
+      } else {
+        // Add file directly
+        const targetName = path.basename(targetPath);
+        archive.file(targetPath, { name: targetName });
+      }
+    }
+    
     archive.finalize();
   });
 }
 
 // Execute packaging
-createZip()
-  .catch((err) => {
+(async () => {
+  try {
+    await createZip();
+  } catch (err) {
     console.error('Packaging failed:', err);
-    cleanup();
     process.exit(1);
-  });
+  }
+})();
 
