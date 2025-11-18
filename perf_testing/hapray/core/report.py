@@ -405,7 +405,7 @@ class ReportGenerator:
             use_refined_lib_symbol: Enable refined mode for memory analysis
             export_comparison: Export comparison Excel for memory analysis
         """
-        self.perf_testing_dir = CommonUtils.get_project_root()
+        self.report_template_path = os.path.abspath(ExeUtils.get_tools_dir('web', 'report_template.html'))
         self.use_refined_lib_symbol = use_refined_lib_symbol
         self.export_comparison = export_comparison
 
