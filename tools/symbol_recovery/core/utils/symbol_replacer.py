@@ -81,6 +81,7 @@ def replace_symbols_in_html(html_content, function_mapping):
         # 检查数据是否被编码/压缩
         data_content = None
         is_compressed = False
+        compression_format = None
 
         # 检查是否是 base64 编码
         if not data_content_raw.startswith('{') and not data_content_raw.startswith('['):
@@ -96,6 +97,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                     decompressed = gzip.decompress(decoded)
                     data_content = decompressed.decode('utf-8', errors='ignore')
                     is_compressed = True
+                    compression_format = 'gzip'
                     logger.info(f'  ✅ Gzip 解压成功，大小: {len(data_content) / 1024 / 1024:.2f} MB')
                 # 检查是否是 zlib
                 elif decoded[:2] in (b'x\x9c', b'x\xda', b'x\x01'):
