@@ -127,4 +127,3 @@ class CallchainRefiner:
             },
             'is_different': (original_lib_id != refined_lib_id) or (original_symbol_id != refined_symbol_id),
         }
-

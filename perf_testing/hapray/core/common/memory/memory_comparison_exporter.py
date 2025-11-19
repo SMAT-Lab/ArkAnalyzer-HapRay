@@ -51,9 +51,7 @@ class MemoryComparisonExporter:
 
             with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
                 # 创建对比数据
-                comparison_data = self._create_comparison_data(
-                    original_records, refined_records, data_dict
-                )
+                comparison_data = self._create_comparison_data(original_records, refined_records, data_dict)
 
                 # 写入对比数据
                 if comparison_data:
@@ -65,9 +63,7 @@ class MemoryComparisonExporter:
                     ws.set_column(0, len(df.columns) - 1, 20)
 
                     # 创建修改过的调用链数据
-                    callchain_data = self._create_modified_callchain_data(
-                        comparison_data, data_dict, callchain_cache
-                    )
+                    callchain_data = self._create_modified_callchain_data(comparison_data, data_dict, callchain_cache)
 
                     # 写入调用链数据
                     if callchain_data:
@@ -85,8 +81,11 @@ class MemoryComparisonExporter:
                     logging.info('Comparison data exported to %s', output_path)
                 else:
                     # 没有对比数据时，创建一个提示信息表
-                    logging.warning('No comparison data to export (original_records=%d, refined_records=%d)',
-                                    len(original_records), len(refined_records))
+                    logging.warning(
+                        'No comparison data to export (original_records=%d, refined_records=%d)',
+                        len(original_records),
+                        len(refined_records),
+                    )
 
                     # 创建一个提示信息表
                     info_data = [
@@ -177,7 +176,7 @@ class MemoryComparisonExporter:
                     comparison_rows.append(
                         {
                             'step': orig.get('step', 'unknown'),  # 添加步骤标记
-                            'eventId': f"{event_key[0]}_{event_key[1]}_{event_key[2]}_{event_key[3]}",
+                            'eventId': f'{event_key[0]}_{event_key[1]}_{event_key[2]}_{event_key[3]}',
                             'pid': event_key[0],
                             'tid': event_key[1],
                             'addr': event_key[2],
@@ -201,8 +200,7 @@ class MemoryComparisonExporter:
                         }
                     )
 
-        logging.info('Found %d events with differences out of %d total events',
-                     len(comparison_rows), len(all_events))
+        logging.info('Found %d events with differences out of %d total events', len(comparison_rows), len(all_events))
         return comparison_rows
 
     def _create_modified_callchain_data(
@@ -236,7 +234,6 @@ class MemoryComparisonExporter:
             if callchain_id and callchain_id > 0:
                 callchain_ids.add(callchain_id)
 
-
         if not callchain_ids:
             logging.warning('No valid callchain IDs found in comparison data')
             return []
@@ -261,19 +258,20 @@ class MemoryComparisonExporter:
                 symbol_name = data_dict.get(symbol_id, 'unknown') if symbol_id else 'unknown'
                 file_path = data_dict.get(file_id, 'unknown') if file_id else 'unknown'
 
-                callchain_rows.append({
-                    'callchainId': callchain_id,
-                    'depth': frame.get('depth', 0),
-                    'symbolId': symbol_id,
-                    'symbol': symbol_name,
-                    'fileId': file_id,
-                    'file': file_path,
-                    'ip': frame.get('ip'),
-                    'offset': frame.get('offset'),
-                    'symbolOffset': frame.get('symbol_offset'),
-                    'vaddr': frame.get('vaddr'),
-                })
+                callchain_rows.append(
+                    {
+                        'callchainId': callchain_id,
+                        'depth': frame.get('depth', 0),
+                        'symbolId': symbol_id,
+                        'symbol': symbol_name,
+                        'fileId': file_id,
+                        'file': file_path,
+                        'ip': frame.get('ip'),
+                        'offset': frame.get('offset'),
+                        'symbolOffset': frame.get('symbol_offset'),
+                        'vaddr': frame.get('vaddr'),
+                    }
+                )
 
         logging.info('Created %d callchain frame records from cache', len(callchain_rows))
         return callchain_rows
-
