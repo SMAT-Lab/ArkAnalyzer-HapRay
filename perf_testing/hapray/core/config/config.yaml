@@ -16,3 +16,22 @@ frame_analysis:
   # 建议值: 5-20，根据性能需求调整
   top_n_analysis: 10
 
+# 调用链精化过滤配置
+callchain_filter:
+  # 文件和符号绑定排除规则（文件和符号必须同时匹配才排除）
+  # 使用YAML锚点避免重复定义符号列表
+  exclude_rules:
+    # 匹配包含 libc 或 libc++ 的 .so 文件（包含关系）
+    '.*libc(\+\+)?\.so.*': 
+      - '.*'
+    # ld-musl-aarch64.so 
+    '.*ld-musl-aarch64\.so.*': 
+      - '.*'
+    # libc++_shared.so 
+    '.*libc\+\+_shared\.so.*': 
+      - '.*'
+
+
+
+
+

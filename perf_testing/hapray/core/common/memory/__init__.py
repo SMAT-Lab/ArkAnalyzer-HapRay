@@ -16,7 +16,10 @@ limitations under the License.
 # Memory Analyzer 模块化组件导出
 
 # 核心组件
+from .callchain_filter_config import CallchainFilterConfig
+from .callchain_refiner import CallchainRefiner
 from .memory_classifier import MemoryClassifier
+from .memory_comparison_exporter import MemoryComparisonExporter
 from .memory_core_analyzer import MemoryAnalyzerCore
 from .memory_data_loader import MemoryDataLoader
 from .memory_record_generator import MemoryRecordGenerator
@@ -26,4 +29,7 @@ __all__ = [
     'MemoryDataLoader',
     'MemoryClassifier',
     'MemoryRecordGenerator',
+    'CallchainFilterConfig',
+    'CallchainRefiner',
+    'MemoryComparisonExporter',
 ]
