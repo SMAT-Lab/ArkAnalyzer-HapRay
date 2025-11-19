@@ -31,8 +31,8 @@ module.exports = {
         new PreservePermissionsPlugin({
             mappings: [
                 {
-                    from: path.resolve(__dirname, 'dist/symbol-recovery/symbol_recovery'),
-                    to: path.resolve(__dirname, '../../dist/tools/symbol-recovery/symbol_recovery'),
+                    from: path.resolve(__dirname, 'dist/symbol-recovery/symbol-recovery'),
+                    to: path.resolve(__dirname, '../../dist/tools/symbol-recovery/symbol-recovery'),
                 },
             ],
         }),
