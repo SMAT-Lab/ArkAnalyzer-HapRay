@@ -6,6 +6,7 @@ LTO (Link-Time Optimization) Detector
 import json
 import logging
 import sys
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -79,8 +80,10 @@ class LtoDetector:
             self.CompilerProvenanceRF = CompilerProvenanceRF
             logging.debug('Successfully imported from lto_feature_pipeline')
 
-        except ImportError as e:
-            logging.error('Failed to import lto_feature_pipeline: %s', e)
+        except Exception as e:  # noqa: BLE001
+            # 捕获所有异常，包括 ImportError 和其他可能的错误（如依赖缺失）
+            error_msg = f'Failed to import lto_feature_pipeline: {e}\n{traceback.format_exc()}'
+            logging.error(error_msg)
             self.LegacyFeatureExtractor = None
             self.HybridFeatureExtractor = None
             self.CompilerProvenanceSVM = None

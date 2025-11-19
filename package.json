@@ -8,7 +8,8 @@
     "web",
     "sa",
     "perf_testing",
-    "tools/optimization_detector"
+    "tools/optimization_detector",
+    "tools/symbol_recovery"
   ],
   "scripts": {
     "postinstall": "node scripts/unzip_third-party.js",
