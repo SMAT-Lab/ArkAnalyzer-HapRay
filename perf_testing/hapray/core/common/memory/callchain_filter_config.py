@@ -39,7 +39,7 @@ class CallchainFilterConfig:
         callchain_filter_config = getattr(config_obj.data, 'callchain_filter', None)
 
         if callchain_filter_config is None:
-            raise ValueError("callchain_filter configuration section not found in config.yaml")
+            raise ValueError('callchain_filter configuration section not found in config.yaml')
 
         # 从配置中读取 exclude_rules
         exclude_rules = getattr(callchain_filter_config, 'exclude_rules', None)
@@ -90,4 +90,3 @@ class CallchainFilterConfig:
                         return True
 
         return False
-

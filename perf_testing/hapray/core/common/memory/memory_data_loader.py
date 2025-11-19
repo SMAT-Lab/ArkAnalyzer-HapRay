@@ -233,10 +233,7 @@ class MemoryDataLoader:
 
         # 从 data_dict 表中查询这些 id 对应的值
         placeholders = ','.join(['?'] * len(sub_type_ids))
-        cursor.execute(
-            f'SELECT id, data FROM data_dict WHERE id IN ({placeholders})',
-            sub_type_ids
-        )
+        cursor.execute(f'SELECT id, data FROM data_dict WHERE id IN ({placeholders})', sub_type_ids)
 
         sub_type_map = {}
         for row in cursor.fetchall():
