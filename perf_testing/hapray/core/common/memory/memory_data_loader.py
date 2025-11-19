@@ -203,25 +203,50 @@ class MemoryDataLoader:
     def _query_sub_type_names(conn: sqlite3.Connection) -> dict[int, str]:
         """查询 sub_type 名称映射
 
-        注意：sub_type 表可能不存在，如果不存在则返回空字典
+        从 data_dict 表中读取所有 sub_type_id 对应的名称
+        注意：data_dict 表的字段是 (id, data)，不是 (id, value)
         """
         cursor = conn.cursor()
 
-        # 检查表是否存在
+        # 检查 data_dict 表是否存在
         cursor.execute("""
             SELECT name FROM sqlite_master
-            WHERE type='table' AND name='sub_type'
+            WHERE type='table' AND name='data_dict'
         """)
 
         if not cursor.fetchone():
-            logging.warning('sub_type table does not exist in database')
+            logging.warning('data_dict table does not exist in database')
             return {}
 
-        cursor.execute('SELECT id, name FROM sub_type')
+        # 获取所有在 native_hook 表中使用的 sub_type_id
+        cursor.execute("""
+            SELECT DISTINCT sub_type_id
+            FROM native_hook
+            WHERE sub_type_id IS NOT NULL
+        """)
+
+        sub_type_ids = [row[0] for row in cursor.fetchall()]
+
+        if not sub_type_ids:
+            logging.info('No sub_type_id found in native_hook table')
+            return {}
+
+        # 从 data_dict 表中查询这些 id 对应的值
+        placeholders = ','.join(['?'] * len(sub_type_ids))
+        cursor.execute(
+            f'SELECT id, data FROM data_dict WHERE id IN ({placeholders})',
+            sub_type_ids
+        )
 
         sub_type_map = {}
         for row in cursor.fetchall():
-            sub_type_map[row[0]] = row[1]
+            dict_id = row[0]
+            data_value = row[1]
+            # 只保留非空的值
+            if data_value and data_value.strip():
+                sub_type_map[dict_id] = data_value
+
+        logging.info('Loaded %d sub_type names from data_dict', len(sub_type_map))
 
         return sub_type_map
 

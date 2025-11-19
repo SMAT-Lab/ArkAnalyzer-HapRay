@@ -232,6 +232,88 @@ export class MemoryDao {
   }
 
   /**
+   * Build SQL query for file level event type aggregation (category mode)
+   * 查询文件层级事件类型数据：按事件类型和时间聚合（分类模式）
+   *
+   * @param stepId - Step id
+   * @param categoryName - Category name
+   * @param subCategoryName - Subcategory name
+   * @param fileName - File name
+   * @returns SQL statement and parameters
+   */
+  static buildQueryFileEventTypeRecords(
+    stepId: number,
+    categoryName: string,
+    subCategoryName: string,
+    fileName: string
+  ): QueryResult {
+    const sql = `
+      SELECT
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        event_dict.value as eventType,
+        sub_event_dict.value as subEventType,
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
+      LEFT JOIN memory_data_dicts AS category_dict
+        ON raw.categoryNameId = category_dict.dictId AND category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_category_dict
+        ON raw.subCategoryNameId = sub_category_dict.dictId AND sub_category_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_event_dict
+        ON raw.subEventTypeId = sub_event_dict.dictId AND sub_event_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND category_dict.value = ? AND sub_category_dict.value = ? AND file_dict.value LIKE ?
+      GROUP BY timePoint10ms, event_dict.value, sub_event_dict.value
+      ORDER BY timePoint10ms, event_dict.value, sub_event_dict.value
+    `;
+    const params: SqlParam[] = [stepId, categoryName, subCategoryName, `%${fileName}`];
+    return { sql, params };
+  }
+
+  /**
+   * Build SQL query for file level event type aggregation (process mode)
+   * 查询文件层级事件类型数据：按事件类型和时间聚合（进程模式）
+   *
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @param fileName - File name
+   * @returns SQL statement and parameters
+   */
+  static buildQueryFileEventTypeRecordsForProcess(
+    stepId: number,
+    processName: string,
+    threadName: string,
+    fileName: string
+  ): QueryResult {
+    const sql = `
+      SELECT
+        (raw.relativeTs / 10000000) as timePoint10ms,
+        event_dict.value as eventType,
+        sub_event_dict.value as subEventType,
+        SUM(raw.heapSize) as netSize
+      FROM memory_records AS raw
+      LEFT JOIN memory_data_dicts AS proc_dict
+        ON raw.processId = proc_dict.dictId AND proc_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS thread_dict
+        ON raw.threadId = thread_dict.dictId AND thread_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS file_dict
+        ON raw.fileId = file_dict.dictId AND file_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS event_dict
+        ON raw.eventTypeId = event_dict.dictId AND event_dict.step_id = raw.step_id
+      LEFT JOIN memory_data_dicts AS sub_event_dict
+        ON raw.subEventTypeId = sub_event_dict.dictId AND sub_event_dict.step_id = raw.step_id
+      WHERE raw.step_id = ? AND proc_dict.value = ? AND thread_dict.value = ? AND file_dict.value LIKE ?
+      GROUP BY timePoint10ms, event_dict.value, sub_event_dict.value
+      ORDER BY timePoint10ms, event_dict.value, sub_event_dict.value
+    `;
+    const params: SqlParam[] = [stepId, processName, threadName, `%${fileName}`];
+    return { sql, params };
+  }
+
+  /**
    * Build SQL query to get all unique subcategories for a category
    * 查询大类的所有小类名称
    *
