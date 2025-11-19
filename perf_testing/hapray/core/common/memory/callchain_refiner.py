@@ -54,6 +54,9 @@ class CallchainRefiner:
         # 按depth排序（从大到小）
         sorted_frames = sorted(callchain_frames, key=lambda f: f.get('depth', 0), reverse=True)
 
+        # 记录最后一个有效的帧（用于所有帧都被排除的情况）
+        last_valid_frame = None
+
         for frame in sorted_frames:
             symbol_id = frame.get('symbol_id')
             file_id = frame.get('file_id')
@@ -62,24 +65,26 @@ class CallchainRefiner:
             symbol_name = data_dict.get(symbol_id, 'unknown') if symbol_id else None
             lib_path = data_dict.get(file_id, 'unknown') if file_id else None
 
-            # 检查是否应该排除
+            # 如果file是空的，跳过当前帧
+            if not lib_path or lib_path == 'unknown':
+                continue
+
+            # 记录最后一个有效的帧（file不为空）
+            last_valid_frame = (file_id, symbol_id, lib_path, symbol_name)
+
+            # 检查是否应该排除（file和symbol作为整体判断）
             if self.filter_config.should_exclude(symbol_name, lib_path):
                 continue
 
-            # 找到第一个有效的帧
+            # 找到第一个有效的帧（file不为空且未被排除）
             return file_id, symbol_id, lib_path, symbol_name
 
-        # 如果所有帧都被排除，返回最深的帧（调用链底部）的信息，确保数据库文件能生成
+        # 如果所有帧都被排除，返回最后一个有效的帧（depth最小的，即最接近depth=0的）
         # 这是为了确保即使过滤后没有匹配，也能生成hapray_report.db文件
-        if sorted_frames:
-            deepest_frame = sorted_frames[0]  # sorted_frames[0] 是最深的帧（depth最大）
-            symbol_id = deepest_frame.get('symbol_id')
-            file_id = deepest_frame.get('file_id')
-            symbol_name = data_dict.get(symbol_id, 'unknown') if symbol_id else None
-            lib_path = data_dict.get(file_id, 'unknown') if file_id else None
-            return file_id, symbol_id, lib_path, symbol_name
+        if last_valid_frame:
+            return last_valid_frame
 
-        # 如果没有帧，返回None
+        # 如果没有有效的帧，返回None
         return None, None, None, None
 
     def refine_callchain_with_comparison(

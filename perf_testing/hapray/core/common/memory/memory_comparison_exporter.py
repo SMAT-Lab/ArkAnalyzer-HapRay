@@ -176,6 +176,7 @@ class MemoryComparisonExporter:
                 if is_different:
                     comparison_rows.append(
                         {
+                            'step': orig.get('step', 'unknown'),  # 添加步骤标记
                             'eventId': f"{event_key[0]}_{event_key[1]}_{event_key[2]}_{event_key[3]}",
                             'pid': event_key[0],
                             'tid': event_key[1],

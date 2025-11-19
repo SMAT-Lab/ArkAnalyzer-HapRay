@@ -21,54 +21,15 @@ callchain_filter:
   # 文件和符号绑定排除规则（文件和符号必须同时匹配才排除）
   # 使用YAML锚点避免重复定义符号列表
   exclude_rules:
-    # 共享的内存分配符号列表
-    shared_memory_symbols: &shared_memory_symbols
-      - 'new'
-      - 'new\[\]'
-      - 'operator new'
-      - 'operator new\[\]'
-      - 'std::make_shared'
-      - 'std::make_unique'
-      - 'delete'
-      - 'delete\[\]'
-      - 'operator delete'
-      - 'operator delete\[\]'
-      - 'aligned_alloc'
-      - 'asprintf'
-      - 'calloc'
-      - 'canonicalize_file_name'
-      - 'get_current_dir_name'
-      - 'getaddrinfo'
-      - 'getcwd'
-      - 'getdelim'
-      - 'gethostbyaddr'
-      - 'gethostbyname'
-      - 'getline'
-      - 'malloc'
-      - 'memalign'
-      - 'mkdtemp'
-      - 'mkstemp'
-      - 'pvalloc'
-      - 'realloc'
-      - 'realpath'
-      - 'strdup'
-      - 'strndup'
-      - 'tempnam'
-      - 'tmpnam'
-      - 'valloc'
-      - 'vasprintf'
-      - 'free'
-      - 'freeaddrinfo'
-      - 'mmap'
-      - 'posix_memalign'
-      - 'munmap'
-
     # 匹配包含 libc 或 libc++ 的 .so 文件（包含关系）
-    '.*libc(\+\+)?\.so.*': *shared_memory_symbols
-    # ld-musl-aarch64.so 也对应相同的内存分配符号
-    '.*ld-musl-aarch64\.so.*': *shared_memory_symbols
-    # libc++_shared.so 也对应相同的内存分配符号
-    '.*libc\+\+_shared\.so.*': *shared_memory_symbols
+    '.*libc(\+\+)?\.so.*': 
+      - '.*'
+    # ld-musl-aarch64.so 
+    '.*ld-musl-aarch64\.so.*': 
+      - '.*'
+    # libc++_shared.so 
+    '.*libc\+\+_shared\.so.*': 
+      - '.*'
 
 
 
