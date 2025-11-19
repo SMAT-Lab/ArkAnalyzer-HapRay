@@ -16,11 +16,10 @@ limitations under the License.
 import argparse
 import logging
 import os
-import subprocess
 from typing import Optional
 
 from hapray import VERSION
-from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.exe_utils import ExeUtils
 
 
 class StaticAction:
@@ -64,21 +63,8 @@ class StaticAction:
             logging.error(f'Input file does not exist: {parsed_args.input}')
             return 1
 
-        # 获取hapray-sa路径，支持exe环境
-        project_root = CommonUtils.get_project_root()
-        static_analyzer_path = project_root / 'sa-cmd' / 'hapray-sa-cmd.js'
-
-        if not static_analyzer_path.exists():
-            logging.error(f'Static analyzer not found: {static_analyzer_path}')
-            logging.error('Please ensure hapray-sa is properly installed')
-            logging.error(f'Project root: {project_root}')
-            return 1
-
-        # 构建命令 - 使用hapray hap子命令
-        cmd = [
-            'node',
-            str(static_analyzer_path),
-            'hapray',
+        # 构建命令参数
+        cmd_args = [
             'hap',
             '-i',
             parsed_args.input,
@@ -88,50 +74,28 @@ class StaticAction:
 
         # 添加并发数参数
         if parsed_args.jobs != 'auto':
-            cmd.extend(['-j', parsed_args.jobs])
+            cmd_args.extend(['-j', parsed_args.jobs])
 
         if parsed_args.include_details:
             # 新CLI默认包含详细信息，不需要额外参数
             pass
 
-        try:
-            logging.info('Starting HAP static analysis...')
-            logging.info(f'Input: {parsed_args.input}')
-            logging.info(f'Output: {parsed_args.output}')
-            if parsed_args.jobs != 'auto':
-                logging.info(f'Jobs: {parsed_args.jobs}')
-            else:
-                logging.info('Jobs: auto (using CPU core count)')
+        logging.info('Starting HAP static analysis...')
+        logging.info(f'Input: {parsed_args.input}')
+        logging.info(f'Output: {parsed_args.output}')
+        if parsed_args.jobs != 'auto':
+            logging.info(f'Jobs: {parsed_args.jobs}')
+        else:
+            logging.info('Jobs: auto (using CPU core count)')
 
-            # 执行静态分析
-            result = subprocess.run(
-                cmd,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='ignore',
-                cwd=str(project_root),
-            )
+        # 使用 execute_hapray_cmd 执行静态分析
+        success = ExeUtils.execute_hapray_cmd(cmd_args)
 
-            if result.returncode == 0:
-                logging.info('Static analysis completed successfully')
-                if result.stdout:
-                    print(result.stdout)
-                return 0
-            logging.error(f'Static analysis failed with return code: {result.returncode}')
-            if result.stderr:
-                logging.error(f'Error output: {result.stderr}')
-            if result.stdout:
-                logging.info(f'Standard output: {result.stdout}')
-            return result.returncode
-
-        except FileNotFoundError:
-            logging.error('Node.js not found. Please ensure Node.js is installed and in PATH')
-            return 1
-        except Exception as e:
-            logging.error(f'Failed to execute static analysis: {e}')
-            return 1
+        if success:
+            logging.info('Static analysis completed successfully')
+            return 0
+        logging.error('Static analysis failed')
+        return 1
 
     @staticmethod
     def get_help_text():
