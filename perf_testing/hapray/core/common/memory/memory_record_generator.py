@@ -81,8 +81,9 @@ class MemoryRecordGenerator:
             logging.info('No callchains to refine')
             return {}
 
-        logging.info('Preloading and refining %d unique callchains with %d workers',
-                     len(unique_callchain_ids), max_workers)
+        logging.info(
+            'Preloading and refining %d unique callchains with %d workers', len(unique_callchain_ids), max_workers
+        )
 
         # 一次性加载所有callchain数据到内存
         try:
@@ -122,10 +123,7 @@ class MemoryRecordGenerator:
 
         # 使用线程池并行精化
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(refine_single_callchain, cid): cid
-                for cid in unique_callchain_ids
-            }
+            futures = {executor.submit(refine_single_callchain, cid): cid for cid in unique_callchain_ids}
 
             completed = 0
             for future in as_completed(futures):
@@ -142,7 +140,11 @@ class MemoryRecordGenerator:
         return refined_results
 
     def _get_refined_lib_symbol(
-        self, callchain_id: int, original_lib_id: Optional[int], original_symbol_id: Optional[int], data_dict: dict[int, str]
+        self,
+        callchain_id: int,
+        original_lib_id: Optional[int],
+        original_symbol_id: Optional[int],
+        data_dict: dict[int, str],
     ) -> tuple[Optional[int], Optional[int]]:
         """获取refined的lib_id和symbol_id
 
@@ -307,7 +309,11 @@ class MemoryRecordGenerator:
                     if refined_lib_id is not None or refined_symbol_id is not None:
                         logging.debug(
                             'Using cached refined result for callchain %d: lib %s->%s, symbol %s->%s',
-                            callchain_id, file_id, refined_lib_id, symbol_id, refined_symbol_id
+                            callchain_id,
+                            file_id,
+                            refined_lib_id,
+                            symbol_id,
+                            refined_symbol_id,
                         )
                 else:
                     # 回退到单个查询（用于缓存未命中的情况）
@@ -468,17 +474,24 @@ class MemoryRecordGenerator:
         original_use_refined = self.use_refined_lib_symbol
         self.use_refined_lib_symbol = False
         logging.info('Generating original records (refined mode disabled)')
-        original_result = self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts, sub_type_names)
+        original_result = self._generate_records_internal(
+            events, processes, threads, data_dict, trace_start_ts, sub_type_names
+        )
         original_records = original_result['records']
 
         # 恢复refined模式，生成refined值记录
         self.use_refined_lib_symbol = original_use_refined
         logging.info('Generating refined records (refined mode enabled)')
-        refined_result = self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts, sub_type_names)
+        refined_result = self._generate_records_internal(
+            events, processes, threads, data_dict, trace_start_ts, sub_type_names
+        )
         refined_records = refined_result['records']
 
-        logging.info('Generated %d original records and %d refined records for comparison',
-                     len(original_records), len(refined_records))
+        logging.info(
+            'Generated %d original records and %d refined records for comparison',
+            len(original_records),
+            len(refined_records),
+        )
 
         return {
             'original_records': original_records,

@@ -56,7 +56,7 @@ import type {
   NativeMemoryRecord,
 } from '@/stores/nativeMemory';
 
-type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file';
+type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file' | 'event';
 type ViewMode = 'category' | 'process';
 
 interface FlameGraphNode {
