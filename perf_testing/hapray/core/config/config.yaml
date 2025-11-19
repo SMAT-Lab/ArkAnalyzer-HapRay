@@ -30,7 +30,9 @@ callchain_filter:
     # libc++_shared.so 
     '.*libc\+\+_shared\.so.*': 
       - '.*'
-
+    # /system/lib64/chipset-pub-sdk/libutils.z.so
+    '.*/system/lib64/chipset-pub-sdk/libutils\.z\.so':
+      - 'OHOS::Parcel::Parcel()'
 
 
 
