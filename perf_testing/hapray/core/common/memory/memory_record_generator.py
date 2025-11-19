@@ -194,6 +194,7 @@ class MemoryRecordGenerator:
         threads: list[dict],
         data_dict: dict[int, str],
         trace_start_ts: int,
+        sub_type_names: Optional[dict[int, str]] = None,
     ) -> dict[str, Any]:
         """生成平铺的内存记录
 
@@ -214,6 +215,7 @@ class MemoryRecordGenerator:
             threads: 线程列表
             data_dict: 数据字典（符号和文件名）
             trace_start_ts: Trace 起始时间戳
+            sub_type_names: sub_type_id 到名称的映射字典
             step_idx: 步骤索引
 
         Returns:
@@ -226,7 +228,7 @@ class MemoryRecordGenerator:
         else:
             self.refined_callchain_cache = {}
 
-        return self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts)
+        return self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts, sub_type_names)
 
     def _generate_records_internal(
         self,
@@ -235,6 +237,7 @@ class MemoryRecordGenerator:
         threads: list[dict],
         data_dict: dict[int, str],
         trace_start_ts: int,
+        sub_type_names: Optional[dict[int, str]] = None,
     ) -> dict[str, Any]:
         """内部方法：生成平铺的内存记录（不进行预加载）
 
@@ -244,6 +247,7 @@ class MemoryRecordGenerator:
             threads: 线程列表
             data_dict: 数据字典（符号和文件名）
             trace_start_ts: Trace 起始时间戳
+            sub_type_names: sub_type_id 到名称的映射字典
 
         Returns:
             内存记录列表
@@ -252,6 +256,10 @@ class MemoryRecordGenerator:
         # 构建映射
         process_map = {p['id']: p for p in processes}
         thread_map = {t['id']: t for t in threads}
+
+        # 如果没有传入 sub_type_names，使用空字典
+        if sub_type_names is None:
+            sub_type_names = {}
 
         # 地址 -> 分配事件的分类信息（用于释放事件继承分类）
         # 使用栈结构支持同一地址的多次分配/释放（LIFO）
@@ -370,6 +378,12 @@ class MemoryRecordGenerator:
             # heapSize 存储规则：申请内存为正数，释放内存为负数
             heap_size = -abs(heap_size) if is_free else abs(heap_size)
 
+            # 获取 subEventType（从 sub_type_names 映射）
+            sub_type_id = event.get('sub_type_id')
+            sub_event_type = ''
+            if sub_type_id is not None and sub_type_id in sub_type_names:
+                sub_event_type = sub_type_names[sub_type_id]
+
             # 创建记录
             record = {
                 # 进程维度信息
@@ -386,7 +400,7 @@ class MemoryRecordGenerator:
                 'symbol': symbol_name,
                 # 事件信息
                 'eventType': event['event_type'],
-                'subEventType': '',  # 可以从 sub_type_names 获取
+                'subEventType': sub_event_type,
                 'addr': event['addr'],
                 'callchainId': event['callchain_id'],
                 # 内存大小（申请为正数，释放为负数）
@@ -424,6 +438,7 @@ class MemoryRecordGenerator:
         threads: list[dict],
         data_dict: dict[int, str],
         trace_start_ts: int,
+        sub_type_names: Optional[dict[int, str]] = None,
     ) -> dict[str, Any]:
         """生成原始值和refined值的内存记录对比
 
@@ -435,6 +450,7 @@ class MemoryRecordGenerator:
             threads: 线程列表
             data_dict: 数据字典（符号和文件名）
             trace_start_ts: Trace 起始时间戳
+            sub_type_names: sub_type_id 到名称的映射字典
 
         Returns:
             包含 'original_records' 和 'refined_records' 的字典
@@ -452,13 +468,13 @@ class MemoryRecordGenerator:
         original_use_refined = self.use_refined_lib_symbol
         self.use_refined_lib_symbol = False
         logging.info('Generating original records (refined mode disabled)')
-        original_result = self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts)
+        original_result = self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts, sub_type_names)
         original_records = original_result['records']
 
         # 恢复refined模式，生成refined值记录
         self.use_refined_lib_symbol = original_use_refined
         logging.info('Generating refined records (refined mode enabled)')
-        refined_result = self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts)
+        refined_result = self._generate_records_internal(events, processes, threads, data_dict, trace_start_ts, sub_type_names)
         refined_records = refined_result['records']
 
         logging.info('Generated %d original records and %d refined records for comparison',

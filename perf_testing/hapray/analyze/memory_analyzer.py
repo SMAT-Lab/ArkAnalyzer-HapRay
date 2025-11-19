@@ -21,6 +21,7 @@ import pandas as pd
 from hapray.analyze.base_analyzer import BaseAnalyzer, BaseModel
 from hapray.core.common.memory import MemoryAnalyzerCore
 from hapray.core.common.memory.memory_aggregator import MemoryAggregator
+from hapray.core.common.memory.memory_comparison_exporter import MemoryComparisonExporter
 
 
 class MemoryResultModel(BaseModel):
@@ -150,7 +151,15 @@ class MemoryAnalyzer(BaseAnalyzer):
         self.time_ranges = time_ranges
         self.use_refined_lib_symbol = use_refined_lib_symbol
         self.export_comparison = export_comparison
-        self.core_analyzer = MemoryAnalyzerCore(use_refined_lib_symbol, export_comparison)
+        self.core_analyzer = MemoryAnalyzerCore(use_refined_lib_symbol, collect_comparison_data=export_comparison)
+
+        # 收集所有步骤的对比数据
+        self.all_comparison_data = {
+            'original_records': [],
+            'refined_records': [],
+            'data_dict': {},
+            'callchain_cache': {},
+        }
 
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
@@ -167,11 +176,34 @@ class MemoryAnalyzer(BaseAnalyzer):
             Analysis results dictionary
         """
         # Use core analyzer for analysis
-        return self.core_analyzer.analyze_memory(
+        result = self.core_analyzer.analyze_memory(
             scene_dir=self.scene_dir,
             memory_db_path=trace_db_path,
             app_pids=app_pids,
         )
+
+        # 如果启用了对比导出，收集对比数据并添加步骤标记
+        if self.export_comparison and result and 'original_records' in result:
+            # 为原始记录添加步骤标记
+            original_records = result.get('original_records', [])
+            for record in original_records:
+                record['step'] = step_dir
+            self.all_comparison_data['original_records'].extend(original_records)
+
+            # 为refined记录添加步骤标记
+            refined_records = result.get('records', [])
+            for record in refined_records:
+                record['step'] = step_dir
+            self.all_comparison_data['refined_records'].extend(refined_records)
+
+            # 合并 data_dict
+            data_dict = result.get('dataDict', {})
+            self.all_comparison_data['data_dict'].update(data_dict)
+            # 合并 callchain_cache
+            callchain_cache = result.get('callchain_cache', {})
+            self.all_comparison_data['callchain_cache'].update(callchain_cache)
+
+        return result
 
     def write_report(self, result: dict):
         """Write memory Excel report and preserve parent class JSON report logic
@@ -214,8 +246,44 @@ class MemoryAnalyzer(BaseAnalyzer):
 
         # Excel writing complete; parent class has already written structure to JSON
 
+        # 导出对比报告（如果启用了对比导出）
+        if self.export_comparison:
+            self._export_comparison_report()
+
         # Save to SQLite database
         self._save_results_to_db()
+
+    def _export_comparison_report(self):
+        """导出对比报告（包含所有步骤的数据）"""
+        try:
+            # 检查是否有对比数据
+            if not self.all_comparison_data['original_records'] and not self.all_comparison_data['refined_records']:
+                self.logger.info('No comparison data to export')
+                return
+
+            report_dir = os.path.join(self.scene_dir, 'report')
+            os.makedirs(report_dir, exist_ok=True)
+            comparison_path = os.path.join(report_dir, 'memory_comparison.xlsx')
+
+            # 使用 MemoryComparisonExporter 导出
+            exporter = MemoryComparisonExporter()
+            exporter.export_comparison(
+                output_path=comparison_path,
+                original_records=self.all_comparison_data['original_records'],
+                refined_records=self.all_comparison_data['refined_records'],
+                data_dict=self.all_comparison_data['data_dict'],
+                callchain_cache=self.all_comparison_data['callchain_cache'],
+            )
+
+            self.logger.info(
+                'Comparison report exported to %s (%d original records, %d refined records)',
+                comparison_path,
+                len(self.all_comparison_data['original_records']),
+                len(self.all_comparison_data['refined_records']),
+            )
+        except Exception as e:
+            self.logger.warning('Failed to export comparison report: %s', str(e))
+
 
     def _extract_unreleased_rows(self, unreleased_data: dict, step_name: str, point: str) -> list[dict]:
         """Extract unreleased memory rows from aggregator result
