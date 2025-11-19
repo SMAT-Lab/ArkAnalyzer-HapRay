@@ -72,11 +72,10 @@ def init_llm_analyzer(
             log(f'使用批量 LLM 分析器: 服务={service_type}, 模型={model_name}, 批量大小={batch_size}')
             return analyzer, True, True
 
-        if use_batch_llm and not BATCH_LLM_AVAILABLE:
-            log('批量 LLM 分析器不可用,将使用单个函数分析')
-            analyzer = LLMFunctionAnalyzer(api_key=api_key, model=model_name, base_url=base_url, enable_cache=True)
-            log(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
-            return analyzer, True, False
+        log('批量 LLM 分析器不可用,将使用单个函数分析')
+        analyzer = LLMFunctionAnalyzer(api_key=api_key, model=model_name, base_url=base_url, enable_cache=True)
+        log(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
+        return analyzer, True, False
     except Exception as e:
         log(f'初始化 LLM 分析器失败: {e}')
         return None, False, use_batch_llm
