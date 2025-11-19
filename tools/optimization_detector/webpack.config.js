@@ -1,4 +1,5 @@
 const path = require('path');
+<<<<<<< HEAD
 const fs = require('fs');
 const CopyPlugin = require('copy-webpack-plugin');
 const archiver = require('archiver');
@@ -118,6 +119,27 @@ class PackPlugin {
         
         return shouldSkip;
     }
+=======
+const CopyPlugin = require('copy-webpack-plugin');
+const { PreservePermissionsPlugin, PackPlugin } = require('../../scripts/webpack_plugin');
+const version = require('./package.json').version;
+
+/**
+ * 跳过文件的函数：用于 opt-detector 的打包过滤
+ */
+function shouldSkipFile(filePath) {
+    const skipExtensions = ['.inc', '.h', '.hpp', '.txt', '.md'];
+    const skipPatterns = [
+        /_internal[\\/]tensorflow[\\/]include/,
+        /test|doc|example/i
+    ];
+    
+    const ext = path.extname(filePath).toLowerCase();
+    const shouldSkip = skipExtensions.includes(ext) || 
+                      skipPatterns.some(pattern => pattern.test(filePath));
+    
+    return shouldSkip;
+>>>>>>> 685286851b1330e907ed8464027736fa2b10949e
 }
 
 module.exports = {
@@ -144,6 +166,7 @@ module.exports = {
                 },
             ],
         }),
+<<<<<<< HEAD
         // 使用 PackPlugin 创建 zip 文件
         new PackPlugin({
             zipName: 'opt-detector',
@@ -151,6 +174,26 @@ module.exports = {
             additionalFiles: [
                 'README.md'
             ]
+=======
+        // 保持文件权限插件：在文件拷贝后保持可执行权限
+        new PreservePermissionsPlugin({
+            mappings: [
+                {
+                    from: path.resolve(__dirname, 'dist/opt-detector/opt-detector'),
+                    to: path.resolve(__dirname, '../../dist/tools/opt-detector/opt-detector'),
+                },
+            ],
+        }),
+        // 使用 PackPlugin 创建 zip 文件
+        new PackPlugin({
+            zipName: 'opt-detector',
+            version: version,
+            sourceDir: '../../dist/tools/opt-detector',
+            additionalFiles: [
+                'README.md'
+            ],
+            shouldSkipFile: shouldSkipFile // opt-detector 需要跳过某些文件
+>>>>>>> 685286851b1330e907ed8464027736fa2b10949e
         }),
     ],
 };

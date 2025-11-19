@@ -45,8 +45,8 @@ class PerfDataToSqliteConverter:
         # 检查常见位置
         search_paths = [
             Path.cwd(),
+            Path.cwd() / '..' / 'trace_streamer_binary',
             Path.cwd() / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
-            Path.cwd() / '..' / 'tools' / 'trace_streamer_binary',
             Path.cwd() / 'tools' / 'trace_streamer_binary',
         ]
 
@@ -68,6 +68,17 @@ class PerfDataToSqliteConverter:
             except Exception:
                 pass
 
+        logger.info(f'当前目录: {Path.cwd()}')
+        logger.error('❌ 错误: 未找到 trace_streamer 工具')
+        logger.info('\n请确保 trace_streamer 工具在以下位置之一:')
+        for idx, search_path in enumerate(search_paths, 1):
+            resolved_path = search_path.resolve()
+            exists = resolved_path.exists()
+            status = '✓' if exists else '✗'
+            logger.info(f'  {idx}. {status} {resolved_path}')
+
+        logger.info('  4. 系统 PATH 中')
+
         return None
 
     def convert_to_sqlite_db(self):
@@ -77,12 +88,6 @@ class PerfDataToSqliteConverter:
         logger.info('=' * 80)
 
         if not self.trace_streamer_path:
-            logger.error('❌ 错误: 未找到 trace_streamer 工具')
-            logger.info('\n请确保 trace_streamer 工具在以下位置之一:')
-            logger.info('  1. 当前目录')
-            logger.info('  2. tools/ 目录')
-            logger.info('  3. third-party/ 目录')
-            logger.info('  4. 系统 PATH 中')
             return None
 
         # 输出文件路径
