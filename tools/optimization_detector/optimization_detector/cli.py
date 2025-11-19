@@ -40,7 +40,12 @@ class OptAction:
             version=f'%(prog)s {__version__}',
             help="Show program's version number and exit",
         )
-        parser.add_argument('--input', '-i', required=True, help='Directory containing binary files to analyze')
+        parser.add_argument(
+            '--input',
+            '-i',
+            required=True,
+            help='Input path: directory containing binary files, or single file (.so, .a, .hap, .hsp, .apk) to analyze',
+        )
         parser.add_argument(
             '--output',
             '-o',
