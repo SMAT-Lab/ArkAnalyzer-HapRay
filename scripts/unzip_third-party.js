@@ -33,6 +33,24 @@ function unzipFile(zipFile, output) {
 }
 
 function cleanupTraceStreamerBinary(basePath) {
+    // 首先为 trace_streamer_mac 和 trace_streamer_linux 添加可执行权限
+    // 在删除文件之前设置权限，确保即使文件被保留也能正确设置权限
+    const executableFiles = ['trace_streamer_mac', 'trace_streamer_linux'];
+    executableFiles.forEach(fileName => {
+        const filePath = path.join(basePath, fileName);
+        if (fs.existsSync(filePath)) {
+            try {
+                const stats = fs.statSync(filePath);
+                // 添加可执行权限：所有者、组、其他用户都有执行权限
+                const newMode = stats.mode | 0o111; // 0o111 = 0b001001001 (rwxrwxrwx 中的 x)
+                fs.chmodSync(filePath, newMode);
+                console.log(`Added executable permission to: ${fileName} (mode: ${newMode.toString(8)})`);
+            } catch (err) {
+                console.warn(`Failed to set executable permission for ${fileName}:`, err.message);
+            }
+        }
+    });
+
     const platformKeepMap = {
         win32: 'trace_streamer_windows.exe',
         darwin: 'trace_streamer_mac',
