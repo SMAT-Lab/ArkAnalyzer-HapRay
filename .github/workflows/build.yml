@@ -102,4 +102,4 @@ jobs:
           ArkAnalyzer-HapRay-*.zip
           tools/optimization_detector/*.zip
           tools/symbol_recovery/*.zip
-          sa/*.zip
+          tools/static_analyzer/*.zip
