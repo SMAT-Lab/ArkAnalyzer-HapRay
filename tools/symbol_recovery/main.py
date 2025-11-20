@@ -15,7 +15,7 @@ from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
 from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
 from core.utils import config
-from core.utils.logger import get_logger
+from core.utils.logger import get_logger, setup_logging
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
 from core.utils.symbol_replacer import (
     add_disclaimer,
@@ -654,6 +654,7 @@ def main():
 
     # 处理输出目录配置
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
+    setup_logging(output_dir)
 
     if handle_excel_mode(args, output_dir):
         return
