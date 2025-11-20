@@ -6,7 +6,7 @@
   "files": [],
   "workspaces": [
     "web",
-    "sa",
+    "tools/static_analyzer",
     "perf_testing",
     "tools/optimization_detector",
     "tools/symbol_recovery"
