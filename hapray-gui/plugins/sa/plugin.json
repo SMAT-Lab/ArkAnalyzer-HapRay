@@ -1,0 +1,92 @@
+{
+  "id": "sa",
+  "name": "静态分析",
+  "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "type": "node",
+    "mode": "dev",
+    "script": {
+      "path": "lib/bundle.js",
+      "defaults": ["lib/bundle.js", "src/cli/index.ts", "hapray-sa-cmd.js", "index.js", "cli.js"]
+    },
+    "exe": {
+      "path": "dist/sa.exe",
+      "defaults": ["sa.exe", "dist/sa.exe"]
+    },
+    "working_dir": null
+  },
+  "parameters": {
+    "command": {
+      "type": "choice",
+      "label": "命令类型",
+      "required": true,
+      "default": "hap",
+      "choices": ["hap", "perf", "elf"],
+      "help": "要执行的命令类型"
+    },
+    "input": {
+      "type": "file",
+      "label": "输入路径",
+      "required": true,
+      "help": "HAP/ZIP文件或目录路径"
+    },
+    "output": {
+      "type": "dir",
+      "label": "输出目录",
+      "required": false,
+      "default": "./output",
+      "help": "输出目录路径"
+    },
+    "format": {
+      "type": "choice",
+      "label": "输出格式",
+      "required": false,
+      "default": "all",
+      "choices": ["json", "html", "excel", "all"],
+      "help": "输出格式"
+    },
+    "jobs": {
+      "type": "str",
+      "label": "并发数量",
+      "required": false,
+      "default": "auto",
+      "help": "并发分析数量，默认为CPU核心数"
+    },
+    "beautify_js": {
+      "type": "bool",
+      "label": "美化JS文件",
+      "required": false,
+      "default": false,
+      "help": "美化压缩的JS文件并保存到输出目录"
+    }
+  },
+  "config": {
+    "description": "静态分析插件配置项",
+    "items": {
+      "node_path": {
+        "type": "str",
+        "label": "Node.js路径",
+        "default": "node",
+        "help": "用于执行Node.js脚本的Node.js解释器路径",
+        "required": false
+      },
+      "default_jobs": {
+        "type": "str",
+        "label": "默认并发数量",
+        "default": "auto",
+        "help": "默认的并发分析数量",
+        "required": false
+      },
+      "enable_cache": {
+        "type": "bool",
+        "label": "启用缓存",
+        "default": true,
+        "help": "是否启用分析结果缓存",
+        "required": false
+      }
+    }
+  }
+}
+
