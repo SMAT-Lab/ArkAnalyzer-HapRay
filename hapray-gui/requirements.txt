@@ -1,0 +1,5 @@
+PySide6>=6.5.0
+pyinstaller>=5.13.0
+Pillow>=9.0.0
+
+tox

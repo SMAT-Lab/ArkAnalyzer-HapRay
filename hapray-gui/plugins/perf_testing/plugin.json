@@ -1,0 +1,131 @@
+{
+  "id": "perf_testing",
+  "name": "动态测试",
+  "description": "执行性能测试，收集性能数据和trace信息",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "type": "python",
+    "mode": "dev",
+    "script": {
+      "path": "scripts/main.py",
+      "defaults": ["main.py", "scripts/main.py"]
+    },
+    "exe": {
+      "path": "dist/perf_testing.exe",
+      "defaults": ["perf_testing.exe", "dist/perf_testing.exe"]
+    },
+    "working_dir": null
+  },
+  "parameters": {
+    "action": {
+      "type": "choice",
+      "label": "操作类型",
+      "required": true,
+      "default": "perf",
+      "choices": ["perf", "opt", "static", "prepare", "compare", "update"],
+      "help": "要执行的操作类型"
+    },
+    "so_dir": {
+      "type": "dir",
+      "label": "SO文件目录",
+      "required": false,
+      "help": "符号化后的.so文件目录"
+    },
+    "run_testcases": {
+      "type": "str",
+      "label": "测试用例",
+      "required": false,
+      "help": "要运行的测试用例（空格分隔多个用例）"
+    },
+    "round": {
+      "type": "int",
+      "label": "测试轮数",
+      "required": false,
+      "default": 5,
+      "help": "测试执行的轮数"
+    },
+    "circles": {
+      "type": "bool",
+      "label": "CPU周期采样",
+      "required": false,
+      "default": false,
+      "help": "启用CPU周期采样"
+    },
+    "no_trace": {
+      "type": "bool",
+      "label": "禁用Trace",
+      "required": false,
+      "default": false,
+      "help": "禁用trace捕获"
+    },
+    "no_perf": {
+      "type": "bool",
+      "label": "禁用Perf",
+      "required": false,
+      "default": false,
+      "help": "禁用perf捕获（仅内存模式）"
+    },
+    "memory": {
+      "type": "bool",
+      "label": "内存分析",
+      "required": false,
+      "default": false,
+      "help": "启用内存分析"
+    },
+    "devices": {
+      "type": "str",
+      "label": "设备序列号",
+      "required": false,
+      "help": "设备序列号（空格分隔）"
+    },
+    "hapflow": {
+      "type": "dir",
+      "label": "HapFlow目录",
+      "required": false,
+      "help": "启用HapFlow管道并指定Homecheck根目录"
+    },
+    "manual": {
+      "type": "bool",
+      "label": "手动测试模式",
+      "required": false,
+      "default": false,
+      "help": "启用手动测试模式，交互式收集30秒性能数据"
+    }
+  },
+  "config": {
+    "description": "动态测试插件配置项",
+    "items": {
+      "python_path": {
+        "type": "str",
+        "label": "Python路径",
+        "default": "python",
+        "help": "用于执行Python脚本的Python解释器路径",
+        "required": false
+      },
+      "timeout": {
+        "type": "int",
+        "label": "超时时间（秒）",
+        "default": 3600,
+        "help": "工具执行的最大超时时间",
+        "required": false
+      },
+      "log_level": {
+        "type": "choice",
+        "label": "日志级别",
+        "default": "INFO",
+        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
+        "help": "日志输出级别",
+        "required": false
+      },
+      "max_retries": {
+        "type": "int",
+        "label": "最大重试次数",
+        "default": 3,
+        "help": "执行失败时的最大重试次数",
+        "required": false
+      }
+    }
+  }
+}
+

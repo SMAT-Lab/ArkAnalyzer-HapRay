@@ -1,0 +1,40 @@
+{
+  "name": "hapray-gui",
+  "version": "1.0.0",
+  "description": "HapRay GUI - 工具集成平台",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "postinstall": "npm run setup",
+    "setup": "npm run setup:win --if-present || npm run setup:unix",
+    "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
+    "setup:unix": "python3 setup_env.py",
+    "build": "npm run build:onedir",
+    "build:onedir": "./.venv/bin/pyinstaller -y main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y main.spec",
+    "build:onefile": "./.venv/bin/pyinstaller -y --onefile main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y --onefile main.spec",
+    "clean": "rm -rf build/ dist/ *.egg-info .venv",
+    "install:dev": "npm run setup",
+    "run": "python main.py",
+    "run:venv": "./.venv/bin/python main.py || .\\\\.venv\\\\Scripts\\\\python.exe main.py",
+    "lint": "./.venv/bin/tox -e ruff || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff || python3 -m ruff check .",
+    "lint:fix": "./.venv/bin/tox -e ruff-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff-fix || python3 -m ruff check --fix ."
+  },
+  "author": "Huawei Device Co., Ltd.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "hapray",
+    "gui",
+    "performance",
+    "analysis",
+    "tools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}
+
