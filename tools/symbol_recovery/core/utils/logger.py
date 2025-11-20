@@ -10,18 +10,16 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import config
-
 _LOGGER_INITIALIZED = False
 _LOG_FILE_PATH: Optional[Path] = None
 
 
-def setup_logging(log_file: Optional[str] = None, level: Optional[str] = None) -> Path:
+def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
     """
     初始化 logging，配置控制台与文件双通道输出。
 
     Args:
-        log_file: 自定义日志文件路径（可选）
+        output_dir: 自定义日志文件路径
         level: 字符串形式的日志级别（可选，默认 INFO）
 
     Returns:
@@ -35,13 +33,9 @@ def setup_logging(log_file: Optional[str] = None, level: Optional[str] = None) -
     log_level = level or os.getenv('SYMBOL_RECOVERY_LOG_LEVEL', 'INFO')
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    if log_file:
-        log_path = Path(log_file)
-    else:
-        output_dir = config.ensure_output_dir(config.get_output_dir())
-        log_dir = output_dir / 'logs'
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_path = log_dir / 'symbol_recovery.log'
+    log_dir = output_dir / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / 'symbol_recovery.log'
 
     logger = logging.getLogger('symbol_recovery')
     logger.setLevel(numeric_level)
@@ -75,7 +69,7 @@ def get_logger(name: Optional[str] = None, level: Optional[str] = None) -> loggi
     Returns:
         logging.Logger: 对应的日志记录器
     """
-    setup_logging()
+
     logger_name = 'symbol_recovery'
     if name and name != 'symbol_recovery':
         logger_name = f'{logger_name}.{name}'
