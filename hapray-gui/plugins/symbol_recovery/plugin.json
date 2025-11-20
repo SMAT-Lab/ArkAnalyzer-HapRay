@@ -1,0 +1,119 @@
+{
+  "id": "symbol_recovery",
+  "name": "符号恢复",
+  "description": "二进制符号恢复工具，支持perf.data和Excel偏移量两种模式",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "type": "python",
+    "mode": "dev",
+    "script": {
+      "path": "main.py",
+      "defaults": ["main.py"]
+    },
+    "exe": {
+      "path": "dist/symbol_recovery.exe",
+      "defaults": ["symbol_recovery.exe", "dist/symbol_recovery.exe"]
+    },
+    "working_dir": null
+  },
+  "parameters": {
+    "excel_file": {
+      "type": "file",
+      "label": "Excel文件（Excel模式）",
+      "required": false,
+      "help": "包含函数偏移量地址的Excel文件（启用Excel分析模式）"
+    },
+    "so_file": {
+      "type": "file",
+      "label": "SO文件（Excel模式）",
+      "required": false,
+      "help": "SO文件路径（Excel分析模式必需）"
+    },
+    "perf_data": {
+      "type": "file",
+      "label": "perf.data文件（Perf模式）",
+      "required": false,
+      "default": "perf.data",
+      "help": "perf.data文件路径（仅perf分析模式）"
+    },
+    "so_dir": {
+      "type": "dir",
+      "label": "SO文件目录",
+      "required": false,
+      "help": "包含.so文件的目录"
+    },
+    "output": {
+      "type": "dir",
+      "label": "输出目录",
+      "required": false,
+      "default": "out",
+      "help": "输出目录路径"
+    },
+    "top_n": {
+      "type": "int",
+      "label": "Top N函数",
+      "required": false,
+      "default": 100,
+      "help": "只分析前N个函数"
+    },
+    "no_llm": {
+      "type": "bool",
+      "label": "不使用LLM",
+      "required": false,
+      "default": false,
+      "help": "不使用LLM进行符号恢复"
+    },
+    "stat_method": {
+      "type": "choice",
+      "label": "统计方法",
+      "required": false,
+      "default": "event_count",
+      "choices": ["event_count", "call_count"],
+      "help": "统计方法：event_count（事件计数）或call_count（调用次数）"
+    }
+  },
+  "validation": {
+    "custom": true,
+    "rules": [
+      {
+        "type": "one_of",
+        "params": ["excel_file", "perf_data"],
+        "message": "必须提供 Excel 文件或 perf.data 文件之一"
+      },
+      {
+        "type": "conditional",
+        "condition": "excel_file",
+        "required": ["so_file"],
+        "message": "Excel 模式需要提供 SO 文件"
+      }
+    ]
+  },
+  "config": {
+    "description": "符号恢复插件配置项",
+    "items": {
+      "python_path": {
+        "type": "str",
+        "label": "Python路径",
+        "default": "python",
+        "help": "用于执行Python脚本的Python解释器路径",
+        "required": false
+      },
+      "llm_enabled": {
+        "type": "bool",
+        "label": "启用LLM",
+        "default": true,
+        "help": "是否默认启用LLM进行符号恢复",
+        "required": false
+      },
+      "default_top_n": {
+        "type": "int",
+        "label": "默认Top N函数",
+        "default": 100,
+        "help": "默认分析前N个函数",
+        "required": false
+      }
+    }
+  }
+}
+
