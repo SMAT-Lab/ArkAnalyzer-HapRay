@@ -239,7 +239,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
                     # 保存到缓存
                     if self.enable_cache:
-                        for func_data, result in zip(uncached_batch, batch_parsed_results):
+                        for func_data, result in zip(uncached_batch, batch_parsed_results):  # noqa: B905
                             cache_key = self._get_cache_key(
                                 func_data.get('instructions', []),
                                 func_data.get('strings', []),
