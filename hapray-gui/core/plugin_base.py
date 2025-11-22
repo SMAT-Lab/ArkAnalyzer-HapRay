@@ -3,6 +3,7 @@
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -54,7 +55,13 @@ class PluginTool(BaseTool):
         # 执行配置
         self.execution_config = metadata.get('execution', {})
         self.executor_type = self.execution_config.get('type', 'python')  # python 或 node
-        self.execution_mode = self.execution_config.get('mode', 'dev')  # dev 或 release
+        # 如果是在打包后的环境中，自动切换到 release 模式（执行 exe）
+        default_mode = self.execution_config.get('mode', 'dev')
+        if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+            # PyInstaller 打包后的环境，强制使用 release 模式
+            self.execution_mode = 'release'
+        else:
+            self.execution_mode = default_mode
 
     def get_script_path(self) -> str:
         """获取脚本路径（根据模式返回 Python 脚本或 exe 文件）"""

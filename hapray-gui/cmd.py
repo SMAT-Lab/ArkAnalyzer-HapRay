@@ -223,26 +223,35 @@ class CLI:
             logger.info(f'Action: {action}')
         logger.info(f'脚本路径: {script_path}')
 
-        # 根据执行器类型执行工具
-        if executor_type == 'python':
-            result = self.tool_executor.execute_python_tool(
-                plugin_name=plugin_name,
-                script_path=script_path,
-                params=params,
-                working_dir=working_dir,
-                callback=lambda line: print(line, flush=True),
-            )
-        elif executor_type == 'node':
-            result = self.tool_executor.execute_node_tool(
-                plugin_name=plugin_name,
-                script_path=script_path,
+        if plugin.get_execution_mode() == 'release':
+            result = self.tool_executor.execute_exe_tool(
+                plugin_id=plugin_id,
+                exe_path=script_path,
                 params=params,
                 working_dir=working_dir,
                 callback=lambda line: print(line, flush=True),
             )
         else:
-            logger.error(f'不支持的执行器类型: {executor_type}')
-            return 1
+            # 根据执行器类型执行工具
+            if executor_type == 'python':
+                result = self.tool_executor.execute_python_tool(
+                    plugin_name=plugin_name,
+                    script_path=script_path,
+                    params=params,
+                    working_dir=working_dir,
+                    callback=lambda line: print(line, flush=True),
+                )
+            elif executor_type == 'node':
+                result = self.tool_executor.execute_node_tool(
+                    plugin_name=plugin_name,
+                    script_path=script_path,
+                    params=params,
+                    working_dir=working_dir,
+                    callback=lambda line: print(line, flush=True),
+                )
+            else:
+                logger.error(f'不支持的执行器类型: {executor_type}')
+                return 1
 
         # 检查执行结果
         if result.success:

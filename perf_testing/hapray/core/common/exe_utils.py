@@ -56,6 +56,7 @@ class ExeUtils:
             os.path.join(project_root, '..', 'tools'),
             os.path.join(project_root, '..', '..', 'tools'),
             os.path.join(project_root, 'tools'),
+            os.path.join(project_root, '..', '..', '..', '..', 'dist', 'tools'),
         ]
 
         for base in candidates:

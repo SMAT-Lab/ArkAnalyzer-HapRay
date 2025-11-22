@@ -157,7 +157,7 @@ class ToolExecutor:
 
     def execute_exe_tool(
         self,
-        plugin_name: str,
+        plugin_id: str,
         exe_path: str,
         params: dict[str, Any],
         working_dir: Optional[str] = None,
@@ -167,7 +167,7 @@ class ToolExecutor:
         执行可执行文件工具（PyInstaller 打包的 exe）
 
         Args:
-            plugin_name: 工具名称
+            plugin_id: 插件 id
             exe_path: exe 文件路径
             params: 参数字典
             working_dir: 工作目录
@@ -178,7 +178,7 @@ class ToolExecutor:
             cmd = [exe_path]
 
             # 特殊处理perf_testing工具，它使用action参数
-            if plugin_name == '动态测试' and 'action' in params:
+            if plugin_id == 'perf_testing' and 'action' in params:
                 action = params.pop('action')
                 cmd.append(action)
 
@@ -209,9 +209,9 @@ class ToolExecutor:
                 bufsize=1,
             )
 
-            self.running_tasks[plugin_name] = process
+            self.running_tasks[plugin_id] = process
             if callback:
-                self.task_callbacks[plugin_name] = callback
+                self.task_callbacks[plugin_id] = callback
 
             # 实时读取输出
             output_lines = []
@@ -245,9 +245,9 @@ class ToolExecutor:
             output_thread.join(timeout=1)
             error_thread.join(timeout=1)
 
-            del self.running_tasks[plugin_name]
-            if plugin_name in self.task_callbacks:
-                del self.task_callbacks[plugin_name]
+            del self.running_tasks[plugin_id]
+            if plugin_id in self.task_callbacks:
+                del self.task_callbacks[plugin_id]
 
             output = ''.join(output_lines)
             error_output = ''.join(error_lines)
