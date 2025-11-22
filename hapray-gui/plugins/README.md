@@ -25,17 +25,13 @@ plugins/
   "version": "1.0.0",
   "author": "作者名称",
   "execution": {
-    "type": "python|node",
-    "mode": "dev|release",
-    "script": {
-      "path": "相对路径/脚本文件",
-      "defaults": ["默认脚本1", "默认脚本2"]
+    "debug": {
+      "cmd": ["可执行文件 node｜python｜exe", "默认脚本2"],
+      "script": "相对路径/脚本文件（可选）"
     },
-    "exe": {
-      "path": "相对路径/exe文件",
-      "defaults": ["默认exe1", "默认exe2"]
-    },
-    "working_dir": "工作目录（可选）"
+    "release": {
+      "cmd": ["可执行文件 node｜python｜exe", "默认脚本2"]
+    }
   },
   "parameters": {
     "参数名": {
@@ -115,26 +111,35 @@ plugins/
 
 插件支持两种执行模式：
 
-- **dev（开发模式）**：执行 Python 脚本或 Node.js 脚本
-  - 使用 `script` 配置中的路径
-  - 需要安装 Python/Node.js 运行环境
+- **debug（调试模式）**：开发和调试模式
+  - 使用 `cmd` 配置中的可执行文件（node/python/exe）和脚本路径
+  - 可以指定可选的 `script` 脚本文件
   - 适合开发和调试
 
-- **release（发布模式）**：执行 PyInstaller 打包的 exe 文件
-  - 使用 `exe` 配置中的路径
-  - 不需要安装 Python 运行环境
+- **release（发布模式）**：生产环境模式
+  - 使用 `cmd` 配置中的可执行文件（node/python/exe）和脚本路径
+  - 可以指定可选的 `script` 脚本文件
   - 适合生产环境部署
 
-在 `plugin.json` 中设置 `mode` 字段来切换模式：
+在 `plugin.json` 中分别配置 `debug` 和 `release` 模式：
 ```json
 {
   "execution": {
-    "mode": "dev",  // 或 "release"
-    "script": { ... },
-    "exe": { ... }
+    "debug": {
+      "cmd": ["python", "scripts/main.py"],
+      "script": "scripts/main.py"
+    },
+    "release": {
+      "cmd": ["opt-detector", "opt-detector.exe", "dist/opt-detector/opt-detector.exe"]
+    }
   }
 }
 ```
+
+**cmd 格式说明**：
+- `cmd` 是一个数组，第一个元素是可执行文件（`node`、`python`、`python3` 或 exe 文件名）
+- 第二个元素是脚本路径（可选，主要用于 debug 模式）
+- release 模式通常只包含 exe 文件名列表，系统会尝试找到第一个存在的文件
 
 ## 配置项
 

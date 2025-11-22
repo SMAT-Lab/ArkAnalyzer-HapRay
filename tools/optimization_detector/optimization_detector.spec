@@ -143,7 +143,7 @@ if os.path.exists(os.path.join(project_root, 'hooks', 'pyi_rth_numpy.py')):
     runtime_hooks.append(os.path.join(project_root, 'hooks', 'pyi_rth_numpy.py'))
 
 a = Analysis(
-    ['optimization_detector/cli.py'],
+    ['cli.py'],
     pathex=[],
     binaries=binaries,
     datas=datas,
