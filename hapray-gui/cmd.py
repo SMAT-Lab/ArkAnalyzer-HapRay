@@ -105,6 +105,9 @@ class CLI:
         help_text = param_def.get('help', '')
         required = param_def.get('required', False)
         default = param_def.get('default')
+        # 如果提供了默认值，则不需要用户必须提供该参数
+        if default is not None:
+            required = False
         short_name = param_def.get('short')  # 短选项，如 'i', 'o', 'j'
         nargs = param_def.get('nargs')  # 多个值，如 '+', '*'
 
@@ -247,7 +250,7 @@ class CLI:
             script_path=script_path,
             params=params,
             plugin_root_dir=plugin_root_dir,
-            callback=lambda line: print(line, flush=True),
+            callback=lambda line: logger.info(line),
         )
 
         # 检查执行结果
@@ -258,7 +261,7 @@ class CLI:
             return 0
         logger.error(f'执行失败: {result.message}')
         if result.error:
-            print(result.error, file=sys.stderr)
+            logger.info(result.error)
         return 1
 
     def run(self, args: Optional[list[str]] = None) -> int:

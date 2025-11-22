@@ -121,7 +121,7 @@ class ToolExecutor:
                             break
                         error_lines.append(line)
                         if callback:
-                            callback(f'ERROR: {line.rstrip()}')
+                            callback(line.rstrip())
 
             output_thread = threading.Thread(target=read_output, daemon=True)
             error_thread = threading.Thread(target=read_error, daemon=True)
