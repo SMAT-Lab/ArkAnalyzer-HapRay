@@ -21,11 +21,11 @@ class PluginLoader:
         初始化插件加载器
 
         Args:
-            plugins_dir: 插件目录路径，默认为项目根目录下的 plugins 目录
+            plugins_dir: 插件目录路径，默认为项目根目录下的 tools 目录
         """
         if plugins_dir is None:
-            # 默认使用项目根目录下的 plugins 目录
-            plugins_dir = Path(__file__).parent.parent / 'plugins'
+            # 默认使用项目根目录下的 tools 目录
+            plugins_dir = Path(__file__).parent.parent / '..' / 'tools'
         self.plugins_dir = Path(plugins_dir)
         self.plugins: dict[str, BaseTool] = {}
         self.plugin_metadata: dict[str, dict[str, Any]] = {}

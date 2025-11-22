@@ -30,7 +30,7 @@ class PluginTool(BaseTool):
 
         # 获取插件目录
         # 优先从配置中获取路径（这是实际工具所在的路径）
-        tool_path = self.config.get_plugin_path(plugin_id) or self.config.get_tool_path(plugin_id)
+        tool_path = self.config.get_plugin_path(plugin_id)
         if tool_path:
             self.plugin_path = Path(tool_path)
         else:
@@ -131,9 +131,31 @@ class PluginTool(BaseTool):
         # 默认使用插件目录
         return str(self.plugin_path) if self.plugin_path.exists() else None
 
-    def get_parameters(self) -> dict[str, Any]:
-        """获取参数定义（从元数据中读取）"""
+    def get_parameters(self, action: Optional[str] = None) -> dict[str, Any]:
+        """获取参数定义（从元数据中读取）
+
+        Args:
+            action: 如果指定 action，则从 actions 中获取该 action 的参数
+        """
+        # 如果指定了 action 且存在 actions 配置
+        if action and 'actions' in self.metadata:
+            action_config = self.metadata['actions'].get(action)
+            if action_config:
+                return action_config.get('parameters', {})
+        # 否则返回全局参数（向后兼容）
         return self.metadata.get('parameters', {})
+
+    def get_action_info(self, action: str) -> Optional[dict[str, Any]]:
+        """获取指定 action 的信息"""
+        if 'actions' in self.metadata:
+            return self.metadata['actions'].get(action)
+        return None
+
+    def get_all_actions(self) -> list[str]:
+        """获取所有支持的 action 列表"""
+        if 'actions' in self.metadata:
+            return list(self.metadata['actions'].keys())
+        return []
 
     def get_config_schema(self) -> dict[str, Any]:
         """获取配置项定义（从元数据中读取）"""

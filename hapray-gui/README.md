@@ -68,12 +68,25 @@ python main.py
 npm run build
 ```
 
+或者直接使用打包脚本：
+```bash
+# macOS/Linux
+./build.sh
+
+# Windows
+build.bat
+```
+
 打包为单文件（体积更大，但便于分发）：
 ```bash
 npm run build:onefile
 ```
 
-打包后的文件在 `dist/hapray-gui/` 目录下。
+**打包说明：**
+- GUI 可执行文件会输出到根目录的 `dist/HapRay-GUI`（或 `HapRay-GUI.exe`）
+- 工具插件从 `dist/tools/` 目录加载
+- 打包脚本会自动处理 Python 运行时共享，避免每个工具的 `_internal` 目录重复包含 `Python3.framework`（macOS）或 Python DLL（Windows）
+- 共享的 Python 运行时位于 `dist/_shared_python/` 目录
 
 ### 清理
 
@@ -108,11 +121,17 @@ hapray-gui/
 ### 构建说明
 
 - `npm run setup`: 创建虚拟环境并安装依赖
-- `npm run build`: 使用 PyInstaller 打包为目录形式
+- `npm run build`: 使用 PyInstaller 打包为目录形式（会自动共享 Python 运行时）
 - `npm run build:onefile`: 打包为单文件
 - `npm run clean`: 清理构建文件和虚拟环境
 
-打包后的可执行文件位于 `dist/hapray-gui/` 目录。
+**打包输出：**
+- GUI 可执行文件：`../dist/HapRay-GUI`（或 `HapRay-GUI.exe`）
+- 工具目录：`../dist/tools/`
+- 共享 Python 运行时：`../dist/_shared_python/`
+
+**Python 运行时共享：**
+打包脚本会自动执行 `share_python_runtime.py` 后处理脚本，将所有工具的 Python 运行时（macOS 上的 `Python3.framework`，Windows 上的 Python DLL）共享到统一目录，避免重复。每个工具的 `_internal` 目录会通过符号链接（或复制）指向共享的运行时。
 
 ## 目录结构
 
