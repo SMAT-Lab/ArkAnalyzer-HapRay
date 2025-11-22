@@ -12,7 +12,6 @@
       "defaults": ["lib/bundle.js", "src/cli/index.ts", "hapray-sa-cmd.js", "index.js", "cli.js"]
     },
     "exe": {
-      "path": "dist/sa.exe",
       "defaults": ["sa.exe", "dist/sa.exe"]
     },
     "working_dir": null

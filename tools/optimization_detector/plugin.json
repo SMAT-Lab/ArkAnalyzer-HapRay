@@ -6,14 +6,13 @@
   "author": "HapRay Team",
   "execution": {
     "type": "python",
-    "mode": "dev",
+    "mode": "release",
     "script": {
       "path": "optimization_detector/cli.py",
       "defaults": ["cli.py", "optimization_detector/cli.py"]
     },
     "exe": {
-      "path": "dist/optimization_detector.exe",
-      "defaults": ["optimization_detector.exe", "dist/optimization_detector.exe"]
+      "defaults": ["opt-detector", "opt-detector.exe", "dist/opt-detector/opt-detector.exe", "dist/opt-detector/opt-detector"]
     },
     "working_dir": null
   },

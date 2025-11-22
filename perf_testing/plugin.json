@@ -12,7 +12,6 @@
       "defaults": ["main.py", "scripts/main.py"]
     },
     "exe": {
-      "path": "perf-testing",
       "defaults": ["perf-testing", "perf_testing.exe", "dist/perf-testing/perf_testing.exe", "dist/perf-testing/perf-testing"]
     },
     "working_dir": null

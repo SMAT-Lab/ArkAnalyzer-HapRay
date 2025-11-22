@@ -181,6 +181,8 @@ class ToolExecutor:
             if plugin_id == 'perf_testing' and 'action' in params:
                 action = params.pop('action')
                 cmd.append(action)
+            if plugin_id in ['optimization_detector']:
+                params.pop('action')
 
             # 添加参数
             for key, value in params.items():
