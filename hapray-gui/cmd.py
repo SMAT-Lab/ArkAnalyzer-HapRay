@@ -226,7 +226,7 @@ class CLI:
         # 根据执行器类型执行工具
         if executor_type == 'python':
             result = self.tool_executor.execute_python_tool(
-                tool_name=plugin_name,
+                plugin_name=plugin_name,
                 script_path=script_path,
                 params=params,
                 working_dir=working_dir,
@@ -234,7 +234,7 @@ class CLI:
             )
         elif executor_type == 'node':
             result = self.tool_executor.execute_node_tool(
-                tool_name=plugin_name,
+                plugin_name=plugin_name,
                 script_path=script_path,
                 params=params,
                 working_dir=working_dir,
