@@ -22,6 +22,7 @@
       "type": "dir",
       "label": "输入路径",
       "required": true,
+      "short": "i",
       "help": "包含二进制文件的目录或单个文件路径"
     },
     "output": {
@@ -29,6 +30,7 @@
       "label": "输出文件",
       "required": false,
       "default": "binary_analysis_report.xlsx",
+      "short": "o",
       "help": "输出Excel文件路径"
     },
     "jobs": {
@@ -36,12 +38,14 @@
       "label": "并行任务数",
       "required": false,
       "default": 1,
+      "short": "j",
       "help": "并行处理的任务数量"
     },
     "report_dir": {
       "type": "dir",
       "label": "报告目录",
       "required": false,
+      "short": "r",
       "help": "包含报告要更新的目录"
     },
     "timeout": {

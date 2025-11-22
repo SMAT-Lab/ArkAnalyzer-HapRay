@@ -21,7 +21,7 @@ class CLI:
         self.plugin_loader = PluginLoader()
         self.tool_executor = ToolExecutor()
         self.parser = argparse.ArgumentParser(
-            prog='hapray-cmd',
+            prog='ArkAnalyzer-HapRay',
             description='HapRay 命令行工具 - 基于插件的工具集合',
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -61,18 +61,25 @@ class CLI:
         help_text = param_def.get('help', '')
         required = param_def.get('required', False)
         default = param_def.get('default', None)
+        short_name = param_def.get('short', None)  # 短选项，如 'i', 'o', 'j'
+        nargs = param_def.get('nargs', None)  # 多个值，如 '+', '*'
 
         # 将参数名转换为命令行格式（下划线转连字符）
         arg_name = param_name.replace('_', '-')
         # 创建长参数名
         long_name = f'--{arg_name}'
 
+        # 构建参数列表（可能包含短选项）
+        arg_names = [long_name]
+        if short_name:
+            arg_names.insert(0, f'-{short_name}')
+
         # 根据类型设置不同的参数选项
         if param_type == 'bool':
             # 布尔类型使用 store_true 或 store_false
             action = 'store_true' if not default else 'store_false'
             parser.add_argument(
-                long_name,
+                *arg_names,
                 action=action,
                 default=default if default is not None else False,
                 help=help_text or label,
@@ -81,7 +88,7 @@ class CLI:
             # 选择类型
             choices = param_def.get('choices', [])
             parser.add_argument(
-                long_name,
+                *arg_names,
                 type=str,
                 choices=choices,
                 default=default,
@@ -90,31 +97,42 @@ class CLI:
             )
         elif param_type == 'int':
             # 整数类型
-            parser.add_argument(
-                long_name,
-                type=int,
-                default=default,
-                required=required,
-                help=help_text or label,
-            )
+            # 如果 nargs 指定为 '+' 或 '*'，则支持多个值
+            kwargs = {
+                'type': int,
+                'default': default,
+                'required': required,
+                'help': help_text or label,
+            }
+            if nargs:
+                kwargs['nargs'] = nargs
+            parser.add_argument(*arg_names, **kwargs)
         elif param_type in ('file', 'dir'):
             # 文件或目录类型
-            parser.add_argument(
-                long_name,
-                type=str,
-                default=default,
-                required=required,
-                help=help_text or label,
-            )
+            kwargs = {
+                'type': str,
+                'default': default,
+                'required': required,
+                'help': help_text or label,
+            }
+            if nargs:
+                kwargs['nargs'] = nargs
+            parser.add_argument(*arg_names, **kwargs)
         else:
             # 字符串类型（默认）
-            parser.add_argument(
-                long_name,
-                type=str,
-                default=default,
-                required=required,
-                help=help_text or label,
-            )
+            kwargs = {
+                'type': str,
+                'default': default,
+                'required': required,
+                'help': help_text or label,
+            }
+            # 根据参数名推断是否需要多个值
+            if nargs:
+                kwargs['nargs'] = nargs
+            elif param_name in ('run_testcases', 'devices', 'perfs', 'traces', 'pids', 'time_ranges'):
+                # 这些参数在 README.md 中支持多个值
+                kwargs['nargs'] = '+'
+            parser.add_argument(*arg_names, **kwargs)
 
     def _convert_args_to_params(self, args: argparse.Namespace) -> dict[str, Any]:
         """将 argparse Namespace 转换为参数字典"""

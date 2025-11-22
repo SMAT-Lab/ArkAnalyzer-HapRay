@@ -36,7 +36,8 @@
       "type": "str",
       "label": "测试用例",
       "required": false,
-      "help": "要运行的测试用例（空格分隔多个用例）"
+      "nargs": "+",
+      "help": "要运行的测试用例（支持多个值）"
     },
     "round": {
       "type": "int",
@@ -77,7 +78,8 @@
       "type": "str",
       "label": "设备序列号",
       "required": false,
-      "help": "设备序列号（空格分隔）"
+      "nargs": "+",
+      "help": "设备序列号（支持多个值）"
     },
     "hapflow": {
       "type": "dir",

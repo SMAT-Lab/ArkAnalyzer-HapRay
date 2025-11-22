@@ -30,6 +30,7 @@
       "type": "file",
       "label": "输入路径",
       "required": true,
+      "short": "i",
       "help": "HAP/ZIP文件或目录路径"
     },
     "output": {
@@ -37,6 +38,7 @@
       "label": "输出目录",
       "required": false,
       "default": "./output",
+      "short": "o",
       "help": "输出目录路径"
     },
     "format": {
