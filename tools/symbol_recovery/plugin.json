@@ -5,17 +5,13 @@
   "version": "1.0.0",
   "author": "HapRay Team",
   "execution": {
-    "type": "python",
-    "mode": "dev",
-    "script": {
-      "path": "main.py",
-      "defaults": ["main.py"]
+    "debug": {
+      "cmd": ["python", "main.py"],
+      "script": "main.py"
     },
-    "exe": {
-      "path": "dist/symbol_recovery.exe",
-      "defaults": ["symbol_recovery.exe", "dist/symbol_recovery.exe"]
-    },
-    "working_dir": null
+    "release": {
+      "cmd": ["symbol_recovery.exe", "dist/symbol_recovery.exe"]
+    }
   },
   "parameters": {
     "excel_file": {
