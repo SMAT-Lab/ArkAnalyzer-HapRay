@@ -10,7 +10,7 @@
     "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
     "setup:unix": "python3 setup_env.py",
     "build": "npm run build:python",
-    "postbuild": "node -e \"if (process.platform === 'win32') { require('child_process').execSync('node copy_dist.js', {stdio: 'inherit'}) } else { require('child_process').execSync('mkdir -p ../dist && rm -rf ../dist/_internal ../dist/ArkAnalyzer-HapRay && cp -a dist/ArkAnalyzer-HapRay/_internal ../dist/ && cp -a dist/ArkAnalyzer-HapRay/ArkAnalyzer-HapRay ../dist/', {stdio: 'inherit'}) }\"",
+    "postbuild": "node -e \"if (process.platform === 'win32') { require('child_process').execSync('node copy_dist.js', {stdio: 'inherit'}) } else { require('child_process').execSync('mkdir -p ../dist/tools/perf_testing && rm -rf ../dist/tools/perf_testing/* && cp -a dist/perf_testing/* ../dist/tools/perf_testing/', {stdio: 'inherit'}) }\"",
     "build:python": "./.venv/bin/pyinstaller -y main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y main.spec",
     "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint || python3 -m ruff check .",
     "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix || python3 -m ruff check --fix .",

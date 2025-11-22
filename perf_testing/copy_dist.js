@@ -4,8 +4,8 @@ const path = require("path");
 
 const perfTestingRoot = path.resolve(__dirname);
 const repoRoot = path.resolve(perfTestingRoot, "..");
-const srcDir = path.join(perfTestingRoot, "dist", "ArkAnalyzer-HapRay");
-const destDir = path.join(repoRoot, "dist");
+const srcDir = path.join(perfTestingRoot, "dist", "perf_testing");
+const destDir = path.join(repoRoot, "dist", "tools", "perf_testing");
 
 if (!fs.existsSync(srcDir)) {
   console.error(`Source directory not found: ${srcDir}`);
