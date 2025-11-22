@@ -17,49 +17,57 @@
     },
     "working_dir": null
   },
-  "parameters": {
-    "command": {
-      "type": "choice",
-      "label": "命令类型",
-      "required": true,
-      "default": "hap",
-      "choices": ["hap", "perf", "elf"],
-      "help": "要执行的命令类型"
-    },
-    "input": {
-      "type": "file",
-      "label": "输入路径",
-      "required": true,
-      "help": "HAP/ZIP文件或目录路径"
-    },
-    "output": {
-      "type": "dir",
-      "label": "输出目录",
-      "required": false,
-      "default": "./output",
-      "help": "输出目录路径"
-    },
-    "format": {
-      "type": "choice",
-      "label": "输出格式",
-      "required": false,
-      "default": "all",
-      "choices": ["json", "html", "excel", "all"],
-      "help": "输出格式"
-    },
-    "jobs": {
-      "type": "str",
-      "label": "并发数量",
-      "required": false,
-      "default": "auto",
-      "help": "并发分析数量，默认为CPU核心数"
-    },
-    "beautify_js": {
-      "type": "bool",
-      "label": "美化JS文件",
-      "required": false,
-      "default": false,
-      "help": "美化压缩的JS文件并保存到输出目录"
+  "actions": {
+    "static": {
+      "name": "静态分析",
+      "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+      "parameters": {
+        "command": {
+          "type": "choice",
+          "label": "命令类型",
+          "required": true,
+          "default": "hap",
+          "choices": ["hap", "perf", "elf"],
+          "help": "要执行的命令类型"
+        },
+        "input": {
+          "type": "file",
+          "label": "输入路径",
+          "required": true,
+          "short": "i",
+          "help": "HAP/ZIP文件或目录路径"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "default": "./output",
+          "short": "o",
+          "help": "输出目录路径"
+        },
+        "format": {
+          "type": "choice",
+          "label": "输出格式",
+          "required": false,
+          "default": "all",
+          "choices": ["json", "html", "excel", "all"],
+          "help": "输出格式"
+        },
+        "jobs": {
+          "type": "str",
+          "label": "并发数量",
+          "required": false,
+          "default": "auto",
+          "help": "并发分析数量，默认为CPU核心数"
+        },
+        "beautify_js": {
+          "type": "bool",
+          "label": "美化JS文件",
+          "required": false,
+          "default": false,
+          "help": "美化压缩的JS文件并保存到输出目录"
+        }
+      }
     }
   },
   "config": {
