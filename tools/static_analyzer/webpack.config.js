@@ -83,6 +83,7 @@ module.exports = {
         new CopyPlugin({
             patterns: [
                 { from: 'res', to: 'res' },
+                { from: 'plugin.json', to: 'plugin.json' },
                 { from: '../../node_modules/bjc/res', to: 'res'},
                 { from: '../../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
