@@ -26,7 +26,7 @@ class ToolExecutor:
 
     def execute_python_tool(
         self,
-        tool_name: str,
+        plugin_id: str,
         script_path: str,
         params: dict[str, Any],
         working_dir: Optional[str] = None,
@@ -36,21 +36,21 @@ class ToolExecutor:
         执行Python工具
 
         Args:
-            tool_name: 工具名称
+            plugin_id: 工具ID
             script_path: Python脚本路径
             params: 参数字典
             working_dir: 工作目录
             callback: 输出回调函数
         """
         try:
-            tool_config = self.config.get_tool_config(tool_name)
+            tool_config = self.config.get_plugin_config(plugin_id)
             python_cmd = tool_config.get('python', 'python')
 
             # 构建命令
             cmd = [python_cmd, script_path]
 
             # 特殊处理perf_testing工具，它使用action参数
-            if tool_name == '动态测试' and 'action' in params:
+            if plugin_id == '动态测试' and 'action' in params:
                 action = params.pop('action')
                 cmd.append(action)
 
@@ -92,9 +92,9 @@ class ToolExecutor:
                 bufsize=1,
             )
 
-            self.running_tasks[tool_name] = process
+            self.running_tasks[plugin_id] = process
             if callback:
-                self.task_callbacks[tool_name] = callback
+                self.task_callbacks[plugin_id] = callback
 
             # 实时读取输出
             output_lines = []
@@ -128,9 +128,9 @@ class ToolExecutor:
             output_thread.join(timeout=1)
             error_thread.join(timeout=1)
 
-            del self.running_tasks[tool_name]
-            if tool_name in self.task_callbacks:
-                del self.task_callbacks[tool_name]
+            del self.running_tasks[plugin_id]
+            if plugin_id in self.task_callbacks:
+                del self.task_callbacks[plugin_id]
 
             output = ''.join(output_lines)
             error_output = ''.join(error_lines)
@@ -157,7 +157,7 @@ class ToolExecutor:
 
     def execute_exe_tool(
         self,
-        tool_name: str,
+        plugin_id: str,
         exe_path: str,
         params: dict[str, Any],
         working_dir: Optional[str] = None,
@@ -167,7 +167,7 @@ class ToolExecutor:
         执行可执行文件工具（PyInstaller 打包的 exe）
 
         Args:
-            tool_name: 工具名称
+            plugin_id: 插件 id
             exe_path: exe 文件路径
             params: 参数字典
             working_dir: 工作目录
@@ -178,7 +178,7 @@ class ToolExecutor:
             cmd = [exe_path]
 
             # 特殊处理perf_testing工具，它使用action参数
-            if tool_name == '动态测试' and 'action' in params:
+            if plugin_id == 'perf_testing' and 'action' in params:
                 action = params.pop('action')
                 cmd.append(action)
 
@@ -209,9 +209,9 @@ class ToolExecutor:
                 bufsize=1,
             )
 
-            self.running_tasks[tool_name] = process
+            self.running_tasks[plugin_id] = process
             if callback:
-                self.task_callbacks[tool_name] = callback
+                self.task_callbacks[plugin_id] = callback
 
             # 实时读取输出
             output_lines = []
@@ -245,9 +245,9 @@ class ToolExecutor:
             output_thread.join(timeout=1)
             error_thread.join(timeout=1)
 
-            del self.running_tasks[tool_name]
-            if tool_name in self.task_callbacks:
-                del self.task_callbacks[tool_name]
+            del self.running_tasks[plugin_id]
+            if plugin_id in self.task_callbacks:
+                del self.task_callbacks[plugin_id]
 
             output = ''.join(output_lines)
             error_output = ''.join(error_lines)
@@ -274,7 +274,7 @@ class ToolExecutor:
 
     def execute_node_tool(
         self,
-        tool_name: str,
+        plugin_id: str,
         script_path: str,
         params: dict[str, Any],
         working_dir: Optional[str] = None,
@@ -284,14 +284,14 @@ class ToolExecutor:
         执行Node.js工具
 
         Args:
-            tool_name: 工具名称
+            plugin_id: 工具ID
             script_path: Node.js脚本路径
             params: 参数字典
             working_dir: 工作目录
             callback: 输出回调函数
         """
         try:
-            tool_config = self.config.get_tool_config(tool_name)
+            tool_config = self.config.get_plugin_config(plugin_id)
             node_cmd = tool_config.get('node', 'node')
 
             # 构建命令 - 静态分析工具使用 hapray 命令格式
@@ -328,9 +328,9 @@ class ToolExecutor:
                 bufsize=1,
             )
 
-            self.running_tasks[tool_name] = process
+            self.running_tasks[plugin_id] = process
             if callback:
-                self.task_callbacks[tool_name] = callback
+                self.task_callbacks[plugin_id] = callback
 
             # 实时读取输出
             output_lines = []
@@ -364,9 +364,9 @@ class ToolExecutor:
             output_thread.join(timeout=1)
             error_thread.join(timeout=1)
 
-            del self.running_tasks[tool_name]
-            if tool_name in self.task_callbacks:
-                del self.task_callbacks[tool_name]
+            del self.running_tasks[plugin_id]
+            if plugin_id in self.task_callbacks:
+                del self.task_callbacks[plugin_id]
 
             output = ''.join(output_lines)
             error_output = ''.join(error_lines)
@@ -391,21 +391,21 @@ class ToolExecutor:
             logger.error(f'执行工具失败: {e}', exc_info=True)
             return ToolResult(success=False, message=f'执行失败: {str(e)}', error=str(e))
 
-    def cancel_task(self, tool_name: str) -> bool:
+    def cancel_task(self, plugin_id: str) -> bool:
         """取消正在执行的任务"""
-        if tool_name in self.running_tasks:
-            process = self.running_tasks[tool_name]
+        if plugin_id in self.running_tasks:
+            process = self.running_tasks[plugin_id]
             try:
                 process.terminate()
                 process.wait(timeout=5)
             except (subprocess.TimeoutExpired, ProcessLookupError):
                 process.kill()
-            del self.running_tasks[tool_name]
-            if tool_name in self.task_callbacks:
-                del self.task_callbacks[tool_name]
+            del self.running_tasks[plugin_id]
+            if plugin_id in self.task_callbacks:
+                del self.task_callbacks[plugin_id]
             return True
         return False
 
-    def is_running(self, tool_name: str) -> bool:
+    def is_running(self, plugin_id: str) -> bool:
         """检查任务是否正在运行"""
-        return tool_name in self.running_tasks
+        return plugin_id in self.running_tasks

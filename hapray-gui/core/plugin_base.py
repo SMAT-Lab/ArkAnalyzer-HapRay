@@ -2,6 +2,8 @@
 插件基类 - 提供插件工具的基础功能
 """
 
+import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -30,24 +32,43 @@ class PluginTool(BaseTool):
 
         # 获取插件目录
         # 优先从配置中获取路径（这是实际工具所在的路径）
-        tool_path = self.config.get_plugin_path(plugin_id) or self.config.get_tool_path(plugin_id)
+        tool_path = self.config.get_plugin_path(plugin_id)
         if tool_path:
-            self.plugin_path = Path(tool_path)
+            self.plugin_path = Path(tool_path).resolve()
         else:
             # 如果配置中没有，尝试使用 metadata 中的 plugin_dir（插件加载器添加的）
             plugin_dir = metadata.get('plugin_dir')
             if plugin_dir:
-                self.plugin_path = Path(plugin_dir)
+                plugin_path_obj = Path(plugin_dir)
+                # 解析路径（处理相对路径和 ..），确保是绝对路径
+                try:
+                    self.plugin_path = plugin_path_obj.resolve()
+                except (OSError, RuntimeError):
+                    # 如果解析失败，尝试使用当前工作目录
+                    if os.path.isabs(str(plugin_dir)):
+                        self.plugin_path = Path(plugin_dir)
+                    else:
+                        self.plugin_path = Path(os.getcwd()) / plugin_dir
             else:
                 self.plugin_path = Path()
 
         # 执行配置
         self.execution_config = metadata.get('execution', {})
         self.executor_type = self.execution_config.get('type', 'python')  # python 或 node
-        self.execution_mode = self.execution_config.get('mode', 'dev')  # dev 或 release
+        # 如果是在打包后的环境中，自动切换到 release 模式（执行 exe）
+        default_mode = self.execution_config.get('mode', 'dev')
+        if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+            # PyInstaller 打包后的环境，强制使用 release 模式
+            self.execution_mode = 'release'
+        else:
+            self.execution_mode = default_mode
 
     def get_script_path(self) -> str:
         """获取脚本路径（根据模式返回 Python 脚本或 exe 文件）"""
+        # 确保 plugin_path 是绝对路径且已解析
+        if self.plugin_path:
+            self.plugin_path = self.plugin_path.resolve()
+
         if self.execution_mode == 'release':
             # Release 模式：返回 exe 文件路径
             exe_config = self.execution_config.get('exe', {})
@@ -80,29 +101,73 @@ class PluginTool(BaseTool):
             return str(self.plugin_path / f'{plugin_name}.exe')
         # Dev 模式：返回 Python 脚本路径
         script_config = self.execution_config.get('script', {})
+        exe_config = self.execution_config.get('exe', {})
 
-        # 如果指定了脚本路径
+        # 首先尝试查找脚本文件
+        found_script = None
         if 'path' in script_config:
             script_path = self.plugin_path / script_config['path']
             if script_path.exists():
-                return str(script_path)
+                found_script = script_path
 
-        # 默认查找常见入口文件
+        if not found_script:
+            # 默认查找常见入口文件
+            default_scripts = script_config.get('defaults', [])
+            for script_name in default_scripts:
+                script_path = self.plugin_path / script_name
+                if script_path.exists():
+                    found_script = script_path
+                    break
+
+        if not found_script:
+            # 尝试常见的入口文件
+            for common in ['main.py', 'cli.py', 'index.js', 'bundle.js']:
+                common_path = self.plugin_path / common
+                if common_path.exists():
+                    found_script = common_path
+                    break
+
+        # 如果脚本文件存在，返回脚本路径
+        if found_script:
+            return str(found_script)
+
+        # 如果脚本都不存在，尝试回退到 exe 模式（打包后的情况）
+        # 首先尝试 exe_config 中的 path
+        if 'path' in exe_config:
+            exe_path = self.plugin_path / exe_config['path']
+            if exe_path.exists() and exe_path.is_file():
+                return str(exe_path)
+
+        # 尝试默认的 exe 文件名
+        default_exes = exe_config.get('defaults', [])
+        for exe_name in default_exes:
+            exe_path = self.plugin_path / exe_name
+            if exe_path.exists() and exe_path.is_file():
+                return str(exe_path)
+
+        # 尝试常见的可执行文件名（无扩展名，适用于 Linux/macOS）
+        plugin_name = self.plugin_id.replace('_', '-')
+        # 首先尝试插件名对应的可执行文件（最常见的情况）
+        plugin_exe_path = self.plugin_path / plugin_name
+        if plugin_exe_path.exists() and plugin_exe_path.is_file():
+            return str(plugin_exe_path)
+
+        # 然后尝试其他常见的可执行文件名
+        for common_exe in [f'{plugin_name}.exe', 'main.exe', 'cli.exe']:
+            common_path = self.plugin_path / common_exe
+            if common_path.exists() and common_path.is_file():
+                return str(common_path)
+
+        # 如果都没找到，再次尝试查找可执行文件（防止遗漏）
+        plugin_name = self.plugin_id.replace('_', '-')
+        exe_path = self.plugin_path / plugin_name
+        if exe_path.exists() and exe_path.is_file():
+            return str(exe_path)
+
+        # 如果都没找到，返回第一个默认脚本路径（即使不存在，让执行器报告错误）
         default_scripts = script_config.get('defaults', [])
-        for script_name in default_scripts:
-            script_path = self.plugin_path / script_name
-            if script_path.exists():
-                return str(script_path)
-
-        # 如果都没找到，返回第一个默认值
         if default_scripts:
             return str(self.plugin_path / default_scripts[0])
-
-        # 最后尝试常见的入口文件
-        for common in ['main.py', 'cli.py', 'index.js', 'bundle.js']:
-            common_path = self.plugin_path / common
-            if common_path.exists():
-                return str(common_path)
 
         return str(self.plugin_path / 'main.py')
 
@@ -131,9 +196,31 @@ class PluginTool(BaseTool):
         # 默认使用插件目录
         return str(self.plugin_path) if self.plugin_path.exists() else None
 
-    def get_parameters(self) -> dict[str, Any]:
-        """获取参数定义（从元数据中读取）"""
+    def get_parameters(self, action: Optional[str] = None) -> dict[str, Any]:
+        """获取参数定义（从元数据中读取）
+
+        Args:
+            action: 如果指定 action，则从 actions 中获取该 action 的参数
+        """
+        # 如果指定了 action 且存在 actions 配置
+        if action and 'actions' in self.metadata:
+            action_config = self.metadata['actions'].get(action)
+            if action_config:
+                return action_config.get('parameters', {})
+        # 否则返回全局参数（向后兼容）
         return self.metadata.get('parameters', {})
+
+    def get_action_info(self, action: str) -> Optional[dict[str, Any]]:
+        """获取指定 action 的信息"""
+        if 'actions' in self.metadata:
+            return self.metadata['actions'].get(action)
+        return None
+
+    def get_all_actions(self) -> list[str]:
+        """获取所有支持的 action 列表"""
+        if 'actions' in self.metadata:
+            return list(self.metadata['actions'].keys())
+        return []
 
     def get_config_schema(self) -> dict[str, Any]:
         """获取配置项定义（从元数据中读取）"""
@@ -172,10 +259,14 @@ class PluginTool(BaseTool):
         if not self.plugin_path.exists():
             return False, f'插件路径不存在: {self.plugin_path}'
 
-        # 检查脚本路径
-        script_path = Path(self.get_script_path())
+        # 检查脚本路径（get_script_path 已经包含了回退逻辑，会尝试脚本和exe）
+        script_path_str = self.get_script_path()
+        script_path = Path(script_path_str)
+        # 解析路径（处理相对路径和 ..）
+        script_path = script_path.resolve()
+
         if not script_path.exists():
-            return False, f'脚本文件不存在: {script_path}'
+            return False, f'脚本或可执行文件不存在: {script_path}'
 
         # 检查必需参数
         parameters = self.get_parameters()

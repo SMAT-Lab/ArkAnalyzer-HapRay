@@ -87,9 +87,10 @@ class ExecutionThread(QThread):
             is_release = self.tool.execution_mode == 'release'
 
         # 根据执行器类型和执行模式选择执行方法
+        plugin_id = self.tool.plugin_id if hasattr(self.tool, 'plugin_id') else self.tool.get_name()
         if executor_type == 'node':
             result = self.executor.execute_node_tool(
-                self.tool.get_name(),
+                plugin_id,
                 self.tool.get_script_path(),
                 self.params.copy(),
                 self.tool.get_working_dir(),
@@ -98,7 +99,7 @@ class ExecutionThread(QThread):
         elif is_release and executor_type == 'python':
             # Release 模式：执行 exe 文件
             result = self.executor.execute_exe_tool(
-                self.tool.get_name(),
+                plugin_id,
                 self.tool.get_script_path(),
                 self.params.copy(),
                 self.tool.get_working_dir(),
@@ -107,7 +108,7 @@ class ExecutionThread(QThread):
         elif executor_type == 'python' or executor_type is None:
             # Dev 模式：默认使用 Python 执行器
             result = self.executor.execute_python_tool(
-                self.tool.get_name(),
+                plugin_id,
                 self.tool.get_script_path(),
                 self.params.copy(),
                 self.tool.get_working_dir(),
@@ -316,7 +317,8 @@ class ToolPage(QWidget):
         """取消执行"""
         if self.execution_thread and self.execution_thread.isRunning():
             executor = ToolExecutor()
-            executor.cancel_task(self.tool.get_name())
+            plugin_id = self.tool.plugin_id if hasattr(self.tool, 'plugin_id') else self.tool.get_name()
+            executor.cancel_task(plugin_id)
             self.execution_thread.terminate()
             self.execution_thread.wait()
             self.output_text.append('\n执行已取消')
