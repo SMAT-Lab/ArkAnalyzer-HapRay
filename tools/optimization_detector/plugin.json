@@ -1,0 +1,111 @@
+{
+  "id": "optimization_detector",
+  "name": "优化检测",
+  "description": "检测二进制文件的优化级别和LTO（链接时优化）",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "debug": {
+      "cmd": ["./.venv/bin/python", "./.venv/Scripts/python.exe"],
+      "script": "cli.py"
+    },
+    "release": {
+      "cmd": ["opt-detector", "opt-detector.exe", "dist/opt-detector/opt-detector.exe", "dist/opt-detector/opt-detector"]
+    }
+  },
+  "actions": {
+    "opt": {
+      "name": "优化检测",
+      "description": "检测二进制文件的优化级别和LTO（链接时优化）",
+      "action_mapping": {
+        "type": "remove"
+      },
+      "parameters": {
+        "input": {
+          "type": "dir",
+          "label": "输入路径",
+          "required": true,
+          "short": "i",
+          "help": "包含二进制文件的目录或单个文件路径"
+        },
+        "output": {
+          "type": "file",
+          "label": "输出文件",
+          "required": false,
+          "default": "binary_analysis_report.xlsx",
+          "short": "o",
+          "help": "输出Excel文件路径"
+        },
+        "jobs": {
+          "type": "int",
+          "label": "并行任务数",
+          "required": false,
+          "default": 1,
+          "short": "j",
+          "help": "并行处理的任务数量"
+        },
+        "report_dir": {
+          "type": "dir",
+          "label": "报告目录",
+          "required": false,
+          "short": "r",
+          "help": "包含报告要更新的目录"
+        },
+        "timeout": {
+          "type": "int",
+          "label": "超时时间（秒）",
+          "required": false,
+          "help": "处理单个文件的超时时间"
+        },
+        "no_lto": {
+          "type": "bool",
+          "label": "禁用LTO检测",
+          "required": false,
+          "default": false,
+          "help": "禁用LTO（链接时优化）检测"
+        },
+        "no_opt": {
+          "type": "bool",
+          "label": "禁用优化级别检测",
+          "required": false,
+          "default": false,
+          "help": "禁用优化级别（Ox）检测，仅运行LTO检测"
+        },
+        "verbose": {
+          "type": "bool",
+          "label": "详细输出",
+          "required": false,
+          "default": false,
+          "help": "显示详细日志"
+        }
+      }
+    }
+  },
+  "config": {
+    "description": "优化检测插件配置项",
+    "items": {
+      "python_path": {
+        "type": "str",
+        "label": "Python路径",
+        "default": "python",
+        "help": "用于执行Python脚本的Python解释器路径",
+        "required": false
+      },
+      "default_jobs": {
+        "type": "int",
+        "label": "默认并行任务数",
+        "default": 4,
+        "help": "默认的并行处理任务数量",
+        "required": false
+      },
+      "default_timeout": {
+        "type": "int",
+        "label": "默认超时时间（秒）",
+        "default": 300,
+        "help": "处理单个文件的默认超时时间",
+        "required": false
+      }
+    }
+  }
+}
+
