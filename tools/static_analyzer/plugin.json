@@ -1,5 +1,5 @@
 {
-  "id": "sa",
+  "id": "static_analyzer",
   "name": "静态分析",
   "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
   "version": "1.0.0",
@@ -18,15 +18,11 @@
     "static": {
       "name": "静态分析",
       "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+      "action_mapping": {
+        "type": "map",
+        "command": ["hapray", "hap"]
+      },
       "parameters": {
-        "command": {
-          "type": "choice",
-          "label": "命令类型",
-          "required": true,
-          "default": "hap",
-          "choices": ["hap", "perf", "elf"],
-          "help": "要执行的命令类型"
-        },
         "input": {
           "type": "file",
           "label": "输入路径",
@@ -42,14 +38,6 @@
           "short": "o",
           "help": "输出目录路径"
         },
-        "format": {
-          "type": "choice",
-          "label": "输出格式",
-          "required": false,
-          "default": "all",
-          "choices": ["json", "html", "excel", "all"],
-          "help": "输出格式"
-        },
         "jobs": {
           "type": "str",
           "label": "并发数量",
@@ -57,12 +45,12 @@
           "default": "auto",
           "help": "并发分析数量，默认为CPU核心数"
         },
-        "beautify_js": {
+        "include_details": {
           "type": "bool",
-          "label": "美化JS文件",
+          "label": "包含详细信息",
           "required": false,
           "default": false,
-          "help": "美化压缩的JS文件并保存到输出目录"
+          "help": "是否包含详细信息"
         }
       }
     }

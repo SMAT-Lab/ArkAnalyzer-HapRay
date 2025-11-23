@@ -17,6 +17,9 @@
     "perf": {
       "name": "性能测试",
       "description": "执行性能测试，收集性能数据和trace信息",
+      "action_mapping": {
+        "type": "position"
+      },
       "parameters": {
         "so_dir": {
           "type": "dir",
@@ -97,6 +100,9 @@
     "prepare": {
       "name": "简化测试执行",
       "description": "简化的测试执行，不生成复杂报告",
+      "action_mapping": {
+        "type": "position"
+      },
       "parameters": {
         "run_testcases": {
           "type": "str",
@@ -123,6 +129,9 @@
     "update": {
       "name": "更新报告",
       "description": "更新现有性能报告",
+      "action_mapping": {
+        "type": "position"
+      },
       "parameters": {
         "report_dir": {
           "type": "dir",
@@ -195,6 +204,9 @@
     "compare": {
       "name": "对比报告",
       "description": "对比两个报告目录",
+      "action_mapping": {
+        "type": "position"
+      },
       "parameters": {
         "base_dir": {
           "type": "dir",

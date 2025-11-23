@@ -124,6 +124,29 @@ class PluginTool(BaseTool):
             return list(self.metadata['actions'].keys())
         return []
 
+    def get_action_mapping(self, action: Optional[str] = None) -> Optional[dict[str, Any]]:
+        """获取 action 映射配置
+        
+        Args:
+            action: action 名称，如果提供则从该 action 的配置中读取
+        
+        Returns:
+            action_mapping 配置字典，格式：
+            {
+                "type": "position" | "remove" | "map",
+                "command": ["command", "args", ...]  # 仅当 type 为 "map" 时存在
+            }
+        """
+        # 优先从 action 配置中读取
+        if action and 'actions' in self.metadata:
+            action_config = self.metadata['actions'].get(action)
+            if action_config and 'action_mapping' in action_config:
+                return action_config.get('action_mapping')
+        
+        # 向后兼容：如果没有在 action 中配置，尝试从 execution 中读取
+        execution_config = self.metadata.get('execution', {})
+        return execution_config.get('action_mapping')
+
     def get_config_schema(self) -> dict[str, Any]:
         """获取配置项定义（从元数据中读取）"""
         return self.metadata.get('config', {})
@@ -170,8 +193,9 @@ class PluginTool(BaseTool):
         if not script_path.exists():
             return False, f'脚本或可执行文件不存在: {script_path}'
 
-        # 检查必需参数
-        parameters = self.get_parameters()
+        # 检查必需参数（从 params 中提取 action，如果存在）
+        action = params.get('action')
+        parameters = self.get_parameters(action)
         for param_name, param_def in parameters.items():
             if param_def.get('required', False) and (param_name not in params or not params[param_name]):
                 label = param_def.get('label', param_name)

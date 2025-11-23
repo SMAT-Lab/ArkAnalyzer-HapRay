@@ -32,6 +32,7 @@ class ToolExecutor:
         params: dict[str, Any] = None,
         plugin_root_dir: Optional[str] = None,
         callback: Optional[Callable[[str], None]] = None,
+        action_mapping: Optional[dict[str, Any]] = None,
     ) -> ToolResult:
         """
         执行工具（统一入口，支持 Python、Node.js 和 exe）
@@ -43,6 +44,13 @@ class ToolExecutor:
             params: 参数字典
             plugin_root_dir: 插件根目录（用作工作目录 cwd）
             callback: 输出回调函数
+            action_mapping: action 映射配置，格式：
+                {
+                    "type": "position" | "remove" | "map",
+                    "mappings": {  # 仅当 type 为 "map" 时存在
+                        "action_name": ["command", "args", ...]
+                    }
+                }
 
         Returns:
             ToolResult: 执行结果
@@ -55,13 +63,34 @@ class ToolExecutor:
             cmd = [executable_path]
             if script_path:
                 cmd.append(script_path)
-            # 特殊处理 perf_testing 工具
-            if plugin_id == 'perf_testing' and 'action' in params:
+
+            # 处理 action 映射
+            if 'action' in params:
                 action = params.pop('action')
-                cmd.append(action)
-            # 特殊处理 optimization_detector 工具
-            if plugin_id in ['optimization_detector']:
-                params.pop('action', None)
+                if action_mapping:
+                    mapping_type = action_mapping.get('type')
+                    if mapping_type == 'position':
+                        # action 作为位置参数直接添加
+                        cmd.append(action)
+                    elif mapping_type == 'remove':
+                        # action 被移除，不传递
+                        pass
+                    elif mapping_type == 'map':
+                        # action 映射到特定的命令序列
+                        mapping_cmd = action_mapping.get('command', [])
+                        # 支持占位符替换，如 {command} 会被 params 中的 command 值替换
+                        for item in mapping_cmd:
+                            if isinstance(item, str) and item.startswith('{') and item.endswith('}'):
+                                # 占位符，从 params 中获取值
+                                placeholder_key = item[1:-1]
+                                placeholder_value = params.pop(placeholder_key, None)
+                                if placeholder_value:
+                                    cmd.append(str(placeholder_value))
+                            else:
+                                cmd.append(str(item))
+                else:
+                    # 没有配置，默认作为位置参数（向后兼容）
+                    cmd.append(action)
 
             # 添加参数
             for key, value in params.items():

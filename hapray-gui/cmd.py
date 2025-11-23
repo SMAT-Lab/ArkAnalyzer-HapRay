@@ -243,6 +243,9 @@ class CLI:
         if hasattr(plugin, 'plugin_path') and plugin.plugin_path:
             plugin_root_dir = str(plugin.plugin_path.resolve())
 
+        # 获取 action_mapping 配置（从 action 配置中读取）
+        action_mapping = plugin.get_action_mapping(action)
+
         # 使用统一的执行函数
         result = self.tool_executor.execute_tool(
             plugin_id=plugin_id,
@@ -251,6 +254,7 @@ class CLI:
             params=params,
             plugin_root_dir=plugin_root_dir,
             callback=lambda line: logger.info(line),
+            action_mapping=action_mapping,
         )
 
         # 检查执行结果
@@ -299,8 +303,15 @@ class CLI:
 
 def main():
     """主函数"""
-    cli = CLI()
-    sys.exit(cli.run())
+    try:
+        cli = CLI()
+        sys.exit(cli.run())
+    except KeyboardInterrupt:
+        logger.info('用户中断')
+        sys.exit(130)
+    except Exception as e:
+        logger.error(f'程序执行失败: {e}', exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
