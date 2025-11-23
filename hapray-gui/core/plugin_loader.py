@@ -3,6 +3,7 @@
 """
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -21,12 +22,19 @@ class PluginLoader:
         初始化插件加载器
 
         Args:
-            plugins_dir: 插件目录路径，默认为项目根目录下的 plugins 目录
+            plugins_dir: 插件目录路径，默认为项目根目录下的 tools 目录
         """
         if plugins_dir is None:
-            # 默认使用项目根目录下的 plugins 目录
-            plugins_dir = Path(__file__).parent.parent / 'plugins'
-        self.plugins_dir = Path(plugins_dir)
+            # 默认使用项目根目录下的 tools 目录
+            # 在打包后的环境中，从可执行文件位置推断工具目录
+            if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+                # PyInstaller 打包后的情况
+                exe_dir = Path(sys.executable).parent
+                plugins_dir = exe_dir / 'tools'
+            else:
+                # 开发环境
+                plugins_dir = Path(__file__).parent.parent.parent / 'tools'
+        self.plugins_dir = Path(plugins_dir).resolve()
         self.plugins: dict[str, BaseTool] = {}
         self.plugin_metadata: dict[str, dict[str, Any]] = {}
 
@@ -93,8 +101,9 @@ class PluginLoader:
                 logger.warning(f'插件 {plugin_id} 的 plugin.json 中没有 id 字段，使用目录名作为插件ID')
             # 如果存在 id 字段，直接使用（无需额外赋值）
 
-            # 添加目录路径
-            metadata['plugin_dir'] = str(plugin_dir)
+            # 添加目录路径（确保是绝对路径）
+            plugin_dir_resolved = plugin_dir.resolve()
+            metadata['plugin_dir'] = str(plugin_dir_resolved)
 
             return metadata
         except json.JSONDecodeError as e:
