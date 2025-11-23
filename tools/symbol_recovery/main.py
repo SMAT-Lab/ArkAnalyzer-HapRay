@@ -104,6 +104,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     # 输出目录参数
     parser.add_argument(
         '--output-dir',
+        '--output',
         type=str,
         default=None,
         help=f'输出目录，用于存储所有分析结果和 perf.db 等（默认: {config.DEFAULT_OUTPUT_DIR}）',
