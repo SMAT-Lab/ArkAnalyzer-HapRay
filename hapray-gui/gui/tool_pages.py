@@ -72,49 +72,29 @@ class ExecutionThread(QThread):
             else:
                 self.params.pop('devices', None)
 
-        # 检查工具是否有执行器类型方法
-        executor_type = None
-        if hasattr(self.tool, 'get_executor_type'):
-            executor_type = self.tool.get_executor_type()
-        elif hasattr(self.tool, 'executor_type'):
-            executor_type = self.tool.executor_type
+        # 获取插件ID
+        plugin_id = self.tool.plugin_id if hasattr(self.tool, 'plugin_id') else self.tool.get_name()
 
-        # 检查是否为发布模式（exe）
-        is_release = False
-        if hasattr(self.tool, 'is_release_mode'):
-            is_release = self.tool.is_release_mode()
-        elif hasattr(self.tool, 'execution_mode'):
-            is_release = self.tool.execution_mode == 'release'
+        # 尝试获取 cmd 可执行文件路径
+        cmd_executable = self.tool.get_cmd_executable()
 
-        # 根据执行器类型和执行模式选择执行方法
-        if executor_type == 'node':
-            result = self.executor.execute_node_tool(
-                self.tool.get_name(),
-                self.tool.get_script_path(),
-                self.params.copy(),
-                self.tool.get_working_dir(),
-                output_callback,
-            )
-        elif is_release and executor_type == 'python':
-            # Release 模式：执行 exe 文件
-            result = self.executor.execute_exe_tool(
-                self.tool.get_name(),
-                self.tool.get_script_path(),
-                self.params.copy(),
-                self.tool.get_working_dir(),
-                output_callback,
-            )
-        elif executor_type == 'python' or executor_type is None:
-            # Dev 模式：默认使用 Python 执行器
-            result = self.executor.execute_python_tool(
-                self.tool.get_name(),
-                self.tool.get_script_path(),
-                self.params.copy(),
-                self.tool.get_working_dir(),
-                output_callback,
-            )
-        else:
-            result = self.tool.execute(self.params)
+        # 获取脚本路径
+        script_path = self.tool.get_cmd_script_path()
+
+        # 获取插件根目录
+        plugin_root_dir = None
+        if hasattr(self.tool, 'plugin_path') and self.tool.plugin_path:
+            plugin_root_dir = str(self.tool.plugin_path.resolve())
+
+        # 使用统一的执行方法
+        result = self.executor.execute_tool(
+            plugin_id=plugin_id,
+            executable_path=cmd_executable,
+            script_path=script_path,
+            params=self.params.copy(),
+            plugin_root_dir=plugin_root_dir,
+            callback=output_callback,
+        )
 
         # 保存结果
         result_path = self.processor.save_result(self.tool.get_name(), result, self.params)
@@ -316,7 +296,8 @@ class ToolPage(QWidget):
         """取消执行"""
         if self.execution_thread and self.execution_thread.isRunning():
             executor = ToolExecutor()
-            executor.cancel_task(self.tool.get_name())
+            plugin_id = self.tool.plugin_id if hasattr(self.tool, 'plugin_id') else self.tool.get_name()
+            executor.cancel_task(plugin_id)
             self.execution_thread.terminate()
             self.execution_thread.wait()
             self.output_text.append('\n执行已取消')

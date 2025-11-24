@@ -25,6 +25,7 @@ module.exports = {
                     to: path.resolve(__dirname, '../../dist/tools/symbol-recovery/README.md'),
                     noErrorOnMissing: true,
                 },
+                { from: path.resolve(__dirname, 'plugin.json'), to: path.resolve(__dirname, '../../dist/tools/symbol-recovery/plugin.json') },
             ],
         }),
         // 保持文件权限插件：在文件拷贝后保持可执行权限

@@ -42,7 +42,7 @@ exe = EXE(
     a.binaries,
     [],
     exclude_binaries=True,
-    name='ArkAnalyzer-HapRay',
+    name='perf-testing',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -64,5 +64,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='ArkAnalyzer-HapRay',
+    name='perf-testing',
 )
