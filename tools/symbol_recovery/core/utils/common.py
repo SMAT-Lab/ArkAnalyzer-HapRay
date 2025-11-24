@@ -385,7 +385,6 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
                     <th>排名</th>
                     <th>文件路径</th>
                     <th>地址</th>
-                    <th>偏移量</th>
 """
     if use_event_count:
         html += '                    <th>指令数 (event_count)</th>\n'
@@ -405,11 +404,12 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
         strings_value = result.get('strings', '')
         if isinstance(strings_value, list):
             strings_value = ', '.join(strings_value)
+        elif not strings_value or strings_value == 'nan' or strings_value == 'NaN':
+            strings_value = ''
         html += f"""                <tr>
                     <td class="rank">{result.get('rank', '')}</td>
                     <td>{result.get('file_path', '')}</td>
                     <td class="address">{result.get('address', '')}</td>
-                    <td class="address">{result.get('offset', '')}</td>
 """
         if use_event_count:
             html += f'                    <td class="call-count">{result.get("event_count", 0):,}</td>\n'

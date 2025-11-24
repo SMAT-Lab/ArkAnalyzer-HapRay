@@ -45,6 +45,9 @@ class ExcelOffsetAnalyzer:
         use_batch_llm: bool = True,
         batch_size: int = None,
         context: str = None,
+        save_prompts: bool = False,
+        output_dir: str = None,
+        skip_decompilation: bool = False,
     ):
         """
         初始化分析器
@@ -57,6 +60,9 @@ class ExcelOffsetAnalyzer:
             use_batch_llm: 是否使用批量 LLM 分析
             batch_size: 批量分析时每个 prompt 包含的函数数量
             context: 自定义上下文信息（可选，如果不提供则根据 SO 文件名自动推断）
+            save_prompts: 是否保存生成的 prompt 到文件
+            output_dir: 输出目录，用于保存 prompt 文件
+            skip_decompilation: 是否跳过反编译（默认 False，启用反编译可提高 LLM 分析质量但较慢）
         """
         self.so_file = Path(so_file)
         self.excel_file = Path(excel_file)
@@ -84,6 +90,8 @@ class ExcelOffsetAnalyzer:
             use_batch_llm=self.use_batch_llm,
             batch_size=self.batch_size,
             logger=logger.info,
+            save_prompts=save_prompts,
+            output_dir=output_dir,
         )
 
     def parse_offset(self, offset_str: str) -> Optional[int]:
@@ -432,7 +440,8 @@ class ExcelOffsetAnalyzer:
 
         # 分析每个偏移量
         results = []
-        len(offsets_data)
+        total_offsets = len(offsets_data)
+        logger.info(f'共 {total_offsets} 个偏移量需要分析')
 
         for idx, offset_data in enumerate(offsets_data, 1):
             if progress_callback:
@@ -443,6 +452,10 @@ class ExcelOffsetAnalyzer:
                 # 添加原始行数据
                 result['original_row'] = offset_data['row_data']
                 results.append(result)
+
+        # 分析完成后，保存所有缓存和统计
+        if self.use_llm and self.llm_analyzer:
+            self.llm_analyzer.finalize()
 
         return results
 

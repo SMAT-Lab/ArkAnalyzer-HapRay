@@ -59,3 +59,12 @@ htmlcov/
 # 文档构建
 docs/_build/
 docs/.doctrees/
+
+# 构建产物
+build/
+dist/
+*.spec
+*.egg-info/
+
+# 调试输出
+prompt_outputs/

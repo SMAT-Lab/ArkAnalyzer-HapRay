@@ -46,6 +46,9 @@ class EventCountAnalyzer:
         batch_size=5,
         context=None,
         use_capstone_only=False,
+        save_prompts=False,
+        output_dir=None,
+        skip_decompilation=False,
     ):
         """
         初始化分析器
@@ -58,6 +61,10 @@ class EventCountAnalyzer:
             use_batch_llm: 是否使用批量 LLM 分析（一个 prompt 包含多个函数，默认 True）
             batch_size: 批量分析时每个 prompt 包含的函数数量（默认 3）
             context: 自定义上下文信息（可选，如果不提供则根据 SO 文件名自动推断）
+            use_capstone_only: 只使用 Capstone 反汇编（不使用 Radare2，即使已安装）
+            save_prompts: 是否保存生成的 prompt 到文件
+            output_dir: 输出目录，用于保存 prompt 文件
+            skip_decompilation: 是否跳过反编译（默认 False，启用反编译可提高 LLM 分析质量但较慢）
         """
         self.perf_db_file = Path(perf_db_file)
         self.so_dir = Path(so_dir)
@@ -67,6 +74,7 @@ class EventCountAnalyzer:
         self.batch_size = batch_size or config.DEFAULT_BATCH_SIZE
         self.context = context
         self.use_capstone_only = use_capstone_only
+        self.skip_decompilation = skip_decompilation
 
         if not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 不存在: {perf_db_file}')
@@ -80,6 +88,8 @@ class EventCountAnalyzer:
             use_batch_llm=self.use_batch_llm,
             batch_size=self.batch_size,
             logger=logger.info,
+            save_prompts=save_prompts,
+            output_dir=output_dir,
         )
 
     def analyze(self):
@@ -462,6 +472,7 @@ class EventCountAnalyzer:
             if self.llm_analyzer:
                 # 如果已经有 LLM 分析器，直接复用；否则创建新的（但可能没有 LLM）
                 analyzer = MissingSymbolFunctionAnalyzer(
+                    skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
                     so_dir=str(self.so_dir),
                     use_llm=False,  # 先不启用，避免重复初始化
@@ -480,6 +491,7 @@ class EventCountAnalyzer:
             else:
                 # 如果没有 LLM 分析器，正常创建（会尝试初始化）
                 analyzer = MissingSymbolFunctionAnalyzer(
+                    skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
                     so_dir=str(self.so_dir),
                     use_llm=self.use_llm,
@@ -574,6 +586,7 @@ class EventCountAnalyzer:
             if self.llm_analyzer:
                 # 创建时先不启用 LLM，避免重复初始化
                 analyzer = MissingSymbolFunctionAnalyzer(
+                    skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
                     so_dir=str(self.so_dir),
                     use_llm=False,  # 先不启用，避免重复初始化
@@ -588,6 +601,7 @@ class EventCountAnalyzer:
             else:
                 # 如果没有 LLM 分析器，正常创建（会尝试初始化）
                 analyzer = MissingSymbolFunctionAnalyzer(
+                    skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
                     so_dir=str(self.so_dir),
                     use_llm=self.use_llm,
