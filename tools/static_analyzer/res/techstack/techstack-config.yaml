@@ -81,7 +81,13 @@ detections:
         extractor: "extractFlutterVersionLastModified"
       - field: "openSourcePackages"
         extractor: "extractDartPackages"
-      
+      - field: "soDependencies"
+        extractor: "extractSoDependencies"
+      - field: "soExports"
+        extractor: "extractSoExports"
+      - field: "soImports"
+        extractor: "extractSoImports"
+
 
   - id: "FlutterAssets"
     name: "Flutter Assets"
@@ -106,6 +112,13 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libreact_.*\\.so$","libreact_.*\\.so", "librnoh\\.so", "librnoh_.*\\.so", "libjsi\\.so", "libjsinspector\\.so"]
+    metadataRules:
+      - field: "soDependencies"
+        extractor: "extractSoDependencies"
+      - field: "soExports"
+        extractor: "extractSoExports"
+      - field: "soImports"
+        extractor: "extractSoImports"
 
   - id: "Hermes_Engine"
     name: "Hermes JavaScript Engine"
@@ -114,6 +127,13 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libhermes\\.so$"]
+    metadataRules:
+      - field: "soDependencies"
+        extractor: "extractSoDependencies"
+      - field: "soExports"
+        extractor: "extractSoExports"
+      - field: "soImports"
+        extractor: "extractSoImports"
 
   - id: "RN bundles"
     name: "RN bundles"
