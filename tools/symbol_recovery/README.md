@@ -17,9 +17,11 @@ SymRecover（Symbol Recovery）是一个专业的二进制符号恢复工具，�
 ### 3. 智能分析
 - **双反汇编引擎**：优先使用 Radare2（自动函数识别），回退到 Capstone
 - **实例缓存优化**：同一 SO 文件复用 Radare2 实例，性能提升 10 倍+
+- **反编译支持**：支持多种反编译插件（r2dec/r2ghidra/pdq），自动按优先级选择
 - **精准字符串提取**：通过分析 ARM64 指令引用（`adrp`/`add`/`ldr`），精准提取函数相关的字符串常量
 - **LLM 分析**：使用 GPT-5、Claude-Sonnet-4.5 等大模型分析函数功能和推断函数名
 - **批量分析**：支持批量 LLM 分析，一个 prompt 包含多个函数（默认 batch_size=3），显著提高效率
+- **Prompt 调试**：支持保存生成的 prompt 到文件，便于调试和分析
 
 ### 4. 报告生成
 - **Excel 报告**：包含所有分析结果的详细 Excel 报告（自动列宽、文本换行）
@@ -40,6 +42,12 @@ pip install -r requirements.txt
   - Windows: 下载并安装到 `C:\radare2-5.9.4-w64\`
   - 配置路径：代码会自动添加到 PATH
   - Python 接口: `pip install r2pipe>=1.7.0`（已在 requirements.txt 中）
+
+- **反编译插件**（可选，用于提高 LLM 分析质量）：
+  - **r2dec**（推荐，轻量快速）：`r2pm install r2dec`
+  - **r2ghidra**（高质量，需要 Java）：`r2pm install r2ghidra`
+  - 工具会自动按优先级尝试：r2dec → r2ghidra → pdq
+  - 如果未安装反编译插件，将仅使用反汇编代码
 
 ### 2. 配置 LLM API Key（可选）
 
@@ -108,6 +116,12 @@ python main.py --no-llm
 # 只使用 Capstone（不使用 Radare2）
 python main.py --use-capstone-only
 
+# 跳过反编译（仅使用反汇编，提升速度）
+python main.py --skip-decompilation
+
+# 保存生成的 prompt 到文件（用于调试）
+python main.py --save-prompts
+
 # 调整批量大小（适应 token 限制）
 python main.py --batch-size 3
 ```
@@ -133,7 +147,14 @@ python main.py --excel-file data/test.xlsx --so-file libxwebcore.so --output-dir
 perf.data 
   → Step 1: 转换为 SQLite (perf.db)
   → Step 2: 已移除（逻辑已集成到 Step 3）
-  → Step 3: LLM 分析恢复函数名和功能（直接从 perf.db 读取）
+  → Step 3: LLM 分析恢复函数名和功能
+    ├─ 从 perf.db 读取缺失符号地址
+    ├─ 函数定位与切分（radare2）
+    ├─ 反汇编/反编译（radare2，可选）
+    ├─ 提取上下文信息（字符串、调用函数、调用堆栈）
+    ├─ 构建 LLM Prompt（支持批量）
+    ├─ LLM 分析推断函数名
+    └─ 生成 Excel 和 HTML 报告
   → Step 4: HTML 符号替换（可选）
 ```
 
@@ -142,9 +163,10 @@ perf.data
 ```
 Excel 文件（包含偏移量）
   → 读取偏移量
-  → 反汇编分析
+  → 函数定位与切分（radare2）
+  → 反汇编/反编译（radare2，可选）
   → 精准字符串提取
-  → LLM 分析（可选）
+  → LLM 分析（可选，支持批量）
   → 生成 Excel 和 HTML 报告
 ```
 
@@ -160,6 +182,8 @@ Excel 文件（包含偏移量）
 | `--no-batch` | 不使用批量分析 | `False` |
 | `--batch-size` | 批量分析时每个 prompt 包含的函数数量 | `3` (建议 3-10) |
 | `--use-capstone-only` | 只使用 Capstone 反汇编（不使用 Radare2） | `False` |
+| `--skip-decompilation` | 跳过反编译步骤（仅使用反汇编，提升速度） | `False` |
+| `--save-prompts` | 保存每个函数生成的 prompt 到文件（用于调试） | `False` |
 | `--llm-model` | LLM 模型名称 | `GPT-5` |
 | `--context` | 自定义上下文信息（可选） | 自动推断 |
 
@@ -211,6 +235,11 @@ Excel 文件（包含偏移量）
 - `cache/llm_analysis_cache.json` - LLM 分析结果缓存（自动管理）
 - `cache/llm_token_stats.json` - Token 使用统计（自动更新）
 
+### Prompt 调试文件（使用 --save-prompts 时）
+
+- `{output_dir}/prompts/prompt_{offset}_{symbol}_{timestamp}.txt` - 单个函数的 prompt
+- `{output_dir}/prompts/prompt_batch_{batch_num}_{total_batches}_{timestamp}.txt` - 批量函数的 prompt
+
 ## 技术特性
 
 ### 1. 双反汇编引擎
@@ -219,23 +248,41 @@ Excel 文件（包含偏移量）
 - **Capstone 回退**：如果 Radare2 不可用或使用 `--use-capstone-only`，自动使用 Capstone 反汇编
 - **强制 Capstone**：使用 `--use-capstone-only` 参数可强制使用 Capstone（即使已安装 Radare2）
 
-### 2. 精准字符串提取
+### 2. 反编译支持（可选）
+- **多插件支持**：自动按优先级尝试 r2dec → r2ghidra → pdq
+- **r2dec**（推荐）：
+  - 轻量快速：JavaScript 实现，无需 Java
+  - 安装：`r2pm install r2dec`
+  - 适合批量分析，速度比 r2ghidra 快 2-5 倍
+- **r2ghidra**：
+  - 高质量反编译：基于 Ghidra 引擎，类型推断准确
+  - 安装：`r2pm install r2ghidra`（需要 Java 8+）
+  - 适合复杂函数分析，但速度较慢
+- **智能回退**：如果反编译失败，自动使用反汇编代码
+- **性能优化**：使用 `--skip-decompilation` 可跳过反编译以提升速度
+
+### 3. 精准字符串提取
 - 通过分析 ARM64 指令（`adrp`/`add`、`adr`、`ldr`）中的字符串引用
 - 精准提取函数相关的字符串常量，而不是扫描整个 `.rodata` 段
 - 支持 Radare2 的 `axtj` 交叉引用分析
 
-### 3. 批量 LLM 分析
+### 4. 批量 LLM 分析
 - 将多个函数合并到一个 prompt 中（默认 batch_size=3）
 - 显著减少 API 调用次数，提高分析效率
 - 自动处理 token 限制和 JSON 解析
 - 支持禁用批量分析（`--no-batch`）进行逐个函数分析
 
-### 4. 智能缓存
+### 5. Prompt 调试支持
+- 使用 `--save-prompts` 选项可保存所有生成的 prompt 到文件
+- 便于调试 LLM 分析过程，优化 prompt 设计
+- 支持单个函数和批量函数的 prompt 保存
+
+### 6. 智能缓存
 - LLM 分析结果自动缓存到 `cache/` 目录
 - 避免重复分析相同的函数代码，节省成本
 - Token 统计自动保存和累积
 
-### 5. 时间统计
+### 7. 时间统计
 - 自动记录各分析步骤的执行时间
 - 在 HTML 报告和控制台中展示
 - 保存为 JSON 格式便于分析
@@ -372,6 +419,20 @@ python main.py --no-batch
 python main.py --use-capstone-only --perf-data perf.data --so-dir so/
 ```
 
+### 示例 7：跳过反编译以提升速度
+
+```bash
+# 跳过反编译步骤，仅使用反汇编代码（速度更快）
+python main.py --skip-decompilation --perf-data perf.data --so-dir so/
+```
+
+### 示例 8：保存 Prompt 用于调试
+
+```bash
+# 保存所有生成的 prompt 到 output/prompts/ 目录
+python main.py --save-prompts --perf-data perf.data --so-dir so/
+```
+
 ## 常见问题
 
 ### Q: 如何跳过某个步骤？
@@ -399,11 +460,29 @@ python main.py --use-capstone-only --perf-data perf.data --so-dir so/
 
 ### Q: 为什么分析速度慢？
 
-A: 主要耗时在 Radare2/Capstone 反汇编。优化建议：
+A: 主要耗时在 Radare2/Capstone 反汇编和反编译。优化建议：
 1. 安装 Radare2（性能提升 10 倍+）
 2. 确保 Radare2 实例缓存生效（看到 "♻️ 复用 radare2 分析器实例"）
 3. 使用批量 LLM 分析（默认开启）
-4. 减少 `--top-n` 数量
+4. 使用 `--skip-decompilation` 跳过反编译（可显著提升速度）
+5. 安装 r2dec 反编译插件（比 r2ghidra 快 2-5 倍）：`r2pm install r2dec`
+6. 减少 `--top-n` 数量
+
+### Q: r2dec 和 r2ghidra 有什么区别？
+
+A: 
+- **r2dec**：轻量快速（JavaScript），适合批量分析，反编译质量中等
+- **r2ghidra**：高质量反编译（基于 Ghidra），但较慢（需要 Java），适合复杂函数
+- 工具会自动按优先级选择：r2dec → r2ghidra → pdq
+- 推荐安装 r2dec：`r2pm install r2dec`
+
+### Q: 如何保存和调试生成的 prompt？
+
+A: 使用 `--save-prompts` 选项：
+```bash
+python main.py --save-prompts --perf-data perf.data --so-dir so/
+```
+Prompt 文件会保存在 `{output_dir}/prompts/` 目录下，包含完整的 prompt 内容和元信息。
 
 ### Q: 如何清理缓存？
 
@@ -428,10 +507,16 @@ A: 请参考 `docs/CODE_DEPENDENCIES.md` 文档。
 - 总体性能提升：约 2-3 倍
 - 支持禁用批量分析（`--no-batch`）进行逐个函数分析
 
-### 3. 总体性能
+### 3. 反编译优化
+- **r2dec**：轻量快速，适合批量分析（推荐）
+- **r2ghidra**：高质量但较慢，适合复杂函数
+- **跳过反编译**：使用 `--skip-decompilation` 可进一步提升速度
+
+### 4. 总体性能
 - **原始版本**（使用 `aaa`，无缓存）：174 秒 / 5 个函数
 - **优化版本**（使用 `aa` + 缓存 + 批量）：16 秒 / 5 个函数
 - **性能提升**：约 10.7 倍
+- **跳过反编译**：可再提升 20-30% 速度（但可能降低 LLM 分析质量）
 
 ## 许可证
 
@@ -439,7 +524,14 @@ A: 请参考 `docs/CODE_DEPENDENCIES.md` 文档。
 
 ## 更新日志
 
-### v4.2（当前版本）
+### v4.3（当前版本）
+- **Prompt 调试支持**：新增 `--save-prompts` 选项，可保存所有生成的 prompt 到文件
+- **反编译优化**：新增 `--skip-decompilation` 选项，可跳过反编译以提升速度
+- **反编译插件支持**：支持 r2dec/r2ghidra/pdq 多种反编译插件，自动按优先级选择
+- **性能优化**：优化反编译流程，支持智能回退机制
+- **文档完善**：更新 README，添加反编译组件说明和性能优化建议
+
+### v4.2
 - **LLM 配置集中化**：所有 LLM 配置集中到 `utils/config.py`，支持多种服务类型（poe/openai/claude/deepseek/custom）
 - **服务切换**：通过环境变量 `LLM_SERVICE_TYPE` 轻松切换不同的 LLM 服务
 - **DeepSeek 支持**：新增 DeepSeek API 支持，可通过 `LLM_SERVICE_TYPE=deepseek` 和 `DEEPSEEK_API_KEY` 使用

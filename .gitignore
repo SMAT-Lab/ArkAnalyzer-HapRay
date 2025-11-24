@@ -42,3 +42,10 @@ experiments_ignore/
 sa/lib
 hapray-sa
 
+# Cache directories
+.cache/
+.npm-cache/
+
+# Local scripts
+hapray
+

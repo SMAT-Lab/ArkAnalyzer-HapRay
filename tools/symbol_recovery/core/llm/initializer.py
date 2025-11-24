@@ -28,6 +28,8 @@ def init_llm_analyzer(
     use_batch_llm: bool,
     batch_size: int,
     logger: Callable,
+    save_prompts: bool = False,
+    output_dir: Optional[str] = None,
 ) -> tuple[Optional[LLMFunctionAnalyzer], bool, bool]:
     """初始化 LLM 分析器
     Args:
@@ -36,6 +38,8 @@ def init_llm_analyzer(
         use_batch_llm: 是否使用批量 LLM 分析
         batch_size: 批量分析时每个 prompt 包含的函数数量
         logger: 日志打印函数
+        save_prompts: 是否保存生成的 prompt 到文件
+        output_dir: 输出目录，用于保存 prompt 文件
     Returns:
         (llm_analyzer, use_llm, use_batch_llm) 其中use_llm和use_batch_llm是实际使用的LLM分析器类型
     """
@@ -68,14 +72,28 @@ def init_llm_analyzer(
                 base_url=base_url,
                 batch_size=batch_size,
                 enable_cache=True,
+                save_prompts=save_prompts,
+                output_dir=output_dir,
             )
             log(f'使用批量 LLM 分析器: 服务={service_type}, 模型={model_name}, 批量大小={batch_size}')
+            if save_prompts:
+                log(f'已启用 prompt 保存功能')
             return analyzer, True, True
 
-        log('批量 LLM 分析器不可用,将使用单个函数分析')
-        analyzer = LLMFunctionAnalyzer(api_key=api_key, model=model_name, base_url=base_url, enable_cache=True)
-        log(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
-        return analyzer, True, False
+        if use_batch_llm and not BATCH_LLM_AVAILABLE:
+            log('批量 LLM 分析器不可用,将使用单个函数分析')
+            analyzer = LLMFunctionAnalyzer(
+                api_key=api_key,
+                model=model_name,
+                base_url=base_url,
+                enable_cache=True,
+                save_prompts=save_prompts,
+                output_dir=output_dir,
+            )
+            log(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
+            if save_prompts:
+                log(f'已启用 prompt 保存功能')
+            return analyzer, True, False
     except Exception as e:
         log(f'初始化 LLM 分析器失败: {e}')
         return None, False, use_batch_llm

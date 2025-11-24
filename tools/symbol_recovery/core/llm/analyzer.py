@@ -48,6 +48,8 @@ class LLMFunctionAnalyzer:
         model: str = None,
         base_url: Optional[str] = None,
         enable_cache: bool = True,
+        save_prompts: bool = False,
+        output_dir: Optional[str] = None,
     ):
         """
         初始化 LLM 分析器
@@ -57,6 +59,8 @@ class LLMFunctionAnalyzer:
             model: 使用的模型名称，如果为 None 则使用 config.DEFAULT_LLM_MODEL
             base_url: API 基础 URL，如果为 None 则使用 config.LLM_BASE_URL
             enable_cache: 是否启用缓存（避免重复分析相同代码）
+            save_prompts: 是否保存生成的 prompt 到文件
+            output_dir: 输出目录，用于保存 prompt 文件
         """
         if openai is None:
             raise ImportError('需要安装 openai 库: pip install openai')
@@ -106,8 +110,16 @@ class LLMFunctionAnalyzer:
         self.model = model or default_model
         self.base_url = base_url or default_base_url
         self.enable_cache = enable_cache
+        self.save_prompts = save_prompts
+        self.output_dir = Path(output_dir) if output_dir else config.get_output_dir()
         self.cache: dict[str, dict[str, Any]] = {}
         self.cache_file = llm_config['cache_file']
+        
+        # 设置 prompt 保存目录
+        if self.save_prompts:
+            self.prompt_output_dir = self.output_dir / 'prompts'
+            self.prompt_output_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f'Prompt 保存目录: {self.prompt_output_dir.absolute()}')
 
         # 确保缓存目录存在
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -220,15 +232,48 @@ class LLMFunctionAnalyzer:
         instructions: list[str],
         strings: list[str],
         symbol_name: Optional[str] = None,
+        called_functions: Optional[list[str]] = None,
+        decompiled: Optional[str] = None,
     ) -> str:
-        """生成缓存键"""
-        # 使用前20条指令和字符串生成缓存键
-        key_parts = [
-            '; '.join(instructions[:20]),
-            ', '.join(str(s) for s in strings[:10]),  # 确保所有元素都是字符串
-            str(symbol_name) if symbol_name else '',
-        ]
-        return '|'.join(key_parts)
+        """生成缓存键（使用 hash 提高效率和准确性）"""
+        import hashlib
+        
+        # 构建用于 hash 的内容
+        # 1. 指令：使用前50条指令（增加数量以提高唯一性）+ 指令总数
+        inst_content = '; '.join(instructions[:50]) if instructions else ''
+        inst_count = str(len(instructions))
+        
+        # 2. 字符串：所有字符串（排序以确保一致性）
+        strings_sorted = sorted(set(str(s) for s in strings)) if strings else []
+        strings_content = ', '.join(strings_sorted)
+        
+        # 3. 调用的函数：排序后的函数列表
+        called_sorted = sorted(set(str(f) for f in called_functions)) if called_functions else []
+        called_content = ', '.join(called_sorted)
+        
+        # 4. 反编译代码：如果有，使用前500字符的 hash（避免过长）
+        decompiled_hash = ''
+        if decompiled:
+            decompiled_preview = decompiled[:500]  # 前500字符
+            decompiled_hash = hashlib.md5(decompiled_preview.encode('utf-8')).hexdigest()[:16]
+        
+        # 5. 符号名
+        symbol_str = str(symbol_name) if symbol_name else ''
+        
+        # 组合所有内容并生成 hash
+        key_content = '|'.join([
+            inst_content,
+            inst_count,
+            strings_content,
+            called_content,
+            decompiled_hash,
+            symbol_str,
+        ])
+        
+        # 使用 MD5 hash 生成固定长度的 key（避免 key 过长）
+        key_hash = hashlib.md5(key_content.encode('utf-8')).hexdigest()
+        
+        return key_hash
 
     def analyze_with_llm(
         self,
@@ -259,16 +304,26 @@ class LLMFunctionAnalyzer:
         """
         # 检查缓存
         if self.enable_cache:
-            cache_key = self._get_cache_key(instructions, strings, symbol_name)
+            cache_key = self._get_cache_key(instructions, strings, symbol_name, called_functions, None)
             if cache_key in self.cache:
+                cached_entry = self.cache[cache_key]
+                # 处理新格式（包含元信息）和旧格式（直接是分析结果）
+                if isinstance(cached_entry, dict) and 'analysis' in cached_entry:
+                    cached_result = cached_entry['analysis']
+                else:
+                    cached_result = cached_entry
                 self.token_stats['cached_requests'] += 1
                 self.token_stats['total_requests'] += 1
-                logger.info(f'[DEBUG] 使用缓存结果（总指令数: {len(instructions)}，缓存键基于前20条指令）')
-                return self.cache[cache_key]
+                logger.debug(f'使用缓存结果（总指令数: {len(instructions)}）')
+                return cached_result
 
         # 构建提示词
-        logger.info(f'[DEBUG] 构建新的 prompt（总指令数: {len(instructions)}）')
+        logger.debug(f'构建新的 prompt（总指令数: {len(instructions)}）')
         prompt = self._build_prompt(instructions, strings, symbol_name, called_functions, offset, context)
+        
+        # 保存 prompt（如果启用）
+        if self.save_prompts:
+            self._save_single_prompt(prompt, offset, symbol_name)
 
         try:
             # 调用 LLM（设置超时避免卡住）
@@ -330,8 +385,9 @@ class LLMFunctionAnalyzer:
                     if len(self.token_stats['requests']) > 1000:
                         self.token_stats['requests'] = self.token_stats['requests'][-1000:]
 
-                    # 保存统计
-                    self._save_token_stats()
+                    # 延迟保存统计（每10次请求保存一次，减少 I/O）
+                    if self.token_stats['total_requests'] % 10 == 0:
+                        self._save_token_stats()
             finally:
                 # 恢复信号处理
                 if hasattr(signal, 'SIGALRM'):
@@ -343,10 +399,23 @@ class LLMFunctionAnalyzer:
             # 解析结果
             result = self._parse_llm_response(result_text)
 
-            # 保存到缓存
+            # 保存到缓存（包含元信息）
             if self.enable_cache:
-                self.cache[cache_key] = result
-                self._save_cache()
+                # 存储分析结果和元信息
+                cache_entry = {
+                    'analysis': result,  # LLM 分析结果
+                    'metadata': {
+                        'instruction_count': len(instructions),
+                        'string_count': len(strings),
+                        'has_decompiled': False,  # 单函数模式暂不支持反编译
+                        'called_functions_count': len(called_functions) if called_functions else 0,
+                        'offset': f'0x{offset:x}' if offset else None,
+                    }
+                }
+                self.cache[cache_key] = cache_entry
+                # 延迟保存缓存（每10次保存一次，减少 I/O）
+                if len(self.cache) % 10 == 0:
+                    self._save_cache()
 
             return result
 
@@ -395,7 +464,7 @@ class LLMFunctionAnalyzer:
         # 因此增加发送给 LLM 的指令数量，以提供更完整的上下文
         max_instructions = 300 if len(instructions) > 100 else len(instructions)
         # 调试信息：记录实际发送的指令数
-        logger.info(f'[DEBUG] 总指令数: {len(instructions)}, 将发送给 LLM: {max_instructions}')
+        logger.debug(f'总指令数: {len(instructions)}, 将发送给 LLM: {max_instructions}')
         for i, inst in enumerate(instructions[:max_instructions], 1):
             prompt_parts.append(f'  {i:3d}. {inst}')
 
@@ -581,3 +650,45 @@ class LLMFunctionAnalyzer:
             results.append(result)
 
         return results
+
+    def finalize(self):
+        """完成分析后调用，保存所有缓存和统计信息"""
+        if self.enable_cache:
+            self._save_cache()
+        self._save_token_stats()
+
+    def _save_single_prompt(self, prompt: str, offset: Optional[int], symbol_name: Optional[str]):
+        """保存单个函数的 prompt 到文件"""
+        if not self.save_prompts:
+            return
+        
+        try:
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 包含毫秒
+            
+            # 生成文件名
+            offset_str = f'0x{offset:x}' if offset else 'unknown'
+            symbol_str = symbol_name.replace('/', '_').replace('\\', '_') if symbol_name else 'unknown'
+            # 限制文件名长度
+            if len(symbol_str) > 50:
+                symbol_str = symbol_str[:50]
+            
+            prompt_file = self.prompt_output_dir / f'prompt_{offset_str}_{symbol_str}_{timestamp}.txt'
+            
+            with open(prompt_file, 'w', encoding='utf-8') as f:
+                f.write('=' * 80 + '\n')
+                f.write('生成的 LLM Prompt (单个函数)\n')
+                f.write('=' * 80 + '\n')
+                f.write(f'生成时间: {datetime.now().isoformat()}\n')
+                f.write(f'函数偏移量: {offset_str}\n')
+                if symbol_name:
+                    f.write(f'符号名: {symbol_name}\n')
+                f.write(f'总长度: {len(prompt):,} 字符\n')
+                f.write(f'估计 Token 数: ≈{len(prompt) // 4:,}\n')
+                f.write('=' * 80 + '\n\n')
+                f.write(prompt)
+                f.write('\n\n' + '=' * 80 + '\n')
+            
+            logger.debug(f'Prompt 已保存: {prompt_file.name}')
+        except Exception as e:
+            logger.warning(f'保存 prompt 失败: {e}')
