@@ -26,6 +26,16 @@ module.exports = {
                     noErrorOnMissing: true,
                 },
                 {
+                    from: path.resolve(__dirname, 'dist/hapray/ArkAnalyzer-HapRay.exe'),
+                    to: path.resolve(__dirname, '../dist'),
+                    noErrorOnMissing: true,
+                },
+                {
+                    from: path.resolve(__dirname, 'dist/hapray/ArkAnalyzer-HapRay-GUI.exe'),
+                    to: path.resolve(__dirname, '../dist'),
+                    noErrorOnMissing: true,
+                },
+                {
                     from: path.resolve(__dirname, 'dist/hapray/_internal'),
                     to: path.resolve(__dirname, '../dist/_internal'),
                     noErrorOnMissing: true,
