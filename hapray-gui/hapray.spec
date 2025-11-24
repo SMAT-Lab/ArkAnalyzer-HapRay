@@ -251,6 +251,7 @@ exe_cmd = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(project_root / 'resources' / 'icon.ico') if (project_root / 'resources' / 'icon.ico').exists() else None
 )
 
 # 使用一个 COLLECT 收集所有内容到一个目录（共用一个 _internal）
