@@ -11,7 +11,7 @@ import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
 
-from .file_info import FILE_STATUS_MAPPING, FileInfo
+from optimization_detector.file_info import FILE_STATUS_MAPPING, FileInfo
 
 
 class TimeoutError(Exception):

@@ -16,7 +16,7 @@ from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
 from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
 from core.utils import config
-from core.utils.logger import get_logger
+from core.utils.logger import get_logger, setup_logging
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
 from core.utils.symbol_replacer import (
     add_disclaimer,
@@ -105,6 +105,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     # 输出目录参数
     parser.add_argument(
         '--output-dir',
+        '--output',
         type=str,
         default=None,
         help=f'输出目录，用于存储所有分析结果和 perf.db 等（默认: {config.DEFAULT_OUTPUT_DIR}）',
@@ -706,6 +707,7 @@ def main():
 
     # 处理输出目录配置
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
+    setup_logging(output_dir)
 
     if handle_excel_mode(args, output_dir):
         return
