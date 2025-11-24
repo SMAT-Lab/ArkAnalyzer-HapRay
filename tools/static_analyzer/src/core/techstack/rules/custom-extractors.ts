@@ -59,6 +59,11 @@ export class CustomExtractorRegistry {
 
         // 文件元数据提取器
         this.register('extractLastModified', extractLastModified);
+
+        // SO文件信息提取器
+        this.register('extractSoDependencies', extractSoDependencies);
+        this.register('extractSoExports', extractSoExports);
+        this.register('extractSoImports', extractSoImports);
     }
 }
 
@@ -402,5 +407,127 @@ async function extractLastModified(fileInfo: FileInfo, _pattern?: MetadataPatter
 
     // 返回 ISO 格式的时间字符串
     return fileInfo.lastModified.toISOString();
+}
+
+/**
+ * 提取SO文件的依赖库列表
+ */
+async function extractSoDependencies(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
+    if (!fileInfo.content) {
+        return [];
+    }
+
+    // 检查文件是否为SO文件
+    if (!fileInfo.file.endsWith('.so')) {
+        return [];
+    }
+
+    try {
+        const elfAnalyzer = ElfAnalyzer.getInstance();
+
+        // 创建临时文件
+        const tempDir = path.join(process.cwd(), '.temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}.so`);
+        fs.writeFileSync(tempFilePath, fileInfo.content);
+
+        try {
+            const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
+            return elfInfo.dependencies;
+        } finally {
+            // 清理临时文件
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+            }
+        }
+    } catch (error) {
+        console.warn(`Failed to extract SO dependencies from ${fileInfo.file}:`, error);
+        return [];
+    }
+}
+
+/**
+ * 提取SO文件的导出符号（限制数量以避免过大）
+ */
+async function extractSoExports(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
+    if (!fileInfo.content) {
+        return [];
+    }
+
+    // 检查文件是否为SO文件
+    if (!fileInfo.file.endsWith('.so')) {
+        return [];
+    }
+
+    try {
+        const elfAnalyzer = ElfAnalyzer.getInstance();
+
+        // 创建临时文件
+        const tempDir = path.join(process.cwd(), '.temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}.so`);
+        fs.writeFileSync(tempFilePath, fileInfo.content);
+
+        try {
+            const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
+            // 限制导出符号数量，只返回前100个
+            return elfInfo.exports.slice(0, 100);
+        } finally {
+            // 清理临时文件
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+            }
+        }
+    } catch (error) {
+        console.warn(`Failed to extract SO exports from ${fileInfo.file}:`, error);
+        return [];
+    }
+}
+
+/**
+ * 提取SO文件的导入符号（限制数量以避免过大）
+ */
+async function extractSoImports(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
+    if (!fileInfo.content) {
+        return [];
+    }
+
+    // 检查文件是否为SO文件
+    if (!fileInfo.file.endsWith('.so')) {
+        return [];
+    }
+
+    try {
+        const elfAnalyzer = ElfAnalyzer.getInstance();
+
+        // 创建临时文件
+        const tempDir = path.join(process.cwd(), '.temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}.so`);
+        fs.writeFileSync(tempFilePath, fileInfo.content);
+
+        try {
+            const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
+            // 限制导入符号数量，只返回前100个
+            return elfInfo.imports.slice(0, 100);
+        } finally {
+            // 清理临时文件
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+            }
+        }
+    } catch (error) {
+        console.warn(`Failed to extract SO imports from ${fileInfo.file}:`, error);
+        return [];
+    }
 }
 
