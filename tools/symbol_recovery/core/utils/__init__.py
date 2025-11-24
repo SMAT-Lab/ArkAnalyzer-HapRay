@@ -21,7 +21,6 @@ from .symbol_replacer import (
 from .time_tracker import TimeTracker
 
 __all__ = [
-    'setup_windows_console',
     'create_disassembler',
     'parse_offset',
     'find_function_start',
