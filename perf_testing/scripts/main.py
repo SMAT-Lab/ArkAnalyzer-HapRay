@@ -21,7 +21,6 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
-from hapray.actions.opt_action import OptAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
 from hapray.actions.static_action import StaticAction
@@ -59,7 +58,6 @@ class HapRayCmd:
 
         actions = {
             'perf': PerfAction,
-            'opt': OptAction,
             'static': StaticAction,
             'update': UpdateAction,
             'compare': CompareAction,
