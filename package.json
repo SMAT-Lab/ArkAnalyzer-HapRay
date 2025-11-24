@@ -6,14 +6,15 @@
   "files": [],
   "workspaces": [
     "web",
-    "sa",
+    "tools/static_analyzer",
     "perf_testing",
-    "tools/optimization_detector"
+    "tools/optimization_detector",
+    "tools/symbol_recovery",
+    "hapray-gui"
   ],
   "scripts": {
-    "postinstall": "node scripts/unzip_third-party.js",
-    "build": "npm run build --ws",
-    "release": "node scripts/zip.js ArkAnalyzer-HapRay",
+    "build": "node scripts/unzip_third-party.js && npm run build --ws",
+    "release": "node scripts/merge_duplicates.js && node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
     "test": "npm run test -w perf_testing"

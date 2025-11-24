@@ -28,7 +28,13 @@ class ExcelReportSaver:
 
         :param output_path: Path to save the Excel file
         """
-        self.output_path = os.path.abspath(output_path)
+        # Ensure the output path has .xlsx extension
+        output_path = os.path.abspath(output_path)
+        if not output_path.lower().endswith('.xlsx'):
+            # Remove any existing extension and add .xlsx
+            base_path = os.path.splitext(output_path)[0]
+            output_path = base_path + '.xlsx'
+        self.output_path = output_path
         self.sheets = {}
 
     def add_sheet(self, df: pd.DataFrame, sheet_name: str):
@@ -49,10 +55,14 @@ class ExcelReportSaver:
             return
 
         # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
+        output_dir = os.path.dirname(self.output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
 
         # Save to Excel using ExcelWriter
-        with pd.ExcelWriter(self.output_path, engine='xlsxwriter') as writer:
+        # Explicitly set engine as string to avoid property object issues
+        engine_name = 'xlsxwriter'
+        with pd.ExcelWriter(self.output_path, engine=engine_name) as writer:
             for sheet_name, df in self.sheets.items():
                 df.to_excel(writer, sheet_name=sheet_name)
                 ExcelReportSaver._auto_adjust_columns(writer, sheet_name, df)

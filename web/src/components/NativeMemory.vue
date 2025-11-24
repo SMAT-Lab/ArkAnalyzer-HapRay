@@ -114,7 +114,7 @@ import type { NativeMemoryStepData } from '@/stores/nativeMemory';
 const TIMELINE_CHART_HEIGHT = '350px';
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 
-type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file';
+type DrillDownLevel = 'overview' | 'category' | 'subCategory' | 'process' | 'thread' | 'file' | 'event';
 type ViewMode = 'category' | 'process';
 
 interface TimePointStats {
