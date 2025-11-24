@@ -101,4 +101,5 @@ jobs:
         path: |
           ArkAnalyzer-HapRay-*.zip
           tools/optimization_detector/*.zip
-          sa/*.zip
+          tools/symbol_recovery/*.zip
+          tools/static_analyzer/*.zip

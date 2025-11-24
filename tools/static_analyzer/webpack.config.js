@@ -9,7 +9,7 @@ const version = require('./package.json').version;
 class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
-            let dist = path.resolve(__dirname, '../dist/tools/sa-cmd');
+            let dist = path.resolve(__dirname, '../../dist/tools/sa-cmd');
             if (!fs.existsSync(dist)) {
                 return;
             }
@@ -30,7 +30,7 @@ class PackPlugin {
             });
 
             // 解压 trace_streamer_binary.zip 并打包到 tools 目录
-            const traceStreamerZipPath = path.resolve(__dirname, '../third-party/trace_streamer_binary.zip');
+            const traceStreamerZipPath = path.resolve(__dirname, '../../third-party/trace_streamer_binary.zip');
             if (fs.existsSync(traceStreamerZipPath)) {
                 try {
                     const zip = new AdmZip(traceStreamerZipPath);
@@ -77,14 +77,15 @@ module.exports = {
     },
     output: {
         filename: 'hapray-sa-cmd.js',
-        path: path.resolve(__dirname, '../dist/tools/sa-cmd'),
+        path: path.resolve(__dirname, '../../dist/tools/sa-cmd'),
     },
     plugins: [
         new CopyPlugin({
             patterns: [
                 { from: 'res', to: 'res' },
-                { from: '../node_modules/bjc/res', to: 'res'},
-                { from: '../node_modules/arkanalyzer/config/', to: 'config' },
+                { from: 'plugin.json', to: 'plugin.json' },
+                { from: '../../node_modules/bjc/res', to: 'res'},
+                { from: '../../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
                 {
                     from: 'src/core/elf/demangle-wasm.wasm',
@@ -92,19 +93,19 @@ module.exports = {
                 },
                 // sql.js
                 {
-                    from: '../node_modules/sql.js/package.json',
+                    from: '../../node_modules/sql.js/package.json',
                     to: 'node_modules/sql.js/package.json',
                 },
                 {
-                    from: '../node_modules/sql.js/dist/sql-wasm.js',
+                    from: '../../node_modules/sql.js/dist/sql-wasm.js',
                     to: 'node_modules/sql.js/dist/sql-wasm.js',
                 },
                 {
-                    from: '../node_modules/sql.js/dist/sql-wasm.wasm',
+                    from: '../../node_modules/sql.js/dist/sql-wasm.wasm',
                     to: 'node_modules/sql.js/dist/sql-wasm.wasm',
                 },
                 {
-                    from: '../node_modules/sql.js/dist/worker.sql-wasm.js',
+                    from: '../../node_modules/sql.js/dist/worker.sql-wasm.js',
                     to: 'node_modules/sql.js/dist/worker.sql-wasm.js',
                 },
             ],

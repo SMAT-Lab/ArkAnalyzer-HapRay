@@ -18,7 +18,6 @@ import logging
 import multiprocessing
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Optional
 
 import pandas as pd
 
@@ -30,7 +29,7 @@ class OptAction:
     """Handles binary optimization analysis actions."""
 
     @staticmethod
-    def execute() -> Optional[list[tuple[str, pd.DataFrame]]]:
+    def execute() -> int:
         """Executes binary optimization detection workflow."""
         parser = argparse.ArgumentParser(description='Analyze binary files for optimization flags', prog='opt-detector')
         parser.add_argument(
@@ -40,7 +39,12 @@ class OptAction:
             version=f'%(prog)s {__version__}',
             help="Show program's version number and exit",
         )
-        parser.add_argument('--input', '-i', required=True, help='Directory containing binary files to analyze')
+        parser.add_argument(
+            '--input',
+            '-i',
+            required=True,
+            help='Input path: directory containing binary files, or single file (.so, .a, .hap, .hsp, .apk) to analyze',
+        )
         parser.add_argument(
             '--output',
             '-o',
@@ -87,7 +91,7 @@ class OptAction:
 
             if not file_infos:
                 logging.warning('No valid binary files found')
-                return None
+                return 1
 
             logging.info('Starting optimization detection on %d files', len(file_infos))
             if parsed_args.timeout:
@@ -114,7 +118,7 @@ class OptAction:
                     data.extend(future.result())
                 action.generate_excel_report(data, parsed_args.output)
                 logging.info('Analysis report saved to: %s', parsed_args.output)
-                return data
+                return 0
         finally:
             file_collector.cleanup()
 

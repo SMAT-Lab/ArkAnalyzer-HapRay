@@ -34,6 +34,8 @@ export type WorkerMessageType =
   | 'memory.queryProcessRecords'
   | 'memory.queryThreadRecords'
   | 'memory.queryFileRecords'
+  | 'memory.queryFileEventTypeRecords'
+  | 'memory.queryFileEventTypeRecordsForProcess'
   | 'memory.queryCategories'
   | 'memory.querySubCategories'
   | 'memory.queryRecordsUpToByCategory'
@@ -374,6 +376,36 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
           fileName: string;
         }) || {};
         const result = await serviceApi.queryFileRecords(db, stepId, processName, threadName, fileName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryFileEventTypeRecords': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, categoryName, subCategoryName, fileName } = (payload as {
+          stepId: number;
+          categoryName: string;
+          subCategoryName: string;
+          fileName: string;
+        }) || {};
+        const result = await serviceApi.queryFileEventTypeRecords(db, stepId, categoryName, subCategoryName, fileName);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryFileEventTypeRecordsForProcess': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId, processName, threadName, fileName } = (payload as {
+          stepId: number;
+          processName: string;
+          threadName: string;
+          fileName: string;
+        }) || {};
+        const result = await serviceApi.queryFileEventTypeRecordsForProcess(db, stepId, processName, threadName, fileName);
         sendSuccessResponse(id, { result });
         break;
       }

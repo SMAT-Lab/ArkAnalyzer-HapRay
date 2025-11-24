@@ -52,16 +52,21 @@ class ExeUtils:
         """
         project_root = CommonUtils.get_project_root()
         candidates = [
-            os.path.join(project_root, '..', 'tools'),
-            os.path.join(project_root, 'tools'),
             os.path.join(project_root, '..', 'dist', 'tools'),
+            os.path.join(project_root, '..', 'tools'),
+            os.path.join(project_root, '..', '..', 'tools'),
+            os.path.join(project_root, 'tools'),
+            os.path.join(project_root, '..', '..', '..', '..', 'dist', 'tools'),
         ]
 
         for base in candidates:
-            if os.path.isdir(base):
-                if relative_segments:
-                    return os.path.join(base, *relative_segments)
-                return base
+            tools_dir = base
+            if relative_segments:
+                tools_dir = os.path.join(base, *relative_segments)
+
+            if os.path.exists(tools_dir):
+                return tools_dir
+
         logging.warning(f'Tools directory not found. project_root: {project_root}')
         if require:
             raise FileNotFoundError(
@@ -417,4 +422,4 @@ class ExeUtils:
 # Initialize commonly used tool paths after class definition
 ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', 'hapray-sa-cmd.js'))
 ExeUtils.trace_streamer_path = ExeUtils._get_trace_streamer_path()
-ExeUtils.opt_detector_path = os.path.abspath(ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False))
+ExeUtils.opt_detector_path = ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False)

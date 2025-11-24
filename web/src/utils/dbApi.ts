@@ -135,6 +135,50 @@ export class DbApi {
   }
 
   /**
+   * Query file level event type records (for category mode)
+   * @param stepId - Step id
+   * @param categoryName - Category name
+   * @param subCategoryName - Subcategory name
+   * @param fileName - File name
+   * @returns File event type records array
+   */
+  async queryFileEventTypeRecords(
+    stepId: number,
+    categoryName: string,
+    subCategoryName: string,
+    fileName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryFileEventTypeRecords', {
+      stepId,
+      categoryName,
+      subCategoryName,
+      fileName,
+    });
+  }
+
+  /**
+   * Query file level event type records (for process mode)
+   * @param stepId - Step id
+   * @param processName - Process name
+   * @param threadName - Thread name
+   * @param fileName - File name
+   * @returns File event type records array
+   */
+  async queryFileEventTypeRecordsForProcess(
+    stepId: number,
+    processName: string,
+    threadName: string,
+    fileName: string
+  ): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryFileEventTypeRecordsForProcess', {
+      stepId,
+      processName,
+      threadName,
+      fileName,
+    });
+  }
+
+  /**
    * Query all unique categories for a step
    * @param stepId - Step id
    * @returns Array of category names

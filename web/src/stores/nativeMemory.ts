@@ -228,6 +228,34 @@ export class NativeMemoryService {
     return records;
   }
 
+  async fetchFileEventTypeRecords(stepId: number, categoryName: string, subCategoryName: string, fileName: string): Promise<NativeMemoryRecord[]> {
+    const startTime = performance.now();
+
+    console.log(`${LOG_PREFIX} Loading file event type records for step ${stepId}, category ${categoryName}, subcategory ${subCategoryName}, file ${fileName}.`);
+
+    const rows = await getDbApi().queryFileEventTypeRecords(stepId, categoryName, subCategoryName, fileName);
+    const records = rows.map((row) => this.mapFileEventTypeRow(row, categoryName, subCategoryName, fileName));
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`${LOG_PREFIX} File event type records ready for step ${stepId}/${categoryName}/${subCategoryName}/${fileName} in ${duration}ms.`);
+
+    return records;
+  }
+
+  async fetchFileEventTypeRecordsForProcess(stepId: number, processName: string, threadName: string, fileName: string): Promise<NativeMemoryRecord[]> {
+    const startTime = performance.now();
+
+    console.log(`${LOG_PREFIX} Loading file event type records for step ${stepId}, process ${processName}, thread ${threadName}, file ${fileName}.`);
+
+    const rows = await getDbApi().queryFileEventTypeRecordsForProcess(stepId, processName, threadName, fileName);
+    const records = rows.map((row) => this.mapFileEventTypeRowForProcess(row, processName, threadName, fileName));
+
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`${LOG_PREFIX} File event type records ready for step ${stepId}/${processName}/${threadName}/${fileName} in ${duration}ms.`);
+
+    return records;
+  }
+
   async fetchRecordsUpToTimeByCategory(
     stepId: number,
     relativeTsSeconds: number,
@@ -488,6 +516,62 @@ export class NativeMemoryService {
     });
   }
 
+  private mapFileEventTypeRow(row: SqlRow, categoryName: string, subCategoryName: string, fileName: string): NativeMemoryRecord {
+    const netSize = Number(row.netSize ?? 0);
+    const timePoint10ms = Number(row.timePoint10ms ?? 0);
+    const eventType = String(row.eventType ?? '');
+    const subEventType = String(row.subEventType ?? '');
+
+    return {
+      pid: 0,
+      process: '',
+      tid: null,
+      thread: null,
+      fileId: null,
+      file: fileName,
+      symbolId: null,
+      symbol: null,
+      eventType: eventType as EventType,
+      subEventType,
+      addr: 0,
+      callchainId: 0,
+      heapSize: Math.abs(netSize),
+      relativeTs: timePoint10ms * 0.01,
+      componentName: '',
+      componentCategory: ComponentCategory.UNKNOWN,
+      categoryName,
+      subCategoryName,
+    };
+  }
+
+  private mapFileEventTypeRowForProcess(row: SqlRow, processName: string, threadName: string, fileName: string): NativeMemoryRecord {
+    const netSize = Number(row.netSize ?? 0);
+    const timePoint10ms = Number(row.timePoint10ms ?? 0);
+    const eventType = String(row.eventType ?? '');
+    const subEventType = String(row.subEventType ?? '');
+
+    return {
+      pid: 0,
+      process: processName,
+      tid: null,
+      thread: threadName,
+      fileId: null,
+      file: fileName,
+      symbolId: null,
+      symbol: null,
+      eventType: eventType as EventType,
+      subEventType,
+      addr: 0,
+      callchainId: 0,
+      heapSize: Math.abs(netSize),
+      relativeTs: timePoint10ms * 0.01,
+      componentName: '',
+      componentCategory: ComponentCategory.UNKNOWN,
+      categoryName: '',
+      subCategoryName: '',
+    };
+  }
+
   private mapRawRecordRow(row: SqlRow): NativeMemoryRecord {
     const pid = Number(row.pid ?? 0);
     const tidValue = row.tid;
@@ -635,4 +719,22 @@ export function fetchRecordsUpToTimeByProcess(
 
 export function fetchCallchainFrames(stepId: number, callchainIds: number[]): Promise<CallchainFrameMap> {
   return nativeMemoryService.fetchCallchainFrames(stepId, callchainIds);
+}
+
+export function fetchFileEventTypeRecords(
+  stepId: number,
+  categoryName: string,
+  subCategoryName: string,
+  fileName: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchFileEventTypeRecords(stepId, categoryName, subCategoryName, fileName);
+}
+
+export function fetchFileEventTypeRecordsForProcess(
+  stepId: number,
+  processName: string,
+  threadName: string,
+  fileName: string
+): Promise<NativeMemoryRecord[]> {
+  return nativeMemoryService.fetchFileEventTypeRecordsForProcess(stepId, processName, threadName, fileName);
 }
