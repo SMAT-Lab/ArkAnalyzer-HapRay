@@ -5,6 +5,7 @@ SymRecover - 二进制符号恢复工具：支持 perf.data 和 Excel 偏移量�
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -140,6 +141,16 @@ def create_argument_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='只使用 Capstone 反汇编（不使用 Radare2，即使已安装）',
     )
+    parser.add_argument(
+        '--save-prompts',
+        action='store_true',
+        help='保存每个函数生成的 prompt 到文件（用于后续 debug）',
+    )
+    parser.add_argument(
+        '--skip-decompilation',
+        action='store_true',
+        help='跳过反编译步骤（仅使用反汇编代码，可显著提升速度但可能降低 LLM 分析质量）',
+    )
 
     # 流程控制
     parser.add_argument('--skip-step1', action='store_true', help='跳过 Step 1（perf.data → perf.db）')
@@ -251,6 +262,9 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
             use_batch_llm=not args.no_batch,
             batch_size=args.batch_size,
             context=args.context,
+            save_prompts=args.save_prompts,
+            output_dir=str(output_dir),
+            skip_decompilation=args.skip_decompilation,
         )
         time_tracker.end_step('初始化')
     except Exception:
@@ -290,8 +304,9 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     logger.info(f'📄 HTML 报告: {html_file}')
     logger.info(f'⏱️  时间统计: {time_stats_file}')
 
-    if analyzer.use_llm and analyzer.llm_analyzer:
-        analyzer.llm_analyzer.print_token_stats()
+        if analyzer.use_llm and analyzer.llm_analyzer:
+            analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
+            analyzer.llm_analyzer.print_token_stats()
     return True
 
 
@@ -385,6 +400,9 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
         batch_size=args.batch_size,
         context=args.context,
         use_capstone_only=args.use_capstone_only,
+        save_prompts=args.save_prompts,
+        output_dir=str(output_dir),
+        skip_decompilation=args.skip_decompilation,
     )
     time_tracker.end_step('初始化完成')
 
@@ -406,6 +424,7 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
         logger.info(f'⏱️  时间统计: {time_stats_file}')
 
         if analyzer.use_llm and analyzer.llm_analyzer:
+            analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
             analyzer.llm_analyzer.print_token_stats()
     else:
         logger.warning('\n⚠️  没有成功分析任何函数')
@@ -430,6 +449,9 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         batch_size=args.batch_size,
         context=args.context,
         use_capstone_only=args.use_capstone_only,
+        save_prompts=args.save_prompts,
+        output_dir=str(output_dir),
+        skip_decompilation=args.skip_decompilation,
     )
     time_tracker.end_step('初始化完成')
 
@@ -460,6 +482,7 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         logger.info(f'⏱️  时间统计: {time_stats_file}')
 
         if analyzer.use_llm and analyzer.llm_analyzer:
+            analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
             analyzer.llm_analyzer.print_token_stats()
     else:
         logger.warning('\n⚠️  没有成功分析任何函数')
@@ -501,16 +524,46 @@ def run_html_symbol_replacement(args, output_dir: Path):
     logger.info('\n正在替换缺失符号...')
     html_content, replacement_info = replace_symbols_in_html(html_content, function_mapping)
 
-    logger.info('\n添加免责声明...')
+    logger.info('\n添加免责声明和嵌入报告...')
     reference_report = build_reference_report_name(excel_file.name, args)
     relative_path = compute_relative_output_path(html_input, output_dir, args)
+
+    # 从 Excel 文件读取数据用于生成报告
+    from core.utils.symbol_replacer import load_excel_data_for_report
+    report_data = None
+    llm_analyzer = None
+    try:
+        report_data = load_excel_data_for_report(excel_file)
+        logger.info(f'✅ 从 Excel 加载了 {len(report_data)} 条记录用于生成报告')
+        
+        # 尝试加载 LLM 统计信息
+        from core.utils import common as util
+        token_stats_file = Path('cache/llm_token_stats.json')
+        if token_stats_file.exists():
+            try:
+                with token_stats_file.open('r', encoding='utf-8') as f:
+                    saved_stats = json.load(f)
+                # 创建一个简单的对象来存储 token 统计信息
+                class SimpleLLMAnalyzer:
+                    def get_token_stats(self):
+                        return saved_stats
+                llm_analyzer = SimpleLLMAnalyzer()
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f'⚠️  无法从 Excel 加载报告数据: {e}')
 
     html_content = add_disclaimer(
         html_content,
         reference_report_file=reference_report,
         relative_path=relative_path,
+        html_report_file=None,  # 不再从文件读取
+        excel_file=str(excel_file) if excel_file else None,
+        report_data=report_data,
+        llm_analyzer=llm_analyzer,
     )
 
+    # 生成新的 HTML 文件，而不是直接修改原文件
     html_input_stem = html_input.stem
     html_output = html_input.parent / f'{html_input_stem}_with_inferred_symbols.html'
 
@@ -644,8 +697,7 @@ def summarize_outputs(args, output_dir: Path):
     if not args.skip_step4 and not args.only_step1 and not args.only_step3:
         html_input = detect_html_input(args)
         if html_input and html_input.exists():
-            html_output = html_input.parent / f'{html_input.stem}_with_inferred_symbols.html'
-            logger.info(f'  - {html_output} (符号替换后的 HTML 报告)')
+            logger.info(f'  - {html_input} (已修改，符号已替换)')
 
 
 def main():
