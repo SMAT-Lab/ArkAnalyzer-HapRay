@@ -305,9 +305,9 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     logger.info(f'📄 HTML 报告: {html_file}')
     logger.info(f'⏱️  时间统计: {time_stats_file}')
 
-        if analyzer.use_llm and analyzer.llm_analyzer:
-            analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
-            analyzer.llm_analyzer.print_token_stats()
+    if analyzer.use_llm and analyzer.llm_analyzer:
+        analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
+        analyzer.llm_analyzer.print_token_stats()
     return True
 
 

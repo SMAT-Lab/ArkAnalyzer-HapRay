@@ -563,6 +563,7 @@ class R2FunctionAnalyzer:
             logger.info(f'   函数大小: {func_info["size"]} 字节')
 
             # 2. 反汇编函数（优化：使用 pdfj @offset 直接反汇编）
+            # 注意：disassemble_function 内部会检查 func_info，如果提供了会使用函数起始地址
             logger.info('正在反汇编函数...')
             instructions = self.disassemble_function(offset, func_info)
             if not instructions:
@@ -572,6 +573,7 @@ class R2FunctionAnalyzer:
             logger.info(f'✅ 反汇编成功，共 {len(instructions)} 条指令')
 
             # 3. 提取字符串（优化：使用 axtj 查找字符串引用）
+            # extract_strings_from_function 内部会检查 func_info，如果提供了会使用函数起始地址
             logger.info('正在提取字符串常量...')
             strings = self.extract_strings_from_function(offset, func_info)
             if strings:
@@ -582,6 +584,7 @@ class R2FunctionAnalyzer:
                 logger.warning('⚠️  未找到字符串常量')
 
             # 4. 获取被调用的函数列表（新增功能）
+            # get_called_functions 内部会检查 func_info，如果提供了会使用函数起始地址
             logger.info('正在分析函数调用关系...')
             called_functions = self.get_called_functions(offset, func_info)
             if called_functions:
@@ -590,6 +593,7 @@ class R2FunctionAnalyzer:
                 )
 
             # 5. 尝试反编译（可选，如果插件可用且未跳过）
+            # decompile_function 内部会检查 func_info，如果提供了会使用函数起始地址
             decompiled = None
             if not self.skip_decompilation:
                 logger.info('正在尝试反编译...')
