@@ -1043,6 +1043,8 @@ class MissingSymbolFunctionAnalyzer:
                             inst_list = [f'{inst.address:x}: {inst.mnemonic} {inst.op_str}' for inst in instructions]
                     else:
                         inst_list = []
+                        # 如果没有指令，记录警告但仍然添加到批量分析中（使用空指令列表）
+                        logger.warning(f'⚠️  函数 {rank} (地址: {address}) 没有指令，将使用空指令列表进行 LLM 分析')
 
                     # 处理字符串：如果是逗号分隔的字符串，转换为列表
                     strings_value = result.get('strings', '')
@@ -1053,28 +1055,35 @@ class MissingSymbolFunctionAnalyzer:
                     else:
                         strings_list = strings_value if strings_value else []
 
+                    # 确保所有函数都被添加到批量分析中，即使指令为空
+                    # 注意：offset 字段应该使用原始地址字符串（如 "libxxx.so+0x123456"），这样在 prompt 中能正确显示原始地址
+                    # result.get('offset') 返回的是 '0x...' 格式，但我们需要原始地址字符串
+                    offset_value = address  # 使用原始地址字符串（如 "libquick.so+0xc8ef4"），而不是解析后的偏移量
+                    
                     functions_data.append(
                         {
                             'function_id': f'func_{rank}',
-                            'offset': result.get('offset', ''),
-                            'instructions': inst_list,
+                            'offset': offset_value,  # 使用原始地址字符串，确保 prompt 中显示正确的地址
+                            'instructions': inst_list,  # 即使为空也添加
                             'strings': strings_list,
                             'symbol_name': None,
                             'called_functions': result.get('called_functions', []),
                             'decompiled': result.get('decompiled'),  # 添加反编译代码
                             'rank': rank,
                             'file_path': file_path,
-                            'address': address,
+                            'address': address,  # 保留原始地址字符串
                         }
                     )
+                    logger.debug(f'✅ 函数 #{rank} ({address}) 已添加到 functions_data，指令数: {len(inst_list)}, 反编译: {"有" if result.get("decompiled") else "无"}')
 
                     # 每10个函数显示一次进度
                     if len(results) % 10 == 0:
                         logger.info(f'  进度: {len(results)}/{top_n} 个函数信息收集完成')
 
-                # 第二步：批量 LLM 分析
+            # 第二步：批量 LLM 分析
             if functions_data and self.llm_analyzer:
                 logger.info(f'\n步骤 2: 批量 LLM 分析 {len(functions_data)} 个函数...')
+                logger.debug(f'functions_data 长度: {len(functions_data)}, llm_analyzer: {self.llm_analyzer is not None}')
                 # 构建上下文信息（使用第一个函数的上下文）
                 context = None
                 if results:
@@ -1091,6 +1100,10 @@ class MissingSymbolFunctionAnalyzer:
                 # 第三步：将 LLM 分析结果合并到 results 中
                 logger.info('\n步骤 3: 合并 LLM 分析结果...')
                 batch_results_map = {r.get('function_id', ''): r for r in batch_results}
+                logger.info(f'批量分析返回了 {len(batch_results)} 个结果，function_id: {[r.get("function_id") for r in batch_results]}')
+                logger.info(f'results 中有 {len(results)} 个函数，rank: {[r.get("rank") for r in results]}')
+                
+                missing_results = []
                 for result in results:
                     func_id = f'func_{result["rank"]}'
                     if func_id in batch_results_map:
@@ -1098,6 +1111,20 @@ class MissingSymbolFunctionAnalyzer:
                         # 移除 function_id，保留其他字段
                         llm_result = {k: v for k, v in batch_result.items() if k != 'function_id'}
                         result['llm_result'] = llm_result
+                        logger.info(f'✅ 函数 #{result["rank"]} ({func_id}, 地址: {result.get("address", "unknown")}) 成功合并 LLM 结果: {llm_result.get("function_name", "None")}, {llm_result.get("functionality", "未知")}')
+                    else:
+                        # 如果批量分析结果中没有该函数，使用默认结果
+                        missing_results.append(func_id)
+                        result['llm_result'] = {
+                            'function_name': None,
+                            'functionality': '未知',
+                            'confidence': '低',
+                            'reasoning': '批量 LLM 分析结果中未找到该函数',
+                        }
+                        logger.warning(f'⚠️  函数 #{result["rank"]} ({func_id}, 地址: {result.get("address", "unknown")}) 在批量分析结果中未找到')
+                
+                if missing_results:
+                    logger.warning(f'⚠️  以下 {len(missing_results)} 个函数在批量分析结果中未找到: {", ".join(missing_results)}')
         else:
             # 单个分析模式：逐个分析（原有逻辑）
             results = []
@@ -1203,6 +1230,11 @@ class MissingSymbolFunctionAnalyzer:
             strings_value = result.get('strings', '')
             if strings_value is None:
                 strings_value = ''
+            elif isinstance(strings_value, list):
+                strings_value = ', '.join(str(s) for s in strings_value if s)
+            else:
+                strings_value = str(strings_value) if strings_value else ''
+            
             # 获取函数边界信息（用于地址匹配）
             func_info = result.get('func_info', {})
             func_start = func_info.get('minbound', func_info.get('offset', 0))
@@ -1213,6 +1245,24 @@ class MissingSymbolFunctionAnalyzer:
             called_functions = result.get('called_functions', [])
             called_functions_str = ', '.join(called_functions[:10]) if called_functions else ''  # 最多显示10个
             
+            # 确保 llm_result 存在，如果不存在则使用默认值
+            if 'llm_result' not in result or result.get('llm_result') is None:
+                result['llm_result'] = {
+                    'function_name': None,
+                    'functionality': '未知',
+                    'confidence': '低',
+                    'reasoning': 'LLM 分析结果缺失',
+                }
+            
+            llm_result = result.get('llm_result', {})
+            
+            # 安全地获取 LLM 结果字段，确保 None 值转换为空字符串
+            def safe_get_llm_field(field_name, default=''):
+                value = llm_result.get(field_name) if llm_result else None
+                if value is None:
+                    return default
+                return str(value) if value else default
+            
             row_data = {
                 '排名': result['rank'],
                 '文件路径': result['file_path'],
@@ -1222,10 +1272,10 @@ class MissingSymbolFunctionAnalyzer:
                 '指令数': result['instruction_count'],
                 '字符串常量': strings_value,  # 确保是字符串类型，不是 None
                 '调用的函数': called_functions_str,  # 添加调用的函数列表
-                'LLM推断函数名': llm_result.get('function_name', '') if llm_result else '',
-                'LLM功能描述': llm_result.get('functionality', '') if llm_result else '',
-                'LLM置信度': llm_result.get('confidence', '') if llm_result else '',
-                'LLM推理过程': llm_result.get('reasoning', '') if llm_result else '',
+                'LLM推断函数名': safe_get_llm_field('function_name', ''),
+                'LLM功能描述': safe_get_llm_field('functionality', '未知'),
+                'LLM置信度': safe_get_llm_field('confidence', '低'),
+                'LLM推理过程': safe_get_llm_field('reasoning', ''),
                 '函数起始偏移': f'0x{func_start:x}' if func_start else '',
                 '函数大小': func_size if func_size > 0 else '',
                 '函数结束偏移': f'0x{func_end:x}' if func_end > func_start else '',
@@ -1251,7 +1301,20 @@ class MissingSymbolFunctionAnalyzer:
 
         # 确保字符串常量列是字符串类型，避免空字符串被转换为 nan
         if '字符串常量' in df.columns:
-            df['字符串常量'] = df['字符串常量'].astype(str).replace('nan', '').replace('None', '')
+            df['字符串常量'] = df['字符串常量'].fillna('').astype(str).replace('nan', '').replace('None', '')
+        
+        # 确保 LLM 相关列不是 nan（处理 None 值）
+        llm_columns = ['LLM推断函数名', 'LLM功能描述', 'LLM置信度', 'LLM推理过程']
+        for col in llm_columns:
+            if col in df.columns:
+                # 将 None 和 nan 替换为空字符串或默认值
+                if col == 'LLM功能描述':
+                    default_value = '未知'
+                elif col == 'LLM置信度':
+                    default_value = '低'
+                else:
+                    default_value = ''
+                df[col] = df[col].fillna(default_value).astype(str).replace('nan', default_value).replace('None', default_value)
 
         # 确保列的顺序：如果使用 event_count，将 event_count 列放在调用次数之前
         if use_event_count and '指令数(event_count)' in df.columns:

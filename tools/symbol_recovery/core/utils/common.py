@@ -323,22 +323,69 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
         <div class="section">
             <h2>📚 技术原理</h2>
             <h3>为什么会出现符号缺失？</h3>
-            <p>在性能分析过程中，<code>perf.data</code> 文件中出现符号缺失（显示为 <code>libxwebcore.so+0x...</code>）的主要原因包括：</p>
+            <p>在性能分析过程中，<code>perf.data</code> 文件中出现符号缺失（显示为 <code>libxxx.so+0x...</code>）的主要原因包括：</p>
             <ul>
-                <li><strong>符号表剥离</strong>：生产版本的 SO 文件通常会剥离 <code>.symtab</code> 以减小大小，仅保留 <code>.dynsym</code>。</li>
-                <li><strong>动态符号表限制</strong>：<code>.dynsym</code> 只包含导出函数，内部函数不会出现。</li>
-                <li><strong>编译器优化</strong>：函数内联、死代码消除等可能导致符号丢失。</li>
-                <li><strong>地址映射问题</strong>：ASLR 和动态加载导致地址映射不准确。</li>
-                <li><strong>JIT 代码</strong>：动态生成的代码没有静态符号。</li>
+                <li><strong>符号表剥离</strong>：生产版本的 SO 文件通常会剥离 <code>.symtab</code> 符号表以减小文件大小，仅保留 <code>.dynsym</code> 动态符号表。</li>
+                <li><strong>动态符号表限制</strong>：<code>.dynsym</code> 只包含导出函数（供外部调用），内部函数和静态函数不会出现在动态符号表中。</li>
+                <li><strong>编译器优化</strong>：函数内联、死代码消除、链接时优化（LTO）等编译器优化可能导致符号信息丢失。</li>
+                <li><strong>地址映射问题</strong>：ASLR（地址空间布局随机化）和动态加载导致运行时地址与编译时地址不一致。</li>
+                <li><strong>JIT 代码</strong>：动态生成的代码（如 JavaScript 引擎、解释器等）没有静态符号表。</li>
+                <li><strong>混淆和保护</strong>：代码混淆和反调试保护可能故意移除或修改符号信息。</li>
             </ul>
-            <h3>解决方案</h3>
+            <h3>解决方案与技术实现</h3>
+            <p>本工具采用多阶段分析流程，结合静态分析和 AI 推理来恢复缺失符号：</p>
             <ol>
-                <li><strong>反汇编分析</strong>：使用 Capstone 对函数反汇编。</li>
-                <li><strong>上下文提取</strong>：提取字符串常量、调用信息作为上下文。</li>
-                <li><strong>LLM 推断</strong>：利用大模型推断功能和函数名。</li>
-                <li><strong>置信度评估</strong>：根据指令数量和上下文评估置信度。</li>
+                <li><strong>函数定位与边界检测</strong>：
+                    <ul>
+                        <li>使用 <strong>Radare2</strong> 进行二进制分析，自动识别函数边界（<code>minbound</code>/<code>maxbound</code>）</li>
+                        <li>支持多种反汇编引擎：优先使用 Radare2（自动函数识别），回退到 Capstone</li>
+                        <li>智能函数边界检测：通过符号表、函数序言（prologue）分析等方式精确定位函数范围</li>
+                    </ul>
+                </li>
+                <li><strong>反汇编与反编译</strong>：
+                    <ul>
+                        <li>使用 <strong>Radare2</strong> 进行高质量反汇编，支持 ARM64 架构</li>
+                        <li>支持多种反编译插件（按优先级自动选择）：
+                            <ul>
+                                <li><strong>r2dec</strong>：轻量快速，JavaScript 实现，适合批量分析</li>
+                                <li><strong>r2ghidra</strong>：高质量反编译，基于 Ghidra 引擎，类型推断准确</li>
+                                <li><strong>pdq</strong>：快速反编译器</li>
+                            </ul>
+                        </li>
+                        <li>反编译代码提供更高级的语义信息，有助于 LLM 理解函数逻辑</li>
+                    </ul>
+                </li>
+                <li><strong>上下文信息提取</strong>：
+                    <ul>
+                        <li><strong>字符串常量提取</strong>：通过分析 ARM64 指令（<code>adrp</code>/<code>add</code>、<code>adr</code>、<code>ldr</code>）中的字符串引用，精准提取函数相关的字符串常量</li>
+                        <li><strong>函数调用关系</strong>：使用 Radare2 的交叉引用分析（<code>axtj</code>）提取被调用函数列表</li>
+                        <li><strong>调用堆栈信息</strong>：从 <code>perf.db</code> 获取真实的函数调用关系，提供更多上下文</li>
+                    </ul>
+                </li>
+                <li><strong>批量 LLM 分析</strong>：
+                    <ul>
+                        <li>将多个函数合并到一个 prompt 中（默认 <code>batch_size=3</code>），显著减少 API 调用次数</li>
+                        <li>支持多种 LLM 服务：Poe、OpenAI、Claude、DeepSeek 等</li>
+                        <li>智能缓存机制：基于函数代码、字符串、调用关系等生成唯一缓存键，避免重复分析</li>
+                        <li>Token 使用统计：自动记录和统计 API 调用成本</li>
+                    </ul>
+                </li>
+                <li><strong>置信度评估</strong>：
+                    <ul>
+                        <li>根据指令数量、字符串常量数量、反编译代码质量等因素评估推断结果的置信度</li>
+                        <li>提供高/中/低三级置信度，帮助用户判断结果可靠性</li>
+                    </ul>
+                </li>
             </ol>
-            <p><strong>注意</strong>：推断结果仅供参考。</p>
+            <h3>性能优化</h3>
+            <ul>
+                <li><strong>Radare2 实例缓存</strong>：同一 SO 文件的多个函数复用同一个 Radare2 实例，避免重复初始化，性能提升 10 倍+</li>
+                <li><strong>轻量级分析</strong>：使用 <code>aa</code> 替代 <code>aaa</code>，初始化时间减少 10-15 倍</li>
+                <li><strong>批量处理</strong>：批量 LLM 分析减少 API 调用次数，总体性能提升 2-3 倍</li>
+                <li><strong>智能缓存</strong>：LLM 分析结果自动缓存，避免重复分析相同函数</li>
+                <li><strong>可选反编译</strong>：支持 <code>--skip-decompilation</code> 选项，可跳过反编译步骤以进一步提升速度</li>
+            </ul>
+            <p><strong>注意</strong>：推断结果基于静态分析和 AI 推理，仅供参考。实际函数名可能与推断结果有差异，建议结合代码审查和运行时验证。</p>
         </div>
 """
 

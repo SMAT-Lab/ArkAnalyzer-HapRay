@@ -68,3 +68,10 @@ dist/
 
 # 调试输出
 prompt_outputs/
+
+# 测试文件
+test_*.py
+*_test.py
+
+# 临时脚本
+symrecover
