@@ -10,7 +10,7 @@
       "script": "scripts/main.py"
     },
     "release": {
-      "cmd": ["perf-testing", "perf_testing.exe", "dist/perf-testing/perf_testing.exe", "dist/perf-testing/perf-testing"]
+      "cmd": ["perf-testing", "perf-testing.exe", "dist/perf-testing/perf-testing.exe", "dist/perf-testing/perf-testing"]
     }
   },
   "actions": {
