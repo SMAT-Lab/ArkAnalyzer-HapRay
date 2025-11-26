@@ -51,6 +51,25 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
         prompt_parts.append('请分析以下多个 ARM64 反汇编函数，推断每个函数的功能和可能的函数名。')
         prompt_parts.append('')
+        prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，这些函数被识别为高指令数负载的热点函数。')
+        prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
+        prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
+        prompt_parts.append('  - 内存操作（大量内存拷贝、频繁的内存分配/释放）')
+        prompt_parts.append('  - 字符串处理（字符串拼接、解析、格式化）')
+        prompt_parts.append('  - 算法复杂度（O(n²)、O(n³) 等高复杂度算法）')
+        prompt_parts.append('  - 系统调用和 I/O 操作（文件读写、网络操作）')
+        prompt_parts.append('  - 递归调用（深度递归可能导致栈溢出或高指令数）')
+        prompt_parts.append('  - 异常处理（频繁的异常捕获和处理）')
+        prompt_parts.append('  - 锁和同步操作（频繁的加锁/解锁、条件等待）')
+        prompt_parts.append('  - 数据结构和算法选择不当（低效的数据结构使用）')
+        prompt_parts.append('')
+        prompt_parts.append('请分别提供以下信息：')
+        prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
+        prompt_parts.append('  2. 负载问题识别与优化建议：')
+        prompt_parts.append('     - 是否存在明显的性能瓶颈（如上述因素）')
+        prompt_parts.append('     - 为什么这个函数可能导致高指令数负载')
+        prompt_parts.append('     - 可能的优化建议（如果有）')
+        prompt_parts.append('')
 
         # 添加背景信息
         if context:
@@ -71,6 +90,39 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     prompt_parts.append(f'函数偏移量: {offset}')
                 else:
                     prompt_parts.append(f'函数偏移量: 0x{offset:x}')
+            
+            # 函数元信息
+            func_info = func_data.get('func_info')
+            if func_info:
+                func_start = func_info.get('minbound', func_info.get('offset', offset))
+                func_end = func_info.get('maxbound', func_start + func_info.get('size', 0))
+                func_size = func_info.get('size', 0)
+                if func_size > 0:
+                    prompt_parts.append(f'函数范围: 0x{func_start:x} - 0x{func_end:x} (大小: {func_size} 字节)')
+                
+                nbbs = func_info.get('nbbs', 0)
+                edges = func_info.get('edges', 0)
+                nargs = func_info.get('nargs', 0)
+                if nbbs > 0:
+                    prompt_parts.append(f'基本块数量: {nbbs}')
+                if edges > 0:
+                    prompt_parts.append(f'控制流边数量: {edges}')
+                if nargs > 0:
+                    prompt_parts.append(f'参数数量: {nargs}')
+            
+            # 指令数量
+            instructions = func_data.get('instructions', [])
+            if instructions:
+                prompt_parts.append(f'指令数量: {len(instructions)} 条')
+            
+            # 注意：调用次数（call_count）和指令执行次数（event_count）仅用于排序和筛选，
+            # 不需要传递给 LLM，因此不添加到 prompt 中
+            
+            # SO 文件信息
+            so_file = func_data.get('so_file')
+            if so_file:
+                so_name = so_file.split('/')[-1] if '/' in so_file else so_file
+                prompt_parts.append(f'所在文件: {so_name}')
 
             symbol_name = func_data.get('symbol_name')
             if symbol_name:
@@ -136,8 +188,9 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         prompt_parts.append('  "functions": [')
         prompt_parts.append('    {')
         prompt_parts.append('      "function_id": "func_1",')
-        prompt_parts.append('      "functionality": "详细的功能描述（中文，50-200字）",')
+        prompt_parts.append('      "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）",')
         prompt_parts.append('      "function_name": "推断的函数名（英文，遵循常见命名规范）",')
+        prompt_parts.append('      "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",')
         prompt_parts.append('      "confidence": "高/中/低",')
         prompt_parts.append('      "reasoning": "推理过程（中文，说明为什么这样推断）"')
         prompt_parts.append('    },')
@@ -150,9 +203,16 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         prompt_parts.append("2. 每个函数的结果必须包含 'function_id' 字段，对应输入中的函数 ID")
         prompt_parts.append('3. 如果符号表中已有函数名，优先使用符号名（如果是 C++ 名称修饰，请还原）')
         prompt_parts.append('4. 函数名应该遵循常见的命名规范（如驼峰命名、下划线命名）')
-        prompt_parts.append('5. 功能描述应该具体，但请控制在 150 字以内，避免过长导致 JSON 格式问题')
-        prompt_parts.append('6. 推理过程请控制在 200 字以内，简洁明了即可')
-        prompt_parts.append('7. 置信度评估标准：')
+        prompt_parts.append('5. 功能描述应该具体，但请控制在 150 字以内，避免过长导致 JSON 格式问题，且不要包含性能分析内容')
+        prompt_parts.append('6. 负载问题识别与优化建议（performance_analysis）必须详细说明：')
+        prompt_parts.append('   - 是否存在明显的性能瓶颈（是/否，并说明原因）')
+        prompt_parts.append('   - 为什么这个函数可能导致高指令数负载（具体分析）')
+        prompt_parts.append('   - 可能的优化建议（如果有）')
+        prompt_parts.append('   请控制在 300 字以内，避免过长导致 JSON 格式问题')
+        prompt_parts.append('   示例："存在性能瓶颈。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
+        prompt_parts.append('   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"')
+        prompt_parts.append('7. 推理过程请控制在 200 字以内，简洁明了即可')
+        prompt_parts.append('8. 置信度评估标准：')
         prompt_parts.append(
             "   - '高'：能看到完整的函数逻辑，包括函数序言、主要业务逻辑、函数调用、返回值等，且功能明确"
         )
@@ -225,6 +285,12 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         else:
                             # 兼容旧格式（直接存储分析结果）
                             cached_result = cache_entry.copy() if isinstance(cache_entry, dict) else {}
+                        
+                        # 确保旧缓存格式也有 performance_analysis 字段
+                        if 'performance_analysis' not in cached_result:
+                            cached_result['performance_analysis'] = ''
+                            logger.debug(f'⚠️  函数 {func_data.get("function_id", "unknown")} 的缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）')
+                        
                         cached_result['function_id'] = func_data['function_id']
                         batch_results.append(cached_result)
                         cached_batch.append(func_data)  # 记录缓存的函数
@@ -354,6 +420,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                 'function_id': func_data['function_id'],
                                 'functionality': '未知',
                                 'function_name': None,
+                                'performance_analysis': '',
                                 'confidence': '低',
                                 'reasoning': f'批量分析失败: {str(e)}',
                             }
@@ -559,15 +626,20 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 for func_result in functions_results:
                     func_id = func_result.get('function_id')
                     if func_id and func_id in function_id_map:
+                        performance_analysis = func_result.get('performance_analysis', '')
+                        if not performance_analysis:
+                            logger.warning(f'⚠️  函数 {func_id} 的 LLM 响应中未包含 performance_analysis 字段或为空')
+                        
                         result_item = {
                             'function_id': func_id,
                             'functionality': func_result.get('functionality', '未知'),
                             'function_name': func_result.get('function_name'),
+                            'performance_analysis': performance_analysis,
                             'confidence': func_result.get('confidence', '低'),
                             'reasoning': func_result.get('reasoning', ''),
                         }
                         results.append(result_item)
-                        logger.debug(f'✅ 从 LLM 响应中提取了 {func_id}: function_name={result_item["function_name"]}, functionality={result_item["functionality"][:50]}...')
+                        logger.debug(f'✅ 从 LLM 响应中提取了 {func_id}: function_name={result_item["function_name"]}, functionality={result_item["functionality"][:50]}..., performance_analysis={"有" if performance_analysis else "无"}')
 
                 # 检查是否有遗漏的函数
                 processed_ids = {r['function_id'] for r in results}
@@ -582,6 +654,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                 'function_id': func_data['function_id'],
                                 'functionality': '未知',
                                 'function_name': None,
+                                'performance_analysis': '',
                                 'confidence': '低',
                                 'reasoning': 'LLM 响应中未找到该函数的结果',
                             }
@@ -603,6 +676,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         'function_id': func_data['function_id'],
                         'functionality': '未知',
                         'function_name': None,
+                        'performance_analysis': '',
                         'confidence': '低',
                         'reasoning': f'LLM 响应 JSON 解析失败: {str(e)}',
                     }
@@ -624,6 +698,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         'function_id': func_id,
                         'functionality': match.group(1),
                         'function_name': match.group(2) if match.group(2) else None,
+                        'performance_analysis': '',  # 文本提取模式无法提取 performance_analysis
                         'confidence': match.group(3),
                         'reasoning': '从响应文本中提取',
                     }
@@ -634,6 +709,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         'function_id': func_id,
                         'functionality': '未知',
                         'function_name': None,
+                        'performance_analysis': '',
                         'confidence': '低',
                         'reasoning': '无法从响应中解析结果',
                     }

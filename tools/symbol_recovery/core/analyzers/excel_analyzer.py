@@ -492,7 +492,12 @@ class ExcelOffsetAnalyzer:
             }
 
             if result.get('llm_result'):
-                row['LLM推断函数名'] = result.get('function_name', '')
+                # 格式化函数名，添加 "Function: " 前缀
+                function_name = result.get('function_name', '')
+                if function_name and function_name != 'nan' and function_name != 'None':
+                    if not function_name.startswith('Function: '):
+                        function_name = f'Function: {function_name}'
+                row['LLM推断函数名'] = function_name
                 row['函数功能描述'] = result.get('function_description', '')
                 row['置信度'] = result.get('confidence', '')
             else:
