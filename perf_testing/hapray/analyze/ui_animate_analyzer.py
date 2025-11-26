@@ -171,7 +171,7 @@ class UIAnimateAnalyzer(BaseAnalyzer):
 
         # 检查当前组件是否为XCompose
         component_type = data.get('attributes', {}).get('type', '')
-        if component_type in ['XCompose']:
+        if component_type in ['XCompose', 'Image']:
             bounds = data.get('attributes', {}).get('bounds', '')
             bounds_rect = self._parse_bounds(bounds)
 
@@ -253,6 +253,8 @@ class UIAnimateAnalyzer(BaseAnalyzer):
                         'comparison_result': comparison_result,
                         'is_animation': True,
                         'animation_type': self._classify_animation_type(comparison_result),
+                        'region': bounds_rect,
+                        'similarity': comparison_result['similarity_percentage'],
                     }
                     animation_regions.append(animation_info)
                     self.logger.info(
