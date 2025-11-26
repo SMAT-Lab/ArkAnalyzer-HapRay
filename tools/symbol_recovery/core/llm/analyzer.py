@@ -283,6 +283,10 @@ class LLMFunctionAnalyzer:
         called_functions: Optional[list[str]] = None,
         offset: Optional[int] = None,
         context: Optional[str] = None,
+        func_info: Optional[dict] = None,
+        call_count: Optional[int] = None,
+        event_count: Optional[int] = None,
+        so_file: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         使用 LLM 分析反汇编代码并推断函数功能和函数名
@@ -312,6 +316,12 @@ class LLMFunctionAnalyzer:
                     cached_result = cached_entry['analysis']
                 else:
                     cached_result = cached_entry
+                
+                # 确保旧缓存格式也有 performance_analysis 字段
+                if 'performance_analysis' not in cached_result:
+                    cached_result['performance_analysis'] = ''
+                    logger.debug('⚠️  缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）')
+                
                 self.token_stats['cached_requests'] += 1
                 self.token_stats['total_requests'] += 1
                 logger.debug(f'使用缓存结果（总指令数: {len(instructions)}）')
@@ -319,7 +329,10 @@ class LLMFunctionAnalyzer:
 
         # 构建提示词
         logger.debug(f'构建新的 prompt（总指令数: {len(instructions)}）')
-        prompt = self._build_prompt(instructions, strings, symbol_name, called_functions, offset, context)
+        prompt = self._build_prompt(
+            instructions, strings, symbol_name, called_functions, offset, context,
+            func_info=func_info, call_count=call_count, event_count=event_count, so_file=so_file
+        )
         
         # 保存 prompt（如果启用）
         if self.save_prompts:
@@ -437,11 +450,34 @@ class LLMFunctionAnalyzer:
         called_functions: Optional[list[str]],
         offset: Optional[int],
         context: Optional[str] = None,
+        func_info: Optional[dict] = None,
+        call_count: Optional[int] = None,
+        event_count: Optional[int] = None,
+        so_file: Optional[str] = None,
     ) -> str:
         """构建 LLM 提示词"""
         prompt_parts = []
 
         prompt_parts.append('请分析以下 ARM64 反汇编代码，推断函数的功能和可能的函数名。')
+        prompt_parts.append('')
+        prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，该函数被识别为高指令数负载的热点函数。')
+        prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
+        prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
+        prompt_parts.append('  - 内存操作（大量内存拷贝、频繁的内存分配/释放）')
+        prompt_parts.append('  - 字符串处理（字符串拼接、解析、格式化）')
+        prompt_parts.append('  - 算法复杂度（O(n²)、O(n³) 等高复杂度算法）')
+        prompt_parts.append('  - 系统调用和 I/O 操作（文件读写、网络操作）')
+        prompt_parts.append('  - 递归调用（深度递归可能导致栈溢出或高指令数）')
+        prompt_parts.append('  - 异常处理（频繁的异常捕获和处理）')
+        prompt_parts.append('  - 锁和同步操作（频繁的加锁/解锁、条件等待）')
+        prompt_parts.append('  - 数据结构和算法选择不当（低效的数据结构使用）')
+        prompt_parts.append('')
+        prompt_parts.append('请分别提供以下信息：')
+        prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
+        prompt_parts.append('  2. 负载问题识别与优化建议：')
+        prompt_parts.append('     - 是否存在明显的性能瓶颈（如上述因素）')
+        prompt_parts.append('     - 为什么这个函数可能导致高指令数负载')
+        prompt_parts.append('     - 可能的优化建议（如果有）')
         prompt_parts.append('')
 
         # 添加背景信息
@@ -450,8 +486,44 @@ class LLMFunctionAnalyzer:
             prompt_parts.append(context)
             prompt_parts.append('')
 
+        # 函数基本信息
         if offset:
             prompt_parts.append(f'函数偏移量: 0x{offset:x}')
+        
+        # 函数边界信息
+        if func_info:
+            func_start = func_info.get('minbound', func_info.get('offset', offset))
+            func_end = func_info.get('maxbound', func_start + func_info.get('size', 0))
+            func_size = func_info.get('size', 0)
+            if func_size > 0:
+                prompt_parts.append(f'函数范围: 0x{func_start:x} - 0x{func_end:x} (大小: {func_size} 字节)')
+        
+        # 指令数量
+        if instructions:
+            prompt_parts.append(f'指令数量: {len(instructions)} 条')
+        
+        # 函数复杂度指标
+        if func_info:
+            nbbs = func_info.get('nbbs', 0)
+            edges = func_info.get('edges', 0)
+            nargs = func_info.get('nargs', 0)
+            nlocals = func_info.get('nlocals', 0)
+            if nbbs > 0:
+                prompt_parts.append(f'基本块数量: {nbbs}')
+            if edges > 0:
+                prompt_parts.append(f'控制流边数量: {edges}')
+            if nargs > 0:
+                prompt_parts.append(f'参数数量: {nargs}')
+            if nlocals > 0:
+                prompt_parts.append(f'局部变量数量: {nlocals}')
+        
+        # 注意：调用次数（call_count）和指令执行次数（event_count）仅用于排序和筛选，
+        # 不需要传递给 LLM，因此不添加到 prompt 中
+        
+        # SO 文件信息
+        if so_file:
+            so_name = so_file.split('/')[-1] if '/' in so_file else so_file
+            prompt_parts.append(f'所在文件: {so_name}')
 
         if symbol_name:
             prompt_parts.append(f'符号表中的函数名: {symbol_name}')
@@ -487,8 +559,9 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('')
         prompt_parts.append('请按以下 JSON 格式返回分析结果:')
         prompt_parts.append('{')
-        prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字）",')
+        prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）",')
         prompt_parts.append('  "function_name": "推断的函数名（英文，遵循常见命名规范）",')
+        prompt_parts.append('  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",')
         prompt_parts.append('  "confidence": "高/中/低",')
         prompt_parts.append('  "reasoning": "推理过程（中文，说明为什么这样推断）"')
         prompt_parts.append('}')
@@ -496,17 +569,23 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('注意:')
         prompt_parts.append('1. 如果符号表中已有函数名，优先使用符号名（如果是 C++ 名称修饰，请还原）')
         prompt_parts.append('2. 函数名应该遵循常见的命名规范（如驼峰命名、下划线命名）')
-        prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述')
-        prompt_parts.append('4. 置信度评估标准：')
+        prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容')
+        prompt_parts.append('4. 负载问题识别与优化建议（performance_analysis）必须详细说明：')
+        prompt_parts.append('   - 是否存在明显的性能瓶颈（是/否，并说明原因）')
+        prompt_parts.append('   - 为什么这个函数可能导致高指令数负载（具体分析）')
+        prompt_parts.append('   - 可能的优化建议（如果有）')
+        prompt_parts.append('   示例："存在性能瓶颈。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
+        prompt_parts.append('   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"')
+        prompt_parts.append('5. 置信度评估标准：')
         prompt_parts.append(
             "   - '高'：能看到完整的函数逻辑，包括函数序言、主要业务逻辑、函数调用、返回值等，且功能明确"
         )
         prompt_parts.append("   - '中'：能看到部分函数逻辑，能推断出大致功能，但可能缺少一些细节")
         prompt_parts.append("   - '低'：只能看到函数片段（如只有函数结尾），无法确定完整功能")
         prompt_parts.append(
-            "5. 如果反汇编代码从函数开始（有 pacibsp 或 stp x29, x30），且能看到主要逻辑，置信度应该设为'高'或'中'"
+            "6. 如果反汇编代码从函数开始（有 pacibsp 或 stp x29, x30），且能看到主要逻辑，置信度应该设为'高'或'中'"
         )
-        prompt_parts.append("6. 如果无法确定，confidence 设为'低'，function_name 可以为 null")
+        prompt_parts.append("7. 如果无法确定，confidence 设为'低'，function_name 可以为 null")
 
         return '\n'.join(prompt_parts)
 
@@ -516,6 +595,7 @@ class LLMFunctionAnalyzer:
         result = {
             'functionality': '未知',
             'function_name': None,
+            'performance_analysis': '',
             'confidence': '低',
             'reasoning': '解析失败',
         }
@@ -562,8 +642,16 @@ class LLMFunctionAnalyzer:
 
                     result['functionality'] = parsed.get('functionality', '未知')
                     result['function_name'] = parsed.get('function_name')
+                    result['performance_analysis'] = parsed.get('performance_analysis', '')
                     result['confidence'] = parsed.get('confidence', '低')
                     result['reasoning'] = parsed.get('reasoning', '')
+                    
+                    # 调试：检查 performance_analysis 是否存在
+                    if not result['performance_analysis']:
+                        logger.warning('⚠️  LLM 响应中未包含 performance_analysis 字段或为空，请检查 prompt 是否包含该字段要求')
+                        # 尝试从 reasoning 或其他字段中提取性能相关信息（fallback）
+                        if result.get('reasoning') and ('性能' in result['reasoning'] or '瓶颈' in result['reasoning'] or '负载' in result['reasoning']):
+                            logger.debug('在 reasoning 字段中检测到性能相关信息，但 performance_analysis 为空')
 
                     # 如果检测到截断，在结果中标记
                     if is_truncated:

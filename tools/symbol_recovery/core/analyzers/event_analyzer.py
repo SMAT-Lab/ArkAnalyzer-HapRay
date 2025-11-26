@@ -395,13 +395,7 @@ class EventCountAnalyzer:
                 logger.exception('[ERROR] 统计 event_count 失败')
                 raise
 
-            # 关闭数据库连接（在后续操作之前）
-            if conn:
-                conn.close()
-                conn = None
-                cursor = None
-
-            # 3. 转换为分析结果格式
+            # 3. 转换为分析结果格式，并处理 HAP 地址（在关闭连接之前）
             logger.info('\n步骤 3: 准备分析数据...')
             try:
                 results = []
@@ -411,9 +405,55 @@ class EventCountAnalyzer:
                     reverse=True,
                 )[:top_n]
 
-                for rank, (_key, info) in enumerate(sorted_items, 1):
-                    # 提取偏移量（从 address 中提取，格式如 "libxwebcore.so+0x50338a0"）
+                # 3.1 检测并批量解析 HAP 地址
+                hap_addresses = []
+                for _key, info in sorted_items:
                     address = info['address']
+                    # 检测 HAP 地址
+                    try:
+                        from core.utils.hap_address_resolver import is_hap_address, resolve_hap_addresses_batch
+                        if is_hap_address(address):
+                            hap_addresses.append(address)
+                    except ImportError:
+                        pass  # HAP 解析模块不可用
+                
+                # 批量解析 HAP 地址
+                hap_resolutions = {}
+                if hap_addresses:
+                    try:
+                        from core.utils.hap_address_resolver import resolve_hap_addresses_batch
+                        from pathlib import Path
+                        logger.info(f'检测到 {len(hap_addresses)} 个 HAP 地址，开始批量解析...')
+                        from pathlib import Path
+                        so_dir = Path(self.so_dir) if self.so_dir else None
+                        
+                        hap_resolutions = resolve_hap_addresses_batch(Path(self.perf_db_file), hap_addresses, quick_mode=True, so_dir=so_dir)
+                        resolved_count = sum(1 for r in hap_resolutions.values() if r.get("resolved"))
+                        logger.info(f'✅ HAP 地址解析完成，成功解析 {resolved_count}/{len(hap_resolutions)} 个')
+                        if resolved_count < len(hap_resolutions):
+                            logger.warning(f'⚠️  有 {len(hap_resolutions) - resolved_count} 个 HAP 地址无法解析（偏移量超出文件大小）')
+                    except Exception as e:
+                        logger.warning(f'⚠️  HAP 地址解析失败: {e}')
+
+                # 3.2 转换为结果格式
+                for rank, (_key, info) in enumerate(sorted_items, 1):
+                    address = info['address']
+                    file_path = info['file_path']
+                    
+                    # 处理 HAP 地址解析结果
+                    if address in hap_resolutions:
+                        resolution = hap_resolutions[address]
+                        if resolution.get('resolved') and resolution.get('so_file_path'):
+                            # 更新为 SO 文件路径和地址
+                            file_path = resolution['so_file_path']
+                            address = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            logger.info(f'  ✅ HAP 地址解析: {info["address"]} -> {address}')
+                        else:
+                            # 无法解析的 HAP 地址，跳过
+                            logger.warning(f'  ⚠️  HAP 地址无法解析，跳过: {address}')
+                            continue  # 跳过这个地址，不添加到 results 中
+                    
+                    # 提取偏移量（从 address 中提取，格式如 "libxwebcore.so+0x50338a0"）
                     offset = None
                     if '+' in address:
                         try:
@@ -427,8 +467,8 @@ class EventCountAnalyzer:
                     results.append(
                         {
                             'rank': rank,
-                            'file_path': info['file_path'],
-                            'address': info['address'],
+                            'file_path': file_path,  # 使用解析后的文件路径
+                            'address': address,  # 使用解析后的地址
                             'offset': offset,
                             'event_count': info['event_count'],
                             'call_count': info.get('call_count', 0),
@@ -446,6 +486,12 @@ class EventCountAnalyzer:
             except Exception:
                 logger.exception('[ERROR] 准备分析数据失败')
                 raise
+            finally:
+                # 关闭数据库连接（在准备完数据之后）
+                if conn:
+                    conn.close()
+                    conn = None
+                    cursor = None
 
             # 4. 进行函数分析（反汇编和字符串提取，以及可选的 LLM 分析）
             logger.info('\n步骤 4: 进行函数分析（反汇编、字符串提取和 LLM 分析）...')
