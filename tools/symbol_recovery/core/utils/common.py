@@ -195,6 +195,23 @@ def find_function_start(elf_file, vaddr, disassembler):
 # HTML 报告渲染
 # ============================================================================
 
+def format_function_name(function_name: str) -> str:
+    """
+    格式化函数名，添加 "Function: " 前缀
+    
+    Args:
+        function_name: 原始函数名
+    
+    Returns:
+        格式化后的函数名（如果为空则返回空字符串）
+    """
+    if not function_name or function_name == 'nan' or function_name == 'None':
+        return ''
+    # 如果已经有 "Function: " 前缀，不再添加
+    if function_name.startswith('Function: '):
+        return function_name
+    return f'Function: {function_name}'
+
 
 def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺失符号函数分析报告'):
     """渲染 HTML 报告内容"""
@@ -283,6 +300,7 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
         .confidence-medium {{ color: #FF9800; font-weight: bold; }}
         .confidence-low {{ color: #f44336; }}
         .functionality {{ max-width: 400px; word-wrap: break-word; }}
+        .performance-analysis {{ max-width: 500px; word-wrap: break-word; }}
         .strings {{ font-family: 'Courier New', monospace; font-size: 0.85em; max-width: 300px; word-wrap: break-word; }}
         .section {{
             margin-top: 40px;
@@ -440,6 +458,7 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
                     <th>字符串常量</th>
                     <th>LLM 推断函数名</th>
                     <th>LLM 功能描述</th>
+                    <th>负载问题识别与优化建议</th>
                     <th>LLM 置信度</th>
                 </tr>
             </thead>
@@ -463,8 +482,9 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
         html += f"""                    <td class="call-count">{result.get('call_count', 0):,}</td>
                     <td class="call-count">{result.get('instruction_count', 0):,}</td>
                     <td class="strings">{strings_value}</td>
-                    <td>{llm_result.get('function_name', '')}</td>
+                    <td>{format_function_name(llm_result.get('function_name', ''))}</td>
                     <td class="functionality">{llm_result.get('functionality', '')}</td>
+                    <td class="performance-analysis">{llm_result.get('performance_analysis', '')}</td>
 """
         confidence = llm_result.get('confidence', '')
         confidence_class = 'confidence-low'

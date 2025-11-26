@@ -12,6 +12,7 @@ from typing import Any, Optional
 import r2pipe
 
 from core.utils.logger import get_logger
+from core.utils.string_extractor import should_filter_string
 
 logger = get_logger(__name__)
 
@@ -232,6 +233,16 @@ class R2FunctionAnalyzer:
             # 如果提供了函数信息，使用函数起始地址
             func_offset = func_info['offset'] if func_info else offset
 
+            # 验证偏移量是否超出文件大小
+            try:
+                file_size = self.so_file.stat().st_size
+                if func_offset >= file_size:
+                    logger.warning(f'⚠️  偏移量 0x{func_offset:x} 超出文件大小 ({file_size:,} 字节)，无法反汇编')
+                    logger.warning(f'   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
+                    return []
+            except Exception:
+                pass  # 如果无法获取文件大小，继续尝试反汇编
+
             # 优化：直接使用 pdfj @offset 反汇编函数，不需要先跳转
             # pdfj: 以 JSON 格式反汇编函数（更高效）
             disasm_json = self.r2.cmd(f'pdfj @{func_offset}')
@@ -314,6 +325,10 @@ class R2FunctionAnalyzer:
 
                             # 限制字符串长度（避免提取过长的字符串）
                             if len(str_value) > 200:
+                                continue
+
+                            # 过滤掉错误消息和调试字符串
+                            if should_filter_string(str_value):
                                 continue
 
                             # 使用 axtj 查找对该字符串地址的引用
@@ -551,6 +566,17 @@ class R2FunctionAnalyzer:
         logger.info(f'{"=" * 80}')
 
         try:
+            # 0. 验证偏移量是否超出文件大小
+            try:
+                file_size = self.so_file.stat().st_size
+                if offset >= file_size:
+                    logger.warning(f'⚠️  偏移量 0x{offset:x} ({offset:,} 字节) 超出文件大小 ({file_size:,} 字节)')
+                    logger.warning(f'   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
+                    logger.warning(f'   无法进行反汇编分析')
+                    return None
+            except Exception:
+                pass  # 如果无法获取文件大小，继续尝试分析
+
             # 1. 查找函数（优化：使用 af @offset 直接分析）
             logger.info('正在查找函数...')
             func_info = self.find_function_by_offset(offset)
