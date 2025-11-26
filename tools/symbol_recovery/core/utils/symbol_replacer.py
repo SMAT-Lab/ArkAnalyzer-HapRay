@@ -19,59 +19,43 @@ from core.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def format_function_name(function_name: str) -> str:
+    """
+    格式化函数名，添加 "Function: " 前缀
+    
+    Args:
+        function_name: 原始函数名
+    
+    Returns:
+        格式化后的函数名（如果为空则返回空字符串）
+    """
+    if not function_name or function_name == 'nan' or function_name == 'None':
+        return ''
+    # 如果已经有 "Function: " 前缀，不再添加
+    if function_name.startswith('Function: '):
+        return function_name
+    return f'Function: {function_name}'
+
+
 def load_function_mapping(excel_file):
-    """从 Excel 文件加载地址到函数名的映射，包含函数边界信息"""
+    """从 Excel 文件加载地址到函数名的映射（精确匹配）
+    
+    由于地址来自 perf 采样，与分析时的地址一致，只需要精确匹配。
+    """
     df = pd.read_excel(excel_file, engine='openpyxl')
 
-    # 创建映射：地址 -> (函数名, 函数起始偏移, 函数结束偏移)
+    # 创建映射：地址 -> 函数名（添加 "Function: " 前缀）
     mapping = {}
     for _, row in df.iterrows():
         address = str(row.get('地址', '')).strip()
         function_name = str(row.get('LLM推断函数名', '')).strip()
 
         if address and function_name and function_name != 'nan' and function_name:
-            # 提取地址部分（如 libquick.so+0xc8a7c）
-            # 获取函数边界信息
-            func_start_str = str(row.get('函数起始偏移', '')).strip()
-            func_size = row.get('函数大小', 0)
-            func_end_str = str(row.get('函数结束偏移', '')).strip()
-            
-            # 解析偏移量
-            func_start = None
-            func_end = None
-            if func_start_str and func_start_str != 'nan':
-                try:
-                    func_start = int(func_start_str, 16) if func_start_str.startswith('0x') else int(func_start_str, 16)
-                except (ValueError, AttributeError):
-                    pass
-            
-            if func_end_str and func_end_str != 'nan':
-                try:
-                    func_end = int(func_end_str, 16) if func_end_str.startswith('0x') else int(func_end_str, 16)
-                except (ValueError, AttributeError):
-                    pass
-            elif func_start is not None and func_size and func_size > 0:
-                func_end = func_start + int(func_size)
-            
-            # 如果没有边界信息，尝试从偏移量列解析
-            if func_start is None:
-                offset_str = str(row.get('偏移量', '')).strip()
-                if offset_str and offset_str != 'nan':
-                    try:
-                        func_start = int(offset_str, 16) if offset_str.startswith('0x') else int(offset_str, 16)
-                        # 使用默认大小 2000 字节
-                        func_end = func_start + 2000
-                    except (ValueError, AttributeError):
-                        pass
-            
-            # 存储映射：地址 -> (函数名, 起始偏移, 结束偏移)
-            mapping[address] = {
-                'name': function_name,
-                'start': func_start,
-                'end': func_end,
-            }
+            # 格式化函数名，添加 "Function: " 前缀
+            formatted_name = format_function_name(function_name)
+            mapping[address] = formatted_name
 
-    logger.info(f'✅ 加载了 {len(mapping)} 个函数名映射（包含边界信息）')
+    logger.info(f'✅ 加载了 {len(mapping)} 个函数名映射')
     return mapping
 
 
@@ -106,6 +90,18 @@ def load_excel_data_for_report(excel_file):
         if called_functions_str and called_functions_str != 'nan':
             called_functions = [f.strip() for f in called_functions_str.split(',') if f.strip()]
         
+        # 格式化函数名，添加 "Function: " 前缀
+        function_name = str(row.get('LLM推断函数名', ''))
+        if function_name and function_name != 'nan' and function_name != 'None':
+            function_name = format_function_name(function_name)
+        
+        # 处理负载问题识别与优化建议（可能是 NaN）
+        performance_analysis = row.get('负载问题识别与优化建议', '')
+        if pd.isna(performance_analysis):
+            performance_analysis = ''
+        else:
+            performance_analysis = str(performance_analysis)
+        
         result = {
             'rank': row.get('排名', ''),
             'file_path': str(row.get('文件路径', '')),
@@ -117,8 +113,9 @@ def load_excel_data_for_report(excel_file):
             'strings': strings_value,
             'called_functions': called_functions,  # 添加调用的函数列表
             'llm_result': {
-                'function_name': str(row.get('LLM推断函数名', '')),
+                'function_name': function_name,
                 'functionality': str(row.get('LLM功能描述', '')),
+                'performance_analysis': performance_analysis,  # 添加负载问题识别与优化建议
                 'confidence': str(row.get('LLM置信度', '')),
             }
         }
@@ -489,67 +486,20 @@ def replace_symbols_in_html(html_content, function_mapping):
             if not address:
                 return match.group(0)
             
-            # 从地址中提取偏移量（如 libquick.so+0xc8a7c -> 0xc8a7c）
-            offset = None
-            try:
-                # 提取偏移量部分
-                offset_match = re.search(r'\+0x([0-9a-fA-F]+)', address)
-                if offset_match:
-                    offset = int(offset_match.group(1), 16)
-            except (ValueError, AttributeError):
-                pass
-            
-            # 查找匹配的函数（优先精确匹配，然后范围匹配）
+            # 只进行精确匹配（地址来自 perf 采样，与分析时的地址一致）
             matched_function = None
             matched_address = None
             
-            # 首先尝试精确匹配
             if address in so_addresses:
-                func_info = so_addresses[address]
-                if isinstance(func_info, dict):
-                    matched_function = func_info.get('name')
-                else:
-                    # 兼容旧格式（直接是函数名）
-                    matched_function = func_info
+                matched_function = so_addresses[address]
                 matched_address = address
-            elif offset is not None:
-                # 如果精确匹配失败，尝试范围匹配
-                # 查找包含该偏移量的函数
-                best_match_size = None
-                for addr, func_info in so_addresses.items():
-                    if isinstance(func_info, dict):
-                        func_start = func_info.get('start')
-                        func_end = func_info.get('end')
-                        func_name = func_info.get('name')
-                        
-                        # 检查偏移量是否在函数范围内
-                        if func_start is not None and func_end is not None:
-                            if func_start <= offset < func_end:
-                                func_size = func_end - func_start
-                                # 找到匹配的函数，选择最小的函数（最精确）
-                                if matched_function is None or (best_match_size is None or func_size < best_match_size):
-                                    matched_function = func_name
-                                    matched_address = addr
-                                    best_match_size = func_size
-                    else:
-                        # 兼容旧格式，尝试从地址中提取偏移量进行匹配
-                        try:
-                            addr_offset_match = re.search(r'\+0x([0-9a-fA-F]+)', addr)
-                            if addr_offset_match:
-                                addr_offset = int(addr_offset_match.group(1), 16)
-                                # 如果偏移量相同，使用这个函数
-                                if addr_offset == offset:
-                                    matched_function = func_info
-                                    matched_address = addr
-                                    break
-                        except (ValueError, AttributeError):
-                            pass
             
             if matched_function and matched_address:
                 replaced_count['count'] += 1
                 if matched_address not in [r['original'] for r in replacement_info]:
                     replacement_info.append({'original': matched_address, 'replaced': matched_function})
-                return f'{prefix}{matched_function} [反推，仅供参考]"'
+                # 在替换后保留原始地址，便于追溯
+                return f'{prefix}{matched_function} [反推，仅供参考] ({address})"'
             return match.group(0)
 
         # 匹配 symbol 字段（完整格式和压缩格式）
@@ -562,14 +512,11 @@ def replace_symbols_in_html(html_content, function_mapping):
         # 方法2: 替换完整路径格式（优化：只处理未被方法1替换的地址）
         logger.info('  步骤 2/3: 替换完整路径格式...')
         existing_replacements = {r['original'] for r in replacement_info}
-        # 处理新的映射格式（dict）和旧格式（直接是函数名）
-        remaining_addresses = {}
-        for addr, func_info in so_addresses.items():
-            if addr not in existing_replacements:
-                if isinstance(func_info, dict):
-                    remaining_addresses[addr] = func_info.get('name', '')
-                else:
-                    remaining_addresses[addr] = func_info
+        # 获取尚未替换的地址
+        remaining_addresses = {
+            addr: func_name for addr, func_name in so_addresses.items()
+            if addr not in existing_replacements
+        }
         if remaining_addresses:
             logger.info(f'  剩余 {len(remaining_addresses)} 个地址需要处理...')
             logger.info(
@@ -590,11 +537,12 @@ def replace_symbols_in_html(html_content, function_mapping):
                 logger.info(f'      模式 1/3: 完整路径格式 ({pattern_count}/{total_patterns})...')
                 pattern_full = rf'([^"]*/proc/[^"]*/)([^"]*libs/arm64/)({escaped_address})'
 
-                def replace_full_path(m, fn=function_name):
+                def replace_full_path(m, fn=function_name, addr=address):
                     if '[反推，仅供参考]' in m.group(0):
                         return m.group(0)
                     replaced_count['count'] += 1
-                    return f'{m.group(1)}{m.group(2)}{fn} [反推，仅供参考]'
+                    # 在替换后保留原始地址，便于追溯
+                    return f'{m.group(1)}{m.group(2)}{fn} [反推，仅供参考] ({addr})'
 
                 data_content_to_replace = re.sub(pattern_full, replace_full_path, data_content_to_replace)
 
@@ -603,11 +551,12 @@ def replace_symbols_in_html(html_content, function_mapping):
                 logger.info(f'      模式 2/3: 简单格式 ({pattern_count}/{total_patterns})...')
                 pattern_simple = rf'(")({escaped_address})(")'
 
-                def replace_simple(m, fn=function_name):
+                def replace_simple(m, fn=function_name, addr=address):
                     if '[反推，仅供参考]' in m.group(0):
                         return m.group(0)
                     replaced_count['count'] += 1
-                    return f'{m.group(1)}{fn} [反推，仅供参考]{m.group(3)}'
+                    # 在替换后保留原始地址，便于追溯
+                    return f'{m.group(1)}{fn} [反推，仅供参考] ({addr}){m.group(3)}'
 
                 data_content_to_replace = re.sub(pattern_simple, replace_simple, data_content_to_replace)
 
@@ -616,11 +565,12 @@ def replace_symbols_in_html(html_content, function_mapping):
                 logger.info(f'      模式 3/3: symbol 字段 ({pattern_count}/{total_patterns})...')
                 pattern_in_symbol = rf'("(?:symbol|f)"\s*:\s*")([^"]*{escaped_address}[^"]*)"'
 
-                def replace_in_symbol_direct(m, fn=function_name):
+                def replace_in_symbol_direct(m, fn=function_name, addr=address):
                     if '[反推，仅供参考]' in m.group(2):
                         return m.group(0)
                     replaced_count['count'] += 1
-                    return f'{m.group(1)}{fn} [反推，仅供参考]"'
+                    # 在替换后保留原始地址，便于追溯
+                    return f'{m.group(1)}{fn} [反推，仅供参考] ({addr})"'
 
                 data_content_to_replace = re.sub(pattern_in_symbol, replace_in_symbol_direct, data_content_to_replace)
 
@@ -716,7 +666,8 @@ def replace_symbols_in_html(html_content, function_mapping):
                 replaced_count['count'] += 1
                 if address not in [r['original'] for r in replacement_info]:
                     replacement_info.append({'original': address, 'replaced': function_name})
-                return f'{prefix}{function_name} [反推，仅供参考]"'
+                # 在替换后保留原始地址，便于追溯
+                return f'{prefix}{function_name} [反推，仅供参考] ({address})"'
             return match.group(0)
 
         # 匹配 symbol 字段（完整格式和压缩格式 "f"，支持任何 .so 文件，包括下划线）

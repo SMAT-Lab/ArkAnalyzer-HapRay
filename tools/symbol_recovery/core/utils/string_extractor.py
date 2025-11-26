@@ -14,6 +14,54 @@ from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# 需要过滤的字符串模式（错误消息、调试信息等）
+FILTERED_STRING_PATTERNS = [
+    r'^WeakRef:',
+    r'^Error:',
+    r'^Warning:',
+    r'^Exception:',
+    r'^Assertion failed',
+    r'^Debug:',
+    r'^Traceback',
+    r'must be an object',
+    r'must be a',
+    r'cannot be',
+    r'is not',
+    r'has no attribute',
+    r'TypeError',
+    r'ValueError',
+    r'AttributeError',
+]
+
+
+def should_filter_string(s: str) -> bool:
+    """
+    判断字符串是否应该被过滤掉
+    
+    Args:
+        s: 待检查的字符串
+    
+    Returns:
+        True 如果应该过滤，False 如果应该保留
+    """
+    if not s or len(s) < 4:
+        return True
+    
+    s_lower = s.lower()
+    
+    # 检查是否匹配过滤模式
+    for pattern in FILTERED_STRING_PATTERNS:
+        if re.search(pattern, s_lower):
+            return True
+    
+    # 过滤掉看起来像错误消息的字符串（包含常见错误关键词）
+    error_keywords = ['error', 'warning', 'exception', 'failed', 'invalid', 'null', 'undefined']
+    if any(keyword in s_lower for keyword in error_keywords) and len(s) < 50:
+        # 如果字符串很短且包含错误关键词，可能是错误消息
+        return True
+    
+    return False
+
 
 class StringExtractor:
     """字符串提取器 - 通过分析反汇编代码精准提取字符串常量"""
@@ -108,7 +156,19 @@ class StringExtractor:
             for str_addr in string_addresses:
                 string = self._extract_string_at_address(section_data, section_vaddr, str_addr)
                 if string and string not in strings:  # 去重
-                    strings.append(string)
+                    # 过滤掉错误消息和调试字符串
+                    if not should_filter_string(string):
+                        strings.append(string)
+                    else:
+                        logger.debug(f'过滤掉字符串: {string[:50]}...')
+            
+            # 如果通过指令分析没有找到字符串，记录调试信息
+            if not strings:
+                logger.debug(f'指令分析未找到字符串（函数地址: 0x{vaddr:x if vaddr else 0:x}）')
+                logger.debug('  可能原因：')
+                logger.debug('    1. 函数确实不引用字符串常量（正常现象）')
+                logger.debug('    2. 字符串通过不支持的方式引用（需要改进提取逻辑）')
+                logger.debug('    3. 字符串被编译器优化或内联（无法提取）')
 
         except Exception:
             logger.exception('⚠️  提取字符串常量失败')
@@ -144,7 +204,12 @@ class StringExtractor:
 
         # 如果通过指令分析没有找到字符串，使用 fallback
         if not strings:
+            logger.debug('指令分析未找到字符串，尝试 fallback 方法...')
             strings = self._fallback_extract_strings(elf_file)
+            if strings:
+                logger.debug(f'Fallback 方法找到 {len(strings)} 个字符串')
+            else:
+                logger.debug('Fallback 方法也未找到字符串，这可能是正常的（函数可能不引用字符串常量）')
 
         return strings
 
@@ -273,7 +338,8 @@ class StringExtractor:
                     if len(current_string) >= 4:
                         try:
                             decoded = current_string.decode('utf-8', errors='ignore')
-                            if decoded not in strings:
+                            # 过滤掉错误消息和调试字符串
+                            if decoded not in strings and not should_filter_string(decoded):
                                 strings.append(decoded)
                                 if len(strings) >= 5:  # 最多5个作为fallback
                                     break

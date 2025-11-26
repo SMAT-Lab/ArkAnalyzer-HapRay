@@ -32,6 +32,21 @@ from core.utils import common as util
 
 logger = get_logger(__name__)
 
+# HAP 地址解析（延迟导入，避免循环依赖）
+try:
+    from core.utils.hap_address_resolver import (
+        is_hap_address,
+        resolve_hap_address_from_perfdb,
+        resolve_hap_addresses_batch,
+    )
+    HAP_RESOLVER_AVAILABLE = True
+except ImportError:
+    HAP_RESOLVER_AVAILABLE = False
+    is_hap_address = None
+    resolve_hap_address_from_perfdb = None
+    resolve_hap_addresses_batch = None
+    logger.warning('HAP 地址解析模块不可用')
+
 try:
     from dotenv import load_dotenv
 
@@ -738,6 +753,10 @@ class MissingSymbolFunctionAnalyzer:
                     called_functions=called_functions,  # 传递被调用的函数列表
                     offset=vaddr,
                     context=context,
+                    func_info=func_info,  # 传递函数元信息
+                    call_count=call_count,  # 传递调用次数
+                    event_count=event_count,  # 传递指令执行次数
+                    so_file=str(so_file_path) if so_file_path else None,  # 传递 SO 文件路径
                 )
 
                 logger.info('✅ LLM 分析完成')
@@ -836,6 +855,10 @@ class MissingSymbolFunctionAnalyzer:
                             called_functions=[],
                             offset=vaddr,
                             context=context,
+                            func_info=None,  # capstone 模式下没有 func_info
+                            call_count=call_count,
+                            event_count=event_count,
+                            so_file=str(so_file_path) if so_file_path else None,
                         )
 
                         logger.info('✅ LLM 分析完成')
@@ -922,16 +945,24 @@ class MissingSymbolFunctionAnalyzer:
 
             logger.info(f'✅ 处理完成，共 {total_rows:,} 条记录，聚合为 {len(address_call_counts):,} 个唯一地址')
 
-            # 3. 过滤系统文件
+            # 3. 过滤系统文件，并检测 HAP 地址
             excluded_exact = ['[shmm]', '未知文件', '/bin/devhost.elf']
             excluded_prefixes = ['/system', '/vendor/lib64', '/lib', '/chip_prod']
 
             filtered_data = []
+            hap_addresses = []  # 收集 HAP 地址用于批量解析
+            
             for (file_path, address), call_count in address_call_counts.items():
                 if file_path in excluded_exact:
                     continue
                 if any(file_path.startswith(prefix) for prefix in excluded_prefixes):
                     continue
+                
+                # 检测 HAP 地址
+                if HAP_RESOLVER_AVAILABLE and is_hap_address(address):
+                    hap_addresses.append(address)
+                    logger.debug(f'检测到 HAP 地址: {address}')
+                
                 filtered_data.append(
                     {
                         'file_path': file_path,
@@ -939,10 +970,37 @@ class MissingSymbolFunctionAnalyzer:
                         'call_count': call_count,
                     }
                 )
+            
+            # 4. 批量解析 HAP 地址（如果存在）
+            hap_resolutions = {}
+            if hap_addresses and self.perf_db_file and HAP_RESOLVER_AVAILABLE:
+                logger.info(f'\n步骤 3: 批量解析 {len(hap_addresses)} 个 HAP 地址...')
+                hap_resolutions = resolve_hap_addresses_batch(self.perf_db_file, hap_addresses, quick_mode=True)
+                
+                # 更新 filtered_data 中的 HAP 地址信息
+                for item in filtered_data:
+                    address = item['address']
+                    if address in hap_resolutions:
+                        resolution = hap_resolutions[address]
+                        if resolution.get('resolved') and resolution.get('so_file_path'):
+                            # 更新为 SO 文件路径和地址
+                            item['file_path'] = resolution['so_file_path']
+                            item['address'] = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            item['hap_resolution'] = resolution
+                            logger.info(f'  ✅ {address} -> {item["address"]}')
+                        else:
+                            item['hap_resolution'] = resolution
+                            logger.warning(f'  ⚠️  {address} 未找到对应的 SO 文件')
 
-            # 4. 按调用次数排序，取前 N 个
+            # 5. 按调用次数排序，取前 N 个
             sorted_data = sorted(filtered_data, key=lambda x: x['call_count'], reverse=True)[:top_n]
             logger.info(f'✅ 过滤后剩余 {len(filtered_data):,} 条记录，选择前 {top_n} 个')
+            
+            # 统计 HAP 地址解析情况
+            hap_count = sum(1 for item in sorted_data if 'hap_resolution' in item)
+            if hap_count > 0:
+                resolved_count = sum(1 for item in sorted_data if item.get('hap_resolution', {}).get('resolved'))
+                logger.info(f'📊 HAP 地址统计: 共 {hap_count} 个，成功解析 {resolved_count} 个')
 
             return sorted_data
 
@@ -1028,6 +1086,20 @@ class MissingSymbolFunctionAnalyzer:
                 call_count = item.get('call_count', 0)
                 event_count = item.get('event_count', None)
                 rank = idx
+                
+                # 处理 HAP 地址（如果之前没有解析成功，再次尝试）
+                if HAP_RESOLVER_AVAILABLE and is_hap_address(address) and self.perf_db_file:
+                    hap_resolution = item.get('hap_resolution')
+                    if not hap_resolution or not hap_resolution.get('resolved'):
+                        logger.info(f'🔄 重新解析 HAP 地址: {address}')
+                        resolution = resolve_hap_address_from_perfdb(self.perf_db_file, address, quick_mode=True, so_dir=self.so_dir)
+                        if resolution and resolution.get('resolved'):
+                            file_path = resolution['so_file_path']
+                            address = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            logger.info(f'  ✅ 解析成功: {address}')
+                        else:
+                            logger.warning(f'  ⚠️  无法解析 HAP 地址，跳过: {address}')
+                            continue
 
                 # 只进行反汇编和字符串提取，不进行 LLM 分析
                 result = self.analyze_function(file_path, address, call_count, rank, event_count, skip_llm=True)
@@ -1069,6 +1141,10 @@ class MissingSymbolFunctionAnalyzer:
                             'symbol_name': None,
                             'called_functions': result.get('called_functions', []),
                             'decompiled': result.get('decompiled'),  # 添加反编译代码
+                            'func_info': result.get('func_info'),  # 添加函数元信息
+                            'call_count': result.get('call_count', 0),  # 添加调用次数
+                            'event_count': result.get('event_count', 0),  # 添加指令执行次数
+                            'so_file': result.get('so_file'),  # 添加 SO 文件路径
                             'rank': rank,
                             'file_path': file_path,
                             'address': address,  # 保留原始地址字符串
@@ -1134,6 +1210,20 @@ class MissingSymbolFunctionAnalyzer:
                 call_count = item.get('call_count', 0)
                 event_count = item.get('event_count', None)  # 从 Excel 读取时可能包含 event_count
                 rank = len(results) + 1
+                
+                # 处理 HAP 地址（如果之前没有解析成功，再次尝试）
+                if HAP_RESOLVER_AVAILABLE and is_hap_address(address) and self.perf_db_file:
+                    hap_resolution = item.get('hap_resolution')
+                    if not hap_resolution or not hap_resolution.get('resolved'):
+                        logger.info(f'🔄 重新解析 HAP 地址: {address}')
+                        resolution = resolve_hap_address_from_perfdb(self.perf_db_file, address, quick_mode=True, so_dir=self.so_dir)
+                        if resolution and resolution.get('resolved'):
+                            file_path = resolution['so_file_path']
+                            address = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            logger.info(f'  ✅ 解析成功: {address}')
+                        else:
+                            logger.warning(f'  ⚠️  无法解析 HAP 地址，跳过: {address}')
+                            continue
 
                 result = self.analyze_function(file_path, address, call_count, rank, event_count)
                 if result:
@@ -1261,7 +1351,11 @@ class MissingSymbolFunctionAnalyzer:
                 value = llm_result.get(field_name) if llm_result else None
                 if value is None:
                     return default
-                return str(value) if value else default
+                result = str(value) if value else default
+                # 如果是函数名，添加 "Function: " 前缀
+                if field_name == 'function_name' and result and result != default:
+                    result = f'Function: {result}'
+                return result
             
             row_data = {
                 '排名': result['rank'],
@@ -1274,6 +1368,7 @@ class MissingSymbolFunctionAnalyzer:
                 '调用的函数': called_functions_str,  # 添加调用的函数列表
                 'LLM推断函数名': safe_get_llm_field('function_name', ''),
                 'LLM功能描述': safe_get_llm_field('functionality', '未知'),
+                '负载问题识别与优化建议': safe_get_llm_field('performance_analysis', ''),
                 'LLM置信度': safe_get_llm_field('confidence', '低'),
                 'LLM推理过程': safe_get_llm_field('reasoning', ''),
                 '函数起始偏移': f'0x{func_start:x}' if func_start else '',
@@ -1304,12 +1399,14 @@ class MissingSymbolFunctionAnalyzer:
             df['字符串常量'] = df['字符串常量'].fillna('').astype(str).replace('nan', '').replace('None', '')
         
         # 确保 LLM 相关列不是 nan（处理 None 值）
-        llm_columns = ['LLM推断函数名', 'LLM功能描述', 'LLM置信度', 'LLM推理过程']
+        llm_columns = ['LLM推断函数名', 'LLM功能描述', '负载问题识别与优化建议', 'LLM置信度', 'LLM推理过程']
         for col in llm_columns:
             if col in df.columns:
                 # 将 None 和 nan 替换为空字符串或默认值
                 if col == 'LLM功能描述':
                     default_value = '未知'
+                elif col == '负载问题识别与优化建议':
+                    default_value = ''
                 elif col == 'LLM置信度':
                     default_value = '低'
                 else:
@@ -1376,6 +1473,7 @@ class MissingSymbolFunctionAnalyzer:
             '调用的函数': 50,  # 新增：调用的函数列表
             'LLM推断函数名': 30,
             'LLM功能描述': 80,
+            '负载问题识别与优化建议': 100,
             'LLM置信度': 12,
             'LLM推理过程': 80,
             '函数起始偏移': 15,
@@ -1388,7 +1486,7 @@ class MissingSymbolFunctionAnalyzer:
             ws.column_dimensions[col_letter].width = column_widths.get(header, 15)
 
             # 设置文本换行
-            if header in ['LLM功能描述', 'LLM推理过程', '文件路径', '调用的函数', '字符串常量']:
+            if header in ['LLM功能描述', '负载问题识别与优化建议', 'LLM推理过程', '文件路径', '调用的函数', '字符串常量']:
                 for row_idx in range(2, len(df) + 2):
                     cell = ws[f'{col_letter}{row_idx}']
                     cell.alignment = Alignment(wrap_text=True, vertical='top')
