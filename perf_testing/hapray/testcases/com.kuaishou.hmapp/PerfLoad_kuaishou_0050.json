@@ -1,0 +1,16 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "PerfLoad_kuaishou_0050.py"
+        ]
+    },
+    "kits": []
+} 
