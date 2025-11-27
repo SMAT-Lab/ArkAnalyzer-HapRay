@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_kuaishou_0050(PerfTestCase):
@@ -37,8 +36,6 @@ class PerfLoad_kuaishou_0050(PerfTestCase):
         self.driver.touch(self.convert_coordinate(540, 2253))
         time.sleep(2)
 
-
-
         def step1():
             # 点击拍摄按钮
             self.driver.touch(self.convert_coordinate(541, 2000))
@@ -64,4 +61,3 @@ class PerfLoad_kuaishou_0050(PerfTestCase):
         time.sleep(2)
         self.driver.touch(BY.text('确认'))
         time.sleep(2)
-

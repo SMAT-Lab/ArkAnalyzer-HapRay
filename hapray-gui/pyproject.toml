@@ -83,6 +83,7 @@ max-complexity = 10
 "__init__.py" = ["F401"] # __init__.py 中允许未使用的导入
 "setup_env.py" = ["PLR2004"] # setup 脚本中允许魔术值
 "gui/main_window.py" = ["N802"] # PySide6 事件处理函数使用驼峰命名
+"gui/multi_select_combobox.py" = ["N802", "N803"] # PySide6 组件方法使用驼峰命名
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

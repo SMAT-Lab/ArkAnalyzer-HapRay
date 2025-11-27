@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_meituan_0040(PerfTestCase):
@@ -87,4 +86,3 @@ class PerfLoad_meituan_0040(PerfTestCase):
             time.sleep(2)
 
         self.execute_performance_step('美团-外卖购物场景-step3购物车结算', 30, step3)
-

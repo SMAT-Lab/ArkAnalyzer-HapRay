@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_gaodeditu_0010(PerfTestCase):
@@ -29,7 +28,7 @@ class PerfLoad_gaodeditu_0010(PerfTestCase):
         self.driver.swipe_to_home()
 
         # Step('启动被测应用')
-        self.driver.start_app(self.app_package)
+        self.driver.start_app(self.app_package, page_name='EntryAbility')
         self.driver.wait(5)
         time.sleep(2)
 
@@ -47,9 +46,9 @@ class PerfLoad_gaodeditu_0010(PerfTestCase):
             time.sleep(2)
 
             for _ in range(5):
-                self.dirver.pinch_out(BY.text('西安钟楼'))
+                self.driver.pinch_out(BY.text('西安钟楼'))
             for _ in range(5):
-                self.dirver.pinch_in(BY.text('西安钟楼'))
+                self.driver.pinch_in(BY.text('西安钟楼'))
 
         def step2():
             # Step('左滑操作')

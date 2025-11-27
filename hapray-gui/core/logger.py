@@ -2,11 +2,12 @@
 日志管理器 - 提供统一的日志功能
 """
 
+import contextlib
+import io
 import logging
 import sys
 from pathlib import Path
 from typing import Optional
-import io
 
 
 def get_logger(name: str, log_file: Optional[str] = None) -> logging.Logger:
@@ -34,10 +35,8 @@ def get_logger(name: str, log_file: Optional[str] = None) -> logging.Logger:
         if sys.platform == 'win32':
             # 重定向 stdout 到 UTF-8 编码的包装器
             if hasattr(sys.stdout, 'reconfigure'):
-                try:
+                with contextlib.suppress(Exception):
                     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-                except Exception:
-                    pass
             # 创建 UTF-8 编码的流包装器（仅当 buffer 存在时）
             if hasattr(sys.stdout, 'buffer') and sys.stdout.buffer is not None:
                 try:

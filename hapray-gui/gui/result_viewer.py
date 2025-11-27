@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QClipboard
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -57,7 +56,6 @@ class ResultViewer(QWidget):
         self.copy_path_button.clicked.connect(self.copy_output_path)
         self.copy_path_button.setEnabled(False)
         toolbar_layout.addWidget(self.copy_path_button)
-
 
         toolbar_layout.addStretch()
         layout.addLayout(toolbar_layout)
@@ -234,4 +232,3 @@ class ResultViewer(QWidget):
         clipboard = QApplication.clipboard()
         clipboard.setText(str(output_path))
         QMessageBox.information(self, '成功', f'路径已复制到剪贴板:\n{output_path}')
-
