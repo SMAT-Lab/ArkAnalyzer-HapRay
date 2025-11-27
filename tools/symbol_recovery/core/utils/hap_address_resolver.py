@@ -175,10 +175,10 @@ def resolve_hap_address_from_perfdb(perf_db: Path, address: str, quick_mode: boo
             else:
                 logger.warning(f'⚠️  调用链中未找到应用内的 SO 文件')
                 
-                # 如果提供了 so_dir，尝试从 so_dir 中查找所有 SO 文件
+                # 如果提供了 so_dir，尝试从 so_dir 中递归查找所有 SO 文件
                 if so_dir and so_dir.exists():
-                    logger.info(f'尝试从 so_dir 中查找 SO 文件: {so_dir}')
-                    so_files = list(so_dir.glob('*.so'))
+                    logger.info(f'尝试从 so_dir 中递归查找 SO 文件: {so_dir}')
+                    so_files = list(so_dir.rglob('*.so'))
                     if so_files:
                         # 检查 HAP 偏移量是否合理（不能超过 SO 文件大小）
                         for so_file in so_files:
@@ -322,9 +322,9 @@ def resolve_hap_addresses_batch(perf_db: Path, addresses: list, quick_mode: bool
                         'resolved': True,
                     }
                 else:
-                    # 如果调用链中找不到，尝试从 so_dir 中查找
+                    # 如果调用链中找不到，尝试从 so_dir 中递归查找
                     if so_dir and so_dir.exists():
-                        so_files = list(so_dir.glob('*.so'))
+                        so_files = list(so_dir.rglob('*.so'))
                         if so_files:
                             # 检查偏移量是否合理
                             resolved = False
