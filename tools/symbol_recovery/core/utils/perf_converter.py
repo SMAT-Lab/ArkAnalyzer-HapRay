@@ -197,8 +197,8 @@ class MissingSymbolFunctionAnalyzer:
             # 返回绝对路径，确保路径一致性（用于缓存键）
             return so_file.resolve()
 
-        # 如果找不到，尝试查找所有 SO 文件
-        for so_file in self.so_dir.glob('*.so'):
+        # 如果找不到，尝试递归查找所有子目录中的 SO 文件
+        for so_file in self.so_dir.rglob('*.so'):
             if so_file.name == so_name:
                 # 返回绝对路径，确保路径一致性（用于缓存键）
                 return so_file.resolve()
