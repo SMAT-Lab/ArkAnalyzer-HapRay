@@ -2,8 +2,11 @@
 文件工具类 - 提供文件操作相关功能
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class FileUtils:
@@ -63,3 +66,45 @@ class FileUtils:
         if not dir_path.exists():
             return []
         return [str(d) for d in dir_path.iterdir() if d.is_dir()]
+
+    @staticmethod
+    def get_project_root() -> Path:
+        """获取项目根目录"""
+        # 从当前文件向上查找，直到找到包含特定标记文件的目录
+        current = Path(__file__).resolve()
+        while current != current.parent:
+            if (current / 'hapray-gui').exists() or (current / 'perf_testing').exists():
+                return current
+            current = current.parent
+        return Path.cwd()
+
+    @staticmethod
+    def get_testcases() -> list[str]:
+        """
+        获取所有可用的测试用例名称
+        从打包环境目录结构查找：tools/perf-testing/_internal/hapray/testcases
+
+        Returns:
+            测试用例名称列表（不包含.py扩展名）
+        """
+        project_root = FileUtils.get_project_root()
+
+        # 打包环境：tools/perf-testing/_internal/hapray/testcases
+        testcases_dir = project_root / 'tools' / 'perf-testing' / '_internal' / 'hapray' / 'testcases'
+
+        if not testcases_dir.exists():
+            return []
+
+        testcases = []
+        # 遍历所有子目录
+        for app_dir in testcases_dir.iterdir():
+            if not app_dir.is_dir() or app_dir.name.startswith('_'):
+                continue
+            # 查找所有.py文件（排除__init__.py）
+            for py_file in app_dir.glob('*.py'):
+                if py_file.name != '__init__.py':
+                    # 去掉.py扩展名
+                    testcase_name = py_file.stem
+                    testcases.append(testcase_name)
+
+        return sorted(testcases)

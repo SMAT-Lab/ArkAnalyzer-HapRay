@@ -4,7 +4,7 @@
 
 from typing import Any
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -26,9 +26,11 @@ from PySide6.QtWidgets import (
 
 from core.base_tool import BaseTool
 from core.config_manager import ConfigManager
+from core.file_utils import FileUtils
 from core.plugin_loader import PluginLoader
 from core.result_processor import ResultProcessor
 from core.tool_executor import ToolExecutor
+from gui.multi_select_combobox import MultiSelectComboBox
 
 
 class ExecutionThread(QThread):
@@ -86,6 +88,13 @@ class ExecutionThread(QThread):
         if hasattr(self.tool, 'plugin_path') and self.tool.plugin_path:
             plugin_root_dir = str(self.tool.plugin_path.resolve())
 
+        # 获取 action_mapping 配置（如果有 action）
+        action_mapping = None
+        if 'action' in self.params:
+            action = self.params.get('action')
+            if hasattr(self.tool, 'get_action_mapping'):
+                action_mapping = self.tool.get_action_mapping(action)
+
         # 使用统一的执行方法
         result = self.executor.execute_tool(
             plugin_id=plugin_id,
@@ -94,6 +103,7 @@ class ExecutionThread(QThread):
             params=self.params.copy(),
             plugin_root_dir=plugin_root_dir,
             callback=output_callback,
+            action_mapping=action_mapping,
         )
 
         # 保存结果
@@ -112,6 +122,8 @@ class ToolPage(QWidget):
         self.tool = tool
         self.param_widgets: dict[str, Any] = {}
         self.execution_thread: ExecutionThread = None
+        self.current_action: str = None  # 当前选中的action
+        self.params_group: QGroupBox = None  # 参数组控件引用
         self.init_ui()
 
     def init_ui(self):
@@ -124,20 +136,50 @@ class ToolPage(QWidget):
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 
+        # Action选择器（如果工具支持多个action）
+        actions = self.tool.get_all_actions() if hasattr(self.tool, 'get_all_actions') else []
+        if len(actions) > 1:
+            action_group = QGroupBox('操作选择')
+            action_layout = QHBoxLayout()
+
+            action_label = QLabel('选择操作:')
+            action_layout.addWidget(action_label)
+
+            self.action_selector = QComboBox()
+            for action in actions:
+                action_info = self.tool.get_action_info(action) if hasattr(self.tool, 'get_action_info') else {}
+                action_name = action_info.get('name', action)
+                action_desc = action_info.get('description', '')
+                self.action_selector.addItem(action_name, action)
+                # 设置工具提示
+                if action_desc:
+                    self.action_selector.setItemData(
+                        self.action_selector.count() - 1,
+                        action_desc,
+                        Qt.ToolTipRole
+                    )
+
+            self.action_selector.currentIndexChanged.connect(self.on_action_changed)
+            action_layout.addWidget(self.action_selector)
+            action_layout.addStretch()
+
+            action_group.setLayout(action_layout)
+            layout.addWidget(action_group)
+
+            # 设置初始action
+            self.current_action = actions[0]
+        elif len(actions) == 1:
+            # 只有一个action，直接使用
+            self.current_action = actions[0]
+
         # 参数表单
-        params_group = QGroupBox('参数配置')
-        params_layout = QFormLayout()
+        self.params_group = QGroupBox('参数配置')
+        self.params_layout = QFormLayout()
+        self.params_group.setLayout(self.params_layout)
+        layout.addWidget(self.params_group)
 
-        parameters = self.tool.get_parameters()
-        for param_name, param_def in parameters.items():
-            widget = self.create_param_widget(param_name, param_def)
-            if widget:
-                self.param_widgets[param_name] = widget
-                label = param_def.get('label', param_name)
-                params_layout.addRow(label + ':', widget)
-
-        params_group.setLayout(params_layout)
-        layout.addWidget(params_group)
+        # 初始化参数表单
+        self.rebuild_param_form()
 
         # 输出区域
         output_group = QGroupBox('执行输出')
@@ -170,6 +212,58 @@ class ToolPage(QWidget):
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+    def on_action_changed(self, index: int):
+        """Action选择改变时的回调"""
+        if hasattr(self, 'action_selector'):
+            self.current_action = self.action_selector.currentData()
+            self.rebuild_param_form()
+
+    def rebuild_param_form(self):
+        """重建参数表单"""
+        # 清空现有参数控件
+        while self.params_layout.count():
+            item = self.params_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.param_widgets.clear()
+
+        # 获取当前action的参数定义
+        if self.current_action and hasattr(self.tool, 'get_parameters'):
+            parameters = self.tool.get_parameters(self.current_action)
+        else:
+            parameters = self.tool.get_parameters() if hasattr(self.tool, 'get_parameters') else {}
+
+        # 创建新的参数控件
+        for param_name, param_def in parameters.items():
+            widget = self.create_param_widget(param_name, param_def)
+            if widget:
+                self.param_widgets[param_name] = widget
+                label = param_def.get('label', param_name)
+                help_text = param_def.get('help', '')
+                required = param_def.get('required', False)
+
+                # 如果是必选参数，添加红色星号
+                if required:
+                    label_text = f'<span style="color: red;">*</span> {label}:'
+                else:
+                    label_text = label + ':'
+
+                label_widget = QLabel(label_text)
+                label_widget.setTextFormat(Qt.RichText)
+
+                # 如果有帮助文本，添加到标签的工具提示
+                if help_text:
+                    tooltip = help_text
+                    if required:
+                        tooltip = f'【必填】{tooltip}'
+                    label_widget.setToolTip(tooltip)
+                elif required:
+                    label_widget.setToolTip('【必填】')
+
+                self.params_layout.addRow(label_widget, widget)
+
 
     def create_param_widget(self, param_name: str, param_def: dict[str, Any]) -> QWidget:
         """创建参数控件"""
@@ -216,14 +310,43 @@ class ToolPage(QWidget):
             return widget
 
         if param_type == 'choice':
-            widget = QComboBox()
-            choices = param_def.get('choices', [])
-            widget.addItems(choices)
-            if default:
-                index = widget.findText(str(default))
-                if index >= 0:
-                    widget.setCurrentIndex(index)
-            return widget
+            # 检查是否支持多选
+            multi_select = param_def.get('multi_select', False)
+
+            if multi_select:
+                # 多选下拉框
+                widget = MultiSelectComboBox()
+                choices = param_def.get('choices', [])
+
+                # 如果choices是函数名，则动态获取选项
+                if isinstance(choices, str) and choices == 'get_testcases':
+                    choices = FileUtils.get_testcases()
+
+                widget.addItems(choices)
+
+                # 设置默认选中项
+                if default:
+                    if isinstance(default, list):
+                        widget.set_checked_items(default)
+                    else:
+                        widget.set_checked_items([str(default)])
+
+                return widget
+            else:
+                # 单选下拉框
+                widget = QComboBox()
+                choices = param_def.get('choices', [])
+
+                # 如果choices是函数名，则动态获取选项
+                if isinstance(choices, str) and choices == 'get_testcases':
+                    choices = FileUtils.get_testcases()
+
+                widget.addItems(choices)
+                if default:
+                    index = widget.findText(str(default))
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                return widget
 
         # str
         widget = QLineEdit()
@@ -250,6 +373,11 @@ class ToolPage(QWidget):
                 params[param_name] = widget.isChecked()
             elif isinstance(widget, QSpinBox):
                 params[param_name] = widget.value()
+            elif isinstance(widget, MultiSelectComboBox):
+                # 多选下拉框，返回选中项列表
+                checked_items = widget.get_checked_items()
+                if checked_items:
+                    params[param_name] = checked_items
             elif isinstance(widget, QComboBox):
                 params[param_name] = widget.currentText()
             elif isinstance(widget, QWidget):  # file or dir
@@ -268,6 +396,10 @@ class ToolPage(QWidget):
         """执行工具"""
         params = self.get_params()
 
+        # 如果有当前action，添加到参数中
+        if self.current_action:
+            params['action'] = self.current_action
+
         # 验证参数
         valid, error = self.tool.validate_parameters(params)
         if not valid:
@@ -276,7 +408,12 @@ class ToolPage(QWidget):
 
         # 清空输出
         self.output_text.clear()
-        self.output_text.append(f'开始执行工具: {self.tool.get_name()}\n')
+        action_name = ''
+        if self.current_action and hasattr(self.tool, 'get_action_info'):
+            action_info = self.tool.get_action_info(self.current_action)
+            if action_info:
+                action_name = f' - {action_info.get("name", self.current_action)}'
+        self.output_text.append(f'开始执行工具: {self.tool.get_name()}{action_name}\n')
 
         # 显示进度条
         self.progress_bar.setVisible(True)
@@ -331,7 +468,65 @@ class ToolPages(QWidget):
     def __init__(self):
         super().__init__()
         self.config = ConfigManager()
-        self.plugin_loader = PluginLoader()
+
+        # 确定插件目录路径
+        import sys
+        from pathlib import Path
+
+        if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+            # 打包后的环境
+            exe_dir = Path(sys.executable).parent
+
+            # 尝试多个可能的插件位置
+            # 打包后exe在 dist/hapray/ 或 dist/ 目录
+            # 插件在项目根目录（dist的父级或祖父级）
+            possible_plugin_dirs = [
+                exe_dir / 'tools',  # 同级tools目录
+                exe_dir.parent / 'tools',  # 父级tools目录
+                exe_dir.parent.parent,  # 祖父级目录（项目根目录）
+                exe_dir.parent.parent.parent,  # 曾祖父级目录
+                exe_dir.parent,  # 父级目录
+            ]
+
+            plugins_dir = None
+            for dir_path in possible_plugin_dirs:
+                if not dir_path.exists():
+                    continue
+
+                # 检查是否包含插件目录（如perf_testing等）
+                try:
+                    plugin_subdirs = [d for d in dir_path.iterdir()
+                                    if d.is_dir() and (d / 'plugin.json').exists()]
+                    if plugin_subdirs:
+                        plugins_dir = dir_path
+                        # 写入日志文件
+                        try:
+                            with open(exe_dir / 'plugin_loader_debug.log', 'a', encoding='utf-8') as f:
+                                f.write(f"找到插件目录: {plugins_dir}, 插件: {[d.name for d in plugin_subdirs]}\n")
+                        except:
+                            pass
+                        break
+                except Exception as e:
+                    try:
+                        with open(exe_dir / 'plugin_loader_debug.log', 'a', encoding='utf-8') as f:
+                            f.write(f"检查目录失败 {dir_path}: {e}\n")
+                    except:
+                        pass
+                    continue
+
+            if plugins_dir is None:
+                # 如果找不到，使用exe的祖父级目录作为默认
+                plugins_dir = exe_dir.parent.parent
+                try:
+                    with open(exe_dir / 'plugin_loader_debug.log', 'a', encoding='utf-8') as f:
+                        f.write(f"未找到插件，使用默认目录: {plugins_dir}\n")
+                except:
+                    pass
+        else:
+            # 开发环境，使用默认路径
+            plugins_dir = None
+
+        self.plugin_loader = PluginLoader(plugins_dir)
         self.init_ui()
 
     def init_ui(self):
