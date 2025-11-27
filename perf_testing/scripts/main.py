@@ -14,11 +14,11 @@ limitations under the License.
 """
 
 import argparse
+import io
 import logging
 import multiprocessing
 import os
 import sys
-import io
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
@@ -71,7 +71,9 @@ def configure_logging(log_file='HapRay.log'):
     logger.addHandler(console_handler)
 
     # 文件处理器（如果指定了日志文件）- 使用 UTF-8 编码和错误处理
-    file_handler = RotatingFileHandler(log_file, mode='a', maxBytes=10 * 1024 * 1024, backupCount=10, encoding='UTF-8', errors='replace')
+    file_handler = RotatingFileHandler(
+        log_file, mode='a', maxBytes=10 * 1024 * 1024, backupCount=10, encoding='UTF-8', errors='replace'
+    )
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)

@@ -23,6 +23,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from hapray.actions.opt_action import OptAction
+
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.update_action import UpdateAction
 

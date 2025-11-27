@@ -48,6 +48,5 @@ class CommonUtils:
             # 例如: D:\haprayTest\tools\perf-testing\perf-testing.exe
             # 我们需要返回 D:\haprayTest\tools\perf-testing
             return Path(sys.executable).parent
-        else:
-            # 开发环境：从当前文件向上4级
-            return Path(__file__).parent.parent.parent.parent
+        # 开发环境：从当前文件向上4级
+        return Path(__file__).parent.parent.parent.parent

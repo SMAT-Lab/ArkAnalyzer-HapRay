@@ -1,9 +1,6 @@
-import time
-from typing import Optional
-
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_taobao_0060(PerfTestCase):
@@ -44,7 +41,5 @@ class PerfLoad_taobao_0060(PerfTestCase):
             self.swipes_up(swip_num=5, sleep=2)
             # Step('订单页，下滑5次')
             self.swipes_down(swip_num=5, sleep=2)
-
-
 
         self.execute_performance_step('淘宝-我的订单-step1订单页面上下滑动', 40, step1)

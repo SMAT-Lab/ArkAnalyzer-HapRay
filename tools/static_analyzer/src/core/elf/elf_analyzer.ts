@@ -104,7 +104,7 @@ export class ElfAnalyzer {
 
         // 查找 .dynamic section
         const dynamicSection = elf.body.sections.find(s => s.type === 'dynamic');
-        if (!dynamicSection || !dynamicSection.data) {
+        if (!dynamicSection?.data) {
             return dependencies;
         }
 
@@ -115,13 +115,13 @@ export class ElfAnalyzer {
 
             // 查找 .dynstr section (字符串表)
             const dynstrSection = elf.body.sections.find(s => s.name === '.dynstr');
-            if (!dynstrSection || !dynstrSection.data) {
+            if (!dynstrSection?.data) {
                 return dependencies;
             }
 
             // 解析 dynamic entries
             for (let offset = 0; offset < data.length; offset += entrySize) {
-                if (offset + entrySize > data.length) break;
+                if (offset + entrySize > data.length) {break;}
 
                 let tag: number;
                 let value: number | bigint;
