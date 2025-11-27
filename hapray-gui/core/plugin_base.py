@@ -310,6 +310,37 @@ class PluginTool(BaseTool):
             # 遍历所有候选路径，找到第一个存在的可执行文件
             for cmd_item in cmd_array:
                 executable = str(cmd_item).strip()
+
+                # 特殊处理：如果是 "python"，尝试使用 sys.executable
+                if executable.lower() in ('python', 'python3', 'python.exe', 'python3.exe'):
+                    return sys.executable
+
+                # 特殊处理：如果是 "node"，尝试查找 Node.js
+                if executable.lower() in ('node', 'node.exe'):
+                    # 首先尝试系统 PATH 中的 node
+                    import shutil
+                    node_path = shutil.which('node')
+                    if node_path:
+                        return node_path
+
+                    # 如果系统没有 node，尝试查找打包的 node.exe
+                    if self.plugin_path:
+                        # 尝试在插件目录下查找
+                        for node_name in ['node.exe', 'node']:
+                            node_exe = self.plugin_path / node_name
+                            if node_exe.exists():
+                                return str(node_exe.resolve())
+
+                        # 尝试在上级目录查找（可能在 tools 目录下）
+                        tools_dir = self.plugin_path.parent
+                        for node_name in ['node.exe', 'node']:
+                            node_exe = tools_dir / node_name
+                            if node_exe.exists():
+                                return str(node_exe.resolve())
+
+                    # 如果都找不到，返回 'node'（让系统报告错误）
+                    return 'node'
+
                 # 尝试解析为路径
                 # 如果是相对路径（以 ./ 或 ../ 开头），相对于插件目录
                 if executable.startswith('./') or executable.startswith('../'):
@@ -326,9 +357,24 @@ class PluginTool(BaseTool):
 
                 # 否则尝试在插件目录下查找
                 if self.plugin_path:
+                    # 尝试直接匹配
                     exe_path = self.plugin_path / executable
                     if exe_path.exists():
                         return str(exe_path.resolve())
+
+                    # 尝试处理下划线和中划线的差异
+                    if '-' in executable:
+                        # 尝试将中划线替换为下划线
+                        alt_executable = executable.replace('-', '_')
+                        exe_path = self.plugin_path / alt_executable
+                        if exe_path.exists():
+                            return str(exe_path.resolve())
+                    elif '_' in executable:
+                        # 尝试将下划线替换为中划线
+                        alt_executable = executable.replace('_', '-')
+                        exe_path = self.plugin_path / alt_executable
+                        if exe_path.exists():
+                            return str(exe_path.resolve())
 
                 # 尝试作为绝对路径
                 exe_path_abs = Path(executable)
@@ -337,7 +383,11 @@ class PluginTool(BaseTool):
 
             # 如果都没找到，返回第一个作为默认值（让执行器报告错误）
             # 可能是系统 PATH 中的可执行文件
-            return str(cmd_array[0]).strip()
+            first_cmd = str(cmd_array[0]).strip()
+            # 如果第一个是 python，返回 sys.executable
+            if first_cmd.lower() in ('python', 'python3', 'python.exe', 'python3.exe'):
+                return sys.executable
+            return first_cmd
         return None
 
     def get_cmd_script_path(self) -> str:

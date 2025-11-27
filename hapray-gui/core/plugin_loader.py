@@ -30,10 +30,23 @@ class PluginLoader:
             if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
                 # PyInstaller 打包后的情况
                 exe_dir = Path(sys.executable).parent
-                plugins_dir = exe_dir / 'tools'
+                # 尝试多个可能的路径
+                possible_paths = [
+                    exe_dir / 'tools',  # 如果tools在exe同级目录
+                    exe_dir.parent / 'tools',  # 如果tools在exe父目录
+                    exe_dir.parent,  # 直接使用父目录作为插件根目录
+                ]
+                plugins_dir = None
+                for path in possible_paths:
+                    if path.exists():
+                        plugins_dir = path
+                        break
+                if plugins_dir is None:
+                    # 如果都找不到，使用exe父目录
+                    plugins_dir = exe_dir.parent
             else:
                 # 开发环境
-                plugins_dir = Path(__file__).parent.parent.parent / 'tools'
+                plugins_dir = Path(__file__).parent.parent.parent
         self.plugins_dir = Path(plugins_dir).resolve()
         self.plugins: dict[str, BaseTool] = {}
         self.plugin_metadata: dict[str, dict[str, Any]] = {}

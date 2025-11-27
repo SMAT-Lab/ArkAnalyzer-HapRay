@@ -15,6 +15,7 @@ limitations under the License.
 
 # coding: utf-8
 import os
+import sys
 from importlib.resources import files
 from pathlib import Path
 
@@ -40,5 +41,13 @@ class CommonUtils:
 
     @staticmethod
     def get_project_root() -> Path:
-        """获取项目根目录"""
-        return Path(__file__).parent.parent.parent.parent
+        """获取项目根目录，支持打包后的环境"""
+        # 如果是 PyInstaller 打包后的环境
+        if getattr(sys, 'frozen', False):
+            # sys.executable 是可执行文件的路径
+            # 例如: D:\haprayTest\tools\perf-testing\perf-testing.exe
+            # 我们需要返回 D:\haprayTest\tools\perf-testing
+            return Path(sys.executable).parent
+        else:
+            # 开发环境：从当前文件向上4级
+            return Path(__file__).parent.parent.parent.parent

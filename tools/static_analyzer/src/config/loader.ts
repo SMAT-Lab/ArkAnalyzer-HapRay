@@ -150,6 +150,9 @@ function getExtToolsRoot(): string {
     if (!fs.existsSync(root)) {
         root = path.join(__dirname, '../../../dist/tools');
     }
+    if (!fs.existsSync(root)) {
+        root = path.join(__dirname, '../../tools');
+    }
     if (fs.existsSync(root)) {
         return path.resolve(root);
     }

@@ -28,11 +28,12 @@
           "help": "符号化后的.so文件目录"
         },
         "run_testcases": {
-          "type": "str",
+          "type": "choice",
           "label": "测试用例",
           "required": false,
-          "nargs": "+",
-          "help": "要运行的测试用例（支持多个值）"
+          "multi_select": true,
+          "choices": "get_testcases",
+          "help": "要运行的测试用例（支持多选）"
         },
         "round": {
           "type": "int",
@@ -105,11 +106,12 @@
       },
       "parameters": {
         "run_testcases": {
-          "type": "str",
+          "type": "choice",
           "label": "测试用例",
           "required": false,
-          "nargs": "+",
-          "help": "要运行的测试用例（支持多个值）"
+          "multi_select": true,
+          "choices": "get_testcases",
+          "help": "要运行的测试用例（支持多选）"
         },
         "all_0000": {
           "type": "bool",
