@@ -3,6 +3,7 @@
 """
 
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -318,7 +319,6 @@ class PluginTool(BaseTool):
                 # 特殊处理：如果是 "node"，尝试查找 Node.js
                 if executable.lower() in ('node', 'node.exe'):
                     # 首先尝试系统 PATH 中的 node
-                    import shutil
                     node_path = shutil.which('node')
                     if node_path:
                         return node_path

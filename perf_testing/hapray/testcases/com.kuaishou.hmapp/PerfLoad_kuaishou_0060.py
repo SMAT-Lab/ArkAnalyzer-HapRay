@@ -1,9 +1,4 @@
-import time
-from typing import Optional
-
-from hypium import BY
-
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_kuaishou_0060(PerfTestCase):
@@ -36,4 +31,3 @@ class PerfLoad_kuaishou_0060(PerfTestCase):
             self.swipe_to_home()
 
         self.execute_performance_step('快手-冷启动场景-step1应用冷启动', 10, step1, sample_all_processes=True)
-

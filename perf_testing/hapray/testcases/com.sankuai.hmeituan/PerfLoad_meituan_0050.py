@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_meituan_0050(PerfTestCase):
@@ -32,7 +31,6 @@ class PerfLoad_meituan_0050(PerfTestCase):
         self.driver.start_app(self.app_package)
         self.driver.wait(5)
         time.sleep(2)
-
 
         def step1():
             self.driver.touch(BY.text('团购'))
@@ -64,5 +62,3 @@ class PerfLoad_meituan_0050(PerfTestCase):
         #     self.swipes_down(swip_num=5, sleep=2)
         #
         # self.execute_performance_step('美团-团购购物场景-step2团购商品结算', 30, step2)
-
-
