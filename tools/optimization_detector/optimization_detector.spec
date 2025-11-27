@@ -14,6 +14,27 @@ if models_path.exists():
 
 binaries = []
 
+# 过滤函数：排除测试文件和不必要的文件
+def filter_datas(datas_list):
+    """过滤掉测试文件、文档和其他不必要的文件"""
+    filtered = []
+    exclude_patterns = [
+        '/tests/', '\\tests\\',
+        '/test/', '\\test\\',
+        '/docs/', '\\docs\\',
+        '/examples/', '\\examples\\',
+        '/benchmarks/', '\\benchmarks\\',
+        'CHANGELOG', 'LICENSE', 'README',
+    ]
+
+    for src, dest in datas_list:
+        # 检查路径中是否包含排除模式
+        should_exclude = any(pattern in src.lower() for pattern in exclude_patterns)
+        if not should_exclude:
+            filtered.append((src, dest))
+
+    return filtered
+
 # 项目自身模块
 hiddenimports = [
     'optimization_detector',
@@ -34,7 +55,7 @@ hiddenimports = [
 
 # 显式收集 numpy（pandas 的依赖）
 tmp_ret = collect_all('numpy')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 # 添加 numpy 的关键隐藏导入
@@ -54,29 +75,29 @@ hiddenimports += [
 
 # 收集 pandas
 tmp_ret = collect_all('pandas')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 # 收集其他依赖
 tmp_ret = collect_all('tensorflow')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 tmp_ret = collect_all('arpy')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 tmp_ret = collect_all('joblib')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 # 收集 scipy - sklearn 的依赖
 tmp_ret = collect_all('scipy')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 # 添加 scipy 的关键隐藏导入（特别是 Cython 扩展模块）
@@ -100,7 +121,7 @@ hiddenimports += [
 
 # 收集 sklearn (scikit-learn) - LTO 检测器需要
 tmp_ret = collect_all('sklearn')
-datas += tmp_ret[0]
+datas += filter_datas(tmp_ret[0])  # 应用过滤
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 # 添加 sklearn 的关键隐藏导入

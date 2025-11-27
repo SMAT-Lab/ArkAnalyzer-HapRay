@@ -20,11 +20,14 @@ module.exports = {
                     to: path.resolve(__dirname, '../dist/tools/perf-testing'),
                     noErrorOnMissing: true,
                 },
-                { 
-                    from: path.resolve(__dirname, 'plugin.json'), 
-                    to: path.resolve(__dirname, '../dist/tools/perf-testing/plugin.json') 
+                {
+                    from: path.resolve(__dirname, 'plugin.json'),
+                    to: path.resolve(__dirname, '../dist/tools/perf-testing/plugin.json')
                 },
             ],
+            options: {
+                concurrency: 30, // 进一步限制并发数
+            },
         }),
         new PreservePermissionsPlugin({
             mappings: [

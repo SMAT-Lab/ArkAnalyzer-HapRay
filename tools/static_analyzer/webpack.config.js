@@ -109,6 +109,9 @@ module.exports = {
                     to: 'node_modules/sql.js/dist/worker.sql-wasm.js',
                 },
             ],
+            options: {
+                concurrency: 50, // 限制并发文件复制数，避免打开太多文件
+            },
         }),
 
         new PackPlugin(),

@@ -1,14 +1,21 @@
-import os
+#!/usr/bin/env python3
+"""
+统一的Python环境设置脚本
+支持增量安装：即使.venv已存在，也会检查并安装缺失的依赖
+"""
+
 import platform
-import re
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 # Version requirements
 MIN_PYTHON_VERSION = (3, 9)
 MAX_PYTHON_VERSION = (3, 12)
+
+# Configuration
+VENV_NAME = '.venv'
+REQUIREMENTS_FILE = 'requirements.txt'
 
 
 def check_python_version():
@@ -16,95 +23,36 @@ def check_python_version():
     current_version = sys.version_info[:2]
     if not (MIN_PYTHON_VERSION <= current_version <= MAX_PYTHON_VERSION):
         print(
-            f'Error: Python version must be between {MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]} and {MAX_PYTHON_VERSION[0]}.{MAX_PYTHON_VERSION[1]}'
+            f'Error: Python version must be between {MIN_PYTHON_VERSION[0]}.{MIN_PYTHON_VERSION[1]} '
+            f'and {MAX_PYTHON_VERSION[0]}.{MAX_PYTHON_VERSION[1]}'
         )
         print(f'Current Python version: {current_version[0]}.{current_version[1]}')
         sys.exit(1)
 
 
-# Check Python version before proceeding
-check_python_version()
-
-# Configuration Constants
-VENV_NAME = '.venv'
-VERSION = '5.0.7.200'
-
-# Path Configuration
-CURRENT_DIR = Path(os.path.abspath(Path(__file__).parent))
-HYPIUM_ZIP_PATH = CURRENT_DIR.parent / 'third-party' / f'hypium-{VERSION}.zip'
-
-HYPIUM_DIR = f'hypium-{VERSION}'
-REQUIREMENTS_FILE = 'requirements.txt'
-
-# Package Installation Order
-PACKAGE_INSTALL_ORDER = {'xdevice': 0, 'xdevice-devicetest': 1, 'xdevice-ohos': 2, 'hypium': 3}
-
-
-def execute_command(command: list, working_dir: Path = None, error_message: str = '') -> None:
-    """
-    Execute a shell command with error handling.
-
-    Args:
-        command: List of command arguments
-        working_dir: Working directory for the command
-        error_message: Custom error message for exception handling
-    """
+def execute_command(command: list, error_message: str = '') -> None:
+    """Execute a shell command with error handling."""
     try:
-        result = subprocess.run(command, cwd=working_dir, check=True, shell=platform.system() == 'Windows', text=True)
-        print(result.stdout)
-        if result.stderr:
-            print(f'Warning: {result.stderr}')
+        result = subprocess.run(
+            command,
+            check=True,
+            shell=platform.system() == 'Windows',
+            text=True,
+            capture_output=True
+        )
+        if result.stdout:
+            print(result.stdout)
     except subprocess.CalledProcessError as e:
         print(f'Error: {error_message}')
-        print(f'Command: {e.cmd}')
-        print(f'Error output: {e.stderr}')
+        print(f'Command: {" ".join(command)}')
+        if e.stdout:
+            print(f'Output: {e.stdout}')
+        if e.stderr:
+            print(f'Error output: {e.stderr}')
         sys.exit(1)
 
 
-def get_package_files(directory: Path) -> list[Path]:
-    """Get all .tar.gz and .whl files in the specified directory."""
-    return [file for file in directory.iterdir() if file.suffix in ('.tar.gz', '.whl') or file.name.endswith('.tar.gz')]
-
-
-def extract_package_prefix(file_name: str) -> str:
-    """
-    Extract package name prefix from a package filename.
-
-    Args:
-        file_name: Name of the package file (e.g., "perf_analyzer-5.0.7.200b0-py3-none-any.whl")
-
-    Returns:
-        Extracted package name prefix (e.g., "perf_analyzer")
-    """
-    patterns = [
-        r'^([a-zA-Z0-9_]+?)-\d.*\.(whl|tar\.gz)$',  # Standard package naming
-        r'^([a-zA-Z0-9_-]+?)-\d+[a-zA-Z0-9.]*\.(whl|tar\.gz)$',  # Complex package names
-    ]
-
-    for pattern in patterns:
-        match = re.match(pattern, file_name)
-        if match:
-            prefix = match.group(1)
-            # Filter numeric suffixes
-            if any(c.isdigit() for c in prefix.split('-')[-1]):
-                return '-'.join(prefix.split('-')[:-1])
-            return prefix
-    return ''
-
-
-def setup_virtual_environment() -> None:
-    """Create Python virtual environment if it doesn't exist."""
-    print(f'\n[1/3] Creating virtual environment: {VENV_NAME}...')
-    venv_path = Path(VENV_NAME)
-
-    if venv_path.exists():
-        print(f'Warning: Virtual environment {VENV_NAME} already exists')
-        return
-
-    execute_command([sys.executable, '-m', 'venv', VENV_NAME], error_message='Failed to create virtual environment')
-
-
-def get_virtualenv_paths() -> tuple[Path, Path]:
+def get_virtualenv_paths() -> tuple:
     """Get paths to virtual environment executables."""
     if platform.system() == 'Windows':
         python_path = Path(VENV_NAME) / 'Scripts' / 'python.exe'
@@ -114,93 +62,210 @@ def get_virtualenv_paths() -> tuple[Path, Path]:
         pip_path = Path(VENV_NAME) / 'bin' / 'pip'
 
     if not python_path.exists():
-        sys.exit(f'Error: Missing Python executable in virtual environment: {python_path}')
+        print(f'Error: Virtual environment Python not found at {python_path}')
+        sys.exit(1)
 
     return python_path, pip_path
 
 
-def extract_package(zip_path: Path, extractall_dir: Path) -> None:
-    """
-    Extract package from zip archive.
+def create_virtual_environment():
+    """Create a virtual environment if it doesn't exist."""
+    venv_path = Path(VENV_NAME)
+    if venv_path.exists():
+        print(f'Virtual environment already exists at {venv_path}')
+        return False  # 返回False表示没有创建新环境
+    
+    print(f'Creating virtual environment at {venv_path}...')
+    execute_command(
+        [sys.executable, '-m', 'venv', VENV_NAME],
+        error_message='Failed to create virtual environment'
+    )
+    print(f'Successfully created virtual environment')
+    return True  # 返回True表示创建了新环境
 
-    Args:
-        zip_path: Path to the zip file
-    """
-    print(f'\n[2/3] Extract package: {zip_path.name}...')
 
-    if not zip_path.exists():
-        sys.exit(f'Error: package not found: {zip_path}')
+def check_package_installed(python_path: Path, package_name: str) -> bool:
+    """Check if a package is installed in the virtual environment."""
     try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extractall_dir)
-        print(f'Extracted to: {extractall_dir}')
-    except zipfile.BadZipFile as e:
-        sys.exit(f'Error: Failed to extract {zip_path}: {str(e)}')
+        # 将包名中的-替换为_用于import
+        import_name = package_name.replace('-', '_').split('[')[0].split('>=')[0].split('==')[0].split('~=')[0]
+        cmd = [str(python_path), '-c', f'import {import_name}']
+        subprocess.run(cmd, check=True, capture_output=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 
-def install_project_dependencies(pip_executable: Path) -> None:
-    """Install project dependencies from requirements file and Hypium packages."""
-    # Install requirements.txt
+def get_required_packages() -> list:
+    """Get list of required packages from requirements.txt."""
     requirements_path = Path(REQUIREMENTS_FILE)
     if not requirements_path.exists():
-        print(f'\n[3/3] Warning: Requirements file not found: {requirements_path}')
+        return []
+    
+    packages = []
+    with open(requirements_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # 跳过空行和注释
+            if line and not line.startswith('#'):
+                # 提取包名（去掉版本号）
+                pkg_name = line.split('>=')[0].split('==')[0].split('~=')[0].split('[')[0].strip()
+                packages.append(pkg_name)
+    return packages
+
+
+def verify_dependencies(python_path: Path) -> tuple:
+    """
+    Verify if all required dependencies are installed.
+    Returns: (all_installed: bool, missing_packages: list)
+    """
+    required = get_required_packages()
+    if not required:
+        return True, []
+    
+    missing = []
+    for pkg in required:
+        if not check_package_installed(python_path, pkg):
+            missing.append(pkg)
+    
+    return len(missing) == 0, missing
+
+
+def install_hypium_packages(python_path: Path):
+    """Install local hypium packages if available."""
+    hypium_dir = Path('hypium-5.0.7.200')
+
+    if not hypium_dir.exists():
+        print('Note: hypium-5.0.7.200 directory not found, skipping hypium installation')
         return
 
-    print(f'\n[3/3] Installing dependencies from {REQUIREMENTS_FILE}...')
-    print(f'Using pip executable: {pip_executable}')
-    print(f'Requirements file path: {requirements_path}')
-
+    # Check if hypium is already installed
     try:
-        execute_command(
-            [str(pip_executable), 'install', '-r', str(requirements_path)],
-            error_message='Failed to install requirements',
+        subprocess.run(
+            [str(python_path), '-c', 'import hypium'],
+            check=True,
+            capture_output=True
         )
-        print('Successfully installed requirements')
-    except Exception as e:
-        print(f'Error installing requirements: {str(e)}')
-        raise
+        print('Hypium packages already installed')
+        return
+    except subprocess.CalledProcessError:
+        pass  # hypium not installed, proceed with installation
 
-    # Install Hypium packages in specific order
-    packages_dir = Path(HYPIUM_DIR)
-    package_files = get_package_files(packages_dir)
+    # Install hypium packages in order
+    packages = [
+        'xdevice-5.0.7.200.tar.gz',
+        'xdevice-devicetest-5.0.7.200.tar.gz',
+        'xdevice-ohos-5.0.7.200.tar.gz',
+        'hypium-5.0.7.200.tar.gz',
+    ]
 
-    package_files.sort(key=lambda p: PACKAGE_INSTALL_ORDER.get(extract_package_prefix(p.name), float('inf')))
+    print('Installing hypium packages...')
+    for pkg in packages:
+        pkg_path = hypium_dir / pkg
+        if not pkg_path.exists():
+            print(f'  Warning: {pkg} not found, skipping')
+            continue
 
-    for package in package_files:
-        print(f'Installing package: {package.name}')
-        try:
-            execute_command(
-                [str(pip_executable), 'install', str(package)],
-                error_message=f'Failed to install package: {package.name}',
-            )
-            print(f'Successfully installed {package.name}')
-        except Exception as e:
-            print(f'Error installing {package.name}: {str(e)}')
-            raise
+        print(f'  Installing {pkg}...')
+        execute_command(
+            [str(python_path), '-m', 'pip', 'install', str(pkg_path)],
+            error_message=f'Failed to install {pkg}'
+        )
+
+    print('Successfully installed hypium packages')
 
 
-def display_activation_instructions() -> None:
-    """Display virtual environment activation instructions."""
-    print('\nSetup complete! Next steps:')
+def install_dependencies():
+    """Install Python dependencies from requirements.txt or pyproject.toml."""
+    python_path, pip_path = get_virtualenv_paths()
 
-    activate_cmd = (
-        f'{VENV_NAME}\\Scripts\\activate' if platform.system() == 'Windows' else f'source {VENV_NAME}/bin/activate'
+    requirements_path = Path(REQUIREMENTS_FILE)
+    pyproject_path = Path('pyproject.toml')
+
+    # 先检查依赖是否已完整安装
+    all_installed, missing = verify_dependencies(python_path)
+
+    # 升级pip（无论是否需要安装依赖）
+    print('Upgrading pip...')
+    execute_command(
+        [str(python_path), '-m', 'pip', 'install', '--upgrade', 'pip'],
+        error_message='Failed to upgrade pip'
     )
 
-    print(f'\n1. Activate virtual environment:\n   {activate_cmd}\n')
+    # Install hypium packages first (perf_testing specific)
+    install_hypium_packages(python_path)
+
+    if all_installed:
+        print('All dependencies are already installed, skipping installation')
+        return
+
+    print(f'Missing packages: {", ".join(missing)}')
+    print('Installing dependencies...')
+
+    # Try requirements.txt first
+    if requirements_path.exists():
+        print(f'Installing from {REQUIREMENTS_FILE}...')
+        execute_command(
+            [str(python_path), '-m', 'pip', 'install', '-r', str(requirements_path)],
+            error_message=f'Failed to install from {REQUIREMENTS_FILE}'
+        )
+        print('Successfully installed dependencies from requirements.txt')
+        return
+
+    # Try pyproject.toml as fallback
+    if pyproject_path.exists() and _has_project_dependencies(pyproject_path):
+        print(f'Installing from pyproject.toml...')
+        execute_command(
+            [str(python_path), '-m', 'pip', 'install', '-e', '.'],
+            error_message='Failed to install from pyproject.toml'
+        )
+        print('Successfully installed dependencies from pyproject.toml')
+        return
+
+    # Fatal error if no dependency file found
+    print(f'ERROR: No dependency file found!')
+    print(f'   Expected: {REQUIREMENTS_FILE} or pyproject.toml with [project.dependencies]')
+    print(f'   Current directory: {Path.cwd()}')
+    sys.exit(1)
 
 
-def main() -> None:
-    """Main execution flow."""
+def _has_project_dependencies(pyproject_path: Path) -> bool:
+    """Check if pyproject.toml has [project] section with dependencies."""
+    try:
+        content = pyproject_path.read_text(encoding='utf-8')
+        return '[project]' in content and 'dependencies' in content
+    except Exception:
+        return False
 
-    setup_virtual_environment()
-    _, pip_executable = get_virtualenv_paths()
 
-    extract_package(HYPIUM_ZIP_PATH, HYPIUM_DIR)
+def main():
+    """Main setup function."""
+    check_python_version()
+    
+    print('=' * 60)
+    print('Python Environment Setup')
+    print('=' * 60)
+    print(f'Working directory: {Path.cwd()}')
+    print()
 
-    install_project_dependencies(pip_executable)
-    display_activation_instructions()
+    # Create or verify virtual environment
+    is_new_env = create_virtual_environment()
+    
+    # Install or verify dependencies
+    install_dependencies()
+
+    print('=' * 60)
+    print('Setup completed successfully!')
+    print('=' * 60)
+    
+    # Show activation instructions
+    if platform.system() == 'Windows':
+        print(f'Activate: {VENV_NAME}\\Scripts\\activate')
+    else:
+        print(f'Activate: source {VENV_NAME}/bin/activate')
+    print()
 
 
 if __name__ == '__main__':
     main()
+

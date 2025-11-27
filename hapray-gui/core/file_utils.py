@@ -70,7 +70,16 @@ class FileUtils:
     @staticmethod
     def get_project_root() -> Path:
         """获取项目根目录"""
-        # 从当前文件向上查找，直到找到包含特定标记文件的目录
+        import sys
+
+        # 如果是 PyInstaller 打包后的环境
+        if getattr(sys, 'frozen', False):
+            # sys.executable 是可执行文件的路径
+            # 例如: D:\ArkAnalyzer-HapRay\dist\ArkAnalyzer-HapRay-GUI.exe
+            # 我们需要返回 D:\ArkAnalyzer-HapRay\dist
+            return Path(sys.executable).parent
+
+        # 开发环境：从当前文件向上查找，直到找到包含特定标记文件的目录
         current = Path(__file__).resolve()
         while current != current.parent:
             if (current / 'hapray-gui').exists() or (current / 'perf_testing').exists():
@@ -87,12 +96,25 @@ class FileUtils:
         Returns:
             测试用例名称列表（不包含.py扩展名）
         """
+        import sys
+        from core.logger import get_logger
+
+        logger = get_logger(__name__)
         project_root = FileUtils.get_project_root()
+
+        # 记录调试信息
+        logger.debug(f'sys.frozen: {getattr(sys, "frozen", False)}')
+        logger.debug(f'sys.executable: {sys.executable}')
+        logger.debug(f'project_root: {project_root}')
 
         # 打包环境：tools/perf-testing/_internal/hapray/testcases
         testcases_dir = project_root / 'tools' / 'perf-testing' / '_internal' / 'hapray' / 'testcases'
 
+        logger.debug(f'testcases_dir: {testcases_dir}')
+        logger.debug(f'testcases_dir.exists(): {testcases_dir.exists()}')
+
         if not testcases_dir.exists():
+            logger.warning(f'测试用例目录不存在: {testcases_dir}')
             return []
 
         testcases = []
@@ -107,4 +129,5 @@ class FileUtils:
                     testcase_name = py_file.stem
                     testcases.append(testcase_name)
 
+        logger.info(f'找到 {len(testcases)} 个测试用例')
         return sorted(testcases)

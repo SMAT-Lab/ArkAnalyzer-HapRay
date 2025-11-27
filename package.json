@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "build": "node scripts/unzip_third-party.js && npm run build --ws",
-    "release": "node scripts/merge_duplicates.js && node scripts/zip.js ArkAnalyzer-HapRay",
+    "verify": "node scripts/verify-build.js",
+    "release": "npm run build && npm run verify && node scripts/merge_duplicates.js && node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
     "test": "npm run test -w perf_testing"

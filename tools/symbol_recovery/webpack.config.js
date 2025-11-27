@@ -19,6 +19,17 @@ module.exports = {
                     from: path.resolve(__dirname, 'dist/symbol-recovery'),
                     to: path.resolve(__dirname, '../../dist/tools/symbol-recovery'),
                     noErrorOnMissing: true,
+                    filter: (resourcePath) => {
+                        // 过滤掉测试文件和其他不需要的文件
+                        const skipPatterns = [
+                            /[\\/]tests?[\\/]/,
+                            /[\\/]test_.*\.py[co]?$/,
+                            /[\\/]docs?[\\/]/,
+                            /[\\/]examples?[\\/]/,
+                            /[\\/]benchmark/,
+                        ];
+                        return !skipPatterns.some(pattern => pattern.test(resourcePath));
+                    },
                 },
                 {
                     from: path.resolve(__dirname, 'README.md'),
@@ -27,6 +38,9 @@ module.exports = {
                 },
                 { from: path.resolve(__dirname, 'plugin.json'), to: path.resolve(__dirname, '../../dist/tools/symbol-recovery/plugin.json') },
             ],
+            options: {
+                concurrency: 30, // 限制并发文件复制数
+            },
         }),
         // 保持文件权限插件：在文件拷贝后保持可执行权限
         new PreservePermissionsPlugin({

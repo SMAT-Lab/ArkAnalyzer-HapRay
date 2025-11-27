@@ -41,6 +41,9 @@ module.exports = {
                     noErrorOnMissing: true,
                 },
             ],
+            options: {
+                concurrency: 50, // 限制并发文件复制数，避免打开太多文件
+            },
         }),
         // 保持文件权限插件：在文件拷贝后保持可执行权限
         new PreservePermissionsPlugin({

@@ -47,10 +47,29 @@ for path in sys.path:
         site_packages_dir = path
         break
 
+# 定义需要排除的目录和文件模式
+exclude_patterns = {
+    'tests', 'test', 'testing',
+    'docs', 'doc', 'documentation',
+    'examples', 'example', 'samples',
+    'benchmarks', 'benchmark',
+}
+
+def should_exclude(name):
+    """判断是否应该排除某个包"""
+    name_lower = name.lower()
+    # 排除测试、文档、示例等目录
+    if any(pattern in name_lower for pattern in exclude_patterns):
+        return True
+    # 排除特定的大型测试包
+    if name.startswith('test'):
+        return True
+    return False
+
 if site_packages_dir and os.path.exists(site_packages_dir):
     for item in os.listdir(site_packages_dir):
         item_path = os.path.join(site_packages_dir, item)
-        if os.path.isdir(item_path) and not item.startswith('__'):
+        if os.path.isdir(item_path) and not item.startswith('__') and not should_exclude(item):
             datas.append((item_path, item))
 
 a = Analysis(
@@ -62,7 +81,23 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # 排除测试模块
+        'pytest', 'unittest', 'nose', '_pytest',
+        'test', 'tests', 'testing',
+        # 排除文档和示例
+        'sphinx', 'doctest',
+        # 排除不需要的numpy测试模块
+        'numpy.testing', 'numpy.tests',
+        'numpy.f2py.tests',
+        # 排除pandas测试模块
+        'pandas.tests', 'pandas.testing',
+        # 排除开发工具
+        'IPython', 'jupyter', 'notebook',
+        'pip', 'setuptools', 'wheel',
+        # 排除其他不需要的模块
+        'tkinter', 'turtle',
+    ],
     noarchive=False,
     optimize=0,
 )
