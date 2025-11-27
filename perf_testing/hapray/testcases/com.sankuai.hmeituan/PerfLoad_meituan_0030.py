@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_meituan_0030(PerfTestCase):
@@ -74,4 +73,3 @@ class PerfLoad_meituan_0030(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('美团-蜜雪冰城滑动浏览场景-step3蜜雪冰城评价页上下滑动', 30, step3)
-

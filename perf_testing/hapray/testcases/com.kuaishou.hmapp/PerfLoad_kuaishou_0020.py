@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_kuaishou_0020(PerfTestCase):
@@ -49,7 +48,7 @@ class PerfLoad_kuaishou_0020(PerfTestCase):
 
         self.execute_performance_step('快手-搜索页-step1搜索结束页面滑动', 35, step1)
 
-        self.dirver.swipe_to_back()
+        self.driver.swipe_to_back()
 
         self.driver.touch(BY.text('直播榜'))
         time.sleep(2)

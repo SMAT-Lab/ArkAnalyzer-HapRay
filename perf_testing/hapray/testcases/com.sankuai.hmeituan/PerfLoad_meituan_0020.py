@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_meituan_0020(PerfTestCase):
@@ -36,6 +35,7 @@ class PerfLoad_meituan_0020(PerfTestCase):
         self.driver.touch(BY.text('美食'))
         self.driver.wait(2)
         time.sleep(2)
+
         def step1():
             # Step('美团美食页上滑操作')
             self.swipes_up(swip_num=5, sleep=2)
@@ -57,4 +57,3 @@ class PerfLoad_meituan_0020(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('美团-美食、酒店民宿页面滑动浏览场景-step2酒店民宿页上下滑动', 30, step2)
-

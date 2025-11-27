@@ -19,6 +19,7 @@ import os
 import platform
 import sqlite3
 import subprocess
+import sys
 import time
 from typing import Optional
 
@@ -37,7 +38,7 @@ class ExeUtils:
         """Resolve the tools directory, supporting both source and packaged layouts.
 
         打包后的目录结构：
-        D:\haprayTest\tools\
+        D:\\haprayTest\tools\
           ├── perf-testing\
           │   └── perf-testing.exe  <- sys.executable
           ├── trace_streamer_binary\
@@ -57,7 +58,6 @@ class ExeUtils:
         Raises:
             FileNotFoundError: If neither candidate tools directory exists.
         """
-        import sys
         project_root = CommonUtils.get_project_root()
 
         # 打包后：project_root 是 exe 所在目录（D:\haprayTest\tools\perf-testing）
@@ -70,11 +70,13 @@ class ExeUtils:
             candidates.append(os.path.join(project_root, '..'))
         else:
             # 开发环境：尝试多个可能的路径
-            candidates.extend([
-                os.path.join(project_root, 'tools'),  # 仓库根目录/tools
-                os.path.join(project_root, '..', 'tools'),  # 上一级/tools
-                os.path.join(project_root, '..', 'dist', 'tools'),  # 上一级/dist/tools
-            ])
+            candidates.extend(
+                [
+                    os.path.join(project_root, 'tools'),  # 仓库根目录/tools
+                    os.path.join(project_root, '..', 'tools'),  # 上一级/tools
+                    os.path.join(project_root, '..', 'dist', 'tools'),  # 上一级/dist/tools
+                ]
+            )
 
         for base in candidates:
             tools_dir = os.path.abspath(base)
@@ -84,7 +86,9 @@ class ExeUtils:
             if os.path.exists(tools_dir):
                 return tools_dir
 
-        logging.warning(f'Tools directory not found. project_root: {project_root}, frozen: {getattr(sys, "frozen", False)}')
+        logging.warning(
+            f'Tools directory not found. project_root: {project_root}, frozen: {getattr(sys, "frozen", False)}'
+        )
         if require:
             raise FileNotFoundError(
                 f'Tools directory not found. Checked: {", ".join(os.path.abspath(c) for c in candidates)}'
