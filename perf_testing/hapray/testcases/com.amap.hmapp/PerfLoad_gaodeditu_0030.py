@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_gaodeditu_0030(PerfTestCase):
@@ -29,7 +28,7 @@ class PerfLoad_gaodeditu_0030(PerfTestCase):
         self.driver.swipe_to_home()
 
         # Step('启动被测应用')
-        self.driver.start_app(self.app_package)
+        self.driver.start_app(self.app_package, page_name='EntryAbility')
         self.driver.wait(5)
         time.sleep(2)
 
@@ -60,4 +59,3 @@ class PerfLoad_gaodeditu_0030(PerfTestCase):
             time.sleep(10)
 
         self.execute_performance_step('高德地图-线路切换场景-step1驾车打车骑行tab页切换', 50, step1)
-

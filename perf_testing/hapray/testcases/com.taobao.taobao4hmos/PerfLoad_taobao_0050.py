@@ -1,9 +1,8 @@
 import time
-from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import Log, PerfTestCase
+from hapray.core.perf_testcase import PerfTestCase
 
 
 class PerfLoad_taobao_0050(PerfTestCase):
@@ -40,7 +39,6 @@ class PerfLoad_taobao_0050(PerfTestCase):
             # Step('直播页，下滑5次')
             self.swipes_down(swip_num=5, sleep=2)
 
-
         def step2():
             # 点击第一个直播间
             self.driver.touch(self.convert_coordinate(280, 1328))
@@ -49,7 +47,6 @@ class PerfLoad_taobao_0050(PerfTestCase):
             self.swipes_up(swip_num=5, sleep=2)
             # Step('直播间切换，下滑5次')
             self.swipes_down(swip_num=5, sleep=2)
-
 
         self.execute_performance_step('淘宝-首页-step1直播页滑动', 40, step1)
         self.execute_performance_step('淘宝-首页-step2直播间上下滑动', 30, step2)

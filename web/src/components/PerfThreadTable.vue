@@ -92,21 +92,21 @@ v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.instructions) }}</span>
+            <span class="value" :title="formatNumber(row.instructions)">{{ formatScientific(row.instructions) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="isHidden" label="迭代指令数" width="160" prop="compareInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
+            <span class="value" :title="formatNumber(row.compareInstructions)">{{ formatScientific(row.compareInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="isHidden" label="负载增长指令数" width="160" prop="increaseInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.increaseInstructions) }}</span>
+            <span class="value" :title="formatNumber(row.increaseInstructions)">{{ formatScientific(row.increaseInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -168,6 +168,14 @@ const formatScientific = (num: number) => {
     num = Number(num);
   }
   return num.toExponential(2);
+};
+
+const formatNumber = (num: number) => {
+  if (typeof num !== 'number') {
+    num = Number(num);
+  }
+  // 格式化为带千分位分隔符的完整数字，用于tooltip显示
+  return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
 
 const handleRowClick = (row: { name: string }) => {
@@ -409,6 +417,8 @@ watch(filteredData, (newVal) => {
 
   .value {
     font-family: monospace;
+    cursor: help;
+    text-decoration: underline dotted;
   }
 
   .trend {
