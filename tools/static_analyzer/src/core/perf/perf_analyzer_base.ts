@@ -125,7 +125,7 @@ export interface PerfSymbolDetailData {
     symbol: string;
     symbolEvents: number;
     symbolTotalEvents: number;
-    componentName?: string;
+    subCategoryName?: string;
     componentCategory: ComponentCategory;
     originKind?: OriginKind;
     isMainApp: boolean;
@@ -742,7 +742,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     symbol: data.symbol,
                     symbolEvents: 0,
                     symbolTotalEvents: 0,
-                    componentName: data.componentName,
+                    subCategoryName: data.subCategoryName,
                     componentCategory: data.componentCategory,
                     originKind: data.originKind,
                     isMainApp: data.isMainApp,
@@ -764,7 +764,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     symbol: data.symbol,
                     symbolEvents: 0,
                     symbolTotalEvents: 0,
-                    componentName: data.componentName,
+                    subCategoryName: data.subCategoryName,
                     componentCategory: data.componentCategory,
                     originKind: data.originKind,
                     isMainApp: data.isMainApp,
@@ -825,7 +825,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 { value: data[1].symbolTotalEvents, type: Number },
 
                 { value: data[0].componentCategory, type: Number },
-                { value: data[0].componentName, type: String },
+                { value: data[0].subCategoryName, type: String },
                 { value: data[0].originKind, type: Number },
                 { value: data[0].isMainApp, type: Boolean },
                 { value: data[0].sysDomain, type: String },
@@ -936,11 +936,11 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 data.componentCategory === ComponentCategory.APP_ABC ||
                 data.componentCategory === ComponentCategory.APP_LIB
             ) {
-                if (harMap.has(data.componentName!)) {
-                    let value = harMap.get(data.componentName!)!;
+                if (harMap.has(data.subCategoryName!)) {
+                    let value = harMap.get(data.subCategoryName!)!;
                     value.count += data.symbolEvents;
                 } else {
-                    harMap.set(data.componentName!, { name: data.componentName!, count: data.symbolEvents });
+                    harMap.set(data.subCategoryName!, { name: data.subCategoryName!, count: data.symbolEvents });
                 }
             }
 

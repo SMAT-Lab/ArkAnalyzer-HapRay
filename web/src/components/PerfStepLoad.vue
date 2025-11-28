@@ -317,24 +317,24 @@ function getDrilldownPieData(name: string, stack: string[]) {
     const componentData = calculateComponentNameData(perfData!, null, false).filter((d: ThreadDataItem) =>
       d.category === category && d.stepId === props.stepId);
     const sorted = [...componentData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: ThreadDataItem) => d.componentName);
-    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.componentName, value: d.instructions }));
+    const legendData = sorted.map((d: ThreadDataItem) => d.subCategoryName);
+    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.subCategoryName, value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 2) {
     const category = stack[0];
-    const componentName = name;
+    const subCategoryName = name;
     const fileData = calculateFileData1(perfData!, null, false).filter((d: FileDataItem) =>
-      d.category === category && d.componentName === componentName && d.stepId === props.stepId);
+      d.category === category && d.subCategoryName === subCategoryName && d.stepId === props.stepId);
     const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: FileDataItem) => d.file);
     const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 3) {
     const category = stack[0];
-    const componentName = stack[1];
+    const subCategoryName = stack[1];
     const file = name;
     const symbolData = calculateSymbolData1(perfData!, null, false).filter((d: SymbolDataItem) =>
-      d.category === category && d.componentName === componentName && d.file === file && d.stepId === props.stepId);
+      d.category === category && d.subCategoryName === subCategoryName && d.file === file && d.stepId === props.stepId);
     const sorted = [...symbolData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: SymbolDataItem) => d.symbol);
     const seriesData = sorted.map((d: SymbolDataItem) => ({ name: d.symbol, value: d.instructions }));
@@ -479,7 +479,7 @@ const filteredFilePerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   }
   return data;
 });
@@ -490,9 +490,9 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   } else if (stack.length === 3) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1] && d.file === stack[2]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1] && d.file === stack[2]);
   }
   return data;
 });
