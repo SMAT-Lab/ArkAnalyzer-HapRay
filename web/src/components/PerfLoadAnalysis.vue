@@ -419,14 +419,14 @@ function getDrilldownPieData(name: string, stack: string[]) {
     const category = name;
     const componentData = calculateComponentNameData(perfData!, null, currentStepIndex.value === 0).filter((d: ThreadDataItem) => d.category === category && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
     const sorted = [...componentData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: ThreadDataItem) => d.componentName);
-    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.componentName, value: d.instructions }));
+    const legendData = sorted.map((d: ThreadDataItem) => d.subCategoryName);
+    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.subCategoryName, value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 2) {
     // 文件分布
     const category = stack[0];
-    const componentName = name;
-    const fileData = calculateFileData1(perfData!, null, currentStepIndex.value === 0).filter((d: FileDataItem) => d.category === category && d.componentName === componentName && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
+    const subCategoryName = name;
+    const fileData = calculateFileData1(perfData!, null, currentStepIndex.value === 0).filter((d: FileDataItem) => d.category === category && d.subCategoryName === subCategoryName && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
     const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: FileDataItem) => d.file);
     const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
@@ -434,9 +434,9 @@ function getDrilldownPieData(name: string, stack: string[]) {
   } else if (stack.length === 3) {
     // 符号分布
     const category = stack[0];
-    const componentName = stack[1];
+    const subCategoryName = stack[1];
     const file = name;
-    const symbolData = calculateSymbolData1(perfData!, null, currentStepIndex.value === 0).filter((d: SymbolDataItem) => d.category === category && d.componentName === componentName && d.file === file && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
+    const symbolData = calculateSymbolData1(perfData!, null, currentStepIndex.value === 0).filter((d: SymbolDataItem) => d.category === category && d.subCategoryName === subCategoryName && d.file === file && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
     const sorted = [...symbolData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: SymbolDataItem) => d.symbol);
     const seriesData = sorted.map((d: SymbolDataItem) => ({ name: d.symbol, value: d.instructions }));
@@ -641,7 +641,7 @@ const filteredFilePerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   }
   return data;
 });
@@ -652,9 +652,9 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   } else if (stack.length === 3) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1] && d.file === stack[2]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1] && d.file === stack[2]);
   }
   return data;
 });

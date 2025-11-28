@@ -811,7 +811,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 symbolTotalEvents: 0,
                 originKind: finalClassification.originKind,
                 componentCategory: finalClassification.category,
-                componentName: finalClassification.subCategoryName,
+                subCategoryName: finalClassification.subCategoryName,
                 isMainApp: process.systemClassifyCategory.isMainApp,
                 sysDomain: process.systemClassifyCategory.domain,
                 sysSubSystem: process.systemClassifyCategory.subSystem,
@@ -827,9 +827,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // 根据线程名直接分类
             if (thread.classification.category !== ComponentCategory.UNKNOWN) {
                 if (thread.classification.subCategoryName) {
-                    data.componentName = thread.classification.subCategoryName;
+                    data.subCategoryName = thread.classification.subCategoryName;
                 } else {
-                    data.componentName = path.basename(finalClassification.file);
+                    data.subCategoryName = path.basename(finalClassification.file);
                 }
 
                 data.componentCategory = thread.classification.category;
@@ -840,9 +840,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 continue;
             }
 
-            if (data.componentCategory === ComponentCategory.SYS_SDK && data.componentName === 'Other') {
+            if (data.componentCategory === ComponentCategory.SYS_SDK && data.subCategoryName === 'Other') {
                 if (path.basename(data.processName) === path.basename(data.file)) {
-                    data.componentName = data.sysDomain;
+                    data.subCategoryName = data.sysDomain;
                 }
             }
 
@@ -957,7 +957,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         // 遍历所有符号数据进行统计
         for (const data of groupData) {
-            const componentKey = `${data.componentCategory}_${data.componentName}`;
+            const componentKey = `${data.componentCategory}_${data.subCategoryName}`;
             const eventIndex = data.eventType; // 0: cycles, 1: instructions
             // 将 UNKNOWN(-1) 映射到最后一个索引
             const categoryIndex = data.componentCategory >= 0 ? data.componentCategory : categoryCount - 1;
@@ -973,7 +973,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // 统计组件负载
             if (!componentMap.has(componentKey)) {
                 componentMap.set(componentKey, {
-                    name: data.componentName ?? 'Unknown',
+                    name: data.subCategoryName ?? 'Unknown',
                     cycles: 0,
                     totalCycles: 0,
                     instructions: 0,
