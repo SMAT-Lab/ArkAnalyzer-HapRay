@@ -139,7 +139,7 @@ import PerfThreadTable from './PerfThreadTable.vue';
 import PerfFileTable from './PerfFileTable.vue';
 import PerfSymbolTable from './PerfSymbolTable.vue';
 import PieChart from './PieChart.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, ComponentCategory } from '../stores/jsonDataStore.ts';
 import { 
   calculateComponentNameData, 
   calculateFileData, 
@@ -305,7 +305,7 @@ function handleProcessPieDrillup() {
 }
 
 function getDrilldownPieData(name: string, stack: string[]) {
-  // 新层级：0-大分类 1-小分类 2-文件 3-符号
+  // 新层级：0-大分类 1-小分类(subCategoryName) 2-文件 3-符号
   if (stack.length === 0) {
     const categoryData = calculateCategorysData(perfData!, null, false);
     const sorted = [...categoryData].sort((a, b) => b.instructions - a.instructions);
@@ -313,31 +313,81 @@ function getDrilldownPieData(name: string, stack: string[]) {
     const seriesData = sorted.map((d: ProcessDataItem) => ({ name: d.category, value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 1) {
+    // 二级分类：按 subCategoryName 过滤
     const category = name;
-    const componentData = calculateComponentNameData(perfData!, null, false).filter((d: ThreadDataItem) =>
-      d.category === category && d.stepId === props.stepId);
-    const sorted = [...componentData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: ThreadDataItem) => d.componentName);
-    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.componentName, value: d.instructions }));
+    const subCategoryMap = new Map<string, number>();
+    // 从原始数据中聚合 subCategoryName
+    perfData!.steps.forEach(step => {
+      if (props.stepId === 0 || step.step_id === props.stepId) {
+        step.data.forEach(item => {
+          const itemCategory = ComponentCategory[item.componentCategory];
+          if (itemCategory === category && item.subCategoryName) {
+            const subCategoryName = item.subCategoryName;
+            const currentValue = subCategoryMap.get(subCategoryName) || 0;
+            subCategoryMap.set(subCategoryName, currentValue + item.symbolEvents);
+          }
+        });
+      }
+    });
+    
+    const sorted = Array.from(subCategoryMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    const legendData = sorted.map(d => d.name);
+    const seriesData = sorted.map(d => ({ name: d.name, value: d.value }));
     return { legendData, seriesData };
   } else if (stack.length === 2) {
+    // 三级：文件，需要按 category 和 subCategoryName 过滤
     const category = stack[0];
-    const componentName = name;
-    const fileData = calculateFileData1(perfData!, null, false).filter((d: FileDataItem) =>
-      d.category === category && d.componentName === componentName && d.stepId === props.stepId);
-    const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: FileDataItem) => d.file);
-    const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
+    const subCategoryName = name;
+    const fileMap = new Map<string, number>();
+    
+    // 从原始数据中聚合文件数据
+    perfData!.steps.forEach(step => {
+      if (props.stepId === 0 || step.step_id === props.stepId) {
+        step.data.forEach(item => {
+          const itemCategory = ComponentCategory[item.componentCategory];
+          if (itemCategory === category && item.subCategoryName === subCategoryName && item.file) {
+            const fileName = item.file;
+            const currentValue = fileMap.get(fileName) || 0;
+            fileMap.set(fileName, currentValue + item.symbolEvents);
+          }
+        });
+      }
+    });
+    
+    const sorted = Array.from(fileMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    const legendData = sorted.map(d => d.name);
+    const seriesData = sorted.map(d => ({ name: d.name, value: d.value }));
     return { legendData, seriesData };
   } else if (stack.length === 3) {
+    // 四级：符号，需要按 category、subCategoryName 和 file 过滤
     const category = stack[0];
-    const componentName = stack[1];
+    const subCategoryName = stack[1];
     const file = name;
-    const symbolData = calculateSymbolData1(perfData!, null, false).filter((d: SymbolDataItem) =>
-      d.category === category && d.componentName === componentName && d.file === file && d.stepId === props.stepId);
-    const sorted = [...symbolData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: SymbolDataItem) => d.symbol);
-    const seriesData = sorted.map((d: SymbolDataItem) => ({ name: d.symbol, value: d.instructions }));
+    const symbolMap = new Map<string, number>();
+    
+    // 从原始数据中聚合符号数据
+    perfData!.steps.forEach(step => {
+      if (props.stepId === 0 || step.step_id === props.stepId) {
+        step.data.forEach(item => {
+          const itemCategory = ComponentCategory[item.componentCategory];
+          if (itemCategory === category && item.subCategoryName === subCategoryName && item.file === file && item.symbol) {
+            const symbolName = item.symbol;
+            const currentValue = symbolMap.get(symbolName) || 0;
+            symbolMap.set(symbolName, currentValue + item.symbolEvents);
+          }
+        });
+      }
+    });
+    
+    const sorted = Array.from(symbolMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    const legendData = sorted.map(d => d.name);
+    const seriesData = sorted.map(d => ({ name: d.name, value: d.value }));
     return { legendData, seriesData };
   } else {
     return stepPieData.value;
@@ -463,12 +513,124 @@ const filteredSymbolPerformanceDataDrill = computed(() => {
   return data;
 });
 
+// 辅助函数：从原始数据中按 subCategoryName 过滤并聚合为 ThreadDataItem
+function filterBySubCategoryName(category: string, subCategoryName: string): ThreadDataItem[] {
+  const resultMap = new Map<string, ThreadDataItem>();
+  
+  perfData!.steps.forEach(step => {
+    if (props.stepId === 0 || step.step_id === props.stepId) {
+      step.data.forEach(item => {
+        const itemCategory = ComponentCategory[item.componentCategory];
+        if (itemCategory === category && item.subCategoryName === subCategoryName) {
+          const key = item.subCategoryName;
+          const existing = resultMap.get(key);
+          if (existing) {
+            existing.instructions += item.symbolEvents;
+          } else {
+            resultMap.set(key, {
+              stepId: props.stepId,
+              process: item.processName || '',
+              category: itemCategory,
+              componentName: item.componentName || '',
+              subCategoryName: item.subCategoryName || '',
+              thread: item.threadName,
+              instructions: item.symbolEvents,
+              compareInstructions: 0,
+              increaseInstructions: 0,
+              increasePercentage: 0,
+            });
+          }
+        }
+      });
+    }
+  });
+  
+  return sortByInstructions(Array.from(resultMap.values()));
+}
+
+// 辅助函数：从原始数据中按 subCategoryName 过滤并聚合为 FileDataItem
+function filterFileBySubCategoryName(category: string, subCategoryName: string): FileDataItem[] {
+  const resultMap = new Map<string, FileDataItem>();
+  
+  perfData!.steps.forEach(step => {
+    if (props.stepId === 0 || step.step_id === props.stepId) {
+      step.data.forEach(item => {
+        const itemCategory = ComponentCategory[item.componentCategory];
+        if (itemCategory === category && item.subCategoryName === subCategoryName && item.file) {
+          const key = item.file;
+          const existing = resultMap.get(key);
+          if (existing) {
+            existing.instructions += item.symbolEvents;
+          } else {
+            resultMap.set(key, {
+              stepId: props.stepId,
+              process: item.processName || '',
+              category: itemCategory,
+              componentName: item.componentName || '',
+              subCategoryName: item.subCategoryName || '',
+              thread: item.threadName || '',
+              file: item.file,
+              instructions: item.symbolEvents,
+              compareInstructions: 0,
+              increaseInstructions: 0,
+              increasePercentage: 0,
+            });
+          }
+        }
+      });
+    }
+  });
+  
+  return sortByInstructions(Array.from(resultMap.values()));
+}
+
+// 辅助函数：从原始数据中按 subCategoryName 和 file 过滤并聚合为 SymbolDataItem
+function filterSymbolBySubCategoryName(category: string, subCategoryName: string, fileName?: string): SymbolDataItem[] {
+  const resultMap = new Map<string, SymbolDataItem>();
+  
+  perfData!.steps.forEach(step => {
+    if (props.stepId === 0 || step.step_id === props.stepId) {
+      step.data.forEach(item => {
+        const itemCategory = ComponentCategory[item.componentCategory];
+        if (itemCategory === category && item.subCategoryName === subCategoryName && item.symbol) {
+          if (fileName && item.file !== fileName) return;
+          const key = item.symbol;
+          const existing = resultMap.get(key);
+          if (existing) {
+            existing.instructions += item.symbolEvents;
+          } else {
+            resultMap.set(key, {
+              stepId: props.stepId,
+              process: item.processName || '',
+              category: itemCategory,
+              componentName: item.componentName || '',
+              subCategoryName: item.subCategoryName || '',
+              thread: item.threadName || '',
+              file: item.file || '',
+              symbol: item.symbol,
+              instructions: item.symbolEvents,
+              compareInstructions: 0,
+              increaseInstructions: 0,
+              increasePercentage: 0,
+            });
+          }
+        }
+      });
+    }
+  });
+  
+  return sortByInstructions(Array.from(resultMap.values()));
+}
+
 // 右侧 drill 联动
 const filteredComponentNamePerformanceDataDrill = computed(() => {
   const stack = stepPieDrilldownStack.value;
   let data = filteredComponentNamePerformanceData.value;
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
+  } else if (stack.length === 2) {
+    // 二级分类按 subCategoryName 过滤
+    data = filterBySubCategoryName(stack[0], stack[1]);
   }
   return data;
 });
@@ -479,7 +641,8 @@ const filteredFilePerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    // 二级分类按 subCategoryName 过滤
+    data = filterFileBySubCategoryName(stack[0], stack[1]);
   }
   return data;
 });
@@ -490,9 +653,11 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    // 二级分类按 subCategoryName 过滤
+    data = filterSymbolBySubCategoryName(stack[0], stack[1]);
   } else if (stack.length === 3) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1] && d.file === stack[2]);
+    // 三级按 subCategoryName 和 file 过滤
+    data = filterSymbolBySubCategoryName(stack[0], stack[1], stack[2]);
   }
   return data;
 });

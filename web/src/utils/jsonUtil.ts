@@ -20,6 +20,7 @@ export interface ThreadDataItem {
   process: string
   category: string
   componentName: string
+  subCategoryName: string;
   thread: string
   instructions: number
   compareInstructions: number
@@ -28,6 +29,7 @@ export interface ThreadDataItem {
 }
 
 export interface FileDataItem {
+  subCategoryName: string;
   stepId: number
   process: string
   category: string
@@ -41,6 +43,7 @@ export interface FileDataItem {
 }
 
 export interface SymbolDataItem {
+  subCategoryName: string;
   stepId: number
   process: string
   category: string
@@ -276,6 +279,7 @@ export function calculateThreadData(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
+            subCategoryName: "",
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             instructions,
             compareInstructions,
@@ -301,6 +305,7 @@ export function calculateFileData(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
+            subCategoryName: "",
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             instructions,
@@ -327,6 +332,7 @@ export function calculateSymbolData(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
             componentName: "",
+            subCategoryName: "",
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             symbol: ignoreStep ? keyParts[3] : keyParts[4],
@@ -379,6 +385,7 @@ export function calculateComponentNameData(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
             componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             instructions,
             compareInstructions,
@@ -404,6 +411,7 @@ export function calculateFileData1(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
             componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             instructions,
@@ -430,6 +438,7 @@ export function calculateSymbolData1(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
             componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             symbol: ignoreStep ? keyParts[3] : keyParts[4],

@@ -30,7 +30,7 @@ v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags pla
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
       <el-input
-v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
+v-if="hasCategory" v-model="subCategoryName.subCategoryName" placeholder="根据小分类搜索" clearable
         class="search-input" @input="handleFilterChange">
         <template #prefix>
           <el-icon>
@@ -86,7 +86,7 @@ v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="
       </el-table-column>
       <el-table-column v-if="hasCategory" prop="category" label="小分类">
         <template #default="{ row }">
-          <div class="category-cell">{{ row.componentName }}</div>
+          <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
@@ -140,7 +140,7 @@ v-model:current-page="currentPage" :page-size="pageSize" :total="total" :backgro
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore, useSubCategoryNameStore } from '../stores/jsonDataStore.ts';
 import type { ThreadDataItem } from '../utils/jsonUtil.ts';
 const emit = defineEmits(['custom-event']);
 
@@ -179,7 +179,7 @@ const filterModel = useFilterModeStore();// 'string' 或 'regex'
 const processNameQuery = useProcessNameQueryStore();
 const threadNameQuery = useThreadNameQueryStore();
 const category = useCategoryStore();
-const componentNameQuery = useComponentNameStore();
+const subCategoryName = useSubCategoryNameStore();
 
 
 // 分页状态
@@ -230,7 +230,7 @@ const filteredData = computed<ThreadDataItem[]>(() => {
 
   // 应用小分类过滤
   if (hasCategory) {
-    result = filterQueryCondition('componentName', componentNameQuery.componentNameQuery, result);
+    result = filterQueryCondition('subCategoryName', subCategoryName.subCategoryName, result);
   }
 
   // 应用分类过滤
@@ -295,8 +295,8 @@ function getDataItemProperty(queryName: string, dataItem: ThreadDataItem): strin
     return dataItem.process;
   } else if (queryName === 'thread') {
     return dataItem.thread;
-  } else if (queryName === 'componentName') {
-    return dataItem.componentName;
+  } else if (queryName === 'subCategoryName') {
+    return dataItem.subCategoryName;
   } else {
     return ''
   }

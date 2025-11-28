@@ -270,7 +270,7 @@ const sceneTrendData = computed(() => {
 
 const categoryTrendData = computed(() => {
   const sortedData = [...filteredData.value].sort((a, b) => a.basicInfo.timestamp - b.basicInfo.timestamp);
-  const categories = ['APP_ABC', 'APP_LIB', 'APP_SO', 'OS_Runtime', 'SYS_SDK', 'RN', 'Flutter', 'WEB'];
+  const categories = ['APP', 'ArkUI', 'OS_Runtime', 'SYS_SDK', 'RN', 'Flutter', 'WEB'];
   
   return {
     xAxis: sortedData.map(item => `${item.basicInfo.rom_version}-${item.basicInfo.app_version}`),

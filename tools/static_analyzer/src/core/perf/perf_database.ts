@@ -144,9 +144,9 @@ export class PerfDatabase {
                     $symbol: record.symbol,
                     $symbolEvents: record.symbolEvents,
                     $symbolTotalEvents: record.symbolTotalEvents,
-                    $componentName: record.componentName ?? null,
-                    $componentCategory: record.componentCategory,
-                    $originKind: record.originKind ?? null,
+                    $componentName: record.componentCategory.categoryName || null,
+                    $componentCategory: record.componentCategory.category,
+                    $originKind: null,
                 });
                 stmt.step();
                 stmt.reset();

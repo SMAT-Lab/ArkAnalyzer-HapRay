@@ -6,9 +6,8 @@ import type { NativeMemoryData } from './nativeMemory';
 
 /** 组件分类 */
 export enum ComponentCategory {
-  APP_ABC = 0,
-  APP_SO = 1,
-  APP_LIB = 2,
+  APP = 1,
+  ArkUI = 2,
   OS_Runtime = 3,
   SYS_SDK = 4,
   RN = 5,
@@ -22,14 +21,6 @@ export enum ComponentCategory {
 export enum PerfEvent {
   CYCLES_EVENT = 0,
   INSTRUCTION_EVENT = 1,
-}
-
-/** 来源类型 */
-enum OriginKind {
-  UNKNOWN = 0,
-  FIRST_PARTY = 1,
-  OPEN_SOURCE = 2,
-  THIRD_PARTY = 3,
 }
 
 export interface BasicInfo {
@@ -63,7 +54,8 @@ interface PerfDataStep {
     symbolTotalEvents: number;
     componentName?: string;
     componentCategory: ComponentCategory;
-    originKind?: OriginKind;
+    subCategoryName?: string;
+    thirdCategoryName?: string;
   }[];
 }
 
@@ -1180,9 +1172,9 @@ export const useCategoryStore = defineStore('categoryNameQuery', {
   })
 });
 
-export const useComponentNameStore = defineStore('componentNameQuery', {
+export const useSubCategoryNameStore = defineStore('subCategoryName', {
   state: () => ({
-    componentNameQuery: '' as string,
+    subCategoryName: '' as string,
   })
 });
 

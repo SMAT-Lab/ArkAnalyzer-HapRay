@@ -49,7 +49,7 @@ v-if="dataType === 'component'" v-model="categoryNameQuery" placeholder="根据�
           </template>
         </el-input>
         <el-input
-v-if="dataType === 'component'" v-model="componentNameQuery" placeholder="根据小类搜索" clearable
+v-if="dataType === 'component'" v-model="subCategoryName" placeholder="根据小类搜索" clearable
           class="search-input" @input="handleFilterChange">
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -224,7 +224,7 @@ const processNameQuery = ref('');
 const fileNameQuery = ref('');
 const symbolNameQuery = ref('');
 const categoryNameQuery = ref('');
-const componentNameQuery = ref('');
+const subCategoryName = ref('');
 
 // 分页
 const currentPage = ref(1);
@@ -256,8 +256,8 @@ const filteredData = computed(() => {
   if (categoryNameQuery.value) {
     result = filterByField(result, 'category', categoryNameQuery.value, isRegexMode);
   }
-  if (componentNameQuery.value) {
-    result = filterByField(result, 'componentName', componentNameQuery.value, isRegexMode);
+  if (subCategoryName.value) {
+    result = filterByField(result, 'subCategoryName', subCategoryName.value, isRegexMode);
   }
 
   // 排序

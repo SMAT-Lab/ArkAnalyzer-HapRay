@@ -9,14 +9,15 @@
     <template v-else>
     <div class="info-box">
       负载分类说明：
-      <p>APP_ABC => 应用代码 |
-        APP_LIB => 应用三方ArkTS库 |
-        APP_SO => 应用native库 |
-        OS_Runtime => 系统运行时 |
-        SYS_SDK => 系统SDK |
-        RN => 三方框架React Native |
-        Flutter => 三方框架Flutter |
-        WEB => 三方框架ArkWeb</p>
+          <p>APP => 应用代码 |
+            ArkUI => ArkUI |
+            OS_Runtime => 语言运行时 |
+            SYS_SDK => 系统SDK |
+            RN => 三方框架React Native |
+            Flutter => 三方框架Flutter |
+            WEB => 三方框架ArkWeb ｜
+            KMP => 三方框架KMP
+          </p>
     </div>
     
     <el-descriptions :title="performanceData.app_name" :column="1" class="beautified-descriptions">
@@ -641,7 +642,7 @@ const filteredFilePerformanceData1Drill = computed(() => {
   if (stack.length === 1) {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
-    data = data.filter(d => d.category === stack[0] && d.componentName === stack[1]);
+    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   }
   return data;
 });

@@ -20,7 +20,7 @@ import platform
 import sqlite3
 import subprocess
 import time
-from typing import Optional
+from typing import List, Optional, Tuple, Union
 
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.config.config import Config
@@ -240,7 +240,7 @@ class ExeUtils:
             logger.warning('Failed to update so_dir cache: %s', str(e))
 
     @staticmethod
-    def build_hapray_cmd(args: list[str]) -> list[str]:
+    def build_hapray_cmd(args: List[str]) -> List[str]:
         """Constructs a command for executing hapray-sa-cmd.
 
         Args:
@@ -264,7 +264,7 @@ class ExeUtils:
         return ret
 
     @staticmethod
-    def execute_command(cmd: list[str], timeout: int = 1800) -> tuple[bool, Optional[str], Optional[str]]:
+    def execute_command(cmd: List[str], timeout: int = 1800) -> Tuple[bool, Optional[str], Optional[str]]:
         """Executes a shell command and captures its output.
 
         Args:
@@ -321,7 +321,7 @@ class ExeUtils:
             return False, None, None
 
     @staticmethod
-    def _decode_output(output: Optional[bytes | str]) -> str:
+    def _decode_output(output: Optional[Union[bytes, str]]) -> str:
         """Safely decode command output, handling both bytes and str.
 
         Args:
@@ -344,7 +344,7 @@ class ExeUtils:
         return str(output)
 
     @staticmethod
-    def execute_hapray_cmd(args: list[str], timeout: int = 1800) -> bool:
+    def execute_hapray_cmd(args: List[str], timeout: int = 1800) -> bool:
         """Executes a hapray command.
 
         Args:
