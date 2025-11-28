@@ -61,7 +61,7 @@ interface PerfDataStep {
     symbol: string;
     symbolEvents: number;
     symbolTotalEvents: number;
-    componentName?: string;
+    subCategoryName?: string;
     componentCategory: ComponentCategory;
     originKind?: OriginKind;
   }[];
@@ -1182,7 +1182,7 @@ export const useCategoryStore = defineStore('categoryNameQuery', {
 
 export const useComponentNameStore = defineStore('componentNameQuery', {
   state: () => ({
-    componentNameQuery: '' as string,
+    subCategoryNameQuery: '' as string,
   })
 });
 

@@ -39,7 +39,7 @@ v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags pla
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
       <el-input
-v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
+v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder="根据小分类搜索" clearable
         class="search-input" @input="handleFilterChange">
         <template #prefix>
           <el-icon>
@@ -98,9 +98,9 @@ v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="
           <div class="category-cell">{{ row.category }}</div>
         </template>
       </el-table-column>
-      <el-table-column v-if="hasCategory" prop="componentName" label="小分类">
+      <el-table-column v-if="hasCategory" prop="subCategoryName" label="小分类">
         <template #default="{ row }">
-          <div class="category-cell">{{ row.componentName }}</div>
+          <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
@@ -250,7 +250,7 @@ const filteredData = computed(() => {
 
   // 应用小分类过滤
   if (hasCategory) {
-    result = filterQueryCondition('componentName', componentNameQuery.componentNameQuery, result);
+    result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
   }
 
   // 文件搜索过滤
@@ -330,8 +330,8 @@ function getDataItemProperty(queryName: string, dataItem: FileDataItem): string 
     return dataItem.process;
   } else if (queryName === 'thread') {
     return dataItem.thread;
-  } else if (queryName === 'componentName') {
-    return dataItem.componentName;
+  } else if (queryName === 'subCategoryName') {
+    return dataItem.subCategoryName;
   } else if (queryName === 'file') {
     return dataItem.file;
   } else {
@@ -379,7 +379,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['category', 'componentName', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
+  const validKeys: SortKey[] = ['category', 'subCategoryName', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
