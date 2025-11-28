@@ -54,7 +54,7 @@ export class PerfDatabase {
                 symbol TEXT,
                 symbol_events INTEGER,
                 symbol_total_events INTEGER,
-                component_name TEXT,
+                sub_category_name TEXT,
                 component_category INTEGER,
                 origin_kind INTEGER
             );
@@ -121,7 +121,7 @@ export class PerfDatabase {
                 $version, $scene, $stepIdx, $eventType, $pid, $processName, $processEvents,
                 $tid, $threadName, $threadEvents, $file, $fileEvents, $symbol,
                 $symbolEvents, $symbolTotalEvents,
-                $componentName, $componentCategory, $originKind
+                $subCategoryName, $componentCategory, $originKind
             );    
         `);
 
@@ -144,7 +144,7 @@ export class PerfDatabase {
                     $symbol: record.symbol,
                     $symbolEvents: record.symbolEvents,
                     $symbolTotalEvents: record.symbolTotalEvents,
-                    $componentName: record.componentName ?? null,
+                    $subCategoryName: record.subCategoryName ?? null,
                     $componentCategory: record.componentCategory,
                     $originKind: record.originKind ?? null,
                 });
