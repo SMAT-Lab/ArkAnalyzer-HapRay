@@ -56,7 +56,6 @@ export class PerfDatabase {
                 symbol_total_events INTEGER,
                 sub_category_name TEXT,
                 component_category INTEGER,
-                origin_kind INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS perf_test_step (
@@ -121,7 +120,7 @@ export class PerfDatabase {
                 $version, $scene, $stepIdx, $eventType, $pid, $processName, $processEvents,
                 $tid, $threadName, $threadEvents, $file, $fileEvents, $symbol,
                 $symbolEvents, $symbolTotalEvents,
-                $subCategoryName, $componentCategory, $originKind
+                $subCategoryName, $componentCategory
             );    
         `);
 
@@ -144,9 +143,8 @@ export class PerfDatabase {
                     $symbol: record.symbol,
                     $symbolEvents: record.symbolEvents,
                     $symbolTotalEvents: record.symbolTotalEvents,
-                    $subCategoryName: record.subCategoryName ?? null,
-                    $componentCategory: record.componentCategory,
-                    $originKind: record.originKind ?? null,
+                    $subCategoryName: record.componentCategory.subCategoryName ?? null,
+                    $componentCategory: record.componentCategory.category
                 });
                 stmt.step();
                 stmt.reset();

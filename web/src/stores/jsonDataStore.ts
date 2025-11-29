@@ -6,9 +6,8 @@ import type { NativeMemoryData } from './nativeMemory';
 
 /** 组件分类 */
 export enum ComponentCategory {
-  APP_ABC = 0,
-  APP_SO = 1,
-  APP_LIB = 2,
+  APP = 1,
+  ArkUI = 2,
   OS_Runtime = 3,
   SYS_SDK = 4,
   RN = 5,
@@ -24,13 +23,6 @@ export enum PerfEvent {
   INSTRUCTION_EVENT = 1,
 }
 
-/** 来源类型 */
-enum OriginKind {
-  UNKNOWN = 0,
-  FIRST_PARTY = 1,
-  OPEN_SOURCE = 2,
-  THIRD_PARTY = 3,
-}
 
 export interface BasicInfo {
   rom_version: string;
@@ -61,9 +53,10 @@ interface PerfDataStep {
     symbol: string;
     symbolEvents: number;
     symbolTotalEvents: number;
+    thirdCategoryName?: string;
     subCategoryName?: string;
+    categoryName?: string;
     componentCategory: ComponentCategory;
-    originKind?: OriginKind;
   }[];
 }
 
