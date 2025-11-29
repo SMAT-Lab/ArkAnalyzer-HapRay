@@ -146,16 +146,15 @@ const ConfigSchema = z.object({
 });
 
 function getExtToolsRoot(): string {
-    let root = path.join(__dirname, 'tools');
-    if (!fs.existsSync(root)) {
-        root = path.join(__dirname, '../../../dist/tools');
+    const candidates = ['tools', '../../../dist/tools', '../../tools', '../../../../dist/tools'];
+
+    for (const base of candidates) {
+        let root = path.join(__dirname, base);
+        if (fs.existsSync(root)) {
+            return path.resolve(root);
+        }
     }
-    if (!fs.existsSync(root)) {
-        root = path.join(__dirname, '../../tools');
-    }
-    if (fs.existsSync(root)) {
-        return path.resolve(root);
-    }
+    
     throw new Error('not found ext_tools');
 }
 

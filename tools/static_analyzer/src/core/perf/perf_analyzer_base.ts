@@ -16,8 +16,8 @@
 import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
-import type { Component, ComponentCategoryType } from '../../types/component';
-import { ComponentCategory, OriginKind } from '../../types/component';
+import type { Component, ComponentCategoryType, ClassifyCategory } from '../../types/component';
+import { ComponentCategory, OriginKind, createLevel2Category } from '../../types/component';
 import { AnalyzerProjectBase, PROJECT_ROOT } from './project';
 import { getConfig } from '../../config';
 import writeXlsxFile from 'write-excel-file/node';
@@ -51,12 +51,6 @@ export interface TestStepGroup {
     perfFile?: string;
 }
 
-export interface ClassifyCategory {
-    category: number; // 组件大类
-    categoryName: string; //组件名
-    subCategoryName?: string; // 小类
-}
-
 export interface ProcessClassifyCategory {
     isMainApp: boolean; //是否主应用
     domain: string; //业务领域
@@ -81,15 +75,8 @@ export interface TestSceneInfo {
     chooseRound: number;
 }
 
-export interface ClassifyCategory {
-    category: number; // 组件大类
-    categoryName: string; // 组件名
-    subCategoryName?: string; // 小类
-}
-
 export interface FileClassification extends ClassifyCategory {
     file: string;
-    originKind: OriginKind; // 来源，开源
 }
 
 export interface PerfComponent {
@@ -99,8 +86,7 @@ export interface PerfComponent {
     instructions: number;
     totalInstructions: number;
 
-    category: ComponentCategory; // 大类
-    originKind?: OriginKind; // 来源
+    category: ClassifyCategory; // 大类
 }
 
 export enum PerfEvent {
@@ -125,9 +111,9 @@ export interface PerfSymbolDetailData {
     symbol: string;
     symbolEvents: number;
     symbolTotalEvents: number;
-    subCategoryName?: string;
-    componentCategory: ComponentCategory;
-    originKind?: OriginKind;
+
+    componentCategory: ClassifyCategory; 
+
     isMainApp: boolean;
     sysDomain: string;
     sysSubSystem: string;
@@ -211,9 +197,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     specialProcessClassifyCfg: Map<RegExp, Map<RegExp, ProcessClassifyCategory>>;
 
     // classify rule
-    protected threadClassifyCfg: Map<RegExp, ClassifyCategory>;
+    protected threadClassifyCfg: Array<{ regex: RegExp; category: ClassifyCategory; priority: number }>;
     protected fileClassifyCfg: Map<string, ClassifyCategory>;
-    protected fileRegexClassifyCfg: Map<RegExp, ClassifyCategory>;
+    protected fileRegexClassifyCfg: Array<{ regex: RegExp; category: ClassifyCategory; priority: number }>;
     protected soOriginsClassifyCfg: Map<string, SoOriginal>;
     protected hapComponents: Map<string, Component>;
     protected symbolsSplitRulesCfg: Array<SymbolSplitRule>;
@@ -239,9 +225,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         this.processClassifyCfg = new Map();
         this.specialProcessClassifyCfg = new Map();
         this.hapComponents = new Map();
-        this.threadClassifyCfg = new Map();
+        this.threadClassifyCfg = [];
         this.fileClassifyCfg = new Map();
-        this.fileRegexClassifyCfg = new Map();
+        this.fileRegexClassifyCfg = [];
         this.soOriginsClassifyCfg = getConfig().perf.soOrigins;
         this.symbolsSplitRulesCfg = [];
 
@@ -277,34 +263,50 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             }
         }
         getConfig().analysis.ohpm.forEach((pkg) => {
-            this.hapComponents.set(pkg.name, { name: pkg.name, kind: ComponentCategory.APP_LIB });
+            this.hapComponents.set(pkg.name, { name: pkg.name, kind: createLevel2Category(ComponentCategory.APP, 'APP', 1, 'APP_LIB') });
         });
         getConfig().analysis.npm.forEach((pkg) => {
-            this.hapComponents.set(pkg.name, { name: pkg.name, kind: ComponentCategory.APP_LIB });
+            this.hapComponents.set(pkg.name, { name: pkg.name, kind: createLevel2Category(ComponentCategory.APP, 'APP', 1, 'APP_LIB') });
         });
     }
 
     private loadPerfKindCfg(): void {
+        // 收集所有规则，包含优先级信息
+        const threadRules: Array<{ regex: RegExp; category: ClassifyCategory; priority: number }> = [];
+        const fileRegexRules: Array<{ regex: RegExp; category: ClassifyCategory; priority: number }> = [];
+
         for (const componentConfig of getConfig().perf.kinds) {
             for (const sub of componentConfig.components) {
+                // 获取优先级，默认为 0（优先级越高，数字越大）
+                const priority = sub.priority ?? 0;
                 if (sub.threads) {
                     for (const thread of sub.threads) {
-                        this.threadClassifyCfg.set(new RegExp(thread), {
-                            category: componentConfig.kind,
-                            categoryName: componentConfig.name,
-                            subCategoryName: sub.name,
+                        threadRules.push({
+                            regex: new RegExp(thread),
+                            category: {
+                                category: componentConfig.kind,
+                                categoryName: componentConfig.name,
+                                subCategoryName: sub.name,
+                            },
+                            priority: priority,
                         });
                     }
                 }
 
                 for (const file of sub.files) {
                     if (this.hasRegexChart(file)) {
-                        this.fileRegexClassifyCfg.set(new RegExp(file), {
-                            category: componentConfig.kind,
-                            categoryName: componentConfig.name,
-                            subCategoryName: sub.name,
+                        fileRegexRules.push({
+                            regex: new RegExp(file),
+                            category: {
+                                category: componentConfig.kind,
+                                categoryName: componentConfig.name,
+                                subCategoryName: sub.name,
+                            },
+                            priority: priority,
                         });
                     } else {
+                        // 精确匹配的文件规则使用 Map（key 是唯一的，通常不会有冲突）
+                        // 如果确实有冲突，后加载的会覆盖先加载的
                         this.fileClassifyCfg.set(file, {
                             category: componentConfig.kind,
                             categoryName: componentConfig.name,
@@ -314,6 +316,13 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 }
             }
         }
+
+        // 按优先级从高到低排序（优先级高的先匹配）
+        threadRules.sort((a, b) => b.priority - a.priority);
+        fileRegexRules.sort((a, b) => b.priority - a.priority);
+
+        this.threadClassifyCfg = threadRules;
+        this.fileRegexClassifyCfg = fileRegexRules;
     }
 
     private loadSymbolSplitCfg(): void {
@@ -393,7 +402,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             category: ComponentCategory.SYS_SDK,
             categoryName: 'SYS_SDK',
             subCategoryName: path.basename(file),
-            originKind: OriginKind.UNKNOWN,
+            thirdCategoryName: path.basename(file),
         };
 
         if (this.fileClassifyCfg.has(file)) {
@@ -407,36 +416,17 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             return fileClassify;
         }
 
-        for (const [key, component] of this.fileRegexClassifyCfg) {
-            let matched = file.match(key);
+        // 按优先级顺序匹配（已排序，优先级高的在前）
+        for (const rule of this.fileRegexClassifyCfg) {
+            let matched = file.match(rule.regex);
             if (matched) {
-                fileClassify.category = component.category;
-                fileClassify.categoryName = component.categoryName;
-                if (component.subCategoryName) {
-                    fileClassify.subCategoryName = component.subCategoryName;
+                fileClassify.category = rule.category.category;
+                fileClassify.categoryName = rule.category.categoryName;
+                if (rule.category.subCategoryName) {
+                    fileClassify.subCategoryName = rule.category.subCategoryName;
                 }
                 return fileClassify;
             }
-        }
-
-        /**
-         * bundle so file
-         * /proc/8836/root/data/storage/el1/bundle/libs/arm64/libalog.so
-         */
-        let regex = new RegExp('/proc/.*/data/storage/.*/bundle/.*');
-        if (
-            file.match(regex) ||
-            (this.project.bundleName === 'com.ohos.sceneboard' && file.startsWith('/system/app/SceneBoard/')) ||
-            (this.project.bundleName === 'com.huawei.hmos.photos' && file.startsWith('/system/app/PhotosHm/'))
-        ) {
-            let name = path.basename(file);
-            if (name.endsWith('.so') || file.indexOf('/bundle/libs/') >= 0) {
-                fileClassify.category = ComponentCategory.APP_SO;
-                return fileClassify;
-            }
-
-            fileClassify.category = ComponentCategory.APP_ABC;
-            return fileClassify;
         }
 
         if (this.fileClassifyCfg.has(path.basename(file))) {
@@ -459,7 +449,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         }
 
         const symbol = this.symbolsMap.get(symbolId) ?? '';
-        if (fileClassification.category === ComponentCategory.APP_ABC) {
+        if (fileClassification.category === ComponentCategory.APP && fileClassification.subCategoryName === 'APP_ABC') {
             /**
              * ets symbol
              * xx: [url:entry|@aaa/bbb|1.0.0|src/main/ets/i9/l9.ts:12:1]
@@ -472,10 +462,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
                 let symbolClassification: FileClassification = {
                     file: `${packageName}/${version}/${filePath}`,
-                    originKind: fileClassification.originKind,
                     category: fileClassification.category,
                     categoryName: fileClassification.categoryName,
-                    subCategoryName: packageName,
+                    subCategoryName: fileClassification.subCategoryName,
+                    thirdCategoryName: packageName,
                 };
 
                 // 特殊处理compose符号
@@ -486,7 +476,15 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 }
 
                 if (this.hapComponents.has(matches[3])) {
-                    symbolClassification.category = this.hapComponents.get(matches[3])!.kind;
+                    const componentKind = this.hapComponents.get(matches[3])!.kind;
+                    symbolClassification.category = componentKind.category;
+                    symbolClassification.categoryName = componentKind.categoryName;
+                    if (componentKind.subCategoryName) {
+                        symbolClassification.subCategoryName = componentKind.subCategoryName;
+                    }
+                    if (componentKind.thirdCategoryName) {
+                        symbolClassification.thirdCategoryName = componentKind.thirdCategoryName;
+                    }
                 }
 
                 this.symbolsClassifyMap.set(symbolId, symbolClassification);
@@ -497,10 +495,10 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             this.symbolsMap.set(symbolId, kmpSymbol.fullFunctionName);
             let symbolClassification: FileClassification = {
                 file: `${kmpSymbol.packageName}.${kmpSymbol.className}`,
-                originKind: fileClassification.originKind,
                 category: fileClassification.category,
                 categoryName: fileClassification.categoryName,
-                subCategoryName: kmpSymbol.packageName,
+                subCategoryName: 'KMP_LIB',
+                thirdCategoryName: kmpSymbol.packageName,
             };
 
             this.symbolsClassifyMap.set(symbolId, symbolClassification);
@@ -515,7 +513,6 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 if (symbol.match(symbolRule)) {
                     let newClassification: FileClassification = {
                         file: rule.dst,
-                        originKind: fileClassification.originKind,
                         category: fileClassification.category,
                         categoryName: fileClassification.categoryName,
                         subCategoryName: fileClassification.subCategoryName,
@@ -539,12 +536,13 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             return unknown;
         }
 
-        for (const [reg, component] of this.threadClassifyCfg) {
-            if (threadName.match(reg)) {
+        // 按优先级顺序匹配（已排序，优先级高的在前）
+        for (const rule of this.threadClassifyCfg) {
+            if (threadName.match(rule.regex)) {
                 return {
-                    category: component.category,
-                    categoryName: component.categoryName,
-                    subCategoryName: component.subCategoryName,
+                    category: rule.category.category,
+                    categoryName: rule.category.categoryName,
+                    subCategoryName: rule.category.subCategoryName,
                 };
             }
         }
@@ -595,7 +593,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         return UNKNOWN;
     }
 
-    public classifySoOrigins(file: string): { originKind: OriginKind; subCategoryName?: string } | undefined {
+    public classifySoOrigins(file: string): { subCategoryName: string, thirdCategoryName?: string } | undefined {
         let name = path.basename(file);
         if (!this.soOriginsClassifyCfg.has(name)) {
             return undefined;
@@ -603,16 +601,16 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
         let soOriginalCfg = this.soOriginsClassifyCfg.get(name)!;
         let result = {
-            originKind: OriginKind.FIRST_PARTY,
-            subCategoryName: this.soOriginsClassifyCfg.get(name)!.sdk_category,
+            subCategoryName: OriginKind.FIRST_PARTY,
+            thirdCategoryName: this.soOriginsClassifyCfg.get(name)!.sdk_category,
         };
 
         if (soOriginalCfg.broad_category === 'THIRD_PARTY') {
-            result.originKind = OriginKind.THIRD_PARTY;
+            result.subCategoryName = OriginKind.THIRD_PARTY;
         } else if (soOriginalCfg.broad_category === 'OPENSOURCE') {
-            result.originKind = OriginKind.OPEN_SOURCE;
+            result.subCategoryName = OriginKind.OPEN_SOURCE;
         } else if (soOriginalCfg.broad_category === 'FIRST_PARTY') {
-            result.originKind = OriginKind.FIRST_PARTY;
+            result.subCategoryName = OriginKind.FIRST_PARTY;
         }
     }
 
@@ -679,49 +677,13 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             { value: 'Total cycle数' },
             { value: '指令数' },
             { value: 'Total指令数' },
-            { value: '组件大类' },
-            { value: '组件小类' },
-            { value: '组件来源' },
+            { value: '组件一级分类' },
+            { value: '组件二级分类' },
+            { value: '组件三级分类' },
             { value: '是否主应用' },
             { value: '业务领域' },
             { value: '子系统' },
             { value: '部件' },
-        ]);
-
-        symbolPerfData.push([
-            { value: 'test_version' },
-            { value: 'test_model' },
-            { value: 'test_date' },
-            { value: 'test_sn' },
-            { value: 'trace_path' },
-            { value: 'test_scene_name' },
-            { value: 'test_scene_trial_id' },
-            { value: 'step_id' },
-            { value: 'app_version_id' },
-            { value: 'hiperf_id' },
-            { value: 'process_id' },
-            { value: 'process_name' },
-            { value: 'process_cycles' },
-            { value: 'process_instructions' },
-            { value: 'thread_id' },
-            { value: 'thread_name' },
-            { value: 'thread_cycles' },
-            { value: 'thread_instructions' },
-            { value: 'file' },
-            { value: 'file_cycles' },
-            { value: 'file_instructions' },
-            { value: 'symbol' },
-            { value: 'cpu_cycles' },
-            { value: 'cpu_cycles_tree' },
-            { value: 'cpu_instructions' },
-            { value: 'cpu_instructions_tree' },
-            { value: 'component_type' },
-            { value: 'component_name' },
-            { value: 'origin_kind' },
-            { value: 'is_main_app' },
-            { value: 'sys_domain' },
-            { value: 'sys_subsystem' },
-            { value: 'sys_component' },
         ]);
 
         let symbolDetailsMap = new Map<string, Array<PerfSymbolDetailData>>();
@@ -742,9 +704,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     symbol: data.symbol,
                     symbolEvents: 0,
                     symbolTotalEvents: 0,
-                    subCategoryName: data.subCategoryName,
                     componentCategory: data.componentCategory,
-                    originKind: data.originKind,
                     isMainApp: data.isMainApp,
                     sysDomain: data.sysDomain,
                     sysSubSystem: data.sysSubSystem,
@@ -764,9 +724,7 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                     symbol: data.symbol,
                     symbolEvents: 0,
                     symbolTotalEvents: 0,
-                    subCategoryName: data.subCategoryName,
                     componentCategory: data.componentCategory,
-                    originKind: data.originKind,
                     isMainApp: data.isMainApp,
                     sysDomain: data.sysDomain,
                     sysSubSystem: data.sysSubSystem,
@@ -824,9 +782,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 { value: data[1].symbolEvents, type: Number },
                 { value: data[1].symbolTotalEvents, type: Number },
 
-                { value: data[0].componentCategory, type: Number },
-                { value: data[0].subCategoryName, type: String },
-                { value: data[0].originKind, type: Number },
+                { value: data[0].componentCategory.category, type: Number },
+                { value: data[0].componentCategory.subCategoryName, type: String },
+                { value: data[0].componentCategory.thirdCategoryName, type: String },
                 { value: data[0].isMainApp, type: Boolean },
                 { value: data[0].sysDomain, type: String },
                 { value: data[0].sysSubSystem, type: String },
@@ -933,14 +891,14 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
 
             // 统计 HAR 组件数据
             if (
-                data.componentCategory === ComponentCategory.APP_ABC ||
-                data.componentCategory === ComponentCategory.APP_LIB
+                (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_ABC') ||
+                (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_LIB')
             ) {
-                if (harMap.has(data.subCategoryName!)) {
-                    let value = harMap.get(data.subCategoryName!)!;
+                if (harMap.has(data.componentCategory.categoryName)) {
+                    let value = harMap.get(data.componentCategory.categoryName)!;
                     value.count += data.symbolEvents;
                 } else {
-                    harMap.set(data.subCategoryName!, { name: data.subCategoryName!, count: data.symbolEvents });
+                    harMap.set(data.componentCategory.categoryName, { name: data.componentCategory.categoryName, count: data.symbolEvents });
                 }
             }
 
@@ -968,8 +926,77 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             const jsonString = JSON.stringify([jsonObject], null, 2);
             return this.isRight(jsonString, outputFileName);
         } else {
-            await saveJsonArray([jsonObject], outputFileName);
+            await saveJsonArray(this.transformPerfData([jsonObject]), outputFileName);
         }
+    }
+
+
+    /**
+     * 展开 componentCategory 对象到顶层
+     * @param obj - 包含 componentCategory 的对象
+     * @returns 展开后的对象
+     */
+    expandComponentCategory<T extends { componentCategory?: ClassifyCategory }>(obj: T): T & {
+        componentName?: string;
+        subCategoryName?: string;
+        thirdCategoryName?: string;
+        componentCategory?: ComponentCategory;
+    } {
+        if ('componentCategory' in obj && obj.componentCategory) {
+            const componentCategory = obj.componentCategory;
+            const { componentCategory: _, ...rest } = obj;
+            return {
+                ...rest,
+                componentName: componentCategory.categoryName,
+                subCategoryName: componentCategory.subCategoryName,
+                thirdCategoryName: componentCategory.thirdCategoryName,
+                componentCategory: componentCategory.category,
+            } as T & {
+                componentName?: string;
+                subCategoryName?: string;
+                thirdCategoryName?: string;
+                componentCategory?: ComponentCategory;
+            };
+        }
+        return obj as T & {
+            componentName?: string;
+            subCategoryName?: string;
+            thirdCategoryName?: string;
+            componentCategory?: ComponentCategory;
+        };
+    }
+
+    /**
+     * 处理 perf.steps[].data[].componentCategory 展开
+     * @param data - 要处理的数据
+     * @param transform - 可选的转换函数
+     * @returns 处理后的数据
+     */
+    transformPerfData<T extends Record<string, unknown>>(data: Array<T>): Array<T> {
+        if (!Array.isArray(data)) {
+            return data;
+        }
+
+        return data.map((item) => {
+            if ('steps' in item && Array.isArray(item.steps)) {
+                const processedItem = { ...item } as T & { steps: Array<Record<string, unknown>> };
+                const steps = item.steps as Array<Record<string, unknown>>;
+                processedItem.steps = steps.map((step) => {
+                    if ('data' in step && Array.isArray(step.data)) {
+                        const processedStep = { ...step } as Record<string, unknown> & { data: Array<Record<string, unknown>> };
+                        const dataArray = step.data as Array<Record<string, unknown>>;
+                        processedStep.data = dataArray.map((dataItem) => {
+                            // 然后展开 componentCategory
+                            return this.expandComponentCategory(dataItem);
+                        });
+                        return processedStep;
+                    }
+                    return step;
+                });
+                return processedItem as T;
+            }
+            return item;
+        });
     }
 
     private getStepByGroupId(testInfo: TestSceneInfo, groupId: number): TestStepGroup {
