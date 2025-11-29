@@ -285,7 +285,11 @@ export class HtmlFormatter extends BaseFormatter {
             });
         }
 
-        const sortedMetadataColumns = Array.from(metadataColumns).sort();
+        // 过滤掉 soDependencies、soExports 和 soImports 字段（不在 HTML 中显示）
+        const excludedFields = ['soDependencies', 'soExports', 'soImports'];
+        const sortedMetadataColumns = Array.from(metadataColumns)
+            .filter(column => !excludedFields.includes(column))
+            .sort();
 
         // 构建数据项
         for (const detection of detections) {
@@ -302,7 +306,7 @@ export class HtmlFormatter extends BaseFormatter {
                 sourceVersionName: detection.sourceVersionName ?? ''
             };
 
-            // 添加 metadata 字段
+            // 添加 metadata 字段（已过滤掉 soDependencies、soExports 和 soImports）
             for (const column of sortedMetadataColumns) {
                 const value = detection.metadata[column];
                 if (value !== undefined && value !== null) {
