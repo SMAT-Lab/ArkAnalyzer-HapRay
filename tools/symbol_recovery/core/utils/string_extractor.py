@@ -37,30 +37,27 @@ FILTERED_STRING_PATTERNS = [
 def should_filter_string(s: str) -> bool:
     """
     判断字符串是否应该被过滤掉
-    
+
     Args:
         s: 待检查的字符串
-    
+
     Returns:
         True 如果应该过滤，False 如果应该保留
     """
     if not s or len(s) < 4:
         return True
-    
+
     s_lower = s.lower()
-    
+
     # 检查是否匹配过滤模式
     for pattern in FILTERED_STRING_PATTERNS:
         if re.search(pattern, s_lower):
             return True
-    
+
     # 过滤掉看起来像错误消息的字符串（包含常见错误关键词）
     error_keywords = ['error', 'warning', 'exception', 'failed', 'invalid', 'null', 'undefined']
-    if any(keyword in s_lower for keyword in error_keywords) and len(s) < 50:
-        # 如果字符串很短且包含错误关键词，可能是错误消息
-        return True
-    
-    return False
+    # 如果字符串很短且包含错误关键词，可能是错误消息
+    return any(keyword in s_lower for keyword in error_keywords) and len(s) < 50
 
 
 class StringExtractor:
@@ -161,7 +158,7 @@ class StringExtractor:
                         strings.append(string)
                     else:
                         logger.debug(f'过滤掉字符串: {string[:50]}...')
-            
+
             # 如果通过指令分析没有找到字符串，记录调试信息
             if not strings:
                 logger.debug(f'指令分析未找到字符串（函数地址: 0x{vaddr:x if vaddr else 0:x}）')

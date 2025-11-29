@@ -103,11 +103,32 @@
   "config": {
     "description": "符号恢复插件配置项",
     "items": {
-      "python_path": {
+      "llm_service_type": {
         "type": "str",
-        "label": "Python路径",
-        "default": "python",
-        "help": "用于执行Python脚本的Python解释器路径",
+        "label": "LLM服务类型",
+        "default": "poe",
+        "help": "LLM服务类型：poe、openai、claude、deepseek、custom",
+        "required": false
+      },
+      "llm_api_key": {
+        "type": "str",
+        "label": "LLM API Key",
+        "default": "",
+        "help": "LLM API Key",
+        "required": false
+      },
+      "llm_base_url": {
+        "type": "str",
+        "label": "LLM Base URL",
+        "default": "https://api.poe.com/v1",
+        "help": "LLM Base URL",
+        "required": false
+      },
+      "llm_model": {
+        "type": "str",
+        "label": "LLM Model",
+        "default": "GPT-5",
+        "help": "LLM Model",
         "required": false
       },
       "llm_enabled": {

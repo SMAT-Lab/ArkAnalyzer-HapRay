@@ -20,6 +20,7 @@ from core.utils.logger import get_logger, setup_logging
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
 from core.utils.symbol_replacer import (
     add_disclaimer,
+    load_excel_data_for_report,
     load_function_mapping,
     replace_symbols_in_html,
 )
@@ -530,24 +531,25 @@ def run_html_symbol_replacement(args, output_dir: Path):
     relative_path = compute_relative_output_path(html_input, output_dir, args)
 
     # 从 Excel 文件读取数据用于生成报告
-    from core.utils.symbol_replacer import load_excel_data_for_report
     report_data = None
     llm_analyzer = None
     try:
         report_data = load_excel_data_for_report(excel_file)
         logger.info(f'✅ 从 Excel 加载了 {len(report_data)} 条记录用于生成报告')
-        
+
         # 尝试加载 LLM 统计信息
-        from core.utils import common as util
+
         token_stats_file = Path('cache/llm_token_stats.json')
         if token_stats_file.exists():
             try:
                 with token_stats_file.open('r', encoding='utf-8') as f:
                     saved_stats = json.load(f)
+
                 # 创建一个简单的对象来存储 token 统计信息
                 class SimpleLLMAnalyzer:
                     def get_token_stats(self):
                         return saved_stats
+
                 llm_analyzer = SimpleLLMAnalyzer()
             except Exception:
                 pass

@@ -77,7 +77,7 @@ def init_llm_analyzer(
             )
             log(f'使用批量 LLM 分析器: 服务={service_type}, 模型={model_name}, 批量大小={batch_size}')
             if save_prompts:
-                log(f'已启用 prompt 保存功能')
+                log('已启用 prompt 保存功能')
             return analyzer, True, True
 
         if use_batch_llm and not BATCH_LLM_AVAILABLE:
@@ -92,7 +92,7 @@ def init_llm_analyzer(
             )
             log(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
             if save_prompts:
-                log(f'已启用 prompt 保存功能')
+                log('已启用 prompt 保存功能')
             return analyzer, True, False
     except Exception as e:
         log(f'初始化 LLM 分析器失败: {e}')

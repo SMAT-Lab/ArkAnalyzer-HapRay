@@ -49,9 +49,32 @@ TEMP_FILE_PREFIX = 'temp_'
 # LLM 服务配置
 # ============================================================================
 
+
+def _get_plugin_config(key: str, default: Optional[str] = None) -> Optional[str]:
+    """
+    从 HAPRAY_PLUGIN_CONFIG_* 环境变量读取配置（优先）
+    如果不存在或为空字符串，则返回 None，让调用者使用其他方式获取
+
+    Args:
+        key: 配置键名（小写，下划线分隔）
+        default: 默认值
+
+    Returns:
+        配置值或默认值
+    """
+    # 将配置键转换为环境变量名（大写，下划线分隔）
+    env_key = f'HAPRAY_PLUGIN_CONFIG_{key.upper().replace("-", "_")}'
+    value = os.getenv(env_key)
+    # 如果环境变量存在且不为空字符串，返回该值
+    if value is not None and value != '':
+        return value
+    # 否则返回默认值（可能是 None）
+    return default
+
+
 # LLM 服务类型：支持 "poe", "openai", "claude", "deepseek", "custom"
-# 可以通过环境变量 LLM_SERVICE_TYPE 覆盖
-LLM_SERVICE_TYPE = os.getenv('LLM_SERVICE_TYPE', 'poe').lower()
+# 优先从 HAPRAY_PLUGIN_CONFIG_LLM_SERVICE_TYPE 读取，其次从 LLM_SERVICE_TYPE 读取
+LLM_SERVICE_TYPE = (_get_plugin_config('llm_service_type') or os.getenv('LLM_SERVICE_TYPE', 'poe')).lower()
 
 # LLM API Key 环境变量名（根据服务类型自动设置，也可通过环境变量覆盖）
 LLM_API_KEY_ENV_MAP = {
@@ -75,7 +98,12 @@ LLM_BASE_URL_MAP = {
 }
 
 # 当前服务类型的 Base URL
-LLM_BASE_URL = LLM_BASE_URL_MAP.get(LLM_SERVICE_TYPE, os.getenv('LLM_BASE_URL', 'https://api.poe.com/v1'))
+# 优先从 HAPRAY_PLUGIN_CONFIG_LLM_BASE_URL 读取，其次从 LLM_BASE_URL 读取
+_plugin_base_url = _get_plugin_config('llm_base_url')
+if _plugin_base_url:
+    LLM_BASE_URL = _plugin_base_url
+else:
+    LLM_BASE_URL = LLM_BASE_URL_MAP.get(LLM_SERVICE_TYPE, os.getenv('LLM_BASE_URL', 'https://api.poe.com/v1'))
 
 # LLM 模型配置（支持服务特定的模型环境变量）
 LLM_MODEL_ENV_MAP = {
@@ -90,14 +118,18 @@ LLM_MODEL_ENV_MAP = {
 LLM_MODEL_ENV = LLM_MODEL_ENV_MAP.get(LLM_SERVICE_TYPE, 'LLM_MODEL')
 
 
-# 获取 LLM 模型名称（优先从服务特定的环境变量读取，其次从通用 LLM_MODEL，最后使用默认值）
+# 获取 LLM 模型名称（优先从 HAPRAY_PLUGIN_CONFIG_LLM_MODEL 读取，其次从服务特定的环境变量读取，最后使用默认值）
 def get_llm_model() -> str:
     """获取 LLM 模型名称"""
-    # 优先从服务特定的环境变量读取
+    # 优先从 HAPRAY_PLUGIN_CONFIG_LLM_MODEL 读取
+    model = _get_plugin_config('llm_model')
+    if model:
+        return model
+    # 其次从服务特定的环境变量读取
     model = os.getenv(LLM_MODEL_ENV)
     if model:
         return model
-    # 其次从通用 LLM_MODEL 环境变量读取
+    # 再次从通用 LLM_MODEL 环境变量读取
     model = os.getenv('LLM_MODEL')
     if model:
         return model
@@ -119,10 +151,16 @@ LLM_TOKEN_STATS_FILE = LLM_CACHE_DIR / 'llm_token_stats.json'
 def load_api_key() -> Optional[str]:
     """
     从环境变量或 .env 文件中加载 API key（使用 config 中的配置）
+    优先从 HAPRAY_PLUGIN_CONFIG_LLM_API_KEY 读取
 
     Returns:
         Optional[str]: API key，如果未找到则返回 None
     """
+    # 优先从 HAPRAY_PLUGIN_CONFIG_LLM_API_KEY 读取
+    api_key = _get_plugin_config('llm_api_key')
+    if api_key:
+        return api_key
+
     # 从环境变量读取（load_dotenv() 已经加载了 .env 文件）
     api_key = os.getenv(LLM_API_KEY_ENV)
     if api_key:

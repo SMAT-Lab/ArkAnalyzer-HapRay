@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from core.utils import config
 from core.utils import common as util
+from core.utils import config
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,14 +22,14 @@ logger = get_logger(__name__)
 def format_function_name(function_name: str) -> str:
     """
     格式化函数名，添加 "Function: " 前缀
-    
+
     Args:
         function_name: 原始函数名
-    
+
     Returns:
         格式化后的函数名（如果为空则返回空字符串）
     """
-    if not function_name or function_name == 'nan' or function_name == 'None':
+    if not function_name or function_name in {'nan', 'None'}:
         return ''
     # 如果已经有 "Function: " 前缀，不再添加
     if function_name.startswith('Function: '):
@@ -39,7 +39,7 @@ def format_function_name(function_name: str) -> str:
 
 def load_function_mapping(excel_file):
     """从 Excel 文件加载地址到函数名的映射（精确匹配）
-    
+
     由于地址来自 perf 采样，与分析时的地址一致，只需要精确匹配。
     """
     df = pd.read_excel(excel_file, engine='openpyxl')
@@ -62,7 +62,7 @@ def load_function_mapping(excel_file):
 def load_excel_data_for_report(excel_file):
     """从 Excel 文件加载完整数据用于生成报告"""
     df = pd.read_excel(excel_file, engine='openpyxl')
-    
+
     results = []
     for _, row in df.iterrows():
         # 处理 event_count 列名（可能有空格或没有空格）
@@ -71,37 +71,31 @@ def load_excel_data_for_report(excel_file):
             event_count = row.get('指令数(event_count)', 0)
         elif '指令数 (event_count)' in row:
             event_count = row.get('指令数 (event_count)', 0)
-        
+
         # 处理字符串常量（可能是 NaN）
         strings_value = row.get('字符串常量', '')
-        if pd.isna(strings_value):
-            strings_value = ''
-        else:
-            strings_value = str(strings_value)
-        
+        strings_value = '' if pd.isna(strings_value) else str(strings_value)
+
         # 处理指令数量（可能是 '指令数' 列）
         instruction_count = row.get('指令数', 0)
         if pd.isna(instruction_count):
             instruction_count = 0
-        
+
         # 处理调用的函数（可能是逗号分隔的字符串）
         called_functions_str = str(row.get('调用的函数', ''))
         called_functions = []
         if called_functions_str and called_functions_str != 'nan':
             called_functions = [f.strip() for f in called_functions_str.split(',') if f.strip()]
-        
+
         # 格式化函数名，添加 "Function: " 前缀
         function_name = str(row.get('LLM推断函数名', ''))
-        if function_name and function_name != 'nan' and function_name != 'None':
+        if function_name and function_name not in {'nan', 'None'}:
             function_name = format_function_name(function_name)
-        
+
         # 处理负载问题识别与优化建议（可能是 NaN）
         performance_analysis = row.get('负载问题识别与优化建议', '')
-        if pd.isna(performance_analysis):
-            performance_analysis = ''
-        else:
-            performance_analysis = str(performance_analysis)
-        
+        performance_analysis = '' if pd.isna(performance_analysis) else str(performance_analysis)
+
         result = {
             'rank': row.get('排名', ''),
             'file_path': str(row.get('文件路径', '')),
@@ -117,10 +111,10 @@ def load_excel_data_for_report(excel_file):
                 'functionality': str(row.get('LLM功能描述', '')),
                 'performance_analysis': performance_analysis,  # 添加负载问题识别与优化建议
                 'confidence': str(row.get('LLM置信度', '')),
-            }
+            },
         }
         results.append(result)
-    
+
     return results
 
 
@@ -485,15 +479,15 @@ def replace_symbols_in_html(html_content, function_mapping):
             address = extract_address(symbol_value)
             if not address:
                 return match.group(0)
-            
+
             # 只进行精确匹配（地址来自 perf 采样，与分析时的地址一致）
             matched_function = None
             matched_address = None
-            
+
             if address in so_addresses:
                 matched_function = so_addresses[address]
                 matched_address = address
-            
+
             if matched_function and matched_address:
                 replaced_count['count'] += 1
                 if matched_address not in [r['original'] for r in replacement_info]:
@@ -514,8 +508,7 @@ def replace_symbols_in_html(html_content, function_mapping):
         existing_replacements = {r['original'] for r in replacement_info}
         # 获取尚未替换的地址
         remaining_addresses = {
-            addr: func_name for addr, func_name in so_addresses.items()
-            if addr not in existing_replacements
+            addr: func_name for addr, func_name in so_addresses.items() if addr not in existing_replacements
         }
         if remaining_addresses:
             logger.info(f'  剩余 {len(remaining_addresses)} 个地址需要处理...')
@@ -681,19 +674,19 @@ def replace_symbols_in_html(html_content, function_mapping):
 def extract_html_body_content(html_file_path: Path) -> str:
     """从 HTML 文件中提取 body 内容（不包括 body 标签本身）"""
     try:
-        with open(html_file_path, 'r', encoding='utf-8') as f:
+        with open(html_file_path, encoding='utf-8') as f:
             content = f.read()
-        
+
         # 提取 <body> 标签内的内容
         body_match = re.search(r'<body[^>]*>(.*?)</body>', content, re.DOTALL | re.IGNORECASE)
         if body_match:
             return body_match.group(1).strip()
-        
+
         # 如果没有 body 标签，尝试提取整个文档内容（除了 html/head 标签）
         html_match = re.search(r'</head>(.*?)</html>', content, re.DOTALL | re.IGNORECASE)
         if html_match:
             return html_match.group(1).strip()
-        
+
         # 如果都没有，返回空字符串
         return ''
     except Exception as e:
@@ -701,8 +694,15 @@ def extract_html_body_content(html_file_path: Path) -> str:
         return ''
 
 
-def add_disclaimer(html_content, reference_report_file=None, relative_path=None, 
-                   html_report_file=None, excel_file=None, report_data=None, llm_analyzer=None):
+def add_disclaimer(
+    html_content,
+    reference_report_file=None,
+    relative_path=None,
+    html_report_file=None,
+    excel_file=None,
+    report_data=None,
+    llm_analyzer=None,
+):
     """在 HTML 中添加免责声明、参考链接和嵌入的报告
 
     Args:
@@ -728,7 +728,7 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
 
     # 确定参考报告文件
     if reference_report_file:
-        reference_link = f'{relative_path}/{reference_report_file}' if relative_path else reference_report_file
+        pass
     # 自动查找最新的报告文件
     elif output_dir.exists():
         # 查找所有报告文件，按修改时间排序
@@ -736,32 +736,25 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
         if report_files:
             # 按修改时间排序，取最新的
             report_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            reference_link = f'{relative_path}/{report_files[0].name}' if relative_path else report_files[0].name
+            f'{relative_path}/{report_files[0].name}' if relative_path else report_files[0].name
         # 如果没有找到，使用默认名称
         elif relative_path:
-            reference_link = f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
+            f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
         else:
-            reference_link = config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
+            config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
     elif relative_path:
-        reference_link = f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
+        f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
     else:
-        reference_link = config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
+        config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
 
     # 构建 Excel 下载链接
-    excel_link = ''
     if excel_file:
         excel_path = Path(excel_file)
         if excel_path.exists():
-            excel_link_path = f'{relative_path}/{excel_path.name}' if relative_path else excel_path.name
-            excel_link = f'''
-        <strong>📊 Excel 报告:</strong><br>
-        <a href="{excel_link_path}" download
-           style="color: #1976d2; text-decoration: underline; font-weight: bold;">
-           下载 Excel 分析报告
-        </a><br><br>'''
+            pass
 
     # 不再显示免责声明框
-    disclaimer = ""
+    disclaimer = ''
 
     # 生成报告内容（优先使用 report_data，否则从文件读取）
     report_body_content = ''
@@ -781,13 +774,13 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
         html_report_path = Path(html_report_file)
         if html_report_path.exists():
             report_body_content = extract_html_body_content(html_report_path)
-    
+
     # 嵌入 HTML 报告内容（如果提供）
     embedded_report = ''
     if report_body_content:
         # 转义 JavaScript 字符串中的特殊字符
         report_body_content_escaped = json.dumps(report_body_content)
-        
+
         embedded_report = f"""
     <!-- 添加新的 tab 来显示详细分析报告 -->
     <script>
@@ -800,26 +793,26 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
                     setTimeout(addReportTab, 500);
                     return;
                 }}
-                
+
                 // 检查是否已经添加过
                 var existingPane = tabs.querySelector('lit-tabpane[key="5"]');
                 if (existingPane) {{
                     return;
                 }}
-                
+
                 // 创建新的 tabpane
                 var newPane = document.createElement('lit-tabpane');
                 newPane.setAttribute('id', 'pane5');
                 newPane.setAttribute('tab', '详细分析报告');
                 newPane.setAttribute('key', '5');
-                
+
                 // 将报告内容添加到 tabpane 中
                 var reportContent = {report_body_content_escaped};
-                
+
                 // 创建容器并添加样式
                 var container = document.createElement('div');
                 container.style.cssText = 'padding: 20px; background: white; min-height: 100vh;';
-                
+
                 // 创建样式元素
                 var styleElement = document.createElement('style');
                 styleElement.textContent = '.container {{ max-width: 100%; margin: 0; background: white; padding: 20px; box-sizing: border-box; }} ' +
@@ -846,22 +839,22 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
                     'td:nth-child(9) {{ max-width: 350px; }} ' +
                     'td:nth-child(10) {{ max-width: 400px; }}';
                 container.appendChild(styleElement);
-                
+
                 // 插入报告内容
                 container.innerHTML += reportContent;
                 newPane.appendChild(container);
-                
+
                 // 添加到 tabs 中
                 tabs.appendChild(newPane);
             }}
-            
+
             // 页面加载后执行
             if (document.readyState === 'loading') {{
                 document.addEventListener('DOMContentLoaded', addReportTab);
             }} else {{
                 addReportTab();
             }}
-            
+
             // 延迟执行，确保所有内容都已加载
             setTimeout(addReportTab, 500);
             setTimeout(addReportTab, 1000);
@@ -875,12 +868,12 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
         # 提取样式和脚本部分
         style_match = re.search(r'<style>(.*?)</style>', embedded_report, re.DOTALL)
         script_match = re.search(r'<script>(.*?)</script>', embedded_report, re.DOTALL)
-        
+
         if style_match:
             layout_style_script += f'<style>{style_match.group(1)}</style>'
         if script_match:
             layout_style_script += f'<script>{script_match.group(1)}</script>'
-    
+
     # 插入布局样式和脚本到 head 或 body 开始处
     if layout_style_script:
         if '</head>' in html_content:
@@ -889,14 +882,14 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None,
             body_match = re.search(r'(<body[^>]*>)', html_content, re.IGNORECASE)
             if body_match:
                 html_content = html_content.replace(body_match.group(1), body_match.group(1) + layout_style_script)
-    
+
     # 提取报告容器部分（不包含样式和脚本）
     report_container = ''
     if embedded_report:
         container_match = re.search(r'(<div id="embedded-report-container".*?</div>)', embedded_report, re.DOTALL)
         if container_match:
             report_container = container_match.group(1)
-    
+
     # 在 </body> 标签前插入声明和报告容器
     insertion_content = disclaimer + report_container
     if '</body>' in html_content:

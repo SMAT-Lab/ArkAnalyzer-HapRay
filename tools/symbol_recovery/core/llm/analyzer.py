@@ -4,11 +4,13 @@
 参考: https://creator.poe.com/docs/external-applications/tool-calling
 """
 
+import hashlib
 import json
 import os
 import re
 import signal
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -114,7 +116,7 @@ class LLMFunctionAnalyzer:
         self.output_dir = Path(output_dir) if output_dir else config.get_output_dir()
         self.cache: dict[str, dict[str, Any]] = {}
         self.cache_file = llm_config['cache_file']
-        
+
         # 设置 prompt 保存目录
         if self.save_prompts:
             self.prompt_output_dir = self.output_dir / 'prompts'
@@ -236,44 +238,42 @@ class LLMFunctionAnalyzer:
         decompiled: Optional[str] = None,
     ) -> str:
         """生成缓存键（使用 hash 提高效率和准确性）"""
-        import hashlib
-        
         # 构建用于 hash 的内容
         # 1. 指令：使用前50条指令（增加数量以提高唯一性）+ 指令总数
         inst_content = '; '.join(instructions[:50]) if instructions else ''
         inst_count = str(len(instructions))
-        
+
         # 2. 字符串：所有字符串（排序以确保一致性）
         strings_sorted = sorted(set(str(s) for s in strings)) if strings else []
         strings_content = ', '.join(strings_sorted)
-        
+
         # 3. 调用的函数：排序后的函数列表
         called_sorted = sorted(set(str(f) for f in called_functions)) if called_functions else []
         called_content = ', '.join(called_sorted)
-        
+
         # 4. 反编译代码：如果有，使用前500字符的 hash（避免过长）
         decompiled_hash = ''
         if decompiled:
             decompiled_preview = decompiled[:500]  # 前500字符
             decompiled_hash = hashlib.md5(decompiled_preview.encode('utf-8')).hexdigest()[:16]
-        
+
         # 5. 符号名
         symbol_str = str(symbol_name) if symbol_name else ''
-        
+
         # 组合所有内容并生成 hash
-        key_content = '|'.join([
-            inst_content,
-            inst_count,
-            strings_content,
-            called_content,
-            decompiled_hash,
-            symbol_str,
-        ])
-        
+        key_content = '|'.join(
+            [
+                inst_content,
+                inst_count,
+                strings_content,
+                called_content,
+                decompiled_hash,
+                symbol_str,
+            ]
+        )
+
         # 使用 MD5 hash 生成固定长度的 key（避免 key 过长）
-        key_hash = hashlib.md5(key_content.encode('utf-8')).hexdigest()
-        
-        return key_hash
+        return hashlib.md5(key_content.encode('utf-8')).hexdigest()
 
     def analyze_with_llm(
         self,
@@ -316,12 +316,12 @@ class LLMFunctionAnalyzer:
                     cached_result = cached_entry['analysis']
                 else:
                     cached_result = cached_entry
-                
+
                 # 确保旧缓存格式也有 performance_analysis 字段
                 if 'performance_analysis' not in cached_result:
                     cached_result['performance_analysis'] = ''
                     logger.debug('⚠️  缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）')
-                
+
                 self.token_stats['cached_requests'] += 1
                 self.token_stats['total_requests'] += 1
                 logger.debug(f'使用缓存结果（总指令数: {len(instructions)}）')
@@ -330,10 +330,18 @@ class LLMFunctionAnalyzer:
         # 构建提示词
         logger.debug(f'构建新的 prompt（总指令数: {len(instructions)}）')
         prompt = self._build_prompt(
-            instructions, strings, symbol_name, called_functions, offset, context,
-            func_info=func_info, call_count=call_count, event_count=event_count, so_file=so_file
+            instructions,
+            strings,
+            symbol_name,
+            called_functions,
+            offset,
+            context,
+            func_info=func_info,
+            call_count=call_count,
+            event_count=event_count,
+            so_file=so_file,
         )
-        
+
         # 保存 prompt（如果启用）
         if self.save_prompts:
             self._save_single_prompt(prompt, offset, symbol_name)
@@ -423,7 +431,7 @@ class LLMFunctionAnalyzer:
                         'has_decompiled': False,  # 单函数模式暂不支持反编译
                         'called_functions_count': len(called_functions) if called_functions else 0,
                         'offset': f'0x{offset:x}' if offset else None,
-                    }
+                    },
                 }
                 self.cache[cache_key] = cache_entry
                 # 延迟保存缓存（每10次保存一次，减少 I/O）
@@ -489,7 +497,7 @@ class LLMFunctionAnalyzer:
         # 函数基本信息
         if offset:
             prompt_parts.append(f'函数偏移量: 0x{offset:x}')
-        
+
         # 函数边界信息
         if func_info:
             func_start = func_info.get('minbound', func_info.get('offset', offset))
@@ -497,11 +505,11 @@ class LLMFunctionAnalyzer:
             func_size = func_info.get('size', 0)
             if func_size > 0:
                 prompt_parts.append(f'函数范围: 0x{func_start:x} - 0x{func_end:x} (大小: {func_size} 字节)')
-        
+
         # 指令数量
         if instructions:
             prompt_parts.append(f'指令数量: {len(instructions)} 条')
-        
+
         # 函数复杂度指标
         if func_info:
             nbbs = func_info.get('nbbs', 0)
@@ -516,10 +524,10 @@ class LLMFunctionAnalyzer:
                 prompt_parts.append(f'参数数量: {nargs}')
             if nlocals > 0:
                 prompt_parts.append(f'局部变量数量: {nlocals}')
-        
+
         # 注意：调用次数（call_count）和指令执行次数（event_count）仅用于排序和筛选，
         # 不需要传递给 LLM，因此不添加到 prompt 中
-        
+
         # SO 文件信息
         if so_file:
             so_name = so_file.split('/')[-1] if '/' in so_file else so_file
@@ -561,7 +569,9 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('{')
         prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）",')
         prompt_parts.append('  "function_name": "推断的函数名（英文，遵循常见命名规范）",')
-        prompt_parts.append('  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",')
+        prompt_parts.append(
+            '  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",'
+        )
         prompt_parts.append('  "confidence": "高/中/低",')
         prompt_parts.append('  "reasoning": "推理过程（中文，说明为什么这样推断）"')
         prompt_parts.append('}')
@@ -575,7 +585,9 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('   - 为什么这个函数可能导致高指令数负载（具体分析）')
         prompt_parts.append('   - 可能的优化建议（如果有）')
         prompt_parts.append('   示例："存在性能瓶颈。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
-        prompt_parts.append('   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"')
+        prompt_parts.append(
+            '   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"'
+        )
         prompt_parts.append('5. 置信度评估标准：')
         prompt_parts.append(
             "   - '高'：能看到完整的函数逻辑，包括函数序言、主要业务逻辑、函数调用、返回值等，且功能明确"
@@ -645,12 +657,18 @@ class LLMFunctionAnalyzer:
                     result['performance_analysis'] = parsed.get('performance_analysis', '')
                     result['confidence'] = parsed.get('confidence', '低')
                     result['reasoning'] = parsed.get('reasoning', '')
-                    
+
                     # 调试：检查 performance_analysis 是否存在
                     if not result['performance_analysis']:
-                        logger.warning('⚠️  LLM 响应中未包含 performance_analysis 字段或为空，请检查 prompt 是否包含该字段要求')
+                        logger.warning(
+                            '⚠️  LLM 响应中未包含 performance_analysis 字段或为空，请检查 prompt 是否包含该字段要求'
+                        )
                         # 尝试从 reasoning 或其他字段中提取性能相关信息（fallback）
-                        if result.get('reasoning') and ('性能' in result['reasoning'] or '瓶颈' in result['reasoning'] or '负载' in result['reasoning']):
+                        if result.get('reasoning') and (
+                            '性能' in result['reasoning']
+                            or '瓶颈' in result['reasoning']
+                            or '负载' in result['reasoning']
+                        ):
                             logger.debug('在 reasoning 字段中检测到性能相关信息，但 performance_analysis 为空')
 
                     # 如果检测到截断，在结果中标记
@@ -749,20 +767,19 @@ class LLMFunctionAnalyzer:
         """保存单个函数的 prompt 到文件"""
         if not self.save_prompts:
             return
-        
+
         try:
-            from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 包含毫秒
-            
+
             # 生成文件名
             offset_str = f'0x{offset:x}' if offset else 'unknown'
             symbol_str = symbol_name.replace('/', '_').replace('\\', '_') if symbol_name else 'unknown'
             # 限制文件名长度
             if len(symbol_str) > 50:
                 symbol_str = symbol_str[:50]
-            
+
             prompt_file = self.prompt_output_dir / f'prompt_{offset_str}_{symbol_str}_{timestamp}.txt'
-            
+
             with open(prompt_file, 'w', encoding='utf-8') as f:
                 f.write('=' * 80 + '\n')
                 f.write('生成的 LLM Prompt (单个函数)\n')
@@ -776,7 +793,7 @@ class LLMFunctionAnalyzer:
                 f.write('=' * 80 + '\n\n')
                 f.write(prompt)
                 f.write('\n\n' + '=' * 80 + '\n')
-            
+
             logger.debug(f'Prompt 已保存: {prompt_file.name}')
         except Exception as e:
             logger.warning(f'保存 prompt 失败: {e}')

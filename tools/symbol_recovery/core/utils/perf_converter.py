@@ -39,6 +39,7 @@ try:
         resolve_hap_address_from_perfdb,
         resolve_hap_addresses_batch,
     )
+
     HAP_RESOLVER_AVAILABLE = True
 except ImportError:
     HAP_RESOLVER_AVAILABLE = False
@@ -397,53 +398,54 @@ class MissingSymbolFunctionAnalyzer:
 
     def _get_call_stack_info(self, file_path: str, address: str, vaddr: int) -> Optional[dict]:
         """从 perf.db 获取调用堆栈信息
-        
+
         Args:
             file_path: 文件路径
             address: 地址字符串
             vaddr: 虚拟地址偏移量
-            
+
         Returns:
             调用堆栈信息字典，包含调用者和被调用者信息
         """
         if not self.perf_db_file or not self.perf_db_file.exists():
             return None
-        
+
         try:
             conn = sqlite3.connect(str(self.perf_db_file))
             cursor = conn.cursor()
-            
+
             try:
                 # 加载映射关系
                 cursor.execute('SELECT DISTINCT file_id, path FROM perf_files WHERE path IS NOT NULL')
                 file_id_to_path = {row[0]: row[1] for row in cursor.fetchall()}
-                
+
                 cursor.execute('SELECT id, data FROM data_dict WHERE data IS NOT NULL')
                 name_to_data = {row[0]: row[1] for row in cursor.fetchall()}
-                
+
                 # 查找文件 ID
                 file_id = None
                 for fid, path in file_id_to_path.items():
                     if path == file_path:
                         file_id = fid
                         break
-                
+
                 if file_id is None:
                     return None
-                
+
                 # 查找地址 ID
                 name_id = None
                 for nid, data in name_to_data.items():
                     if data == address:
                         name_id = nid
                         break
-                
+
                 if name_id is None:
                     return None
-                
+
                 # 查询调用堆栈：找到调用这个函数的函数（depth 更小的）
                 # 限制查询数量以提高性能
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT DISTINCT pc2.file_id, pc2.name, pc2.depth, pc2.symbol_id as caller_symbol_id
                     FROM perf_callchain pc1
                     JOIN perf_sample ps ON pc1.callchain_id = ps.callchain_id
@@ -453,14 +455,16 @@ class MissingSymbolFunctionAnalyzer:
                       AND pc2.symbol_id != -1
                     ORDER BY pc2.depth DESC
                     LIMIT 10
-                """, (file_id, name_id))
-                
+                """,
+                    (file_id, name_id),
+                )
+
                 callers = []
                 for row in cursor.fetchall():
                     caller_file_id, caller_name_id, caller_depth, caller_symbol_id = row
                     caller_file_path = file_id_to_path.get(caller_file_id, '')
                     caller_address = name_to_data.get(caller_name_id, '')
-                    
+
                     # 获取调用者函数名（如果有符号）
                     caller_symbol_name = None
                     if caller_symbol_id and caller_symbol_id != -1:
@@ -468,17 +472,20 @@ class MissingSymbolFunctionAnalyzer:
                         symbol_row = cursor.fetchone()
                         if symbol_row:
                             caller_symbol_name = symbol_row[0]
-                    
+
                     if caller_file_path and caller_address:
-                        callers.append({
-                            'file_path': caller_file_path,
-                            'address': caller_address,
-                            'symbol_name': caller_symbol_name,
-                            'depth': caller_depth,
-                        })
-                
+                        callers.append(
+                            {
+                                'file_path': caller_file_path,
+                                'address': caller_address,
+                                'symbol_name': caller_symbol_name,
+                                'depth': caller_depth,
+                            }
+                        )
+
                 # 查询被调用者：找到这个函数调用的函数（depth 更大的，且有符号的）
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT DISTINCT pc2.file_id, pc2.name, pc2.depth, pc2.symbol_id as callee_symbol_id
                     FROM perf_callchain pc1
                     JOIN perf_sample ps ON pc1.callchain_id = ps.callchain_id
@@ -488,14 +495,16 @@ class MissingSymbolFunctionAnalyzer:
                       AND pc2.symbol_id != -1
                     ORDER BY pc2.depth ASC
                     LIMIT 10
-                """, (file_id, name_id))
-                
+                """,
+                    (file_id, name_id),
+                )
+
                 callees = []
                 for row in cursor.fetchall():
                     callee_file_id, callee_name_id, callee_depth, callee_symbol_id = row
                     callee_file_path = file_id_to_path.get(callee_file_id, '')
                     callee_address = name_to_data.get(callee_name_id, '')
-                    
+
                     # 获取被调用者函数名（如果有符号）
                     callee_symbol_name = None
                     if callee_symbol_id and callee_symbol_id != -1:
@@ -503,42 +512,44 @@ class MissingSymbolFunctionAnalyzer:
                         symbol_row = cursor.fetchone()
                         if symbol_row:
                             callee_symbol_name = symbol_row[0]
-                    
+
                     if callee_file_path and callee_address:
-                        callees.append({
-                            'file_path': callee_file_path,
-                            'address': callee_address,
-                            'symbol_name': callee_symbol_name,
-                            'depth': callee_depth,
-                        })
-                
+                        callees.append(
+                            {
+                                'file_path': callee_file_path,
+                                'address': callee_address,
+                                'symbol_name': callee_symbol_name,
+                                'depth': callee_depth,
+                            }
+                        )
+
                 return {
                     'callers': callers[:5],  # 限制最多5个调用者
                     'callees': callees[:5],  # 限制最多5个被调用者
                 }
-                
+
             finally:
                 conn.close()
-                
+
         except Exception as e:
             logger.warning(f'获取调用堆栈信息时出错: {e}')
             return None
 
     def _enhance_context_with_call_stack(self, base_context: str, call_stack_info: Optional[dict]) -> str:
         """增强上下文信息，添加调用堆栈信息
-        
+
         Args:
             base_context: 基础上下文信息
             call_stack_info: 调用堆栈信息
-            
+
         Returns:
             增强后的上下文信息
         """
         if not call_stack_info:
             return base_context
-        
+
         context_parts = [base_context]
-        
+
         # 添加调用者信息
         callers = call_stack_info.get('callers', [])
         if callers:
@@ -546,10 +557,10 @@ class MissingSymbolFunctionAnalyzer:
             for i, caller in enumerate(callers[:3], 1):  # 只显示前3个
                 caller_info = f'  {i}. '
                 if caller.get('symbol_name'):
-                    caller_info += f"{caller['symbol_name']} "
-                caller_info += f"({caller['file_path']} {caller['address']})"
+                    caller_info += f'{caller["symbol_name"]} '
+                caller_info += f'({caller["file_path"]} {caller["address"]})'
                 context_parts.append(caller_info)
-        
+
         # 添加被调用者信息（有符号的函数）
         callees = call_stack_info.get('callees', [])
         if callees:
@@ -557,10 +568,10 @@ class MissingSymbolFunctionAnalyzer:
             for i, callee in enumerate(callees[:3], 1):  # 只显示前3个
                 callee_info = f'  {i}. '
                 if callee.get('symbol_name'):
-                    callee_info += f"{callee['symbol_name']} "
-                callee_info += f"({callee['file_path']} {callee['address']})"
+                    callee_info += f'{callee["symbol_name"]} '
+                callee_info += f'({callee["file_path"]} {callee["address"]})'
                 context_parts.append(callee_info)
-        
+
         return '\n'.join(context_parts)
 
     def extract_strings_near_offset(self, elf_file, vaddr, range_size=200):
@@ -858,7 +869,7 @@ class MissingSymbolFunctionAnalyzer:
                             func_info=None,  # capstone 模式下没有 func_info
                             call_count=call_count,
                             event_count=event_count,
-                            so_file=str(so_file_path) if so_file_path else None,
+                            so_file=str(so_file) if so_file else None,
                         )
 
                         logger.info('✅ LLM 分析完成')
@@ -951,18 +962,18 @@ class MissingSymbolFunctionAnalyzer:
 
             filtered_data = []
             hap_addresses = []  # 收集 HAP 地址用于批量解析
-            
+
             for (file_path, address), call_count in address_call_counts.items():
                 if file_path in excluded_exact:
                     continue
                 if any(file_path.startswith(prefix) for prefix in excluded_prefixes):
                     continue
-                
+
                 # 检测 HAP 地址
                 if HAP_RESOLVER_AVAILABLE and is_hap_address(address):
                     hap_addresses.append(address)
                     logger.debug(f'检测到 HAP 地址: {address}')
-                
+
                 filtered_data.append(
                     {
                         'file_path': file_path,
@@ -970,13 +981,13 @@ class MissingSymbolFunctionAnalyzer:
                         'call_count': call_count,
                     }
                 )
-            
+
             # 4. 批量解析 HAP 地址（如果存在）
             hap_resolutions = {}
             if hap_addresses and self.perf_db_file and HAP_RESOLVER_AVAILABLE:
                 logger.info(f'\n步骤 3: 批量解析 {len(hap_addresses)} 个 HAP 地址...')
                 hap_resolutions = resolve_hap_addresses_batch(self.perf_db_file, hap_addresses, quick_mode=True)
-                
+
                 # 更新 filtered_data 中的 HAP 地址信息
                 for item in filtered_data:
                     address = item['address']
@@ -985,7 +996,7 @@ class MissingSymbolFunctionAnalyzer:
                         if resolution.get('resolved') and resolution.get('so_file_path'):
                             # 更新为 SO 文件路径和地址
                             item['file_path'] = resolution['so_file_path']
-                            item['address'] = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            item['address'] = f'{resolution["so_name"]}+0x{resolution["so_offset"]:x}'
                             item['hap_resolution'] = resolution
                             logger.info(f'  ✅ {address} -> {item["address"]}')
                         else:
@@ -995,7 +1006,7 @@ class MissingSymbolFunctionAnalyzer:
             # 5. 按调用次数排序，取前 N 个
             sorted_data = sorted(filtered_data, key=lambda x: x['call_count'], reverse=True)[:top_n]
             logger.info(f'✅ 过滤后剩余 {len(filtered_data):,} 条记录，选择前 {top_n} 个')
-            
+
             # 统计 HAP 地址解析情况
             hap_count = sum(1 for item in sorted_data if 'hap_resolution' in item)
             if hap_count > 0:
@@ -1086,16 +1097,18 @@ class MissingSymbolFunctionAnalyzer:
                 call_count = item.get('call_count', 0)
                 event_count = item.get('event_count', None)
                 rank = idx
-                
+
                 # 处理 HAP 地址（如果之前没有解析成功，再次尝试）
                 if HAP_RESOLVER_AVAILABLE and is_hap_address(address) and self.perf_db_file:
                     hap_resolution = item.get('hap_resolution')
                     if not hap_resolution or not hap_resolution.get('resolved'):
                         logger.info(f'🔄 重新解析 HAP 地址: {address}')
-                        resolution = resolve_hap_address_from_perfdb(self.perf_db_file, address, quick_mode=True, so_dir=self.so_dir)
+                        resolution = resolve_hap_address_from_perfdb(
+                            self.perf_db_file, address, quick_mode=True, so_dir=self.so_dir
+                        )
                         if resolution and resolution.get('resolved'):
                             file_path = resolution['so_file_path']
-                            address = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            address = f'{resolution["so_name"]}+0x{resolution["so_offset"]:x}'
                             logger.info(f'  ✅ 解析成功: {address}')
                         else:
                             logger.warning(f'  ⚠️  无法解析 HAP 地址，跳过: {address}')
@@ -1131,7 +1144,7 @@ class MissingSymbolFunctionAnalyzer:
                     # 注意：offset 字段应该使用原始地址字符串（如 "libxxx.so+0x123456"），这样在 prompt 中能正确显示原始地址
                     # result.get('offset') 返回的是 '0x...' 格式，但我们需要原始地址字符串
                     offset_value = address  # 使用原始地址字符串（如 "libquick.so+0xc8ef4"），而不是解析后的偏移量
-                    
+
                     functions_data.append(
                         {
                             'function_id': f'func_{rank}',
@@ -1150,7 +1163,9 @@ class MissingSymbolFunctionAnalyzer:
                             'address': address,  # 保留原始地址字符串
                         }
                     )
-                    logger.debug(f'✅ 函数 #{rank} ({address}) 已添加到 functions_data，指令数: {len(inst_list)}, 反编译: {"有" if result.get("decompiled") else "无"}')
+                    logger.debug(
+                        f'✅ 函数 #{rank} ({address}) 已添加到 functions_data，指令数: {len(inst_list)}, 反编译: {"有" if result.get("decompiled") else "无"}'
+                    )
 
                     # 每10个函数显示一次进度
                     if len(results) % 10 == 0:
@@ -1159,7 +1174,9 @@ class MissingSymbolFunctionAnalyzer:
             # 第二步：批量 LLM 分析
             if functions_data and self.llm_analyzer:
                 logger.info(f'\n步骤 2: 批量 LLM 分析 {len(functions_data)} 个函数...')
-                logger.debug(f'functions_data 长度: {len(functions_data)}, llm_analyzer: {self.llm_analyzer is not None}')
+                logger.debug(
+                    f'functions_data 长度: {len(functions_data)}, llm_analyzer: {self.llm_analyzer is not None}'
+                )
                 # 构建上下文信息（使用第一个函数的上下文）
                 context = None
                 if results:
@@ -1176,9 +1193,11 @@ class MissingSymbolFunctionAnalyzer:
                 # 第三步：将 LLM 分析结果合并到 results 中
                 logger.info('\n步骤 3: 合并 LLM 分析结果...')
                 batch_results_map = {r.get('function_id', ''): r for r in batch_results}
-                logger.info(f'批量分析返回了 {len(batch_results)} 个结果，function_id: {[r.get("function_id") for r in batch_results]}')
+                logger.info(
+                    f'批量分析返回了 {len(batch_results)} 个结果，function_id: {[r.get("function_id") for r in batch_results]}'
+                )
                 logger.info(f'results 中有 {len(results)} 个函数，rank: {[r.get("rank") for r in results]}')
-                
+
                 missing_results = []
                 for result in results:
                     func_id = f'func_{result["rank"]}'
@@ -1187,7 +1206,9 @@ class MissingSymbolFunctionAnalyzer:
                         # 移除 function_id，保留其他字段
                         llm_result = {k: v for k, v in batch_result.items() if k != 'function_id'}
                         result['llm_result'] = llm_result
-                        logger.info(f'✅ 函数 #{result["rank"]} ({func_id}, 地址: {result.get("address", "unknown")}) 成功合并 LLM 结果: {llm_result.get("function_name", "None")}, {llm_result.get("functionality", "未知")}')
+                        logger.info(
+                            f'✅ 函数 #{result["rank"]} ({func_id}, 地址: {result.get("address", "unknown")}) 成功合并 LLM 结果: {llm_result.get("function_name", "None")}, {llm_result.get("functionality", "未知")}'
+                        )
                     else:
                         # 如果批量分析结果中没有该函数，使用默认结果
                         missing_results.append(func_id)
@@ -1197,10 +1218,14 @@ class MissingSymbolFunctionAnalyzer:
                             'confidence': '低',
                             'reasoning': '批量 LLM 分析结果中未找到该函数',
                         }
-                        logger.warning(f'⚠️  函数 #{result["rank"]} ({func_id}, 地址: {result.get("address", "unknown")}) 在批量分析结果中未找到')
-                
+                        logger.warning(
+                            f'⚠️  函数 #{result["rank"]} ({func_id}, 地址: {result.get("address", "unknown")}) 在批量分析结果中未找到'
+                        )
+
                 if missing_results:
-                    logger.warning(f'⚠️  以下 {len(missing_results)} 个函数在批量分析结果中未找到: {", ".join(missing_results)}')
+                    logger.warning(
+                        f'⚠️  以下 {len(missing_results)} 个函数在批量分析结果中未找到: {", ".join(missing_results)}'
+                    )
         else:
             # 单个分析模式：逐个分析（原有逻辑）
             results = []
@@ -1210,16 +1235,18 @@ class MissingSymbolFunctionAnalyzer:
                 call_count = item.get('call_count', 0)
                 event_count = item.get('event_count', None)  # 从 Excel 读取时可能包含 event_count
                 rank = len(results) + 1
-                
+
                 # 处理 HAP 地址（如果之前没有解析成功，再次尝试）
                 if HAP_RESOLVER_AVAILABLE and is_hap_address(address) and self.perf_db_file:
                     hap_resolution = item.get('hap_resolution')
                     if not hap_resolution or not hap_resolution.get('resolved'):
                         logger.info(f'🔄 重新解析 HAP 地址: {address}')
-                        resolution = resolve_hap_address_from_perfdb(self.perf_db_file, address, quick_mode=True, so_dir=self.so_dir)
+                        resolution = resolve_hap_address_from_perfdb(
+                            self.perf_db_file, address, quick_mode=True, so_dir=self.so_dir
+                        )
                         if resolution and resolution.get('resolved'):
                             file_path = resolution['so_file_path']
-                            address = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            address = f'{resolution["so_name"]}+0x{resolution["so_offset"]:x}'
                             logger.info(f'  ✅ 解析成功: {address}')
                         else:
                             logger.warning(f'  ⚠️  无法解析 HAP 地址，跳过: {address}')
@@ -1324,17 +1351,17 @@ class MissingSymbolFunctionAnalyzer:
                 strings_value = ', '.join(str(s) for s in strings_value if s)
             else:
                 strings_value = str(strings_value) if strings_value else ''
-            
+
             # 获取函数边界信息（用于地址匹配）
             func_info = result.get('func_info', {})
             func_start = func_info.get('minbound', func_info.get('offset', 0))
             func_size = func_info.get('size', 0)
             func_end = func_info.get('maxbound', func_start + func_size) if func_size > 0 else func_start + 2000
-            
+
             # 处理调用的函数列表
             called_functions = result.get('called_functions', [])
             called_functions_str = ', '.join(called_functions[:10]) if called_functions else ''  # 最多显示10个
-            
+
             # 确保 llm_result 存在，如果不存在则使用默认值
             if 'llm_result' not in result or result.get('llm_result') is None:
                 result['llm_result'] = {
@@ -1343,20 +1370,20 @@ class MissingSymbolFunctionAnalyzer:
                     'confidence': '低',
                     'reasoning': 'LLM 分析结果缺失',
                 }
-            
+
             llm_result = result.get('llm_result', {})
-            
+
             # 安全地获取 LLM 结果字段，确保 None 值转换为空字符串
-            def safe_get_llm_field(field_name, default=''):
-                value = llm_result.get(field_name) if llm_result else None
+            def safe_get_llm_field(field_name, llm_result_dict, default=''):
+                value = llm_result_dict.get(field_name) if llm_result_dict else None
                 if value is None:
                     return default
-                result = str(value) if value else default
+                result_value = str(value) if value else default
                 # 如果是函数名，添加 "Function: " 前缀
-                if field_name == 'function_name' and result and result != default:
-                    result = f'Function: {result}'
-                return result
-            
+                if field_name == 'function_name' and result_value and result_value != default:
+                    result_value = f'Function: {result_value}'
+                return result_value
+
             row_data = {
                 '排名': result['rank'],
                 '文件路径': result['file_path'],
@@ -1366,11 +1393,11 @@ class MissingSymbolFunctionAnalyzer:
                 '指令数': result['instruction_count'],
                 '字符串常量': strings_value,  # 确保是字符串类型，不是 None
                 '调用的函数': called_functions_str,  # 添加调用的函数列表
-                'LLM推断函数名': safe_get_llm_field('function_name', ''),
-                'LLM功能描述': safe_get_llm_field('functionality', '未知'),
-                '负载问题识别与优化建议': safe_get_llm_field('performance_analysis', ''),
-                'LLM置信度': safe_get_llm_field('confidence', '低'),
-                'LLM推理过程': safe_get_llm_field('reasoning', ''),
+                'LLM推断函数名': safe_get_llm_field('function_name', llm_result, ''),
+                'LLM功能描述': safe_get_llm_field('functionality', llm_result, '未知'),
+                '负载问题识别与优化建议': safe_get_llm_field('performance_analysis', llm_result, ''),
+                'LLM置信度': safe_get_llm_field('confidence', llm_result, '低'),
+                'LLM推理过程': safe_get_llm_field('reasoning', llm_result, ''),
                 '函数起始偏移': f'0x{func_start:x}' if func_start else '',
                 '函数大小': func_size if func_size > 0 else '',
                 '函数结束偏移': f'0x{func_end:x}' if func_end > func_start else '',
@@ -1397,7 +1424,7 @@ class MissingSymbolFunctionAnalyzer:
         # 确保字符串常量列是字符串类型，避免空字符串被转换为 nan
         if '字符串常量' in df.columns:
             df['字符串常量'] = df['字符串常量'].fillna('').astype(str).replace('nan', '').replace('None', '')
-        
+
         # 确保 LLM 相关列不是 nan（处理 None 值）
         llm_columns = ['LLM推断函数名', 'LLM功能描述', '负载问题识别与优化建议', 'LLM置信度', 'LLM推理过程']
         for col in llm_columns:
@@ -1411,7 +1438,13 @@ class MissingSymbolFunctionAnalyzer:
                     default_value = '低'
                 else:
                     default_value = ''
-                df[col] = df[col].fillna(default_value).astype(str).replace('nan', default_value).replace('None', default_value)
+                df[col] = (
+                    df[col]
+                    .fillna(default_value)
+                    .astype(str)
+                    .replace('nan', default_value)
+                    .replace('None', default_value)
+                )
 
         # 确保列的顺序：如果使用 event_count，将 event_count 列放在调用次数之前
         if use_event_count and '指令数(event_count)' in df.columns:
@@ -1486,7 +1519,14 @@ class MissingSymbolFunctionAnalyzer:
             ws.column_dimensions[col_letter].width = column_widths.get(header, 15)
 
             # 设置文本换行
-            if header in ['LLM功能描述', '负载问题识别与优化建议', 'LLM推理过程', '文件路径', '调用的函数', '字符串常量']:
+            if header in [
+                'LLM功能描述',
+                '负载问题识别与优化建议',
+                'LLM推理过程',
+                '文件路径',
+                '调用的函数',
+                '字符串常量',
+            ]:
                 for row_idx in range(2, len(df) + 2):
                     cell = ws[f'{col_letter}{row_idx}']
                     cell.alignment = Alignment(wrap_text=True, vertical='top')
