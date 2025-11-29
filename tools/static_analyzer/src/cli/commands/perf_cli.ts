@@ -83,7 +83,6 @@ export const PerfCli = new Command('perf')
     .option('--compatibility', 'start compatibility mode', false)
     .option('--ut', 'ut mode', false)
     .option('--time-ranges <ranges...>', 'optional time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges')
-    .option('--analysis-mode <mode>', 'analysis mode: all (default), perf (load analysis only), memory (memory analysis only)', 'all')
     .action(async (options: HapAnalyzerOptions) => {
         let cliArgs: Partial<GlobalConfig> = { ...options };
         initConfig(cliArgs, (config) => {
@@ -106,24 +105,10 @@ export const PerfCli = new Command('perf')
         }
 
         const perfAnalysisService = new PerfAnalysisService();
-        const analysisMode = options.analysisMode ?? 'all';
-        logger.info(`Analysis mode: ${analysisMode}`);
 
         if (options.choose) {
             await perfAnalysisService.chooseRound(options.input);
         } else {
-            switch (analysisMode) {
-                case 'perf':
-                    await perfAnalysisService.analyzePerfOnly(options.input, timeRanges);
-                    break;
-                case 'memory':
-                    // 内存分析已完全迁移到 Python，SA 不再处理
-                    logger.warn('Memory analysis is now handled by Python. Please use Python update command.');
-                    break;
-                case 'all':
-                default:
-                    await perfAnalysisService.generatePerfReport(options.input, timeRanges);
-                    break;
-            }
+            await perfAnalysisService.generatePerfReport(options.input, timeRanges);
         }
     });
