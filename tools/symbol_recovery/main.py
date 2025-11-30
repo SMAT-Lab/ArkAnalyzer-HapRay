@@ -15,11 +15,25 @@ from typing import Optional
 from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
 from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
-from core.utils import config
+from core.utils.config import (
+    CALL_COUNT_ANALYSIS_PATTERN,
+    CALL_COUNT_REPORT_PATTERN,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_PERF_DATA,
+    DEFAULT_PERF_DB,
+    DEFAULT_TOP_N,
+    EVENT_COUNT_ANALYSIS_PATTERN,
+    EVENT_COUNT_REPORT_PATTERN,
+    HTML_REPORT_PATTERN,
+    STEP_DIRS,
+    config,
+)
 from core.utils.logger import get_logger, setup_logging
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
 from core.utils.symbol_replacer import (
     add_disclaimer,
+    load_excel_data_for_report,
     load_function_mapping,
     replace_symbols_in_html,
 )
@@ -86,8 +100,8 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--perf-data',
         type=str,
-        default=config.DEFAULT_PERF_DATA,
-        help=f'perf.data 文件路径（默认: {config.DEFAULT_PERF_DATA}，仅 perf 分析模式）',
+        default=DEFAULT_PERF_DATA,
+        help=f'perf.data 文件路径（默认: {DEFAULT_PERF_DATA}，仅 perf 分析模式）',
     )
     parser.add_argument(
         '--perf-db',
@@ -108,15 +122,15 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--output',
         type=str,
         default=None,
-        help=f'输出目录，用于存储所有分析结果和 perf.db 等（默认: {config.DEFAULT_OUTPUT_DIR}）',
+        help=f'输出目录，用于存储所有分析结果和 perf.db 等（默认: {DEFAULT_OUTPUT_DIR}）',
     )
 
     # 分析参数
     parser.add_argument(
         '--top-n',
         type=int,
-        default=config.DEFAULT_TOP_N,
-        help=f'分析前 N 个函数（默认: {config.DEFAULT_TOP_N}）',
+        default=DEFAULT_TOP_N,
+        help=f'分析前 N 个函数（默认: {DEFAULT_TOP_N}）',
     )
     parser.add_argument(
         '--stat-method',
@@ -127,15 +141,10 @@ def create_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument('--no-llm', action='store_true', help='不使用 LLM 分析（仅反汇编）')
     parser.add_argument(
-        '--no-batch',
-        action='store_true',
-        help='不使用批量分析（逐个函数分析，较慢但较稳定）',
-    )
-    parser.add_argument(
         '--batch-size',
         type=int,
-        default=config.DEFAULT_BATCH_SIZE,
-        help=f'批量分析时每个 prompt 包含的函数数量（默认: {config.DEFAULT_BATCH_SIZE}，建议范围: 3-10）',
+        default=DEFAULT_BATCH_SIZE,
+        help=f'批量分析时每个 prompt 包含的函数数量（默认: {DEFAULT_BATCH_SIZE}，建议范围: 3-10）。当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
     )
     parser.add_argument(
         '--use-capstone-only',
@@ -164,13 +173,13 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--html-input',
         type=str,
         default=None,
-        help=f'HTML 输入文件路径或目录（默认: 自动查找 {", ".join(config.STEP_DIRS)} 目录下的 {config.HTML_REPORT_PATTERN}）',
+        help=f'HTML 输入文件路径或目录（默认: 自动查找 {", ".join(STEP_DIRS)} 目录下的 {HTML_REPORT_PATTERN}）',
     )
     parser.add_argument(
         '--html-pattern',
         type=str,
-        default=config.HTML_REPORT_PATTERN,
-        help=f'HTML 文件搜索模式（默认: {config.HTML_REPORT_PATTERN}）',
+        default=HTML_REPORT_PATTERN,
+        help=f'HTML 文件搜索模式（默认: {HTML_REPORT_PATTERN}）',
     )
 
     # Excel 分析模式参数
@@ -218,7 +227,7 @@ def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Op
         perf_db_file = Path(args.perf_db)
     elif args.perf_data:
         try:
-            perf_db_file = output_dir / config.DEFAULT_PERF_DB
+            perf_db_file = output_dir / DEFAULT_PERF_DB
         except Exception:
             perf_db_file = None
     else:
@@ -260,7 +269,6 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
             excel_file=str(excel_file),
             use_llm=not args.no_llm,
             llm_model=args.llm_model,
-            use_batch_llm=not args.no_batch,
             batch_size=args.batch_size,
             context=args.context,
             save_prompts=args.save_prompts,
@@ -397,7 +405,6 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
         perf_db_file=str(perf_db_file),
         so_dir=str(so_dir),
         use_llm=not args.no_llm,
-        use_batch_llm=not args.no_batch,
         batch_size=args.batch_size,
         context=args.context,
         use_capstone_only=args.use_capstone_only,
@@ -446,7 +453,6 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         so_dir=str(so_dir),
         use_llm=not args.no_llm,
         llm_model=args.llm_model,
-        use_batch_llm=not args.no_batch,
         batch_size=args.batch_size,
         context=args.context,
         use_capstone_only=args.use_capstone_only,
@@ -530,24 +536,25 @@ def run_html_symbol_replacement(args, output_dir: Path):
     relative_path = compute_relative_output_path(html_input, output_dir, args)
 
     # 从 Excel 文件读取数据用于生成报告
-    from core.utils.symbol_replacer import load_excel_data_for_report
     report_data = None
     llm_analyzer = None
     try:
         report_data = load_excel_data_for_report(excel_file)
         logger.info(f'✅ 从 Excel 加载了 {len(report_data)} 条记录用于生成报告')
-        
+
         # 尝试加载 LLM 统计信息
-        from core.utils import common as util
+
         token_stats_file = Path('cache/llm_token_stats.json')
         if token_stats_file.exists():
             try:
                 with token_stats_file.open('r', encoding='utf-8') as f:
                     saved_stats = json.load(f)
+
                 # 创建一个简单的对象来存储 token 统计信息
                 class SimpleLLMAnalyzer:
                     def get_token_stats(self):
                         return saved_stats
+
                 llm_analyzer = SimpleLLMAnalyzer()
             except Exception:
                 pass
@@ -608,7 +615,7 @@ def detect_excel_file(args, output_dir: Path) -> Optional[Path]:
         if all_event_count_files:
             logger.info(f'使用最新的 event_count 分析文件: {all_event_count_files[0]}')
             return all_event_count_files[0]
-        return output_dir / config.EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
+        return output_dir / EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
 
     all_call_count_files = sorted(
         output_dir.glob('top*_missing_symbols_analysis.xlsx'),
@@ -618,7 +625,7 @@ def detect_excel_file(args, output_dir: Path) -> Optional[Path]:
     if all_call_count_files:
         logger.info(f'使用最新的 call_count 分析文件: {all_call_count_files[0]}')
         return all_call_count_files[0]
-    return output_dir / config.CALL_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
+    return output_dir / CALL_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
 
 
 def detect_html_input(args) -> Optional[Path]:
@@ -636,7 +643,7 @@ def detect_html_input(args) -> Optional[Path]:
         logger.warning('⚠️  HTML 路径不存在: %s', html_input_path)
         return None
 
-    for step_dir in config.STEP_DIRS:
+    for step_dir in STEP_DIRS:
         step_path = Path(step_dir)
         if step_path.exists():
             html_files = list(step_path.glob(args.html_pattern))
@@ -687,13 +694,13 @@ def summarize_outputs(args, output_dir: Path):
     logger.info('=' * 80)
     logger.info('\n输出文件:')
     if not args.only_step4:
-        logger.info(f'  - {output_dir}/{config.DEFAULT_PERF_DB}')
+        logger.info(f'  - {output_dir}/{DEFAULT_PERF_DB}')
         if args.stat_method == 'event_count':
-            logger.info(f'  - {output_dir}/{config.EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)}')
-            logger.info(f'  - {output_dir}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=args.top_n)}')
+            logger.info(f'  - {output_dir}/{EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)}')
+            logger.info(f'  - {output_dir}/{EVENT_COUNT_REPORT_PATTERN.format(n=args.top_n)}')
         elif args.stat_method == 'call_count':
-            logger.info(f'  - {output_dir}/{config.CALL_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)}')
-            logger.info(f'  - {output_dir}/{config.CALL_COUNT_REPORT_PATTERN.format(n=args.top_n)}')
+            logger.info(f'  - {output_dir}/{CALL_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)}')
+            logger.info(f'  - {output_dir}/{CALL_COUNT_REPORT_PATTERN.format(n=args.top_n)}')
 
     if not args.skip_step4 and not args.only_step1 and not args.only_step3:
         html_input = detect_html_input(args)
