@@ -4,30 +4,20 @@ LLM 初始化工具
 集中处理 API key 的获取和初始化
 """
 
-from collections.abc import Callable
 from typing import Optional
 
 from core.llm.analyzer import LLMFunctionAnalyzer
-from core.utils import config
+from core.llm.batch_analyzer import BatchLLMFunctionAnalyzer
+from core.utils.config import config
 from core.utils.logger import get_logger
 
-module_logger = get_logger(__name__)
-
-try:
-    from core.llm.batch_analyzer import BatchLLMFunctionAnalyzer
-
-    BATCH_LLM_AVAILABLE = True
-except ImportError:
-    BATCH_LLM_AVAILABLE = False
-    module_logger.warning('batch_llm_function_analyzer 模块不可用,将使用单个函数分析')
+logger = get_logger(__name__)
 
 
 def init_llm_analyzer(
     use_llm: bool,
     llm_model: str,
-    use_batch_llm: bool,
     batch_size: int,
-    logger: Callable,
     save_prompts: bool = False,
     output_dir: Optional[str] = None,
 ) -> tuple[Optional[LLMFunctionAnalyzer], bool, bool]:
@@ -43,29 +33,26 @@ def init_llm_analyzer(
     Returns:
         (llm_analyzer, use_llm, use_batch_llm) 其中use_llm和use_batch_llm是实际使用的LLM分析器类型
     """
-    log = logger or module_logger.info
 
     if not use_llm:
-        return None, False, use_batch_llm
+        return None, False, False
 
-    api_key = config.load_api_key()
+    llm_config = config.get_llm_config()
+    api_key = llm_config['api_key']
     if not api_key:
-        llm_config = config.get_llm_config()
         service_type = llm_config['service_type']
         api_key_env = llm_config['api_key_env']
-        log(f'未找到 {service_type.upper()} API key ({api_key_env})，将跳过 LLM 分析')
-        return None, False, use_batch_llm
+        logger.info(f'未找到 {service_type.upper()} API key ({api_key_env})，将跳过 LLM 分析')
+        return None, False, False
 
-    batch_size = batch_size if batch_size is not None else config.DEFAULT_BATCH_SIZE
-    model_name = llm_model if llm_model is not None else config.get_llm_model()
+    model_name = llm_model if llm_model is not None else llm_config['model']
 
     # 从配置获取 base_url
-    llm_config = config.get_llm_config()
     base_url = llm_config['base_url']
     service_type = llm_config['service_type']
 
     try:
-        if use_batch_llm and BATCH_LLM_AVAILABLE:
+        if batch_size > 1:
             analyzer = BatchLLMFunctionAnalyzer(
                 api_key=api_key,
                 model=model_name,
@@ -75,9 +62,10 @@ def init_llm_analyzer(
                 save_prompts=save_prompts,
                 output_dir=output_dir,
             )
-            log(f'使用批量 LLM 分析器: 服务={service_type}, 模型={model_name}, 批量大小={batch_size}')
+            logger.info(f'使用批量 LLM 分析器: 服务={service_type}, 模型={model_name}, 批量大小={batch_size}')
             if save_prompts:
-                log(f'已启用 prompt 保存功能')
+<<<<<<< HEAD
+                log('已启用 prompt 保存功能')
             return analyzer, True, True
 
         if use_batch_llm and not BATCH_LLM_AVAILABLE:
@@ -92,8 +80,25 @@ def init_llm_analyzer(
             )
             log(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
             if save_prompts:
-                log(f'已启用 prompt 保存功能')
+                log('已启用 prompt 保存功能')
             return analyzer, True, False
+=======
+                logger.info('已启用 prompt 保存功能')
+            return analyzer, True, True
+        logger.info('批量 LLM 分析器不可用,将使用单个函数分析')
+        analyzer = LLMFunctionAnalyzer(
+            api_key=api_key,
+            model=model_name,
+            base_url=base_url,
+            enable_cache=True,
+            save_prompts=save_prompts,
+            output_dir=output_dir,
+        )
+        logger.info(f'使用单个 LLM 分析器: 服务={service_type}, 模型={model_name}')
+        if save_prompts:
+            logger.info('已启用 prompt 保存功能')
+        return analyzer, True, False
+>>>>>>> e9690ae3c21acfec41f775f6b19c0242a458b4ac
     except Exception as e:
-        log(f'初始化 LLM 分析器失败: {e}')
-        return None, False, use_batch_llm
+        logger.info(f'初始化 LLM 分析器失败: {e}')
+        return None, False, False

@@ -14,23 +14,25 @@ import pandas as pd
 
 from core.llm.initializer import init_llm_analyzer
 from core.utils import config
+from core.utils.config import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_TOP_N,
+    EVENT_COUNT_ANALYSIS_PATTERN,
+    EVENT_COUNT_REPORT_PATTERN,
+    TEMP_FILE_PREFIX,
+)
 from core.utils.logger import get_logger
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
 
+# 延迟导入，避免循环依赖
+try:
+    from core.utils.hap_address_resolver import is_hap_address, resolve_hap_addresses_batch
+except ImportError:
+    is_hap_address = None
+    resolve_hap_addresses_batch = None
+
 #  使用日志
 logger = get_logger(__name__)
-
-# 加载 .env 文件中的环境变量
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    logger.warning('未安装 python-dotenv 库，将跳过 .env 文件的加载')
-    logger.warning('请安装 python-dotenv 库: pip install python-dotenv')
-except Exception as e:
-    logger.error('加载 .env 文件时出错: %s', e)
-    raise
 
 
 class EventCountAnalyzer:
@@ -42,7 +44,6 @@ class EventCountAnalyzer:
         so_dir,
         use_llm=True,
         llm_model=None,
-        use_batch_llm=True,
         batch_size=5,
         context=None,
         use_capstone_only=False,
@@ -58,7 +59,6 @@ class EventCountAnalyzer:
             so_dir: SO 文件目录
             use_llm: 是否使用 LLM 分析
             llm_model: LLM 模型名称
-            use_batch_llm: 是否使用批量 LLM 分析（一个 prompt 包含多个函数，默认 True）
             batch_size: 批量分析时每个 prompt 包含的函数数量（默认 3）
             context: 自定义上下文信息（可选，如果不提供则根据 SO 文件名自动推断）
             use_capstone_only: 只使用 Capstone 反汇编（不使用 Radare2，即使已安装）
@@ -70,8 +70,7 @@ class EventCountAnalyzer:
         self.so_dir = Path(so_dir)
         self.use_llm = use_llm
         self.llm_model = llm_model
-        self.use_batch_llm = use_batch_llm
-        self.batch_size = batch_size or config.DEFAULT_BATCH_SIZE
+        self.batch_size = batch_size or DEFAULT_BATCH_SIZE
         self.context = context
         self.use_capstone_only = use_capstone_only
         self.skip_decompilation = skip_decompilation
@@ -85,9 +84,7 @@ class EventCountAnalyzer:
         self.llm_analyzer, self.use_llm, self.use_batch_llm = init_llm_analyzer(
             use_llm=self.use_llm,
             llm_model=self.llm_model,
-            use_batch_llm=self.use_batch_llm,
             batch_size=self.batch_size,
-            logger=logger.info,
             save_prompts=save_prompts,
             output_dir=output_dir,
         )
@@ -205,13 +202,13 @@ class EventCountAnalyzer:
 
         # 取 top_n（使用默认值）
         sorted_items = sorted(filtered.items(), key=lambda x: x[1]['call_count'], reverse=True)
-        top_n = config.DEFAULT_TOP_N
+        top_n = DEFAULT_TOP_N
         return {k: v for k, v in sorted_items[:top_n]}
 
     def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None):
         """按 event_count 求和统计 topN"""
         if top_n is None:
-            top_n = config.DEFAULT_TOP_N
+            top_n = DEFAULT_TOP_N
         # 查询 perf_sample 和 perf_callchain 的关联
         cursor.execute("""
             SELECT pc.file_id, pc.name, SUM(ps.event_count) as total_event_count,
@@ -289,7 +286,7 @@ class EventCountAnalyzer:
         # 使用现有的分析器
         output_dir = config.get_output_dir()
         config.ensure_output_dir(output_dir)
-        temp_excel = output_dir / f'{config.TEMP_FILE_PREFIX}event_count_diff.xlsx'
+        temp_excel = output_dir / f'{TEMP_FILE_PREFIX}event_count_diff.xlsx'
         temp_excel.parent.mkdir(exist_ok=True)
         df = pd.DataFrame(diff_data)
         df.to_excel(temp_excel, index=False)
@@ -355,7 +352,7 @@ class EventCountAnalyzer:
     def analyze_event_count_only(self, top_n=None):
         """只按 event_count 统计 topN，不进行对比"""
         if top_n is None:
-            top_n = config.DEFAULT_TOP_N
+            top_n = DEFAULT_TOP_N
         logger.info('=' * 80)
         logger.info(f'分析 event_count 的 top{top_n}')
         logger.info('=' * 80)
@@ -410,28 +407,26 @@ class EventCountAnalyzer:
                 for _key, info in sorted_items:
                     address = info['address']
                     # 检测 HAP 地址
-                    try:
-                        from core.utils.hap_address_resolver import is_hap_address, resolve_hap_addresses_batch
-                        if is_hap_address(address):
-                            hap_addresses.append(address)
-                    except ImportError:
-                        pass  # HAP 解析模块不可用
-                
+                    if is_hap_address and is_hap_address(address):
+                        hap_addresses.append(address)
+
                 # 批量解析 HAP 地址
                 hap_resolutions = {}
-                if hap_addresses:
+                if hap_addresses and resolve_hap_addresses_batch:
                     try:
-                        from core.utils.hap_address_resolver import resolve_hap_addresses_batch
-                        from pathlib import Path
                         logger.info(f'检测到 {len(hap_addresses)} 个 HAP 地址，开始批量解析...')
-                        from pathlib import Path
+
                         so_dir = Path(self.so_dir) if self.so_dir else None
-                        
-                        hap_resolutions = resolve_hap_addresses_batch(Path(self.perf_db_file), hap_addresses, quick_mode=True, so_dir=so_dir)
-                        resolved_count = sum(1 for r in hap_resolutions.values() if r.get("resolved"))
+
+                        hap_resolutions = resolve_hap_addresses_batch(
+                            Path(self.perf_db_file), hap_addresses, quick_mode=True, so_dir=so_dir
+                        )
+                        resolved_count = sum(1 for r in hap_resolutions.values() if r.get('resolved'))
                         logger.info(f'✅ HAP 地址解析完成，成功解析 {resolved_count}/{len(hap_resolutions)} 个')
                         if resolved_count < len(hap_resolutions):
-                            logger.warning(f'⚠️  有 {len(hap_resolutions) - resolved_count} 个 HAP 地址无法解析（偏移量超出文件大小）')
+                            logger.warning(
+                                f'⚠️  有 {len(hap_resolutions) - resolved_count} 个 HAP 地址无法解析（偏移量超出文件大小）'
+                            )
                     except Exception as e:
                         logger.warning(f'⚠️  HAP 地址解析失败: {e}')
 
@@ -439,20 +434,20 @@ class EventCountAnalyzer:
                 for rank, (_key, info) in enumerate(sorted_items, 1):
                     address = info['address']
                     file_path = info['file_path']
-                    
+
                     # 处理 HAP 地址解析结果
                     if address in hap_resolutions:
                         resolution = hap_resolutions[address]
                         if resolution.get('resolved') and resolution.get('so_file_path'):
                             # 更新为 SO 文件路径和地址
                             file_path = resolution['so_file_path']
-                            address = f"{resolution['so_name']}+0x{resolution['so_offset']:x}"
+                            address = f'{resolution["so_name"]}+0x{resolution["so_offset"]:x}'
                             logger.info(f'  ✅ HAP 地址解析: {info["address"]} -> {address}')
                         else:
                             # 无法解析的 HAP 地址，跳过
                             logger.warning(f'  ⚠️  HAP 地址无法解析，跳过: {address}')
                             continue  # 跳过这个地址，不添加到 results 中
-                    
+
                     # 提取偏移量（从 address 中提取，格式如 "libxwebcore.so+0x50338a0"）
                     offset = None
                     if '+' in address:
@@ -499,7 +494,7 @@ class EventCountAnalyzer:
             output_dir = config.get_output_dir()
             config.ensure_output_dir(output_dir)
             # 创建临时 Excel 文件用于分析（包含 event_count 列）
-            temp_excel = output_dir / f'{config.TEMP_FILE_PREFIX}event_count.xlsx'
+            temp_excel = output_dir / f'{TEMP_FILE_PREFIX}event_count.xlsx'
             temp_excel.parent.mkdir(exist_ok=True)
             temp_data = []
             for r in results:
@@ -523,7 +518,6 @@ class EventCountAnalyzer:
                     so_dir=str(self.so_dir),
                     use_llm=False,  # 先不启用，避免重复初始化
                     llm_model=self.llm_model,
-                    use_batch_llm=self.use_batch_llm,
                     batch_size=self.batch_size,
                     context=self.context,  # 传递上下文
                     use_capstone_only=self.use_capstone_only,
@@ -542,7 +536,6 @@ class EventCountAnalyzer:
                     so_dir=str(self.so_dir),
                     use_llm=self.use_llm,
                     llm_model=self.llm_model,
-                    use_batch_llm=self.use_batch_llm,
                     batch_size=self.batch_size,
                     context=self.context,  # 传递上下文
                     use_capstone_only=self.use_capstone_only,
@@ -602,7 +595,7 @@ class EventCountAnalyzer:
                     result['rank'] = rank
 
             # 创建临时 Excel 文件用于保存
-            temp_excel = output_dir / f'{config.TEMP_FILE_PREFIX}event_count.xlsx'
+            temp_excel = output_dir / f'{TEMP_FILE_PREFIX}event_count.xlsx'
             temp_excel.parent.mkdir(exist_ok=True)
 
             # 创建临时 Excel 文件时，包含 event_count 字段（如果存在）
@@ -652,7 +645,6 @@ class EventCountAnalyzer:
                     so_dir=str(self.so_dir),
                     use_llm=self.use_llm,
                     llm_model=self.llm_model,
-                    use_batch_llm=self.use_batch_llm,  # 传递批量分析设置
                     batch_size=self.batch_size,  # 传递 batch_size
                     use_capstone_only=self.use_capstone_only,
                 )
@@ -660,8 +652,8 @@ class EventCountAnalyzer:
             # 确定输出文件名（使用用户指定的 top_n，如果没有则使用实际结果数量）
             if top_n is None:
                 top_n = len(results)
-            output_file = str(output_dir / config.EVENT_COUNT_ANALYSIS_PATTERN.format(n=top_n))
-            html_file = str(output_dir / config.EVENT_COUNT_REPORT_PATTERN.format(n=top_n))
+            output_file = str(output_dir / EVENT_COUNT_ANALYSIS_PATTERN.format(n=top_n))
+            html_file = str(output_dir / EVENT_COUNT_REPORT_PATTERN.format(n=top_n))
 
             # 保存 Excel 结果和生成 HTML 报告（传递 time_tracker、html_file 和 output_dir）
             saved_file = analyzer.save_results(
