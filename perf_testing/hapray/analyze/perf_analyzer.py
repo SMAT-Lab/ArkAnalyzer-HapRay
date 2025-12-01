@@ -59,7 +59,7 @@ class PerfAnalyzer(BaseAnalyzer):
 
             logging.debug('Running perf analysis with command: %s', ' '.join(args))
             ExeUtils.execute_hapray_cmd(args)
-   
+
         return flame_graph
 
     @staticmethod

@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import contextlib
 import os
 from typing import Any, Optional
 
@@ -258,7 +259,7 @@ class MemoryAnalyzer(BaseAnalyzer):
 
         # Save to SQLite database
         self._save_results_to_db()
-        
+
         # Ensure database is fully written and flushed to disk
         # This is critical to prevent race conditions when packaging the database file
         self._ensure_db_flushed()
@@ -676,7 +677,5 @@ class MemoryAnalyzer(BaseAnalyzer):
         except Exception as e:
             self.logger.warning('Failed to flush database: %s', str(e))
             # Try to close connection anyway
-            try:
+            with contextlib.suppress(Exception):
                 self.close_db_connection()
-            except Exception:
-                pass
