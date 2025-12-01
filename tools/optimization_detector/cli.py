@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import io
 import argparse
 import logging
 import multiprocessing
@@ -23,6 +24,8 @@ import pandas as pd
 
 from optimization_detector import FileCollector, InvokeSymbols, OptimizationDetector, __version__
 from optimization_detector.excel_utils import ExcelReportSaver
+
+_STDOUT_WRAPPER = None
 
 
 class OptAction:
@@ -151,7 +154,13 @@ class OptAction:
     def setup_logging(verbose: bool = False, log_file: str = None):
         """配置日志"""
         level = logging.DEBUG if verbose else logging.INFO
-        handlers = [logging.StreamHandler(sys.stdout)]
+        global _STDOUT_WRAPPER
+        if _STDOUT_WRAPPER is None:
+            # Use TextIOWrapper to set UTF-8 encoding for stdout
+            # Keep reference to prevent the wrapper from being closed
+            _STDOUT_WRAPPER = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+
+        handlers = [logging.StreamHandler(_STDOUT_WRAPPER)]
 
         if log_file:
             handlers.append(logging.FileHandler(log_file, encoding='utf-8'))
