@@ -3,6 +3,7 @@
 """
 
 import logging
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -108,3 +109,45 @@ class FileUtils:
                     testcases.append(testcase_name)
 
         return sorted(testcases)
+
+    @staticmethod
+    def get_installed_apps() -> list[str]:
+        """
+        获取设备上已安装的应用包名列表
+        使用 hdc shell bm dump -a 命令查询
+
+        Returns:
+            应用包名列表
+        """
+        apps = []
+        try:
+            result = subprocess.run(
+                ['hdc', 'shell', 'bm', 'dump', '-a'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+
+            if result.returncode == 0 and result.stdout:
+                # 解析 bm dump -n 输出
+                # 输出格式可能是 JSON 或每行一个包名
+                for raw_line in result.stdout.splitlines():
+                    line = raw_line.strip()
+                    if not line or line.startswith('#') or line.startswith('['):
+                        continue
+                    # 简单格式：直接使用整行作为包名, 过滤掉 com.huawei.* 和 com.ohos.* 的包名
+                    if '.' in line and not line.startswith('com.huawei.') and not line.startswith('com.ohos.'):
+                        apps.append(line)
+
+            return sorted(set(apps)) if apps else []  # 去重并排序
+
+        except subprocess.TimeoutExpired:
+            logger.warning('获取应用列表超时')
+            return []
+        except FileNotFoundError:
+            logger.warning('hdc 命令未找到，请确保已安装 HDC 工具并配置到 PATH')
+            return []
+        except Exception as e:
+            logger.warning(f'获取应用列表时发生错误: {e}')
+            return []

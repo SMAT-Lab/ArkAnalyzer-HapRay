@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import io
 import argparse
+import io
 import logging
 import multiprocessing
 import sys
@@ -158,7 +158,9 @@ class OptAction:
         if _STDOUT_WRAPPER is None:
             # Use TextIOWrapper to set UTF-8 encoding for stdout
             # Keep reference to prevent the wrapper from being closed
-            _STDOUT_WRAPPER = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+            _STDOUT_WRAPPER = io.TextIOWrapper(
+                sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True
+            )
 
         handlers = [logging.StreamHandler(_STDOUT_WRAPPER)]
 
