@@ -1,0 +1,59 @@
+{
+  "id": "static_analyzer",
+  "name": "HAP包静态分析",
+  "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "debug": {
+      "cmd": ["node -r ts-node/register "],
+      "script": "src/cli/index.ts"
+    },
+    "release": {
+      "cmd": ["node"],
+      "script": "hapray-sa-cmd.js"
+    }
+  },
+  "actions": {
+    "static": {
+      "name": "静态分析",
+      "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+      "action_mapping": {
+        "type": "map",
+        "command": ["hapray", "hap"]
+      },
+      "parameters": {
+        "input": {
+          "type": "file",
+          "label": "输入路径",
+          "required": true,
+          "short": "i",
+          "help": "HAP/ZIP文件或目录路径"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "default": "./output",
+          "short": "o",
+          "help": "输出目录路径"
+        },
+        "jobs": {
+          "type": "str",
+          "label": "并发数量",
+          "required": false,
+          "default": "auto",
+          "help": "并发分析数量，默认为CPU核心数"
+        },
+        "include_details": {
+          "type": "bool",
+          "label": "包含详细信息",
+          "required": false,
+          "default": false,
+          "help": "是否包含详细信息"
+        }
+      }
+    }
+  }
+}
+

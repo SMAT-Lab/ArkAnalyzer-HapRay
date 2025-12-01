@@ -19,8 +19,9 @@ import os
 import platform
 import sqlite3
 import subprocess
+import sys
 import time
-from typing import Optional
+from typing import Optional, Union
 
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.config.config import Config
@@ -29,52 +30,107 @@ from hapray.core.config.config import Config
 logger = logging.getLogger(__name__)
 
 
-def _get_trace_streamer_path() -> str:
-    """Gets the path to the trace_streamer executable based on the current OS.
-
-    Returns:
-        Path to the trace_streamer executable
-
-    Raises:
-        OSError: For unsupported operating systems
-        FileNotFoundError: If the executable doesn't exist
-    """
-    # Get the root directory of the project
-    project_root = CommonUtils.get_project_root()
-
-    # Determine OS-specific executable name
-    system = platform.system().lower()
-    if system == 'windows':
-        executable = 'trace_streamer_windows.exe'
-    elif system == 'darwin':  # macOS
-        executable = 'trace_streamer_mac'
-    elif system == 'linux':
-        executable = 'trace_streamer_linux'
-    else:
-        raise OSError(f'Unsupported operating system: {system}')
-
-    # Construct full path to the executable
-    tool_path = os.path.join(project_root, 'sa-cmd', 'third-party', 'trace_streamer_binary', executable)
-
-    # Validate executable exists
-    if not os.path.exists(tool_path):
-        raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
-
-    # Set execute permissions for Unix-like systems
-    if system in ('darwin', 'linux'):
-        os.chmod(tool_path, 0o755)  # rwxr-xr-x
-
-    return tool_path
-
-
 class ExeUtils:
     """Utility class for executing external commands and tools"""
 
-    # Path to the hapray-sa-cmd script
-    hapray_cmd_path = os.path.abspath(os.path.join(CommonUtils.get_project_root(), 'sa-cmd', 'hapray-sa-cmd'))
+    @staticmethod
+    def get_tools_dir(*relative_segments: str, require: bool = True) -> Optional[str]:
+        """Resolve the tools directory, supporting both source and packaged layouts.
 
-    # Path to the trace streamer executable
-    trace_streamer_path = _get_trace_streamer_path()
+        打包后的目录结构：
+        D:\\haprayTest\tools\
+          ├── perf-testing\
+          │   └── perf-testing.exe  <- sys.executable
+          ├── trace_streamer_binary\
+          ├── sa-cmd\
+          └── ...
+
+        所以从 exe 所在目录向上一级就是 tools 目录
+
+        Args:
+            *relative_segments: Optional path segments to append to the tools dir.
+            require: Whether to raise if the directory cannot be resolved.
+
+        Returns:
+            Absolute path to the tools directory (or sub-path within it).
+            Returns None if not found and require is False.
+
+        Raises:
+            FileNotFoundError: If neither candidate tools directory exists.
+        """
+        project_root = CommonUtils.get_project_root()
+
+        # 打包后：project_root 是 exe 所在目录（D:\haprayTest\tools\perf-testing）
+        # 开发环境：project_root 是仓库根目录
+        candidates = []
+
+        if getattr(sys, 'frozen', False):
+            # 打包后：从 exe 所在目录向上一级就是 tools 目录
+            # D:\haprayTest\tools\perf-testing -> D:\haprayTest\tools
+            candidates.append(os.path.join(project_root, '..'))
+        else:
+            # 开发环境：尝试多个可能的路径
+            candidates.extend(
+                [
+                    os.path.join(project_root, 'tools'),  # 仓库根目录/tools
+                    os.path.join(project_root, '..', 'tools'),  # 上一级/tools
+                    os.path.join(project_root, '..', 'dist', 'tools'),  # 上一级/dist/tools
+                ]
+            )
+
+        for base in candidates:
+            tools_dir = os.path.abspath(base)
+            if relative_segments:
+                tools_dir = os.path.join(tools_dir, *relative_segments)
+
+            if os.path.exists(tools_dir):
+                return tools_dir
+
+        logging.warning(
+            f'Tools directory not found. project_root: {project_root}, frozen: {getattr(sys, "frozen", False)}'
+        )
+        if require:
+            raise FileNotFoundError(
+                f'Tools directory not found. Checked: {", ".join(os.path.abspath(c) for c in candidates)}'
+            )
+        return None
+
+    @staticmethod
+    def _get_trace_streamer_path() -> str:
+        """Gets the path to the trace_streamer executable based on the current OS.
+
+        Returns:
+            Path to the trace_streamer executable
+
+        Raises:
+            OSError: For unsupported operating systems
+            FileNotFoundError: If the executable doesn't exist
+        """
+
+        # Determine OS-specific executable name
+        system = platform.system().lower()
+        if system == 'windows':
+            executable = 'trace_streamer_windows.exe'
+        elif system == 'darwin':  # macOS
+            executable = 'trace_streamer_mac'
+        elif system == 'linux':
+            executable = 'trace_streamer_linux'
+        else:
+            raise OSError(f'Unsupported operating system: {system}')
+
+        # Construct full path to the executable
+        trace_streamer_dir = ExeUtils.get_tools_dir('trace_streamer_binary')
+        tool_path = os.path.join(trace_streamer_dir, executable)
+
+        # Validate executable exists
+        if not os.path.exists(tool_path):
+            raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
+
+        # Set execute permissions for Unix-like systems
+        if system in ('darwin', 'linux'):
+            os.chmod(tool_path, 0o755)  # rwxr-xr-x
+
+        return tool_path
 
     @staticmethod
     def _get_so_dir_cache_file(output_db: str) -> str:
@@ -237,28 +293,59 @@ class ExeUtils:
             return True, result.stdout, result.stderr
 
         except subprocess.TimeoutExpired as e:
+            # Decode stdout/stderr safely, handling both bytes and str
+            stdout_str = ExeUtils._decode_output(e.stdout)
+            stderr_str = ExeUtils._decode_output(e.stderr)
+
             logger.error(
                 'Command timed out after %d seconds: %s\nSTDOUT: %s\nSTDERR: %s',
                 timeout,
                 ' '.join(cmd),
-                e.stdout,
-                e.stderr,
+                stdout_str,
+                stderr_str,
             )
-            return False, e.stdout, e.stderr
+            return False, stdout_str, stderr_str
 
         except subprocess.CalledProcessError as e:
+            # Decode stdout/stderr safely, handling both bytes and str
+            stdout_str = ExeUtils._decode_output(e.stdout)
+            stderr_str = ExeUtils._decode_output(e.stderr)
+
             logger.error(
                 'Command failed with code %d: %s\nSTDOUT: %s\nSTDERR: %s',
                 e.returncode,
                 ' '.join(cmd),
-                e.stdout,
-                e.stderr,
+                stdout_str,
+                stderr_str,
             )
-            return False, e.stdout, e.stderr
+            return False, stdout_str, stderr_str
 
         except FileNotFoundError:
             logger.error('Command not found: %s', ' '.join(cmd))
             return False, None, None
+
+    @staticmethod
+    def _decode_output(output: Optional[Union[bytes, str]]) -> str:
+        """Safely decode command output, handling both bytes and str.
+
+        Args:
+            output: Output from subprocess (bytes or str)
+
+        Returns:
+            Decoded string, or empty string if None
+        """
+        if output is None:
+            return ''
+        if isinstance(output, bytes):
+            # Try utf-8 first, then fall back to system encoding with errors='replace'
+            try:
+                return output.decode('utf-8', errors='replace')
+            except Exception:
+                try:
+                    return output.decode('gbk', errors='replace')
+                except Exception:
+                    return output.decode('utf-8', errors='replace')
+        return str(output)
 
     @staticmethod
     def execute_hapray_cmd(args: list[str], timeout: int = 1800) -> bool:
@@ -382,3 +469,9 @@ class ExeUtils:
         except Exception as e:
             logger.exception('Unexpected error during conversion: %s', str(e))
             return False
+
+
+# Initialize commonly used tool paths after class definition
+ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', 'hapray-sa-cmd.js'))
+ExeUtils.trace_streamer_path = ExeUtils._get_trace_streamer_path()
+ExeUtils.opt_detector_path = ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False)

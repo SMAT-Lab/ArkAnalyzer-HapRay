@@ -250,7 +250,14 @@ class PerfAction:
         )
 
         parser.add_argument('--so_dir', default=None, help='Directory for symbolicated .so files')
-        parser.add_argument('--run_testcases', nargs='+', default=None, help='Test cases to execute')
+        parser.add_argument(
+            '--run_testcases',
+            '--run-testcases',
+            nargs='+',
+            default=None,
+            dest='run_testcases',
+            help='Test cases to execute',
+        )
         parser.add_argument('--circles', action='store_true', help='Enable CPU cycle sampling')
         parser.add_argument('--round', type=int, default=5, help='Number of test rounds')
         parser.add_argument('--no-trace', action='store_true', help='Disable trace capturing')

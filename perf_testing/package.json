@@ -9,14 +9,19 @@
     "setup": "npm run setup:win --if-present || npm run setup:unix",
     "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
     "setup:unix": "python3 setup_env.py",
-    "build": "",
-    "build:python": "./.venv/bin/pyinstaller main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe main.spec",
-    "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint",
-    "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix",
-    "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe",
-    "prepack": "npm run build:python && node zip.js ArkAnalyzer-HapRay"
+    "build": "npm run build:python",
+    "postbuild": "webpack --config webpack.config.js",
+    "build:python": "./.venv/bin/pyinstaller -y main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y main.spec",
+    "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint || python3 -m ruff check .",
+    "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix || python3 -m ruff check --fix .",
+    "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe"
   },
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "webpack": "^5.95.0",
+    "webpack-cli": "^5.1.4",
+    "copy-webpack-plugin": "^12.0.2"
+  }
 }

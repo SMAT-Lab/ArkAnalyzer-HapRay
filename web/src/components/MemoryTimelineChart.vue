@@ -42,7 +42,7 @@
             </el-breadcrumb-item>
 
             <el-breadcrumb-item
-              v-if="drillDownLevel === 'subCategory' || drillDownLevel === 'file'"
+              v-if="drillDownLevel === 'subCategory' || drillDownLevel === 'file' || drillDownLevel === 'event'"
             >
               <a
                 href="#"
@@ -57,7 +57,7 @@
               <span style="font-weight: 600; color: #333;">{{ selectedSubCategory }}</span>
             </el-breadcrumb-item>
 
-            <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+            <el-breadcrumb-item v-if="drillDownLevel === 'file' || drillDownLevel === 'event'">
               <a
                 href="#"
                 style="color: #409eff; text-decoration: none;"
@@ -70,6 +70,20 @@
             <el-breadcrumb-item v-if="drillDownLevel === 'file'">
               <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
             </el-breadcrumb-item>
+
+            <el-breadcrumb-item v-if="drillDownLevel === 'event'">
+              <a
+                href="#"
+                style="color: #409eff; text-decoration: none;"
+                @click.prevent="backToFile"
+              >
+                {{ selectedFile }}
+              </a>
+            </el-breadcrumb-item>
+
+            <el-breadcrumb-item v-if="drillDownLevel === 'event'">
+              <span style="font-weight: 600; color: #333;">事件类型</span>
+            </el-breadcrumb-item>
           </template>
 
           <template v-else>
@@ -78,7 +92,7 @@
             </el-breadcrumb-item>
 
             <el-breadcrumb-item
-              v-if="drillDownLevel === 'thread' || drillDownLevel === 'file'"
+              v-if="drillDownLevel === 'thread' || drillDownLevel === 'file' || drillDownLevel === 'event'"
             >
               <a
                 href="#"
@@ -93,7 +107,7 @@
               <span style="font-weight: 600; color: #333;">{{ selectedThread }}</span>
             </el-breadcrumb-item>
 
-            <el-breadcrumb-item v-if="drillDownLevel === 'file'">
+            <el-breadcrumb-item v-if="drillDownLevel === 'file' || drillDownLevel === 'event'">
               <a
                 href="#"
                 style="color: #409eff; text-decoration: none;"
@@ -105,6 +119,20 @@
 
             <el-breadcrumb-item v-if="drillDownLevel === 'file'">
               <span style="font-weight: 600; color: #333;">{{ selectedFile }}</span>
+            </el-breadcrumb-item>
+
+            <el-breadcrumb-item v-if="drillDownLevel === 'event'">
+              <a
+                href="#"
+                style="color: #409eff; text-decoration: none;"
+                @click.prevent="backToFile"
+              >
+                {{ selectedFile }}
+              </a>
+            </el-breadcrumb-item>
+
+            <el-breadcrumb-item v-if="drillDownLevel === 'event'">
+              <span style="font-weight: 600; color: #333;">事件类型</span>
             </el-breadcrumb-item>
           </template>
         </el-breadcrumb>
@@ -135,6 +163,8 @@ import {
   fetchSubCategoryRecords,
   fetchProcessRecords,
   fetchThreadRecords,
+  fetchFileEventTypeRecords,
+  fetchFileEventTypeRecordsForProcess,
 } from '@/stores/nativeMemory';
 
 // 时间线处理后的数据结构（供图表渲染使用）
@@ -288,7 +318,8 @@ type DrillDownLevel =
   | 'subCategory'
   | 'process'
   | 'thread'
-  | 'file';
+  | 'file'
+  | 'event';
 
 const viewMode = ref<ViewMode>('category');
 const drillDownLevel = ref<DrillDownLevel>('overview');
@@ -497,6 +528,22 @@ function drillDownToThread(threadName: string) {
 function drillDownToFile(fileName: string) {
   drillDownLevel.value = 'file';
   selectedFile.value = fileName;
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function backToFile() {
+  drillDownLevel.value = 'file';
+  selectedSeriesIndex.value = null;
+  selectedSeriesName.value = '';
+  emit('time-point-selected', null);
+  emit('time-point-stats-updated', createEmptyTimePointStats());
+}
+
+function drillDownToEvent() {
+  drillDownLevel.value = 'event';
   selectedSeriesIndex.value = null;
   selectedSeriesName.value = '';
   emit('time-point-selected', null);
@@ -747,6 +794,35 @@ function processTimelineDataSync(): TimelineProcessedData {
     } else if (drillDownLevel.value === 'file') {
       // 文件视图：显示单个文件的详细数据
       seriesGroups = [{ name: selectedFile.value, records: filteredRecords }];
+    } else if (drillDownLevel.value === 'event') {
+      // 事件视图：按事件类型分组
+      console.log('[MemoryTimelineChart] Event level - total filtered records:', filteredRecords.length);
+      const eventTypeMap = new Map<string, NativeMemoryRecord[]>();
+
+      filteredRecords.forEach(record => {
+        // 根据 eventType 和 subEventType 确定事件类型名称
+        let eventTypeName = '';
+        if (record.eventType === 'AllocEvent' || record.eventType === 'FreeEvent') {
+          eventTypeName = 'AllocEvent';
+        } else if (record.eventType === 'MmapEvent' || record.eventType === 'MunmapEvent') {
+          // 如果有 subEventType，单独提出来；否则归类到 Mmap
+          if (record.subEventType && record.subEventType.trim() !== '') {
+            eventTypeName = record.subEventType;
+          } else {
+            eventTypeName = 'Other MmapEvent';
+          }
+        } else {
+          eventTypeName = record.eventType || 'Unknown';
+        }
+
+        if (!eventTypeMap.has(eventTypeName)) {
+          eventTypeMap.set(eventTypeName, []);
+        }
+        eventTypeMap.get(eventTypeName)!.push(record);
+      });
+
+      console.log('[MemoryTimelineChart] Event level - unique event types:', Array.from(eventTypeMap.keys()));
+      seriesGroups = Array.from(eventTypeMap.entries()).map(([name, records]) => ({ name, records }));
     }
   } else {
     // 进程模式的下钻
@@ -790,6 +866,35 @@ function processTimelineDataSync(): TimelineProcessedData {
     } else if (drillDownLevel.value === 'file') {
       // 文件视图：显示单个文件的详细数据
       seriesGroups = [{ name: selectedFile.value, records: filteredRecords }];
+    } else if (drillDownLevel.value === 'event') {
+      // 事件视图：按事件类型分组
+      console.log('[MemoryTimelineChart] Event level (process mode) - total filtered records:', filteredRecords.length);
+      const eventTypeMap = new Map<string, NativeMemoryRecord[]>();
+
+      filteredRecords.forEach(record => {
+        // 根据 eventType 和 subEventType 确定事件类型名称
+        let eventTypeName = '';
+        if (record.eventType === 'AllocEvent' || record.eventType === 'FreeEvent') {
+          eventTypeName = 'AllocEvent';
+        } else if (record.eventType === 'MmapEvent' || record.eventType === 'MunmapEvent') {
+          // 如果有 subEventType，单独提出来；否则归类到 Mmap
+          if (record.subEventType && record.subEventType.trim() !== '') {
+            eventTypeName = record.subEventType;
+          } else {
+            eventTypeName = 'Other MmapEvent';
+          }
+        } else {
+          eventTypeName = record.eventType || 'Unknown';
+        }
+
+        if (!eventTypeMap.has(eventTypeName)) {
+          eventTypeMap.set(eventTypeName, []);
+        }
+        eventTypeMap.get(eventTypeName)!.push(record);
+      });
+
+      console.log('[MemoryTimelineChart] Event level (process mode) - unique event types:', Array.from(eventTypeMap.keys()));
+      seriesGroups = Array.from(eventTypeMap.entries()).map(([name, records]) => ({ name, records }));
     }
   }
 
@@ -961,6 +1066,16 @@ async function loadCurrentLevelData() {
           selectedSubCategory.value
         );
         console.log('[MemoryTimelineChart] Loaded records:', currentRecords.value.length);
+      } else if (drillDownLevel.value === 'event') {
+        // 事件层级：加载指定文件的事件类型数据
+        console.log('[MemoryTimelineChart] Loading event data for:', selectedCategory.value, selectedSubCategory.value, selectedFile.value);
+        currentRecords.value = await fetchFileEventTypeRecords(
+          props.stepId,
+          selectedCategory.value,
+          selectedSubCategory.value,
+          selectedFile.value
+        );
+        console.log('[MemoryTimelineChart] Loaded event records:', currentRecords.value.length);
       }
     } else if (viewMode.value === 'process') {
       // 进程模式
@@ -977,6 +1092,16 @@ async function loadCurrentLevelData() {
           selectedThread.value
         );
         console.log('[MemoryTimelineChart] Loaded records:', currentRecords.value.length);
+      } else if (drillDownLevel.value === 'event') {
+        // 事件层级：加载指定文件的事件类型数据
+        console.log('[MemoryTimelineChart] Loading event data for:', selectedProcess.value, selectedThread.value, selectedFile.value);
+        currentRecords.value = await fetchFileEventTypeRecordsForProcess(
+          props.stepId,
+          selectedProcess.value,
+          selectedThread.value,
+          selectedFile.value
+        );
+        console.log('[MemoryTimelineChart] Loaded event records:', currentRecords.value.length);
       }
     }
 
@@ -2135,6 +2260,11 @@ function drillDownBySeriesName(seriesName: string): boolean {
       drillDownToFile(seriesName);
       return true;
     }
+    if (drillDownLevel.value === 'file') {
+      console.log('[MemoryTimelineChart] Drilling down to event type');
+      drillDownToEvent();
+      return true;
+    }
   }
 
   // ========== 进程模式下钻 ==========
@@ -2147,6 +2277,11 @@ function drillDownBySeriesName(seriesName: string): boolean {
     if (drillDownLevel.value === 'thread') {
       console.log('[MemoryTimelineChart] Drilling down to file:', seriesName);
       drillDownToFile(seriesName);
+      return true;
+    }
+    if (drillDownLevel.value === 'file') {
+      console.log('[MemoryTimelineChart] Drilling down to event type');
+      drillDownToEvent();
       return true;
     }
   }

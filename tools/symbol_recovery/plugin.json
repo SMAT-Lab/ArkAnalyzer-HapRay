@@ -1,0 +1,108 @@
+{
+  "id": "symbol_recovery",
+  "name": "符号恢复",
+  "description": "二进制符号恢复工具，支持perf.data和Excel偏移量两种模式",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "debug": {
+      "cmd": ["python", "main.py"],
+      "script": "main.py"
+    },
+    "release": {
+      "cmd": ["symbol-recovery", "symbol-recovery.exe"]
+    }
+  },
+  "actions": {
+    "symbol-recovery": {
+      "name": "符号恢复",
+      "description": "二进制符号恢复工具，支持perf.data和Excel偏移量两种模式",
+      "action_mapping": {
+        "type": "remove"
+      },
+      "parameters": {
+        "perf-data": {
+          "type": "file",
+          "label": "perf.data文件（Perf模式）",
+          "required": true,
+          "default": "perf.data",
+          "help": "perf.data文件路径（仅perf分析模式）"
+        },
+        "html-input": {
+          "type": "file",
+          "label": "HTML输入文件",
+          "required": true,
+          "help": "HTML输入文件路径"
+        },
+        "so-dir": {
+          "type": "dir",
+          "label": "SO文件目录",
+          "required": true,
+          "help": "包含.so文件的目录"
+        },
+        "batch-size": {
+          "type": "int",
+          "label": "批量分析大小",
+          "required": false,
+          "default": 3,
+          "help": "批量分析大小"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "default": "out",
+          "help": "输出目录路径"
+        },
+        "top-n": {
+          "type": "int",
+          "label": "Top N函数",
+          "required": false,
+          "default": 100,
+          "help": "只分析前N个函数"
+        }
+      }
+    }
+  },
+  "validation": {
+    "custom": true,
+    "rules": [
+      
+    ]
+  },
+  "config": {
+    "description": "符号恢复插件配置项",
+    "items": {
+      "llm_api_key": {
+        "type": "str",
+        "label": "LLM API Key",
+        "default": "",
+        "help": "LLM API Key",
+        "required": false
+      },
+      "llm_base_url": {
+        "type": "str",
+        "label": "LLM Base URL",
+        "default": "https://api.poe.com/v1",
+        "help": "LLM Base URL",
+        "required": false
+      },
+      "llm_model": {
+        "type": "str",
+        "label": "LLM Model",
+        "default": "GPT-5",
+        "help": "LLM Model",
+        "required": false
+      },
+      "logger_level": {
+        "type": "choice",
+        "label": "日志级别",
+        "default": "INFO",
+        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
+        "help": "日志输出级别",
+        "required": false
+      }
+    }
+  }
+}
+
