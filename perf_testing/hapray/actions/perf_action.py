@@ -280,7 +280,7 @@ class PerfAction:
             help='Enable manual testing mode with interactive 30-second performance data collection',
         )
         parser.add_argument(
-            '--app',
+            '--package-name',
             default=None,
             help='Target application bundle name for manual testing (performance data will be collected for 30 seconds)',
         )
@@ -301,7 +301,7 @@ class PerfAction:
             Config.set('so_dir', parsed_args.so_dir)
         if parsed_args.manual:
             Config.set('run_testcases', ['PerformanceDynamic_Manual'])
-            Config.set('app', parsed_args.app)
+            Config.set('package_name', parsed_args.package_name)
 
         # Configure collection modes
         Config.set('trace.enable', not parsed_args.no_trace)
