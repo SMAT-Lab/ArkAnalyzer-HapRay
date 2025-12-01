@@ -101,7 +101,7 @@ class UpdateAction:
             help='Export comparison Excel showing differences between original and refined lib_id/symbol_id values',
         )
         parser.add_argument(
-            '--symbolstatistic', type=str, default=None, help='Path to SymbolsStatistic.txt for symbol analysis'
+            '--symbol-statistic', type=str, default=None, help='Path to SymbolsStatistic.txt for symbol analysis'
         )
         parsed_args = parser.parse_args(args)
 
