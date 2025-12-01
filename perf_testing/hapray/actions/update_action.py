@@ -73,6 +73,7 @@ class UpdateAction:
         )
         parser.add_argument(
             '--package-name',
+            '--package_name',
             default='',
             help='SIMPLE mode need package name',
         )
@@ -84,24 +85,27 @@ class UpdateAction:
         )
         parser.add_argument(
             '--time-ranges',
+            '--time_ranges',
             nargs='*',
             default=[],
             help='可选的时间范围过滤，格式为 "startTime-endTime"（纳秒），支持多个时间范围，如: --time-ranges "1000000000-2000000000" "3000000000-4000000000"',
         )
         parser.add_argument(
             '--use-refined-lib-symbol',
+            '--use_refined_lib_symbol',
             action='store_true',
             default=False,
             help='Enable refined mode for memory analysis: use callchain to find real allocation source instead of database default values',
         )
         parser.add_argument(
             '--export-comparison',
+            '--export_comparison',
             action='store_true',
             default=False,
             help='Export comparison Excel showing differences between original and refined lib_id/symbol_id values',
         )
         parser.add_argument(
-            '--symbol-statistic', type=str, default=None, help='Path to SymbolsStatistic.txt for symbol analysis'
+            '--symbol_statistic','--symbol-statistic', type=str, default=None, help='Path to SymbolsStatistic.txt for symbol analysis'
         )
         parsed_args = parser.parse_args(args)
 
@@ -158,8 +162,8 @@ class UpdateAction:
             use_refined_lib_symbol=parsed_args.use_refined_lib_symbol,
             export_comparison=parsed_args.export_comparison,
         )
-        if parsed_args.mode == Mode.SIMPLE and parsed_args.symbolstatistic:
-            symbol_file = parsed_args.symbolstatistic
+        if parsed_args.mode == Mode.SIMPLE and parsed_args.symbol_statistic:
+            symbol_file = parsed_args.symbol_statistic
             time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
             analyzer = SymbolStatisticAnalyzer(report_dir, symbol_file, time_ranges)
             testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)

@@ -134,14 +134,50 @@ class CLI:
         elif param_type == 'choice':
             # 选择类型
             choices = param_def.get('choices', [])
-            parser.add_argument(
-                *arg_names,
-                type=str,
-                choices=choices,
-                default=default,
-                required=required,
-                help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
-            )
+            multi_select = param_def.get('multi_select', False)
+
+            # 如果choices是函数名（如 "get_testcases"），则在命令行中不限制choices
+            # 因为这些参数通常支持正则表达式模式匹配
+            if isinstance(choices, str):
+                # 对于多选且choices是函数名的情况，使用nargs='+'而不设置choices限制
+                if multi_select:
+                    parser.add_argument(
+                        *arg_names,
+                        type=str,
+                        nargs='+',
+                        default=default,
+                        required=required,
+                        help=f'{help_text} (支持多个值，可使用正则表达式模式)' if help_text else label,
+                    )
+                else:
+                    parser.add_argument(
+                        *arg_names,
+                        type=str,
+                        default=default,
+                        required=required,
+                        help=help_text or label,
+                    )
+            else:
+                # 对于固定的选项列表
+                if multi_select:
+                    parser.add_argument(
+                        *arg_names,
+                        type=str,
+                        nargs='+',
+                        choices=choices,
+                        default=default,
+                        required=required,
+                        help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
+                    )
+                else:
+                    parser.add_argument(
+                        *arg_names,
+                        type=str,
+                        choices=choices,
+                        default=default,
+                        required=required,
+                        help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
+                    )
         elif param_type == 'int':
             # 整数类型
             # 如果 nargs 指定为 '+' 或 '*'，则支持多个值
