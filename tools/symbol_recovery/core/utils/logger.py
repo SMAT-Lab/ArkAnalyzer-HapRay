@@ -42,8 +42,8 @@ def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
     logger.propagate = False
 
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s - %(message)s', '%Y-%m-%d %H:%M:%S')
-
-    console_handler = logging.StreamHandler(sys.stdout)
+    stream = open(sys.stdout.fileno(), mode='w', encoding='utf-8', errors='replace', buffering=1)
+    console_handler = logging.StreamHandler(stream)
     console_handler.setLevel(numeric_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
@@ -75,9 +75,9 @@ def get_logger(name: Optional[str] = None, level: Optional[str] = None) -> loggi
         logger_name = f'{logger_name}.{name}'
 
     logger = logging.getLogger(logger_name)
-    desired_level = level or os.getenv('SYMBOL_RECOVERY_LOGGER_LEVEL')
+    desired_level = level or os.getenv('LOGGER_LEVEL')
     if desired_level:
         logger.setLevel(getattr(logging, desired_level.upper(), logging.INFO))
     elif logger.level == logging.NOTSET:
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
     return logger
