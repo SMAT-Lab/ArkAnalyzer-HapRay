@@ -9,8 +9,7 @@ const version = require('./package.json').version;
 function shouldSkipFile(filePath) {
     const skipExtensions = ['.inc', '.h', '.hpp', '.txt', '.md'];
     const skipPatterns = [
-        /_internal[\\/]tensorflow[\\/]include/,
-        /test|doc|example/i
+        /_internal[\\/]tensorflow[\\/]include/
     ];
     
     const ext = path.extname(filePath).toLowerCase();
@@ -36,6 +35,10 @@ module.exports = {
                     from: path.resolve(__dirname, 'dist/opt-detector'),
                     to: path.resolve(__dirname, '../../dist/tools/opt-detector'),
                     noErrorOnMissing: true,
+                    filter: (resourcePath) => {
+                        // 使用 shouldSkipFile 函数过滤文件
+                        return !shouldSkipFile(resourcePath);
+                    },
                 },
                 {
                     from: path.resolve(__dirname, 'README.md'),
