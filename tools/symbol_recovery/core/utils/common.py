@@ -195,17 +195,18 @@ def find_function_start(elf_file, vaddr, disassembler):
 # HTML 报告渲染
 # ============================================================================
 
+
 def format_function_name(function_name: str) -> str:
     """
     格式化函数名，添加 "Function: " 前缀
-    
+
     Args:
         function_name: 原始函数名
-    
+
     Returns:
         格式化后的函数名（如果为空则返回空字符串）
     """
-    if not function_name or function_name == 'nan' or function_name == 'None':
+    if not function_name or function_name in {'nan', 'None'}:
         return ''
     # 如果已经有 "Function: " 前缀，不再添加
     if function_name.startswith('Function: '):
@@ -470,7 +471,7 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
         strings_value = result.get('strings', '')
         if isinstance(strings_value, list):
             strings_value = ', '.join(strings_value)
-        elif not strings_value or strings_value == 'nan' or strings_value == 'NaN':
+        elif not strings_value or strings_value in {'nan', 'NaN'}:
             strings_value = ''
         html += f"""                <tr>
                     <td class="rank">{result.get('rank', '')}</td>
