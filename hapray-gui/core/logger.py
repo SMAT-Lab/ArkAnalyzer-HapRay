@@ -2,8 +2,6 @@
 日志管理器 - 提供统一的日志功能
 """
 
-import contextlib
-import io
 import logging
 import sys
 from pathlib import Path
@@ -30,20 +28,6 @@ def get_logger(name: str, log_file: Optional[str] = None) -> logging.Logger:
     if sys.stdout is not None:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
-
-        # 对于 Windows，需要使用 UTF-8 编码包装器
-        if sys.platform == 'win32':
-            # 重定向 stdout 到 UTF-8 编码的包装器
-            if hasattr(sys.stdout, 'reconfigure'):
-                with contextlib.suppress(Exception):
-                    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-            # 创建 UTF-8 编码的流包装器（仅当 buffer 存在时）
-            if hasattr(sys.stdout, 'buffer') and sys.stdout.buffer is not None:
-                try:
-                    utf8_stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-                    console_handler.stream = utf8_stdout
-                except Exception:
-                    pass
 
         console_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',

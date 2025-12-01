@@ -80,32 +80,6 @@
         }
       }
     }
-  },
-  "config": {
-    "description": "优化检测插件配置项",
-    "items": {
-      "python_path": {
-        "type": "str",
-        "label": "Python路径",
-        "default": "python",
-        "help": "用于执行Python脚本的Python解释器路径",
-        "required": false
-      },
-      "default_jobs": {
-        "type": "int",
-        "label": "默认并行任务数",
-        "default": 4,
-        "help": "默认的并行处理任务数量",
-        "required": false
-      },
-      "default_timeout": {
-        "type": "int",
-        "label": "默认超时时间（秒）",
-        "default": 300,
-        "help": "处理单个文件的默认超时时间",
-        "required": false
-      }
-    }
   }
 }
 
