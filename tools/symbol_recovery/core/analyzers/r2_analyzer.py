@@ -4,6 +4,7 @@
 使用 radare2 进行函数分析
 """
 
+import builtins
 import contextlib
 import json
 from pathlib import Path
@@ -238,7 +239,7 @@ class R2FunctionAnalyzer:
                 file_size = self.so_file.stat().st_size
                 if func_offset >= file_size:
                     logger.warning(f'⚠️  偏移量 0x{func_offset:x} 超出文件大小 ({file_size:,} 字节)，无法反汇编')
-                    logger.warning(f'   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
+                    logger.warning('   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
                     return []
             except Exception:
                 pass  # 如果无法获取文件大小，继续尝试反汇编
@@ -400,10 +401,10 @@ class R2FunctionAnalyzer:
 
             # 确保函数已分析（如果未分析则自动分析）
             self.r2.cmd(f'af @{func_offset}')
-            
+
             # 保存当前位置，以便后续恢复
             current_addr = self.r2.cmd('s')
-            
+
             # 跳转到函数位置（反编译命令需要先跳转到函数位置）
             self.r2.cmd(f's @{func_offset}')
 
@@ -420,13 +421,13 @@ class R2FunctionAnalyzer:
                     decompiled = self.r2.cmd(cmd)
                     if decompiled and decompiled.strip() and not decompiled.startswith('Cannot'):
                         decompiled = decompiled.strip()
-                        
+
                         # 验证反编译代码是否对应正确的函数
                         if len(decompiled) > 100:  # 确保不是空函数或错误的反编译
                             # 限制反编译代码长度，避免包含函数边界外的代码
                             # 根据函数大小估算合理的反编译代码长度
                             func_size = func_info.get('size', 0) if func_info else 0
-                            
+
                             # 估算：每字节代码大约对应 2-5 行反编译代码
                             # 对于很小的函数（< 200 字节），限制在 500 行以内
                             # 对于小函数（< 500 字节），限制在 1500 行以内
@@ -437,7 +438,7 @@ class R2FunctionAnalyzer:
                                 max_lines = 1500
                             else:
                                 max_lines = 5000
-                            
+
                             lines = decompiled.split('\n')
                             if len(lines) > max_lines:
                                 logger.warning(
@@ -458,34 +459,34 @@ class R2FunctionAnalyzer:
                                 if last_valid_line < max_lines:
                                     decompiled = '\n'.join(lines[:last_valid_line])
                                     logger.info(f'  截取到第 {last_valid_line} 行（找到函数结束）')
-                            
+
                             # 过滤掉 warning 行
                             filtered_lines = []
                             for line in decompiled.split('\n'):
                                 # 跳过 warning 行（以 //WARNING 开头或包含 WARNING 的注释行）
-                                if not (line.strip().startswith('//WARNING') or 
-                                        ('WARNING' in line.upper() and line.strip().startswith('//'))):
+                                if not (
+                                    line.strip().startswith('//WARNING')
+                                    or ('WARNING' in line.upper() and line.strip().startswith('//'))
+                                ):
                                     filtered_lines.append(line)
                             decompiled = '\n'.join(filtered_lines)
-                            
-                            logger.info(f'✅ 使用 {name} 反编译成功 ({len(decompiled.split(chr(10)))} 行，已过滤 warning)')
+
+                            logger.info(
+                                f'✅ 使用 {name} 反编译成功 ({len(decompiled.split(chr(10)))} 行，已过滤 warning)'
+                            )
                             # 恢复原位置
                             if current_addr:
-                                try:
+                                with contextlib.suppress(builtins.BaseException):
                                     self.r2.cmd(f's @{current_addr}')
-                                except:
-                                    pass
                             return decompiled
                 except Exception as e:
                     logger.debug(f'反编译插件 {name} 失败: {e}')
                     continue
-            
+
             # 恢复原位置
             if current_addr:
-                try:
+                with contextlib.suppress(builtins.BaseException):
                     self.r2.cmd(f's @{current_addr}')
-                except:
-                    pass
 
             logger.warning('⚠️  所有反编译插件均不可用，将使用反汇编代码')
             return None
@@ -571,8 +572,8 @@ class R2FunctionAnalyzer:
                 file_size = self.so_file.stat().st_size
                 if offset >= file_size:
                     logger.warning(f'⚠️  偏移量 0x{offset:x} ({offset:,} 字节) 超出文件大小 ({file_size:,} 字节)')
-                    logger.warning(f'   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
-                    logger.warning(f'   无法进行反汇编分析')
+                    logger.warning('   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
+                    logger.warning('   无法进行反汇编分析')
                     return None
             except Exception:
                 pass  # 如果无法获取文件大小，继续尝试分析

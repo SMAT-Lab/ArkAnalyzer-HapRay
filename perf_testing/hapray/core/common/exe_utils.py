@@ -21,7 +21,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from typing import Optional
+from typing import Optional, Union
 
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.config.config import Config
@@ -325,7 +325,7 @@ class ExeUtils:
             return False, None, None
 
     @staticmethod
-    def _decode_output(output: Optional[bytes | str]) -> str:
+    def _decode_output(output: Optional[Union[bytes, str]]) -> str:
         """Safely decode command output, handling both bytes and str.
 
         Args:
