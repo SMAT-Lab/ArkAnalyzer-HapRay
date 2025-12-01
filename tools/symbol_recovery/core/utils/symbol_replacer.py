@@ -13,7 +13,11 @@ from pathlib import Path
 import pandas as pd
 
 from core.utils import common as util
-from core.utils import config
+from core.utils.config import (
+    DEFAULT_TOP_N,
+    EVENT_COUNT_REPORT_PATTERN,
+    config,
+)
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -739,13 +743,13 @@ def add_disclaimer(
             f'{relative_path}/{report_files[0].name}' if relative_path else report_files[0].name
         # 如果没有找到，使用默认名称
         elif relative_path:
-            f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
+            f'{relative_path}/{EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)}'
         else:
-            config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
+            EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)
     elif relative_path:
-        f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
+        f'{relative_path}/{EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)}'
     else:
-        config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
+        EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)
 
     # 构建 Excel 下载链接
     if excel_file:

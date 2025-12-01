@@ -161,7 +161,7 @@ class StringExtractor:
 
             # 如果通过指令分析没有找到字符串，记录调试信息
             if not strings:
-                logger.debug(f'指令分析未找到字符串（函数地址: 0x{vaddr:x if vaddr else 0:x}）')
+                logger.debug(f'指令分析未找到字符串（函数地址: 0x{(vaddr if vaddr is not None else 0):x}）')
                 logger.debug('  可能原因：')
                 logger.debug('    1. 函数确实不引用字符串常量（正常现象）')
                 logger.debug('    2. 字符串通过不支持的方式引用（需要改进提取逻辑）')

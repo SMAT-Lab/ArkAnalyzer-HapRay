@@ -6,7 +6,6 @@
 
 import hashlib
 import json
-import os
 import re
 import signal
 import time
@@ -14,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from core.utils import config
+from core.utils.config import config
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,17 +26,6 @@ except ImportError:
     logger.warning('请安装 openai 库: pip install openai')
 except Exception as e:
     logger.error('加载 openai 库时出错: %s', e)
-    raise
-
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    logger.warning('未安装 python-dotenv 库，将跳过 .env 文件的加载')
-    logger.warning('请安装 python-dotenv 库: pip install python-dotenv')
-except Exception as e:
-    logger.error('加载 .env 文件时出错: %s', e)
     raise
 
 
@@ -58,8 +46,8 @@ class LLMFunctionAnalyzer:
 
         Args:
             api_key: API key，如果为 None 则从环境变量或 .env 文件读取
-            model: 使用的模型名称，如果为 None 则使用 config.DEFAULT_LLM_MODEL
-            base_url: API 基础 URL，如果为 None 则使用 config.LLM_BASE_URL
+            model: 使用的模型名称，如果为 None 则从 config.get_llm_config() 获取
+            base_url: API 基础 URL，如果为 None 则从 config.get_llm_config() 获取
             enable_cache: 是否启用缓存（避免重复分析相同代码）
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
@@ -69,50 +57,15 @@ class LLMFunctionAnalyzer:
 
         # 从配置获取默认值
         llm_config = config.get_llm_config()
-        api_key_env = llm_config['api_key_env']
         default_base_url = llm_config['base_url']
         default_model = llm_config['model']
 
-        # 优先使用参数传入的 key，其次从环境变量读取，最后尝试从 .env 文件读取
-        self.api_key = api_key or os.getenv(api_key_env)
-        if not self.api_key:
-            # 尝试从 .env 文件读取（如果安装了 python-dotenv）
-            env_file = Path('.env')
-            if env_file.exists():
-                try:
-                    with open(env_file, encoding='utf-8') as f:
-                        for raw_line in f:
-                            line = raw_line.strip()
-                            # 支持多种环境变量名（向后兼容）
-                            key_patterns = [
-                                f'{api_key_env}=',
-                                'POE_API_KEY=',
-                                'OPENAI_API_KEY=',
-                                'LLM_API_KEY=',
-                            ]
-                            for pattern in key_patterns:
-                                if line.startswith(pattern) and not line.startswith('#'):
-                                    self.api_key = line.split('=', 1)[1].strip()
-                                    break
-                            if self.api_key:
-                                break
-                except Exception:
-                    pass
-
-        if not self.api_key:
-            service_type = llm_config['service_type']
-            raise ValueError(
-                f'需要提供 {service_type.upper()} API key。\n'
-                f'方法1: 通过参数传入 api_key\n'
-                f'方法2: 设置环境变量 {api_key_env}\n'
-                f'方法3: 在 .env 文件中设置 {api_key_env}=your_key\n'
-                f'方法4: 切换服务类型: 设置环境变量 LLM_SERVICE_TYPE=poe|openai|claude|custom'
-            )
-
+        self.api_key = api_key or llm_config['api_key']
         self.model = model or default_model
         self.base_url = base_url or default_base_url
         self.enable_cache = enable_cache
         self.save_prompts = save_prompts
+
         self.output_dir = Path(output_dir) if output_dir else config.get_output_dir()
         self.cache: dict[str, dict[str, Any]] = {}
         self.cache_file = llm_config['cache_file']
@@ -349,7 +302,8 @@ class LLMFunctionAnalyzer:
         try:
             # 调用 LLM（设置超时避免卡住）
             # 从配置获取超时时间
-            timeout_seconds = config.LLM_TIMEOUT
+            llm_config = config.get_llm_config()
+            timeout_seconds = llm_config['timeout']
 
             def timeout_handler(signum, frame):
                 raise TimeoutError(f'LLM API 调用超时（超过 {timeout_seconds} 秒）')

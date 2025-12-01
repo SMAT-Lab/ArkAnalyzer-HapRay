@@ -9,7 +9,10 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-from core.utils import config
+from core.utils.config import (
+    DEFAULT_PERF_DB,
+    config,
+)
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -91,7 +94,7 @@ class PerfDataToSqliteConverter:
             return None
 
         # 输出文件路径
-        perf_db_path = self.output_dir / config.DEFAULT_PERF_DB
+        perf_db_path = self.output_dir / DEFAULT_PERF_DB
 
         logger.info(f'\n输入文件: {self.perf_data_file}')
         logger.info(f'输出文件: {perf_db_path}')

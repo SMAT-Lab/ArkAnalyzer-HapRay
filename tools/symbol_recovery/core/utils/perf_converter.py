@@ -27,8 +27,15 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     BatchLLMFunctionAnalyzer = None
 from core.llm.initializer import init_llm_analyzer
-from core.utils import StringExtractor, config, get_logger
+from core.utils import StringExtractor, get_logger
 from core.utils import common as util
+from core.utils.config import (
+    CALL_COUNT_ANALYSIS_PATTERN,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_LLM_MODEL,
+    DEFAULT_TOP_N,
+    config,
+)
 
 logger = get_logger(__name__)
 
@@ -47,17 +54,6 @@ except ImportError:
     resolve_hap_address_from_perfdb = None
     resolve_hap_addresses_batch = None
     logger.warning('HAP 地址解析模块不可用')
-
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    logger.warning('未安装 python-dotenv 库，将跳过 .env 文件的加载')
-    logger.warning('请安装 python-dotenv 库: pip install python-dotenv')
-except Exception as e:
-    logger.error('加载 .env 文件时出错: %s', e)
-    raise
 
 try:
     import r2pipe
@@ -108,7 +104,6 @@ class MissingSymbolFunctionAnalyzer:
         perf_db_file=None,
         use_llm=True,
         llm_model=None,
-        use_batch_llm=True,
         batch_size=None,
         context=None,
         use_capstone_only=False,
@@ -137,9 +132,8 @@ class MissingSymbolFunctionAnalyzer:
         self.perf_db_file = Path(perf_db_file) if perf_db_file else None
         self.so_dir = Path(so_dir) if so_dir else None
         self.use_llm = use_llm
-        self.llm_model = llm_model if llm_model is not None else config.DEFAULT_LLM_MODEL
-        self.use_batch_llm = use_batch_llm
-        self.batch_size = batch_size if batch_size is not None else config.DEFAULT_BATCH_SIZE
+        self.llm_model = llm_model if llm_model is not None else DEFAULT_LLM_MODEL
+        self.batch_size = batch_size if batch_size is not None else DEFAULT_BATCH_SIZE
         self.context = context  # 自定义上下文
         self.use_capstone_only = use_capstone_only  # 强制使用 Capstone
         self.skip_decompilation = skip_decompilation  # 是否跳过反编译
@@ -171,9 +165,7 @@ class MissingSymbolFunctionAnalyzer:
         self.llm_analyzer, self.use_llm, self.use_batch_llm = init_llm_analyzer(
             use_llm=self.use_llm,
             llm_model=self.llm_model,
-            use_batch_llm=self.use_batch_llm,
             batch_size=self.batch_size,
-            logger=logger.info,
             save_prompts=save_prompts,
             output_dir=output_dir,
         )
@@ -901,7 +893,7 @@ class MissingSymbolFunctionAnalyzer:
     def _get_missing_symbols_from_perf_db(self, top_n=None):
         """从 perf.db 中提取缺失符号（call_count 模式）"""
         if top_n is None:
-            top_n = config.DEFAULT_TOP_N
+            top_n = DEFAULT_TOP_N
 
         logger.info('=' * 80)
         logger.info('⚡️ 从 perf.db 提取缺失符号（call_count 模式）')
@@ -1021,7 +1013,7 @@ class MissingSymbolFunctionAnalyzer:
     def analyze_top_functions(self, top_n=None):
         """分析前 N 个函数"""
         if top_n is None:
-            top_n = config.DEFAULT_TOP_N
+            top_n = DEFAULT_TOP_N
         logger.info('=' * 80)
         logger.info(f'分析缺失符号中的前 {top_n} 个函数（按调用次数）')
         logger.info('=' * 80)
@@ -1072,8 +1064,7 @@ class MissingSymbolFunctionAnalyzer:
         # 如果使用批量 LLM 分析，先收集所有函数信息，然后批量分析
         # 检查是否是批量分析器
         is_batch_analyzer = (
-            BatchLLMFunctionAnalyzer is not None
-            and self.use_llm
+            self.use_llm
             and self.use_batch_llm
             and self.llm_analyzer
             and isinstance(self.llm_analyzer, BatchLLMFunctionAnalyzer)
@@ -1334,7 +1325,7 @@ class MissingSymbolFunctionAnalyzer:
 
         # 如果没有提供 top_n，从结果数量推断
         if top_n is None:
-            top_n = len(results) if results else config.DEFAULT_TOP_N
+            top_n = len(results) if results else DEFAULT_TOP_N
 
         # 检查是否使用 event_count（如果结果中有 event_count 字段）
         use_event_count = any('event_count' in result and result.get('event_count', 0) > 0 for result in results)
@@ -1470,7 +1461,7 @@ class MissingSymbolFunctionAnalyzer:
                 df = df[cols]
 
         if output_file is None:
-            excel_file = output_dir / config.CALL_COUNT_ANALYSIS_PATTERN.format(n=top_n)
+            excel_file = output_dir / CALL_COUNT_ANALYSIS_PATTERN.format(n=top_n)
         else:
             excel_file = Path(output_file) if isinstance(output_file, str) else output_file
             if not excel_file.is_absolute():
