@@ -169,7 +169,7 @@
           "nargs": "+",
           "help": "SIMPLE模式可选的trace文件路径（支持多个文件）"
         },
-        "package_name": {
+        "package-name": {
           "type": "str",
           "label": "应用包名",
           "required": false,
@@ -200,6 +200,12 @@
           "label": "HapFlow目录",
           "required": false,
           "help": "运行HapFlow后处理，使用提供的Homecheck项目根目录"
+        },
+        "symbol-statistic": {
+          "type": "str",
+          "label": "SymbolsStatistic文件目录",
+          "required": false,
+          "help": "SymbolsStatistic.txt文件路径"
         }
       }
     },
