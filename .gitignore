@@ -2,6 +2,7 @@
 node_modules/
 .npmrc
 package-lock.json
+.DS_Store
 
 # Virtual Environment
 .venv/
@@ -40,4 +41,11 @@ experiments_ignore/
 # staticanalyzer
 sa/lib
 hapray-sa
+
+# Cache directories
+.cache/
+.npm-cache/
+
+# Local scripts
+hapray
 

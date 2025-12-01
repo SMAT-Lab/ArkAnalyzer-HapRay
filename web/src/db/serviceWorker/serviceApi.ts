@@ -199,6 +199,46 @@ export async function queryFileRecords(
 }
 
 /**
+ * Query file level event type records (for category mode)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param categoryName - Category name
+ * @param subCategoryName - Subcategory name
+ * @param fileName - File name
+ * @returns File event type records array
+ */
+export async function queryFileEventTypeRecords(
+  db: Database,
+  stepId: number,
+  categoryName: string,
+  subCategoryName: string,
+  fileName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryFileEventTypeRecords(stepId, categoryName, subCategoryName, fileName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
+ * Query file level event type records (for process mode)
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @param processName - Process name
+ * @param threadName - Thread name
+ * @param fileName - File name
+ * @returns File event type records array
+ */
+export async function queryFileEventTypeRecordsForProcess(
+  db: Database,
+  stepId: number,
+  processName: string,
+  threadName: string,
+  fileName: string
+): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryFileEventTypeRecordsForProcess(stepId, processName, threadName, fileName);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
  * Query all unique categories for a step
  * @param db - Database instance
  * @param stepId - Step id

@@ -1,0 +1,77 @@
+# SymRecover .gitignore
+# 二进制符号恢复工具
+
+# 环境变量和敏感信息
+.env
+.env.local
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# 输出和缓存
+output/
+cache/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# 数据文件（通常很大，不应提交）
+data/
+*.perf.data
+*.perf.data.old
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+*.log.*
+
+# 临时文件
+*.tmp
+*.temp
+temp_*
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 文档构建
+docs/_build/
+docs/.doctrees/
+
+# 构建产物
+build/
+dist/
+*.spec
+*.egg-info/
+
+# 调试输出
+prompt_outputs/
+
+# 测试文件
+test_*.py
+*_test.py
+
+# 临时脚本
+symrecover

@@ -1,0 +1,235 @@
+{
+  "id": "perf_testing",
+  "name": "应用负载测试",
+  "description": "执行性能测试，收集性能数据和trace信息",
+  "version": "1.0.0",
+  "author": "HapRay Team",
+  "execution": {
+    "debug": {
+      "cmd": ["python", "scripts/main.py"],
+      "script": "scripts/main.py"
+    },
+    "release": {
+      "cmd": ["perf-testing", "perf-testing.exe", "dist/perf-testing/perf-testing.exe", "dist/perf-testing/perf-testing"]
+    }
+  },
+  "actions": {
+    "perf": {
+      "name": "性能测试",
+      "description": "执行性能测试，收集性能数据和trace信息",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "so_dir": {
+          "type": "dir",
+          "label": "SO文件目录",
+          "required": false,
+          "help": "符号化后的.so文件目录"
+        },
+        "run_testcases": {
+          "type": "choice",
+          "label": "测试用例",
+          "required": false,
+          "multi_select": true,
+          "choices": "get_testcases",
+          "help": "要运行的测试用例（支持多选）"
+        },
+        "round": {
+          "type": "int",
+          "label": "测试轮数",
+          "required": false,
+          "default": 5,
+          "help": "测试执行的轮数"
+        },
+        "circles": {
+          "type": "bool",
+          "label": "CPU周期采样",
+          "required": false,
+          "default": false,
+          "help": "启用CPU周期采样"
+        },
+        "no_trace": {
+          "type": "bool",
+          "label": "禁用Trace",
+          "required": false,
+          "default": false,
+          "help": "禁用trace捕获"
+        },
+        "no_perf": {
+          "type": "bool",
+          "label": "禁用Perf",
+          "required": false,
+          "default": false,
+          "help": "禁用perf捕获（仅内存模式）"
+        },
+        "memory": {
+          "type": "bool",
+          "label": "内存分析",
+          "required": false,
+          "default": false,
+          "help": "启用内存分析"
+        },
+        "devices": {
+          "type": "str",
+          "label": "设备序列号",
+          "required": false,
+          "nargs": "+",
+          "help": "设备序列号（支持多个值）"
+        },
+        "hapflow": {
+          "type": "dir",
+          "label": "HapFlow目录",
+          "required": false,
+          "help": "启用HapFlow管道并指定Homecheck根目录"
+        },
+        "manual": {
+          "type": "bool",
+          "label": "手动测试模式",
+          "required": false,
+          "default": false,
+          "help": "启用手动测试模式，交互式收集30秒性能数据"
+        },
+        "app": {
+          "type": "str",
+          "label": "应用包名",
+          "required": false,
+          "help": "手动测试模式下的目标应用包名"
+        }
+      }
+    },
+    "prepare": {
+      "name": "简化测试执行",
+      "description": "简化的测试执行，不生成复杂报告",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "run_testcases": {
+          "type": "choice",
+          "label": "测试用例",
+          "required": false,
+          "multi_select": true,
+          "choices": "get_testcases",
+          "help": "要运行的测试用例（支持多选）"
+        },
+        "all_0000": {
+          "type": "bool",
+          "label": "执行所有_0000用例",
+          "required": false,
+          "default": false,
+          "help": "执行所有以_0000结尾的测试用例"
+        },
+        "device": {
+          "type": "str",
+          "label": "设备序列号",
+          "required": false,
+          "help": "设备序列号（如：HX1234567890）"
+        }
+      }
+    },
+    "update": {
+      "name": "更新报告",
+      "description": "更新现有性能报告",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "report_dir": {
+          "type": "dir",
+          "label": "报告目录",
+          "required": true,
+          "short": "r",
+          "help": "包含要更新的报告的目录"
+        },
+        "so_dir": {
+          "type": "dir",
+          "label": "SO文件目录",
+          "required": false,
+          "help": "更新后的符号化.so文件目录"
+        },
+        "mode": {
+          "type": "int",
+          "label": "模式",
+          "required": false,
+          "default": 0,
+          "help": "选择模式：0 COMMUNITY, 1 COMPATIBILITY, 2 SIMPLE"
+        },
+        "perfs": {
+          "type": "str",
+          "label": "Perf数据路径",
+          "required": false,
+          "nargs": "+",
+          "help": "SIMPLE模式需要的perf数据路径（支持多个文件）"
+        },
+        "traces": {
+          "type": "str",
+          "label": "Trace文件路径",
+          "required": false,
+          "nargs": "+",
+          "help": "SIMPLE模式可选的trace文件路径（支持多个文件）"
+        },
+        "package_name": {
+          "type": "str",
+          "label": "应用包名",
+          "required": false,
+          "help": "SIMPLE模式需要的应用包名"
+        },
+        "pids": {
+          "type": "int",
+          "label": "进程ID",
+          "required": false,
+          "nargs": "+",
+          "help": "SIMPLE模式可选的进程ID列表"
+        },
+        "steps": {
+          "type": "file",
+          "label": "Steps文件",
+          "required": false,
+          "help": "SIMPLE模式可选的steps.json文件路径"
+        },
+        "time_ranges": {
+          "type": "str",
+          "label": "时间范围",
+          "required": false,
+          "nargs": "*",
+          "help": "时间范围过滤器，格式为 \"startTime-endTime\"（纳秒），支持多个范围"
+        },
+        "hapflow": {
+          "type": "dir",
+          "label": "HapFlow目录",
+          "required": false,
+          "help": "运行HapFlow后处理，使用提供的Homecheck项目根目录"
+        }
+      }
+    },
+    "compare": {
+      "name": "对比报告",
+      "description": "对比两个报告目录",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "base_dir": {
+          "type": "dir",
+          "label": "基准报告目录",
+          "required": true,
+          "help": "包含基准报告的目录"
+        },
+        "compare_dir": {
+          "type": "dir",
+          "label": "对比报告目录",
+          "required": true,
+          "help": "包含要对比报告的目录"
+        },
+        "output": {
+          "type": "file",
+          "label": "输出文件",
+          "required": false,
+          "default": "compare_result.xlsx",
+          "help": "输出Excel文件路径（默认：当前目录下的compare_result.xlsx）"
+        }
+      }
+    }
+  }
+}
