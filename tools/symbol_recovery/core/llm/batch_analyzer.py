@@ -6,6 +6,7 @@
 import json
 import logging
 import re
+from datetime import datetime
 from typing import Any, Optional
 
 from core.llm.analyzer import LLMFunctionAnalyzer
@@ -90,7 +91,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     prompt_parts.append(f'函数偏移量: {offset}')
                 else:
                     prompt_parts.append(f'函数偏移量: 0x{offset:x}')
-            
+
             # 函数元信息
             func_info = func_data.get('func_info')
             if func_info:
@@ -99,7 +100,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 func_size = func_info.get('size', 0)
                 if func_size > 0:
                     prompt_parts.append(f'函数范围: 0x{func_start:x} - 0x{func_end:x} (大小: {func_size} 字节)')
-                
+
                 nbbs = func_info.get('nbbs', 0)
                 edges = func_info.get('edges', 0)
                 nargs = func_info.get('nargs', 0)
@@ -109,15 +110,15 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     prompt_parts.append(f'控制流边数量: {edges}')
                 if nargs > 0:
                     prompt_parts.append(f'参数数量: {nargs}')
-            
+
             # 指令数量
             instructions = func_data.get('instructions', [])
             if instructions:
                 prompt_parts.append(f'指令数量: {len(instructions)} 条')
-            
+
             # 注意：调用次数（call_count）和指令执行次数（event_count）仅用于排序和筛选，
             # 不需要传递给 LLM，因此不添加到 prompt 中
-            
+
             # SO 文件信息
             so_file = func_data.get('so_file')
             if so_file:
@@ -130,7 +131,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 prompt_parts.append('（如果符号名是 C++ 名称修饰，请尝试还原原始函数名）')
 
             decompiled = func_data.get('decompiled')
-            
+
             # 如果有反编译代码，优先使用反编译代码，不显示反汇编代码
             if decompiled:
                 prompt_parts.append('')
@@ -140,10 +141,13 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 filtered_lines = []
                 for line in decompiled_lines:
                     # 跳过 warning 行（以 //WARNING 开头或包含 WARNING）
-                    if not (line.strip().startswith('//WARNING') or 
-                            'WARNING' in line.upper() and line.strip().startswith('//')):
+                    if not (
+                        line.strip().startswith('//WARNING')
+                        or 'WARNING' in line.upper()
+                        and line.strip().startswith('//')
+                    ):
                         filtered_lines.append(line)
-                
+
                 # 批量模式下，限制反编译代码长度，避免 prompt 过长导致 LLM 响应截断
                 # 注意：如果 prompt 过长，LLM 可能无法返回完整的 JSON，导致某些函数的结果丢失
                 max_decompiled_lines = 300  # 从 1000 行减少到 300 行，避免 prompt 过长
@@ -190,7 +194,9 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         prompt_parts.append('      "function_id": "func_1",')
         prompt_parts.append('      "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）",')
         prompt_parts.append('      "function_name": "推断的函数名（英文，遵循常见命名规范）",')
-        prompt_parts.append('      "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",')
+        prompt_parts.append(
+            '      "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",'
+        )
         prompt_parts.append('      "confidence": "高/中/低",')
         prompt_parts.append('      "reasoning": "推理过程（中文，说明为什么这样推断）"')
         prompt_parts.append('    },')
@@ -203,14 +209,18 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         prompt_parts.append("2. 每个函数的结果必须包含 'function_id' 字段，对应输入中的函数 ID")
         prompt_parts.append('3. 如果符号表中已有函数名，优先使用符号名（如果是 C++ 名称修饰，请还原）')
         prompt_parts.append('4. 函数名应该遵循常见的命名规范（如驼峰命名、下划线命名）')
-        prompt_parts.append('5. 功能描述应该具体，但请控制在 150 字以内，避免过长导致 JSON 格式问题，且不要包含性能分析内容')
+        prompt_parts.append(
+            '5. 功能描述应该具体，但请控制在 150 字以内，避免过长导致 JSON 格式问题，且不要包含性能分析内容'
+        )
         prompt_parts.append('6. 负载问题识别与优化建议（performance_analysis）必须详细说明：')
         prompt_parts.append('   - 是否存在明显的性能瓶颈（是/否，并说明原因）')
         prompt_parts.append('   - 为什么这个函数可能导致高指令数负载（具体分析）')
         prompt_parts.append('   - 可能的优化建议（如果有）')
         prompt_parts.append('   请控制在 300 字以内，避免过长导致 JSON 格式问题')
         prompt_parts.append('   示例："存在性能瓶颈。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
-        prompt_parts.append('   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"')
+        prompt_parts.append(
+            '   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"'
+        )
         prompt_parts.append('7. 推理过程请控制在 200 字以内，简洁明了即可')
         prompt_parts.append('8. 置信度评估标准：')
         prompt_parts.append(
@@ -222,7 +232,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
             "8. 如果反汇编代码从函数开始（有 pacibsp 或 stp x29, x30），且能看到主要逻辑，置信度应该设为'高'或'中'"
         )
         prompt_parts.append("9. 如果无法确定，confidence 设为'低'，function_name 可以为 null")
-        prompt_parts.append("10. 重要：确保 JSON 格式完整，所有字符串字段必须正确闭合引号，不要截断")
+        prompt_parts.append('10. 重要：确保 JSON 格式完整，所有字符串字段必须正确闭合引号，不要截断')
 
         return '\n'.join(prompt_parts)
 
@@ -260,7 +270,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
             batch = functions_data[batch_idx : batch_idx + self.batch_size]
             batch_num = batch_idx // self.batch_size + 1
 
-            logger.info(f'\n批量分析批次 {batch_num}/{total_batches} (包含 {len(batch)} 个函数)...')
+            logger.info(f'\nBatch analysis batch {batch_num}/{total_batches} (contains {len(batch)} functions)...')
 
             # 检查缓存
             batch_results = []
@@ -285,12 +295,14 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         else:
                             # 兼容旧格式（直接存储分析结果）
                             cached_result = cache_entry.copy() if isinstance(cache_entry, dict) else {}
-                        
+
                         # 确保旧缓存格式也有 performance_analysis 字段
                         if 'performance_analysis' not in cached_result:
                             cached_result['performance_analysis'] = ''
-                            logger.debug(f'⚠️  函数 {func_data.get("function_id", "unknown")} 的缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）')
-                        
+                            logger.debug(
+                                f'⚠️  函数 {func_data.get("function_id", "unknown")} 的缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）'
+                            )
+
                         cached_result['function_id'] = func_data['function_id']
                         batch_results.append(cached_result)
                         cached_batch.append(func_data)  # 记录缓存的函数
@@ -308,7 +320,9 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 if all_functions_for_prompt:  # 确保有函数才保存
                     batch_prompt = self._build_batch_prompt(all_functions_for_prompt, context)
                     self._save_batch_prompt(batch_prompt, all_functions_for_prompt, batch_num, total_batches)
-                    logger.debug(f'✅ 已保存 prompt (批次 {batch_num}/{total_batches})，包含 {len(all_functions_for_prompt)} 个函数（缓存: {len(cached_batch)}, 未缓存: {len(uncached_batch)}）')
+                    logger.debug(
+                        f'✅ 已保存 prompt (批次 {batch_num}/{total_batches})，包含 {len(all_functions_for_prompt)} 个函数（缓存: {len(cached_batch)}, 未缓存: {len(uncached_batch)}）'
+                    )
 
             # 如果有未缓存的函数，进行批量分析
             if uncached_batch:
@@ -351,18 +365,21 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
                     # 解析批量结果
                     result_text = response.choices[0].message.content
-                    
+
                     # 调试：记录响应信息（仅在 debug 级别）
-                    logger.debug('LLM 响应长度: %d 字符', len(result_text))
+                    logger.debug('LLM response length: %d characters', len(result_text))
                     if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug('LLM 响应结尾: %s', result_text[-200:] if len(result_text) > 200 else result_text)
-                    
+                        logger.debug(
+                            'LLM response ending: %s', result_text[-200:] if len(result_text) > 200 else result_text
+                        )
+
                     # 保存完整的 LLM 响应到文件（用于调试）
                     if self.save_prompts:
                         try:
-                            from datetime import datetime
                             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
-                            response_file = self.prompt_output_dir / f'llm_response_batch_{batch_num:03d}_{timestamp}.txt'
+                            response_file = (
+                                self.prompt_output_dir / f'llm_response_batch_{batch_num:03d}_{timestamp}.txt'
+                            )
                             with open(response_file, 'w', encoding='utf-8') as f:
                                 f.write('=' * 80 + '\n')
                                 f.write(f'LLM 响应 (批次 {batch_num}/{total_batches})\n')
@@ -373,10 +390,10 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                 f.write('=' * 80 + '\n\n')
                                 f.write(result_text)
                                 f.write('\n\n' + '=' * 80 + '\n')
-                            logger.debug(f'LLM 响应已保存: {response_file.name}')
+                            logger.debug(f'LLM response saved: {response_file.name}')
                         except Exception as e:
-                            logger.warning(f'⚠️  保存 LLM 响应失败: {e}')
-                    
+                            logger.warning(f'⚠️  Failed to save LLM response: {e}')
+
                     batch_parsed_results = self._parse_batch_response(result_text, uncached_batch)
 
                     # 保存到缓存（包含元信息）
@@ -392,7 +409,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                             # 保存时移除 function_id（缓存键中不包含它）
                             cache_result = result.copy()
                             cache_result.pop('function_id', None)
-                            
+
                             # 存储分析结果和元信息
                             cache_entry = {
                                 'analysis': cache_result,  # LLM 分析结果
@@ -403,7 +420,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                     'called_functions_count': len(func_data.get('called_functions', [])),
                                     'offset': func_data.get('offset', ''),
                                     'function_size': None,  # 可以从 func_info 获取，但暂不存储
-                                }
+                                },
                             }
                             self.cache[cache_key] = cache_entry
                         # 延迟保存缓存（每批次保存一次，减少 I/O）
@@ -427,8 +444,8 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         )
 
             all_results.extend(batch_results)
-            logger.info(f'✅ 批次 {batch_num} 完成，分析了 {len(batch_results)} 个函数')
-            logger.debug(f'批次 {batch_num} 返回的 function_id: {[r.get("function_id") for r in batch_results]}')
+            logger.info(f'✅ Batch {batch_num} completed, analyzed {len(batch_results)} functions')
+            logger.debug(f'Batch {batch_num} returned function_id: {[r.get("function_id") for r in batch_results]}')
 
         return all_results
 
@@ -454,10 +471,10 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
             if not json_match:
                 # 如果没找到完整结构，尝试匹配到 functions 数组结束
                 json_match = re.search(r'\{[^{}]*"functions"[^{}]*\[.*?\]', response_text, re.DOTALL)
-            
+
             if json_match:
                 json_str = json_match.group(0)
-                
+
                 # 修复字符串中的未转义双引号
                 # 在 JSON 字符串值中，未转义的双引号会导致解析失败
                 # 我们需要将字符串值中的双引号转义为 \"
@@ -467,22 +484,22 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     i = 0
                     in_string = False
                     escape_next = False
-                    
+
                     while i < len(text):
                         char = text[i]
-                        
+
                         if escape_next:
                             result.append(char)
                             escape_next = False
                             i += 1
                             continue
-                        
+
                         if char == '\\':
                             escape_next = True
                             result.append(char)
                             i += 1
                             continue
-                        
+
                         if char == '"':
                             if not in_string:
                                 # 字符串开始
@@ -494,7 +511,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                 j = i + 1
                                 while j < len(text) and text[j] in [' ', '\t', '\n', '\r']:
                                     j += 1
-                                
+
                                 # 如果下一个非空白字符是 : 或 , 或 } 或 ]，则是字符串结束
                                 if j >= len(text) or text[j] in [':', ',', '}', ']']:
                                     # 字符串结束
@@ -505,26 +522,26 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                     result.append('\\"')
                             i += 1
                             continue
-                        
+
                         result.append(char)
                         i += 1
-                    
+
                     return ''.join(result)
-                
+
                 # 先修复未转义的双引号（保存函数引用以便后续使用）
                 fixed_json_str = fix_unescaped_quotes_in_strings(json_str)
                 json_str = fixed_json_str
-                
+
                 # 记录修复后的 JSON 用于调试
-                logger.debug(f'修复后的 JSON 长度: {len(json_str)} 字符')
-                
+                logger.debug(f'Fixed JSON length: {len(json_str)} characters')
+
                 # 尝试修复常见的截断问题
                 # 1. 如果 JSON 字符串未闭合，尝试补全
                 if not json_str.rstrip().endswith('}'):
                     # 检查是否有未闭合的字符串
                     open_braces = json_str.count('{') - json_str.count('}')
                     open_brackets = json_str.count('[') - json_str.count(']')
-                    
+
                     # 尝试补全未闭合的字符串（如果最后一个字符串字段未闭合）
                     if json_str.rstrip().endswith('"') or json_str.rstrip().endswith('\\"'):
                         # 字符串已闭合，只需要补全括号
@@ -534,23 +551,23 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         last_quote_pos = json_str.rfind('"')
                         if last_quote_pos > 0:
                             # 在最后一个引号后补全
-                            json_str = json_str[:last_quote_pos+1] + '}' * open_braces + ']' * open_brackets + '}'
+                            json_str = json_str[: last_quote_pos + 1] + '}' * open_braces + ']' * open_brackets + '}'
                         else:
                             json_str += '}' * open_braces + ']' * open_brackets + '}'
-                
+
                 # 尝试解析
                 try:
                     data = json.loads(json_str)
-                    logger.debug(f'✅ JSON 解析成功，包含 {len(data.get("functions", []))} 个函数')
+                    logger.debug(f'✅ JSON parsing successful, contains {len(data.get("functions", []))} functions')
                 except json.JSONDecodeError as je:
-                    logger.warning(f'⚠️  JSON 解析失败: {je}')
-                    logger.warning(f'错误位置: {je.pos}, 行: {je.lineno}, 列: {je.colno}')
+                    logger.warning(f'⚠️  JSON parsing failed: {je}')
+                    logger.warning(f'Error position: {je.pos}, line: {je.lineno}, column: {je.colno}')
                     # 显示错误附近的文本用于调试
                     start = max(0, je.pos - 200)
                     end = min(len(json_str), je.pos + 200)
-                    logger.debug(f'错误附近的文本:\n{json_str[start:end]}')
+                    logger.debug(f'Text near error:\n{json_str[start:end]}')
                     # 如果仍然失败，尝试更激进的修复
-                    logger.warning('⚠️  第一次 JSON 解析失败，尝试修复截断的字符串...')
+                    logger.warning('⚠️  First JSON parsing failed, attempting to fix truncated strings...')
                     # 移除最后一个可能不完整的对象
                     if '"functions"' in json_str:
                         # 尝试找到最后一个完整的函数对象
@@ -563,29 +580,29 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                             current_obj = ''
                             in_string = False
                             escape_next = False
-                            
+
                             for char in functions_content:
                                 if escape_next:
                                     current_obj += char
                                     escape_next = False
                                     continue
-                                    
+
                                 if char == '\\':
                                     escape_next = True
                                     current_obj += char
                                     continue
-                                    
+
                                 if char == '"' and not escape_next:
                                     in_string = not in_string
-                                    
+
                                 if not in_string:
                                     if char == '{':
                                         brace_count += 1
                                     elif char == '}':
                                         brace_count -= 1
-                                        
+
                                 current_obj += char
-                                
+
                                 if not in_string and brace_count == 0 and current_obj.strip():
                                     # 找到一个完整的对象
                                     obj_str = current_obj.strip().rstrip(',').strip()
@@ -593,25 +610,33 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                         try:
                                             func_obj = json.loads(obj_str)
                                             func_objects.append(func_obj)
-                                            logger.debug(f'✅ 成功解析函数对象: {func_obj.get("function_id", "unknown")}')
+                                            logger.debug(
+                                                f'✅ 成功解析函数对象: {func_obj.get("function_id", "unknown")}'
+                                            )
                                         except json.JSONDecodeError as je:
-                                            logger.debug(f'⚠️  解析函数对象失败: {str(je)[:100]}, function_id: {obj_str[:100]}')
+                                            logger.debug(
+                                                f'⚠️  解析函数对象失败: {str(je)[:100]}, function_id: {obj_str[:100]}'
+                                            )
                                             # 尝试修复未转义的双引号后重新解析
                                             try:
                                                 # 使用相同的修复函数
                                                 fixed_obj_str = fix_unescaped_quotes_in_strings(obj_str)
                                                 func_obj = json.loads(fixed_obj_str)
                                                 func_objects.append(func_obj)
-                                                logger.debug(f'✅ 修复后成功解析函数对象: {func_obj.get("function_id", "unknown")}')
+                                                logger.debug(
+                                                    f'✅ 修复后成功解析函数对象: {func_obj.get("function_id", "unknown")}'
+                                                )
                                             except Exception as e2:
-                                                logger.debug(f'⚠️  修复后仍然解析失败: {str(e2)[:100]}')
+                                                logger.debug(f'⚠️  Still failed to parse after fix: {str(e2)[:100]}')
                                                 pass
                                     current_obj = ''
-                            
+
                             # 如果找到了完整的对象，构建新的 JSON
                             if func_objects:
                                 data = {'functions': func_objects}
-                                logger.info(f'✅ 成功修复，提取了 {len(func_objects)} 个完整的函数对象')
+                                logger.info(
+                                    f'✅ Successfully fixed, extracted {len(func_objects)} complete function objects'
+                                )
                             else:
                                 raise je
                         else:
@@ -628,8 +653,10 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     if func_id and func_id in function_id_map:
                         performance_analysis = func_result.get('performance_analysis', '')
                         if not performance_analysis:
-                            logger.warning(f'⚠️  函数 {func_id} 的 LLM 响应中未包含 performance_analysis 字段或为空')
-                        
+                            logger.warning(
+                                f'⚠️  Function {func_id} LLM response missing or empty performance_analysis field'
+                            )
+
                         result_item = {
                             'function_id': func_id,
                             'functionality': func_result.get('functionality', '未知'),
@@ -639,7 +666,9 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                             'reasoning': func_result.get('reasoning', ''),
                         }
                         results.append(result_item)
-                        logger.debug(f'✅ 从 LLM 响应中提取了 {func_id}: function_name={result_item["function_name"]}, functionality={result_item["functionality"][:50]}..., performance_analysis={"有" if performance_analysis else "无"}')
+                        logger.debug(
+                            f'✅ 从 LLM 响应中提取了 {func_id}: function_name={result_item["function_name"]}, functionality={result_item["functionality"][:50]}..., performance_analysis={"有" if performance_analysis else "无"}'
+                        )
 
                 # 检查是否有遗漏的函数
                 processed_ids = {r['function_id'] for r in results}
@@ -662,13 +691,16 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
                 return results
         except json.JSONDecodeError as e:
-            logger.warning('⚠️  JSON 解析失败: %s', e)
-            logger.warning('响应文本长度: %d 字符', len(response_text))
-            logger.warning('响应文本前500字符: %s', response_text[:500])
-            logger.warning('响应文本后500字符: %s', response_text[-500:] if len(response_text) > 500 else response_text)
-            
+            logger.warning('⚠️  JSON parsing failed: %s', e)
+            logger.warning('Response text length: %d characters', len(response_text))
+            logger.warning('Response text first 500 characters: %s', response_text[:500])
+            logger.warning(
+                'Response text last 500 characters: %s',
+                response_text[-500:] if len(response_text) > 500 else response_text,
+            )
+
             # JSON 解析失败时，为所有函数返回默认结果
-            logger.warning('⚠️  由于 JSON 解析失败，为所有函数使用默认结果')
+            logger.warning('⚠️  Using default results for all functions due to JSON parsing failure')
             results = []
             for func_data in functions_data:
                 results.append(
@@ -684,7 +716,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
             return results
 
         # 如果解析失败，尝试逐个匹配（fallback）
-        logger.warning('⚠️  尝试使用备用解析方法...')
+        logger.warning('⚠️  Attempting to use fallback parsing method...')
         for func_data in functions_data:
             # 尝试在响应文本中查找该函数的结果
             func_id = func_data['function_id']
@@ -721,14 +753,13 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         """保存批量 prompt 到文件"""
         if not self.save_prompts:
             return
-        
+
         try:
-            from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 包含毫秒
-            
+
             # 生成文件名
             prompt_file = self.prompt_output_dir / f'prompt_batch_{batch_num:03d}_{total_batches:03d}_{timestamp}.txt'
-            
+
             with open(prompt_file, 'w', encoding='utf-8') as f:
                 f.write('=' * 80 + '\n')
                 f.write(f'生成的 LLM Prompt (批次 {batch_num}/{total_batches})\n')
@@ -738,7 +769,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 f.write(f'总长度: {len(prompt):,} 字符\n')
                 f.write(f'估计 Token 数: ≈{len(prompt) // 4:,}\n')
                 f.write('=' * 80 + '\n\n')
-                
+
                 # 添加函数列表信息
                 f.write('函数列表:\n')
                 for idx, func_data in enumerate(functions_data, 1):
@@ -748,11 +779,13 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     func_id = func_data.get('function_id', f'func_{idx}')
                     f.write(f'  {idx}. {func_id}: {offset_str} ({symbol_name})\n')
                 f.write('\n' + '=' * 80 + '\n\n')
-                
+
                 f.write(prompt)
                 f.write('\n\n' + '=' * 80 + '\n')
-            
-            logger.info(f'✅ Prompt 已保存: {prompt_file.name}')
-            logger.info(f'   Prompt 统计: 总长度={len(prompt):,} 字符, 估计 Token 数≈{len(prompt) // 4:,}')
+
+            logger.info(f'✅ Prompt saved: {prompt_file.name}')
+            logger.info(
+                f'   Prompt statistics: total length={len(prompt):,} characters, estimated tokens≈{len(prompt) // 4:,}'
+            )
         except Exception as e:
-            logger.warning(f'保存 prompt 失败: {e}')
+            logger.warning(f'Failed to save prompt: {e}')
