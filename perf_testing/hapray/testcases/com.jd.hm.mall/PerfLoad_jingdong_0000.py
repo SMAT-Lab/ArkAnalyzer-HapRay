@@ -5,7 +5,7 @@ from hypium import BY
 from hapray.core.perf_testcase import PerfTestCase
 
 
-class ResourceUsage_PerformanceDynamic_jingdong_0000(PerfTestCase):
+class PerfLoad_jingdong_0000(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
