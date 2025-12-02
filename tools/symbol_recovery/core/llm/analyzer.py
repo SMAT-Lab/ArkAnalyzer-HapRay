@@ -4,16 +4,15 @@
 参考: https://creator.poe.com/docs/external-applications/tool-calling
 """
 
-import hashlib
 import json
+import os
 import re
 import signal
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from core.utils.config import config
+from core.utils import config
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,10 +21,21 @@ try:
     import openai
 except ImportError:
     openai = None
-    logger.warning('openai library not installed, LLM analysis will be unavailable')
-    logger.warning('Please install openai library: pip install openai')
+    logger.warning('未安装 openai 库，LLM 分析功能将不可用')
+    logger.warning('请安装 openai 库: pip install openai')
 except Exception as e:
-    logger.error('Error loading openai library: %s', e)
+    logger.error('加载 openai 库时出错: %s', e)
+    raise
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    logger.warning('未安装 python-dotenv 库，将跳过 .env 文件的加载')
+    logger.warning('请安装 python-dotenv 库: pip install python-dotenv')
+except Exception as e:
+    logger.error('加载 .env 文件时出错: %s', e)
     raise
 
 
@@ -40,41 +50,80 @@ class LLMFunctionAnalyzer:
         enable_cache: bool = True,
         save_prompts: bool = False,
         output_dir: Optional[str] = None,
+        open_source_lib: Optional[str] = None,
     ):
         """
         初始化 LLM 分析器
 
         Args:
             api_key: API key，如果为 None 则从环境变量或 .env 文件读取
-            model: 使用的模型名称，如果为 None 则从 config.get_llm_config() 获取
-            base_url: API 基础 URL，如果为 None 则从 config.get_llm_config() 获取
+            model: 使用的模型名称，如果为 None 则使用 config.DEFAULT_LLM_MODEL
+            base_url: API 基础 URL，如果为 None 则使用 config.LLM_BASE_URL
             enable_cache: 是否启用缓存（避免重复分析相同代码）
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
+            open_source_lib: 开源库名称（可选，如 "ffmpeg", "openssl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本
         """
         if openai is None:
             raise ImportError('需要安装 openai 库: pip install openai')
 
         # 从配置获取默认值
         llm_config = config.get_llm_config()
+        api_key_env = llm_config['api_key_env']
         default_base_url = llm_config['base_url']
         default_model = llm_config['model']
 
-        self.api_key = api_key or llm_config['api_key']
+        # 优先使用参数传入的 key，其次从环境变量读取，最后尝试从 .env 文件读取
+        self.open_source_lib = open_source_lib  # 开源库名称
+        
+        self.api_key = api_key or os.getenv(api_key_env)
+        if not self.api_key:
+            # 尝试从 .env 文件读取（如果安装了 python-dotenv）
+            env_file = Path('.env')
+            if env_file.exists():
+                try:
+                    with open(env_file, encoding='utf-8') as f:
+                        for raw_line in f:
+                            line = raw_line.strip()
+                            # 支持多种环境变量名（向后兼容）
+                            key_patterns = [
+                                f'{api_key_env}=',
+                                'POE_API_KEY=',
+                                'OPENAI_API_KEY=',
+                                'LLM_API_KEY=',
+                            ]
+                            for pattern in key_patterns:
+                                if line.startswith(pattern) and not line.startswith('#'):
+                                    self.api_key = line.split('=', 1)[1].strip()
+                                    break
+                            if self.api_key:
+                                break
+                except Exception:
+                    pass
+
+        if not self.api_key:
+            service_type = llm_config['service_type']
+            raise ValueError(
+                f'需要提供 {service_type.upper()} API key。\n'
+                f'方法1: 通过参数传入 api_key\n'
+                f'方法2: 设置环境变量 {api_key_env}\n'
+                f'方法3: 在 .env 文件中设置 {api_key_env}=your_key\n'
+                f'方法4: 切换服务类型: 设置环境变量 LLM_SERVICE_TYPE=poe|openai|claude|custom'
+            )
+
         self.model = model or default_model
         self.base_url = base_url or default_base_url
         self.enable_cache = enable_cache
         self.save_prompts = save_prompts
-
         self.output_dir = Path(output_dir) if output_dir else config.get_output_dir()
         self.cache: dict[str, dict[str, Any]] = {}
         self.cache_file = llm_config['cache_file']
-
+        
         # 设置 prompt 保存目录
         if self.save_prompts:
             self.prompt_output_dir = self.output_dir / 'prompts'
             self.prompt_output_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f'Prompt output directory: {self.prompt_output_dir.absolute()}')
+            logger.info(f'Prompt 保存目录: {self.prompt_output_dir.absolute()}')
 
         # 确保缓存目录存在
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +190,67 @@ class LLMFunctionAnalyzer:
             # 静默处理统计保存失败
             pass
 
+    def _add_open_source_lib_prompt(self, prompt_parts: list[str], open_source_lib: Optional[str] = None):
+        """
+        添加开源库和 SIMD 相关的 prompt 内容（共享方法，避免重复代码）
+        
+        Args:
+            prompt_parts: prompt 内容列表
+            open_source_lib: 开源库名称（可选）
+        """
+        if not open_source_lib:
+            return
+        
+        prompt_parts.append(f'🔍 重要提示：这是一个基于开源库 {open_source_lib} 的定制版本（三方库）。')
+        prompt_parts.append(f'   该 SO 文件是基于 {open_source_lib} 开源项目进行定制开发的，函数实现可能与标准 {open_source_lib} 库相似。')
+        prompt_parts.append(f'   请利用您对 {open_source_lib} 开源库的知识，结合反编译代码的特征，')
+        prompt_parts.append(f'   直接根据 {open_source_lib} 库中常见的函数名和功能模式来推断函数名和功能。')
+        prompt_parts.append(f'   如果反编译代码的特征与 {open_source_lib} 库中的某个函数匹配，请优先使用该函数名。')
+        prompt_parts.append('')
+        prompt_parts.append('   📌 SIMD 向量化指令识别（重要：区分标量与向量）：')
+        prompt_parts.append('   请仔细检查反汇编代码中是否使用了 SIMD（单指令多数据）向量化指令。')
+        prompt_parts.append('')
+        prompt_parts.append('   ✅ 向量 NEON 指令的判断标准（必须同时满足）：')
+        prompt_parts.append('   1. 使用向量寄存器 v0-v31（不是标量寄存器 s0-s31）')
+        prompt_parts.append('   2. 有向量后缀标识，如：')
+        prompt_parts.append('      - .4s, .2s (4个/2个32位浮点数)')
+        prompt_parts.append('      - .8h, .4h (8个/4个16位整数)')
+        prompt_parts.append('      - .16b, .8b (16个/8个8位整数)')
+        prompt_parts.append('      - .2d (2个64位浮点数)')
+        prompt_parts.append('   3. 常见的向量 NEON 指令示例：')
+        prompt_parts.append('      - fadd v0.4s, v1.4s, v2.4s  (向量加法，4个浮点数)')
+        prompt_parts.append('      - fmla v0.4s, v1.4s, v2.4s  (向量融合乘加)')
+        prompt_parts.append('      - ld1 {v0.4s}, [x0]         (向量加载)')
+        prompt_parts.append('      - st1 {v0.4s}, [x0]         (向量存储)')
+        prompt_parts.append('      - addv s0, v1.4s            (向量缩减)')
+        prompt_parts.append('      - dup v0.4s, v1.s[0]        (向量复制)')
+        prompt_parts.append('')
+        prompt_parts.append('   ❌ 不是向量 NEON 的情况：')
+        prompt_parts.append('   1. 只使用标量寄存器 s0-s31（32位浮点）或 d0-d31（64位浮点），没有向量后缀')
+        prompt_parts.append('      - 例如：fmadd s0, s1, s2, s3  (标量融合乘加，不是向量)')
+        prompt_parts.append('      - 例如：fadd s0, s1, s2       (标量浮点加法，不是向量)')
+        prompt_parts.append('      - 例如：ldp s0, s1, [x0]     (加载两个标量，不是向量)')
+        prompt_parts.append('   2. 虽然 fmadd/fnmsub 是性能优化指令，但如果只操作标量寄存器，')
+        prompt_parts.append('      它们不是 SIMD 向量化指令，只是标量浮点优化指令。')
+        prompt_parts.append('')
+        prompt_parts.append('   🔍 判断步骤：')
+        prompt_parts.append('   1. 首先检查是否使用 v0-v31 向量寄存器')
+        prompt_parts.append('   2. 然后检查是否有向量后缀（.4s, .2s, .8h 等）')
+        prompt_parts.append('   3. 只有同时满足以上两点，才是向量 NEON 指令')
+        prompt_parts.append('   4. 如果只使用 s/d 寄存器且无向量后缀，则是标量指令，不是向量 NEON')
+        prompt_parts.append('')
+        prompt_parts.append('   如果识别到向量 NEON 指令的使用，请在功能描述中明确说明该函数使用了向量化优化，')
+        prompt_parts.append('   并描述向量化的具体用途（如批量数据处理、并行计算、矩阵运算等）。')
+        prompt_parts.append('   如果只使用了标量浮点指令（如 fmadd/fnmsub 的标量版本），请不要误判为向量 NEON。')
+        prompt_parts.append('')
+        prompt_parts.append('   📌 开源库功能相关性：')
+        prompt_parts.append(f'   在功能描述中，请结合 {open_source_lib} 开源库的典型功能和特性，')
+        prompt_parts.append(f'   说明该函数在 {open_source_lib} 库中的作用和定位，以及与其他 {open_source_lib} 函数的关联性。')
+        prompt_parts.append(f'   例如：该函数是 {open_source_lib} 中哪个模块/组件的核心功能，')
+        prompt_parts.append(f'   在 {open_source_lib} 的典型使用场景中扮演什么角色，')
+        prompt_parts.append(f'   与 {open_source_lib} 库中哪些常见函数或功能相关。')
+        prompt_parts.append('')
+
     def get_token_stats(self) -> dict[str, Any]:
         """获取 token 统计信息"""
         return {
@@ -168,18 +278,18 @@ class LLMFunctionAnalyzer:
         """打印 token 统计信息"""
         stats = self.get_token_stats()
         logger.info('\n' + '=' * 80)
-        logger.info('Token Usage Statistics')
+        logger.info('Token 使用统计')
         logger.info('=' * 80)
-        logger.info(f'Total requests: {stats["total_requests"]}')
-        logger.info(f'Cache hits: {stats["cached_requests"]}')
-        logger.info(f'Actual API calls: {stats["total_requests"] - stats["cached_requests"]}')
-        logger.info(f'\nTotal tokens: {stats["total_tokens"]:,}')
-        logger.info(f'  Input tokens: {stats["total_input_tokens"]:,}')
-        logger.info(f'  Output tokens: {stats["total_output_tokens"]:,}')
+        logger.info(f'总请求数: {stats["total_requests"]}')
+        logger.info(f'缓存命中: {stats["cached_requests"]}')
+        logger.info(f'实际 API 调用: {stats["total_requests"] - stats["cached_requests"]}')
+        logger.info(f'\n总 Token 数: {stats["total_tokens"]:,}')
+        logger.info(f'  输入 Token: {stats["total_input_tokens"]:,}')
+        logger.info(f'  输出 Token: {stats["total_output_tokens"]:,}')
         if stats['total_requests'] - stats['cached_requests'] > 0:
-            logger.info('\nAverage per call:')
-            logger.info(f'  Input tokens: {stats["average_input_tokens"]:.0f}')
-            logger.info(f'  Output tokens: {stats["average_output_tokens"]:.0f}')
+            logger.info('\n平均每次调用:')
+            logger.info(f'  输入 Token: {stats["average_input_tokens"]:.0f}')
+            logger.info(f'  输出 Token: {stats["average_output_tokens"]:.0f}')
         logger.info('=' * 80)
 
     def _get_cache_key(
@@ -191,42 +301,44 @@ class LLMFunctionAnalyzer:
         decompiled: Optional[str] = None,
     ) -> str:
         """生成缓存键（使用 hash 提高效率和准确性）"""
+        import hashlib
+        
         # 构建用于 hash 的内容
         # 1. 指令：使用前50条指令（增加数量以提高唯一性）+ 指令总数
         inst_content = '; '.join(instructions[:50]) if instructions else ''
         inst_count = str(len(instructions))
-
+        
         # 2. 字符串：所有字符串（排序以确保一致性）
         strings_sorted = sorted(set(str(s) for s in strings)) if strings else []
         strings_content = ', '.join(strings_sorted)
-
+        
         # 3. 调用的函数：排序后的函数列表
         called_sorted = sorted(set(str(f) for f in called_functions)) if called_functions else []
         called_content = ', '.join(called_sorted)
-
+        
         # 4. 反编译代码：如果有，使用前500字符的 hash（避免过长）
         decompiled_hash = ''
         if decompiled:
             decompiled_preview = decompiled[:500]  # 前500字符
             decompiled_hash = hashlib.md5(decompiled_preview.encode('utf-8')).hexdigest()[:16]
-
+        
         # 5. 符号名
         symbol_str = str(symbol_name) if symbol_name else ''
-
+        
         # 组合所有内容并生成 hash
-        key_content = '|'.join(
-            [
-                inst_content,
-                inst_count,
-                strings_content,
-                called_content,
-                decompiled_hash,
-                symbol_str,
-            ]
-        )
-
+        key_content = '|'.join([
+            inst_content,
+            inst_count,
+            strings_content,
+            called_content,
+            decompiled_hash,
+            symbol_str,
+        ])
+        
         # 使用 MD5 hash 生成固定长度的 key（避免 key 过长）
-        return hashlib.md5(key_content.encode('utf-8')).hexdigest()
+        key_hash = hashlib.md5(key_content.encode('utf-8')).hexdigest()
+        
+        return key_hash
 
     def analyze_with_llm(
         self,
@@ -269,34 +381,25 @@ class LLMFunctionAnalyzer:
                     cached_result = cached_entry['analysis']
                 else:
                     cached_result = cached_entry
-
+                
                 # 确保旧缓存格式也有 performance_analysis 字段
                 if 'performance_analysis' not in cached_result:
                     cached_result['performance_analysis'] = ''
-                    logger.debug(
-                        '⚠️  Cached result missing performance_analysis field, added empty value (recommend clearing cache and re-analyzing)'
-                    )
-
+                    logger.debug('⚠️  缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）')
+                
                 self.token_stats['cached_requests'] += 1
                 self.token_stats['total_requests'] += 1
-                logger.debug(f'Using cached result (total instructions: {len(instructions)})')
+                logger.debug(f'使用缓存结果（总指令数: {len(instructions)}）')
                 return cached_result
 
         # 构建提示词
-        logger.debug(f'Building new prompt (total instructions: {len(instructions)})')
+        logger.debug(f'构建新的 prompt（总指令数: {len(instructions)}）')
         prompt = self._build_prompt(
-            instructions,
-            strings,
-            symbol_name,
-            called_functions,
-            offset,
-            context,
-            func_info=func_info,
-            call_count=call_count,
-            event_count=event_count,
-            so_file=so_file,
+            instructions, strings, symbol_name, called_functions, offset, context,
+            func_info=func_info, call_count=call_count, event_count=event_count, so_file=so_file,
+            open_source_lib=self.open_source_lib
         )
-
+        
         # 保存 prompt（如果启用）
         if self.save_prompts:
             self._save_single_prompt(prompt, offset, symbol_name)
@@ -304,8 +407,7 @@ class LLMFunctionAnalyzer:
         try:
             # 调用 LLM（设置超时避免卡住）
             # 从配置获取超时时间
-            llm_config = config.get_llm_config()
-            timeout_seconds = llm_config['timeout']
+            timeout_seconds = config.LLM_TIMEOUT
 
             def timeout_handler(signum, frame):
                 raise TimeoutError(f'LLM API 调用超时（超过 {timeout_seconds} 秒）')
@@ -372,7 +474,6 @@ class LLMFunctionAnalyzer:
                     signal.signal(signal.SIGALRM, old_handler)
 
             result_text = response.choices[0].message.content
-            logger.debug(f'LLM response: {result_text}')
 
             # 解析结果
             result = self._parse_llm_response(result_text)
@@ -388,7 +489,7 @@ class LLMFunctionAnalyzer:
                         'has_decompiled': False,  # 单函数模式暂不支持反编译
                         'called_functions_count': len(called_functions) if called_functions else 0,
                         'offset': f'0x{offset:x}' if offset else None,
-                    },
+                    }
                 }
                 self.cache[cache_key] = cache_entry
                 # 延迟保存缓存（每10次保存一次，减少 I/O）
@@ -398,7 +499,7 @@ class LLMFunctionAnalyzer:
             return result
 
         except Exception as e:
-            logger.warning('Warning: LLM analysis failed: %s', e)
+            logger.warning('警告: LLM 分析失败: %s', e)
             # 返回默认结果
             return {
                 'functionality': '未知',
@@ -419,30 +520,49 @@ class LLMFunctionAnalyzer:
         call_count: Optional[int] = None,
         event_count: Optional[int] = None,
         so_file: Optional[str] = None,
+        open_source_lib: Optional[str] = None,
     ) -> str:
         """构建 LLM 提示词"""
         prompt_parts = []
 
         prompt_parts.append('请分析以下 ARM64 反汇编代码，推断函数的功能和可能的函数名。')
         prompt_parts.append('')
-        prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，该函数被识别为高指令数负载的热点函数。')
-        prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
-        prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
-        prompt_parts.append('  - 内存操作（大量内存拷贝、频繁的内存分配/释放）')
-        prompt_parts.append('  - 字符串处理（字符串拼接、解析、格式化）')
-        prompt_parts.append('  - 算法复杂度（O(n²)、O(n³) 等高复杂度算法）')
-        prompt_parts.append('  - 系统调用和 I/O 操作（文件读写、网络操作）')
-        prompt_parts.append('  - 递归调用（深度递归可能导致栈溢出或高指令数）')
-        prompt_parts.append('  - 异常处理（频繁的异常捕获和处理）')
-        prompt_parts.append('  - 锁和同步操作（频繁的加锁/解锁、条件等待）')
-        prompt_parts.append('  - 数据结构和算法选择不当（低效的数据结构使用）')
+        
+        # 如果指定了开源库，添加重要提示（使用共享方法避免重复代码）
+        self._add_open_source_lib_prompt(prompt_parts, open_source_lib)
+        
+        prompt_parts.append('背景信息：')
+        prompt_parts.append('这些函数在性能分析中被检出为「高指令数占比函数（热点函数）」，')
+        prompt_parts.append('但请注意：')
+        prompt_parts.append('  "热点" ≠ "性能瓶颈"。有些函数是计算密集型算法核心（如 FFT、DCT、解码循环），负载高但合理。')
+        prompt_parts.append('')
+        prompt_parts.append('分析目标是客观识别函数所属的性能类型：')
+        prompt_parts.append('  ✅ 计算热点（Expected Hotspot）：高负载但必要、算法高效')
+        prompt_parts.append('  ⚠️ 潜在瓶颈（Optimization Opportunity）：存在低效逻辑或可改进空间')
         prompt_parts.append('')
         prompt_parts.append('请分别提供以下信息：')
-        prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
-        prompt_parts.append('  2. 负载问题识别与优化建议：')
-        prompt_parts.append('     - 是否存在明显的性能瓶颈（如上述因素）')
-        prompt_parts.append('     - 为什么这个函数可能导致高指令数负载')
-        prompt_parts.append('     - 可能的优化建议（如果有）')
+        if open_source_lib:
+            prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
+            prompt_parts.append(f'     - 如果识别到向量 NEON 指令（使用 v0-v31 寄存器且有向量后缀），请明确说明使用了向量化优化及其用途')
+            prompt_parts.append(f'     - 如果只使用了标量浮点指令（如 fmadd/fnmsub 的标量版本），请不要误判为向量 NEON，')
+            prompt_parts.append(f'       可以说明使用了融合乘加等标量优化指令，但不要说是向量化')
+            prompt_parts.append(f'     - 请结合 {open_source_lib} 开源库的功能特性，说明该函数在库中的作用和定位')
+            prompt_parts.append(f'     - 描述该函数与 {open_source_lib} 库中其他功能的关联性和相关性')
+        else:
+            prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
+            prompt_parts.append('     - 如果识别到向量 NEON 指令（使用 v0-v31 寄存器且有向量后缀），请明确说明使用了向量化优化及其用途')
+            prompt_parts.append('     - 如果只使用了标量浮点指令（如 fmadd/fnmsub 的标量版本），请不要误判为向量 NEON，')
+            prompt_parts.append('       可以说明使用了融合乘加等标量优化指令，但不要说是向量化')
+        prompt_parts.append('  2. 负载问题识别与优化建议（performance_analysis）：')
+        prompt_parts.append('     判断函数属于：')
+        prompt_parts.append('       - "计算热点（预期高负载）"')
+        prompt_parts.append('       - "潜在瓶颈（可优化）"')
+        prompt_parts.append('     并说明原因，包括但不限于以下因素：')
+        prompt_parts.append('       - 算法复杂度（如循环结构、嵌套处理）')
+        prompt_parts.append('       - 内存访问模式（频繁读写、拷贝、缓存问题）')
+        prompt_parts.append('       - I/O 调用（网络、文件访问）')
+        prompt_parts.append('       - 函数调用频度或上下文切换')
+        prompt_parts.append('     若存在可优化方向，请给出具体可行建议（100~300 字）')
         prompt_parts.append('')
 
         # 添加背景信息
@@ -454,7 +574,7 @@ class LLMFunctionAnalyzer:
         # 函数基本信息
         if offset:
             prompt_parts.append(f'函数偏移量: 0x{offset:x}')
-
+        
         # 函数边界信息
         if func_info:
             func_start = func_info.get('minbound', func_info.get('offset', offset))
@@ -462,11 +582,11 @@ class LLMFunctionAnalyzer:
             func_size = func_info.get('size', 0)
             if func_size > 0:
                 prompt_parts.append(f'函数范围: 0x{func_start:x} - 0x{func_end:x} (大小: {func_size} 字节)')
-
+        
         # 指令数量
         if instructions:
             prompt_parts.append(f'指令数量: {len(instructions)} 条')
-
+        
         # 函数复杂度指标
         if func_info:
             nbbs = func_info.get('nbbs', 0)
@@ -481,13 +601,14 @@ class LLMFunctionAnalyzer:
                 prompt_parts.append(f'参数数量: {nargs}')
             if nlocals > 0:
                 prompt_parts.append(f'局部变量数量: {nlocals}')
-
+        
         # 注意：调用次数（call_count）和指令执行次数（event_count）仅用于排序和筛选，
         # 不需要传递给 LLM，因此不添加到 prompt 中
-
+        
         # SO 文件信息
         if so_file:
-            so_name = so_file.split('/')[-1] if '/' in so_file else so_file
+            # 跨平台路径处理：使用 Path 提取文件名
+            so_name = Path(so_file).name
             prompt_parts.append(f'所在文件: {so_name}')
 
         if symbol_name:
@@ -501,7 +622,7 @@ class LLMFunctionAnalyzer:
         # 因此增加发送给 LLM 的指令数量，以提供更完整的上下文
         max_instructions = 300 if len(instructions) > 100 else len(instructions)
         # 调试信息：记录实际发送的指令数
-        logger.debug(f'Total instructions: {len(instructions)}, will send to LLM: {max_instructions}')
+        logger.debug(f'总指令数: {len(instructions)}, 将发送给 LLM: {max_instructions}')
         for i, inst in enumerate(instructions[:max_instructions], 1):
             prompt_parts.append(f'  {i:3d}. {inst}')
 
@@ -524,11 +645,12 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('')
         prompt_parts.append('请按以下 JSON 格式返回分析结果:')
         prompt_parts.append('{')
-        prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）",')
+        if open_source_lib:
+            prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）。如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），需说明使用了向量化优化及其用途。如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON。需结合开源库功能特性，说明该函数在库中的作用和定位，以及与库中其他功能的关联性",')
+        else:
+            prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）。如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），需说明使用了向量化优化及其用途。如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON",')
         prompt_parts.append('  "function_name": "推断的函数名（英文，遵循常见命名规范）",')
-        prompt_parts.append(
-            '  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",'
-        )
+        prompt_parts.append('  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：判断函数属于"计算热点（预期高负载）"或"潜在瓶颈（可优化）"，说明原因（算法复杂度、内存访问模式、I/O调用、函数调用频度等），若存在可优化方向，给出具体可行建议",')
         prompt_parts.append('  "confidence": "高/中/低",')
         prompt_parts.append('  "reasoning": "推理过程（中文，说明为什么这样推断）"')
         prompt_parts.append('}')
@@ -536,15 +658,26 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('注意:')
         prompt_parts.append('1. 如果符号表中已有函数名，优先使用符号名（如果是 C++ 名称修饰，请还原）')
         prompt_parts.append('2. 函数名应该遵循常见的命名规范（如驼峰命名、下划线命名）')
-        prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容')
-        prompt_parts.append('4. 负载问题识别与优化建议（performance_analysis）必须详细说明：')
-        prompt_parts.append('   - 是否存在明显的性能瓶颈（是/否，并说明原因）')
-        prompt_parts.append('   - 为什么这个函数可能导致高指令数负载（具体分析）')
-        prompt_parts.append('   - 可能的优化建议（如果有）')
-        prompt_parts.append('   示例："存在性能瓶颈。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
-        prompt_parts.append(
-            '   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"'
-        )
+        if open_source_lib:
+            prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容。')
+            prompt_parts.append('   如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），必须说明使用了向量化优化及其用途。')
+            prompt_parts.append('   如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON，可以说明使用了融合乘加等标量优化指令。')
+            prompt_parts.append('   必须结合开源库功能特性，说明该函数在库中的作用和定位，以及与库中其他功能的关联性')
+        else:
+            prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容。')
+            prompt_parts.append('   如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），必须说明使用了向量化优化及其用途。')
+            prompt_parts.append('   如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON，可以说明使用了融合乘加等标量优化指令。')
+        prompt_parts.append('4. 负载问题识别与优化建议（performance_analysis）必须客观分析：')
+        prompt_parts.append('   - 首先判断函数属于"计算热点（预期高负载）"还是"潜在瓶颈（可优化）"')
+        prompt_parts.append('   - 说明判断原因，包括算法复杂度、内存访问模式、I/O调用、函数调用频度等因素')
+        prompt_parts.append('   - 如果是"计算热点"，说明为什么高负载是合理的（如算法核心、计算密集型任务）')
+        prompt_parts.append('   - 如果是"潜在瓶颈"，给出具体的优化建议（100~300字）')
+        prompt_parts.append('   示例1（计算热点）："计算热点（预期高负载）。该函数是FFT算法的核心实现，')
+        prompt_parts.append('   包含多层嵌套循环进行频域变换，时间复杂度为O(n log n)，这是算法本身的特性，')
+        prompt_parts.append('   高指令数负载是合理的，属于预期的计算密集型热点。"')
+        prompt_parts.append('   示例2（潜在瓶颈）："潜在瓶颈（可优化）。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
+        prompt_parts.append('   且存在重复计算和频繁的内存拷贝。优化建议：1) 优化算法降低复杂度至O(n²)；')
+        prompt_parts.append('   2) 使用缓存减少重复计算；3) 优化内存访问模式，减少不必要的拷贝"')
         prompt_parts.append('5. 置信度评估标准：')
         prompt_parts.append(
             "   - '高'：能看到完整的函数逻辑，包括函数序言、主要业务逻辑、函数调用、返回值等，且功能明确"
@@ -614,21 +747,13 @@ class LLMFunctionAnalyzer:
                     result['performance_analysis'] = parsed.get('performance_analysis', '')
                     result['confidence'] = parsed.get('confidence', '低')
                     result['reasoning'] = parsed.get('reasoning', '')
-
+                    
                     # 调试：检查 performance_analysis 是否存在
                     if not result['performance_analysis']:
-                        logger.warning(
-                            '⚠️  LLM 响应中未包含 performance_analysis 字段或为空，请检查 prompt 是否包含该字段要求'
-                        )
+                        logger.warning('⚠️  LLM 响应中未包含 performance_analysis 字段或为空，请检查 prompt 是否包含该字段要求')
                         # 尝试从 reasoning 或其他字段中提取性能相关信息（fallback）
-                        if result.get('reasoning') and (
-                            '性能' in result['reasoning']
-                            or '瓶颈' in result['reasoning']
-                            or '负载' in result['reasoning']
-                        ):
-                            logger.debug(
-                                'Detected performance-related information in reasoning field, but performance_analysis is empty'
-                            )
+                        if result.get('reasoning') and ('性能' in result['reasoning'] or '瓶颈' in result['reasoning'] or '负载' in result['reasoning']):
+                            logger.debug('在 reasoning 字段中检测到性能相关信息，但 performance_analysis 为空')
 
                     # 如果检测到截断，在结果中标记
                     if is_truncated:
@@ -638,7 +763,7 @@ class LLMFunctionAnalyzer:
                             result['reasoning'] += ' [响应可能被截断]'
                 except json.JSONDecodeError as je:
                     # JSON 解析失败，尝试从文本中提取
-                    logger.warning('Warning: JSON parsing failed, attempting text extraction: %s', str(je)[:100])
+                    logger.warning('警告: JSON 解析失败，尝试文本提取: %s', str(je)[:100])
                     result['reasoning'] = f'JSON解析失败: {str(je)[:100]}\n原始响应: {response_text[:500]}'
 
                     # 尝试从文本中提取字段
@@ -703,7 +828,7 @@ class LLMFunctionAnalyzer:
                 time.sleep(delay)  # 避免 API 限流
 
             if (i + 1) % 10 == 0:
-                logger.info(f'  LLM analysis progress: {i + 1}/{total}')
+                logger.info(f'  LLM 分析进度: {i + 1}/{total}')
 
             result = self.analyze_with_llm(
                 instructions=task.get('instructions', []),
@@ -726,19 +851,20 @@ class LLMFunctionAnalyzer:
         """保存单个函数的 prompt 到文件"""
         if not self.save_prompts:
             return
-
+        
         try:
+            from datetime import datetime
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]  # 包含毫秒
-
+            
             # 生成文件名
             offset_str = f'0x{offset:x}' if offset else 'unknown'
             symbol_str = symbol_name.replace('/', '_').replace('\\', '_') if symbol_name else 'unknown'
             # 限制文件名长度
             if len(symbol_str) > 50:
                 symbol_str = symbol_str[:50]
-
+            
             prompt_file = self.prompt_output_dir / f'prompt_{offset_str}_{symbol_str}_{timestamp}.txt'
-
+            
             with open(prompt_file, 'w', encoding='utf-8') as f:
                 f.write('=' * 80 + '\n')
                 f.write('生成的 LLM Prompt (单个函数)\n')
@@ -752,7 +878,7 @@ class LLMFunctionAnalyzer:
                 f.write('=' * 80 + '\n\n')
                 f.write(prompt)
                 f.write('\n\n' + '=' * 80 + '\n')
-
-            logger.debug(f'Prompt saved: {prompt_file.name}')
+            
+            logger.debug(f'Prompt 已保存: {prompt_file.name}')
         except Exception as e:
-            logger.warning(f'Failed to save prompt: {e}')
+            logger.warning(f'保存 prompt 失败: {e}')
