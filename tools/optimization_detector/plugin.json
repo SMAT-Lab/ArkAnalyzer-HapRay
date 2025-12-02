@@ -51,12 +51,6 @@
           "short": "r",
           "help": "包含报告要更新的目录"
         },
-        "timeout": {
-          "type": "int",
-          "label": "超时时间（秒）",
-          "required": false,
-          "help": "处理单个文件的超时时间"
-        },
         "no_lto": {
           "type": "bool",
           "label": "禁用LTO检测",
