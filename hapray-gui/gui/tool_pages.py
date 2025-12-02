@@ -313,8 +313,11 @@ class ToolPage(QWidget):
                 choices = param_def.get('choices', [])
 
                 # 如果choices是函数名，则动态获取选项
-                if isinstance(choices, str) and choices == 'get_testcases':
-                    choices = FileUtils.get_testcases()
+                if isinstance(choices, str):
+                    if choices == 'get_testcases':
+                        choices = FileUtils.get_testcases()
+                    elif choices == 'get_installed_apps':
+                        choices = FileUtils.get_installed_apps()
 
                 widget.addItems(choices)
 
@@ -331,8 +334,11 @@ class ToolPage(QWidget):
             choices = param_def.get('choices', [])
 
             # 如果choices是函数名，则动态获取选项
-            if isinstance(choices, str) and choices == 'get_testcases':
-                choices = FileUtils.get_testcases()
+            if isinstance(choices, str):
+                if choices == 'get_testcases':
+                    choices = FileUtils.get_testcases()
+                elif choices == 'get_installed_apps':
+                    choices = FileUtils.get_installed_apps()
 
             widget.addItems(choices)
             if default:

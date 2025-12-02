@@ -21,8 +21,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
-from hapray.analyze.symbol_statistic_analyzer import SymbolStatisticAnalyzer
-from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.mode.mode import Mode
@@ -57,7 +55,7 @@ class UpdateAction:
             '--mode',
             type=int,
             default=Mode.COMMUNITY,
-            help=f'select mode {Mode.COMMUNITY} COMMUNITY {Mode.COMPATIBILITY} COMPATIBILITY {Mode.SIMPLE} SIMPLE',
+            help=f'select mode: {Mode.COMMUNITY} COMMUNITY, {Mode.SIMPLE} SIMPLE',
         )
         parser.add_argument(
             '--perfs',
@@ -157,31 +155,9 @@ class UpdateAction:
             time_ranges,
             use_refined_lib_symbol=parsed_args.use_refined_lib_symbol,
             export_comparison=parsed_args.export_comparison,
+            symbol_statistic=parsed_args.symbol_statistic,
+            time_range_strings=parsed_args.time_ranges,
         )
-        if parsed_args.mode == Mode.SIMPLE and parsed_args.symbolstatistic:
-            symbol_file = parsed_args.symbolstatistic
-            time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
-            analyzer = SymbolStatisticAnalyzer(report_dir, symbol_file, time_ranges)
-            testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
-            for case_dir in testcase_dirs:
-                hiperf_path = os.path.join(case_dir, 'hiperf')
-                htrace_path = os.path.join(case_dir, 'htrace')
-                if os.path.exists(htrace_path):
-                    step_dirs = [d for d in os.listdir(htrace_path) if os.path.isdir(os.path.join(htrace_path, d))]
-                    for step_dir in step_dirs:
-                        trace_db = os.path.join(htrace_path, step_dir, 'trace.db')
-                        htrace_file = os.path.join(htrace_path, step_dir, 'trace.htrace')
-                        perf_db = os.path.join(hiperf_path, step_dir, 'perf.db') if os.path.exists(hiperf_path) else ''
-
-                        # Convert htrace to db if needed
-                        if not os.path.exists(trace_db) and os.path.exists(htrace_file):
-                            logging.info('Converting htrace to db for %s...', step_dir)
-                            if not ExeUtils.convert_data_to_db(htrace_file, trace_db):
-                                logging.error('Failed to convert htrace to db for %s', step_dir)
-                                continue
-
-                        analyzer.analyze(step_dir, trace_db, perf_db)
-            analyzer.generate_excel(os.path.join(report_dir, 'symbol_statistics.xlsx'))
 
     @staticmethod
     def find_testcase_dirs(report_dir):
@@ -250,6 +226,8 @@ class UpdateAction:
         time_ranges: list[dict] = None,
         use_refined_lib_symbol: bool = False,
         export_comparison: bool = False,
+        symbol_statistic: str = None,
+        time_range_strings: list[str] = None,
     ):
         """Processes reports using parallel execution.
 
@@ -259,12 +237,16 @@ class UpdateAction:
             time_ranges: Optional time range filters
             use_refined_lib_symbol: Enable refined mode for memory analysis
             export_comparison: Export comparison Excel for memory analysis
+            symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
+            time_range_strings: List of time range strings for symbol statistics (optional)
         """
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
             report_generator = ReportGenerator(
                 use_refined_lib_symbol=use_refined_lib_symbol,
                 export_comparison=export_comparison,
+                symbol_statistic=symbol_statistic,
+                time_range_strings=time_range_strings,
             )
 
             for case_dir in testcase_dirs:

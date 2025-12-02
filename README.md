@@ -182,7 +182,7 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 Options:
 - `--report_dir <path>`: Directory containing existing reports to update (required)
 - `--so_dir <path>`: Directory containing updated symbolicated .so files (optional)
-- `--mode <int>`: Select mode: 0 COMMUNITY, 1 COMPATIBILITY, 2 SIMPLE
+- `--mode <int>`: Select mode: 0 COMMUNITY, 1 SIMPLE
 - `--perfs <path1> <path2> ...`: Multiple perf data paths (required for SIMPLE mode)
 - `--traces <path1> <path2> ...`: Multiple trace file paths (required for SIMPLE mode)
 - `--package-name <package_name>`: Application package name (required for SIMPLE mode)
