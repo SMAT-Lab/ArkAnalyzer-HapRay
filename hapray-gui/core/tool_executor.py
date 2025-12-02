@@ -124,7 +124,15 @@ class ToolExecutor:
                 # 保持参数名不变，不做下划线到中划线的转换
                 param_name = key
                 if isinstance(value, bool):
-                    if value:
+                    # 特殊处理：trace 和 perf 参数，false 时添加 --no-trace/--no-perf
+                    if param_name == 'trace':
+                        if not value:
+                            cmd.append('--no-trace')
+                    elif param_name == 'perf':
+                        if not value:
+                            cmd.append('--no-perf')
+                    elif value:
+                        # 其他 bool 参数，true 时添加参数
                         cmd.append(f'--{param_name}')
                 elif isinstance(value, list):
                     cmd.extend([f'--{param_name}'] + [str(v) for v in value])

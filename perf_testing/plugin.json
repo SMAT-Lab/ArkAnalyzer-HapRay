@@ -42,30 +42,23 @@
           "default": 5,
           "help": "测试执行的轮数"
         },
-        "circles": {
+        "trace": {
           "type": "bool",
-          "label": "CPU周期采样",
+          "label": "Trace捕获",
           "required": false,
-          "default": false,
-          "help": "启用CPU周期采样"
+          "default": true,
+          "help": "启用trace捕获"
         },
-        "no_trace": {
+        "perf": {
           "type": "bool",
-          "label": "禁用Trace",
+          "label": "Perf捕获",
           "required": false,
-          "default": false,
-          "help": "禁用trace捕获"
-        },
-        "no_perf": {
-          "type": "bool",
-          "label": "禁用Perf",
-          "required": false,
-          "default": false,
-          "help": "禁用perf捕获（仅内存模式）"
+          "default": true,
+          "help": "启用perf捕获"
         },
         "memory": {
           "type": "bool",
-          "label": "内存分析",
+          "label": "内存捕获",
           "required": false,
           "default": false,
           "help": "启用内存分析"
@@ -82,19 +75,57 @@
           "label": "HapFlow目录",
           "required": false,
           "help": "启用HapFlow管道并指定Homecheck根目录"
+        }
+      }
+    },
+    "manual": {
+      "name": "手动测试",
+      "description": "手动测试模式，交互式收集性能数据",
+      "action_mapping": {
+        "type": "map",
+        "command": ["perf", "--manual"]
+      },
+      "parameters": {
+        "package-name": {
+          "type": "choice",
+          "label": "应用包名",
+          "required": true,
+          "choices": "get_installed_apps",
+          "help": "目标应用包名（从设备已安装应用列表中选择）"
         },
-        "manual": {
+        "so_dir": {
+          "type": "dir",
+          "label": "SO文件目录",
+          "required": false,
+          "help": "符号化后的.so文件目录"
+        },
+        "trace": {
           "type": "bool",
-          "label": "手动测试模式",
+          "label": "Trace捕获",
+          "required": false,
+          "default": true,
+          "help": "启用trace捕获"
+        },
+        "perf": {
+          "type": "bool",
+          "label": "Perf捕获",
+          "required": false,
+          "default": true,
+          "help": "启用perf捕获"
+        },
+        "memory": {
+          "type": "bool",
+          "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用手动测试模式，交互式收集30秒性能数据"
+          "help": "启用内存分析"
         },
-        "app": {
-          "type": "str",
-          "label": "应用包名",
+        "round": {
+          "type": "int",
+          "label": "测试轮数",
           "required": false,
-          "help": "手动测试模式下的目标应用包名"
+          "default": 1,
+          "help": "测试执行的轮数"
         }
       }
     },
@@ -153,7 +184,7 @@
           "label": "模式",
           "required": false,
           "default": 0,
-          "help": "选择模式：0 COMMUNITY, 1 COMPATIBILITY, 2 SIMPLE"
+          "help": "选择模式：0 COMMUNITY, 1 SIMPLE"
         },
         "perfs": {
           "type": "str",
@@ -188,7 +219,7 @@
           "required": false,
           "help": "SIMPLE模式可选的steps.json文件路径"
         },
-        "time_ranges": {
+        "time-ranges": {
           "type": "str",
           "label": "时间范围",
           "required": false,

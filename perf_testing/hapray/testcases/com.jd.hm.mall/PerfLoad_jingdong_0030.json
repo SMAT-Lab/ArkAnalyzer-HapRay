@@ -9,7 +9,7 @@
     "driver": {
         "type": "DeviceTest",
         "py_file": [
-            "ResourceUsage_PerformanceDynamic_jingdong_0010.py"
+            "PerfLoad_jingdong_0030.py"
         ]
     },
     "kits":[
