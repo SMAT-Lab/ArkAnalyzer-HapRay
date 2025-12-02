@@ -19,6 +19,7 @@ import gzip
 import json
 import logging
 import os
+import re
 import zlib
 from pathlib import Path
 from typing import Any
@@ -27,9 +28,11 @@ import pandas as pd
 
 from hapray import VERSION
 from hapray.analyze import analyze_data
+from hapray.analyze.symbol_statistic_analyzer import SymbolStatisticAnalyzer
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
+from hapray.mode.mode import Mode
 
 
 class DataType(enum.Enum):
@@ -398,16 +401,26 @@ class ReportData:
 class ReportGenerator:
     """Generates and updates performance analysis reports"""
 
-    def __init__(self, use_refined_lib_symbol: bool = False, export_comparison: bool = False):
+    def __init__(
+        self,
+        use_refined_lib_symbol: bool = False,
+        export_comparison: bool = False,
+        symbol_statistic: str = None,
+        time_range_strings: list[str] = None,
+    ):
         """Initialize ReportGenerator
 
         Args:
             use_refined_lib_symbol: Enable refined mode for memory analysis
             export_comparison: Export comparison Excel for memory analysis
+            symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
+            time_range_strings: List of time range strings in format "startTime-endTime" (optional)
         """
         self.report_template_path = os.path.abspath(ExeUtils.get_tools_dir('web', 'report_template.html'))
         self.use_refined_lib_symbol = use_refined_lib_symbol
         self.export_comparison = export_comparison
+        self.symbol_statistic = symbol_statistic
+        self.time_range_strings = time_range_strings or []
 
     def update_report(self, scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Update an existing performance report
@@ -471,6 +484,10 @@ class ReportGenerator:
         # Step 3: Generate HTML report
         self._create_html_report(scene_dir, result)
 
+        # Step 4: Process symbol statistics (if enabled)
+        if self.symbol_statistic:
+            self._process_symbol_statistics(scene_dir)
+
         logging.info('Report successfully %s for %s', 'updated' if skip_round_selection else 'generated', scene_dir)
         return True
 
@@ -509,6 +526,92 @@ class ReportGenerator:
             logging.info('HTML report created at %s', output_path)
         except Exception as e:
             logging.error('Failed to create HTML report: %s', str(e))
+
+    def _process_symbol_statistics(self, report_dir: str):
+        """Process symbol statistics for the report directory.
+
+        Args:
+            report_dir: Report directory path
+        """
+        if not self.symbol_statistic:
+            return
+
+        try:
+            # Only process if in SIMPLE mode
+            if Config.get('mode') != Mode.SIMPLE:
+                logging.info('Symbol statistics only supported in SIMPLE mode, skipping')
+                return
+
+            logging.info('Processing symbol statistics...')
+            time_ranges = self._parse_time_ranges(self.time_range_strings)
+            analyzer = SymbolStatisticAnalyzer(report_dir, self.symbol_statistic, time_ranges)
+            testcase_dirs = self._find_testcase_dirs(report_dir)
+
+            logging.info('Processing symbol statistics for %d test cases', len(testcase_dirs))
+            analyzer.process_all_testcases(testcase_dirs)
+            analyzer.generate_excel(os.path.join(report_dir, 'symbol_statistics.xlsx'))
+            logging.info('Symbol statistics processing completed')
+        except Exception as e:
+            logging.error('Failed to process symbol statistics: %s', str(e))
+
+    @staticmethod
+    def _parse_time_ranges(time_range_strings: list[str]) -> list[dict]:
+        """Parse time range strings into structured format.
+
+        Args:
+            time_range_strings: List of time range strings in format "startTime-endTime"
+
+        Returns:
+            List of time range dictionaries with 'startTime' and 'endTime' keys
+        """
+        if not time_range_strings:
+            return []
+
+        time_ranges = []
+        for tr_str in time_range_strings:
+            try:
+                parts = tr_str.split('-')
+                if len(parts) == 2:
+                    start_time = int(parts[0])
+                    end_time = int(parts[1])
+                    time_ranges.append({'startTime': start_time, 'endTime': end_time})
+                else:
+                    logging.warning('Invalid time range format: %s (expected "startTime-endTime")', tr_str)
+            except ValueError:
+                logging.warning('Invalid time range values: %s (expected integers)', tr_str)
+
+        return time_ranges
+
+    @staticmethod
+    def _find_testcase_dirs(report_dir: str) -> list[str]:
+        """Identifies valid test case directories in the report directory.
+
+        A valid test case directory must have at least a 'hiperf' subdirectory.
+        The 'htrace' subdirectory is optional (for perf-only mode).
+
+        Args:
+            report_dir: Root report directory path
+
+        Returns:
+            List of test case directory paths
+        """
+        testcase_dirs = []
+        round_dir_pattern = re.compile(r'.*_round\d$')
+
+        for entry in os.listdir(report_dir):
+            if round_dir_pattern.match(entry):
+                continue
+
+            full_path = os.path.join(report_dir, entry)
+            # Check if directory has hiperf (htrace is optional)
+            if os.path.isdir(full_path) and os.path.exists(os.path.join(full_path, 'hiperf')):
+                testcase_dirs.append(full_path)
+
+        # If no subdirectories found, check if report_dir itself is a test case directory
+        if not testcase_dirs and os.path.exists(os.path.join(report_dir, 'hiperf')):
+            testcase_dirs.append(report_dir)
+
+        return testcase_dirs
 
     @staticmethod
     def _build_json_data(scene_dir: str, result: dict) -> str:
