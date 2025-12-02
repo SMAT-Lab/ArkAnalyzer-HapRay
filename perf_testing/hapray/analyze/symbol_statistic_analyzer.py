@@ -26,7 +26,13 @@ from hapray.analyze.base_analyzer import BaseAnalyzer
 
 class SymbolStatisticAnalyzer(BaseAnalyzer):
     """
-    Analyzer for symbol statistics based on external configuration.
+    Analyzer for trace event statistics.
+    Collects trace event statistics and correlates with measure data.
+
+    The analyzer:
+    1. Matches patterns against callstack trace event names
+    2. Groups by process, thread, and event name
+    3. Calculates load from measure table values during event duration
     """
 
     def __init__(self, scene_dir: str, symbol_file: str, time_ranges: list[dict] = None):
@@ -84,12 +90,48 @@ class SymbolStatisticAnalyzer(BaseAnalyzer):
         # Note: By default, regex supports fuzzy matching (contains match)
         # No need to add ^ and $ anchors unless explicitly specified
 
+    def _merge_time_ranges(self, time_ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Merge overlapping time ranges.
+
+        Args:
+            time_ranges: List of (start_time, end_time) tuples
+
+        Returns:
+            List of merged (start_time, end_time) tuples
+        """
+        if not time_ranges:
+            return []
+
+        # Sort by start time
+        sorted_ranges = sorted(time_ranges, key=lambda x: x[0])
+        merged = [sorted_ranges[0]]
+
+        for current_start, current_end in sorted_ranges[1:]:
+            last_start, last_end = merged[-1]
+
+            # If current range overlaps with last merged range
+            if current_start <= last_end:
+                # Merge by extending the end time
+                merged[-1] = (last_start, max(last_end, current_end))
+            else:
+                # No overlap, add as new range
+                merged.append((current_start, current_end))
+
+        return merged
+
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
     ) -> Optional[dict[str, Any]]:
-        """Analyze symbols in perf database for the step."""
+        """Analyze symbols in perf database for the step.
+
+        Process:
+        1. Query all time ranges (ts, dur) for symbols matching pattern from callstack
+        2. Merge overlapping time ranges
+        3. Query perf_sample for event_count values where timeStamp falls in merged ranges
+        4. Aggregate by event name and thread
+        """
         if not os.path.exists(trace_db_path):
-            self.logger.warning(f'Perf DB not found for step {step_dir}')
+            self.logger.warning(f'Trace DB not found for step {step_dir}')
             return None
 
         try:
@@ -106,53 +148,104 @@ class SymbolStatisticAnalyzer(BaseAnalyzer):
                 conn.create_function('REGEXP', 2, regexp)
                 cursor = conn.cursor()
 
-                total_matches = 0
+                # Collect all matching events across all patterns (to avoid duplicates)
+                all_event_time_ranges = {}
+
                 for pattern in self.symbol_patterns:
                     # Convert pattern to regex (supports wildcards and regex patterns)
                     regex_pattern = self._convert_pattern_to_regex(pattern)
 
+                    # Step 1: Query all time ranges from callstack for this pattern
                     query = """
-                    SELECT
-                        pf.symbol AS symbol,
-                        proc.thread_name AS process_name,
-                        t.process_id AS process_id,
-                        t.thread_name AS thread_name,
-                        t.thread_id AS thread_id,
-                        pf.path AS file,
-                        SUM(sa.event_count) AS load
-                    FROM perf_files pf
-                    JOIN perf_callchain c ON pf.serial_id = c.symbol_id AND pf.file_id = c.file_id
-                    JOIN perf_sample sa ON c.callchain_id = sa.callchain_id
-                    JOIN perf_thread t ON sa.thread_id = t.thread_id
-                    LEFT JOIN perf_thread proc ON t.process_id = proc.thread_id AND proc.thread_id = proc.process_id
-                    JOIN perf_report r ON sa.event_type_id = r.id
-                    WHERE pf.symbol IS NOT NULL
-                    AND pf.symbol REGEXP ?
-                    AND r.report_value IN ('instructions', 'raw-instruction-retired', 'hw-instructions')
+                    SELECT DISTINCT
+                        c.name AS event_name,
+                        c.ts AS start_time,
+                        c.ts + c.dur AS end_time,
+                        c.callid
+                    FROM callstack c
+                    WHERE c.name IS NOT NULL
+                    AND c.name REGEXP ?
                     """
                     params = [regex_pattern]
-                    if self.time_ranges:
-                        for tr in self.time_ranges:
-                            query += ' AND sa.timestamp_trace BETWEEN ? AND ?'
-                            params.extend([tr['startTime'], tr['endTime']])
-                    query += ' GROUP BY pf.symbol, t.process_id, t.thread_id, pf.path'
-                    cursor.execute(query, params)
-                    rows = cursor.fetchall()
-                    total_matches += len(rows)
 
-                    for row in rows:
+                    if self.time_ranges:
+                        time_range_conditions = ' OR '.join(['(c.ts BETWEEN ? AND ?)'] * len(self.time_ranges))
+                        query += f' AND ({time_range_conditions})'
+                        for tr in self.time_ranges:
+                            params.extend([tr['startTime'], tr['endTime']])
+
+                    cursor.execute(query, params)
+                    callstack_rows = cursor.fetchall()
+
+                    if not callstack_rows:
+                        continue
+
+                    # Group by event_name (accumulate across patterns)
+                    for row in callstack_rows:
+                        event_name = row[0]
+                        start_time = row[1]
+                        end_time = row[2]
+
+                        if event_name not in all_event_time_ranges:
+                            all_event_time_ranges[event_name] = []
+                        # Avoid duplicate time ranges for the same event
+                        time_range_tuple = (start_time, end_time)
+                        if time_range_tuple not in all_event_time_ranges[event_name]:
+                            all_event_time_ranges[event_name].append(time_range_tuple)
+
+                # Step 2 & 3: For each event, merge time ranges and query perf_sample
+                total_matches = 0
+                for event_name, time_ranges_list in all_event_time_ranges.items():
+                    merged_ranges = self._merge_time_ranges(time_ranges_list)
+
+                    self.logger.info(
+                        f'Event "{event_name}": {len(time_ranges_list)} ranges merged to {len(merged_ranges)}'
+                    )
+
+                    # Query perf_sample for each merged range and aggregate by thread
+                    thread_loads = {}
+
+                    for start_time, end_time in merged_ranges:
+                        perf_query = """
+                        SELECT
+                            ps.thread_id,
+                            pt.thread_name,
+                            pt.process_id,
+                            SUM(ps.event_count) AS total_event_count
+                        FROM perf_sample ps
+                        LEFT JOIN perf_thread pt ON ps.thread_id = pt.thread_id
+                        WHERE ps.timeStamp >= ? AND ps.timeStamp <= ?
+                        GROUP BY ps.thread_id
+                        """
+
+                        cursor.execute(perf_query, [start_time, end_time])
+                        perf_rows = cursor.fetchall()
+
+                        # Accumulate event counts by thread
+                        for perf_row in perf_rows:
+                            thread_id = perf_row[0]
+                            thread_name = perf_row[1] or 'unknown'
+                            process_id = perf_row[2] or 0
+                            event_count = perf_row[3] or 0
+
+                            thread_key = (thread_id, thread_name, process_id)
+                            if thread_key not in thread_loads:
+                                thread_loads[thread_key] = 0
+                            thread_loads[thread_key] += event_count
+
+                    # Step 4: Add to statistics
+                    for (thread_id, thread_name, _process_id), total_load in thread_loads.items():
                         self.statistics.append(
                             {
                                 'step': step_dir,
-                                'symbol': row[0],
-                                'process': f'{row[1] or "unknown"} ({row[2]})',
-                                'thread': f'{row[3]} ({row[4]})',
-                                'file': row[5],
-                                'load': row[6],
+                                'event_name': event_name,
+                                'thread': f'{thread_name} ({thread_id})',
+                                'load': total_load,
                             }
                         )
+                        total_matches += 1
 
-            self.logger.info(f'Analyzed {total_matches} symbols for step {step_dir}')
+            self.logger.info(f'Analyzed {total_matches} symbol statistics for step {step_dir}')
             return {'analyzed': True, 'matches': total_matches}
 
         except sqlite3.Error as e:
@@ -163,11 +256,11 @@ class SymbolStatisticAnalyzer(BaseAnalyzer):
             return {'error': str(e)}
 
     def generate_excel(self, output_path: str):
-        """Generate Excel report from collected statistics."""
+        """Generate Excel report from collected trace event statistics."""
         if not self.statistics:
             self.logger.warning('No statistics to generate Excel')
             return
 
         df = pd.DataFrame(self.statistics)
-        df.to_excel(output_path, index=False, sheet_name='Symbol Statistics')
+        df.to_excel(output_path, index=False, sheet_name='Trace Event Statistics')
         self.logger.info(f'Excel report generated at {output_path}')
