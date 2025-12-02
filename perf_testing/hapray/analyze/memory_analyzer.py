@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import contextlib
 import os
 from typing import Any, Optional
 
@@ -258,6 +259,10 @@ class MemoryAnalyzer(BaseAnalyzer):
 
         # Save to SQLite database
         self._save_results_to_db()
+
+        # Ensure database is fully written and flushed to disk
+        # This is critical to prevent race conditions when packaging the database file
+        self._ensure_db_flushed()
 
     def _export_comparison_report(self):
         """导出对比报告（包含所有步骤的数据）"""
@@ -639,3 +644,38 @@ class MemoryAnalyzer(BaseAnalyzer):
             )
             models.append(model)
         return models
+
+    def _ensure_db_flushed(self):
+        """Ensure database is fully written and flushed to disk
+
+        This method performs the following operations:
+        1. Commits any pending transactions
+        2. Executes WAL checkpoint to merge WAL file into main database
+        3. Closes database connection to ensure all buffers are flushed
+
+        This is critical to prevent race conditions when the database file
+        is packaged into HTML before all data is written to disk.
+        """
+        try:
+            if self._db_conn is None:
+                return
+
+            # Commit any pending transactions
+            self.commit()
+
+            # Execute WAL checkpoint to merge WAL file into main database
+            # This ensures all data in WAL is written to the main database file
+            try:
+                self.exec_sql('PRAGMA wal_checkpoint(TRUNCATE)')
+                self.logger.debug('WAL checkpoint completed')
+            except Exception as e:
+                self.logger.warning('WAL checkpoint failed (may not be in WAL mode): %s', str(e))
+
+            # Close database connection to ensure all buffers are flushed
+            self.close_db_connection()
+            self.logger.debug('Database connection closed and flushed')
+        except Exception as e:
+            self.logger.warning('Failed to flush database: %s', str(e))
+            # Try to close connection anyway
+            with contextlib.suppress(Exception):
+                self.close_db_connection()

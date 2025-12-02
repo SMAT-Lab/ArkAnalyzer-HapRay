@@ -60,6 +60,22 @@ excludes:
 
 # 技术栈检测规则
 detections:
+  # ==================== SO Files ====================
+  - id: "SO_Files"
+    name: "SO Files"
+    type: "SO"
+    confidence: 0.90
+    fileRules:
+      - type: "filename"
+        patterns: [".*\\.so$"]
+    metadataRules:
+      - field: "soDependencies"
+        extractor: "extractSoDependencies"
+      - field: "soExports"
+        extractor: "extractSoExports"
+      - field: "soImports"
+        extractor: "extractSoImports"
+        
   # ==================== Flutter ====================
   - id: "Flutter"
     name: "Flutter"
@@ -81,12 +97,6 @@ detections:
         extractor: "extractFlutterVersionLastModified"
       - field: "openSourcePackages"
         extractor: "extractDartPackages"
-      - field: "soDependencies"
-        extractor: "extractSoDependencies"
-      - field: "soExports"
-        extractor: "extractSoExports"
-      - field: "soImports"
-        extractor: "extractSoImports"
 
 
   - id: "FlutterAssets"
@@ -112,13 +122,6 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libreact_.*\\.so$","libreact_.*\\.so", "librnoh\\.so", "librnoh_.*\\.so", "libjsi\\.so", "libjsinspector\\.so"]
-    metadataRules:
-      - field: "soDependencies"
-        extractor: "extractSoDependencies"
-      - field: "soExports"
-        extractor: "extractSoExports"
-      - field: "soImports"
-        extractor: "extractSoImports"
 
   - id: "Hermes_Engine"
     name: "Hermes JavaScript Engine"
@@ -127,13 +130,6 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libhermes\\.so$"]
-    metadataRules:
-      - field: "soDependencies"
-        extractor: "extractSoDependencies"
-      - field: "soExports"
-        extractor: "extractSoExports"
-      - field: "soImports"
-        extractor: "extractSoImports"
 
   - id: "RN bundles"
     name: "RN bundles"

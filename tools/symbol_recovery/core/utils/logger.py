@@ -4,6 +4,7 @@
 统一的 logging 配置，支持同时输出到控制台与日志文件。
 """
 
+import io
 import logging
 import os
 import sys
@@ -12,6 +13,7 @@ from typing import Optional
 
 _LOGGER_INITIALIZED = False
 _LOG_FILE_PATH: Optional[Path] = None
+_STDOUT_WRAPPER = None  # Keep reference to prevent garbage collection
 
 
 def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
@@ -43,7 +45,15 @@ def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
 
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s - %(message)s', '%Y-%m-%d %H:%M:%S')
 
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Create UTF-8 encoded wrapper for stdout
+    # Keep reference in global variable to prevent garbage collection
+    global _STDOUT_WRAPPER
+    if _STDOUT_WRAPPER is None:
+        # Use TextIOWrapper to set UTF-8 encoding for stdout
+        # Keep reference to prevent the wrapper from being closed
+        _STDOUT_WRAPPER = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+
+    console_handler = logging.StreamHandler(_STDOUT_WRAPPER)
     console_handler.setLevel(numeric_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
@@ -75,9 +85,9 @@ def get_logger(name: Optional[str] = None, level: Optional[str] = None) -> loggi
         logger_name = f'{logger_name}.{name}'
 
     logger = logging.getLogger(logger_name)
-    desired_level = level or os.getenv('SYMBOL_RECOVERY_LOGGER_LEVEL')
+    desired_level = level or os.getenv('LOGGER_LEVEL')
     if desired_level:
         logger.setLevel(getattr(logging, desired_level.upper(), logging.INFO))
     elif logger.level == logging.NOTSET:
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
     return logger

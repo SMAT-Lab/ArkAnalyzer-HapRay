@@ -45,6 +45,7 @@ export interface SubComponentConfig {
     name?: string;
     files: Array<string>;
     threads?: Array<string>;
+    priority?: number; // 优先级，数字越大优先级越高，默认为 0
 }
 
 export interface ComponentConfig {

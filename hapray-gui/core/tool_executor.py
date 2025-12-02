@@ -125,7 +125,15 @@ class ToolExecutor:
                 # 保持参数名不变，不做下划线到中划线的转换
                 param_name = key
                 if isinstance(value, bool):
-                    if value:
+                    # 特殊处理：trace 和 perf 参数，false 时添加 --no-trace/--no-perf
+                    if param_name == 'trace':
+                        if not value:
+                            cmd.append('--no-trace')
+                    elif param_name == 'perf':
+                        if not value:
+                            cmd.append('--no-perf')
+                    elif value:
+                        # 其他 bool 参数，true 时添加参数
                         cmd.append(f'--{param_name}')
                 elif isinstance(value, list):
                     cmd.extend([f'--{param_name}'] + [str(v) for v in value])
@@ -146,6 +154,25 @@ class ToolExecutor:
             if sys.platform == 'win32':
                 # 在 Windows 上强制使用 UTF-8 编码
                 env['PYTHONIOENCODING'] = 'utf-8'
+
+            # 获取插件配置并作为环境变量传递（键值对形式）
+            plugin_config = self.config.get(f'plugins.{plugin_id}.config', {})
+            # 将每个配置项作为独立的环境变量传递
+            if plugin_config:
+                for config_key, config_value in plugin_config.items():
+                    # 将配置键转换为环境变量名（大写，下划线分隔）
+                    # 格式: KEY
+                    env_key = config_key.upper().replace('-', '_')
+
+                    # 将配置值转换为字符串
+                    if isinstance(config_value, bool):
+                        env_value = 'true' if config_value else 'false'
+                    elif config_value is None:
+                        env_value = ''
+                    else:
+                        env_value = str(config_value)
+                    env[env_key] = env_value
+                    logger.debug(f'设置环境变量: {env_key}={env_value}')
 
             # 执行命令
             try:

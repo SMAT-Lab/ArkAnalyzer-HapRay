@@ -218,7 +218,12 @@ export class ExcelFormatter extends BaseFormatter {
                 let cellValue = '';
                 if (value !== undefined && value !== null) {
                     if (Array.isArray(value)) {
-                        cellValue = value.join(', ');
+                        // soExports 和 soImports 使用换行符分隔，其他数组使用逗号分隔
+                        if (column === 'soExports' || column === 'soImports') {
+                            cellValue = value.join(os.EOL);
+                        } else {
+                            cellValue = value.join(', ');
+                        }
                     } else {
                         cellValue = String(value);
                     }

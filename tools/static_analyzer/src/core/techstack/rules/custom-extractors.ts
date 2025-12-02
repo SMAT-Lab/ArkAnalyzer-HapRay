@@ -410,124 +410,99 @@ async function extractLastModified(fileInfo: FileInfo, _pattern?: MetadataPatter
 }
 
 /**
- * 提取SO文件的依赖库列表
+ * SO文件ELF信息缓存（基于文件路径）
+ * 避免同一个文件被多次解析
  */
-async function extractSoDependencies(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
+const soElfInfoCache = new Map<string, Promise<{ dependencies: Array<string>; exports: Array<string>; imports: Array<string> } | null>>();
+
+/**
+ * 统一获取SO文件的ELF信息（带缓存）
+ * 合并了 extractSoDependencies、extractSoExports 和 extractSoImports 的公共逻辑
+ */
+async function getSoElfInfo(fileInfo: FileInfo): Promise<{ dependencies: Array<string>; exports: Array<string>; imports: Array<string> } | null> {
     if (!fileInfo.content) {
-        return [];
+        return null;
     }
 
     // 检查文件是否为SO文件
     if (!fileInfo.file.endsWith('.so')) {
-        return [];
+        return null;
     }
 
-    try {
-        const elfAnalyzer = ElfAnalyzer.getInstance();
+    // 使用文件路径作为缓存键
+    const cacheKey = fileInfo.file;
 
-        // 创建临时文件
-        const tempDir = path.join(process.cwd(), '.temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
+    // 如果缓存中存在，直接返回
+    if (soElfInfoCache.has(cacheKey)) {
+        return soElfInfoCache.get(cacheKey)!;
+    }
+
+    // 创建解析任务
+    const parseTask = (async () => {
+        // 再次检查 content（TypeScript 类型保护）
+        if (!fileInfo.content) {
+            return null;
         }
-
-        const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}.so`);
-        fs.writeFileSync(tempFilePath, fileInfo.content);
 
         try {
-            const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
-            return elfInfo.dependencies;
-        } finally {
-            // 清理临时文件
-            if (fs.existsSync(tempFilePath)) {
-                fs.unlinkSync(tempFilePath);
+            const elfAnalyzer = ElfAnalyzer.getInstance();
+
+            // 创建临时文件
+            const tempDir = path.join(process.cwd(), '.temp');
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
             }
+
+            const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}_${path.basename(fileInfo.file)}`);
+            fs.writeFileSync(tempFilePath, fileInfo.content);
+
+            try {
+                const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
+                return {
+                    dependencies: elfInfo.dependencies,
+                    exports: elfInfo.exports,
+                    imports: elfInfo.imports
+                };
+            } finally {
+                // 清理临时文件
+                if (fs.existsSync(tempFilePath)) {
+                    fs.unlinkSync(tempFilePath);
+                }
+            }
+        } catch (error) {
+            console.warn(`Failed to extract SO info from ${fileInfo.file}:`, error);
+            return null;
         }
-    } catch (error) {
-        console.warn(`Failed to extract SO dependencies from ${fileInfo.file}:`, error);
-        return [];
-    }
+    })();
+
+    // 将任务加入缓存
+    soElfInfoCache.set(cacheKey, parseTask);
+
+    // 解析完成后，可以选择保留缓存或清理（这里保留缓存以提高性能）
+    return parseTask;
+}
+
+/**
+ * 提取SO文件的依赖库列表
+ */
+async function extractSoDependencies(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
+    const elfInfo = await getSoElfInfo(fileInfo);
+    return elfInfo?.dependencies ?? [];
 }
 
 /**
  * 提取SO文件的导出符号（限制数量以避免过大）
  */
 async function extractSoExports(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
-    if (!fileInfo.content) {
-        return [];
-    }
-
-    // 检查文件是否为SO文件
-    if (!fileInfo.file.endsWith('.so')) {
-        return [];
-    }
-
-    try {
-        const elfAnalyzer = ElfAnalyzer.getInstance();
-
-        // 创建临时文件
-        const tempDir = path.join(process.cwd(), '.temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}.so`);
-        fs.writeFileSync(tempFilePath, fileInfo.content);
-
-        try {
-            const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
-            // 限制导出符号数量，只返回前100个
-            return elfInfo.exports.slice(0, 100);
-        } finally {
-            // 清理临时文件
-            if (fs.existsSync(tempFilePath)) {
-                fs.unlinkSync(tempFilePath);
-            }
-        }
-    } catch (error) {
-        console.warn(`Failed to extract SO exports from ${fileInfo.file}:`, error);
-        return [];
-    }
+    const elfInfo = await getSoElfInfo(fileInfo);
+    return elfInfo?.exports ?? [];
 }
 
 /**
  * 提取SO文件的导入符号（限制数量以避免过大）
  */
 async function extractSoImports(fileInfo: FileInfo, _pattern?: MetadataPattern): Promise<Array<string>> {
-    if (!fileInfo.content) {
-        return [];
-    }
-
-    // 检查文件是否为SO文件
-    if (!fileInfo.file.endsWith('.so')) {
-        return [];
-    }
-
-    try {
-        const elfAnalyzer = ElfAnalyzer.getInstance();
-
-        // 创建临时文件
-        const tempDir = path.join(process.cwd(), '.temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const tempFilePath = path.join(tempDir, `temp_so_${Date.now()}.so`);
-        fs.writeFileSync(tempFilePath, fileInfo.content);
-
-        try {
-            const elfInfo = await elfAnalyzer.getElfInfo(tempFilePath);
-            // 限制导入符号数量，只返回前100个
-            return elfInfo.imports.slice(0, 100);
-        } finally {
-            // 清理临时文件
-            if (fs.existsSync(tempFilePath)) {
-                fs.unlinkSync(tempFilePath);
-            }
-        }
-    } catch (error) {
-        console.warn(`Failed to extract SO imports from ${fileInfo.file}:`, error);
-        return [];
-    }
+    const elfInfo = await getSoElfInfo(fileInfo);
+    return elfInfo?.imports ?? [];
 }
 
