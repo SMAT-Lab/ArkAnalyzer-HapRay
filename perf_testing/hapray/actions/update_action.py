@@ -158,8 +158,8 @@ class UpdateAction:
             use_refined_lib_symbol=parsed_args.use_refined_lib_symbol,
             export_comparison=parsed_args.export_comparison,
         )
-        if parsed_args.mode == Mode.SIMPLE and parsed_args.symbolstatistic:
-            symbol_file = parsed_args.symbolstatistic
+        if parsed_args.mode == Mode.SIMPLE and parsed_args.symbol_statistic:
+            symbol_file = parsed_args.symbol_statistic
             time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
             analyzer = SymbolStatisticAnalyzer(report_dir, symbol_file, time_ranges)
             testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)

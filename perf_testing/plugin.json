@@ -219,7 +219,7 @@
           "required": false,
           "help": "SIMPLE模式可选的steps.json文件路径"
         },
-        "time_ranges": {
+        "time-ranges": {
           "type": "str",
           "label": "时间范围",
           "required": false,
