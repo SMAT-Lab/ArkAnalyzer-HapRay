@@ -393,21 +393,11 @@ class ExcelOffsetAnalyzer:
         so_name = self.so_file.name.lower()
         so_file_name = self.so_file.name
 
-        # 根据 SO 文件名推断库的类型和用途，格式与示例保持一致
+        # 根据 SO 文件名推断库的类型和用途（通用化处理，不涉及具体应用）
         if 'xwebcore' in so_name or 'xweb' in so_name:
             return (
                 f'这是一个基于 Chromium Embedded Framework (CEF) 的 Web 核心库（{so_file_name}），'
                 f'运行在 HarmonyOS 平台上。该库负责网页渲染、网络请求、DOM 操作等核心功能。'
-            )
-        if 'wechat' in so_name or 'wx' in so_name:
-            return (
-                f'这是一个来自微信（WeChat）应用的 SO 库（{so_file_name}），'
-                f'运行在 HarmonyOS 平台上。该库负责即时通讯、社交网络、多媒体处理等功能。'
-            )
-        if 'taobao' in so_name or 'tb' in so_name:
-            return (
-                f'这是一个来自淘宝（Taobao）应用的 SO 库（{so_file_name}），'
-                f'运行在 HarmonyOS 平台上。该库负责电商购物、商品展示、支付处理等功能。'
             )
         if 'chromium' in so_name or 'blink' in so_name or 'v8' in so_name:
             return (

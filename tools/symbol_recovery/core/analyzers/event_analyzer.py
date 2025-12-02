@@ -39,12 +39,14 @@ class EventCountAnalyzer:
     def __init__(
         self,
         perf_db_file,
-        so_dir,
+        so_dir=None,
+        so_file=None,
         use_llm=True,
         llm_model=None,
         use_batch_llm=True,
         batch_size=5,
         context=None,
+        open_source_lib=None,
         use_capstone_only=False,
         save_prompts=False,
         output_dir=None,
@@ -55,30 +57,41 @@ class EventCountAnalyzer:
 
         Args:
             perf_db_file: perf.db 文件路径
-            so_dir: SO 文件目录
+            so_dir: SO 文件目录（可选，如果指定了 so_file 则不需要）
+            so_file: 单个 SO 文件路径（可选，如果指定则优先使用此文件，否则使用 so_dir）
             use_llm: 是否使用 LLM 分析
             llm_model: LLM 模型名称
             use_batch_llm: 是否使用批量 LLM 分析（一个 prompt 包含多个函数，默认 True）
             batch_size: 批量分析时每个 prompt 包含的函数数量（默认 3）
             context: 自定义上下文信息（可选，如果不提供则根据 SO 文件名自动推断）
+            open_source_lib: 开源库名称（可选，如 "ffmpeg", "openssl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本
             use_capstone_only: 只使用 Capstone 反汇编（不使用 Radare2，即使已安装）
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
             skip_decompilation: 是否跳过反编译（默认 False，启用反编译可提高 LLM 分析质量但较慢）
         """
         self.perf_db_file = Path(perf_db_file)
-        self.so_dir = Path(so_dir)
+        self.so_dir = Path(so_dir) if so_dir else None
+        self.so_file = Path(so_file) if so_file else None
+        
+        # 验证：必须提供 so_file 或 so_dir 之一
+        if not self.so_file and not self.so_dir:
+            raise ValueError('必须提供 so_file 或 so_dir 之一')
+        
+        if self.so_file and not self.so_file.exists():
+            raise FileNotFoundError(f'SO 文件不存在: {so_file}')
         self.use_llm = use_llm
         self.llm_model = llm_model
         self.use_batch_llm = use_batch_llm
         self.batch_size = batch_size or config.DEFAULT_BATCH_SIZE
         self.context = context
+        self.open_source_lib = open_source_lib
         self.use_capstone_only = use_capstone_only
         self.skip_decompilation = skip_decompilation
 
         if not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 不存在: {perf_db_file}')
-        if not self.so_dir.exists():
+        if self.so_dir and not self.so_dir.exists():
             raise FileNotFoundError(f'SO 文件目录不存在: {so_dir}')
 
         # 初始化 LLM 分析器（公共工具）
@@ -90,6 +103,7 @@ class EventCountAnalyzer:
             logger=logger.info,
             save_prompts=save_prompts,
             output_dir=output_dir,
+            open_source_lib=self.open_source_lib,
         )
 
     def analyze(self):
@@ -250,6 +264,12 @@ class EventCountAnalyzer:
         excluded_exact = ['[shmm]', '未知文件', '/bin/devhost.elf']
         excluded_prefixes = ['/system', '/vendor/lib64', '/lib', '/chip_prod']
 
+        # 如果指定了 so_file，只保留匹配的地址
+        target_so_name = None
+        if self.so_file:
+            target_so_name = self.so_file.name
+            logger.info(f'📌 已指定 SO 文件: {target_so_name}，将只分析该文件的地址')
+
         filtered = {}
         for key, data in address_event_counts.items():
             file_path, address = key
@@ -257,6 +277,13 @@ class EventCountAnalyzer:
                 continue
             if any(file_path.startswith(prefix) for prefix in excluded_prefixes):
                 continue
+            
+            # 如果指定了 so_file，只保留匹配的地址
+            if target_so_name:
+                file_so_name = Path(file_path).name
+                if file_so_name != target_so_name:
+                    continue
+            
             filtered[key] = {
                 **data['info'],
                 'event_count': data['event_count'],
@@ -301,6 +328,7 @@ class EventCountAnalyzer:
         analyzer = MissingSymbolFunctionAnalyzer(
             excel_file=temp_excel,
             so_dir=self.so_dir,
+            so_file=self.so_file,
             use_llm=self.use_llm,
             llm_model=self.llm_model,
             use_capstone_only=self.use_capstone_only,
@@ -520,7 +548,8 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
-                    so_dir=str(self.so_dir),
+                    so_dir=str(self.so_dir) if self.so_dir else None,
+                    so_file=str(self.so_file) if self.so_file else None,
                     use_llm=False,  # 先不启用，避免重复初始化
                     llm_model=self.llm_model,
                     use_batch_llm=self.use_batch_llm,
@@ -539,7 +568,8 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
-                    so_dir=str(self.so_dir),
+                    so_dir=str(self.so_dir) if self.so_dir else None,
+                    so_file=str(self.so_file) if self.so_file else None,
                     use_llm=self.use_llm,
                     llm_model=self.llm_model,
                     use_batch_llm=self.use_batch_llm,
@@ -634,7 +664,8 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
-                    so_dir=str(self.so_dir),
+                    so_dir=str(self.so_dir) if self.so_dir else None,
+                    so_file=str(self.so_file) if self.so_file else None,
                     use_llm=False,  # 先不启用，避免重复初始化
                     llm_model=self.llm_model,
                     use_capstone_only=self.use_capstone_only,
@@ -649,7 +680,8 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
-                    so_dir=str(self.so_dir),
+                    so_dir=str(self.so_dir) if self.so_dir else None,
+                    so_file=str(self.so_file) if self.so_file else None,
                     use_llm=self.use_llm,
                     llm_model=self.llm_model,
                     use_batch_llm=self.use_batch_llm,  # 传递批量分析设置

@@ -1,8 +1,9 @@
 import time
+from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class PerfLoad_gaodeditu_0020(PerfTestCase):
@@ -28,7 +29,7 @@ class PerfLoad_gaodeditu_0020(PerfTestCase):
         self.driver.swipe_to_home()
 
         # Step('启动被测应用')
-        self.driver.start_app(self.app_package, page_name='EntryAbility')
+        self.driver.start_app(self.app_package)
         self.driver.wait(5)
         time.sleep(2)
 
@@ -50,11 +51,12 @@ class PerfLoad_gaodeditu_0020(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('高德地图-钟楼搜索页面、推荐页面滑动浏览场景-step1上下滑动5次', 30, step1)
-
         def step2():
             # Step('左滑操作')
             self.swipes_left(swip_num=3, sleep=2)
             # Step('右滑操作')
             self.swipes_right(swip_num=3, sleep=2)
+
+
 
         self.execute_performance_step('高德地图-钟楼搜索页面、推荐页面滑动浏览场景-step2上下滑动3次', 30, step2)

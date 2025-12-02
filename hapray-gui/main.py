@@ -2,9 +2,9 @@
 主程序入口
 """
 
-import io
-import os
 import sys
+import os
+import io
 
 # 在 Windows 上设置 UTF-8 编码
 if sys.platform == 'win32':

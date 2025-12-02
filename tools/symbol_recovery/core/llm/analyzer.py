@@ -50,6 +50,7 @@ class LLMFunctionAnalyzer:
         enable_cache: bool = True,
         save_prompts: bool = False,
         output_dir: Optional[str] = None,
+        open_source_lib: Optional[str] = None,
     ):
         """
         初始化 LLM 分析器
@@ -61,6 +62,7 @@ class LLMFunctionAnalyzer:
             enable_cache: 是否启用缓存（避免重复分析相同代码）
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
+            open_source_lib: 开源库名称（可选，如 "ffmpeg", "openssl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本
         """
         if openai is None:
             raise ImportError('需要安装 openai 库: pip install openai')
@@ -72,6 +74,8 @@ class LLMFunctionAnalyzer:
         default_model = llm_config['model']
 
         # 优先使用参数传入的 key，其次从环境变量读取，最后尝试从 .env 文件读取
+        self.open_source_lib = open_source_lib  # 开源库名称
+        
         self.api_key = api_key or os.getenv(api_key_env)
         if not self.api_key:
             # 尝试从 .env 文件读取（如果安装了 python-dotenv）
@@ -331,7 +335,8 @@ class LLMFunctionAnalyzer:
         logger.debug(f'构建新的 prompt（总指令数: {len(instructions)}）')
         prompt = self._build_prompt(
             instructions, strings, symbol_name, called_functions, offset, context,
-            func_info=func_info, call_count=call_count, event_count=event_count, so_file=so_file
+            func_info=func_info, call_count=call_count, event_count=event_count, so_file=so_file,
+            open_source_lib=self.open_source_lib
         )
         
         # 保存 prompt（如果启用）
@@ -454,30 +459,98 @@ class LLMFunctionAnalyzer:
         call_count: Optional[int] = None,
         event_count: Optional[int] = None,
         so_file: Optional[str] = None,
+        open_source_lib: Optional[str] = None,
     ) -> str:
         """构建 LLM 提示词"""
         prompt_parts = []
 
         prompt_parts.append('请分析以下 ARM64 反汇编代码，推断函数的功能和可能的函数名。')
         prompt_parts.append('')
-        prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，该函数被识别为高指令数负载的热点函数。')
-        prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
-        prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
-        prompt_parts.append('  - 内存操作（大量内存拷贝、频繁的内存分配/释放）')
-        prompt_parts.append('  - 字符串处理（字符串拼接、解析、格式化）')
-        prompt_parts.append('  - 算法复杂度（O(n²)、O(n³) 等高复杂度算法）')
-        prompt_parts.append('  - 系统调用和 I/O 操作（文件读写、网络操作）')
-        prompt_parts.append('  - 递归调用（深度递归可能导致栈溢出或高指令数）')
-        prompt_parts.append('  - 异常处理（频繁的异常捕获和处理）')
-        prompt_parts.append('  - 锁和同步操作（频繁的加锁/解锁、条件等待）')
-        prompt_parts.append('  - 数据结构和算法选择不当（低效的数据结构使用）')
+        
+        # 如果指定了开源库，添加重要提示
+        if open_source_lib:
+            prompt_parts.append(f'🔍 重要提示：这是一个基于开源库 {open_source_lib} 的定制版本（三方库）。')
+            prompt_parts.append(f'   该 SO 文件是基于 {open_source_lib} 开源项目进行定制开发的，函数实现可能与标准 {open_source_lib} 库相似。')
+            prompt_parts.append(f'   请利用您对 {open_source_lib} 开源库的知识，结合反编译代码的特征，')
+            prompt_parts.append(f'   直接根据 {open_source_lib} 库中常见的函数名和功能模式来推断函数名和功能。')
+            prompt_parts.append(f'   如果反编译代码的特征与 {open_source_lib} 库中的某个函数匹配，请优先使用该函数名。')
+            prompt_parts.append('')
+            prompt_parts.append('   📌 SIMD 向量化指令识别（重要：区分标量与向量）：')
+            prompt_parts.append('   请仔细检查反汇编代码中是否使用了 SIMD（单指令多数据）向量化指令。')
+            prompt_parts.append('')
+            prompt_parts.append('   ✅ 向量 NEON 指令的判断标准（必须同时满足）：')
+            prompt_parts.append('   1. 使用向量寄存器 v0-v31（不是标量寄存器 s0-s31）')
+            prompt_parts.append('   2. 有向量后缀标识，如：')
+            prompt_parts.append('      - .4s, .2s (4个/2个32位浮点数)')
+            prompt_parts.append('      - .8h, .4h (8个/4个16位整数)')
+            prompt_parts.append('      - .16b, .8b (16个/8个8位整数)')
+            prompt_parts.append('      - .2d (2个64位浮点数)')
+            prompt_parts.append('   3. 常见的向量 NEON 指令示例：')
+            prompt_parts.append('      - fadd v0.4s, v1.4s, v2.4s  (向量加法，4个浮点数)')
+            prompt_parts.append('      - fmla v0.4s, v1.4s, v2.4s  (向量融合乘加)')
+            prompt_parts.append('      - ld1 {v0.4s}, [x0]         (向量加载)')
+            prompt_parts.append('      - st1 {v0.4s}, [x0]         (向量存储)')
+            prompt_parts.append('      - addv s0, v1.4s            (向量缩减)')
+            prompt_parts.append('      - dup v0.4s, v1.s[0]        (向量复制)')
+            prompt_parts.append('')
+            prompt_parts.append('   ❌ 不是向量 NEON 的情况：')
+            prompt_parts.append('   1. 只使用标量寄存器 s0-s31（32位浮点）或 d0-d31（64位浮点），没有向量后缀')
+            prompt_parts.append('      - 例如：fmadd s0, s1, s2, s3  (标量融合乘加，不是向量)')
+            prompt_parts.append('      - 例如：fadd s0, s1, s2       (标量浮点加法，不是向量)')
+            prompt_parts.append('      - 例如：ldp s0, s1, [x0]     (加载两个标量，不是向量)')
+            prompt_parts.append('   2. 虽然 fmadd/fnmsub 是性能优化指令，但如果只操作标量寄存器，')
+            prompt_parts.append('      它们不是 SIMD 向量化指令，只是标量浮点优化指令。')
+            prompt_parts.append('')
+            prompt_parts.append('   🔍 判断步骤：')
+            prompt_parts.append('   1. 首先检查是否使用 v0-v31 向量寄存器')
+            prompt_parts.append('   2. 然后检查是否有向量后缀（.4s, .2s, .8h 等）')
+            prompt_parts.append('   3. 只有同时满足以上两点，才是向量 NEON 指令')
+            prompt_parts.append('   4. 如果只使用 s/d 寄存器且无向量后缀，则是标量指令，不是向量 NEON')
+            prompt_parts.append('')
+            prompt_parts.append('   如果识别到向量 NEON 指令的使用，请在功能描述中明确说明该函数使用了向量化优化，')
+            prompt_parts.append('   并描述向量化的具体用途（如批量数据处理、并行计算、矩阵运算等）。')
+            prompt_parts.append('   如果只使用了标量浮点指令（如 fmadd/fnmsub 的标量版本），请不要误判为向量 NEON。')
+            prompt_parts.append('')
+            prompt_parts.append('   📌 开源库功能相关性：')
+            prompt_parts.append(f'   在功能描述中，请结合 {open_source_lib} 开源库的典型功能和特性，')
+            prompt_parts.append(f'   说明该函数在 {open_source_lib} 库中的作用和定位，以及与其他 {open_source_lib} 函数的关联性。')
+            prompt_parts.append(f'   例如：该函数是 {open_source_lib} 中哪个模块/组件的核心功能，')
+            prompt_parts.append(f'   在 {open_source_lib} 的典型使用场景中扮演什么角色，')
+            prompt_parts.append(f'   与 {open_source_lib} 库中哪些常见函数或功能相关。')
+            prompt_parts.append('')
+        
+        prompt_parts.append('背景信息：')
+        prompt_parts.append('这些函数在性能分析中被检出为「高指令数占比函数（热点函数）」，')
+        prompt_parts.append('但请注意：')
+        prompt_parts.append('  "热点" ≠ "性能瓶颈"。有些函数是计算密集型算法核心（如 FFT、DCT、解码循环），负载高但合理。')
+        prompt_parts.append('')
+        prompt_parts.append('分析目标是客观识别函数所属的性能类型：')
+        prompt_parts.append('  ✅ 计算热点（Expected Hotspot）：高负载但必要、算法高效')
+        prompt_parts.append('  ⚠️ 潜在瓶颈（Optimization Opportunity）：存在低效逻辑或可改进空间')
         prompt_parts.append('')
         prompt_parts.append('请分别提供以下信息：')
-        prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
-        prompt_parts.append('  2. 负载问题识别与优化建议：')
-        prompt_parts.append('     - 是否存在明显的性能瓶颈（如上述因素）')
-        prompt_parts.append('     - 为什么这个函数可能导致高指令数负载')
-        prompt_parts.append('     - 可能的优化建议（如果有）')
+        if open_source_lib:
+            prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
+            prompt_parts.append(f'     - 如果识别到向量 NEON 指令（使用 v0-v31 寄存器且有向量后缀），请明确说明使用了向量化优化及其用途')
+            prompt_parts.append(f'     - 如果只使用了标量浮点指令（如 fmadd/fnmsub 的标量版本），请不要误判为向量 NEON，')
+            prompt_parts.append(f'       可以说明使用了融合乘加等标量优化指令，但不要说是向量化')
+            prompt_parts.append(f'     - 请结合 {open_source_lib} 开源库的功能特性，说明该函数在库中的作用和定位')
+            prompt_parts.append(f'     - 描述该函数与 {open_source_lib} 库中其他功能的关联性和相关性')
+        else:
+            prompt_parts.append('  1. 功能描述：函数的主要功能是什么（不要包含性能分析）')
+            prompt_parts.append('     - 如果识别到向量 NEON 指令（使用 v0-v31 寄存器且有向量后缀），请明确说明使用了向量化优化及其用途')
+            prompt_parts.append('     - 如果只使用了标量浮点指令（如 fmadd/fnmsub 的标量版本），请不要误判为向量 NEON，')
+            prompt_parts.append('       可以说明使用了融合乘加等标量优化指令，但不要说是向量化')
+        prompt_parts.append('  2. 负载问题识别与优化建议（performance_analysis）：')
+        prompt_parts.append('     判断函数属于：')
+        prompt_parts.append('       - "计算热点（预期高负载）"')
+        prompt_parts.append('       - "潜在瓶颈（可优化）"')
+        prompt_parts.append('     并说明原因，包括但不限于以下因素：')
+        prompt_parts.append('       - 算法复杂度（如循环结构、嵌套处理）')
+        prompt_parts.append('       - 内存访问模式（频繁读写、拷贝、缓存问题）')
+        prompt_parts.append('       - I/O 调用（网络、文件访问）')
+        prompt_parts.append('       - 函数调用频度或上下文切换')
+        prompt_parts.append('     若存在可优化方向，请给出具体可行建议（100~300 字）')
         prompt_parts.append('')
 
         # 添加背景信息
@@ -522,7 +595,8 @@ class LLMFunctionAnalyzer:
         
         # SO 文件信息
         if so_file:
-            so_name = so_file.split('/')[-1] if '/' in so_file else so_file
+            # 跨平台路径处理：使用 Path 提取文件名
+            so_name = Path(so_file).name
             prompt_parts.append(f'所在文件: {so_name}')
 
         if symbol_name:
@@ -559,9 +633,12 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('')
         prompt_parts.append('请按以下 JSON 格式返回分析结果:')
         prompt_parts.append('{')
-        prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）",')
+        if open_source_lib:
+            prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）。如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），需说明使用了向量化优化及其用途。如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON。需结合开源库功能特性，说明该函数在库中的作用和定位，以及与库中其他功能的关联性",')
+        else:
+            prompt_parts.append('  "functionality": "详细的功能描述（中文，50-200字，仅描述功能，不包含性能分析）。如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），需说明使用了向量化优化及其用途。如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON",')
         prompt_parts.append('  "function_name": "推断的函数名（英文，遵循常见命名规范）",')
-        prompt_parts.append('  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：是否存在性能瓶颈、为什么导致高指令数负载、可能的优化建议",')
+        prompt_parts.append('  "performance_analysis": "负载问题识别与优化建议（中文，100-300字）：判断函数属于"计算热点（预期高负载）"或"潜在瓶颈（可优化）"，说明原因（算法复杂度、内存访问模式、I/O调用、函数调用频度等），若存在可优化方向，给出具体可行建议",')
         prompt_parts.append('  "confidence": "高/中/低",')
         prompt_parts.append('  "reasoning": "推理过程（中文，说明为什么这样推断）"')
         prompt_parts.append('}')
@@ -569,13 +646,26 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('注意:')
         prompt_parts.append('1. 如果符号表中已有函数名，优先使用符号名（如果是 C++ 名称修饰，请还原）')
         prompt_parts.append('2. 函数名应该遵循常见的命名规范（如驼峰命名、下划线命名）')
-        prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容')
-        prompt_parts.append('4. 负载问题识别与优化建议（performance_analysis）必须详细说明：')
-        prompt_parts.append('   - 是否存在明显的性能瓶颈（是/否，并说明原因）')
-        prompt_parts.append('   - 为什么这个函数可能导致高指令数负载（具体分析）')
-        prompt_parts.append('   - 可能的优化建议（如果有）')
-        prompt_parts.append('   示例："存在性能瓶颈。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
-        prompt_parts.append('   在处理大量数据时会导致高指令数负载。建议：1) 优化算法降低复杂度；2) 使用缓存减少重复计算"')
+        if open_source_lib:
+            prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容。')
+            prompt_parts.append('   如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），必须说明使用了向量化优化及其用途。')
+            prompt_parts.append('   如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON，可以说明使用了融合乘加等标量优化指令。')
+            prompt_parts.append('   必须结合开源库功能特性，说明该函数在库中的作用和定位，以及与库中其他功能的关联性')
+        else:
+            prompt_parts.append('3. 功能描述应该具体，不要使用泛泛的描述，且不要包含性能分析内容。')
+            prompt_parts.append('   如果识别到向量NEON指令（v0-v31寄存器且有向量后缀），必须说明使用了向量化优化及其用途。')
+            prompt_parts.append('   如果只使用标量浮点指令（如fmadd/fnmsub标量版本），不要误判为向量NEON，可以说明使用了融合乘加等标量优化指令。')
+        prompt_parts.append('4. 负载问题识别与优化建议（performance_analysis）必须客观分析：')
+        prompt_parts.append('   - 首先判断函数属于"计算热点（预期高负载）"还是"潜在瓶颈（可优化）"')
+        prompt_parts.append('   - 说明判断原因，包括算法复杂度、内存访问模式、I/O调用、函数调用频度等因素')
+        prompt_parts.append('   - 如果是"计算热点"，说明为什么高负载是合理的（如算法核心、计算密集型任务）')
+        prompt_parts.append('   - 如果是"潜在瓶颈"，给出具体的优化建议（100~300字）')
+        prompt_parts.append('   示例1（计算热点）："计算热点（预期高负载）。该函数是FFT算法的核心实现，')
+        prompt_parts.append('   包含多层嵌套循环进行频域变换，时间复杂度为O(n log n)，这是算法本身的特性，')
+        prompt_parts.append('   高指令数负载是合理的，属于预期的计算密集型热点。"')
+        prompt_parts.append('   示例2（潜在瓶颈）："潜在瓶颈（可优化）。该函数包含三层嵌套循环，时间复杂度为O(n³)，')
+        prompt_parts.append('   且存在重复计算和频繁的内存拷贝。优化建议：1) 优化算法降低复杂度至O(n²)；')
+        prompt_parts.append('   2) 使用缓存减少重复计算；3) 优化内存访问模式，减少不必要的拷贝"')
         prompt_parts.append('5. 置信度评估标准：')
         prompt_parts.append(
             "   - '高'：能看到完整的函数逻辑，包括函数序言、主要业务逻辑、函数调用、返回值等，且功能明确"

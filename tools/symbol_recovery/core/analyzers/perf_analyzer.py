@@ -57,12 +57,16 @@ class PerfDataToSqliteConverter:
                     logger.info(f'找到 trace_streamer 工具: {tool_path}')
                     return tool_path
 
-        # 尝试在 PATH 中查找
+        # 尝试在 PATH 中查找（跨平台）
         for name in possible_names:
             try:
-                result = subprocess.run(['which', name], check=False, capture_output=True, timeout=5)
+                # Windows 使用 where，Unix 使用 which
+                if platform.system().lower() == 'windows':
+                    result = subprocess.run(['where', name], check=False, capture_output=True, timeout=5, shell=True)
+                else:
+                    result = subprocess.run(['which', name], check=False, capture_output=True, timeout=5)
                 if result.returncode == 0:
-                    tool_path = result.stdout.decode().strip()
+                    tool_path = result.stdout.decode().strip().split('\n')[0].strip()
                     logger.info(f'找到 trace_streamer 工具: {tool_path}')
                     return Path(tool_path)
             except Exception:

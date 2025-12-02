@@ -1,6 +1,9 @@
+import time
+from typing import Optional
+
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class PerfLoad_taobao_0070(PerfTestCase):
@@ -37,5 +40,7 @@ class PerfLoad_taobao_0070(PerfTestCase):
             self.swipes_up(swip_num=5, sleep=3)
             # Step('关注页，下滑5次')
             self.swipes_down(swip_num=5, sleep=3)
+
+
 
         self.execute_performance_step('淘宝-关注-step1关注页面上下滑动', 40, step1)

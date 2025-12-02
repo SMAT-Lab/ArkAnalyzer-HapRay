@@ -2,8 +2,6 @@
 工具页面 - 包含各个工具的配置和执行界面
 """
 
-import sys
-from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -155,7 +153,11 @@ class ToolPage(QWidget):
                 self.action_selector.addItem(action_name, action)
                 # 设置工具提示
                 if action_desc:
-                    self.action_selector.setItemData(self.action_selector.count() - 1, action_desc, Qt.ToolTipRole)
+                    self.action_selector.setItemData(
+                        self.action_selector.count() - 1,
+                        action_desc,
+                        Qt.ToolTipRole
+                    )
 
             self.action_selector.currentIndexChanged.connect(self.on_action_changed)
             action_layout.addWidget(self.action_selector)
@@ -243,7 +245,10 @@ class ToolPage(QWidget):
                 required = param_def.get('required', False)
 
                 # 如果是必选参数，添加红色星号
-                label_text = f'<span style="color: red;">*</span> {label}:' if required else label + ':'
+                if required:
+                    label_text = f'<span style="color: red;">*</span> {label}:'
+                else:
+                    label_text = label + ':'
 
                 label_widget = QLabel(label_text)
                 label_widget.setTextFormat(Qt.RichText)
@@ -258,6 +263,7 @@ class ToolPage(QWidget):
                     label_widget.setToolTip('【必填】')
 
                 self.params_layout.addRow(label_widget, widget)
+
 
     def create_param_widget(self, param_name: str, param_def: dict[str, Any]) -> QWidget:
         """创建参数控件"""
@@ -326,20 +332,21 @@ class ToolPage(QWidget):
                         widget.set_checked_items([str(default)])
 
                 return widget
-            # 单选下拉框
-            widget = QComboBox()
-            choices = param_def.get('choices', [])
+            else:
+                # 单选下拉框
+                widget = QComboBox()
+                choices = param_def.get('choices', [])
 
-            # 如果choices是函数名，则动态获取选项
-            if isinstance(choices, str) and choices == 'get_testcases':
-                choices = FileUtils.get_testcases()
+                # 如果choices是函数名，则动态获取选项
+                if isinstance(choices, str) and choices == 'get_testcases':
+                    choices = FileUtils.get_testcases()
 
-            widget.addItems(choices)
-            if default:
-                index = widget.findText(str(default))
-                if index >= 0:
-                    widget.setCurrentIndex(index)
-            return widget
+                widget.addItems(choices)
+                if default:
+                    index = widget.findText(str(default))
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                return widget
 
         # str
         widget = QLineEdit()
@@ -463,6 +470,9 @@ class ToolPages(QWidget):
         self.config = ConfigManager()
 
         # 确定插件目录路径
+        import sys
+        from pathlib import Path
+
         if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
             # 打包后的环境
             exe_dir = Path(sys.executable).parent
@@ -485,21 +495,22 @@ class ToolPages(QWidget):
 
                 # 检查是否包含插件目录（如perf_testing等）
                 try:
-                    plugin_subdirs = [d for d in dir_path.iterdir() if d.is_dir() and (d / 'plugin.json').exists()]
+                    plugin_subdirs = [d for d in dir_path.iterdir()
+                                    if d.is_dir() and (d / 'plugin.json').exists()]
                     if plugin_subdirs:
                         plugins_dir = dir_path
                         # 写入日志文件
                         try:
                             with open(exe_dir / 'plugin_loader_debug.log', 'a', encoding='utf-8') as f:
-                                f.write(f'找到插件目录: {plugins_dir}, 插件: {[d.name for d in plugin_subdirs]}\n')
-                        except Exception:  # 忽略日志写入错误
+                                f.write(f"找到插件目录: {plugins_dir}, 插件: {[d.name for d in plugin_subdirs]}\n")
+                        except:
                             pass
                         break
                 except Exception as e:
                     try:
                         with open(exe_dir / 'plugin_loader_debug.log', 'a', encoding='utf-8') as f:
-                            f.write(f'检查目录失败 {dir_path}: {e}\n')
-                    except Exception:  # 忽略日志写入错误
+                            f.write(f"检查目录失败 {dir_path}: {e}\n")
+                    except:
                         pass
                     continue
 
@@ -508,8 +519,8 @@ class ToolPages(QWidget):
                 plugins_dir = exe_dir.parent.parent
                 try:
                     with open(exe_dir / 'plugin_loader_debug.log', 'a', encoding='utf-8') as f:
-                        f.write(f'未找到插件，使用默认目录: {plugins_dir}\n')
-                except Exception:  # 忽略日志写入错误
+                        f.write(f"未找到插件，使用默认目录: {plugins_dir}\n")
+                except:
                     pass
         else:
             # 开发环境，使用默认路径

@@ -104,12 +104,14 @@ class MissingSymbolFunctionAnalyzer:
         self,
         excel_file=None,
         so_dir=None,
+        so_file=None,
         perf_db_file=None,
         use_llm=True,
         llm_model=None,
         use_batch_llm=True,
         batch_size=None,
         context=None,
+        open_source_lib=None,
         use_capstone_only=False,
         save_prompts=False,
         output_dir=None,
@@ -120,13 +122,15 @@ class MissingSymbolFunctionAnalyzer:
 
         Args:
             excel_file: 缺失符号分析 Excel 文件（可选，如果提供 perf_db_file 则不需要）
-            so_dir: SO 文件目录
+            so_dir: SO 文件目录（可选，如果指定了 so_file 则不需要）
+            so_file: 单个 SO 文件路径（可选，如果指定则优先使用此文件，否则使用 so_dir）
             perf_db_file: perf.db 文件路径（可选，如果提供则直接从数据库读取，不需要 Excel）
             use_llm: 是否使用 LLM 分析
             llm_model: LLM 模型名称
             use_batch_llm: 是否使用批量 LLM 分析（一个 prompt 包含多个函数，默认 True）
             batch_size: 批量分析时每个 prompt 包含的函数数量（默认 3）
             context: 自定义上下文信息（可选，如果不提供则根据 SO 文件名自动推断）
+            open_source_lib: 开源库名称（可选，如 "ffmpeg", "openssl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本
             use_capstone_only: 只使用 Capstone 反汇编（不使用 Radare2，即使已安装）
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
@@ -135,11 +139,13 @@ class MissingSymbolFunctionAnalyzer:
         self.excel_file = Path(excel_file) if excel_file else None
         self.perf_db_file = Path(perf_db_file) if perf_db_file else None
         self.so_dir = Path(so_dir) if so_dir else None
+        self.so_file = Path(so_file) if so_file else None
         self.use_llm = use_llm
         self.llm_model = llm_model if llm_model is not None else config.DEFAULT_LLM_MODEL
         self.use_batch_llm = use_batch_llm
         self.batch_size = batch_size if batch_size is not None else config.DEFAULT_BATCH_SIZE
         self.context = context  # 自定义上下文
+        self.open_source_lib = open_source_lib  # 开源库名称
         self.use_capstone_only = use_capstone_only  # 强制使用 Capstone
         self.skip_decompilation = skip_decompilation  # 是否跳过反编译
         self._r2_actually_available = None  # 缓存 radare2 实际可用性（延迟检测）
@@ -154,6 +160,13 @@ class MissingSymbolFunctionAnalyzer:
         if self.perf_db_file and not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 文件不存在: {perf_db_file}')
 
+        # 验证 SO 文件或目录：必须提供 so_file 或 so_dir 之一
+        if not self.so_file and not self.so_dir:
+            raise ValueError('必须提供 so_file 或 so_dir 之一')
+        
+        if self.so_file and not self.so_file.exists():
+            raise FileNotFoundError(f'SO 文件不存在: {so_file}')
+        
         if self.so_dir and not self.so_dir.exists():
             raise FileNotFoundError(f'SO 文件目录不存在: {so_dir}')
 
@@ -175,6 +188,7 @@ class MissingSymbolFunctionAnalyzer:
             logger=logger.info,
             save_prompts=save_prompts,
             output_dir=output_dir,
+            open_source_lib=self.open_source_lib,
         )
 
     def find_so_file(self, file_path):
@@ -187,9 +201,29 @@ class MissingSymbolFunctionAnalyzer:
         Returns:
             SO 文件路径，如果找不到返回 None
         """
+        # 如果指定了单个 SO 文件，需要验证 file_path 是否匹配
+        if self.so_file and self.so_file.exists():
+            # 如果提供了 file_path，验证文件名是否匹配
+            if file_path:
+                file_so_name = Path(file_path).name
+                specified_so_name = self.so_file.name
+                # 如果文件名不匹配，返回 None（跳过该函数）
+                if file_so_name != specified_so_name:
+                    logger.debug(f'跳过不匹配的 SO 文件: {file_path} (指定的是 {specified_so_name})')
+                    return None
+            # 文件名匹配或未提供 file_path，返回指定的 SO 文件
+            return self.so_file.resolve()
+        
+        # 否则，从 so_dir 中查找匹配的 SO 文件
+        if not self.so_dir:
+            return None
+        
         # 提取文件名（如 libxwebcore.so）
-        so_name = None
-        so_name = file_path.split('/')[-1] if '/' in file_path else file_path
+        # 跨平台路径处理：使用 Path 提取文件名，自动处理 / 和 \ 分隔符
+        if file_path:
+            so_name = Path(file_path).name
+        else:
+            so_name = file_path
 
         # 在指定目录中查找
         so_file = self.so_dir / so_name
@@ -334,11 +368,11 @@ class MissingSymbolFunctionAnalyzer:
 
     def _build_context(self, so_file, file_path=None):
         """
-        构建 LLM 分析的上下文信息（根据 SO 文件名和应用路径自动推断）
+        构建 LLM 分析的上下文信息（根据 SO 文件名自动推断）
 
         Args:
             so_file: SO 文件路径
-            file_path: 文件路径（可选，用于推断应用类型）
+            file_path: 文件路径（可选，已废弃，不再用于推断应用类型）
 
         Returns:
             上下文字符串
@@ -346,36 +380,11 @@ class MissingSymbolFunctionAnalyzer:
         so_name = Path(so_file).name.lower()
         so_file_name = Path(so_file).name
 
-        # 从文件路径推断应用类型
-        app_name = None
-        if file_path:
-            file_path_lower = file_path.lower()
-            if 'taobao' in file_path_lower or 'com.taobao' in file_path_lower:
-                app_name = '淘宝（Taobao）'
-            elif 'wechat' in file_path_lower or 'com.tencent.wechat' in file_path_lower:
-                app_name = '微信（WeChat）'
-            elif 'alipay' in file_path_lower or 'com.alipay' in file_path_lower:
-                app_name = '支付宝（Alipay）'
-            elif 'qq' in file_path_lower and 'com.tencent' in file_path_lower:
-                app_name = 'QQ'
-            elif 'douyin' in file_path_lower or 'com.ss.android' in file_path_lower:
-                app_name = '抖音（Douyin）'
-
-        # 根据 SO 文件名推断库的类型和用途
+        # 根据 SO 文件名推断库的类型和用途（通用化处理，不涉及具体应用）
         if 'xwebcore' in so_name or 'xweb' in so_name:
             context = (
                 f'这是一个基于 Chromium Embedded Framework (CEF) 的 Web 核心库（{so_file_name}），'
                 f'运行在 HarmonyOS 平台上。该库负责网页渲染、网络请求、DOM 操作等核心功能。'
-            )
-        elif 'wechat' in so_name or 'wx' in so_name:
-            context = (
-                f'这是一个来自微信（WeChat）应用的 SO 库（{so_file_name}），'
-                f'运行在 HarmonyOS 平台上。该库负责即时通讯、社交网络、多媒体处理等功能。'
-            )
-        elif 'taobao' in so_name or 'tb' in so_name:
-            context = (
-                f'这是一个来自淘宝（Taobao）应用的 SO 库（{so_file_name}），'
-                f'运行在 HarmonyOS 平台上。该库负责电商购物、商品展示、支付处理等功能。'
             )
         elif 'chromium' in so_name or 'blink' in so_name or 'v8' in so_name:
             context = (
@@ -384,14 +393,20 @@ class MissingSymbolFunctionAnalyzer:
             )
         elif 'flutter' in so_name:
             context = (
-                f'这是一个 Flutter 框架相关的 SO 库（{so_file_name}），'
-                f'Flutter 是 Google 开发的跨平台 UI 框架，用于构建移动应用界面。'
+                f'这是一个基于 Flutter 框架的组件库（{so_file_name}），'
+                f'通常用于跨平台 UI 渲染和业务逻辑处理。'
             )
-        # 通用格式，根据应用名称调整
-        elif app_name:
-            context = f'这是一个来自 {app_name} 应用的 SO 库（{so_file_name}），运行在 HarmonyOS 平台上。'
+        elif 'ffmpeg' in so_name or 'avcodec' in so_name or 'avformat' in so_name:
+            context = (
+                f'这是一个基于 FFmpeg 的多媒体处理库（{so_file_name}），'
+                f'通常用于音视频编解码、格式转换等多媒体处理功能。'
+            )
         else:
-            context = f'这是一个 SO 库（{so_file_name}），来自 {Path(so_file).parent.name} 目录。'
+            # 通用描述，不涉及具体应用
+            context = (
+                f'这是一个 SO 库文件（{so_file_name}），'
+                f'运行在 HarmonyOS 平台上。请根据反编译代码的特征推断函数功能。'
+            )
 
         return context
 
@@ -949,6 +964,12 @@ class MissingSymbolFunctionAnalyzer:
             excluded_exact = ['[shmm]', '未知文件', '/bin/devhost.elf']
             excluded_prefixes = ['/system', '/vendor/lib64', '/lib', '/chip_prod']
 
+            # 如果指定了 so_file，只保留匹配的地址
+            target_so_name = None
+            if self.so_file:
+                target_so_name = self.so_file.name
+                logger.info(f'📌 已指定 SO 文件: {target_so_name}，将只分析该文件的地址')
+
             filtered_data = []
             hap_addresses = []  # 收集 HAP 地址用于批量解析
             
@@ -957,6 +978,12 @@ class MissingSymbolFunctionAnalyzer:
                     continue
                 if any(file_path.startswith(prefix) for prefix in excluded_prefixes):
                     continue
+                
+                # 如果指定了 so_file，只保留匹配的地址
+                if target_so_name:
+                    file_so_name = Path(file_path).name
+                    if file_so_name != target_so_name:
+                        continue
                 
                 # 检测 HAP 地址
                 if HAP_RESOLVER_AVAILABLE and is_hap_address(address):

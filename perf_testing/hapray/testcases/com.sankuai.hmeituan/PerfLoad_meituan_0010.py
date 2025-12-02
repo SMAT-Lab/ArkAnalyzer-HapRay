@@ -1,6 +1,9 @@
 import time
+from typing import Optional
 
-from hapray.core.perf_testcase import PerfTestCase
+from hypium import BY
+
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class PerfLoad_meituan_0010(PerfTestCase):

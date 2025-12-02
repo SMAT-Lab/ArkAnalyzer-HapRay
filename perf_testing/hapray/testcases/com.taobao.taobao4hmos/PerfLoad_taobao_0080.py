@@ -1,8 +1,9 @@
 import time
+from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class PerfLoad_taobao_0080(PerfTestCase):
@@ -70,5 +71,8 @@ class PerfLoad_taobao_0080(PerfTestCase):
             time.sleep(2)
             self.driver.touch(BY.text('提交订单'))
             time.sleep(2)
+
+
+
 
         self.execute_performance_step('淘宝-闪购-step1闪购页面下单', 50, step1)

@@ -18,23 +18,8 @@ from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-
-def format_function_name(function_name: str) -> str:
-    """
-    格式化函数名，添加 "Function: " 前缀
-    
-    Args:
-        function_name: 原始函数名
-    
-    Returns:
-        格式化后的函数名（如果为空则返回空字符串）
-    """
-    if not function_name or function_name == 'nan' or function_name == 'None':
-        return ''
-    # 如果已经有 "Function: " 前缀，不再添加
-    if function_name.startswith('Function: '):
-        return function_name
-    return f'Function: {function_name}'
+# 使用 common 模块中的 format_function_name，避免重复定义
+format_function_name = util.format_function_name
 
 
 def load_function_mapping(excel_file):
@@ -125,8 +110,8 @@ def load_excel_data_for_report(excel_file):
 
 
 def extract_symbol_from_address(address_str):
-    """从地址字符串中提取符号部分（如 libxwebcore.so+0x50338a0 或 libtaobaoavsdk_bridge.so+0x1243ac）"""
-    # 匹配 lib*.so+0x... 格式（支持下划线，如 libtaobaoavsdk_bridge.so）
+    """从地址字符串中提取符号部分（如 libexample.so+0x50338a0 或 libexample_sdk.so+0x1243ac）"""
+    # 匹配 lib*.so+0x... 格式（支持下划线，如 libexample_sdk.so）
     match = re.search(r'(lib[\w_]+\.so\+0x[0-9a-fA-F]+)', address_str, re.IGNORECASE)
     if match:
         return match.group(1)
@@ -140,10 +125,10 @@ def replace_symbols_in_html(html_content, function_mapping):
     replaced_count = {'count': 0}
     replacement_info = []
 
-    # 提取地址部分（如 libxwebcore.so+0x50338a0 或 libtaobaoavsdk_bridge.so+0x1de430）
+        # 提取地址部分（如 libexample.so+0x50338a0 或 libexample_sdk.so+0x1de430）
     def extract_address(full_path):
         """从完整路径中提取地址部分（支持任何 .so 文件，包括下划线）"""
-        # 使用 [\w_]+ 来匹配包含下划线的库名，如 libtaobaoavsdk_bridge.so
+        # 使用 [\w_]+ 来匹配包含下划线的库名，如 libexample_sdk.so
         match = re.search(r'(lib[\w_]+\.so\+0x[0-9a-fA-F]+)', full_path, re.IGNORECASE)
         return match.group(1) if match else None
 

@@ -1,8 +1,9 @@
 import time
+from typing import Optional
 
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class PerfLoad_kuaishou_0040(PerfTestCase):
@@ -45,3 +46,4 @@ class PerfLoad_kuaishou_0040(PerfTestCase):
             self.swipes_down(swip_num=5, sleep=2)
 
         self.execute_performance_step('快手-直播间-step1切换直播间', 35, step1)
+

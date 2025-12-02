@@ -1,6 +1,9 @@
+import time
+from typing import Optional
+
 from hypium import BY
 
-from hapray.core.perf_testcase import PerfTestCase
+from hapray.core.perf_testcase import Log, PerfTestCase
 
 
 class PerfLoad_taobao_0040(PerfTestCase):
@@ -36,6 +39,7 @@ class PerfLoad_taobao_0040(PerfTestCase):
             self.swipes_up(swip_num=5, sleep=2)
             # Step('购物车，下滑5次')
             self.swipes_down(swip_num=5, sleep=2)
+
 
         def step2():
             self.driver.touch(BY.text('视频'))

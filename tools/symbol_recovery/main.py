@@ -79,7 +79,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--so-file',
         type=str,
         default=None,
-        help='SO 文件路径（Excel 分析模式必需）。如果未指定，将使用 --so-dir 目录下的默认 SO 文件',
+        help='SO 文件路径（Excel 分析模式必需，perf 分析模式可选）。如果未指定，将使用 --so-dir 目录下的默认 SO 文件（Excel 模式）或从目录中查找（perf 模式）',
     )
 
     # 输入参数（perf 分析模式）
@@ -99,7 +99,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--so-dir',
         type=str,
         default=None,
-        help='SO 文件目录，包含需要分析的 SO 库文件（必需，无默认值）',
+        help='SO 文件目录，包含需要分析的 SO 库文件（perf 模式：如果未指定 --so-file 则必需；Excel 模式：如果未指定 --so-file 则必需）',
     )
 
     # 输出目录参数
@@ -182,6 +182,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default=None,
         help='自定义上下文信息（可选，用于 LLM 分析。如果不提供，工具会根据 SO 文件名和应用路径自动推断）',
     )
+    parser.add_argument(
+        '--open-source-lib',
+        type=str,
+        default=None,
+        help='开源库名称（可选，如 "ffmpeg", "openssl", "libcurl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本，大模型可以利用对开源库的知识来更准确地推断函数名和功能',
+    )
     return parser
 
 
@@ -211,7 +217,7 @@ def resolve_directory(path_str: str) -> Path:
         return Path(path_str)
 
 
-def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Optional[Path]]:
+def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Optional[Path], Optional[Path]]:
     perf_data_file = resolve_file_path(args.perf_data)
 
     if args.perf_db:
@@ -225,9 +231,15 @@ def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Op
         perf_db_file = None
 
     so_dir = None
-    if args.so_dir and not args.only_step1:
+    so_file = None
+    if args.so_file and not args.only_step1:
+        # 如果指定了单个 SO 文件，优先使用
+        so_file = resolve_file_path(args.so_file)
+    elif args.so_dir and not args.only_step1:
+        # 否则使用 SO 文件目录
         so_dir = resolve_directory(args.so_dir)
-    return perf_data_file, perf_db_file, so_dir
+    
+    return perf_data_file, perf_db_file, so_dir, so_file
 
 
 def handle_excel_mode(args, output_dir: Path) -> bool:
@@ -361,7 +373,7 @@ def convert_perf_data(args, perf_data_file: Path, perf_db_file: Optional[Path], 
     return Path(result)
 
 
-def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path], output_dir: Path):
+def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path], so_file: Optional[Path], output_dir: Path):
     if args.skip_step3 or args.only_step1:
         return
 
@@ -369,21 +381,31 @@ def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path],
     logger.info(f'Step 3: LLM 分析热点函数（按 {args.stat_method} 统计）')
     logger.info('=' * 80)
 
-    if not so_dir or not so_dir.exists():
-        logger.error('❌ 错误: SO 文件目录不存在: %s', so_dir)
+    # 如果指定了单个 SO 文件，优先使用；否则使用 SO 文件目录
+    if so_file:
+        if not so_file.exists():
+            logger.error('❌ 错误: SO 文件不存在: %s', so_file)
+            sys.exit(1)
+        logger.info(f'SO 文件: {so_file}')
+    elif so_dir:
+        if not so_dir.exists():
+            logger.error('❌ 错误: SO 文件目录不存在: %s', so_dir)
+            sys.exit(1)
+        logger.info(f'SO 文件目录: {so_dir}')
+    else:
+        logger.error('❌ 错误: 必须指定 --so-file 或 --so-dir')
         sys.exit(1)
 
-    logger.info(f'SO 文件目录: {so_dir}')
     logger.info(f'统计方式: {args.stat_method}')
     logger.info(f'分析前 {args.top_n} 个函数')
 
     if args.stat_method == 'call_count':
-        analyze_by_call_count(args, perf_db_file, so_dir, output_dir)
+        analyze_by_call_count(args, perf_db_file, so_dir, so_file, output_dir)
     else:
-        analyze_by_event_count(args, perf_db_file, so_dir, output_dir)
+        analyze_by_event_count(args, perf_db_file, so_dir, so_file, output_dir)
 
 
-def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path):
+def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Optional[Path], so_file: Optional[Path], output_dir: Path):
     if not perf_db_file or not perf_db_file.exists():
         logger.info(f'❌ 错误: perf.db 文件不存在: {perf_db_file if perf_db_file else "(未指定)"}')
         logger.info('   请先运行 Step 1')
@@ -395,11 +417,13 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
     time_tracker.start_step('初始化', '加载配置和初始化分析器')
     analyzer = MissingSymbolFunctionAnalyzer(
         perf_db_file=str(perf_db_file),
-        so_dir=str(so_dir),
+        so_dir=str(so_dir) if so_dir else None,
+        so_file=str(so_file) if so_file else None,
         use_llm=not args.no_llm,
         use_batch_llm=not args.no_batch,
         batch_size=args.batch_size,
         context=args.context,
+        open_source_lib=args.open_source_lib,
         use_capstone_only=args.use_capstone_only,
         save_prompts=args.save_prompts,
         output_dir=str(output_dir),
@@ -431,7 +455,7 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
         logger.warning('\n⚠️  没有成功分析任何函数')
 
 
-def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path):
+def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Optional[Path], so_file: Optional[Path], output_dir: Path):
     if not perf_db_file or not perf_db_file.exists():
         logger.error('❌ 错误: perf.db 文件不存在: %s', perf_db_file)
         logger.info('   请先运行 Step 1')
@@ -443,12 +467,14 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
     time_tracker.start_step('初始化', '加载配置和初始化分析器')
     analyzer = EventCountAnalyzer(
         perf_db_file=str(perf_db_file),
-        so_dir=str(so_dir),
+        so_dir=str(so_dir) if so_dir else None,
+        so_file=str(so_file) if so_file else None,
         use_llm=not args.no_llm,
         llm_model=args.llm_model,
         use_batch_llm=not args.no_batch,
         batch_size=args.batch_size,
         context=args.context,
+        open_source_lib=args.open_source_lib,
         use_capstone_only=args.use_capstone_only,
         save_prompts=args.save_prompts,
         output_dir=str(output_dir),
@@ -712,7 +738,7 @@ def main():
     if handle_excel_mode(args, output_dir):
         return
 
-    perf_data_file, perf_db_file, so_dir = resolve_perf_paths(args, output_dir)
+    perf_data_file, perf_db_file, so_dir, so_file = resolve_perf_paths(args, output_dir)
 
     logger.info('=' * 80)
     logger.info('完整工作流：从 perf.data 到 LLM 分析报告')
@@ -723,7 +749,7 @@ def main():
         logger.info('\n✅ Step 1 完成！')
         return
 
-    run_llm_analysis(args, perf_db_file, so_dir, output_dir)
+    run_llm_analysis(args, perf_db_file, so_dir, so_file, output_dir)
     run_html_symbol_replacement(args, output_dir)
     summarize_outputs(args, output_dir)
 

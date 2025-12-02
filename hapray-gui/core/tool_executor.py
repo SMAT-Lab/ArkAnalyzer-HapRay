@@ -3,10 +3,9 @@
 """
 
 import os
-import re
 import subprocess
-import sys
 import threading
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Optional
@@ -62,6 +61,7 @@ class ToolExecutor:
 
         try:
             # 检查可执行文件路径
+            import sys
             logger.info(f'调试信息 - 当前Python: {sys.executable}')
             logger.info(f'调试信息 - executable_path: {executable_path}')
             logger.info(f'调试信息 - script_path: {script_path}')
@@ -75,6 +75,7 @@ class ToolExecutor:
                 return ToolResult(success=False, message=error_msg, error=error_msg)
 
             # 验证可执行文件是否存在
+            from pathlib import Path
             if not Path(executable_path).exists():
                 error_msg = f'可执行文件不存在: {executable_path}'
                 logger.error(error_msg)
@@ -255,6 +256,8 @@ class ToolExecutor:
         - "输出目录: /path/to/output"
         - "结果保存到: /path/to/output"
         """
+        import re
+
         # 定义匹配模式
         patterns = [
             r'Reports will be saved to:\s*(.+)',
