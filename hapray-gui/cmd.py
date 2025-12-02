@@ -111,9 +111,9 @@ class CLI:
         short_name = param_def.get('short')  # 短选项，如 'i', 'o', 'j'
         nargs = param_def.get('nargs')  # 多个值，如 '+', '*'
 
-        # 将参数名转换为命令行格式（下划线转连字符）
-        arg_name = param_name.replace('_', '-')
-        # 创建长参数名
+        # 保持参数名原样（plugin.json 中定义什么就是什么）
+        # 使用 dest 参数指定存储名称，避免 argparse 自动转换连字符为下划线
+        arg_name = param_name
         long_name = f'--{arg_name}'
 
         # 构建参数列表（可能包含短选项）
@@ -127,6 +127,7 @@ class CLI:
             action = 'store_true' if not default else 'store_false'
             parser.add_argument(
                 *arg_names,
+                dest=param_name,
                 action=action,
                 default=default if default is not None else False,
                 help=help_text or label,
@@ -134,18 +135,59 @@ class CLI:
         elif param_type == 'choice':
             # 选择类型
             choices = param_def.get('choices', [])
-            parser.add_argument(
-                *arg_names,
-                type=str,
-                choices=choices,
-                default=default,
-                required=required,
-                help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
-            )
+            multi_select = param_def.get('multi_select', False)
+
+            # 如果choices是函数名（如 "get_testcases"），则在命令行中不限制choices
+            # 因为这些参数通常支持正则表达式模式匹配
+            if isinstance(choices, str):
+                # 对于多选且choices是函数名的情况，使用nargs='+'而不设置choices限制
+                if multi_select:
+                    parser.add_argument(
+                        *arg_names,
+                        dest=param_name,
+                        type=str,
+                        nargs='+',
+                        default=default,
+                        required=required,
+                        help=f'{help_text} (支持多个值，可使用正则表达式模式)' if help_text else label,
+                    )
+                else:
+                    parser.add_argument(
+                        *arg_names,
+                        dest=param_name,
+                        type=str,
+                        default=default,
+                        required=required,
+                        help=help_text or label,
+                    )
+            else:
+                # 对于固定的选项列表
+                if multi_select:
+                    parser.add_argument(
+                        *arg_names,
+                        dest=param_name,
+                        type=str,
+                        nargs='+',
+                        choices=choices,
+                        default=default,
+                        required=required,
+                        help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
+                    )
+                else:
+                    parser.add_argument(
+                        *arg_names,
+                        dest=param_name,
+                        type=str,
+                        choices=choices,
+                        default=default,
+                        required=required,
+                        help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
+                    )
         elif param_type == 'int':
             # 整数类型
             # 如果 nargs 指定为 '+' 或 '*'，则支持多个值
             kwargs = {
+                'dest': param_name,
                 'type': int,
                 'default': default,
                 'required': required,
@@ -157,6 +199,7 @@ class CLI:
         elif param_type in ('file', 'dir'):
             # 文件或目录类型
             kwargs = {
+                'dest': param_name,
                 'type': str,
                 'default': default,
                 'required': required,
@@ -168,6 +211,7 @@ class CLI:
         else:
             # 字符串类型（默认）
             kwargs = {
+                'dest': param_name,
                 'type': str,
                 'default': default,
                 'required': required,
@@ -176,7 +220,7 @@ class CLI:
             # 根据参数名推断是否需要多个值
             if nargs:
                 kwargs['nargs'] = nargs
-            elif param_name in ('run_testcases', 'devices', 'perfs', 'traces', 'pids', 'time_ranges'):
+            elif param_name in ('run_testcases', 'devices', 'perfs', 'traces', 'pids', 'time_ranges', 'time-ranges'):
                 # 这些参数在 README.md 中支持多个值
                 kwargs['nargs'] = '+'
             parser.add_argument(*arg_names, **kwargs)
@@ -187,9 +231,9 @@ class CLI:
         for key, value in vars(args).items():
             if key in ('plugin_id', 'action'):
                 continue
-            # 将命令行参数名转换回原始格式（连字符转下划线）
-            param_name = key.replace('-', '_')
-            params[param_name] = value
+            # 因为使用了 dest=param_name，所以 key 已经是 plugin.json 中的原始参数名
+            # 不需要做任何转换
+            params[key] = value
         return params
 
     def _execute_plugin(self, plugin_id: str, action: Optional[str], params: dict[str, Any]) -> int:
