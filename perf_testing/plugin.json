@@ -184,7 +184,7 @@
           "label": "模式",
           "required": false,
           "default": 0,
-          "help": "选择模式：0 COMMUNITY, 1 COMPATIBILITY, 2 SIMPLE"
+          "help": "选择模式：0 COMMUNITY, 1 SIMPLE"
         },
         "perfs": {
           "type": "str",
