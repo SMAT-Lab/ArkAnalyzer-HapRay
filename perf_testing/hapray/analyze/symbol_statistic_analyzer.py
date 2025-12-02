@@ -22,11 +22,20 @@ from typing import Any, Optional
 import pandas as pd
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
+from hapray.core.common.exe_utils import ExeUtils
 
 
 class SymbolStatisticAnalyzer(BaseAnalyzer):
     """
-    Analyzer for trace event statistics.
+    Conditional analyzer for trace event statistics.
+
+    NOTE: This analyzer is NOT automatically executed in the default pipeline.
+    It is only executed when both conditions are met:
+    - Mode is SIMPLE (parsed_args.mode == Mode.SIMPLE)
+    - Symbol statistic file is provided (parsed_args.symbol_statistic)
+
+    See: UpdateAction.process_symbol_statistics() for the invocation logic.
+
     Collects trace event statistics and correlates with measure data.
 
     The analyzer:
@@ -264,3 +273,33 @@ class SymbolStatisticAnalyzer(BaseAnalyzer):
         df = pd.DataFrame(self.statistics)
         df.to_excel(output_path, index=False, sheet_name='Trace Event Statistics')
         self.logger.info(f'Excel report generated at {output_path}')
+
+    def process_all_testcases(self, testcase_dirs: list[str]):
+        """Process all test case directories and collect statistics.
+
+        Args:
+            testcase_dirs: List of test case directory paths
+        """
+        for case_dir in testcase_dirs:
+            hiperf_path = os.path.join(case_dir, 'hiperf')
+            htrace_path = os.path.join(case_dir, 'htrace')
+
+            if not os.path.exists(htrace_path):
+                self.logger.warning(f'Htrace path not found: {htrace_path}')
+                continue
+
+            step_dirs = [d for d in os.listdir(htrace_path) if os.path.isdir(os.path.join(htrace_path, d))]
+
+            for step_dir in step_dirs:
+                trace_db = os.path.join(htrace_path, step_dir, 'trace.db')
+                htrace_file = os.path.join(htrace_path, step_dir, 'trace.htrace')
+                perf_db = os.path.join(hiperf_path, step_dir, 'perf.db') if os.path.exists(hiperf_path) else ''
+
+                # Convert htrace to db if needed
+                if not os.path.exists(trace_db) and os.path.exists(htrace_file):
+                    self.logger.info(f'Converting htrace to db for {step_dir}...')
+                    if not ExeUtils.convert_data_to_db(htrace_file, trace_db):
+                        self.logger.error(f'Failed to convert htrace to db for {step_dir}')
+                        continue
+
+                self.analyze(step_dir, trace_db, perf_db)
