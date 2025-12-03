@@ -9,7 +9,7 @@
   "driver": {
     "type": "DeviceTest",
     "py_file": [
-      "ResourceUsage_PerformanceDynamic_xhs_0010.py"
+      "PerfLoad_xhs_0090.py"
     ]
   }
 }

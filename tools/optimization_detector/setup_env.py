@@ -17,6 +17,7 @@ import platform
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Version requirements
 MIN_PYTHON_VERSION = (3, 9)
@@ -41,7 +42,7 @@ check_python_version()
 VENV_NAME = '.venv'
 
 
-def execute_command(command: list, working_dir: Path = None, error_message: str = '') -> None:
+def execute_command(command: list, working_dir: Optional[Path] = None, error_message: str = '') -> None:
     """
     Execute a shell command with error handling.
 
