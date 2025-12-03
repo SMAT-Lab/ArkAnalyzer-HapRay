@@ -52,6 +52,10 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
         prompt_parts.append('请分析以下多个 ARM64 反汇编函数，推断每个函数的功能和可能的函数名。')
         prompt_parts.append('')
+        
+        # 添加开源库相关的 prompt（如果指定了开源库）
+        self._add_open_source_lib_prompt(prompt_parts, self.open_source_lib)
+        
         prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，这些函数被识别为高指令数负载的热点函数。')
         prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
         prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
@@ -72,7 +76,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         prompt_parts.append('     - 可能的优化建议（如果有）')
         prompt_parts.append('')
 
-        # 添加背景信息
+        # 添加背景信息（全局上下文）
         if context:
             prompt_parts.append('背景信息:')
             prompt_parts.append(context)
@@ -83,6 +87,9 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
             prompt_parts.append(f'{"=" * 80}')
             prompt_parts.append(f'函数 {idx} (ID: {func_data.get("function_id", f"func_{idx}")})')
             prompt_parts.append(f'{"=" * 80}')
+            
+            # 调试：记录函数数据的内容
+            logger.debug(f'Building prompt for function {idx}: strings={len(func_data.get("strings", []))}, called_functions={len(func_data.get("called_functions", []))}, call_stack_info={func_data.get("call_stack_info") is not None}')
 
             offset = func_data.get('offset')
             if offset:
@@ -170,6 +177,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         prompt_parts.append(f'  ... (共 {len(instructions)} 条指令，此处显示前 {max_instructions} 条)')
 
             strings = func_data.get('strings', [])
+            logger.info(f'Function {idx} strings: {strings}, type: {type(strings)}, len: {len(strings) if isinstance(strings, list) else "N/A"}, bool: {bool(strings)}')
             if strings:
                 prompt_parts.append('')
                 prompt_parts.append('附近的字符串常量:')
@@ -182,6 +190,33 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 prompt_parts.append('调用的函数:')
                 for func in called_functions[:5]:  # 批量模式下减少调用函数数量
                     prompt_parts.append(f'  - {func}')
+
+            # 添加调用堆栈信息（如果存在）
+            call_stack_info = func_data.get('call_stack_info')
+            logger.info(f'Function {idx} call_stack_info: {call_stack_info is not None}, type: {type(call_stack_info)}, bool: {bool(call_stack_info) if call_stack_info is not None else "None"}')
+            if call_stack_info:
+                logger.info(f'Function {idx} call_stack_info content: callers={len(call_stack_info.get("callers", []))}, callees={len(call_stack_info.get("callees", []))}')
+                callers = call_stack_info.get('callers', [])
+                if callers:
+                    prompt_parts.append('')
+                    prompt_parts.append('调用堆栈信息（谁调用了这个函数）:')
+                    for i, caller in enumerate(callers[:3], 1):  # 只显示前3个
+                        caller_info = f'  {i}. '
+                        if caller.get('symbol_name'):
+                            caller_info += f'{caller["symbol_name"]} '
+                        caller_info += f'({caller.get("file_path", "")} {caller.get("address", "")})'
+                        prompt_parts.append(caller_info)
+                
+                callees = call_stack_info.get('callees', [])
+                if callees:
+                    prompt_parts.append('')
+                    prompt_parts.append('被调用的函数（这个函数调用了哪些有符号的函数）:')
+                    for i, callee in enumerate(callees[:3], 1):  # 只显示前3个
+                        callee_info = f'  {i}. '
+                        if callee.get('symbol_name'):
+                            callee_info += f'{callee["symbol_name"]} '
+                        callee_info += f'({callee.get("file_path", "")} {callee.get("address", "")})'
+                        prompt_parts.append(callee_info)
 
             prompt_parts.append('')
 

@@ -40,6 +40,7 @@ class LLMFunctionAnalyzer:
         enable_cache: bool = True,
         save_prompts: bool = False,
         output_dir: Optional[str] = None,
+        open_source_lib: Optional[str] = None,
     ):
         """
         初始化 LLM 分析器
@@ -51,6 +52,7 @@ class LLMFunctionAnalyzer:
             enable_cache: 是否启用缓存（避免重复分析相同代码）
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
+            open_source_lib: 开源库名称（可选，如 "ffmpeg", "openssl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本
         """
         if openai is None:
             raise ImportError('需要安装 openai 库: pip install openai')
@@ -65,6 +67,7 @@ class LLMFunctionAnalyzer:
         self.base_url = base_url or default_base_url
         self.enable_cache = enable_cache
         self.save_prompts = save_prompts
+        self.open_source_lib = open_source_lib  # 开源库名称
 
         self.output_dir = Path(output_dir) if output_dir else config.get_output_dir()
         self.cache: dict[str, dict[str, Any]] = {}
@@ -295,6 +298,7 @@ class LLMFunctionAnalyzer:
             call_count=call_count,
             event_count=event_count,
             so_file=so_file,
+            open_source_lib=self.open_source_lib,
         )
 
         # 保存 prompt（如果启用）
@@ -419,12 +423,17 @@ class LLMFunctionAnalyzer:
         call_count: Optional[int] = None,
         event_count: Optional[int] = None,
         so_file: Optional[str] = None,
+        open_source_lib: Optional[str] = None,
     ) -> str:
         """构建 LLM 提示词"""
         prompt_parts = []
 
         prompt_parts.append('请分析以下 ARM64 反汇编代码，推断函数的功能和可能的函数名。')
         prompt_parts.append('')
+        
+        # 添加开源库相关的 prompt（如果指定了开源库）
+        self._add_open_source_lib_prompt(prompt_parts, open_source_lib)
+        
         prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，该函数被识别为高指令数负载的热点函数。')
         prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
         prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
@@ -557,6 +566,66 @@ class LLMFunctionAnalyzer:
         prompt_parts.append("7. 如果无法确定，confidence 设为'低'，function_name 可以为 null")
 
         return '\n'.join(prompt_parts)
+
+    def _add_open_source_lib_prompt(self, prompt_parts: list[str], open_source_lib: Optional[str] = None):
+        """
+        添加开源库和 SIMD 相关的 prompt 内容（共享方法，避免重复代码）
+        
+        Args:
+            prompt_parts: prompt 内容列表
+            open_source_lib: 开源库名称（可选）
+        """
+        if not open_source_lib:
+            return
+        
+        prompt_parts.append(f'🔍 重要提示：这是一个基于开源库 {open_source_lib} 的定制版本（三方库）。')
+        prompt_parts.append(f'   该 SO 文件是基于 {open_source_lib} 开源项目进行定制开发的，函数实现可能与标准 {open_source_lib} 库相似。')
+        prompt_parts.append(f'   请利用您对 {open_source_lib} 开源库的知识，结合反编译代码的特征，')
+        prompt_parts.append(f'   直接根据 {open_source_lib} 库中常见的函数名和功能模式来推断函数名和功能。')
+        prompt_parts.append(f'   如果反编译代码的特征与 {open_source_lib} 库中的某个函数匹配，请优先使用该函数名。')
+        prompt_parts.append('')
+        prompt_parts.append('   📌 SIMD 向量化指令识别（重要：区分标量与向量）：')
+        prompt_parts.append('   请仔细检查反汇编代码中是否使用了 SIMD（单指令多数据）向量化指令。')
+        prompt_parts.append('')
+        prompt_parts.append('   ✅ 向量 NEON 指令的判断标准（必须同时满足）：')
+        prompt_parts.append('   1. 使用向量寄存器 v0-v31（不是标量寄存器 s0-s31）')
+        prompt_parts.append('   2. 有向量后缀标识，如：')
+        prompt_parts.append('      - .4s, .2s (4个/2个32位浮点数)')
+        prompt_parts.append('      - .8h, .4h (8个/4个16位整数)')
+        prompt_parts.append('      - .16b, .8b (16个/8个8位整数)')
+        prompt_parts.append('      - .2d (2个64位浮点数)')
+        prompt_parts.append('   3. 常见的向量 NEON 指令示例：')
+        prompt_parts.append('      - fadd v0.4s, v1.4s, v2.4s  (向量加法，4个浮点数)')
+        prompt_parts.append('      - fmla v0.4s, v1.4s, v2.4s  (向量融合乘加)')
+        prompt_parts.append('      - ld1 {v0.4s}, [x0]         (向量加载)')
+        prompt_parts.append('      - st1 {v0.4s}, [x0]         (向量存储)')
+        prompt_parts.append('      - addv s0, v1.4s            (向量缩减)')
+        prompt_parts.append('      - dup v0.4s, v1.s[0]        (向量复制)')
+        prompt_parts.append('')
+        prompt_parts.append('   ❌ 不是向量 NEON 的情况：')
+        prompt_parts.append('   1. 只使用标量寄存器 s0-s31（32位浮点）或 d0-d31（64位浮点），没有向量后缀')
+        prompt_parts.append('      - 例如：fmadd s0, s1, s2, s3  (标量融合乘加，不是向量)')
+        prompt_parts.append('      - 例如：fadd s0, s1, s2       (标量浮点加法，不是向量)')
+        prompt_parts.append('      - 例如：ldp s0, s1, [x0]     (加载两个标量，不是向量)')
+        prompt_parts.append('   2. 虽然 fmadd/fnmsub 是性能优化指令，但如果只操作标量寄存器，')
+        prompt_parts.append('      它们不是 SIMD 向量化指令，只是标量浮点优化指令。')
+        prompt_parts.append('')
+        prompt_parts.append('   🔍 判断步骤：')
+        prompt_parts.append('   1. 首先检查是否使用 v0-v31 向量寄存器')
+        prompt_parts.append('   2. 然后检查是否有向量后缀（.4s, .2s, .8h 等）')
+        prompt_parts.append('   3. 只有同时满足以上两点，才是向量 NEON 指令')
+        prompt_parts.append('   4. 如果只使用 s/d 寄存器且无向量后缀，则是标量指令，不是向量 NEON')
+        prompt_parts.append('')
+        prompt_parts.append('   如果识别到向量 NEON 指令的使用，请在功能描述中明确说明该函数使用了向量化优化，')
+        prompt_parts.append('   并描述向量化的具体用途（如批量数据处理、并行计算、矩阵运算等）。')
+        prompt_parts.append('')
+        prompt_parts.append('   📌 开源库功能相关性：')
+        prompt_parts.append(f'   在功能描述中，请结合 {open_source_lib} 开源库的典型功能和特性，')
+        prompt_parts.append(f'   说明该函数在 {open_source_lib} 库中的作用和定位，以及与其他 {open_source_lib} 函数的关联性。')
+        prompt_parts.append(f'   例如：该函数是 {open_source_lib} 中哪个模块/组件的核心功能，')
+        prompt_parts.append(f'   在 {open_source_lib} 的典型使用场景中扮演什么角色，')
+        prompt_parts.append(f'   与 {open_source_lib} 库中哪些常见函数或功能相关。')
+        prompt_parts.append('')
 
     def _parse_llm_response(self, response_text: str) -> dict[str, Any]:
         """解析 LLM 返回的结果"""

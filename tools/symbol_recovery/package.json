@@ -19,8 +19,6 @@
     "lint": "./.venv/bin/tox -e ruff || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff || python3 -m ruff check .",
     "lint:fix": "./.venv/bin/tox -e ruff-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff-fix || python3 -m ruff check --fix ."
   },
-  "author": "Huawei Device Co., Ltd.",
-  "license": "Apache-2.0",
   "keywords": [
     "binary",
     "symbol",
