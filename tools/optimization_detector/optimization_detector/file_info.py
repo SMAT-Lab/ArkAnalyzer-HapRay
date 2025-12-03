@@ -17,6 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
+import tarfile
 import tempfile
 import zipfile
 from enum import Enum
@@ -129,7 +130,7 @@ class FileCollector:
         if os.path.isfile(input_path):
             if input_path.endswith(('.so', '.a')):
                 file_infos.append(FileInfo(input_path))
-            elif input_path.endswith(('.hap', '.hsp', '.apk')):
+            elif input_path.endswith(('.hap', '.hsp', '.apk', '.har')):
                 file_infos.extend(self._extract_hap_file(input_path))
         elif os.path.isdir(input_path):
             for root, _, _files in os.walk(input_path):
@@ -138,26 +139,60 @@ class FileCollector:
                     if file.endswith(('.so', '.a')):
                         logical_path = os.path.relpath(file_path, input_path)
                         file_infos.append(FileInfo(file_path, logical_path))
-                    elif file.endswith(('.hap', '.hsp', '.apk')):
+                    elif file.endswith(('.hap', '.hsp', '.apk', '.har')):
                         file_infos.extend(self._extract_hap_file(file_path))
         return file_infos
 
+    def _is_tar_gz(self, file_path: str) -> bool:
+        """Check if file is a tar.gz/gzip compressed tar file"""
+        try:
+            with open(file_path, 'rb') as f:
+                magic = f.read(2)
+                return magic == b'\x1f\x8b'  # gzip magic number
+        except Exception:
+            return False
+
     def _extract_hap_file(self, hap_path: str) -> list[FileInfo]:
-        """Extract SO files from HAP/HSP/APK archives and return FileInfo objects"""
+        """Extract SO files from HAP/HSP/APK/HAR archives and return FileInfo objects"""
         extracted_files = []
         temp_dir = tempfile.mkdtemp()
         self.temp_dirs.append(temp_dir)
 
-        try:
-            with zipfile.ZipFile(hap_path, 'r') as zip_ref:
-                for file in zip_ref.namelist():
-                    if (file.startswith('libs/arm64') or file.startswith('lib/arm64')) and file.endswith('.so'):
-                        output_path = os.path.join(temp_dir, file[5:])
-                        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                        with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
-                            dest.write(src.read())
-                        file_info = FileInfo(absolute_path=output_path, logical_path=f'{hap_path}/{file}')
-                        extracted_files.append(file_info)
-        except Exception as e:
-            logging.error('Failed to extract HAP file %s: %s', hap_path, e)
+        # Check if file is tar.gz format (gzip compressed)
+        if self._is_tar_gz(hap_path):
+            try:
+                with tarfile.open(hap_path, 'r:gz') as tar_ref:
+                    for member in tar_ref.getmembers():
+                        if member.isfile():
+                            file_path = member.name
+                            # Handle both 'package/' prefix and direct paths
+                            if file_path.startswith('package/'):
+                                file_path = file_path[8:]  # Remove 'package/' prefix
+                            if (
+                                file_path.startswith('libs/arm64') or file_path.startswith('lib/arm64')
+                            ) and file_path.endswith('.so'):
+                                output_path = os.path.join(temp_dir, file_path)
+                                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                                with tar_ref.extractfile(member) as src, open(output_path, 'wb') as dest:
+                                    dest.write(src.read())
+                                file_info = FileInfo(
+                                    absolute_path=output_path, logical_path=f'{hap_path}/{member.name}'
+                                )
+                                extracted_files.append(file_info)
+            except Exception as e:
+                logging.error('Failed to extract tar.gz file %s: %s', hap_path, e)
+        else:
+            # Try zip format
+            try:
+                with zipfile.ZipFile(hap_path, 'r') as zip_ref:
+                    for file in zip_ref.namelist():
+                        if (file.startswith('libs/arm64') or file.startswith('lib/arm64')) and file.endswith('.so'):
+                            output_path = os.path.join(temp_dir, file[5:])
+                            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                            with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
+                                dest.write(src.read())
+                            file_info = FileInfo(absolute_path=output_path, logical_path=f'{hap_path}/{file}')
+                            extracted_files.append(file_info)
+            except Exception as e:
+                logging.error('Failed to extract HAP file %s: %s', hap_path, e)
         return extracted_files
