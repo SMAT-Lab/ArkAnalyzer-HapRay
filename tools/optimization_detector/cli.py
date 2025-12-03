@@ -19,6 +19,7 @@ import logging
 import multiprocessing
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Optional
 
 import pandas as pd
 
@@ -46,7 +47,7 @@ class OptAction:
             '--input',
             '-i',
             required=True,
-            help='Input path: directory containing binary files, or single file (.so, .a, .hap, .hsp, .apk) to analyze',
+            help='Input path: directory containing binary files, or single file (.so, .a, .hap, .hsp, .apk, .har) to analyze',
         )
         parser.add_argument(
             '--output',
@@ -151,7 +152,7 @@ class OptAction:
         logging.info('Report saved to %s', output_file)
 
     @staticmethod
-    def setup_logging(verbose: bool = False, log_file: str = None):
+    def setup_logging(verbose: bool = False, log_file: Optional[str] = None):
         """配置日志"""
         level = logging.DEBUG if verbose else logging.INFO
         global _STDOUT_WRAPPER
