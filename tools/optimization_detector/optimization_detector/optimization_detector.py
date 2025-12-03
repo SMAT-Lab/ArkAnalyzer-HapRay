@@ -258,7 +258,7 @@ class OptimizationDetector:
         return files_with_results, len(file_infos) - files_with_results, flags_results
 
     def _collect_results(
-        self, flags_results: dict, file_infos: list[FileInfo], lto_results: dict = None
+        self, flags_results: dict, file_infos: list[FileInfo], lto_results: Optional[dict] = None
     ) -> pd.DataFrame:
         if lto_results is None:
             lto_results = {}
