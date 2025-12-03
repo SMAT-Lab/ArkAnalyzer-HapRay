@@ -5,33 +5,121 @@
 
 import base64
 import gzip
+import json
 import re
 import zlib
+from pathlib import Path
 
 import pandas as pd
 
-from core.utils import config
+from core.utils import common as util
+from core.utils.config import (
+    DEFAULT_TOP_N,
+    EVENT_COUNT_REPORT_PATTERN,
+    config,
+)
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+def format_function_name(function_name: str) -> str:
+    """
+    格式化函数名，添加 "Function: " 前缀
+
+    Args:
+        function_name: 原始函数名
+
+    Returns:
+        格式化后的函数名（如果为空则返回空字符串）
+    """
+    if not function_name or function_name in {'nan', 'None'}:
+        return ''
+    # 如果已经有 "Function: " 前缀，不再添加
+    if function_name.startswith('Function: '):
+        return function_name
+    return f'Function: {function_name}'
+
+
 def load_function_mapping(excel_file):
-    """从 Excel 文件加载地址到函数名的映射"""
+    """从 Excel 文件加载地址到函数名的映射（精确匹配）
+
+    由于地址来自 perf 采样，与分析时的地址一致，只需要精确匹配。
+    """
     df = pd.read_excel(excel_file, engine='openpyxl')
 
-    # 创建映射：地址 -> 函数名
+    # 创建映射：地址 -> 函数名（添加 "Function: " 前缀）
     mapping = {}
     for _, row in df.iterrows():
         address = str(row.get('地址', '')).strip()
         function_name = str(row.get('LLM推断函数名', '')).strip()
 
         if address and function_name and function_name != 'nan' and function_name:
-            # 提取地址部分（如 libxwebcore.so+0x50338a0）
-            mapping[address] = function_name
+            # 格式化函数名，添加 "Function: " 前缀
+            formatted_name = format_function_name(function_name)
+            mapping[address] = formatted_name
 
-    logger.info(f'✅ 加载了 {len(mapping)} 个函数名映射')
+    logger.info(f'✅ Loaded {len(mapping)} function name mappings')
     return mapping
+
+
+def load_excel_data_for_report(excel_file):
+    """从 Excel 文件加载完整数据用于生成报告"""
+    df = pd.read_excel(excel_file, engine='openpyxl')
+
+    results = []
+    for _, row in df.iterrows():
+        # 处理 event_count 列名（可能有空格或没有空格）
+        event_count = 0
+        if '指令数(event_count)' in row:
+            event_count = row.get('指令数(event_count)', 0)
+        elif '指令数 (event_count)' in row:
+            event_count = row.get('指令数 (event_count)', 0)
+
+        # 处理字符串常量（可能是 NaN）
+        strings_value = row.get('字符串常量', '')
+        strings_value = '' if pd.isna(strings_value) else str(strings_value)
+
+        # 处理指令数量（可能是 '指令数' 列）
+        instruction_count = row.get('指令数', 0)
+        if pd.isna(instruction_count):
+            instruction_count = 0
+
+        # 处理调用的函数（可能是逗号分隔的字符串）
+        called_functions_str = str(row.get('调用的函数', ''))
+        called_functions = []
+        if called_functions_str and called_functions_str != 'nan':
+            called_functions = [f.strip() for f in called_functions_str.split(',') if f.strip()]
+
+        # 格式化函数名，添加 "Function: " 前缀
+        function_name = str(row.get('LLM推断函数名', ''))
+        if function_name and function_name not in {'nan', 'None'}:
+            function_name = format_function_name(function_name)
+
+        # 处理负载问题识别与优化建议（可能是 NaN）
+        performance_analysis = row.get('负载问题识别与优化建议', '')
+        performance_analysis = '' if pd.isna(performance_analysis) else str(performance_analysis)
+
+        result = {
+            'rank': row.get('排名', ''),
+            'file_path': str(row.get('文件路径', '')),
+            'address': str(row.get('地址', '')),
+            'offset': str(row.get('偏移量', '')),
+            'call_count': row.get('调用次数', 0),
+            'instruction_count': int(instruction_count) if instruction_count else 0,
+            'event_count': int(event_count) if event_count else 0,
+            'strings': strings_value,
+            'called_functions': called_functions,  # 添加调用的函数列表
+            'llm_result': {
+                'function_name': function_name,
+                'functionality': str(row.get('LLM功能描述', '')),
+                'performance_analysis': performance_analysis,  # 添加负载问题识别与优化建议
+                'confidence': str(row.get('LLM置信度', '')),
+            },
+        }
+        results.append(result)
+
+    return results
 
 
 def extract_symbol_from_address(address_str):
@@ -73,7 +161,7 @@ def replace_symbols_in_html(html_content, function_mapping):
     data_suffix = ''
 
     if record_data_match:
-        logger.info('找到 <script id="record_data"> 数据块，优先处理这部分...')
+        logger.info('Found <script id="record_data"> data block, processing this part first...')
         data_prefix = record_data_match.group(1)
         data_content_raw = record_data_match.group(2).strip()  # 原始数据内容
         data_suffix = record_data_match.group(3)
@@ -85,39 +173,39 @@ def replace_symbols_in_html(html_content, function_mapping):
 
         # 检查是否是 base64 编码
         if not data_content_raw.startswith('{') and not data_content_raw.startswith('['):
-            logger.info('  检测到数据可能被编码/压缩，尝试解码...')
+            logger.info('  Detected data may be encoded/compressed, attempting to decode...')
             try:
                 # 尝试 base64 解码
                 decoded = base64.b64decode(data_content_raw)
-                logger.info(f'  ✅ Base64 解码成功，大小: {len(decoded) / 1024 / 1024:.2f} MB')
+                logger.info(f'  ✅ Base64 decoding successful, size: {len(decoded) / 1024 / 1024:.2f} MB')
 
                 # 检查是否是 gzip
                 if decoded[:2] == b'\x1f\x8b':
-                    logger.info('  ✅ 检测到 gzip 压缩，正在解压...')
+                    logger.info('  ✅ Detected gzip compression, decompressing...')
                     decompressed = gzip.decompress(decoded)
                     data_content = decompressed.decode('utf-8', errors='ignore')
                     is_compressed = True
                     compression_format = 'gzip'
-                    logger.info(f'  ✅ Gzip 解压成功，大小: {len(data_content) / 1024 / 1024:.2f} MB')
+                    logger.info(f'  ✅ Gzip decompression successful, size: {len(data_content) / 1024 / 1024:.2f} MB')
                 # 检查是否是 zlib
                 elif decoded[:2] in (b'x\x9c', b'x\xda', b'x\x01'):
-                    logger.info('  ✅ 检测到 zlib 压缩，正在解压...')
+                    logger.info('  ✅ Detected zlib compression, decompressing...')
                     decompressed = zlib.decompress(decoded)
                     data_content = decompressed.decode('utf-8', errors='ignore')
                     is_compressed = True
                     compression_format = 'zlib'
-                    logger.info(f'  ✅ Zlib 解压成功，大小: {len(data_content) / 1024 / 1024:.2f} MB')
+                    logger.info(f'  ✅ Zlib decompression successful, size: {len(data_content) / 1024 / 1024:.2f} MB')
                 else:
                     compression_format = None
                     # 直接尝试作为 UTF-8 字符串
                     try:
                         data_content = decoded.decode('utf-8', errors='ignore')
-                        logger.info('  ✅ 解码为 UTF-8 字符串')
+                        logger.info('  ✅ Decoded as UTF-8 string')
                     except Exception:
-                        logger.info('  ⚠️  无法解码，使用原始数据')
+                        logger.info('  ⚠️  Unable to decode, using raw data')
                         data_content = data_content_raw
             except Exception as e:
-                logger.info(f'  ⚠️  解码失败: {e}，使用原始数据')
+                logger.info(f'  ⚠️  Decoding failed: {e}, using raw data')
                 data_content = data_content_raw
         else:
             # 已经是 JSON 格式
@@ -130,7 +218,7 @@ def replace_symbols_in_html(html_content, function_mapping):
             symbol_map_start = data_content.find('"functionMap"')  # 可能是压缩格式
 
         if symbol_map_start != -1:
-            logger.info('在 record_data 中找到 SymbolMap，只处理这部分...')
+            logger.info('Found SymbolMap in record_data, processing only this part...')
             # 找到 SymbolMap 的开始和结束位置
             brace_start = data_content.find('{', symbol_map_start)
             brace_count = 0
@@ -138,7 +226,7 @@ def replace_symbols_in_html(html_content, function_mapping):
 
             # 优化：限制搜索范围，避免处理过大的数据
             max_search = min(len(data_content), brace_start + 10000000)  # 最多10MB
-            logger.info(f'  搜索 SymbolMap 边界（范围: {max_search - brace_start} 字节）...')
+            logger.info(f'  Searching SymbolMap boundaries (range: {max_search - brace_start} bytes)...')
 
             for i in range(brace_start, max_search):
                 if data_content[i] == '{':
@@ -151,10 +239,10 @@ def replace_symbols_in_html(html_content, function_mapping):
 
                 # 每处理 1MB 输出一次进度
                 if (i - brace_start) % 1000000 == 0 and i > brace_start:
-                    logger.info(f'    搜索进度: {(i - brace_start) / 1024 / 1024:.1f} MB')
+                    logger.info(f'    Search progress: {(i - brace_start) / 1024 / 1024:.1f} MB')
 
             if brace_count != 0:
-                logger.info('  ⚠️  警告: 未找到完整的 SymbolMap 边界，使用整个 record_data')
+                logger.info('  ⚠️  Warning: Complete SymbolMap boundaries not found, using entire record_data')
                 symbol_map_end = len(data_content)
 
             # 只替换 SymbolMap 部分
@@ -208,7 +296,7 @@ def replace_symbols_in_html(html_content, function_mapping):
             json_match._is_compressed = is_compressed
             json_match._compression_format = compression_format
         else:
-            logger.info('在 record_data 中未找到 SymbolMap，处理整个 JSON...')
+            logger.info('SymbolMap not found in record_data, processing entire JSON...')
 
             # 回退到处理整个 JSON
             class RecordDataMatch:
@@ -263,7 +351,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                 brace_count = 0
                 json_end = json_start
                 max_search = min(len(html_content), json_start + 10000000)  # 最多10MB
-                logger.info(f'  搜索 JSON 对象边界（范围: {max_search - json_start} 字节）...')
+                logger.info(f'  Searching JSON object boundaries (range: {max_search - json_start} bytes)...')
 
                 for i in range(json_start, max_search):
                     if html_content[i] == '{':
@@ -276,10 +364,10 @@ def replace_symbols_in_html(html_content, function_mapping):
 
                     # 每处理 1MB 输出一次进度
                     if (i - json_start) % 1000000 == 0 and i > json_start:
-                        logger.info(f'    搜索进度: {(i - json_start) / 1024 / 1024:.1f} MB')
+                        logger.info(f'    Search progress: {(i - json_start) / 1024 / 1024:.1f} MB')
 
                 if brace_count != 0:
-                    logger.info('  ⚠️  警告: 未找到完整的 JSON 对象边界')
+                    logger.info('  ⚠️  Warning: Complete JSON object boundaries not found')
                     json_end = min(len(html_content), json_start + 10000000)
 
                 if json_end > json_start:
@@ -336,7 +424,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                     break
 
     if json_match:
-        logger.info('找到 JSON 数据块，只处理这部分...')
+        logger.info('Found JSON data block, processing only this part...')
 
         # 判断是 SymbolMapMatch 还是其他类型
         if hasattr(json_match, 'get_parts'):
@@ -377,11 +465,11 @@ def replace_symbols_in_html(html_content, function_mapping):
         # 只在这个数据块中进行替换（支持所有 .so 文件）
         so_addresses = function_mapping  # 使用所有地址映射，不再只过滤 libxwebcore.so
         total_addresses = len(so_addresses)
-        logger.info(f'  需要处理 {total_addresses} 个地址映射')
-        logger.info(f'  JSON 数据块大小: {len(data_content_to_replace) / (1024 * 1024):.2f} MB')
+        logger.info(f'  Need to process {total_addresses} address mappings')
+        logger.info(f'  JSON data block size: {len(data_content_to_replace) / (1024 * 1024):.2f} MB')
 
         # 优化：先使用方法1批量替换 symbol 字段，这是最常见的格式
-        logger.info('  步骤 1/3: 批量替换 symbol 字段...')
+        logger.info('  Step 1/3: Batch replacing symbol fields...')
 
         def replace_in_symbol_field(match):
             prefix = match.group(1)  # "symbol": " 或 "f": "
@@ -393,12 +481,23 @@ def replace_symbols_in_html(html_content, function_mapping):
 
             # 提取地址部分（可能是完整路径或简单地址）
             address = extract_address(symbol_value)
-            if address and address in so_addresses:
-                function_name = so_addresses[address]
+            if not address:
+                return match.group(0)
+
+            # 只进行精确匹配（地址来自 perf 采样，与分析时的地址一致）
+            matched_function = None
+            matched_address = None
+
+            if address in so_addresses:
+                matched_function = so_addresses[address]
+                matched_address = address
+
+            if matched_function and matched_address:
                 replaced_count['count'] += 1
-                if address not in [r['original'] for r in replacement_info]:
-                    replacement_info.append({'original': address, 'replaced': function_name})
-                return f'{prefix}{function_name} [反推，仅供参考]"'
+                if matched_address not in [r['original'] for r in replacement_info]:
+                    replacement_info.append({'original': matched_address, 'replaced': matched_function})
+                # 在替换后保留原始地址，便于追溯
+                return f'{prefix}{matched_function} [反推，仅供参考] ({address})"'
             return match.group(0)
 
         # 匹配 symbol 字段（完整格式和压缩格式）
@@ -406,14 +505,17 @@ def replace_symbols_in_html(html_content, function_mapping):
         data_content_to_replace = re.sub(
             symbol_pattern, replace_in_symbol_field, data_content_to_replace, flags=re.IGNORECASE
         )
-        logger.info(f'  步骤 1 完成，已替换 {replaced_count["count"]} 个符号')
+        logger.info(f'  Step 1 completed, replaced {replaced_count["count"]} symbols')
 
         # 方法2: 替换完整路径格式（优化：只处理未被方法1替换的地址）
-        logger.info('  步骤 2/3: 替换完整路径格式...')
+        logger.info('  Step 2/3: Replacing full path format...')
         existing_replacements = {r['original'] for r in replacement_info}
-        remaining_addresses = {addr: name for addr, name in so_addresses.items() if addr not in existing_replacements}
+        # 获取尚未替换的地址
+        remaining_addresses = {
+            addr: func_name for addr, func_name in so_addresses.items() if addr not in existing_replacements
+        }
         if remaining_addresses:
-            logger.info(f'  剩余 {len(remaining_addresses)} 个地址需要处理...')
+            logger.info(f'  Remaining {len(remaining_addresses)} addresses to process...')
             logger.info(
                 f'  注意: 由于 JSON 数据块较大（{len(data_content_to_replace) / (1024 * 1024):.2f} MB），处理可能需要一些时间...'
             )
@@ -421,7 +523,7 @@ def replace_symbols_in_html(html_content, function_mapping):
             pattern_count = 0
 
             for processed, (address, function_name) in enumerate(remaining_addresses.items(), 1):
-                logger.info(f'    处理地址 {processed}/{len(remaining_addresses)}: {address[:50]}...')
+                logger.info(f'    Processing address {processed}/{len(remaining_addresses)}: {address[:50]}...')
 
                 # 优化：使用更简单的模式，避免复杂的正则
                 # 直接替换地址字符串（转义特殊字符）
@@ -429,47 +531,52 @@ def replace_symbols_in_html(html_content, function_mapping):
 
                 # 模式1: 完整路径格式
                 pattern_count += 1
-                logger.info(f'      模式 1/3: 完整路径格式 ({pattern_count}/{total_patterns})...')
+                logger.info(f'      Pattern 1/3: Full path format ({pattern_count}/{total_patterns})...')
                 pattern_full = rf'([^"]*/proc/[^"]*/)([^"]*libs/arm64/)({escaped_address})'
 
-                def replace_full_path(m, fn=function_name):
+                def replace_full_path(m, fn=function_name, addr=address):
                     if '[反推，仅供参考]' in m.group(0):
                         return m.group(0)
                     replaced_count['count'] += 1
-                    return f'{m.group(1)}{m.group(2)}{fn} [反推，仅供参考]'
+                    # 在替换后保留原始地址，便于追溯
+                    return f'{m.group(1)}{m.group(2)}{fn} [反推，仅供参考] ({addr})'
 
                 data_content_to_replace = re.sub(pattern_full, replace_full_path, data_content_to_replace)
 
                 # 模式2: 简单格式（在引号内）
                 pattern_count += 1
-                logger.info(f'      模式 2/3: 简单格式 ({pattern_count}/{total_patterns})...')
+                logger.info(f'      Pattern 2/3: Simple format ({pattern_count}/{total_patterns})...')
                 pattern_simple = rf'(")({escaped_address})(")'
 
-                def replace_simple(m, fn=function_name):
+                def replace_simple(m, fn=function_name, addr=address):
                     if '[反推，仅供参考]' in m.group(0):
                         return m.group(0)
                     replaced_count['count'] += 1
-                    return f'{m.group(1)}{fn} [反推，仅供参考]{m.group(3)}'
+                    # 在替换后保留原始地址，便于追溯
+                    return f'{m.group(1)}{fn} [反推，仅供参考] ({addr}){m.group(3)}'
 
                 data_content_to_replace = re.sub(pattern_simple, replace_simple, data_content_to_replace)
 
                 # 模式3: symbol 字段中的完整路径
                 pattern_count += 1
-                logger.info(f'      模式 3/3: symbol 字段 ({pattern_count}/{total_patterns})...')
+                logger.info(f'      Pattern 3/3: symbol field ({pattern_count}/{total_patterns})...')
                 pattern_in_symbol = rf'("(?:symbol|f)"\s*:\s*")([^"]*{escaped_address}[^"]*)"'
 
-                def replace_in_symbol_direct(m, fn=function_name):
+                def replace_in_symbol_direct(m, fn=function_name, addr=address):
                     if '[反推，仅供参考]' in m.group(2):
                         return m.group(0)
                     replaced_count['count'] += 1
-                    return f'{m.group(1)}{fn} [反推，仅供参考]"'
+                    # 在替换后保留原始地址，便于追溯
+                    return f'{m.group(1)}{fn} [反推，仅供参考] ({addr})"'
 
                 data_content_to_replace = re.sub(pattern_in_symbol, replace_in_symbol_direct, data_content_to_replace)
 
-                logger.info(f'    ✅ 地址 {processed} 处理完成（已替换 {replaced_count["count"]} 个符号）')
+                logger.info(
+                    f'    ✅ Address {processed} processing completed (replaced {replaced_count["count"]} symbols)'
+                )
 
-        logger.info(f'  步骤 2 完成，总共替换了 {replaced_count["count"]} 个符号')
-        logger.info('  步骤 3/3: 完成替换')
+        logger.info(f'  Step 2 completed, total replaced {replaced_count["count"]} symbols')
+        logger.info('  Step 3/3: Replacement completed')
 
         # 如果数据被压缩，需要重新压缩和编码
         # 检查 json_match 是否有 _is_compressed 属性
@@ -477,7 +584,7 @@ def replace_symbols_in_html(html_content, function_mapping):
         compression_format = getattr(json_match, '_compression_format', 'gzip') if json_match else 'gzip'
 
         if is_compressed_flag:
-            logger.info('  重新压缩和编码数据...')
+            logger.info('  Recompressing and encoding data...')
             try:
                 # 如果是 SymbolMapMatch，需要压缩整个 JSON（包括 content_before 和 content_after）
                 # 否则只压缩 data_content_to_replace
@@ -492,10 +599,10 @@ def replace_symbols_in_html(html_content, function_mapping):
 
                 # 根据原始压缩格式选择压缩方法
                 if compression_format == 'zlib':
-                    logger.info('  使用 zlib 压缩...')
+                    logger.info('  Using zlib compression...')
                     compressed = zlib.compress(full_json_content.encode('utf-8'))
                 else:
-                    logger.info('  使用 gzip 压缩...')
+                    logger.info('  Using gzip compression...')
                     compressed = gzip.compress(full_json_content.encode('utf-8'))
 
                 # Base64 编码
@@ -505,7 +612,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                 # 压缩后的数据是完整的 JSON（对于 SymbolMapMatch）或部分 JSON（对于其他模式）
                 data_content_to_replace = encoded
 
-                logger.info(f'  ✅ 重新压缩和编码完成，大小: {len(encoded) / 1024 / 1024:.2f} MB')
+                logger.info(f'  ✅ Recompression and encoding completed, size: {len(encoded) / 1024 / 1024:.2f} MB')
             except Exception:
                 logger.exception('  ⚠️  重新压缩失败，使用未压缩的数据')
 
@@ -546,7 +653,7 @@ def replace_symbols_in_html(html_content, function_mapping):
             html_content = html_content[:start_pos] + data_prefix + data_content_to_replace + html_content[end_pos:]
     else:
         # 如果找不到 window.data，回退到全文件替换（但只替换 symbol 字段）
-        logger.info('未找到 window.data，使用全文件替换模式...')
+        logger.info('window.data not found, using full file replacement mode...')
         so_addresses = function_mapping  # 使用所有地址映射，不再只过滤 libxwebcore.so
 
         def replace_in_symbol_field(match):
@@ -558,19 +665,51 @@ def replace_symbols_in_html(html_content, function_mapping):
                 replaced_count['count'] += 1
                 if address not in [r['original'] for r in replacement_info]:
                     replacement_info.append({'original': address, 'replaced': function_name})
-                return f'{prefix}{function_name} [反推，仅供参考]"'
+                # 在替换后保留原始地址，便于追溯
+                return f'{prefix}{function_name} [反推，仅供参考] ({address})"'
             return match.group(0)
 
         # 匹配 symbol 字段（完整格式和压缩格式 "f"，支持任何 .so 文件，包括下划线）
         symbol_pattern = r'("(?:symbol|f)"\s*:\s*")([^"]*lib[\w_]+\.so\+0x[0-9a-fA-F]+[^"]*)"'
         html_content = re.sub(symbol_pattern, replace_in_symbol_field, html_content, flags=re.IGNORECASE)
 
-    logger.info(f'✅ 替换了 {replaced_count["count"]} 个缺失符号')
+    logger.info(f'✅ Replaced {replaced_count["count"]} missing symbols')
     return html_content, replacement_info
 
 
-def add_disclaimer(html_content, reference_report_file=None, relative_path=None):
-    """在 HTML 中添加免责声明和参考链接
+def extract_html_body_content(html_file_path: Path) -> str:
+    """从 HTML 文件中提取 body 内容（不包括 body 标签本身）"""
+    try:
+        with open(html_file_path, encoding='utf-8') as f:
+            content = f.read()
+
+        # 提取 <body> 标签内的内容
+        body_match = re.search(r'<body[^>]*>(.*?)</body>', content, re.DOTALL | re.IGNORECASE)
+        if body_match:
+            return body_match.group(1).strip()
+
+        # 如果没有 body 标签，尝试提取整个文档内容（除了 html/head 标签）
+        html_match = re.search(r'</head>(.*?)</html>', content, re.DOTALL | re.IGNORECASE)
+        if html_match:
+            return html_match.group(1).strip()
+
+        # 如果都没有，返回空字符串
+        return ''
+    except Exception as e:
+        logger.warning(f'Unable to read HTML report file {html_file_path}: {e}')
+        return ''
+
+
+def add_disclaimer(
+    html_content,
+    reference_report_file=None,
+    relative_path=None,
+    html_report_file=None,
+    excel_file=None,
+    report_data=None,
+    llm_analyzer=None,
+):
+    """在 HTML 中添加免责声明、参考链接和嵌入的报告
 
     Args:
         html_content: HTML 内容
@@ -578,6 +717,8 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None)
                                如果为 None，则自动查找
         relative_path: 从 HTML 文件到输出目录的相对路径
                       如果为 None，则自动计算或使用默认路径
+        html_report_file: HTML 报告文件路径（可选，如果提供则嵌入报告内容）
+        excel_file: Excel 文件路径（可选，如果提供则添加下载链接）
     """
     # 获取输出目录
     output_dir = config.get_output_dir()
@@ -593,7 +734,7 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None)
 
     # 确定参考报告文件
     if reference_report_file:
-        reference_link = f'{relative_path}/{reference_report_file}' if relative_path else reference_report_file
+        pass
     # 自动查找最新的报告文件
     elif output_dir.exists():
         # 查找所有报告文件，按修改时间排序
@@ -601,38 +742,168 @@ def add_disclaimer(html_content, reference_report_file=None, relative_path=None)
         if report_files:
             # 按修改时间排序，取最新的
             report_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-            reference_link = f'{relative_path}/{report_files[0].name}' if relative_path else report_files[0].name
+            f'{relative_path}/{report_files[0].name}' if relative_path else report_files[0].name
         # 如果没有找到，使用默认名称
         elif relative_path:
-            reference_link = f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
+            f'{relative_path}/{EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)}'
         else:
-            reference_link = config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
+            EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)
     elif relative_path:
-        reference_link = f'{relative_path}/{config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)}'
+        f'{relative_path}/{EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)}'
     else:
-        reference_link = config.EVENT_COUNT_REPORT_PATTERN.format(n=config.DEFAULT_TOP_N)
+        EVENT_COUNT_REPORT_PATTERN.format(n=DEFAULT_TOP_N)
 
-    disclaimer = f"""
-    <!-- 符号替换说明 -->
-    <div style="position: fixed; top: 10px; right: 10px; background: #fff3cd; border: 2px solid #ffc107;
-                padding: 15px; border-radius: 5px; z-index: 10000; max-width: 350px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
-        <strong>⚠️ 符号替换说明</strong><br>
-        报告中标记为 <span style="color: #d32f2f; font-weight: bold;">[反推，仅供参考]</span> 的函数名<br>
-        是通过 LLM 分析反汇编代码推断的，<br>
-        格式为 "Function: {{函数名}}"，<br>
-        可能与实际函数名存在差异，仅供参考。<br><br>
-        <strong>📚 技术参考:</strong><br>
-        <a href="{reference_link}" target="_blank"
-           style="color: #1976d2; text-decoration: underline; font-weight: bold;">
-           查看详细分析报告（技术原理、Token统计、函数列表）
-        </a>
-    </div>
+    # 构建 Excel 下载链接
+    if excel_file:
+        excel_path = Path(excel_file)
+        if excel_path.exists():
+            pass
+
+    # 不再显示免责声明框
+    disclaimer = ''
+
+    # 生成报告内容（优先使用 report_data，否则从文件读取）
+    report_body_content = ''
+    if report_data:
+        # 直接从数据生成报告内容
+        full_html = util.render_html_report(
+            report_data,
+            llm_analyzer=llm_analyzer,
+            time_tracker=None,
+            title='缺失符号函数分析报告',
+        )
+        # 提取 body 内容
+        body_match = re.search(r'<body[^>]*>(.*?)</body>', full_html, re.DOTALL | re.IGNORECASE)
+        if body_match:
+            report_body_content = body_match.group(1).strip()
+    elif html_report_file:
+        html_report_path = Path(html_report_file)
+        if html_report_path.exists():
+            report_body_content = extract_html_body_content(html_report_path)
+
+    # 嵌入 HTML 报告内容（如果提供）
+    embedded_report = ''
+    if report_body_content:
+        # 转义 JavaScript 字符串中的特殊字符
+        report_body_content_escaped = json.dumps(report_body_content)
+
+        embedded_report = f"""
+    <!-- 添加新的 tab 来显示详细分析报告 -->
+    <script>
+        (function() {{
+            function addReportTab() {{
+                // 查找 lit-tabs 元素
+                var tabs = document.querySelector('lit-tabs');
+                if (!tabs) {{
+                    // 如果找不到，延迟重试
+                    setTimeout(addReportTab, 500);
+                    return;
+                }}
+
+                // 检查是否已经添加过
+                var existingPane = tabs.querySelector('lit-tabpane[key="5"]');
+                if (existingPane) {{
+                    return;
+                }}
+
+                // 创建新的 tabpane
+                var newPane = document.createElement('lit-tabpane');
+                newPane.setAttribute('id', 'pane5');
+                newPane.setAttribute('tab', '详细分析报告');
+                newPane.setAttribute('key', '5');
+
+                // 将报告内容添加到 tabpane 中
+                var reportContent = {report_body_content_escaped};
+
+                // 创建容器并添加样式
+                var container = document.createElement('div');
+                container.style.cssText = 'padding: 20px; background: white; min-height: 100vh;';
+
+                // 创建样式元素
+                var styleElement = document.createElement('style');
+                styleElement.textContent = '.container {{ max-width: 100%; margin: 0; background: white; padding: 20px; box-sizing: border-box; }} ' +
+                    'h1 {{ color: #333; border-bottom: 3px solid #4CAF50; padding-bottom: 10px; margin-top: 0; }} ' +
+                    'table {{ width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: auto; }} ' +
+                    'th {{ background-color: #4CAF50; color: white; padding: 12px 8px; text-align: left; position: sticky; top: 0; white-space: nowrap; font-size: 13px; }} ' +
+                    'td {{ padding: 10px 8px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 13px; word-wrap: break-word; }} ' +
+                    'tr:hover {{ background-color: #f5f5f5; }} ' +
+                    '.rank {{ font-weight: bold; color: #4CAF50; text-align: center; width: 50px; }} ' +
+                    '.address {{ font-family: "Courier New", monospace; font-size: 0.85em; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }} ' +
+                    '.call-count {{ text-align: right; font-weight: bold; white-space: nowrap; }} ' +
+                    '.confidence-high {{ color: #4CAF50; font-weight: bold; }} ' +
+                    '.confidence-medium {{ color: #FF9800; font-weight: bold; }} ' +
+                    '.confidence-low {{ color: #f44336; }} ' +
+                    '.functionality {{ max-width: 400px; word-wrap: break-word; line-height: 1.4; }} ' +
+                    '.strings {{ font-family: "Courier New", monospace; font-size: 0.85em; max-width: 300px; word-wrap: break-word; line-height: 1.4; }} ' +
+                    '.section {{ margin-top: 40px; padding: 20px; background-color: #f9f9f9; border-radius: 5px; border-left: 4px solid #4CAF50; }} ' +
+                    '.section h2 {{ color: #333; margin-top: 0; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }} ' +
+                    '.token-stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px; }} ' +
+                    '.token-stat-item {{ background: white; padding: 15px; border-radius: 5px; border: 1px solid #ddd; }} ' +
+                    '.token-stat-label {{ font-size: 0.9em; color: #666; margin-bottom: 5px; }} ' +
+                    '.token-stat-value {{ font-size: 1.5em; font-weight: bold; color: #4CAF50; }} ' +
+                    'td:nth-child(2) {{ max-width: 250px; }} ' +
+                    'td:nth-child(9) {{ max-width: 350px; }} ' +
+                    'td:nth-child(10) {{ max-width: 400px; }}';
+                container.appendChild(styleElement);
+
+                // 插入报告内容
+                container.innerHTML += reportContent;
+                newPane.appendChild(container);
+
+                // 添加到 tabs 中
+                tabs.appendChild(newPane);
+            }}
+
+            // 页面加载后执行
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', addReportTab);
+            }} else {{
+                addReportTab();
+            }}
+
+            // 延迟执行，确保所有内容都已加载
+            setTimeout(addReportTab, 500);
+            setTimeout(addReportTab, 1000);
+        }})();
+    </script>
     """
 
-    # 在 </body> 标签前插入声明
+    # 插入样式和脚本（在 head 或 body 开始处）
+    layout_style_script = ''
+    if embedded_report:
+        # 提取样式和脚本部分
+        style_match = re.search(r'<style>(.*?)</style>', embedded_report, re.DOTALL)
+        script_match = re.search(r'<script>(.*?)</script>', embedded_report, re.DOTALL)
+
+        if style_match:
+            layout_style_script += f'<style>{style_match.group(1)}</style>'
+        if script_match:
+            layout_style_script += f'<script>{script_match.group(1)}</script>'
+
+    # 插入布局样式和脚本到 head 或 body 开始处
+    if layout_style_script:
+        if '</head>' in html_content:
+            html_content = html_content.replace('</head>', layout_style_script + '</head>')
+        elif '<body' in html_content:
+            body_match = re.search(r'(<body[^>]*>)', html_content, re.IGNORECASE)
+            if body_match:
+                html_content = html_content.replace(body_match.group(1), body_match.group(1) + layout_style_script)
+
+    # 提取报告容器部分（不包含样式和脚本）
+    report_container = ''
+    if embedded_report:
+        container_match = re.search(r'(<div id="embedded-report-container".*?</div>)', embedded_report, re.DOTALL)
+        if container_match:
+            report_container = container_match.group(1)
+
+    # 在 </body> 标签前插入声明和报告容器
+    insertion_content = disclaimer + report_container
     if '</body>' in html_content:
-        html_content = html_content.replace('</body>', disclaimer + '</body>')
+        html_content = html_content.replace('</body>', insertion_content + '</body>')
     elif '</html>' in html_content:
-        html_content = html_content.replace('</html>', disclaimer + '</html>')
+        html_content = html_content.replace('</html>', insertion_content + '</html>')
+    else:
+        # 如果没有 body 或 html 标签，在末尾添加
+        html_content += insertion_content
 
     return html_content

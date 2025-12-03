@@ -1,10 +1,55 @@
 [
     {
+        "name": "APP",
+        "kind": 1,
+        "components": [
+            {
+                "name": "APP_ABC",
+                "priority": 0,
+                "files": [
+                    "/proc/.*/data/storage/(?!.*/bundle/.*\\.so$)(?!.*/bundle/libs/).*"
+                ]
+            },
+            {
+                "name": "APP_SO",
+                "priority": 0,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/(.*\\.so|libs/.*)"
+                ]
+            }
+        ]
+    },
+    {
+        "name": "ArkUI",
+        "kind": 2,
+        "components": [
+            {
+                "name": "ArkUI",
+                "priority": 10,
+                "files": [
+                    "/system/etc/abc/framework/stateMgmt.abc",
+                    "/system/lib64/libace_ndk.z.so",
+                    "/system/lib64/module/arkui/libcomponentsnapshot.z.so",
+                    "/system/lib64/module/arkui/libcomponentutils.z.so",
+                    "/system/lib64/module/arkui/libfocuscontroller.z.so",
+                    "/system/lib64/module/arkui/libinspector.z.so",
+                    "/system/lib64/module/arkui/libobserver.z.so",
+                    "/system/lib64/platformsdk/libace_compatible.z.so",
+                    "/system/lib64/platformsdk/libace_container_scope.z.so",
+                    "/system/lib64/platformsdk/libace_forward_compatibility.z.so",
+                    "/system/lib64/platformsdk/libace_network.z.so",
+                    "/system/lib64/platformsdk/libace_uicontent.z.so"
+                ]
+            }
+        ]
+    },
+    {
         "name": "OS_Runtime",
         "kind": 3,
         "components": [
             {
                 "name": "Ability",
+                "priority": 10,
                 "files": [
                     "/system/lib64/chipset-pub-sdk/libextractortool.z.so",
                     "/system/lib64/module/ability/libfeatureability.z.so",
@@ -25,6 +70,7 @@
             },
             {
                 "name": "ArkTS Runtime",
+                "priority": 10,
                 "files": [
                     "/system/lib64/libark_jsoptimizer.so",
                     "/system/lib64/module/arkcompiler/stub.an",
@@ -37,32 +83,17 @@
             },
             {
                 "name": "ArkTS System LIB",
+                "priority": 10,
                 "files": [
                     "anon:ArkTS Code:.*"
                 ]
             },
             {
                 "name": "JS Engine",
+                "priority": 10,
                 "files": [
                     "/system/lib64/libv8_shared.so",
                     "/system/lib64/ndk/libjsvm.so"
-                ]
-            },
-            {
-                "name": "ArkUI",
-                "files": [
-                    "/system/etc/abc/framework/stateMgmt.abc",
-                    "/system/lib64/libace_ndk.z.so",
-                    "/system/lib64/module/arkui/libcomponentsnapshot.z.so",
-                    "/system/lib64/module/arkui/libcomponentutils.z.so",
-                    "/system/lib64/module/arkui/libfocuscontroller.z.so",
-                    "/system/lib64/module/arkui/libinspector.z.so",
-                    "/system/lib64/module/arkui/libobserver.z.so",
-                    "/system/lib64/platformsdk/libace_compatible.z.so",
-                    "/system/lib64/platformsdk/libace_container_scope.z.so",
-                    "/system/lib64/platformsdk/libace_forward_compatibility.z.so",
-                    "/system/lib64/platformsdk/libace_network.z.so",
-                    "/system/lib64/platformsdk/libace_uicontent.z.so"
                 ]
             }
         ]
@@ -73,6 +104,7 @@
         "components": [
             {
                 "name": "RN",
+                "priority": 10,
                 "files": [
                     ".*libhermes.so",
                     ".*librnoh.so",
@@ -95,8 +127,9 @@
         "components": [
             {
                 "name": "Flutter",
+                "priority": 10,
                 "files": [
-                    "libflutter.so"
+                    "/proc/.*/data/storage/.*/bundle/.*libflutter.so$"
                 ],
                 "threads": [
                     "\\d+\\.io",
@@ -117,6 +150,7 @@
         "components": [
             {
                 "name": "WEB",
+                "priority": 10,
                 "files": [
                     ".*libarkweb_engine.so",
                     ".*NWeb.hap",
@@ -156,12 +190,14 @@
         "components": [
             {
                 "name": "KMP Runtime",
+                "priority": 10,
                 "files": [
                     "/proc/.*/bundle/libs/arm64/libkn.so"
                 ]
             },
             {
                 "name": "CMP",
+                "priority": 10,
                 "files": [
                     "/proc/.*/bundle/libs/arm64/libskikobridge.so"
                 ]

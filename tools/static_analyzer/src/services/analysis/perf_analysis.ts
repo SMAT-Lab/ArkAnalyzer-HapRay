@@ -77,26 +77,6 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         await this.generatePerfJson(input, testReportInfo, steps, timeRanges);
     }
 
-    /**
-     * 单独分析负载数据（不分析内存数据）
-     * 用于只需要负载分析的场景
-     */
-    async analyzePerfOnly(input: string, timeRanges?: Array<TimeRange>): Promise<void> {
-        const config = getConfig();
-        const scene = path.basename(input);
-        const steps = await this.loadSteps(input);
-
-        if (!(await checkPerfFiles(input, steps.length))) {
-            logger.error('hiperf 数据不全，需要先执行数据收集步骤！');
-            return;
-        }
-
-        const testReportInfo = await this.loadTestReportInfo(input, scene, config);
-        await this.generatePerfJsonOnly(input, testReportInfo, steps, timeRanges);
-    }
-
-
-
     // ===================== 数据加载函数 =====================
     // 注：loadSteps, loadTestReportInfo, loadStandardTestReportInfo 已在基类中实现
     

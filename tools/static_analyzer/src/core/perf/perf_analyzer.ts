@@ -20,9 +20,8 @@ import initSqlJs from 'sql.js';
 import writeXlsxFile from 'write-excel-file/node';
 import { createHash } from 'crypto';
 import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
-import { ComponentCategory, OriginKind, getComponentCategories } from '../../types/component';
+import { ComponentCategory, getComponentCategories, type ClassifyCategory } from '../../types/component';
 import type {
-    ClassifyCategory,
     FileClassification,
     PerfComponent,
     PerfStepSum,
@@ -464,7 +463,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             category: ComponentCategory.UNKNOWN,
             categoryName: UNKNOWN_STR,
             subCategoryName: '',
-            originKind: OriginKind.UNKNOWN,
         });
 
         // 先检查是否存在KMP方案标识文件
@@ -478,17 +476,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             if (pidMatch) {
                 file = file.replace(`/${pidMatch[1]}/`, '/{pid}/');
             }
+
             let fileClassify = this.classifyFile(file);
 
-            if (fileClassify.category === ComponentCategory.APP_SO) {
-                let origin = this.classifySoOrigins(file);
-                if (origin) {
-                    fileClassify.originKind = origin.originKind;
-                    fileClassify.subCategoryName = origin.subCategoryName;
-                }
-            }
-
-            if (fileClassify.category === ComponentCategory.APP_SO) {
+            if (fileClassify.category === ComponentCategory.APP && fileClassify.subCategoryName === 'APP_SO') {
                 // 特殊处理KMP相关文件：当检测到KMP方案时，将libskia.so和libskikobridge.so归类为KMP
                 if (hasKmpScheme &&
                     (file.match(/\/proc\/.*\/bundle\/libs\/arm64\/libskia\.so$/))) {
@@ -639,7 +630,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                     { value: this.symbolsMap.get(call.symbolId) ?? '', type: String },
                     { value: ComponentCategory[call.classification.category], type: String },
                     { value: call.classification.subCategoryName ?? '', type: String },
-                    { value: OriginKind[call.classification.originKind], type: String },
+                    { value: call.classification.thirdCategoryName ?? '', type: String },
                     { value: event, type: String },
                 ]);
             }
@@ -789,11 +780,19 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 continue;
             }
 
-            let callchain = this.callchainsMap.get(sample.callchain_id)!;
-            let call = callchain.stack[callchain.selfEvent];
+            const callchain = this.callchainsMap.get(sample.callchain_id)!;
+            const call = callchain.stack[callchain.selfEvent];
 
             // 优先使用symbolsClassifyMap中的特殊处理结果，如果没有则使用call.classification
-            let finalClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
+            // 创建副本以避免修改callchainsMap中的原始对象
+            const sourceClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
+            const finalClassification: FileClassification = {
+                file: sourceClassification.file,
+                category: sourceClassification.category,
+                categoryName: sourceClassification.categoryName,
+                subCategoryName: sourceClassification.subCategoryName,
+                thirdCategoryName: sourceClassification.thirdCategoryName,
+            };
 
             let data: PerfSymbolDetailData = {
                 stepIdx: groupId,
@@ -809,9 +808,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 symbol: this.symbolsMap.get(call.symbolId) ?? '',
                 symbolEvents: sample.event_count,
                 symbolTotalEvents: 0,
-                originKind: finalClassification.originKind,
-                componentCategory: finalClassification.category,
-                componentName: finalClassification.subCategoryName,
+                componentCategory: finalClassification,
                 isMainApp: process.systemClassifyCategory.isMainApp,
                 sysDomain: process.systemClassifyCategory.domain,
                 sysSubSystem: process.systemClassifyCategory.subSystem,
@@ -827,12 +824,13 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // 根据线程名直接分类
             if (thread.classification.category !== ComponentCategory.UNKNOWN) {
                 if (thread.classification.subCategoryName) {
-                    data.componentName = thread.classification.subCategoryName;
+                    data.componentCategory.subCategoryName = thread.classification.subCategoryName;
                 } else {
-                    data.componentName = path.basename(finalClassification.file);
+                    data.componentCategory.subCategoryName = path.basename(finalClassification.file);
                 }
 
-                data.componentCategory = thread.classification.category;
+                data.componentCategory.category = thread.classification.category;
+                data.componentCategory.categoryName = thread.classification.categoryName;
             }
 
             if (data.sysDomain === 'DFX' || data.sysDomain === 'Test') {
@@ -840,9 +838,9 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 continue;
             }
 
-            if (data.componentCategory === ComponentCategory.SYS_SDK && data.componentName === 'Other') {
+            if (data.componentCategory.category === ComponentCategory.SYS_SDK && data.componentCategory.subCategoryName === 'Other') {
                 if (path.basename(data.processName) === path.basename(data.file)) {
-                    data.componentName = data.sysDomain;
+                    data.componentCategory.subCategoryName = data.sysDomain;
                 }
             }
 
@@ -957,10 +955,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         // 遍历所有符号数据进行统计
         for (const data of groupData) {
-            const componentKey = `${data.componentCategory}_${data.componentName}`;
+            const componentKey = `${data.componentCategory.category}_${data.componentCategory.subCategoryName}`;
             const eventIndex = data.eventType; // 0: cycles, 1: instructions
             // 将 UNKNOWN(-1) 映射到最后一个索引
-            const categoryIndex = data.componentCategory >= 0 ? data.componentCategory : categoryCount - 1;
+            const categoryIndex = data.componentCategory.category >= 0 ? data.componentCategory.category : categoryCount - 1;
 
             // 统计负载计数
             count += data.symbolEvents;
@@ -973,13 +971,12 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             // 统计组件负载
             if (!componentMap.has(componentKey)) {
                 componentMap.set(componentKey, {
-                    name: data.componentName ?? 'Unknown',
+                    name: data.componentCategory.categoryName,
                     cycles: 0,
                     totalCycles: 0,
                     instructions: 0,
                     totalInstructions: 0,
                     category: data.componentCategory,
-                    originKind: data.originKind,
                 });
             }
 

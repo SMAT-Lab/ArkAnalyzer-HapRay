@@ -98,6 +98,67 @@ class CLI:
                 for param_name, param_def in parameters.items():
                     self._add_argument(subparser, param_name, param_def)
 
+    def _build_bool_kwargs(self, param_name: str, default: Any, help_text: str, label: str) -> dict[str, Any]:
+        """构建布尔类型参数"""
+        return {
+            'dest': param_name,
+            'action': 'store_true' if not default else 'store_false',
+            'default': default if default is not None else False,
+            'help': help_text or label,
+        }
+
+    def _build_choice_kwargs(
+        self, param_name: str, param_def: dict[str, Any], default: Any, required: bool, help_text: str, label: str
+    ) -> dict[str, Any]:
+        """构建选择类型参数"""
+        choices = param_def.get('choices', [])
+        multi_select = param_def.get('multi_select', False)
+
+        kwargs = {
+            'dest': param_name,
+            'type': str,
+            'default': default,
+            'required': required,
+        }
+
+        # 根据 choices 和 multi_select 设置相关参数
+        is_dynamic_choices = isinstance(choices, str)  # choices 是函数名（字符串）时为动态选项
+
+        kwargs['choices'] = None if is_dynamic_choices else (choices if choices else None)
+        kwargs['nargs'] = '+' if multi_select else None
+
+        # 构建帮助文本
+        help_suffix = ''
+        if is_dynamic_choices and multi_select:
+            help_suffix = ' (支持多个值，可使用正则表达式模式)'
+        elif not is_dynamic_choices and choices:
+            help_suffix = f' (可选值: {", ".join(choices)})'
+
+        kwargs['help'] = f'{help_text}{help_suffix}' if help_text else label
+
+        return kwargs
+
+    def _build_typed_kwargs(
+        self,
+        param_name: str,
+        param_type: type,
+        default: Any,
+        required: bool,
+        help_text: str,
+        label: str,
+        nargs: str | None,
+    ) -> dict[str, Any]:
+        """构建类型化参数（int, str, file, dir）"""
+        kwargs = {
+            'dest': param_name,
+            'type': param_type,
+            'default': default,
+            'required': required,
+            'help': help_text or label,
+        }
+        kwargs['nargs'] = nargs
+        return kwargs
+
     def _add_argument(self, parser: argparse.ArgumentParser, param_name: str, param_def: dict[str, Any]):
         """添加命令行参数"""
         param_type = param_def.get('type', 'str')
@@ -106,80 +167,31 @@ class CLI:
         required = param_def.get('required', False)
         default = param_def.get('default')
         # 如果提供了默认值，则不需要用户必须提供该参数
-        if default is not None:
-            required = False
+        required = False if default is not None else required
         short_name = param_def.get('short')  # 短选项，如 'i', 'o', 'j'
         nargs = param_def.get('nargs')  # 多个值，如 '+', '*'
 
-        # 将参数名转换为命令行格式（下划线转连字符）
-        arg_name = param_name.replace('_', '-')
-        # 创建长参数名
-        long_name = f'--{arg_name}'
-
         # 构建参数列表（可能包含短选项）
-        arg_names = [long_name]
-        if short_name:
-            arg_names.insert(0, f'-{short_name}')
+        arg_names = [f'--{param_name}']
+        arg_names = [f'-{short_name}'] + arg_names if short_name else arg_names
 
-        # 根据类型设置不同的参数选项
-        if param_type == 'bool':
-            # 布尔类型使用 store_true 或 store_false
-            action = 'store_true' if not default else 'store_false'
-            parser.add_argument(
-                *arg_names,
-                action=action,
-                default=default if default is not None else False,
-                help=help_text or label,
-            )
-        elif param_type == 'choice':
-            # 选择类型
-            choices = param_def.get('choices', [])
-            parser.add_argument(
-                *arg_names,
-                type=str,
-                choices=choices,
-                default=default,
-                required=required,
-                help=f'{help_text} (可选值: {", ".join(choices)})' if help_text else label,
-            )
-        elif param_type == 'int':
-            # 整数类型
-            # 如果 nargs 指定为 '+' 或 '*'，则支持多个值
-            kwargs = {
-                'type': int,
-                'default': default,
-                'required': required,
-                'help': help_text or label,
-            }
-            if nargs:
-                kwargs['nargs'] = nargs
-            parser.add_argument(*arg_names, **kwargs)
-        elif param_type in ('file', 'dir'):
-            # 文件或目录类型
-            kwargs = {
-                'type': str,
-                'default': default,
-                'required': required,
-                'help': help_text or label,
-            }
-            if nargs:
-                kwargs['nargs'] = nargs
-            parser.add_argument(*arg_names, **kwargs)
-        else:
-            # 字符串类型（默认）
-            kwargs = {
-                'type': str,
-                'default': default,
-                'required': required,
-                'help': help_text or label,
-            }
-            # 根据参数名推断是否需要多个值
-            if nargs:
-                kwargs['nargs'] = nargs
-            elif param_name in ('run_testcases', 'devices', 'perfs', 'traces', 'pids', 'time_ranges'):
-                # 这些参数在 README.md 中支持多个值
-                kwargs['nargs'] = '+'
-            parser.add_argument(*arg_names, **kwargs)
+        # 使用映射表来处理不同类型
+        type_handlers = {
+            'bool': lambda: self._build_bool_kwargs(param_name, default, help_text, label),
+            'choice': lambda: self._build_choice_kwargs(param_name, param_def, default, required, help_text, label),
+            'int': lambda: self._build_typed_kwargs(param_name, int, default, required, help_text, label, nargs),
+            'file': lambda: self._build_typed_kwargs(param_name, str, default, required, help_text, label, nargs),
+            'dir': lambda: self._build_typed_kwargs(param_name, str, default, required, help_text, label, nargs),
+            'str': lambda: self._build_typed_kwargs(param_name, str, default, required, help_text, label, nargs),
+        }
+
+        # 获取对应的处理函数，默认使用 str 类型处理
+        handler = type_handlers.get(param_type, type_handlers['str'])
+        kwargs = handler()
+
+        # 移除值为 None 的参数
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        parser.add_argument(*arg_names, **kwargs)
 
     def _convert_args_to_params(self, args: argparse.Namespace) -> dict[str, Any]:
         """将 argparse Namespace 转换为参数字典"""
@@ -187,9 +199,9 @@ class CLI:
         for key, value in vars(args).items():
             if key in ('plugin_id', 'action'):
                 continue
-            # 将命令行参数名转换回原始格式（连字符转下划线）
-            param_name = key.replace('-', '_')
-            params[param_name] = value
+            # 因为使用了 dest=param_name，所以 key 已经是 plugin.json 中的原始参数名
+            # 不需要做任何转换
+            params[key] = value
         return params
 
     def _execute_plugin(self, plugin_id: str, action: Optional[str], params: dict[str, Any]) -> int:

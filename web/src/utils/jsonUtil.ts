@@ -1,6 +1,4 @@
 import { ComponentCategory, type PerfData } from "@/stores/jsonDataStore";
-import { EventType } from "@/stores/nativeMemory";
-import type { NativeMemoryData, NativeMemoryRecord, NativeMemoryStepData } from "@/stores/nativeMemory";
 import pako from 'pako';
 
 // 定义数据类型接口
@@ -8,7 +6,7 @@ export interface ProcessDataItem {
   stepId: number
   process: string
   category: string
-  componentName: string
+  subCategoryName: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
@@ -19,7 +17,7 @@ export interface ThreadDataItem {
   stepId: number
   process: string
   category: string
-  componentName: string
+  subCategoryName: string
   thread: string
   instructions: number
   compareInstructions: number
@@ -31,7 +29,7 @@ export interface FileDataItem {
   stepId: number
   process: string
   category: string
-  componentName: string
+  subCategoryName: string
   thread: string
   file: string
   instructions: number
@@ -44,7 +42,7 @@ export interface SymbolDataItem {
   stepId: number
   process: string
   category: string
-  componentName: string
+  subCategoryName: string
   thread: string
   file: string
   symbol: string
@@ -69,7 +67,7 @@ export interface PerfDataItem {
   symbol: string;
   symbolEvents: number;
   symbolTotalEvents: number;
-  componentName?: string;
+  subCategoryName?: string;
   componentCategory: number;
   originKind?: number;
 }
@@ -251,7 +249,7 @@ export function calculateProcessData(
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
-            componentName: "",
+            subCategoryName: "",
             instructions,
             compareInstructions,
             increaseInstructions,
@@ -275,7 +273,7 @@ export function calculateThreadData(
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
-            componentName: "",
+            subCategoryName: "",
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             instructions,
             compareInstructions,
@@ -300,7 +298,7 @@ export function calculateFileData(
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
-            componentName: "",
+            subCategoryName: "",
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             instructions,
@@ -326,7 +324,7 @@ export function calculateSymbolData(
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: "",
-            componentName: "",
+            subCategoryName: "",
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             symbol: ignoreStep ? keyParts[3] : keyParts[4],
@@ -339,7 +337,7 @@ export function calculateSymbolData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-//category-componentName-file-symbol
+//category-subCategoryName-file-symbol
 // 大分类级别比较
 export function calculateCategorysData(
     baseData: PerfData,
@@ -354,7 +352,7 @@ export function calculateCategorysData(
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
-            componentName: "",
+            subCategoryName: "",
             instructions,
             compareInstructions,
             increaseInstructions,
@@ -371,14 +369,14 @@ export function calculateComponentNameData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.componentName}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.subCategoryName}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.subCategoryName}`;
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
-            componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             instructions,
             compareInstructions,
@@ -396,14 +394,14 @@ export function calculateFileData1(
     ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}`;
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
-            componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             instructions,
@@ -422,14 +420,14 @@ export function calculateSymbolData1(
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}|${item.symbol}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.componentName}|${item.file}|${item.symbol}`;
+        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}|${item.symbol}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}|${item.symbol}`;
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
-            componentName: ignoreStep ? keyParts[1] : keyParts[2],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
             thread: ignoreStep ? keyParts[1] : keyParts[2],
             file: ignoreStep ? keyParts[2] : keyParts[3],
             symbol: ignoreStep ? keyParts[3] : keyParts[4],
@@ -468,187 +466,4 @@ function isBase64(str: string, dataType: string) {
         return false;
     }
     return true;
-}
-
-/**
- * Transform hierarchical native memory JSON from backend into flattened format for frontend
- * Backend format: { process_dimension: [...], category_dimension: [...], peak_memory_size, ... }
- * Frontend format: { step1: { stats: {...}, records: [...] }, step2: {...} }
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function transformNativeMemoryData(rawData: any): NativeMemoryData | null {
-    if (!rawData || typeof rawData !== 'object') {
-        return null;
-    }
-
-    const result: NativeMemoryData = {};
-
-    // Extract statistics from top level
-    const stats = {
-        peakMemorySize: rawData.peak_memory_size || 0,
-        peakMemoryDuration: rawData.peak_memory_duration || 0,
-        averageMemorySize: rawData.average_memory_size || 0,
-    };
-
-    // Flatten the hierarchical structure into records
-    const records: NativeMemoryRecord[] = [];
-    const categoryMap = new Map<number, string>(); // Map category_id to category name
-
-    // First pass: build category map from category_dimension
-    if (Array.isArray(rawData.category_dimension)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        rawData.category_dimension.forEach((cat: any) => {
-            categoryMap.set(cat.category_id, cat.category);
-        });
-    }
-
-    // Second pass: flatten process_dimension into records
-    // 旧数据格式兼容：将层级结构转换为平铺记录
-    // 注意：这是旧数据格式，新数据已经是平铺格式，不需要转换
-    if (Array.isArray(rawData.process_dimension)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        rawData.process_dimension.forEach((process: any) => {
-            // 进程维度记录（只有 pid/process，其他维度为 null）
-            const processRecord: NativeMemoryRecord = {
-                pid: process.pid,
-                process: process.process_name,
-                tid: null,
-                thread: null,
-                fileId: null,
-                file: null,
-                symbolId: null,
-                symbol: null,
-                eventType: EventType.AllocEvent,
-                subEventType: 'unknown',
-                addr: 0,
-                callchainId: 0,
-                heapSize: process.max_mem || 0,
-                relativeTs: process.max_mem_time || 0,
-                componentName: 'unknown',
-                componentCategory: -1,
-                categoryName: 'UNKNOWN',
-                subCategoryName: 'unknown',
-            };
-            records.push(processRecord);
-
-            if (Array.isArray(process.threads)) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                process.threads.forEach((thread: any) => {
-                    // 线程维度记录（pid/process 和 tid/thread，其他维度为 null）
-                    const threadRecord: NativeMemoryRecord = {
-                        pid: process.pid,
-                        process: process.process_name,
-                        tid: thread.tid,
-                        thread: thread.thread_name,
-                        fileId: null,
-                        file: null,
-                        symbolId: null,
-                        symbol: null,
-                        eventType: EventType.AllocEvent,
-                        subEventType: 'unknown',
-                        addr: 0,
-                        callchainId: 0,
-                        heapSize: thread.max_mem || 0,
-                        relativeTs: thread.max_mem_time || 0,
-                        componentName: 'unknown',
-                        componentCategory: -1,
-                        categoryName: 'UNKNOWN',
-                        subCategoryName: 'unknown',
-                    };
-                    records.push(threadRecord);
-
-                    if (Array.isArray(thread.files)) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        thread.files.forEach((file: any) => {
-                            // 文件维度记录（pid/process、tid/thread、fileId/file，symbolId 为 null）
-                            const fileRecord: NativeMemoryRecord = {
-                                pid: process.pid,
-                                process: process.process_name,
-                                tid: thread.tid,
-                                thread: thread.thread_name,
-                                fileId: file.file_id || 0,
-                                file: file.file_path,
-                                symbolId: null,
-                                symbol: null,
-                                eventType: EventType.AllocEvent,
-                                subEventType: 'unknown',
-                                addr: 0,
-                                callchainId: 0,
-                                heapSize: file.max_mem || 0,
-                                relativeTs: file.max_mem_time || 0,
-                                componentName: 'unknown',
-                                componentCategory: -1,
-                                categoryName: 'UNKNOWN',
-                                subCategoryName: 'unknown',
-                            };
-                            records.push(fileRecord);
-
-                            if (Array.isArray(file.symbols)) {
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                file.symbols.forEach((symbol: any) => {
-                                    // 符号维度记录（所有维度都不为 null）
-                                    const symbolRecord: NativeMemoryRecord = {
-                                        pid: process.pid,
-                                        process: process.process_name,
-                                        tid: thread.tid,
-                                        thread: thread.thread_name,
-                                        fileId: file.file_id || 0,
-                                        file: file.file_path,
-                                        symbolId: symbol.symbol_id || 0,
-                                        symbol: symbol.symbol_name,
-                                        eventType: EventType.AllocEvent,
-                                        subEventType: 'unknown',
-                                        addr: 0,
-                                        callchainId: 0,
-                                        heapSize: symbol.max_mem || 0,
-                                        relativeTs: symbol.max_mem_time || 0,
-                                        componentName: 'unknown',
-                                        componentCategory: -1,
-                                        categoryName: 'UNKNOWN',
-                                        subCategoryName: 'unknown',
-                                    };
-                                    records.push(symbolRecord);
-                                });
-                            }
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    // Third pass: enrich records with category and component information from category_dimension
-    if (Array.isArray(rawData.category_dimension)) {
-        const categoryComponentMap = new Map<string, { categoryId: number; categoryName: string }>();
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        rawData.category_dimension.forEach((cat: any) => {
-            if (Array.isArray(cat.components)) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                cat.components.forEach((comp: any) => {
-                    categoryComponentMap.set(comp.component_name, {
-                        categoryId: cat.category_id,
-                        categoryName: cat.category,
-                    });
-                });
-            }
-        });
-
-        // Update records with category information
-        records.forEach(record => {
-            const catInfo = categoryComponentMap.get(record.componentName);
-            if (catInfo) {
-                record.componentCategory = catInfo.categoryId;
-            }
-        });
-    }
-
-    // Create step data
-    const stepData: NativeMemoryStepData = {
-        stats,
-        records,
-    };
-
-    result['step1'] = stepData;
-    return result;
 }

@@ -17,6 +17,32 @@ import fs from 'fs';
 import path from 'path';
 
 /**
+ * 递归地对对象的所有 key 进行排序
+ * @param obj - 要排序的对象
+ * @returns 排序后的新对象
+ */
+function sortObjectKeys(obj: unknown): unknown {
+    if (obj === null || obj === undefined) {
+        return obj;
+    }
+
+    if (Array.isArray(obj)) {
+        return obj.map(item => sortObjectKeys(item));
+    }
+
+    if (typeof obj === 'object') {
+        const sortedObj: Record<string, unknown> = {};
+        const keys = Object.keys(obj as Record<string, unknown>).sort();
+        for (const key of keys) {
+            sortedObj[key] = sortObjectKeys((obj as Record<string, unknown>)[key]);
+        }
+        return sortedObj;
+    }
+
+    return obj;
+}
+
+/**
  * 将 JSON 数组写入文件
  * @param data - 要写入的 JSON 数组数据
  * @param filePath - 目标文件路径
@@ -44,8 +70,11 @@ export async function saveJsonArray<T>(
         throw new Error(`文件已存在: ${filePath}`);
     }
 
+    // 对数据进行 key 排序处理
+    const sortedData = sortObjectKeys(data);
+
     // 转换为 JSON 字符串
-    const jsonString = JSON.stringify(data, null, indent);
+    const jsonString = JSON.stringify(sortedData, null, indent);
 
     // 写入文件
     return new Promise((resolve, reject) => {
@@ -84,7 +113,10 @@ export function saveJsonArraySync<T>(
         throw new Error(`文件已存在: ${filePath}`);
     }
 
+    // 对数据进行 key 排序处理
+    const sortedData = sortObjectKeys(data);
+
     // 转换为 JSON 字符串并写入
-    const jsonString = JSON.stringify(data, null, indent);
+    const jsonString = JSON.stringify(sortedData, null, indent);
     fs.writeFileSync(filePath, jsonString, { encoding });
 }

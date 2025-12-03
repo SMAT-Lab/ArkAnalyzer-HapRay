@@ -4,6 +4,7 @@
 使用 radare2 进行函数分析
 """
 
+import builtins
 import contextlib
 import json
 from pathlib import Path
@@ -12,21 +13,21 @@ from typing import Any, Optional
 import r2pipe
 
 from core.utils.logger import get_logger
+from core.utils.string_extractor import should_filter_string
 
 logger = get_logger(__name__)
-
-# 添加radare2 到 PATH 环境变量
 
 
 class R2FunctionAnalyzer:
     """使用 radare2 进行函数分析"""
 
-    def __init__(self, so_file: Path):
+    def __init__(self, so_file: Path, skip_decompilation: bool = False):
         """
         初始化分析器
 
         Args:
             so_file: SO 文件路径
+            skip_decompilation: 是否跳过反编译（默认 False，启用反编译）
         """
         self.so_file = Path(so_file)
         if not self.so_file.exists():
@@ -34,6 +35,7 @@ class R2FunctionAnalyzer:
 
         self.r2 = None
         self._functions_cache = None
+        self.skip_decompilation = skip_decompilation
 
     def _open_r2(self, analyze_all=False):
         """
@@ -90,9 +92,10 @@ class R2FunctionAnalyzer:
             best_match = None
             if self._functions_cache:
                 for func in self._functions_cache:
-                    # 优先使用 minbound 和 maxbound（如果存在）
-                    minbound = func.get('minbound', func.get('offset', 0))
-                    maxbound = func.get('maxbound', func.get('offset', 0) + func.get('size', 0))
+                    # 优先使用 minbound/minaddr 和 maxbound/maxaddr（如果存在）
+                    # 支持 radare2 不同版本的字段名差异（aflj 使用 minbound/maxbound，afij 使用 minaddr/maxaddr）
+                    minbound = func.get('minbound', func.get('minaddr', func.get('offset', 0)))
+                    maxbound = func.get('maxbound', func.get('maxaddr', func.get('offset', 0) + func.get('size', 0)))
                     func_offset = func.get('offset', minbound)
                     func_size = func.get('size', maxbound - minbound)
 
@@ -133,8 +136,9 @@ class R2FunctionAnalyzer:
                 self._functions_cache = json.loads(functions_json)
                 # 重新查找
                 for func in self._functions_cache:
-                    minbound = func.get('minbound', func.get('offset', 0))
-                    maxbound = func.get('maxbound', func.get('offset', 0) + func.get('size', 0))
+                    # 支持 minbound/minaddr 和 maxbound/maxaddr
+                    minbound = func.get('minbound', func.get('minaddr', func.get('offset', 0)))
+                    maxbound = func.get('maxbound', func.get('maxaddr', func.get('offset', 0) + func.get('size', 0)))
                     func_size = func.get('size', maxbound - minbound)
                     if minbound <= offset < maxbound and 0 < func_size < 100 * 1024:
                         return {
@@ -160,8 +164,9 @@ class R2FunctionAnalyzer:
                     if func_info and len(func_info) > 0:
                         func = func_info[0]
                         func_size = func.get('size', 0)
-                        minbound = func.get('minbound', func.get('offset', offset))
-                        maxbound = func.get('maxbound', minbound + func_size)
+                        # 支持 minbound/minaddr 和 maxbound/maxaddr（radare2 不同版本可能使用不同字段名）
+                        minbound = func.get('minbound', func.get('minaddr', func.get('offset', offset)))
+                        maxbound = func.get('maxbound', func.get('maxaddr', minbound + func_size))
                         # 如果函数大小合理，使用它
                         if 0 < func_size < 100 * 1024:
                             return {
@@ -228,6 +233,16 @@ class R2FunctionAnalyzer:
         try:
             # 如果提供了函数信息，使用函数起始地址
             func_offset = func_info['offset'] if func_info else offset
+
+            # 验证偏移量是否超出文件大小
+            try:
+                file_size = self.so_file.stat().st_size
+                if func_offset >= file_size:
+                    logger.warning(f'⚠️  偏移量 0x{func_offset:x} 超出文件大小 ({file_size:,} 字节)，无法反汇编')
+                    logger.warning('   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
+                    return []
+            except Exception:
+                pass  # 如果无法获取文件大小，继续尝试反汇编
 
             # 优化：直接使用 pdfj @offset 反汇编函数，不需要先跳转
             # pdfj: 以 JSON 格式反汇编函数（更高效）
@@ -313,6 +328,10 @@ class R2FunctionAnalyzer:
                             if len(str_value) > 200:
                                 continue
 
+                            # 过滤掉错误消息和调试字符串
+                            if should_filter_string(str_value):
+                                continue
+
                             # 使用 axtj 查找对该字符串地址的引用
                             try:
                                 refs_json = self.r2.cmd(f'axtj @{str_addr}')
@@ -380,9 +399,14 @@ class R2FunctionAnalyzer:
         try:
             func_offset = func_info['offset'] if func_info else offset
 
-            # 优化：直接使用 af @offset 分析函数，不需要先跳转
             # 确保函数已分析（如果未分析则自动分析）
-            self.r2.cmd(f'af @{func_offset}')  # 直接分析函数，不需要跳转
+            self.r2.cmd(f'af @{func_offset}')
+
+            # 保存当前位置，以便后续恢复
+            current_addr = self.r2.cmd('s')
+
+            # 跳转到函数位置（反编译命令需要先跳转到函数位置）
+            self.r2.cmd(f's @{func_offset}')
 
             # 尝试使用不同的反编译插件（按优先级）
             decompilers = [
@@ -393,12 +417,76 @@ class R2FunctionAnalyzer:
 
             for cmd, name in decompilers:
                 try:
+                    # 注意：pdg/pdd/pdq 命令需要在函数位置执行，不能使用 @offset 语法
                     decompiled = self.r2.cmd(cmd)
                     if decompiled and decompiled.strip() and not decompiled.startswith('Cannot'):
-                        logger.info(f'✅ 使用 {name} 反编译成功')
-                        return decompiled.strip()
-                except Exception:
+                        decompiled = decompiled.strip()
+
+                        # 验证反编译代码是否对应正确的函数
+                        if len(decompiled) > 100:  # 确保不是空函数或错误的反编译
+                            # 限制反编译代码长度，避免包含函数边界外的代码
+                            # 根据函数大小估算合理的反编译代码长度
+                            func_size = func_info.get('size', 0) if func_info else 0
+
+                            # 估算：每字节代码大约对应 2-5 行反编译代码
+                            # 对于很小的函数（< 200 字节），限制在 500 行以内
+                            # 对于小函数（< 500 字节），限制在 1500 行以内
+                            # 对于大函数，限制在 5000 行以内
+                            if func_size < 200:
+                                max_lines = 500
+                            elif func_size < 500:
+                                max_lines = 1500
+                            else:
+                                max_lines = 5000
+
+                            lines = decompiled.split('\n')
+                            if len(lines) > max_lines:
+                                logger.warning(
+                                    f'⚠️  反编译代码过长 ({len(lines)} 行)，函数大小仅 {func_size} 字节，'
+                                    f'可能包含函数边界外的代码。限制为前 {max_lines} 行。'
+                                )
+                                # 只取前 max_lines 行，并尝试找到函数的结束位置
+                                decompiled = '\n'.join(lines[:max_lines])
+                                # 尝试找到最后一个完整的大括号块
+                                brace_count = 0
+                                last_valid_line = max_lines
+                                for i in range(max_lines - 1, -1, -1):
+                                    line = lines[i]
+                                    brace_count += line.count('}') - line.count('{')
+                                    if brace_count <= 0 and '}' in line:
+                                        last_valid_line = i + 1
+                                        break
+                                if last_valid_line < max_lines:
+                                    decompiled = '\n'.join(lines[:last_valid_line])
+                                    logger.info(f'  截取到第 {last_valid_line} 行（找到函数结束）')
+
+                            # 过滤掉 warning 行
+                            filtered_lines = []
+                            for line in decompiled.split('\n'):
+                                # 跳过 warning 行（以 //WARNING 开头或包含 WARNING 的注释行）
+                                if not (
+                                    line.strip().startswith('//WARNING')
+                                    or ('WARNING' in line.upper() and line.strip().startswith('//'))
+                                ):
+                                    filtered_lines.append(line)
+                            decompiled = '\n'.join(filtered_lines)
+
+                            logger.info(
+                                f'✅ 使用 {name} 反编译成功 ({len(decompiled.split(chr(10)))} 行，已过滤 warning)'
+                            )
+                            # 恢复原位置
+                            if current_addr:
+                                with contextlib.suppress(builtins.BaseException):
+                                    self.r2.cmd(f's @{current_addr}')
+                            return decompiled
+                except Exception as e:
+                    logger.debug(f'反编译插件 {name} 失败: {e}')
                     continue
+
+            # 恢复原位置
+            if current_addr:
+                with contextlib.suppress(builtins.BaseException):
+                    self.r2.cmd(f's @{current_addr}')
 
             logger.warning('⚠️  所有反编译插件均不可用，将使用反汇编代码')
             return None
@@ -479,6 +567,17 @@ class R2FunctionAnalyzer:
         logger.info(f'{"=" * 80}')
 
         try:
+            # 0. 验证偏移量是否超出文件大小
+            try:
+                file_size = self.so_file.stat().st_size
+                if offset >= file_size:
+                    logger.warning(f'⚠️  偏移量 0x{offset:x} ({offset:,} 字节) 超出文件大小 ({file_size:,} 字节)')
+                    logger.warning('   这可能是 HAP 文件内的偏移量，而不是 SO 文件内的偏移量')
+                    logger.warning('   无法进行反汇编分析')
+                    return None
+            except Exception:
+                pass  # 如果无法获取文件大小，继续尝试分析
+
             # 1. 查找函数（优化：使用 af @offset 直接分析）
             logger.info('正在查找函数...')
             func_info = self.find_function_by_offset(offset)
@@ -491,6 +590,7 @@ class R2FunctionAnalyzer:
             logger.info(f'   函数大小: {func_info["size"]} 字节')
 
             # 2. 反汇编函数（优化：使用 pdfj @offset 直接反汇编）
+            # 注意：disassemble_function 内部会检查 func_info，如果提供了会使用函数起始地址
             logger.info('正在反汇编函数...')
             instructions = self.disassemble_function(offset, func_info)
             if not instructions:
@@ -500,6 +600,7 @@ class R2FunctionAnalyzer:
             logger.info(f'✅ 反汇编成功，共 {len(instructions)} 条指令')
 
             # 3. 提取字符串（优化：使用 axtj 查找字符串引用）
+            # extract_strings_from_function 内部会检查 func_info，如果提供了会使用函数起始地址
             logger.info('正在提取字符串常量...')
             strings = self.extract_strings_from_function(offset, func_info)
             if strings:
@@ -510,6 +611,7 @@ class R2FunctionAnalyzer:
                 logger.warning('⚠️  未找到字符串常量')
 
             # 4. 获取被调用的函数列表（新增功能）
+            # get_called_functions 内部会检查 func_info，如果提供了会使用函数起始地址
             logger.info('正在分析函数调用关系...')
             called_functions = self.get_called_functions(offset, func_info)
             if called_functions:
@@ -517,9 +619,14 @@ class R2FunctionAnalyzer:
                     f'✅ 找到 {len(called_functions)} 个被调用函数: {", ".join(called_functions[:5])}{"..." if len(called_functions) > 5 else ""}'
                 )
 
-            # 5. 尝试反编译（可选，如果插件可用）
-            logger.info('正在尝试反编译...')
-            decompiled = self.decompile_function(offset, func_info)
+            # 5. 尝试反编译（可选，如果插件可用且未跳过）
+            # decompile_function 内部会检查 func_info，如果提供了会使用函数起始地址
+            decompiled = None
+            if not self.skip_decompilation:
+                logger.info('正在尝试反编译...')
+                decompiled = self.decompile_function(offset, func_info)
+            else:
+                logger.info('⏭️  跳过反编译（使用 --skip-decompilation 选项）')
 
             result = {
                 'func_info': func_info,

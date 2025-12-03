@@ -21,36 +21,31 @@
         "type": "remove"
       },
       "parameters": {
-        "excel_file": {
-          "type": "file",
-          "label": "Excel文件（Excel模式）",
-          "required": false,
-          "help": "包含函数偏移量地址的Excel文件（启用Excel分析模式）"
-        },
-        "so_file": {
-          "type": "file",
-          "label": "SO文件（Excel模式）",
-          "required": false,
-          "help": "SO文件路径（Excel分析模式必需）"
-        },
-        "perf_data": {
+        "perf-data": {
           "type": "file",
           "label": "perf.data文件（Perf模式）",
-          "required": false,
+          "required": true,
           "default": "perf.data",
           "help": "perf.data文件路径（仅perf分析模式）"
         },
         "html-input": {
           "type": "file",
           "label": "HTML输入文件",
-          "required": false,
+          "required": true,
           "help": "HTML输入文件路径"
         },
-        "so_dir": {
+        "so-dir": {
           "type": "dir",
           "label": "SO文件目录",
-          "required": false,
+          "required": true,
           "help": "包含.so文件的目录"
+        },
+        "batch-size": {
+          "type": "int",
+          "label": "批量分析大小",
+          "required": false,
+          "default": 3,
+          "help": "批量分析大小"
         },
         "output": {
           "type": "dir",
@@ -59,27 +54,12 @@
           "default": "out",
           "help": "输出目录路径"
         },
-        "top_n": {
+        "top-n": {
           "type": "int",
           "label": "Top N函数",
           "required": false,
           "default": 100,
           "help": "只分析前N个函数"
-        },
-        "no_llm": {
-          "type": "bool",
-          "label": "不使用LLM",
-          "required": false,
-          "default": false,
-          "help": "不使用LLM进行符号恢复"
-        },
-        "stat_method": {
-          "type": "choice",
-          "label": "统计方法",
-          "required": false,
-          "default": "event_count",
-          "choices": ["event_count", "call_count"],
-          "help": "统计方法：event_count（事件计数）或call_count（调用次数）"
         }
       }
     }
@@ -87,41 +67,39 @@
   "validation": {
     "custom": true,
     "rules": [
-      {
-        "type": "one_of",
-        "params": ["excel_file", "perf_data"],
-        "message": "必须提供 Excel 文件或 perf.data 文件之一"
-      },
-      {
-        "type": "conditional",
-        "condition": "excel_file",
-        "required": ["so_file"],
-        "message": "Excel 模式需要提供 SO 文件"
-      }
+      
     ]
   },
   "config": {
     "description": "符号恢复插件配置项",
     "items": {
-      "python_path": {
+      "llm_api_key": {
         "type": "str",
-        "label": "Python路径",
-        "default": "python",
-        "help": "用于执行Python脚本的Python解释器路径",
+        "label": "LLM API Key",
+        "default": "",
+        "help": "LLM API Key",
         "required": false
       },
-      "llm_enabled": {
-        "type": "bool",
-        "label": "启用LLM",
-        "default": true,
-        "help": "是否默认启用LLM进行符号恢复",
+      "llm_base_url": {
+        "type": "str",
+        "label": "LLM Base URL",
+        "default": "https://api.poe.com/v1",
+        "help": "LLM Base URL",
         "required": false
       },
-      "default_top_n": {
-        "type": "int",
-        "label": "默认Top N函数",
-        "default": 100,
-        "help": "默认分析前N个函数",
+      "llm_model": {
+        "type": "str",
+        "label": "LLM Model",
+        "default": "GPT-5",
+        "help": "LLM Model",
+        "required": false
+      },
+      "logger_level": {
+        "type": "choice",
+        "label": "日志级别",
+        "default": "INFO",
+        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
+        "help": "日志输出级别",
         "required": false
       }
     }
