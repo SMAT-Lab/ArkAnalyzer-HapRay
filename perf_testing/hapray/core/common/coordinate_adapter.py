@@ -46,6 +46,8 @@ class CoordinateAdapter:
 
             # 使用正则表达式匹配屏幕尺寸
             match = re.search(r'render size:\s*(\d+)x(\d+)', result_str)
+            if match is None:
+                match = re.search(r'render resolution=\s*(\d+)x(\d+)', result_str)
             if match:
                 width = int(match.group(1))
                 height = int(match.group(2))
