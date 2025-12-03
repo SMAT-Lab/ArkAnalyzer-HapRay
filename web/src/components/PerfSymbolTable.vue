@@ -49,7 +49,7 @@ v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags pla
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
       <el-input
-v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="根据小分类搜索" clearable
+v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder="根据小分类搜索" clearable
         class="search-input" @input="handleFilterChange">
         <template #prefix>
           <el-icon>
@@ -113,29 +113,29 @@ v-if="hasCategory" v-model="componentNameQuery.componentNameQuery" placeholder="
           <div class="category-cell">{{ row.category }}</div>
         </template>
       </el-table-column>
-      <el-table-column v-if="hasCategory" prop="componentName" label="小分类">
+      <el-table-column v-if="hasCategory" prop="subCategoryName" label="小分类">
         <template #default="{ row }">
-          <div class="category-cell">{{ row.componentName }}</div>
+          <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
       <el-table-column label="指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.instructions) }}</span>
+            <span class="value" :title="formatNumber(row.instructions)">{{ formatScientific(row.instructions) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="isHidden" label="迭代指令数" width="160" prop="compareInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
+            <span class="value" :title="formatNumber(row.compareInstructions)">{{ formatScientific(row.compareInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="isHidden" label="负载增长指令数" width="160" prop="increaseInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value">{{ formatScientific(row.increaseInstructions) }}</span>
+            <span class="value" :title="formatNumber(row.increaseInstructions)">{{ formatScientific(row.increaseInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -196,6 +196,14 @@ const formatScientific = (num: number) => {
     num = Number(num);
   }
   return num.toExponential(2);
+};
+
+const formatNumber = (num: number) => {
+  if (typeof num !== 'number') {
+    num = Number(num);
+  }
+  // 格式化为带千分位分隔符的完整数字，用于tooltip显示
+  return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
 
 const handleRowClick = (row: { name: string }) => {
@@ -270,7 +278,7 @@ const filteredData = computed<SymbolDataItem[]>(() => {
 
   // 应用小分类过滤
   if (hasCategory) {
-    result = filterQueryCondition('componentName', componentNameQuery.componentNameQuery, result);
+    result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
   }
 
   // 应用分类过滤
@@ -340,8 +348,8 @@ function getDataItemProperty(queryName: string, dataItem: SymbolDataItem): strin
     return dataItem.process;
   } else if (queryName === 'thread') {
     return dataItem.thread;
-  } else if (queryName === 'componentName') {
-    return dataItem.componentName;
+  } else if (queryName === 'subCategoryName') {
+    return dataItem.subCategoryName;
   } else if (queryName === 'file') {
     return dataItem.file;
   } else if (queryName === 'symbol') {
@@ -391,7 +399,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['symbol', 'componentName', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
+  const validKeys: SortKey[] = ['symbol', 'subCategoryName', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
@@ -457,6 +465,8 @@ watch(filteredData, (newVal) => {
 
   .value {
     font-family: monospace;
+    cursor: help;
+    text-decoration: underline dotted;
   }
 
   .trend {

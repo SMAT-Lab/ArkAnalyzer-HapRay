@@ -14,6 +14,51 @@ from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# 需要过滤的字符串模式（错误消息、调试信息等）
+FILTERED_STRING_PATTERNS = [
+    r'^WeakRef:',
+    r'^Error:',
+    r'^Warning:',
+    r'^Exception:',
+    r'^Assertion failed',
+    r'^Debug:',
+    r'^Traceback',
+    r'must be an object',
+    r'must be a',
+    r'cannot be',
+    r'is not',
+    r'has no attribute',
+    r'TypeError',
+    r'ValueError',
+    r'AttributeError',
+]
+
+
+def should_filter_string(s: str) -> bool:
+    """
+    判断字符串是否应该被过滤掉
+
+    Args:
+        s: 待检查的字符串
+
+    Returns:
+        True 如果应该过滤，False 如果应该保留
+    """
+    if not s or len(s) < 4:
+        return True
+
+    s_lower = s.lower()
+
+    # 检查是否匹配过滤模式
+    for pattern in FILTERED_STRING_PATTERNS:
+        if re.search(pattern, s_lower):
+            return True
+
+    # 过滤掉看起来像错误消息的字符串（包含常见错误关键词）
+    error_keywords = ['error', 'warning', 'exception', 'failed', 'invalid', 'null', 'undefined']
+    # 如果字符串很短且包含错误关键词，可能是错误消息
+    return any(keyword in s_lower for keyword in error_keywords) and len(s) < 50
+
 
 class StringExtractor:
     """字符串提取器 - 通过分析反汇编代码精准提取字符串常量"""
@@ -108,10 +153,24 @@ class StringExtractor:
             for str_addr in string_addresses:
                 string = self._extract_string_at_address(section_data, section_vaddr, str_addr)
                 if string and string not in strings:  # 去重
-                    strings.append(string)
+                    # 过滤掉错误消息和调试字符串
+                    if not should_filter_string(string):
+                        strings.append(string)
+                    else:
+                        logger.debug(f'Filtered out string: {string[:50]}...')
+
+            # 如果通过指令分析没有找到字符串，记录调试信息
+            if not strings:
+                logger.debug(
+                    f'Instruction analysis found no strings (function address: 0x{(vaddr if vaddr is not None else 0):x})'
+                )
+                logger.debug('  Possible reasons:')
+                logger.debug('    1. Function does not reference string constants (normal)')
+                logger.debug('    2. Strings referenced in unsupported ways (need to improve extraction logic)')
+                logger.debug('    3. Strings optimized or inlined by compiler (cannot extract)')
 
         except Exception:
-            logger.exception('⚠️  提取字符串常量失败')
+            logger.exception('⚠️  Failed to extract string constants')
 
         return strings[:10]  # 最多返回10个字符串
 
@@ -144,7 +203,14 @@ class StringExtractor:
 
         # 如果通过指令分析没有找到字符串，使用 fallback
         if not strings:
+            logger.debug('Instruction analysis found no strings, trying fallback method...')
             strings = self._fallback_extract_strings(elf_file)
+            if strings:
+                logger.debug(f'Fallback method found {len(strings)} strings')
+            else:
+                logger.debug(
+                    'Fallback method also found no strings, this may be normal (function may not reference string constants)'
+                )
 
         return strings
 
@@ -273,7 +339,8 @@ class StringExtractor:
                     if len(current_string) >= 4:
                         try:
                             decoded = current_string.decode('utf-8', errors='ignore')
-                            if decoded not in strings:
+                            # 过滤掉错误消息和调试字符串
+                            if decoded not in strings and not should_filter_string(decoded):
                                 strings.append(decoded)
                                 if len(strings) >= 5:  # 最多5个作为fallback
                                     break

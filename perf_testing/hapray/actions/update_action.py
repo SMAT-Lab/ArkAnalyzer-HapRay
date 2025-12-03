@@ -55,7 +55,7 @@ class UpdateAction:
             '--mode',
             type=int,
             default=Mode.COMMUNITY,
-            help=f'select mode {Mode.COMMUNITY} COMMUNITY {Mode.COMPATIBILITY} COMPATIBILITY {Mode.SIMPLE} SIMPLE',
+            help=f'select mode: {Mode.COMMUNITY} COMMUNITY, {Mode.SIMPLE} SIMPLE',
         )
         parser.add_argument(
             '--perfs',
@@ -98,6 +98,9 @@ class UpdateAction:
             default=False,
             help='Export comparison Excel showing differences between original and refined lib_id/symbol_id values',
         )
+        parser.add_argument(
+            '--symbol-statistic', type=str, default=None, help='Path to SymbolsStatistic.txt for symbol analysis'
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -113,13 +116,13 @@ class UpdateAction:
             trace_paths = parsed_args.traces
             pids = parsed_args.pids
 
-            if not perf_paths:
-                logging.error('SIMPLE mode requires --perfs parameter')
-                return
+            # if not perf_paths:
+            #     logging.error('SIMPLE mode requires --perfs parameter')
+            #     return
 
-            if not parsed_args.package_name:
-                logging.error('SIMPLE mode requires --package_name parameter')
-                return
+            # if not parsed_args.package_name:
+            #     logging.error('SIMPLE mode requires --package_name parameter')
+            #     return
 
             package_name = parsed_args.package_name
             steps_file_path = parsed_args.steps
@@ -152,6 +155,8 @@ class UpdateAction:
             time_ranges,
             use_refined_lib_symbol=parsed_args.use_refined_lib_symbol,
             export_comparison=parsed_args.export_comparison,
+            symbol_statistic=parsed_args.symbol_statistic,
+            time_range_strings=parsed_args.time_ranges,
         )
 
     @staticmethod
@@ -221,6 +226,8 @@ class UpdateAction:
         time_ranges: list[dict] = None,
         use_refined_lib_symbol: bool = False,
         export_comparison: bool = False,
+        symbol_statistic: str = None,
+        time_range_strings: list[str] = None,
     ):
         """Processes reports using parallel execution.
 
@@ -230,12 +237,16 @@ class UpdateAction:
             time_ranges: Optional time range filters
             use_refined_lib_symbol: Enable refined mode for memory analysis
             export_comparison: Export comparison Excel for memory analysis
+            symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
+            time_range_strings: List of time range strings for symbol statistics (optional)
         """
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
             report_generator = ReportGenerator(
                 use_refined_lib_symbol=use_refined_lib_symbol,
                 export_comparison=export_comparison,
+                symbol_statistic=symbol_statistic,
+                time_range_strings=time_range_strings,
             )
 
             for case_dir in testcase_dirs:

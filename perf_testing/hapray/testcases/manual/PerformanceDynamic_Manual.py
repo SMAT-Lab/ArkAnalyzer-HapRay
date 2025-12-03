@@ -8,7 +8,7 @@ class PerformanceDynamic_Manual(PerfTestCase):
     def __init__(self, controllers):
         self.TAG = self.__class__.__name__
         super().__init__(self.TAG, controllers)
-        self._app_package = Config.get('app')
+        self._app_package = Config.get('package_name')
         if self._app_package is None:
             self._app_package = input('请输入应用的包名:')
         self._app_name = 'Manual'
@@ -34,14 +34,5 @@ class PerformanceDynamic_Manual(PerfTestCase):
         def step1():
             print('正在负载采集...请操作测试UI')
             time.sleep(30)
-
-        while True:
-            print('\n' + '=' * 50)
-            print('负载采集准备提示')
-            print('=' * 50)
-            ready = input('请确保：测试页面已正确加载\n\n是否开始30秒的负载采集？(Y): ')
-            if ready.upper() == 'Y':
-                print('开始负载采集...')
-                break
 
         self.execute_performance_step('手动测试', 30, step1)

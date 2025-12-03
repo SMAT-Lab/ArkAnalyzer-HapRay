@@ -30,6 +30,12 @@ export interface InvokeSymbol {
     invoke: boolean;
 }
 
+export interface ElfInfo {
+    exports: Array<string>;
+    imports: Array<string>;
+    dependencies: Array<string>;
+}
+
 export class ElfAnalyzer {
     private static instance: ElfAnalyzer | undefined;
 
@@ -37,6 +43,127 @@ export class ElfAnalyzer {
 
     public static getInstance(): ElfAnalyzer {
         return (this.instance ??= new ElfAnalyzer());
+    }
+
+    /**
+     * 获取SO文件的完整信息（符号和依赖）
+     */
+    public async getElfInfo(filePath: string): Promise<ElfInfo> {
+        const file = path.basename(filePath);
+        const elfBuffer = fs.readFileSync(filePath);
+        let elf: ELF;
+
+        try {
+            elf = parseELF(elfBuffer);
+        } catch (error) {
+            logger.error(`Failed to parse ELF file ${file}: ${(error as Error).message}`);
+            return { exports: [], imports: [], dependencies: [] };
+        }
+
+        // 提取符号
+        const exportedSymbols: Array<string> = [];
+        const importedSymbols: Array<string> = [];
+
+        // Extract exported symbols from .dynsym
+        if (elf.body.symbols) {
+            for (const sym of elf.body.symbols) {
+                if (sym.section === 'SHN_UNDEF') {
+                    importedSymbols.push((await demangle(sym.name)) || sym.name);
+                } else {
+                    exportedSymbols.push((await demangle(sym.name)) || sym.name);
+                }
+            }
+        }
+
+        // Extract exported symbols from .symtab
+        if (elf.body.symtabSymbols) {
+            for (const sym of elf.body.symtabSymbols) {
+                if (sym.section === 'SHN_UNDEF') {
+                    importedSymbols.push((await demangle(sym.name)) || sym.name);
+                } else {
+                    exportedSymbols.push((await demangle(sym.name)) || sym.name);
+                }
+            }
+        }
+
+        // 提取依赖库
+        const dependencies = this.extractDependencies(elf);
+
+        return {
+            exports: [...new Set(exportedSymbols)], // 去重
+            imports: [...new Set(importedSymbols)], // 去重
+            dependencies
+        };
+    }
+
+    /**
+     * 提取SO文件的依赖库列表
+     */
+    private extractDependencies(elf: ELF): Array<string> {
+        const dependencies: Array<string> = [];
+
+        // 查找 .dynamic section
+        const dynamicSection = elf.body.sections.find(s => s.type === 'dynamic');
+        if (!dynamicSection?.data) {
+            return dependencies;
+        }
+
+        try {
+            const is64 = elf.class === '64';
+            const entrySize = is64 ? 16 : 8; // 64位: 16字节, 32位: 8字节
+            const data = dynamicSection.data;
+
+            // 查找 .dynstr section (字符串表)
+            const dynstrSection = elf.body.sections.find(s => s.name === '.dynstr');
+            if (!dynstrSection?.data) {
+                return dependencies;
+            }
+
+            // 解析 dynamic entries
+            for (let offset = 0; offset < data.length; offset += entrySize) {
+                if (offset + entrySize > data.length) {break;}
+
+                let tag: number;
+                let value: number | bigint;
+
+                if (is64) {
+                    // 64位: tag (8 bytes) + value (8 bytes)
+                    tag = Number(data.readBigInt64LE(offset));
+                    value = data.readBigInt64LE(offset + 8);
+                } else {
+                    // 32位: tag (4 bytes) + value (4 bytes)
+                    tag = data.readInt32LE(offset);
+                    value = data.readInt32LE(offset + 4);
+                }
+
+                // DT_NEEDED = 1 (表示依赖的库)
+                if (tag === 1) {
+                    const strOffset = Number(value);
+                    const libName = this.readStringFromBuffer(dynstrSection.data, strOffset);
+                    if (libName) {
+                        dependencies.push(libName);
+                    }
+                } else if (tag === 0) {
+                    // DT_NULL = 0 (表示结束)
+                    break;
+                }
+            }
+        } catch (error) {
+            logger.warn(`Failed to extract dependencies: ${(error as Error).message}`);
+        }
+
+        return dependencies;
+    }
+
+    /**
+     * 从Buffer中读取以null结尾的字符串
+     */
+    private readStringFromBuffer(buffer: Buffer, offset: number): string {
+        let end = offset;
+        while (end < buffer.length && buffer[end] !== 0) {
+            end++;
+        }
+        return buffer.slice(offset, end).toString('utf8');
     }
 
     public async getSymbols(filePath: string): Promise<{ exports: Array<string>; imports: Array<string> }> {

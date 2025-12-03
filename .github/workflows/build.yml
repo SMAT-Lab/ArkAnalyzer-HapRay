@@ -100,6 +100,3 @@ jobs:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
         path: |
           ArkAnalyzer-HapRay-*.zip
-          tools/optimization_detector/*.zip
-          tools/symbol_recovery/*.zip
-          tools/static_analyzer/*.zip
