@@ -73,5 +73,17 @@ prompt_outputs/
 test_*.py
 *_test.py
 
-# 临时脚本
+# 临时脚本和独立工具（未被 main.py 调用）
 symrecover
+dump_and_find_function.py
+hap_address_resolver.py
+query_hap_address_from_perfdb.py
+resolve_hap_address.py
+resolve_hap_address_smart.py
+verify_excel_offsets.py
+verify_function_finding.py
+md_to_docx.py
+
+# 生成的文档（可以从源文件重新生成）
+*.docx
+test_local.py

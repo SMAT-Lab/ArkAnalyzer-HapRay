@@ -255,54 +255,184 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
     <style>
+        * {{
+            box-sizing: border-box;
+        }}
+        html {{
+            width: 100%;
+            overflow-x: visible;
+        }}
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
+            width: 100%;
+            overflow-x: visible;
+            overflow-x: hidden;
         }}
         .container {{
-            max-width: 1400px;
+            width: 100%;
+            max-width: 100%;
             margin: 0 auto;
             background: white;
-            padding: 30px;
+            padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            overflow: visible;
         }}
         h1 {{
             color: #333;
             border-bottom: 3px solid #4CAF50;
             padding-bottom: 10px;
         }}
-        table {{
+        .table-container {{
             width: 100%;
-            border-collapse: collapse;
             margin-top: 20px;
+            position: relative;
+            overflow: visible;
+        }}
+        .table-scroll-hint {{
+            text-align: center;
+            color: #666;
+            font-size: 0.85em;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            display: none;
+        }}
+        @media (max-width: 1400px) {{
+            .table-scroll-hint {{
+                display: block;
+            }}
+        }}
+        .table-wrapper {{
+            display: block;
+            width: 100%;
+            overflow-x: scroll !important;
+            overflow-y: visible;
+            margin-top: 10px;
+            -webkit-overflow-scrolling: touch;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            border-radius: 5px;
+            border: 2px solid #4CAF50;
+            position: relative;
+            scrollbar-width: auto;
+            scrollbar-color: #4CAF50 #f1f1f1;
+        }}
+        .table-wrapper::-webkit-scrollbar {{
+            height: 16px !important;
+            display: block !important;
+        }}
+        .table-wrapper::-webkit-scrollbar-track {{
+            background: #f1f1f1;
+            border-radius: 8px;
+        }}
+        .table-wrapper::-webkit-scrollbar-thumb {{
+            background: #4CAF50;
+            border-radius: 8px;
+            border: 2px solid #f1f1f1;
+            min-width: 50px;
+        }}
+        .table-wrapper::-webkit-scrollbar-thumb:hover {{
+            background: #45a049;
+        }}
+        table {{
+            width: 1500px;
+            min-width: 1500px;
+            border-collapse: collapse;
+            background: white;
+            margin: 0;
+            display: table;
+            table-layout: fixed !important;
         }}
         th {{
             background-color: #4CAF50;
             color: white;
-            padding: 12px;
+            padding: 10px 8px;
             text-align: left;
             position: sticky;
             top: 0;
+            white-space: nowrap;
+            font-size: 0.9em;
+            font-weight: 600;
+            z-index: 10;
         }}
         td {{
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.9em;
+            vertical-align: top;
         }}
         tr:hover {{
             background-color: #f5f5f5;
         }}
-        .rank {{ font-weight: bold; color: #4CAF50; }}
-        .address {{ font-family: 'Courier New', monospace; font-size: 0.9em; }}
-        .call-count {{ text-align: right; font-weight: bold; }}
+        .rank {{
+            font-weight: bold;
+            color: #4CAF50;
+            text-align: center;
+            width: 60px;
+            min-width: 60px;
+            max-width: 60px;
+        }}
+        .file-path {{
+            max-width: 250px;
+            min-width: 200px;
+            word-wrap: break-word;
+            word-break: break-all;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.85em;
+            line-height: 1.3;
+        }}
+        .address {{
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            white-space: nowrap;
+            min-width: 200px;
+            max-width: 200px;
+        }}
+        .call-count {{
+            text-align: right;
+            font-weight: bold;
+            white-space: nowrap;
+            min-width: 110px;
+            max-width: 110px;
+        }}
         .confidence-high {{ color: #4CAF50; font-weight: bold; }}
         .confidence-medium {{ color: #FF9800; font-weight: bold; }}
         .confidence-low {{ color: #f44336; }}
-        .functionality {{ max-width: 400px; word-wrap: break-word; }}
-        .performance-analysis {{ max-width: 500px; word-wrap: break-word; }}
-        .strings {{ font-family: 'Courier New', monospace; font-size: 0.85em; max-width: 300px; word-wrap: break-word; }}
+        .functionality {{
+            max-width: 320px;
+            min-width: 280px;
+            word-wrap: break-word;
+            word-break: break-word;
+            line-height: 1.4;
+        }}
+        .performance-analysis {{
+            max-width: 380px;
+            min-width: 320px;
+            word-wrap: break-word;
+            word-break: break-word;
+            line-height: 1.4;
+        }}
+        .function-name {{
+            font-weight: 600;
+            color: #1976D2;
+            min-width: 160px;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .confidence-cell {{
+            text-align: center;
+            min-width: 90px;
+            max-width: 90px;
+            white-space: nowrap;
+        }}
         .section {{
             margin-top: 40px;
             padding: 20px;
@@ -445,22 +575,23 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
 """
 
     html += """
+        <div class="table-container">
+        <div class="table-scroll-hint">💡 提示：表格较宽，可以左右滚动查看所有列</div>
+        <div class="table-wrapper">
         <table>
             <thead>
                 <tr>
-                    <th>排名</th>
-                    <th>文件路径</th>
-                    <th>地址</th>
+                    <th style="width: 60px;">排名</th>
+                    <th style="width: 250px;">文件路径</th>
+                    <th style="width: 150px;">地址</th>
 """
     if use_event_count:
-        html += '                    <th>指令数 (event_count)</th>\n'
-    html += """                    <th>调用次数</th>
-                    <th>指令数量</th>
-                    <th>字符串常量</th>
-                    <th>LLM 推断函数名</th>
-                    <th>LLM 功能描述</th>
-                    <th>负载问题识别与优化建议</th>
-                    <th>LLM 置信度</th>
+        html += '                    <th style="width: 120px;">指令数</th>\n'
+    html += """                    <th style="width: 100px;">调用次数</th>
+                    <th style="width: 120px;">函数指令数</th>
+                    <th style="width: 180px;">LLM 推断函数名</th>
+                    <th style="width: 300px;">LLM 功能描述</th>
+                    <th style="width: 350px;">负载问题识别与优化建议</th>
                 </tr>
             </thead>
             <tbody>
@@ -468,37 +599,25 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
 
     for result in results:
         llm_result = result.get('llm_result') or {}
-        strings_value = result.get('strings', '')
-        if isinstance(strings_value, list):
-            strings_value = ', '.join(strings_value)
-        elif not strings_value or strings_value in {'nan', 'NaN'}:
-            strings_value = ''
         html += f"""                <tr>
                     <td class="rank">{result.get('rank', '')}</td>
-                    <td>{result.get('file_path', '')}</td>
+                    <td class="file-path" title="{result.get('file_path', '')}">{result.get('file_path', '')}</td>
                     <td class="address">{result.get('address', '')}</td>
 """
         if use_event_count:
             html += f'                    <td class="call-count">{result.get("event_count", 0):,}</td>\n'
         html += f"""                    <td class="call-count">{result.get('call_count', 0):,}</td>
                     <td class="call-count">{result.get('instruction_count', 0):,}</td>
-                    <td class="strings">{strings_value}</td>
-                    <td>{format_function_name(llm_result.get('function_name', ''))}</td>
+                    <td class="function-name">{format_function_name(llm_result.get('function_name', ''))}</td>
                     <td class="functionality">{llm_result.get('functionality', '')}</td>
                     <td class="performance-analysis">{llm_result.get('performance_analysis', '')}</td>
-"""
-        confidence = llm_result.get('confidence', '')
-        confidence_class = 'confidence-low'
-        if confidence == '高':
-            confidence_class = 'confidence-high'
-        elif confidence == '中':
-            confidence_class = 'confidence-medium'
-        html += f"""                    <td class="{confidence_class}">{confidence}</td>
                 </tr>
 """
 
     html += """            </tbody>
         </table>
+        </div>
+        </div>
     </div>
 </body>
 </html>"""
