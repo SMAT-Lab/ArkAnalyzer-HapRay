@@ -76,15 +76,15 @@ class TimeTracker:
     def format_time(self, seconds: float) -> str:
         """格式化时间"""
         if seconds < 60:
-            return f'{seconds:.2f}秒'
+            return f'{seconds:.2f}s'
         if seconds < 3600:
             minutes = int(seconds // 60)
             secs = seconds % 60
-            return f'{minutes}分{secs:.2f}秒'
+            return f'{minutes}m {secs:.2f}s'
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = seconds % 60
-        return f'{hours}小时{minutes}分{secs:.2f}秒'
+        return f'{hours}h {minutes}m {secs:.2f}s'
 
     def get_summary(self) -> dict:
         """获取统计摘要"""
@@ -115,13 +115,13 @@ class TimeTracker:
         """打印统计摘要"""
         summary = self.get_summary()
         logger.info('\n' + '=' * 80)
-        logger.info('⏱️  执行时间统计')
+        logger.info('⏱️  Execution Time Statistics')
         logger.info('=' * 80)
-        logger.info('总执行时间: %s', summary['total_time_formatted'])
-        logger.info('开始时间: %s', summary['start_time'])
+        logger.info('Total execution time: %s', summary['total_time_formatted'])
+        logger.info('Start time: %s', summary['start_time'])
         if summary['end_time']:
-            logger.info('结束时间: %s', summary['end_time'])
-        logger.info('\n各步骤耗时:')
+            logger.info('End time: %s', summary['end_time'])
+        logger.info('\nStep durations:')
         logger.info('-' * 80)
 
         for step in summary['steps']:
@@ -154,11 +154,11 @@ class TimeTracker:
             <h2>⏱️ 执行时间统计</h2>
             <div class="time-summary">
                 <div class="time-item">
-                    <span class="time-label">总执行时间:</span>
+                    <span class="time-label">Total execution time:</span>
                     <span class="time-value">{total_time}</span>
                 </div>
                 <div class="time-item">
-                    <span class="time-label">开始时间:</span>
+                    <span class="time-label">Start time:</span>
                     <span class="time-value">{start_time}</span>
                 </div>
                 {end_time_html}
@@ -166,10 +166,10 @@ class TimeTracker:
             <table class="time-table">
                 <thead>
                     <tr>
-                        <th>步骤</th>
-                        <th>耗时</th>
-                        <th>占比</th>
-                        <th>描述</th>
+                    <th>Step</th>
+                    <th>Duration</th>
+                    <th>Percentage</th>
+                    <th>Description</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -223,7 +223,7 @@ class TimeTracker:
         """.format(
             total_time=summary['total_time_formatted'],
             start_time=summary['start_time'],
-            end_time_html=f'<div class="time-item"><span class="time-label">结束时间:</span><span class="time-value">{summary["end_time"]}</span></div>'
+            end_time_html=f'<div class="time-item"><span class="time-label">End time:</span><span class="time-value">{summary["end_time"]}</span></div>'
             if summary['end_time']
             else '',
             steps_html='\n'.join(

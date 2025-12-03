@@ -9,7 +9,10 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-from core.utils import config
+from core.utils.config import (
+    DEFAULT_PERF_DB,
+    config,
+)
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -57,16 +60,12 @@ class PerfDataToSqliteConverter:
                     logger.info(f'找到 trace_streamer 工具: {tool_path}')
                     return tool_path
 
-        # 尝试在 PATH 中查找（跨平台）
+        # 尝试在 PATH 中查找
         for name in possible_names:
             try:
-                # Windows 使用 where，Unix 使用 which
-                if platform.system().lower() == 'windows':
-                    result = subprocess.run(['where', name], check=False, capture_output=True, timeout=5, shell=True)
-                else:
-                    result = subprocess.run(['which', name], check=False, capture_output=True, timeout=5)
+                result = subprocess.run(['which', name], check=False, capture_output=True, timeout=5)
                 if result.returncode == 0:
-                    tool_path = result.stdout.decode().strip().split('\n')[0].strip()
+                    tool_path = result.stdout.decode().strip()
                     logger.info(f'找到 trace_streamer 工具: {tool_path}')
                     return Path(tool_path)
             except Exception:
@@ -95,7 +94,7 @@ class PerfDataToSqliteConverter:
             return None
 
         # 输出文件路径
-        perf_db_path = self.output_dir / config.DEFAULT_PERF_DB
+        perf_db_path = self.output_dir / DEFAULT_PERF_DB
 
         logger.info(f'\n输入文件: {self.perf_data_file}')
         logger.info(f'输出文件: {perf_db_path}')

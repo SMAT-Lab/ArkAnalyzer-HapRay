@@ -14,23 +14,18 @@ from elftools.elf.elffile import ELFFile
 
 from core.llm.initializer import init_llm_analyzer
 from core.utils import common as util
-from core.utils import config
+from core.utils.config import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_LLM_MODEL,
+    EXCEL_ANALYSIS_PATTERN,
+    EXCEL_REPORT_PATTERN,
+    config,
+)
 from core.utils.logger import get_logger
 from core.utils.string_extractor import StringExtractor
 from core.utils.time_tracker import TimeTracker
 
 logger = get_logger(__name__)
-
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    logger.warning('未安装 python-dotenv 库，将跳过 .env 文件的加载')
-    logger.warning('请安装 python-dotenv 库: pip install python-dotenv')
-except Exception as e:
-    logger.error('加载 .env 文件时出错: %s', e)
-    raise
 
 
 class ExcelOffsetAnalyzer:
@@ -42,12 +37,12 @@ class ExcelOffsetAnalyzer:
         excel_file: str,
         use_llm: bool = True,
         llm_model: str = None,
-        use_batch_llm: bool = True,
         batch_size: int = None,
         context: str = None,
         save_prompts: bool = False,
         output_dir: str = None,
         skip_decompilation: bool = False,
+        open_source_lib: str = None,
     ):
         """
         初始化分析器
@@ -67,9 +62,8 @@ class ExcelOffsetAnalyzer:
         self.so_file = Path(so_file)
         self.excel_file = Path(excel_file)
         self.use_llm = use_llm
-        self.llm_model = llm_model if llm_model is not None else config.DEFAULT_LLM_MODEL
-        self.use_batch_llm = use_batch_llm
-        self.batch_size = batch_size if batch_size is not None else config.DEFAULT_BATCH_SIZE
+        self.llm_model = llm_model if llm_model is not None else DEFAULT_LLM_MODEL
+        self.batch_size = batch_size if batch_size is not None else DEFAULT_BATCH_SIZE
         self.context = context  # 自定义上下文
 
         if not self.so_file.exists():
@@ -87,9 +81,8 @@ class ExcelOffsetAnalyzer:
         self.llm_analyzer, self.use_llm, self.use_batch_llm = init_llm_analyzer(
             use_llm=self.use_llm,
             llm_model=self.llm_model,
-            use_batch_llm=self.use_batch_llm,
             batch_size=self.batch_size,
-            logger=logger.info,
+            open_source_lib=open_source_lib,
             save_prompts=save_prompts,
             output_dir=output_dir,
         )
@@ -393,11 +386,21 @@ class ExcelOffsetAnalyzer:
         so_name = self.so_file.name.lower()
         so_file_name = self.so_file.name
 
-        # 根据 SO 文件名推断库的类型和用途（通用化处理，不涉及具体应用）
+        # 根据 SO 文件名推断库的类型和用途，格式与示例保持一致
         if 'xwebcore' in so_name or 'xweb' in so_name:
             return (
                 f'这是一个基于 Chromium Embedded Framework (CEF) 的 Web 核心库（{so_file_name}），'
                 f'运行在 HarmonyOS 平台上。该库负责网页渲染、网络请求、DOM 操作等核心功能。'
+            )
+        if 'wechat' in so_name or 'wx' in so_name:
+            return (
+                f'这是一个来自微信（WeChat）应用的 SO 库（{so_file_name}），'
+                f'运行在 HarmonyOS 平台上。该库负责即时通讯、社交网络、多媒体处理等功能。'
+            )
+        if 'taobao' in so_name or 'tb' in so_name:
+            return (
+                f'这是一个来自淘宝（Taobao）应用的 SO 库（{so_file_name}），'
+                f'运行在 HarmonyOS 平台上。该库负责电商购物、商品展示、支付处理等功能。'
             )
         if 'chromium' in so_name or 'blink' in so_name or 'v8' in so_name:
             return (
@@ -463,7 +466,7 @@ class ExcelOffsetAnalyzer:
         if output_file is None:
             output_dir = config.get_output_dir()
             config.ensure_output_dir(output_dir)
-            output_file = str(output_dir / config.EXCEL_ANALYSIS_PATTERN.format(n=len(results)))
+            output_file = str(output_dir / EXCEL_ANALYSIS_PATTERN.format(n=len(results)))
 
         output_file = Path(output_file)
         output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -484,9 +487,12 @@ class ExcelOffsetAnalyzer:
             if result.get('llm_result'):
                 # 格式化函数名，添加 "Function: " 前缀
                 function_name = result.get('function_name', '')
-                if function_name and function_name != 'nan' and function_name != 'None':
-                    if not function_name.startswith('Function: '):
-                        function_name = f'Function: {function_name}'
+                if (
+                    function_name
+                    and function_name not in {'nan', 'None'}
+                    and not function_name.startswith('Function: ')
+                ):
+                    function_name = f'Function: {function_name}'
                 row['LLM推断函数名'] = function_name
                 row['函数功能描述'] = result.get('function_description', '')
                 row['置信度'] = result.get('confidence', '')
@@ -539,7 +545,7 @@ class ExcelOffsetAnalyzer:
         if html_file is None:
             output_dir = config.get_output_dir()
             config.ensure_output_dir(output_dir)
-            html_file = str(output_dir / config.EXCEL_REPORT_PATTERN.format(n=len(results)))
+            html_file = str(output_dir / EXCEL_REPORT_PATTERN.format(n=len(results)))
 
         html_file = Path(html_file)
         html_file.parent.mkdir(parents=True, exist_ok=True)
