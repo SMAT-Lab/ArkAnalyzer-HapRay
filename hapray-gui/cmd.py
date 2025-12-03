@@ -146,7 +146,7 @@ class CLI:
         required: bool,
         help_text: str,
         label: str,
-        nargs: str | None,
+        nargs: Optional[str],
     ) -> dict[str, Any]:
         """构建类型化参数（int, str, file, dir）"""
         kwargs = {
