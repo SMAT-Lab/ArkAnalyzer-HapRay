@@ -18,12 +18,11 @@ import io
 import logging
 import multiprocessing
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Optional
 
 import pandas as pd
 
-from optimization_detector import FileCollector, InvokeSymbols, OptimizationDetector, __version__
+from optimization_detector import FileCollector, OptimizationDetector, __version__
 from optimization_detector.excel_utils import ExcelReportSaver
 
 _STDOUT_WRAPPER = None
@@ -56,7 +55,6 @@ class OptAction:
             help='Output Excel file path (default: binary_analysis_report.xlsx)',
         )
         parser.add_argument('--jobs', '-j', type=int, default=1, help='Number of parallel jobs (default: 1)')
-        parser.add_argument('--report_dir', '-r', help='Directory containing reports to update')
         parser.add_argument(
             '--timeout',
             '-t',
@@ -101,28 +99,16 @@ class OptAction:
             if parsed_args.timeout:
                 logging.info('Timeout per file: %d seconds', parsed_args.timeout)
             multiprocessing.freeze_support()
-            with ProcessPoolExecutor(max_workers=2) as executor:
-                futures = []
-                future = executor.submit(
-                    action.run_detection,
-                    parsed_args.jobs,
-                    file_infos,
-                    parsed_args.timeout,
-                    parsed_args.lto,
-                    parsed_args.opt,
-                )
-                futures.append(future)
-                if parsed_args.report_dir:
-                    future = executor.submit(action.run_invoke_analysis, file_infos, parsed_args.report_dir)
-                    futures.append(future)
-
-                data = []
-                # Wait for all report generation tasks
-                for future in as_completed(futures):
-                    data.extend(future.result())
-                action.generate_excel_report(data, parsed_args.output)
-                logging.info('Analysis report saved to: %s', parsed_args.output)
-                return 0
+            data = action.run_detection(
+                parsed_args.jobs,
+                file_infos,
+                parsed_args.timeout,
+                parsed_args.lto,
+                parsed_args.opt,
+            )
+            action.generate_excel_report(data, parsed_args.output)
+            logging.info('Analysis report saved to: %s', parsed_args.output)
+            return 0
         finally:
             file_collector.cleanup()
 
@@ -135,12 +121,6 @@ class OptAction:
         except Exception as e:
             logging.error('OptimizationDetector error: %s', str(e))
             return []
-
-    @staticmethod
-    def run_invoke_analysis(file_infos, report_dir):
-        """Run invoke symbols analysis in a separate process"""
-        invoke_symbols = InvokeSymbols()
-        return invoke_symbols.analyze(file_infos, report_dir)
 
     @staticmethod
     def generate_excel_report(data: list[tuple[str, pd.DataFrame]], output_file: str) -> None:

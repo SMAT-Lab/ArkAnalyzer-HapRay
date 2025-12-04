@@ -44,13 +44,6 @@
           "short": "j",
           "help": "并行处理的任务数量"
         },
-        "report_dir": {
-          "type": "dir",
-          "label": "报告目录",
-          "required": false,
-          "short": "r",
-          "help": "包含报告要更新的目录"
-        },
         "no_lto": {
           "type": "bool",
           "label": "禁用LTO检测",
