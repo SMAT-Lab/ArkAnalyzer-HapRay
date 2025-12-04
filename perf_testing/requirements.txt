@@ -1,9 +1,9 @@
-pillow
-PyYAML
+pillow>=9.0.0
+PyYAML>=6.0
 pyinstaller==6.13.0
-numpy>=2.0
-pandas>=2.0.3
-xlsxwriter
+numpy
+pandas
+xlsxwriter>=3.0.0
 jsonschema
 lxml
 tox
