@@ -113,7 +113,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--so-dir',
         type=str,
         default=None,
-        help='SO 文件目录，包含需要分析的 SO 库文件（必需，无默认值）',
+        help='SO 文件目录，包含需要分析的 SO 库文件（可选，如果提供了 --so-file 则不需要）',
     )
 
     # 输出目录参数
@@ -191,6 +191,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default=None,
         help='自定义上下文信息（可选，用于 LLM 分析。如果不提供，工具会根据 SO 文件名和应用路径自动推断）',
     )
+    parser.add_argument(
+        '--open-source-lib',
+        type=str,
+        default=None,
+        help='开源库名称（可选，如 "ffmpeg", "openssl", "libcurl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本，大模型可以利用对开源库的知识来更准确地推断函数名和功能',
+    )
     return parser
 
 
@@ -234,8 +240,19 @@ def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Op
         perf_db_file = None
 
     so_dir = None
-    if args.so_dir and not args.only_step1:
-        so_dir = resolve_directory(args.so_dir)
+    if not args.only_step1:
+        # 如果提供了 --so-file，直接使用该文件（而不是目录）
+        if args.so_file:
+            so_file_path = Path(args.so_file)
+            if so_file_path.exists():
+                # 直接传递文件路径，find_so_file 会特殊处理
+                so_dir = so_file_path.resolve()
+                logger.info(f'Using specific SO file: {so_dir}')
+            else:
+                logger.error('❌ Error: SO file does not exist: %s', so_file_path)
+                sys.exit(1)
+        elif args.so_dir:
+            so_dir = resolve_directory(args.so_dir)
     return perf_data_file, perf_db_file, so_dir
 
 
@@ -274,6 +291,7 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
             save_prompts=args.save_prompts,
             output_dir=str(output_dir),
             skip_decompilation=args.skip_decompilation,
+            open_source_lib=args.open_source_lib,
         )
         time_tracker.end_step('初始化')
     except Exception:
@@ -381,7 +399,10 @@ def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path],
         logger.error('❌ Error: SO file directory does not exist: %s', so_dir)
         sys.exit(1)
 
-    logger.info(f'SO file directory: {so_dir}')
+    if so_dir and so_dir.is_file():
+        logger.info(f'SO file: {so_dir}')
+    else:
+        logger.info(f'SO file directory: {so_dir}')
     logger.info(f'Statistics method: {args.stat_method}')
     logger.info(f'Analyzing top {args.top_n} functions')
 
@@ -411,6 +432,7 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
         save_prompts=args.save_prompts,
         output_dir=str(output_dir),
         skip_decompilation=args.skip_decompilation,
+        open_source_lib=args.open_source_lib,
     )
     time_tracker.end_step('Initialization completed')
 
@@ -459,6 +481,7 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         save_prompts=args.save_prompts,
         output_dir=str(output_dir),
         skip_decompilation=args.skip_decompilation,
+        open_source_lib=args.open_source_lib,
     )
     time_tracker.end_step('Initialization completed')
 
