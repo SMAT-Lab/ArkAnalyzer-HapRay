@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 import os
+import platform
 from pathlib import Path
 
 # 获取项目根目录
@@ -64,6 +65,32 @@ datas += tmp_ret[0]
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
+# 收集 tensorflow-macos 和 tensorflow-metal (macOS 特定)
+try:
+    if platform.system() == 'Darwin':
+        # 收集 tensorflow-macos
+        tmp_ret = collect_all('tensorflow_macos')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+        
+        # 收集 tensorflow-metal
+        tmp_ret = collect_all('tensorflow_metal')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+        
+        # 添加 tensorflow-metal 的关键隐藏导入
+        hiddenimports += [
+            'tensorflow_metal',
+            'tensorflow_metal.python',
+            'tensorflow_metal.python.gpu',
+            'tensorflow_metal.python.gpu.device',
+        ]
+except ImportError:
+    # 如果不在 macOS 上或包未安装，跳过
+    pass
+
 tmp_ret = collect_all('arpy')
 datas += tmp_ret[0]
 binaries += tmp_ret[1]
@@ -73,6 +100,49 @@ tmp_ret = collect_all('joblib')
 datas += tmp_ret[0]
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
+
+# 收集 pkg_resources 及其依赖（PyInstaller runtime hook 需要）
+try:
+    tmp_ret = collect_all('pkg_resources')
+    datas += tmp_ret[0]
+    binaries += tmp_ret[1]
+    hiddenimports += tmp_ret[2]
+except Exception:
+    pass
+
+# 收集 jaraco（pkg_resources 的依赖）
+try:
+    tmp_ret = collect_all('jaraco')
+    datas += tmp_ret[0]
+    binaries += tmp_ret[1]
+    hiddenimports += tmp_ret[2]
+except Exception:
+    pass
+
+# 收集 backports（jaraco.context 的依赖）
+try:
+    tmp_ret = collect_all('backports')
+    datas += tmp_ret[0]
+    binaries += tmp_ret[1]
+    hiddenimports += tmp_ret[2]
+except Exception:
+    pass
+
+# 添加 jaraco 和 backports 的关键隐藏导入
+hiddenimports += [
+    'jaraco',
+    'jaraco.text',
+    'jaraco.functools',
+    'jaraco.context',
+    'jaraco.collections',
+    'jaraco.classes',
+    'jaraco.itertools',
+    'jaraco.packaging',
+    'jaraco.versioning',
+    'backports',
+    'backports.functools_lru_cache',
+    'backports.tarfile',
+]
 
 # 收集 scipy - sklearn 的依赖
 tmp_ret = collect_all('scipy')
@@ -161,7 +231,6 @@ a = Analysis(
         'notebook',
         'pytest',
         'sphinx',
-        'setuptools',
         'numpy.tests',
         'pandas.tests',
     ],

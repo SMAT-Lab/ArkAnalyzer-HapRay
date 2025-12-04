@@ -32,6 +32,10 @@ class OptimizationDetector:
         self.model = None
         self.flags_model = files('optimization_detector').joinpath('models/aarch64-flag-lstm-converted.h5')
 
+        # 配置 GPU 加速并缓存 GPU 状态
+        self.gpus = self._configure_gpu()
+        self.use_gpu = len(self.gpus) > 0
+
         # LTO检测器（延迟加载）
         self.lto_detector = None
         if enable_lto:
@@ -43,6 +47,32 @@ class OptimizationDetector:
             except ImportError as e:
                 logging.warning('Failed to load LTO detector: %s. LTO detection disabled.', e)
                 self.enable_lto = False
+
+    @staticmethod
+    def _configure_gpu():
+        """配置 TensorFlow 使用 GPU 加速，返回 GPU 设备列表"""
+        try:
+            # 检查 GPU 是否可用
+            gpus = tf.config.list_physical_devices('GPU')
+            if gpus:
+                try:
+                    # 为每个 GPU 设置内存增长，避免一次性占用所有内存
+                    for gpu in gpus:
+                        tf.config.experimental.set_memory_growth(gpu, True)
+                    logging.info('GPU acceleration enabled: %d GPU(s) detected', len(gpus))
+                    # 打印 GPU 信息
+                    for i, gpu in enumerate(gpus):
+                        gpu_details = tf.config.experimental.get_device_details(gpu)
+                        logging.info('GPU %d: %s', i, gpu_details.get('device_name', 'Unknown'))
+                except RuntimeError as e:
+                    # 如果已经在运行时设置，忽略错误
+                    logging.debug('GPU memory growth already configured: %s', e)
+            else:
+                logging.info('No GPU detected, using CPU')
+            return gpus
+        except Exception as e:
+            logging.warning('Failed to configure GPU: %s. Falling back to CPU.', e)
+            return []
 
     @staticmethod
     def _merge_chunk_results(df: pd.DataFrame) -> dict[str, dict]:
@@ -122,11 +152,12 @@ class OptimizationDetector:
             sequences.append(seq)
         return sequences
 
-    @staticmethod
-    def apply_model(data, model):
+    def apply_model(self, data, model):
         if not data.size:
             return None
-        return model.predict(data, batch_size=256)
+        # 根据是否有 GPU 调整批处理大小
+        batch_size = 512 if self.use_gpu else 256  # GPU 可以使用更大的批处理大小
+        return model.predict(data, batch_size=batch_size, verbose=0)
 
     def _run_inference(self, file_info: FileInfo, features: int = 2048) -> list[tuple[int, float]]:
         features_array = self._extract_features(file_info, features)
@@ -140,7 +171,7 @@ class OptimizationDetector:
 
         # For TensorFlow models, avoid multiprocessing (TF models can't be pickled safely)
         # Use simple list comprehension instead
-        y_predict_list = [OptimizationDetector.apply_model(data, self.model) for data in nped_features_array]
+        y_predict_list = [self.apply_model(data, self.model) for data in nped_features_array]
 
         results = []
 
@@ -181,8 +212,25 @@ class OptimizationDetector:
         """Run optimization flag detection on a single file with optional timeout"""
         # Lazy load model
         if self.model is None:
-            self.model = tf.keras.models.load_model(str(self.flags_model))
-            self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
+            # 使用 GPU 策略（如果可用）
+            if self.use_gpu:
+                # 使用 MirroredStrategy 进行多 GPU 推理（如果有多个 GPU）
+                if len(self.gpus) > 1:
+                    strategy = tf.distribute.MirroredStrategy()
+                    with strategy.scope():
+                        self.model = tf.keras.models.load_model(str(self.flags_model))
+                        self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
+                    logging.info('Model loaded with multi-GPU support (%d GPUs)', len(self.gpus))
+                else:
+                    # 单 GPU，直接加载
+                    self.model = tf.keras.models.load_model(str(self.flags_model))
+                    self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
+                    logging.info('Model loaded with GPU acceleration')
+            else:
+                # CPU 模式
+                self.model = tf.keras.models.load_model(str(self.flags_model))
+                self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
+                logging.info('Model loaded with CPU')
 
         if self.timeout is None:
             # No timeout, run normally
