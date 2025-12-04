@@ -84,6 +84,20 @@ def load_excel_data_for_report(excel_file):
         instruction_count = row.get('指令数', 0)
         if pd.isna(instruction_count):
             instruction_count = 0
+        else:
+            try:
+                instruction_count = int(instruction_count)
+            except (ValueError, TypeError):
+                instruction_count = 0
+
+        # 处理 event_count（可能是 NaN）
+        if pd.isna(event_count):
+            event_count = 0
+        else:
+            try:
+                event_count = int(event_count)
+            except (ValueError, TypeError):
+                event_count = 0
 
         # 处理调用的函数（可能是逗号分隔的字符串）
         called_functions_str = str(row.get('调用的函数', ''))
@@ -100,14 +114,34 @@ def load_excel_data_for_report(excel_file):
         performance_analysis = row.get('负载问题识别与优化建议', '')
         performance_analysis = '' if pd.isna(performance_analysis) else str(performance_analysis)
 
+        # 处理排名（可能是 NaN）
+        rank_value = row.get('排名', '')
+        if pd.isna(rank_value):
+            rank_value = ''
+        else:
+            try:
+                rank_value = int(rank_value)
+            except (ValueError, TypeError):
+                rank_value = str(rank_value)
+
+        # 处理调用次数（可能是 NaN）
+        call_count_value = row.get('调用次数', 0)
+        if pd.isna(call_count_value):
+            call_count_value = 0
+        else:
+            try:
+                call_count_value = int(call_count_value)
+            except (ValueError, TypeError):
+                call_count_value = 0
+
         result = {
-            'rank': row.get('排名', ''),
+            'rank': rank_value,
             'file_path': str(row.get('文件路径', '')),
             'address': str(row.get('地址', '')),
             'offset': str(row.get('偏移量', '')),
-            'call_count': row.get('调用次数', 0),
-            'instruction_count': int(instruction_count) if instruction_count else 0,
-            'event_count': int(event_count) if event_count else 0,
+            'call_count': call_count_value,
+            'instruction_count': instruction_count,
+            'event_count': event_count,
             'strings': strings_value,
             'called_functions': called_functions,  # 添加调用的函数列表
             'llm_result': {
