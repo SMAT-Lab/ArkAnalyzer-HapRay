@@ -1,0 +1,15 @@
+{
+  "description": "",
+  "environment": [
+    {
+      "type": "device",
+      "label": "phone"
+    }
+  ],
+  "driver": {
+    "type": "DeviceTest",
+    "py_file": [
+      "PerfLoad_bilibili_1000.py"
+    ]
+  }
+}
