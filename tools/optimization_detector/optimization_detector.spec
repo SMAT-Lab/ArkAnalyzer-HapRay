@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 import os
+import platform
 from pathlib import Path
 
 # 获取项目根目录
@@ -63,6 +64,32 @@ tmp_ret = collect_all('tensorflow')
 datas += tmp_ret[0]
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
+
+# 收集 tensorflow-macos 和 tensorflow-metal (macOS 特定)
+try:
+    if platform.system() == 'Darwin':
+        # 收集 tensorflow-macos
+        tmp_ret = collect_all('tensorflow_macos')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+        
+        # 收集 tensorflow-metal
+        tmp_ret = collect_all('tensorflow_metal')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+        
+        # 添加 tensorflow-metal 的关键隐藏导入
+        hiddenimports += [
+            'tensorflow_metal',
+            'tensorflow_metal.python',
+            'tensorflow_metal.python.gpu',
+            'tensorflow_metal.python.gpu.device',
+        ]
+except ImportError:
+    # 如果不在 macOS 上或包未安装，跳过
+    pass
 
 tmp_ret = collect_all('arpy')
 datas += tmp_ret[0]
