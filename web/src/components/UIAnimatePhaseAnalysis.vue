@@ -28,6 +28,11 @@
         </div>
       </template>
 
+      <div style="margin-bottom: 12px; padding: 8px 12px; background-color: #f5f7fa; border-radius: 4px; font-size: 13px; color: #606266;">
+        <i class="el-icon-info" style="margin-right: 6px;"></i>
+        <span>左侧截图标记动画区域（红色），右侧截图标记超出尺寸的Image（蓝色）</span>
+      </div>
+
       <el-row :gutter="16">
         <el-col
           v-for="(image, index) in markedImages"
@@ -35,7 +40,7 @@
           :span="12"
         >
           <div class="image-container">
-            <div class="image-label">截图 {{ index + 1 }}</div>
+            <div class="image-label">{{ index === 0 ? '动画区域' : '超出尺寸Image' }}</div>
             <el-image
               :src="`data:image/png;base64,${image}`"
               fit="contain"
@@ -55,128 +60,194 @@
       </el-row>
     </el-card>
 
-    <!-- 图像动画分析 -->
-    <el-card v-if="imageAnimations" shadow="never" style="margin-bottom: 16px;">
+    <!-- 动画分析 -->
+    <el-card v-if="imageAnimations || treeAnimations" shadow="never" style="margin-bottom: 16px;">
       <template #header>
         <span style="font-weight: 600; font-size: 15px;">
           <i class="el-icon-view" style="margin-right: 8px;"></i>
-          图像动画分析
+          动画分析
         </span>
       </template>
 
-      <div v-if="imageAnimations.animation_count > 0">
+      <el-tabs v-model="activeTab" type="border-card">
+        <!-- 图像动画分析 -->
+        <el-tab-pane label="图像动画" name="image">
+          <div v-if="imageAnimations && imageAnimations.animation_count > 0">
+            <el-table
+              :data="imageAnimations.animation_regions"
+              border
+              stripe
+              size="small"
+            >
+              <el-table-column type="index" label="#" width="50" align="center" />
+              <el-table-column prop="region" label="区域坐标" min-width="150">
+                <template #default="{ row }">
+                  <el-tag size="small">{{ formatRegion(row.region) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="similarity" label="相似度" width="120" align="center">
+                <template #default="{ row }">
+                  <el-progress
+                    :percentage="row.similarity"
+                    :color="getSimilarityColor(row.similarity)"
+                    :stroke-width="16"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column prop="is_animation" label="是否动画" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag :type="row.is_animation ? 'success' : 'info'" size="small">
+                    {{ row.is_animation ? '是' : '否' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <el-empty v-else description="未检测到图像动画" :image-size="80" />
+        </el-tab-pane>
+
+        <!-- 元素树动画分析 -->
+        <el-tab-pane label="元素树动画" name="tree">
+          <div v-if="treeAnimations && treeAnimations.animation_count > 0">
+            <el-collapse accordion>
+              <el-collapse-item
+                v-for="(region, index) in treeAnimations.animation_regions"
+                :key="index"
+                :name="index"
+              >
+                <template #title>
+                  <div style="display: flex; align-items: center; width: 100%;">
+                    <el-tag type="primary" size="small" style="margin-right: 12px;">
+                      #{{ index + 1 }}
+                    </el-tag>
+                    <span style="flex: 1; font-weight: 500;">
+                      {{ region.component?.type || '未知组件' }}
+                    </span>
+                    <el-tag
+                      :type="region.animate_type === 'attribute_animate' ? 'warning' : 'success'"
+                      size="small"
+                      style="margin-right: 12px;"
+                    >
+                      {{ getAnimateTypeLabel(region.animate_type) }}
+                    </el-tag>
+                  </div>
+                </template>
+
+                <!-- 组件信息 -->
+                <div v-if="region.component" style="margin-bottom: 16px;">
+                  <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #606266;">组件信息</h4>
+                  <el-descriptions :column="2" border size="small">
+                    <el-descriptions-item label="类型">
+                      {{ region.component.type }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="ID">
+                      {{ region.component.id }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="位置" :span="2">
+                      {{ formatBounds(region.component.bounds_rect) }}
+                    </el-descriptions-item>
+                    <!--<el-descriptions-item label="路径" :span="2">
+                      <el-tooltip :content="region.component.path" placement="top">
+                        <span class="path-text">{{ region.component.path }}</span>
+                      </el-tooltip>
+                    </el-descriptions-item>-->
+                  </el-descriptions>
+                </div>
+
+                <!-- 属性变化 -->
+                <div v-if="region.comparison_result && region.comparison_result.length > 0">
+                  <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #606266;">属性变化</h4>
+                  <el-table
+                    :data="region.comparison_result"
+                    border
+                    stripe
+                    size="small"
+                  >
+                    <el-table-column prop="attribute" label="属性名" width="150" />
+                    <el-table-column prop="value1" label="变化前" min-width="200" show-overflow-tooltip />
+                    <el-table-column prop="value2" label="变化后" min-width="200" show-overflow-tooltip />
+                  </el-table>
+                </div>
+              </el-collapse-item>
+            </el-collapse>
+          </div>
+          <el-empty v-else description="未检测到元素树动画" :image-size="80" />
+        </el-tab-pane>
+      </el-tabs>
+    </el-card>
+
+    <!-- 超出尺寸Image分析 -->
+    <el-card v-if="imageSizeAnalysis" shadow="never" style="margin-bottom: 16px;">
+      <template #header>
+        <span style="font-weight: 600; font-size: 15px;">
+          <i class="el-icon-picture-outline-round" style="margin-right: 8px;"></i>
+          超出尺寸Image分析
+        </span>
+      </template>
+
+      <div v-if="imageSizeAnalysis.images_exceeding_framerect && imageSizeAnalysis.images_exceeding_framerect.length > 0">
+        <el-alert
+          :title="`检测到 ${imageSizeAnalysis.images_exceeding_framerect.length} 个超出尺寸的Image节点`"
+          type="warning"
+          :closable="false"
+          style="margin-bottom: 16px;"
+        >
+          <template #default>
+            <div style="margin-top: 8px;">
+              <span style="font-weight: 600; color: #e6a23c;">总超出内存: </span>
+              <span style="font-size: 18px; font-weight: 600; color: #f56c6c;">
+                {{ imageSizeAnalysis.total_excess_memory_mb?.toFixed(2) || '0.00' }} M
+              </span>
+            </div>
+          </template>
+        </el-alert>
+
         <el-table
-          :data="imageAnimations.animation_regions"
+          :data="imageSizeAnalysis.images_exceeding_framerect"
           border
           stripe
           size="small"
+          max-height="400"
         >
           <el-table-column type="index" label="#" width="50" align="center" />
-          <el-table-column prop="region" label="区域坐标" min-width="150">
+          <el-table-column prop="path" label="路径" min-width="200" show-overflow-tooltip />
+          <el-table-column label="FrameRect" width="150" align="center">
             <template #default="{ row }">
-              <el-tag size="small">{{ formatRegion(row.region) }}</el-tag>
+              <div style="font-size: 12px;">
+                {{ row.frameRect?.width }} × {{ row.frameRect?.height }}
+              </div>
             </template>
           </el-table-column>
-          <el-table-column prop="similarity" label="相似度" width="120" align="center">
+          <el-table-column label="RenderedImageSize" width="180" align="center">
             <template #default="{ row }">
-              <el-progress
-                :percentage="row.similarity"
-                :color="getSimilarityColor(row.similarity)"
-                :stroke-width="16"
-              />
+              <div style="font-size: 12px;">
+                {{ row.renderedImageSize?.width }} × {{ row.renderedImageSize?.height }}
+              </div>
             </template>
           </el-table-column>
-          <el-table-column prop="is_animation" label="是否动画" width="100" align="center">
+          <el-table-column label="超出内存" width="120" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.is_animation ? 'success' : 'info'" size="small">
-                {{ row.is_animation ? '是' : '否' }}
+              <el-tag type="warning" size="small">
+                {{ row.memory?.excess_memory_mb?.toFixed(2) || '0.00' }} M
               </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="超出比例" width="100" align="center">
+            <template #default="{ row }">
+              <span style="color: #f56c6c; font-weight: 500;">
+                {{ row.excess?.ratio?.toFixed(1) || '0.0' }}%
+              </span>
             </template>
           </el-table-column>
         </el-table>
       </div>
-      <el-empty v-else description="未检测到图像动画" :image-size="80" />
-    </el-card>
-
-    <!-- 元素树动画分析 -->
-    <el-card v-if="treeAnimations" shadow="never">
-      <template #header>
-        <span style="font-weight: 600; font-size: 15px;">
-          <i class="el-icon-document" style="margin-right: 8px;"></i>
-          元素树动画分析
-        </span>
-      </template>
-
-      <div v-if="treeAnimations.animation_count > 0">
-        <el-collapse accordion>
-          <el-collapse-item
-            v-for="(region, index) in treeAnimations.animation_regions"
-            :key="index"
-            :name="index"
-          >
-            <template #title>
-              <div style="display: flex; align-items: center; width: 100%;">
-                <el-tag type="primary" size="small" style="margin-right: 12px;">
-                  #{{ index + 1 }}
-                </el-tag>
-                <span style="flex: 1; font-weight: 500;">
-                  {{ region.component?.type || '未知组件' }}
-                </span>
-                <el-tag
-                  :type="region.animate_type === 'attribute_animate' ? 'warning' : 'success'"
-                  size="small"
-                  style="margin-right: 12px;"
-                >
-                  {{ getAnimateTypeLabel(region.animate_type) }}
-                </el-tag>
-              </div>
-            </template>
-
-            <!-- 组件信息 -->
-            <div v-if="region.component" style="margin-bottom: 16px;">
-              <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #606266;">组件信息</h4>
-              <el-descriptions :column="2" border size="small">
-                <el-descriptions-item label="类型">
-                  {{ region.component.type }}
-                </el-descriptions-item>
-                <el-descriptions-item label="ID">
-                  {{ region.component.id }}
-                </el-descriptions-item>
-                <el-descriptions-item label="位置" :span="2">
-                  {{ formatBounds(region.component.bounds_rect) }}
-                </el-descriptions-item>
-                <!--<el-descriptions-item label="路径" :span="2">
-                  <el-tooltip :content="region.component.path" placement="top">
-                    <span class="path-text">{{ region.component.path }}</span>
-                  </el-tooltip>
-                </el-descriptions-item>-->
-              </el-descriptions>
-            </div>
-
-            <!-- 属性变化 -->
-            <div v-if="region.comparison_result && region.comparison_result.length > 0">
-              <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #606266;">属性变化</h4>
-              <el-table
-                :data="region.comparison_result"
-                border
-                stripe
-                size="small"
-              >
-                <el-table-column prop="attribute" label="属性名" width="150" />
-                <el-table-column prop="value1" label="变化前" min-width="200" show-overflow-tooltip />
-                <el-table-column prop="value2" label="变化后" min-width="200" show-overflow-tooltip />
-              </el-table>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
-      </div>
-      <el-empty v-else description="未检测到元素树动画" :image-size="80" />
+      <el-empty v-else description="未检测到超出尺寸的Image节点" :image-size="80" />
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { UIAnimatePhaseData } from '@/stores/jsonDataStore';
 
 interface Props {
@@ -185,6 +256,11 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+// 当前激活的标签页（默认显示有数据的标签页）
+const activeTab = ref(
+  (props.phaseData.image_animations?.animation_count ?? 0) > 0 ? 'image' : 'tree'
+);
 
 // 标记图片
 const markedImages = computed(() => {
@@ -203,6 +279,11 @@ const imageAnimations = computed(() => {
 // 元素树动画
 const treeAnimations = computed(() => {
   return props.phaseData.tree_animations;
+});
+
+// 超出尺寸Image分析
+const imageSizeAnalysis = computed(() => {
+  return props.phaseData.image_size_analysis;
 });
 
 // 动画数量

@@ -812,6 +812,46 @@ export interface TreeAnimationRegion {
   animate_type?: string;
 }
 
+// 超出尺寸Image分析
+export interface ExceedingImageInfo {
+  path: string;
+  id: string;
+  bounds_rect: [number, number, number, number];
+  frameRect: {
+    width: number;
+    height: number;
+    area: number;
+    str: string;
+  };
+  renderedImageSize: {
+    width: number;
+    height: number;
+    area: number;
+    str: string;
+  };
+  excess: {
+    width: number;
+    height: number;
+    area: number;
+    ratio: number;
+  };
+  memory: {
+    raw_memory_bytes: number;
+    raw_memory_mb: number;
+    frame_memory_bytes: number;
+    frame_memory_mb: number;
+    excess_memory_bytes: number;
+    excess_memory_mb: number;
+  };
+}
+
+export interface ImageSizeAnalysis {
+  total_images: number;
+  images_exceeding_framerect: ExceedingImageInfo[];
+  total_excess_memory_bytes: number;
+  total_excess_memory_mb: number;
+}
+
 export interface UIAnimatePhaseData {
   image_animations?: {
     animation_regions: ImageAnimationRegion[];
@@ -821,6 +861,7 @@ export interface UIAnimatePhaseData {
     animation_regions: TreeAnimationRegion[];
     animation_count: number;
   };
+  image_size_analysis?: ImageSizeAnalysis;
   marked_images_base64?: string[]; // base64 编码的图片
   marked_images_paths?: string[]; // 原始图片路径（调试用）
   error?: string;

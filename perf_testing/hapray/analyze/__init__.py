@@ -33,7 +33,7 @@ ANALYZER_CLASSES = [
     'GCAnalyzer',
     'FaultTreeAnalyzer',
     'CovAnalyzer',
-    'UIAnimateAnalyzer',
+    'UIAnalyzer',
     # Add more analyzers here
 ]
 
