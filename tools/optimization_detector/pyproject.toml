@@ -27,8 +27,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=2.0",
-    "pandas>=2.0.3",
+    "numpy",
+    "pandas",
     # TensorFlow 依赖：macOS 使用 tensorflow-macos，其他平台使用标准 tensorflow
     "tensorflow>=2.16.2; platform_system != 'Darwin'",
     "tensorflow-macos>=2.16.2; platform_system == 'Darwin'",
@@ -37,8 +37,7 @@ dependencies = [
     "pyelftools>=0.32",
     "arpy~=2.3.0",
     "joblib>=1.3.0",
-    "xlsxwriter>=3.0.0",
-    "scikit-learn>=1.6.1",
+    "xlsxwriter>=3.0.0"
 ]
 
 [project.optional-dependencies]
@@ -141,6 +140,7 @@ max-complexity = 10
 [tool.ruff.lint.per-file-ignores]
 "test_*.py" = ["PLR2004", "S101"] # 测试文件中忽略魔术值和使用断言
 "__init__.py" = ["F401"] # __init__.py 中允许未使用的导入
+"*lto_feature_pipeline.py" = ["N803"] # 机器学习代码中 X, y 是标准约定
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

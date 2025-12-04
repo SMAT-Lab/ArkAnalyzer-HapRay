@@ -13,15 +13,13 @@ from typing import Any, Optional
 
 import joblib
 import numpy as np
+import tensorflow as tf
 from elftools.elf.elffile import ELFFile
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.feature_selection import f_classif
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_curve, precision_score
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
-from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import LinearSVC
+from scipy import stats
+from tensorflow import keras
+from tensorflow.keras import callbacks, models
+from tensorflow.keras.layers import BatchNormalization, Dense, Dropout
+from tensorflow.keras.regularizers import l2
 
 
 # -------------------- Utils --------------------
@@ -50,6 +48,202 @@ def which_any(cands: list[str]) -> Optional[str]:
         if p:
             return p
     return None
+
+
+# -------------------- TensorFlow 替代 sklearn 的辅助类和函数 --------------------
+
+
+class StandardScaler:
+    """替代 sklearn.preprocessing.StandardScaler"""
+
+    def __init__(self):
+        self.mean_ = None
+        self.scale_ = None
+
+    def fit(self, X: np.ndarray):
+        self.mean_ = np.mean(X, axis=0)
+        self.scale_ = np.std(X, axis=0)
+        self.scale_ = np.where(self.scale_ == 0, 1.0, self.scale_)
+        return self
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        return (X - self.mean_) / self.scale_
+
+    def fit_transform(self, X: np.ndarray) -> np.ndarray:
+        return self.fit(X).transform(X)
+
+
+def precision_recall_curve(y_true: np.ndarray, y_score: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """替代 sklearn.metrics.precision_recall_curve"""
+    y_true = np.asarray(y_true, dtype=np.int32)
+    y_score = np.asarray(y_score, dtype=np.float64)
+
+    # 排序
+    desc_score_indices = np.argsort(y_score)[::-1]
+    y_score = y_score[desc_score_indices]
+    y_true = y_true[desc_score_indices]
+
+    # 计算累积的 TP 和 FP
+    tp = np.cumsum(y_true)
+    fp = np.cumsum(1 - y_true)
+
+    # 计算 precision 和 recall
+    precision = tp / (tp + fp + 1e-10)
+    recall = tp / (tp[-1] + 1e-10) if tp[-1] > 0 else np.zeros_like(tp, dtype=np.float64)
+
+    # 添加边界点
+    precision = np.concatenate([[1.0], precision])
+    recall = np.concatenate([[0.0], recall])
+
+    # 计算阈值
+    thresholds = np.concatenate([[np.inf], y_score])
+
+    return precision, recall, thresholds
+
+
+def precision_score(y_true: np.ndarray, y_pred: np.ndarray, zero_division: float = 0.0) -> float:
+    """替代 sklearn.metrics.precision_score"""
+    y_true = np.asarray(y_true, dtype=np.int32)
+    y_pred = np.asarray(y_pred, dtype=np.int32)
+
+    tp = np.sum((y_true == 1) & (y_pred == 1))
+    fp = np.sum((y_true == 0) & (y_pred == 1))
+
+    if tp + fp == 0:
+        return zero_division
+    return float(tp / (tp + fp + 1e-10))
+
+
+def f_classif(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """替代 sklearn.feature_selection.f_classif"""
+    X = np.asarray(X, dtype=np.float64)
+    y = np.asarray(y, dtype=np.int32)
+
+    # 获取类别
+    classes = np.unique(y)
+    if len(classes) < 2:
+        return np.zeros(X.shape[1]), np.zeros(X.shape[1])
+
+    # 计算每个类别的均值和总体均值
+    n_samples, n_features = X.shape
+    overall_mean = np.mean(X, axis=0)
+
+    # 计算组间方差和组内方差
+    between_var = np.zeros(n_features)
+    within_var = np.zeros(n_features)
+
+    for cls in classes:
+        mask = y == cls
+        n_cls = np.sum(mask)
+        if n_cls == 0:
+            continue
+
+        cls_mean = np.mean(X[mask], axis=0)
+        between_var += n_cls * (cls_mean - overall_mean) ** 2
+        within_var += np.sum((X[mask] - cls_mean) ** 2, axis=0)
+
+    # 计算 F 统计量
+    df_between = len(classes) - 1
+    df_within = n_samples - len(classes)
+
+    f_scores = between_var / df_between / (within_var / df_within + 1e-10) if df_within > 0 else np.zeros(n_features)
+
+    # p 值（简化版本，使用 F 分布）
+    p_values = 1 - stats.f.cdf(f_scores, df_between, df_within)
+
+    return f_scores, p_values
+
+
+def grid_search_cv(
+    estimator_factory, param_grid: dict, X: np.ndarray, y: np.ndarray, cv_splits: list, scoring: str = 'precision'
+) -> dict:
+    """简单的网格搜索交叉验证"""
+    best_score = -1.0
+    best_params = None
+    best_estimator = None
+
+    # 生成参数组合
+    keys = list(param_grid.keys())
+    values = [param_grid[k] for k in keys]
+
+    def generate_combinations(keys, values, current=None):
+        if current is None:
+            current = {}
+        if not keys:
+            yield current
+        else:
+            for v in values[0]:
+                current[keys[0]] = v
+                yield from generate_combinations(keys[1:], values[1:], current.copy())
+
+    for params in generate_combinations(keys, values):
+        scores = []
+        for train_idx, val_idx in cv_splits:
+            X_train, y_train = X[train_idx], y[train_idx]
+            X_val, y_val = X[val_idx], y[val_idx]
+
+            estimator = estimator_factory(**params)
+            estimator.fit(X_train, y_train)
+            y_pred = estimator.predict(X_val)
+
+            if scoring == 'precision':
+                score = precision_score(y_val, y_pred, zero_division=0)
+            else:
+                score = precision_score(y_val, y_pred, zero_division=0)
+            scores.append(score)
+
+        avg_score = np.mean(scores)
+        if avg_score > best_score:
+            best_score = avg_score
+            best_params = params
+            best_estimator = estimator_factory(**params)
+
+    return {'best_params': best_params, 'best_score': best_score, 'best_estimator': best_estimator}
+
+
+def stratified_kfold_split(
+    y: np.ndarray, n_splits: int = 5, shuffle: bool = True, random_state: int = 42
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """替代 sklearn.model_selection.StratifiedKFold"""
+    y = np.asarray(y, dtype=np.int32)
+    n_samples = len(y)
+    classes, y_indices = np.unique(y, return_inverse=True)
+    n_classes = len(classes)
+
+    if n_splits > n_samples:
+        raise ValueError(f'n_splits={n_splits} cannot be greater than the number of samples={n_samples}')
+
+    # 为每个类别分配索引
+    class_indices = [np.where(y_indices == i)[0] for i in range(n_classes)]
+
+    # 打乱每个类别的索引
+    if shuffle:
+        rng = np.random.RandomState(random_state)
+        for indices in class_indices:
+            rng.shuffle(indices)
+
+    # 计算每个 fold 的大小
+    fold_sizes = np.full(n_splits, n_samples // n_splits, dtype=np.int32)
+    fold_sizes[: n_samples % n_splits] += 1
+
+    # 为每个类别分配 fold
+    current = np.zeros(n_classes, dtype=np.int32)
+    folds = [[] for _ in range(n_splits)]
+
+    for cls_idx in range(n_classes):
+        for idx in class_indices[cls_idx]:
+            fold_idx = np.argmin([len(folds[i]) + current[i] for i in range(n_splits)])
+            folds[fold_idx].append(idx)
+            current[cls_idx] += 1
+
+    # 生成 train/test 索引对
+    splits = []
+    for fold_idx in range(n_splits):
+        test_indices = np.array(folds[fold_idx], dtype=np.int32)
+        train_indices = np.concatenate([folds[i] for i in range(n_splits) if i != fold_idx])
+        splits.append((train_indices, test_indices))
+
+    return splits
 
 
 # -------------------- 阈值优化 --------------------
@@ -1191,42 +1385,82 @@ class CompilerProvenanceSVM:
         self.random_state = random_state
         self.use_calibration = use_calibration
         self.scaler = StandardScaler()
-        self.svm = LinearSVC(
-            C=C, class_weight=class_weight, random_state=random_state, max_iter=50000, dual=False, tol=1e-4
-        )
+        self.model = None
         self.calibrator = None
         self.is_fitted = False
+        self.n_features_ = None
+
+    def _build_model(self, n_features: int):
+        """构建 TensorFlow 线性 SVM 模型"""
+        tf.random.set_seed(self.random_state)
+        return models.Sequential(
+            [Dense(1, input_shape=(n_features,), use_bias=True, kernel_regularizer=l2(1.0 / self.C))]
+        )
 
     def fit(self, X: np.ndarray, y: np.ndarray, X_val: np.ndarray = None, y_val: np.ndarray = None):  # noqa: N803
         Xs = self.scaler.fit_transform(X)
-        self.svm.fit(Xs, y)
+        self.n_features_ = Xs.shape[1]
+
+        # 计算类别权重
+        class_weights = None
+        if self.class_weight == 'balanced':
+            len(y)
+            n_classes = len(np.unique(y))
+            class_counts = np.bincount(y)
+            total = np.sum(class_counts)
+            class_weights = {i: total / (n_classes * count) for i, count in enumerate(class_counts) if count > 0}
+
+        # 构建和训练模型
+        self.model = self._build_model(self.n_features_)
+
+        # 使用 hinge loss (SVM loss)
+        self.model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001), loss='hinge', metrics=['accuracy'])
+
+        # 准备标签（hinge loss 需要 -1/1）
+        y_tf = np.where(y == 1, 1.0, -1.0).astype(np.float32)
+
+        # 训练
+        callbacks_list = [callbacks.EarlyStopping(monitor='loss', patience=10, restore_best_weights=True)]
+        self.model.fit(
+            Xs, y_tf, epochs=100, batch_size=32, class_weight=class_weights, callbacks=callbacks_list, verbose=0
+        )
+
         if self.use_calibration:
+            # 使用决策函数进行校准
+            decision_train = self.model.predict(Xs, verbose=0).flatten()
             if X_val is not None and y_val is not None:
                 Xvs = self.scaler.transform(X_val)
-                decision_val = self.svm.decision_function(Xvs).reshape(-1, 1)
-                self.calibrator = LogisticRegression(solver='lbfgs', max_iter=1000)
-                self.calibrator.fit(decision_val, y_val)
+                decision_val = self.model.predict(Xvs, verbose=0).flatten()
+                self.calibrator = self._build_calibrator()
+                self.calibrator.fit(decision_val.reshape(-1, 1), y_val)
             else:
-                decision_train = self.svm.decision_function(Xs).reshape(-1, 1)
-                self.calibrator = LogisticRegression(solver='lbfgs', max_iter=1000)
-                self.calibrator.fit(decision_train, y)
+                self.calibrator = self._build_calibrator()
+                self.calibrator.fit(decision_train.reshape(-1, 1), y)
         self.is_fitted = True
+
+    def _build_calibrator(self):
+        """构建逻辑回归校准器"""
+        tf.random.set_seed(self.random_state)
+        model = models.Sequential([Dense(1, input_shape=(1,), activation='sigmoid', use_bias=True)])
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.01), loss='binary_crossentropy')
+        return model
 
     def predict(self, X: np.ndarray) -> np.ndarray:  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
         Xs = self.scaler.transform(X)
-        return self.svm.predict(Xs)
+        decision = self.model.predict(Xs, verbose=0).flatten()
+        return (decision > 0).astype(np.int32)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
         Xs = self.scaler.transform(X)
+        decision_scores = self.model.predict(Xs, verbose=0).flatten()
         if self.calibrator is not None:
-            decision_scores = self.svm.decision_function(Xs).reshape(-1, 1)
-            proba = self.calibrator.predict_proba(decision_scores)
+            proba = self.calibrator.predict(decision_scores.reshape(-1, 1), verbose=0).flatten()
+            proba = np.column_stack([1 - proba, proba])
         else:
-            decision_scores = self.svm.decision_function(Xs)
             proba = 1 / (1 + np.exp(-decision_scores))
             proba = np.column_stack([1 - proba, proba])
         return proba
@@ -1234,45 +1468,85 @@ class CompilerProvenanceSVM:
     def get_feature_importance(self) -> np.ndarray:
         if not self.is_fitted:
             raise ValueError('fit first')
-        return np.abs(self.svm.coef_[0])
+        weights = self.model.layers[0].get_weights()[0]
+        return np.abs(weights.flatten())
 
 
 class CompilerProvenanceRF:
     def __init__(self, n_estimators: int = 400, max_depth: Optional[int] = None, random_state: int = 42):
-        self.rf = RandomForestClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_split=2,
-            min_samples_leaf=1,
-            n_jobs=-1,
-            random_state=random_state,
-        )
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth if max_depth else 10
+        self.random_state = random_state
+        self.model = None
         self.is_fitted = False
+        self.n_features_ = None
+        self.feature_importances_ = None
+
+    def _build_model(self, n_features: int):
+        """构建深度神经网络替代随机森林"""
+        tf.random.set_seed(self.random_state)
+        layers_list = [Dense(256, activation='relu', input_shape=(n_features,))]
+        if self.max_depth > 1:
+            layers_list.extend(
+                [
+                    Dropout(0.3),
+                    Dense(128, activation='relu'),
+                    Dropout(0.2),
+                    Dense(64, activation='relu'),
+                ]
+            )
+        layers_list.append(Dense(1, activation='sigmoid'))
+        return models.Sequential(layers_list)
 
     def fit(self, X, y):  # noqa: N803
-        self.rf.fit(X, y)
+        self.n_features_ = X.shape[1]
+        self.model = self._build_model(self.n_features_)
+
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy']
+        )
+
+        callbacks_list = [
+            callbacks.EarlyStopping(monitor='loss', patience=20, restore_best_weights=True),
+            callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, min_lr=1e-6),
+        ]
+
+        self.model.fit(X, y, epochs=100, batch_size=32, callbacks=callbacks_list, verbose=0)
+
+        # 计算特征重要性（使用梯度）
+        self.feature_importances_ = self._compute_feature_importance(X, y)
         self.is_fitted = True
+
+    def _compute_feature_importance(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """使用梯度计算特征重要性"""
+        X_tensor = tf.constant(X, dtype=tf.float32)
+        with tf.GradientTape() as tape:
+            tape.watch(X_tensor)
+            predictions = self.model(X_tensor, training=False)
+            loss = tf.keras.losses.binary_crossentropy(y, predictions)
+        gradients = tape.gradient(loss, X_tensor)
+        importance = np.mean(np.abs(gradients.numpy()), axis=0)
+        # 归一化
+        if importance.max() > 0:
+            importance = importance / importance.max()
+        return importance
 
     def predict(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return self.rf.predict(X)
+        proba = self.model.predict(X, verbose=0).flatten()
+        return (proba >= 0.5).astype(np.int32)
 
     def predict_proba(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return (
-            self.rf.predict_proba(X)
-            if hasattr(self.rf, 'predict_proba')
-            else np.column_stack([1 - self.rf.predict(X), self.rf.predict(X)])
-        )
+        proba = self.model.predict(X, verbose=0).flatten()
+        return np.column_stack([1 - proba, proba])
 
     def get_feature_importance(self) -> np.ndarray:
-        return getattr(
-            self.rf,
-            'feature_importances_',
-            np.zeros(self.rf.n_features_in_ if hasattr(self.rf, 'n_features_in_') else 0),
-        )
+        if self.feature_importances_ is not None:
+            return self.feature_importances_
+        return np.zeros(self.n_features_ if self.n_features_ else 0)
 
 
 class CompilerProvenanceGBDT:
@@ -1284,69 +1558,161 @@ class CompilerProvenanceGBDT:
         subsample: float = 0.9,
         random_state: int = 42,
     ):
-        self.gbdt = GradientBoostingClassifier(
-            n_estimators=n_estimators,
-            learning_rate=learning_rate,
-            max_depth=max_depth,
-            subsample=subsample,
-            random_state=random_state,
-        )
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.max_depth = max_depth
+        self.subsample = subsample
+        self.random_state = random_state
+        self.model = None
         self.is_fitted = False
+        self.n_features_ = None
+        self.feature_importances_ = None
+
+    def _build_model(self, n_features: int):
+        """构建深度神经网络替代梯度提升树"""
+        tf.random.set_seed(self.random_state)
+        layers_list = [Dense(128, activation='relu', input_shape=(n_features,))]
+        for _ in range(self.max_depth - 1):
+            layers_list.extend(
+                [
+                    Dropout(0.2),
+                    Dense(64, activation='relu'),
+                ]
+            )
+        layers_list.append(Dense(1, activation='sigmoid'))
+        return models.Sequential(layers_list)
 
     def fit(self, X, y):  # noqa: N803
-        self.gbdt.fit(X, y)
+        self.n_features_ = X.shape[1]
+        self.model = self._build_model(self.n_features_)
+
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),
+            loss='binary_crossentropy',
+            metrics=['accuracy'],
+        )
+
+        callbacks_list = [
+            callbacks.EarlyStopping(monitor='loss', patience=20, restore_best_weights=True),
+            callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, min_lr=1e-6),
+        ]
+
+        # 使用 subsample 进行采样
+        n_samples = int(len(X) * self.subsample)
+        indices = np.random.RandomState(self.random_state).choice(len(X), n_samples, replace=False)
+        X_sampled = X[indices]
+        y_sampled = y[indices]
+
+        self.model.fit(
+            X_sampled,
+            y_sampled,
+            epochs=self.n_estimators // 10,  # 简化训练轮数
+            batch_size=32,
+            callbacks=callbacks_list,
+            verbose=0,
+        )
+
+        # 计算特征重要性
+        self.feature_importances_ = self._compute_feature_importance(X, y)
         self.is_fitted = True
+
+    def _compute_feature_importance(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """使用梯度计算特征重要性"""
+        X_tensor = tf.constant(X, dtype=tf.float32)
+        with tf.GradientTape() as tape:
+            tape.watch(X_tensor)
+            predictions = self.model(X_tensor, training=False)
+            loss = tf.keras.losses.binary_crossentropy(y, predictions)
+        gradients = tape.gradient(loss, X_tensor)
+        importance = np.mean(np.abs(gradients.numpy()), axis=0)
+        if importance.max() > 0:
+            importance = importance / importance.max()
+        return importance
 
     def predict(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return self.gbdt.predict(X)
+        proba = self.model.predict(X, verbose=0).flatten()
+        return (proba >= 0.5).astype(np.int32)
 
     def predict_proba(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        if hasattr(self.gbdt, 'predict_proba'):
-            return self.gbdt.predict_proba(X)
-        scores = self.gbdt.decision_function(X)
-        proba = 1 / (1 + np.exp(-scores))
+        proba = self.model.predict(X, verbose=0).flatten()
         return np.column_stack([1 - proba, proba])
 
     def get_feature_importance(self) -> np.ndarray:
-        return getattr(
-            self.gbdt,
-            'feature_importances_',
-            np.zeros(self.gbdt.n_features_in_ if hasattr(self.gbdt, 'n_features_in_') else 0),
-        )
+        if self.feature_importances_ is not None:
+            return self.feature_importances_
+        return np.zeros(self.n_features_ if self.n_features_ else 0)
 
 
 class CompilerProvenanceLR:
     def __init__(self, C: float = 1.0, penalty: str = 'l2', class_weight: Optional[str] = None, random_state: int = 42):  # noqa: N803
+        self.C = C
+        self.penalty = penalty
+        self.class_weight = class_weight
+        self.random_state = random_state
         self.scaler = StandardScaler()
-        self.lr = LogisticRegression(
-            C=C, penalty=penalty, solver='lbfgs', max_iter=2000, class_weight=class_weight, random_state=random_state
-        )
+        self.model = None
         self.is_fitted = False
+        self.n_features_ = None
+
+    def _build_model(self, n_features: int):
+        """构建逻辑回归模型"""
+        tf.random.set_seed(self.random_state)
+        reg = l2(1.0 / self.C) if self.penalty == 'l2' else None
+        return models.Sequential([Dense(1, input_shape=(n_features,), activation='sigmoid', kernel_regularizer=reg)])
 
     def fit(self, X, y):  # noqa: N803
         Xs = self.scaler.fit_transform(X)
-        self.lr.fit(Xs, y)
+        self.n_features_ = Xs.shape[1]
+
+        # 计算类别权重
+        class_weights = None
+        if self.class_weight == 'balanced':
+            len(y)
+            n_classes = len(np.unique(y))
+            class_counts = np.bincount(y)
+            total = np.sum(class_counts)
+            class_weights = {i: total / (n_classes * count) for i, count in enumerate(class_counts) if count > 0}
+
+        self.model = self._build_model(self.n_features_)
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=0.01), loss='binary_crossentropy', metrics=['accuracy']
+        )
+
+        callbacks_list = [callbacks.EarlyStopping(monitor='loss', patience=50, restore_best_weights=True)]
+        self.model.fit(
+            Xs,
+            y,
+            epochs=2000,
+            batch_size=len(Xs) if len(Xs) < 1000 else 1000,
+            class_weight=class_weights,
+            callbacks=callbacks_list,
+            verbose=0,
+        )
         self.is_fitted = True
 
     def predict(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return self.lr.predict(self.scaler.transform(X))
+        Xs = self.scaler.transform(X)
+        proba = self.model.predict(Xs, verbose=0).flatten()
+        return (proba >= 0.5).astype(np.int32)
 
     def predict_proba(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return self.lr.predict_proba(self.scaler.transform(X))
+        Xs = self.scaler.transform(X)
+        proba = self.model.predict(Xs, verbose=0).flatten()
+        return np.column_stack([1 - proba, proba])
 
     def get_feature_importance(self) -> np.ndarray:
-        coef = getattr(self.lr, 'coef_', None)
-        if coef is None:
-            return np.zeros(self.lr.n_features_in_ if hasattr(self.lr, 'n_features_in_') else 0)
-        return np.abs(coef[0])
+        if not self.is_fitted:
+            raise ValueError('fit first')
+        weights = self.model.layers[0].get_weights()[0]
+        return np.abs(weights.flatten())
 
 
 class CompilerProvenanceMLP:
@@ -1359,33 +1725,84 @@ class CompilerProvenanceMLP:
         max_iter=400,
         random_state=42,
     ):
+        self.hidden_layer_sizes = hidden_layer_sizes
+        self.activation = activation
+        self.alpha = alpha
+        self.learning_rate_init = learning_rate_init
+        self.max_iter = max_iter
+        self.random_state = random_state
         self.scaler = StandardScaler()
-        self.mlp = MLPClassifier(
-            hidden_layer_sizes=hidden_layer_sizes,
-            activation=activation,
-            alpha=alpha,
-            learning_rate_init=learning_rate_init,
-            max_iter=max_iter,
-            random_state=random_state,
-            early_stopping=True,
-            validation_fraction=0.1,
-        )
+        self.model = None
         self.is_fitted = False
+        self.n_features_ = None
+
+    def _build_model(self, n_features: int):
+        """构建多层感知机模型"""
+        tf.random.set_seed(self.random_state)
+        layers_list = []
+        for i, size in enumerate(self.hidden_layer_sizes):
+            if i == 0:
+                layers_list.append(
+                    Dense(
+                        size, activation=self.activation, input_shape=(n_features,), kernel_regularizer=l2(self.alpha)
+                    )
+                )
+            else:
+                layers_list.append(Dense(size, activation=self.activation, kernel_regularizer=l2(self.alpha)))
+            layers_list.append(BatchNormalization())
+            layers_list.append(Dropout(0.2))
+        layers_list.append(Dense(1, activation='sigmoid'))
+        return models.Sequential(layers_list)
 
     def fit(self, X, y):  # noqa: N803
         Xs = self.scaler.fit_transform(X)
-        self.mlp.fit(Xs, y)
+        self.n_features_ = Xs.shape[1]
+        self.model = self._build_model(self.n_features_)
+
+        self.model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate_init),
+            loss='binary_crossentropy',
+            metrics=['accuracy'],
+        )
+
+        callbacks_list = [
+            callbacks.EarlyStopping(monitor='loss', patience=20, restore_best_weights=True),
+            callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, min_lr=1e-6),
+        ]
+
+        # 分割验证集
+        n_val = int(len(Xs) * 0.1)
+        indices = np.random.RandomState(self.random_state).permutation(len(Xs))
+        val_indices = indices[:n_val]
+        train_indices = indices[n_val:]
+
+        X_train, y_train = Xs[train_indices], y[train_indices]
+        X_val, y_val = Xs[val_indices], y[val_indices]
+
+        self.model.fit(
+            X_train,
+            y_train,
+            validation_data=(X_val, y_val),
+            epochs=self.max_iter,
+            batch_size=32,
+            callbacks=callbacks_list,
+            verbose=0,
+        )
         self.is_fitted = True
 
     def predict(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return self.mlp.predict(self.scaler.transform(X))
+        Xs = self.scaler.transform(X)
+        proba = self.model.predict(Xs, verbose=0).flatten()
+        return (proba >= 0.5).astype(np.int32)
 
     def predict_proba(self, X):  # noqa: N803
         if not self.is_fitted:
             raise ValueError('fit first')
-        return self.mlp.predict_proba(self.scaler.transform(X))
+        Xs = self.scaler.transform(X)
+        proba = self.model.predict(Xs, verbose=0).flatten()
+        return np.column_stack([1 - proba, proba])
 
 
 # -------------------- Trainers --------------------
@@ -1471,17 +1888,13 @@ class LegacyFeatureTrainer(_BaseTrainer):
 
             # ---- SVM ----
             param_grid = {'C': [0.01, 0.1, 1.0, 10.0], 'class_weight': ['balanced', None]}
-            base_svm = LinearSVC(random_state=42, max_iter=50000, dual=False, tol=1e-4)
-            grid = GridSearchCV(
-                base_svm,
-                param_grid,
-                cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
-                scoring='precision',
-                n_jobs=-1,
-                verbose=0,
-            )
-            grid.fit(Xtr, ytr)
-            best_params = grid.best_params_
+            cv_splits = stratified_kfold_split(ytr, n_splits=5, shuffle=True, random_state=42)
+
+            def svm_factory(**kwargs):
+                return CompilerProvenanceSVM(**kwargs)
+
+            grid_result = grid_search_cv(svm_factory, param_grid, Xtr, ytr, cv_splits, scoring='precision')
+            best_params = grid_result['best_params']
             svm = CompilerProvenanceSVM(C=best_params['C'], class_weight=best_params['class_weight'])
             svm.fit(Xtr, ytr, Xva, yva)
             va_proba = svm.predict_proba(Xva)
@@ -1702,17 +2115,13 @@ class CompilerProvenanceTrainer(_BaseTrainer):
             # 与 LegacyTrainer 同步的模型流程（略写）
             # 仅示范：SVM + GBDT
             param_grid = {'C': [0.01, 0.1, 1.0, 10.0], 'class_weight': ['balanced', None]}
-            base_svm = LinearSVC(random_state=42, max_iter=50000, dual=False, tol=1e-4)
-            grid = GridSearchCV(
-                base_svm,
-                param_grid,
-                cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
-                scoring='precision',
-                n_jobs=-1,
-                verbose=0,
-            )
-            grid.fit(Xtr, ytr)
-            best_params = grid.best_params_
+            cv_splits = stratified_kfold_split(ytr, n_splits=5, shuffle=True, random_state=42)
+
+            def svm_factory(**kwargs):
+                return CompilerProvenanceSVM(**kwargs)
+
+            grid_result = grid_search_cv(svm_factory, param_grid, Xtr, ytr, cv_splits, scoring='precision')
+            best_params = grid_result['best_params']
             svm = CompilerProvenanceSVM(C=best_params['C'], class_weight=best_params['class_weight'])
             svm.fit(Xtr, ytr, Xva, yva)
             thr, _ = optimize_threshold(yva, svm.predict_proba(Xva), metric='precision')
@@ -1940,17 +2349,13 @@ class HybridFeatureTrainer(_BaseTrainer):
 
             # ---- SVM ----
             param_grid = {'C': [0.01, 0.1, 1.0, 10.0], 'class_weight': ['balanced', None]}
-            base_svm = LinearSVC(random_state=42, max_iter=50000, dual=False, tol=1e-4)
-            grid = GridSearchCV(
-                base_svm,
-                param_grid,
-                cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
-                scoring='precision',
-                n_jobs=-1,
-                verbose=0,
-            )
-            grid.fit(Xtr, ytr)
-            best_params = grid.best_params_
+            cv_splits = stratified_kfold_split(ytr, n_splits=5, shuffle=True, random_state=42)
+
+            def svm_factory(**kwargs):
+                return CompilerProvenanceSVM(**kwargs)
+
+            grid_result = grid_search_cv(svm_factory, param_grid, Xtr, ytr, cv_splits, scoring='precision')
+            best_params = grid_result['best_params']
             svm = CompilerProvenanceSVM(C=best_params['C'], class_weight=best_params['class_weight'])
             svm.fit(Xtr, ytr, Xva, yva)
             thr_svm, _ = optimize_threshold(yva, svm.predict_proba(Xva), metric='precision')
