@@ -25,6 +25,7 @@ from hapray.actions.compare_action import CompareAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
 from hapray.actions.static_action import StaticAction
+from hapray.actions.ui_action import UIAction
 from hapray.actions.update_action import UpdateAction
 from hapray.core.config.config import Config
 
@@ -90,6 +91,7 @@ class HapRayCmd:
             'update': UpdateAction,
             'compare': CompareAction,
             'prepare': PrepareAction,
+            'ui': UIAction,
         }
 
         parser = argparse.ArgumentParser(
@@ -103,7 +105,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, opt: so optimization detection, static: HAP static analysis, prepare: simplified test execution)',
+            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis)',
         )
         # Parse action
         action_args = []
@@ -126,4 +128,5 @@ class HapRayCmd:
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
     HapRayCmd()

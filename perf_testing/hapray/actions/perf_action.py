@@ -102,7 +102,11 @@ class DeviceBoundTestRunner:
     def _run_single_round(self, case_name: str, all_testcases: dict, device_sn: str, round_num: int) -> str:
         """Execute a single test round on bound device"""
         case_dir, file_extension = all_testcases[case_name]
-        output_dir = os.path.join(self.reports_path, f'{case_name}_round{round_num}')
+        # Only add round suffix when round_num is not None (i.e., multiple rounds)
+        if self.round > 1:
+            output_dir = os.path.join(self.reports_path, f'{case_name}_round{round_num}')
+        else:
+            output_dir = os.path.join(self.reports_path, case_name)
         device_arg = f'-sn {device_sn}' if device_sn else ''
         command = f'run -l {case_name} {device_arg} -tcpath {case_dir} -rp {output_dir}'
 
