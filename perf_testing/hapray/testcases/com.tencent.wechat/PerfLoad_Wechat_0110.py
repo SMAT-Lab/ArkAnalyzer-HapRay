@@ -1,6 +1,4 @@
 import time
-from hypium import BY
-from tensorflow import double
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -30,35 +28,18 @@ class PerfLoad_Wechat_0110(PerfTestCase):
 
         self.touch_by_text('测试账号', 2)
 
-
         def step1():
-            
             # 点击+
-            self.touch_by_coordinates(1023, 2259, 1)   
-            
-            self.touch_by_text('拍摄', 2)    
-            self.touch_by_text('录像', 2)    
+            self.touch_by_coordinates(1023, 2259, 1)
+
+            self.touch_by_text('拍摄', 2)
+            self.touch_by_text('录像', 2)
             # 开始录像
-            self.touch_by_coordinates(560, 2046, 10)    
+            self.touch_by_coordinates(560, 2046, 10)
             # 停止录像
-            self.touch_by_coordinates(560, 2046, 2)    
-              
-       
-            
+            self.touch_by_coordinates(560, 2046, 2)
+
         self.execute_performance_step('微信-单聊录制和发送视频场景-step1录制视频', 30, step1)
         # 点击对号发送
-        self.touch_by_coordinates(933, 2073, 1) 
+        self.touch_by_coordinates(933, 2073, 1)
         time.sleep(10)
-
- 
-
-
-
-
-    
-        
-
-
-
-
-

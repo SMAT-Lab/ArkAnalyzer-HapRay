@@ -1,6 +1,5 @@
 import time
 
-from devicetest.core.test_case import Step
 from hypium import BY
 from hypium.model import UiParam
 
@@ -27,33 +26,27 @@ class PerfLoad_Douyin_0040(PerfTestCase):
         return self._app_name
 
     def process(self):
-        Step('启动被测应用')
         self.start_app()
 
-        # 2. 点击热点，等待5s
         component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
         self.driver.swipe(UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4)
         time.sleep(2)
-        self.touch_by_id('home-top-tab-text-homepage_pad_hot', 5)
 
         def step1():
-            # 点击查看热榜，等待2s
-            self.touch_by_text('完整热榜', 2)
+            # 点击精选
+            # self.touch_by_id('home-top-tab-text-homepage_mediumvideo', 2)
+            self.touch_by_text('精选', 5)
 
         def step2():
-            # 抖音热榜左滑5次，右滑5次，每次等待1s
-            self.swipes_left(5, 1, 300)
-            self.swipes_right(5, 1, 300)
+            for _i in range(3):
+                # 点击横屏
+                self.touch_by_text('全屏观看', 5)
+                # 返回竖屏
+                self.swipe_to_back(3)
 
-        def step3():
-            # 侧滑返回热点，等待2s
-            self.swipe_to_back(2)
-
-        def step4():
-            # 点击长视频
-            self.touch_by_id('home-top-tab-text-homepage_mediumvideo')
-
-        self.execute_performance_step('抖音-热榜浏览-step1点击热榜', 10, step1)
-        self.execute_performance_step('抖音-热榜浏览-step2滑动浏览', 20, step2)
-        self.execute_performance_step('抖音-热榜浏览-step3侧滑返回', 10, step3)
-        self.execute_performance_step('抖音-热榜浏览-step4点击长视频', 30, step4)
+        self.execute_performance_step('抖音-抖音热点页面-点击-页面切换-抖音长视频页面-step1点击长视频', 30, step1)
+        # 点击第一个视频
+        self.touch_by_coordinates(562, 549, 2)
+        self.execute_performance_step(
+            '抖音-视频书评播放页-点击-应用内操作-视频横屏播放页-step2进入横屏，观看10s，返回竖屏', 30, step2
+        )
