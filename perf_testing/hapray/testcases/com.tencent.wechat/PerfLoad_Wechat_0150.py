@@ -1,6 +1,4 @@
 import time
-from hypium import BY
-from tensorflow import double
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -28,11 +26,10 @@ class PerfLoad_Wechat_0150(PerfTestCase):
         self.start_app()
         time.sleep(2)
 
-
         self.touch_by_text('性能测试群', 1)
         # 点击右上角。。。
         self.touch_by_coordinates(1000, 178, 1)
-        self.swipes_up(1,1)
+        self.swipes_up(1, 1)
         self.touch_by_text('删除聊天记录', 1)
         self.touch_by_coordinates(566, 1998, 1)
         self.swipe_to_back()
@@ -66,25 +63,7 @@ class PerfLoad_Wechat_0150(PerfTestCase):
             self.touch_by_coordinates(180, 2100, 1)
 
             self.touch_by_text('微信红包', 1)
-            #self.touch_by_text('開', 1)
+            # self.touch_by_text('開', 1)
             self.touch_by_coordinates(538, 1567, 1)
 
         self.execute_performance_step('微信-群聊发送收红包场景-step1群聊发送&收红包', 30, step1)
-        
-
-
-
-        
-
- 
-
-
-
-
-    
-        
-
-
-
-
-

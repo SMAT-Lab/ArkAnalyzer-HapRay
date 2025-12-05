@@ -1,6 +1,6 @@
 import time
+
 from hypium import BY
-from tensorflow import double
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -31,8 +31,6 @@ class PerfLoad_Wechat_0050(PerfTestCase):
         self.driver.touch(BY.isAfter(BY.text('通讯录')).isBefore(BY.text('发现')).type('Image'))
         self.driver.wait(0.5)
 
-
-
         def step1():
             self.touch_by_text('朋友圈', 1)
             # self.swipes_up(5, 1)
@@ -45,6 +43,7 @@ class PerfLoad_Wechat_0050(PerfTestCase):
             self.driver.wait(0.5)
             self.swipes_left(8, 1)
             self.swipes_right(8, 1)
+
         def step3():
             # 通过相对位置点击控件
             comps = self.driver.find_all_components(BY.type('View'))
@@ -69,8 +68,6 @@ class PerfLoad_Wechat_0050(PerfTestCase):
             self.touch_by_text('完成(3)', 2)
             self.touch_by_text('发表', 2)
 
-
-            
         self.execute_performance_step('微信-朋友圈播放视频场景-step1朋友圈浏览', 5, step1)
         # self.execute_performance_step('微信-朋友圈播放视频场景-step2朋友圈图片查看', 20, step2)
         # self.swipe_to_back()
@@ -85,14 +82,3 @@ class PerfLoad_Wechat_0050(PerfTestCase):
         # 删除
         self.touch_by_coordinates(752, 1384, 2)
         self.driver.wait(0.5)
-
-
-
-
-    
-        
-
-
-
-
-

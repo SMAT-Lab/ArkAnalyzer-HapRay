@@ -39,6 +39,9 @@ module.exports = {
                     from: path.resolve(__dirname, 'dist/hapray/_internal'),
                     to: path.resolve(__dirname, '../dist/_internal'),
                     noErrorOnMissing: true,
+                    globOptions: {
+                        followSymbolicLinks: false,
+                    },
                 },
             ],
         }),
@@ -52,6 +55,10 @@ module.exports = {
                 {
                     from: path.resolve(__dirname, 'dist/hapray/ArkAnalyzer-HapRay-GUI'),
                     to: path.resolve(__dirname, '../dist/ArkAnalyzer-HapRay-GUI'),
+                },
+                {
+                    from: path.resolve(__dirname, 'dist/hapray/_internal'),
+                    to: path.resolve(__dirname, '../dist/_internal'),
                 },
             ],
         }),

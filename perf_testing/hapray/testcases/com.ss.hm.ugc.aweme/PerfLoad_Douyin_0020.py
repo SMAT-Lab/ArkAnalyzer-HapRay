@@ -1,8 +1,3 @@
-import time
-
-from hypium import BY
-from hypium.model import UiParam
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
@@ -36,14 +31,15 @@ class PerfLoad_Douyin_0020(PerfTestCase):
 
         self.start_app()
 
-        component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
-        for _ in range(3):
-            self.driver.swipe(
-                UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4
-            )
-            time.sleep(2)
-            component_live = self.driver.find_component(BY.id('home-top-tab-text-homepage_tablive'))
-            if component_live:
-                break
+        # component_toptabs = self.driver.find_component(BY.id('HomePage_Top_Tabs_Tree_Container'))
+        # for _ in range(3):
+        #     self.driver.swipe(
+        #         UiParam.RIGHT, area=component_toptabs, distance=60, start_point=(0.4, 0.1), swipe_time=0.4
+        #     )
+        #     time.sleep(2)
+        #     component_live = self.driver.find_component(BY.id('home-top-tab-text-homepage_tablive'))
+        #     if component_live:
+        #         break
+
         self.execute_performance_step('抖音-视频直播浏览场景-step1抖音点击直播页签', 30, step1)
         self.execute_performance_step('抖音-视频直播浏览场景-step2直播页浏览', 60, step2)

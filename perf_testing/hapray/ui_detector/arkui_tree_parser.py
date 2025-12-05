@@ -279,6 +279,24 @@ class ArkUITreeParser:
                 component.attributes['frameRect'] = processed_value  # 保留原始值
             else:
                 component.attributes['frameRect'] = processed_value
+        elif key == 'renderedImageInfo':
+            # 特殊处理RenderedImageInfo属性，解析Width和Height
+            size_tuple = self._parse_rendered_image_info_to_size(value)
+            if size_tuple:
+                component.attributes['renderedImageSize'] = size_tuple
+                component.attributes['renderedImageInfoStr'] = processed_value  # 保留原始值
+            else:
+                component.attributes['renderedImageSize'] = None
+                component.attributes['renderedImageInfoStr'] = processed_value
+        elif key == 'rawImageSize':
+            # 特殊处理rawImageSize属性，解析为(width, height)元组
+            size_tuple = self._parse_rawimagesize_to_size(value)
+            if size_tuple:
+                component.attributes['rawImageSize'] = size_tuple
+                component.attributes['rawImageSizeStr'] = processed_value  # 保留原始值
+            else:
+                component.attributes['rawImageSize'] = None
+                component.attributes['rawImageSizeStr'] = processed_value
         else:
             # 存储其他属性
             component.attributes[key] = processed_value
@@ -332,6 +350,66 @@ class ArkUITreeParser:
                 height = float(match.group(4))
 
                 # 转换为整数坐标
+                return int(width), int(height)
+
+        except Exception:
+            # 解析失败时记录警告但不抛出异常
+            pass
+
+        return None
+
+    def _parse_rendered_image_info_to_size(self, rendered_image_info_value: str) -> Optional[tuple[int, int]]:
+        """解析RenderedImageInfo属性值为尺寸元组
+
+        Args:
+            rendered_image_info_value: RenderedImageInfo属性值，格式如 "{RenderStatus: Success, Width: 540, Height: 960, ...}"
+
+        Returns:
+            size (width, height) 或 None
+        """
+        try:
+            # 去除可能的引号和空格
+            rendered_image_info_value = rendered_image_info_value.strip().strip('"')
+
+            # 匹配RenderedImageInfo格式: {RenderStatus: Success, Width: 540, Height: 960, ...}
+            # 提取Width和Height字段
+            width_match = re.search(r'Width:\s*(\d+)', rendered_image_info_value)
+            height_match = re.search(r'Height:\s*(\d+)', rendered_image_info_value)
+
+            if width_match and height_match:
+                width = int(width_match.group(1))
+                height = int(height_match.group(1))
+                return width, height
+
+        except Exception:
+            # 解析失败时记录警告但不抛出异常
+            pass
+
+        return None
+
+    def _parse_rawimagesize_to_size(self, rawimagesize_value: str) -> Optional[tuple[int, int]]:
+        """解析rawImageSize属性值为尺寸元组
+
+        Args:
+            rawimagesize_value: rawImageSize属性值，格式如 "[642.00 x 360.00]"
+
+        Returns:
+            size (width, height) 或 None
+        """
+        try:
+            # 去除可能的引号和空格
+            rawimagesize_value = rawimagesize_value.strip().strip('"')
+
+            # 匹配rawImageSize格式: [width x height]
+            # 支持整数和小数
+            pattern = r'\[\s*([\d.-]+)\s*x\s*([\d.-]+)\s*\]'
+            match = re.match(pattern, rawimagesize_value)
+
+            if match:
+                width = float(match.group(1))
+                height = float(match.group(2))
+
+                # 转换为整数尺寸
                 return int(width), int(height)
 
         except Exception:
