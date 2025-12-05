@@ -37,9 +37,50 @@ class PreservePermissionsPlugin {
                             return;
                         }
 
-                        const stats = fs.statSync(srcPath);
+                        let stats;
+                        try {
+                            // 使用 lstat 来检测符号链接（不跟随）
+                            stats = fs.lstatSync(srcPath);
+                        } catch (err) {
+                            return;
+                        }
                         
-                        if (stats.isDirectory()) {
+                        if (stats.isSymbolicLink()) {
+                            // 如果是符号链接，确保目标目录中也有相同的符号链接
+                            try {
+                                // 读取源符号链接的目标
+                                const linkTarget = fs.readlinkSync(srcPath);
+                                
+                                // 检查目标路径是否存在
+                                if (fs.existsSync(dstPath)) {
+                                    const targetStats = fs.lstatSync(dstPath);
+                                    // 如果目标不是符号链接，或者目标不同，需要替换
+                                    if (!targetStats.isSymbolicLink() || fs.readlinkSync(dstPath) !== linkTarget) {
+                                        // 删除目标文件/目录
+                                        const dstStats = fs.statSync(dstPath);
+                                        if (dstStats.isDirectory()) {
+                                            fs.rmSync(dstPath, { recursive: true, force: true });
+                                        } else {
+                                            fs.unlinkSync(dstPath);
+                                        }
+                                        // 创建符号链接
+                                        fs.symlinkSync(linkTarget, dstPath);
+                                        console.log(`Preserved symlink: ${path.relative(targetPath, dstPath)} -> ${linkTarget}`);
+                                    }
+                                } else {
+                                    // 如果目标不存在，直接创建符号链接
+                                    // 确保父目录存在
+                                    const parentDir = path.dirname(dstPath);
+                                    if (!fs.existsSync(parentDir)) {
+                                        fs.mkdirSync(parentDir, { recursive: true });
+                                    }
+                                    fs.symlinkSync(linkTarget, dstPath);
+                                    console.log(`Created symlink: ${path.relative(targetPath, dstPath)} -> ${linkTarget}`);
+                                }
+                            } catch (err) {
+                                console.warn(`Failed to preserve symlink for ${dstPath}:`, err.message);
+                            }
+                        } else if (stats.isDirectory()) {
                             // 如果是目录，递归处理
                             if (fs.existsSync(dstPath) && fs.statSync(dstPath).isDirectory()) {
                                 const entries = fs.readdirSync(srcPath);
@@ -55,10 +96,10 @@ class PreservePermissionsPlugin {
                             if (fs.existsSync(dstPath)) {
                                 try {
                                     const sourceMode = stats.mode;
-                                    const targetStats = fs.statSync(dstPath);
+                                    const targetStats = fs.lstatSync(dstPath);
                                     
-                                    // 只有当权限不同时才设置
-                                    if (targetStats.mode !== sourceMode) {
+                                    // 只有当权限不同时才设置（且目标不是符号链接）
+                                    if (!targetStats.isSymbolicLink() && targetStats.mode !== sourceMode) {
                                         fs.chmodSync(dstPath, sourceMode);
                                         console.log(`Preserved permissions for: ${path.relative(targetPath, dstPath)} (mode: ${sourceMode.toString(8)})`);
                                     }
