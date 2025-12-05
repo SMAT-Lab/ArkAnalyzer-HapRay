@@ -1,6 +1,4 @@
 import time
-from hypium import BY
-from tensorflow import double
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -41,17 +39,3 @@ class PerfLoad_Wechat_0070(PerfTestCase):
             self.swipes_up(2, 2)
 
         self.execute_performance_step('微信-公众号浏览场景-step1公众号浏览', 35, step1)
-
-
- 
-
-
-
-
-    
-        
-
-
-
-
-

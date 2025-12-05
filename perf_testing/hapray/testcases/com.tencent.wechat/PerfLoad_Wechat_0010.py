@@ -1,4 +1,5 @@
 import time
+
 from hypium import BY
 from tensorflow import double
 
@@ -31,6 +32,7 @@ class PerfLoad_Wechat_0010(PerfTestCase):
             for _i in range(10):
                 self.swipes_up(1, 1)
                 self.swipes_down(1, 1)
+
         def step2():
             self.touch_by_text('测试账号', 1)
             # 点击加号
@@ -63,7 +65,7 @@ class PerfLoad_Wechat_0010(PerfTestCase):
             self.driver.touch(comps[5])
             self.driver.wait(0.5)
             for _i in range(10):
-                self.driver.touch(self.convert_coordinate(485, 499),double)
+                self.driver.touch(self.convert_coordinate(485, 499), double)
                 time.sleep(2)
                 self.driver.touch(self.convert_coordinate(485, 499), double)
                 time.sleep(2)
@@ -85,6 +87,3 @@ class PerfLoad_Wechat_0010(PerfTestCase):
         self.execute_performance_step('微信-群聊图片消息发送和浏览场景-step4图片放大缩小', 55, step4)
         self.execute_performance_step('微信-群聊图片消息发送和浏览场景-step4图片滑动浏览', 40, step5)
         self.execute_performance_step('微信-群聊图片消息发送和浏览场景-step4图片双指放大/缩小', 30, step6)
-
-
-
