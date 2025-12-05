@@ -20,14 +20,17 @@ import re
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from PIL import Image, ImageDraw, ImageFont
+
 from hapray.analyze.base_analyzer import BaseAnalyzer
 from hapray.ui_detector.arkui_tree_parser import compare_arkui_trees, parse_arkui_tree
 from hapray.ui_detector.image_comparator import RegionImageComparator
+from hapray.ui_detector.image_size_analyzer import analyze_image_sizes
 
 
-class UIAnimateAnalyzer(BaseAnalyzer):
+class UIAnalyzer(BaseAnalyzer):
     """
-    UI动画分析器
+    UI分析器
 
     分析步骤：
     1. 解析inspector_start.json中 type 为XCompose组件，获取组件bounds
@@ -104,21 +107,37 @@ class UIAnimateAnalyzer(BaseAnalyzer):
             # 3. Element树差异分析
             tree_animation_result = self._analyze_tree_differences(ui_dir, phase)
 
+            # 4. 分析超出尺寸的Image节点
+            image_size_result = self._analyze_image_sizes(ui_dir, phase)
+
             regions = []
-            for animation_info in image_animation_result.get('animation_regions'):
+            # 添加动画区域的bounds
+            for animation_info in image_animation_result.get('animation_regions', []):
                 bounds_rect = animation_info['component']['bounds_rect']
-                regions.append(bounds_rect)
+                if bounds_rect:
+                    regions.append({'type': 'animation', 'bounds_rect': bounds_rect})
 
-            for animation_info in tree_animation_result.get('animation_regions'):
+            for animation_info in tree_animation_result.get('animation_regions', []):
                 bounds_rect = animation_info['component']['bounds_rect']
-                regions.append(bounds_rect)
+                if bounds_rect:
+                    regions.append({'type': 'animation', 'bounds_rect': bounds_rect})
 
-            # 4. 生成标记的截图
+            # 添加超出尺寸Image的bounds
+            for image_info in image_size_result.get('images_exceeding_framerect', []):
+                bounds_rect = image_info.get('bounds_rect')
+                if bounds_rect:
+                    excess_memory_mb = image_info.get('memory', {}).get('excess_memory_mb', 0.0)
+                    regions.append(
+                        {'type': 'exceeding_image', 'bounds_rect': bounds_rect, 'excess_memory_mb': excess_memory_mb}
+                    )
+
+            # 5. 生成标记的截图
             marked_images = self._generate_marked_images(ui_dir, phase, regions)
 
             return {
                 'image_animations': image_animation_result,
                 'tree_animations': tree_animation_result,
+                'image_size_analysis': image_size_result,
                 'marked_images': marked_images,
             }
 
@@ -400,13 +419,55 @@ class UIAnimateAnalyzer(BaseAnalyzer):
 
         return animation_differences
 
-    def _generate_marked_images(self, ui_dir: str, phase: str, regions: list[tuple[int]]) -> list[str]:
-        """生成标记了动画区域的截图
+    def _analyze_image_sizes(self, ui_dir: str, phase: str) -> dict[str, Any]:
+        """分析超出尺寸的Image节点
 
         Args:
             ui_dir: UI数据目录
             phase: 阶段名称
-            regions: 动画位置
+
+        Returns:
+            Image尺寸分析结果
+        """
+        tree_path = os.path.join(ui_dir, f'element_tree_{phase}_1.txt')
+
+        if not os.path.exists(tree_path):
+            self.logger.warning(f'Element树文件不存在: {tree_path}')
+            return {'error': 'Element树文件不存在'}
+
+        try:
+            # 读取并解析Element树
+            with open(tree_path, encoding='utf-8') as f:
+                tree_content = f.read()
+
+            # 解析为组件树
+            tree_dict = parse_arkui_tree(tree_content)
+
+            if tree_dict:
+                # 分析Image尺寸
+                result = analyze_image_sizes(tree_dict)
+                self.logger.info(
+                    f'在{phase}阶段找到{len(result.get("images_exceeding_framerect", []))}个超出尺寸的Image节点'
+                )
+                return result
+            return {'error': '无法解析Element树'}
+
+        except Exception as e:
+            self.logger.error(f'分析Image尺寸失败: {str(e)}')
+            return {'error': str(e)}
+
+    def _generate_marked_images(
+        self,
+        ui_dir: str,
+        phase: str,
+        regions: list[dict[str, Any]],
+    ) -> list[str]:
+        """生成标记了动画区域和超出尺寸Image的截图
+
+        Args:
+            ui_dir: UI数据目录
+            phase: 阶段名称
+            regions: 区域列表，每个区域包含 type ('animation' 或 'exceeding_image') 和 bounds_rect
 
         Returns:
             标记后的图像路径列表
@@ -421,10 +482,193 @@ class UIAnimateAnalyzer(BaseAnalyzer):
             output_dir = os.path.join(ui_dir, 'marked_images')
             os.makedirs(output_dir, exist_ok=True)
 
-            # 生成标记后的图像
-            return self.image_comparator.generate_marked_images(
-                screenshot1_path, screenshot2_path, regions, regions, output_dir, f'marked_{phase}'
+            # 根据type分离动画区域和超出尺寸Image区域
+            animation_regions = []
+            exceeding_image_regions = []
+
+            for region in regions:
+                if not region or not isinstance(region, dict):
+                    continue
+                region_type = region.get('type')
+                bounds_rect = region.get('bounds_rect')
+                if not bounds_rect:
+                    continue
+
+                if region_type == 'animation':
+                    animation_regions.append(bounds_rect)
+                elif region_type == 'exceeding_image':
+                    # 保存超出大小信息
+                    excess_memory_mb = region.get('excess_memory_mb', 0.0)
+                    exceeding_image_regions.append({'bounds_rect': bounds_rect, 'excess_memory_mb': excess_memory_mb})
+
+            # 生成标记后的图像（截图1标记动画，截图2标记超出尺寸Image）
+            return self._generate_marked_images_with_types(
+                screenshot1_path,
+                screenshot2_path,
+                animation_regions,
+                exceeding_image_regions,
+                output_dir,
+                f'marked_{phase}',
             )
+
+        except Exception as e:
+            self.logger.error(f'生成标记图像失败: {str(e)}')
+            return []
+
+    def _generate_marked_images_with_types(
+        self,
+        image1_path: str,
+        image2_path: str,
+        animation_regions: list[tuple[int]],
+        exceeding_image_regions: list[dict[str, Any]],
+        output_dir: str,
+        file_name: str,
+    ) -> list[str]:
+        """生成标记了动画区域（红色）和超出尺寸Image（蓝色）的截图
+
+        Args:
+            image1_path: 第一张截图路径（标记动画）
+            image2_path: 第二张截图路径（标记超出尺寸Image）
+            animation_regions: 动画区域列表
+            exceeding_image_regions: 超出尺寸Image区域列表，每个元素包含 bounds_rect 和 excess_memory_mb
+            output_dir: 输出目录
+            file_name: 文件名前缀
+
+        Returns:
+            标记后的图像路径列表
+        """
+        try:
+            marked_paths = []
+
+            # 处理截图1（标记动画区域）
+            if os.path.exists(image1_path):
+                img = Image.open(image1_path)
+                img = img.convert('RGB')
+                draw = ImageDraw.Draw(img)
+
+                # 尝试加载字体
+                try:
+                    font = ImageFont.truetype('arial.ttf', 40)
+                except OSError:
+                    try:
+                        font = ImageFont.truetype('/System/Library/Fonts/Arial.ttf', 40)
+                    except OSError:
+                        font = ImageFont.load_default()
+
+                if animation_regions:
+                    # 标记动画区域（红色）
+                    for i, region in enumerate(animation_regions, 1):
+                        x1, y1, x2, y2 = region
+                        # 绘制红色矩形框
+                        draw.rectangle([x1, y1, x2, y2], outline='red', width=3)
+                        # 在区域左上角绘制编号
+                        text = f'A{i}'
+                        bbox = draw.textbbox((0, 0), text, font=font)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                        text_x = x1 + 5
+                        text_y = y1 + 5
+                        draw.rectangle(
+                            [text_x - 2, text_y - 2, text_x + text_width + 2, text_y + text_height + 2], fill='white'
+                        )
+                        draw.text((text_x, text_y), text, fill='red', font=font)
+                else:
+                    # 未发现动画，在图片中央绘制提示
+                    text = 'No Animation Found'
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    img_width, img_height = img.size
+                    text_x = (img_width - text_width) // 2
+                    text_y = (img_height - text_height) // 2
+                    # 绘制白色背景
+                    padding = 10
+                    draw.rectangle(
+                        [
+                            text_x - padding,
+                            text_y - padding,
+                            text_x + text_width + padding,
+                            text_y + text_height + padding,
+                        ],
+                        fill='white',
+                    )
+                    draw.text((text_x, text_y), text, fill='gray', font=font)
+
+                # 保存标记后的图像
+                output_path = os.path.join(output_dir, f'{file_name}_1.png')
+                img.save(output_path)
+                marked_paths.append(output_path)
+                self.logger.info(f'已保存标记后的图像1: {output_path}')
+
+            # 处理截图2（标记超出尺寸Image区域）
+            if os.path.exists(image2_path):
+                img = Image.open(image2_path)
+                img = img.convert('RGB')
+                draw = ImageDraw.Draw(img)
+
+                # 尝试加载字体
+                try:
+                    font = ImageFont.truetype('arial.ttf', 40)
+                except OSError:
+                    try:
+                        font = ImageFont.truetype('/System/Library/Fonts/Arial.ttf', 40)
+                    except OSError:
+                        font = ImageFont.load_default()
+
+                if exceeding_image_regions:
+                    # 标记超出尺寸Image区域（蓝色）
+                    for i, region_info in enumerate(exceeding_image_regions, 1):
+                        if isinstance(region_info, dict):
+                            bounds_rect = region_info.get('bounds_rect')
+                            excess_memory_mb = region_info.get('excess_memory_mb', 0.0)
+                        else:
+                            # 兼容旧格式
+                            bounds_rect = region_info
+                            excess_memory_mb = 0.0
+
+                        x1, y1, x2, y2 = bounds_rect
+                        # 绘制蓝色矩形框
+                        draw.rectangle([x1, y1, x2, y2], outline='blue', width=3)
+                        # 在区域左上角绘制编号和超出大小
+                        text = f'M{i} {excess_memory_mb:.2f}M'
+                        bbox = draw.textbbox((0, 0), text, font=font)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                        text_x = x1 + 5
+                        text_y = y1 + 5
+                        draw.rectangle(
+                            [text_x - 2, text_y - 2, text_x + text_width + 2, text_y + text_height + 2], fill='white'
+                        )
+                        draw.text((text_x, text_y), text, fill='blue', font=font)
+                else:
+                    # 未发现超尺寸图片，在图片中央绘制提示
+                    text = 'No Oversized Image Found'
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    img_width, img_height = img.size
+                    text_x = (img_width - text_width) // 2
+                    text_y = (img_height - text_height) // 2
+                    # 绘制白色背景
+                    padding = 10
+                    draw.rectangle(
+                        [
+                            text_x - padding,
+                            text_y - padding,
+                            text_x + text_width + padding,
+                            text_y + text_height + padding,
+                        ],
+                        fill='white',
+                    )
+                    draw.text((text_x, text_y), text, fill='gray', font=font)
+
+                # 保存标记后的图像
+                output_path = os.path.join(output_dir, f'{file_name}_2.png')
+                img.save(output_path)
+                marked_paths.append(output_path)
+                self.logger.info(f'已保存标记后的图像2: {output_path}')
+
+            return marked_paths
 
         except Exception as e:
             self.logger.error(f'生成标记图像失败: {str(e)}')
@@ -446,6 +690,10 @@ class UIAnimateAnalyzer(BaseAnalyzer):
         start_tree_count = start_result.get('tree_animations', {}).get('animation_count', 0)
         end_tree_count = end_result.get('tree_animations', {}).get('animation_count', 0)
 
+        # 获取超出尺寸内存统计（单位M）
+        start_excess_memory_mb = start_result.get('image_size_analysis', {}).get('total_excess_memory_mb', 0.0)
+        end_excess_memory_mb = end_result.get('image_size_analysis', {}).get('total_excess_memory_mb', 0.0)
+
         return {
             'total_animations': start_image_count + end_image_count,
             'start_phase_animations': start_image_count,
@@ -453,6 +701,8 @@ class UIAnimateAnalyzer(BaseAnalyzer):
             'start_phase_tree_changes': start_tree_count,
             'end_phase_tree_changes': end_tree_count,
             'has_animations': (start_image_count + end_image_count) > 0,
+            'start_phase_excess_memory_mb': start_excess_memory_mb,
+            'end_phase_excess_memory_mb': end_excess_memory_mb,
         }
 
     def _convert_images_to_base64(self):
