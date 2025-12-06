@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="native-memory-container">
     <div v-if="!hasData" class="no-data-tip">
       <el-empty description="暂无内存分析数据" />

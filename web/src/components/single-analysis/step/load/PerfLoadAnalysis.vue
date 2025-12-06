@@ -1,38 +1,34 @@
-<template>
-  <div class="container">
-    <!-- 标签页导航 -->
-    <div class="tab-nav">
-      <button class="tab-button" :class="{ active: currentTab === 'tab1' }" @click="currentTab = 'tab1'">
-        <i class="fa"></i>负载分析
-      </button>
-      <button class="tab-button" :class="{ active: currentTab === 'tab2' }" @click="currentTab = 'tab2'">
-        <i class="fa"></i>帧分析
-      </button>
+﻿<template>
+  <div class="performance-comparison">
+    <!-- 无数据提示 -->
+    <div v-if="!hasPerfData" class="no-data-tip">
+      <el-empty description="暂无负载分析数据" />
     </div>
-  </div>
 
-  <div v-if="currentTab === 'tab1'" class="performance-comparison">
+    <!-- 负载数据展示（仅当有数据时显示） -->
+    <template v-else>
     <div class="info-box">
       负载分类说明：
-      <p>APP => 应用（包含应用代码、应用三方库、应用native库等） |
-        ArkUI => ArkUI框架 |
+      <p>APP_ABC => 应用代码 |
+        APP_LIB => 应用三方ArkTS库 |
+        APP_SO => 应用native库 |
         OS_Runtime => 系统运行时 |
         SYS_SDK => 系统SDK |
         RN => 三方框架React Native |
         Flutter => 三方框架Flutter |
-        WEB => 三方框架ArkWeb |
-        KMP => Kotlin Multiplatform</p>
+        WEB => 三方框架ArkWeb</p>
     </div>
+    
     <el-descriptions :title="performanceData.app_name" :column="1" class="beautified-descriptions">
       <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
       <el-descriptions-item label="应用版本：">{{ performanceData.app_version }}</el-descriptions-item>
       <el-descriptions-item>
         <div class="description-item-content">
           场景名称：{{ performanceData.scene }}
-          <!-- <UploadHtml /> -->
         </div>
       </el-descriptions-item>
     </el-descriptions>
+    
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
@@ -45,6 +41,7 @@
         </div>
       </el-col>
     </el-row>
+    
     <el-row :gutter="20">
       <el-col :span="12">
         <div class="data-panel">
@@ -59,14 +56,14 @@
     </el-row>
 
     <!-- 测试步骤导航 -->
-    <!-- <div class="step-nav">
+    <div class="step-nav">
       <div
-:class="[
-        'step-item',
-        {
-          active: currentStepIndex === 0,
-        },
-      ]" @click="handleStepClick(0)">
+        :class="[
+          'step-item',
+          {
+            active: currentStepIndex === 0,
+          },
+        ]" @click="handleStepClick(0)">
         <div class="step-header">
           <span class="step-order">STEP 0</span>
           <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
@@ -75,35 +72,32 @@
         <div class="step-name">全部步骤</div>
       </div>
       <div
-v-for="(step, index) in testSteps" :key="index" :class="[
-        'step-item',
-        {
-          active: currentStepIndex === step.id,
-        },
-      ]" @click="handleStepClick(step.id)">
+        v-for="(step, index) in testSteps" :key="index" :class="[
+          'step-item',
+          {
+            active: currentStepIndex === step.id,
+          },
+        ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
           <span class="step-duration">{{ formatDuration(step.count) }}</span>
           <span class="step-duration">{{ formatEnergy(step.count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-        <div class="step-name">测试轮次：{{ step.round }}</div>
-        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
-        <button
-class="beautiful-btn primary-btn"
+        <!-- <button
+          class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
           下载perf
         </button>
         <button
-class="beautiful-btn primary-btn"
+          class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('trace.htrace', step.id, step.step_name)">
           下载trace
-        </button>
+        </button> -->
       </div>
-    </div> -->
+    </div>
 
     <!-- 负载对比区域 -->
-
     <el-row :gutter="20">
       <el-col :span="12">
         <!-- 步骤饼图（左，进程-线程-文件-符号） -->
@@ -123,13 +117,6 @@ class="beautiful-btn primary-btn"
             @drillup="handleProcessPieDrillup"
           />
         </div>
-        <!-- 进程负载 -->
-        <!-- <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">进程负载</span>
-          </h3>
-          <PerfProcessTable :stepId="currentStepIndex" :data="filteredProcessPerformanceData" :hideColumn="isHidden" :hasCategory="false" />
-        </div> -->
       </el-col>
       <el-col :span="12">
         <!-- 步骤饼图（右，分类-小分类-文件-符号） -->
@@ -151,6 +138,8 @@ class="beautiful-btn primary-btn"
         </div>
       </el-col>
     </el-row>
+
+    <!-- 负载表格区域 -->
     <el-row :gutter="20">
       <el-col :span="12">
         <!-- 线程负载 -->
@@ -159,22 +148,23 @@ class="beautiful-btn primary-btn"
             <span class="version-tag">线程负载</span>
           </h3>
           <PerfThreadTable
-:step-id="currentStepIndex" :data="filteredThreadPerformanceDataDrill" :hide-column="isHidden"
+            :step-id="currentStepIndex" :data="filteredThreadPerformanceDataDrill" :hide-column="isHidden"
             :has-category="false" />
         </div>
       </el-col>
       <el-col :span="12">
-        <!-- 线程负载 -->
+        <!-- 小分类负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">小分类负载</span>
           </h3>
           <PerfThreadTable
-:step-id="currentStepIndex" :data="filteredComponentNamePerformanceDataDrill"
+            :step-id="currentStepIndex" :data="filteredComponentNamePerformanceDataDrill"
             :hide-column="isHidden" :has-category="true" />
         </div>
       </el-col>
     </el-row>
+
     <el-row :gutter="20">
       <el-col :span="12">
         <!-- 文件负载 -->
@@ -183,7 +173,7 @@ class="beautiful-btn primary-btn"
             <span class="version-tag">文件负载</span>
           </h3>
           <PerfFileTable
-:step-id="currentStepIndex" :data="filteredFilePerformanceDataDrill" :hide-column="isHidden"
+            :step-id="currentStepIndex" :data="filteredFilePerformanceDataDrill" :hide-column="isHidden"
             :has-category="false" />
         </div>
       </el-col>
@@ -194,11 +184,12 @@ class="beautiful-btn primary-btn"
             <span class="version-tag">文件负载</span>
           </h3>
           <PerfFileTable
-:step-id="currentStepIndex" :data="filteredFilePerformanceData1Drill" :hide-column="isHidden"
+            :step-id="currentStepIndex" :data="filteredFilePerformanceData1Drill" :hide-column="isHidden"
             :has-category="true" />
         </div>
       </el-col>
     </el-row>
+
     <el-row :gutter="20">
       <el-col :span="12">
         <!-- 函数负载 -->
@@ -207,7 +198,7 @@ class="beautiful-btn primary-btn"
             <span class="version-tag">函数负载</span>
           </h3>
           <PerfSymbolTable
-:step-id="currentStepIndex" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden"
+            :step-id="currentStepIndex" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden"
             :has-category="false" />
         </div>
       </el-col>
@@ -218,105 +209,91 @@ class="beautiful-btn primary-btn"
             <span class="version-tag">函数负载</span>
           </h3>
           <PerfSymbolTable
-:step-id="currentStepIndex" :data="filteredSymbolPerformanceData1Drill" :hide-column="isHidden"
+            :step-id="currentStepIndex" :data="filteredSymbolPerformanceData1Drill" :hide-column="isHidden"
             :has-category="true" />
         </div>
       </el-col>
     </el-row>
-  </div>
-  <div v-if="currentTab === 'tab2'">
-    <!-- 测试步骤导航 -->
-    <div class="step-nav" style="margin-bottom: 20px;margin-top: 20px;">
-      <div
-v-for="(step, index) in testSteps" :key="index" :class="[
-        'step-item',
-        {
-          active: currentStepIndex === step.id,
-        },
-      ]" @click="handleStepClick(step.id)">
-        <div class="step-header">
-          <span class="step-order">STEP {{ step.id }}</span>
-          <span class="step-duration">{{ formatDuration(step.count) }}</span>
-          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
-        </div>
-        <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-      </div>
-    </div>
-    <FrameAnalysis :step="currentStepIndex" :data="frameData" />
+    </template>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { ref, computed } from 'vue';
-import PerfThreadTable from './PerfThreadTable.vue';
-import PerfFileTable from './PerfFileTable.vue';
-import PerfSymbolTable from './PerfSymbolTable.vue';
-import PieChart from './PieChart.vue';
-import BarChart from './BarChart.vue';
-import LineChart from './LineChart.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
-// import UploadHtml from './UploadHtml.vue';
-import FrameAnalysis from './FrameAnalysis.vue';
-import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, calculateCategorysData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
+import PerfThreadTable from './tables/PerfThreadTable.vue';
+import PerfFileTable from './tables/PerfFileTable.vue';
+import PerfSymbolTable from './tables/PerfSymbolTable.vue';
+import PieChart from '../../../common/charts/PieChart.vue';
+import BarChart from '../../../common/charts/BarChart.vue';
+import LineChart from '../../../common/charts/LineChart.vue';
+import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
+import { 
+  calculateComponentNameData, 
+  calculateFileData, 
+  calculateFileData1, 
+  calculateSymbolData, 
+  calculateSymbolData1, 
+  calculateThreadData, 
+  processJson2PieChartData, 
+  processJson2ProcessPieChartData, 
+  calculateCategorysData, 
+  type ProcessDataItem, 
+  type ThreadDataItem, 
+  type FileDataItem, 
+  type SymbolDataItem 
+} from '@/utils/jsonUtil.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
+
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
 const RightLineChartSeriesType = 'line';
-// 当前激活的标签
-const currentTab = ref('tab1');
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
-// 通过 getter 获取 JSON 数据
 const basicInfo = jsonDataStore.basicInfo;
-
 const perfData = jsonDataStore.perfData;
 
-const frameData = jsonDataStore.frameData;
-console.log('从元素获取到的 JSON 数据:');
+console.log('负载分析组件获取到的 JSON 数据:');
+
+// 检查是否有负载数据
+const hasPerfData = computed(() => perfData !== null && perfData !== undefined);
 
 const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
-    //从1开始
+  perfData?.steps.map((step, index) => ({
     id: index + 1,
     step_name: step.step_name,
     count: step.count,
     round: step.round,
     perf_data_path: step.perf_data_path,
-  }))
+  })) || []
 );
 
-// interface TestStep {
-//   id: number;
-//   step_name: string;
-//   count: number;
-//   round: number;
-//   perf_data_path: string;
-// }
-// const getTotalTestStepsCount = (testSteps: TestStep[]) => {
-//   let total = 0;
+interface TestStep {
+  id: number;
+  step_name: string;
+  count: number;
+  round: number;
+  perf_data_path: string;
+}
 
-//   testSteps.forEach((step) => {
-//     total += step.count;
-//   });
-//   return total;
-// };
+const getTotalTestStepsCount = (testSteps: TestStep[]) => {
+  let total = 0;
+  testSteps.forEach((step) => {
+    total += step.count;
+  });
+  return total;
+};
 
-const performanceData = ref(
-  {
-    app_name: basicInfo!.app_name,
-    rom_version: basicInfo!.rom_version,
-    app_version: basicInfo!.app_version,
-    scene: basicInfo!.scene,
-  }
-);
+const performanceData = ref({
+  app_name: basicInfo!.app_name,
+  rom_version: basicInfo!.rom_version,
+  app_version: basicInfo!.app_version,
+  scene: basicInfo!.scene,
+});
 
 const currentStepIndex = ref(0);
 
-// 动态聚合数据（根据步骤是否为0决定是否全局聚合）
-// const mergedProcessPerformanceData = computed(() =>
-//   calculateProcessData(perfData!, null, currentStepIndex.value === 0)
-// );
+// 动态聚合数据
 const mergedThreadPerformanceData = computed(() =>
   calculateThreadData(perfData!, null, currentStepIndex.value === 0)
 );
@@ -357,6 +334,10 @@ const processPieDrilldownStack = ref<string[]>([]);
 const processPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
 const processPieData = ref(processJson2ProcessPieChartData(perfData!, currentStepIndex.value));
 const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
+
+const stepPieDrilldownStack = ref<string[]>([]);
+const stepPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
+const stepPieData = ref(processJson2PieChartData(perfData!, currentStepIndex.value));
 
 function getProcessPieDrilldownData(name: string, stack: string[]) {
   // 层级：0-进程 1-线程 2-文件 3-符号
@@ -410,16 +391,13 @@ function handleProcessPieDrilldown(name: string) {
   processPieDataStack.value.push(processPieData.value);
   processPieData.value = newData;
 }
+
 function handleProcessPieDrillup() {
   if (processPieDrilldownStack.value.length > 0) {
     processPieDrilldownStack.value.pop();
     processPieData.value = processPieDataStack.value.pop() || processPieData.value;
   }
 }
-
-const stepPieDrilldownStack = ref<string[]>([]);
-const stepPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
-const stepPieData = ref(processJson2PieChartData(perfData!, currentStepIndex.value));
 
 function getDrilldownPieData(name: string, stack: string[]) {
   // 新层级：0-大分类 1-小分类 2-文件 3-符号
@@ -474,6 +452,7 @@ function handleStepPieDrilldown(name: string) {
   stepPieDataStack.value.push(stepPieData.value);
   stepPieData.value = newData;
 }
+
 function handleStepPieDrillup() {
   if (stepPieDrilldownStack.value.length > 0) {
     stepPieDrilldownStack.value.pop();
@@ -497,16 +476,60 @@ const handleStepClick = (stepId: number) => {
   stepPieDataStack.value = [];
 };
 
-// 计算属性，根据当前步骤 ID 过滤负载数据
-// const filteredProcessPerformanceData = computed(() => {
-//   if (currentStepIndex.value === 0) {
-//     return mergedProcessPerformanceData.value.sort((a, b) => b.instructions - a.instructions);
+// const handleDownloadAndRedirect = (file: string, stepId: number, name: string) => {
+//   const link = document.createElement('a');
+//   if (file === 'perf.data') {
+//     link.href = '../hiperf/step' + stepId + '/' + file;
+//     link.download = name + file;
+//   } else {
+//     link.href = '../htrace/step' + stepId + '/' + file;
+//     link.download = name + file;
 //   }
-//   return mergedProcessPerformanceData.value
-//     .filter((item) => item.stepId === currentStepIndex.value)
-//     .sort((a, b) => b.instructions - a.instructions);
-// });
 
+//   document.body.appendChild(link);
+//   link.click();
+
+//   setTimeout(() => {
+//     document.body.removeChild(link);
+//   }, 100);
+
+//   setTimeout(() => {
+//     window.open('https://localhost:9000/application/', 'trace example');
+//   }, 300);
+// };
+
+// 获取面包屑标签
+function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: string): string {
+  if (type === 'process') {
+    const labels = ['进程', '线程', '文件', '符号'];
+    return `${labels[level]}: ${item}`;
+  } else {
+    const labels = ['大分类', '小分类', '文件', '符号'];
+    return `${labels[level]}: ${item}`;
+  }
+}
+
+// 处理进程饼图面包屑点击
+function handleProcessBreadcrumbClick(targetIndex: number) {
+  // 回退到指定层级
+  const targetLevel = targetIndex + 1;
+  while (processPieDrilldownStack.value.length > targetLevel) {
+    processPieDrilldownStack.value.pop();
+    processPieData.value = processPieDataStack.value.pop() || processPieData.value;
+  }
+}
+
+// 处理步骤饼图面包屑点击
+function handleStepBreadcrumbClick(targetIndex: number) {
+  // 回退到指定层级
+  const targetLevel = targetIndex + 1;
+  while (stepPieDrilldownStack.value.length > targetLevel) {
+    stepPieDrilldownStack.value.pop();
+    stepPieData.value = stepPieDataStack.value.pop() || stepPieData.value;
+  }
+}
+
+// 计算属性，根据当前步骤 ID 过滤负载数据
 const filteredThreadPerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
     return sortByInstructions(mergedThreadPerformanceData.value);
@@ -524,7 +547,6 @@ const filteredComponentNamePerformanceData = computed(() => {
     mergedComponentNamePerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
   );
 });
-
 
 const filteredFilePerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
@@ -572,6 +594,7 @@ const filteredThreadPerformanceDataDrill = computed(() => {
   }
   return data;
 });
+
 const filteredFilePerformanceDataDrill = computed(() => {
   const stack = processPieDrilldownStack.value;
   let data = filteredFilePerformanceData.value;
@@ -582,6 +605,7 @@ const filteredFilePerformanceDataDrill = computed(() => {
   }
   return data;
 });
+
 const filteredSymbolPerformanceDataDrill = computed(() => {
   const stack = processPieDrilldownStack.value;
   let data = filteredSymbolPerformanceData.value;
@@ -594,6 +618,7 @@ const filteredSymbolPerformanceDataDrill = computed(() => {
   }
   return data;
 });
+
 // 右侧 drill 联动
 const filteredComponentNamePerformanceDataDrill = computed(() => {
   const stack = stepPieDrilldownStack.value;
@@ -603,6 +628,7 @@ const filteredComponentNamePerformanceDataDrill = computed(() => {
   }
   return data;
 });
+
 const filteredFilePerformanceData1Drill = computed(() => {
   const stack = stepPieDrilldownStack.value;
   let data = filteredFilePerformanceData1.value;
@@ -613,6 +639,7 @@ const filteredFilePerformanceData1Drill = computed(() => {
   }
   return data;
 });
+
 const filteredSymbolPerformanceData1Drill = computed(() => {
   const stack = stepPieDrilldownStack.value;
   let data = filteredSymbolPerformanceData1.value;
@@ -625,60 +652,6 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   }
   return data;
 });
-
-// const handleDownloadAndRedirect = (file: string, stepId: number, name: string) => {
-//   const link = document.createElement('a');
-//   if (file === 'perf.data') {
-//     link.href = '../hiperf/step' + stepId + '/' + file;  // 替换为实际文件路径
-//     link.download = name + file;       // 自定义文件名
-//   } else {
-//     link.href = '../htrace/step' + stepId + '/' + file;  // 替换为实际文件路径
-//     link.download = name + file;       // 自定义文件名
-//   }
-
-//   document.body.appendChild(link);
-
-//   link.click();
-
-//   setTimeout(() => {
-//     document.body.removeChild(link);
-//   }, 100);
-
-//   setTimeout(() => {
-//     window.open('https://localhost:9000/application/', 'trace example');
-//   }, 300);
-// };
-
-// 获取面包屑标签
-function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: string): string {
-  if (type === 'process') {
-    const labels = ['进程', '线程', '文件', '符号'];
-    return `${labels[level]}: ${item}`;
-  } else {
-    const labels = ['大分类', '小分类', '文件', '符号'];
-    return `${labels[level]}: ${item}`;
-  }
-}
-
-// 处理进程饼图面包屑点击
-function handleProcessBreadcrumbClick(targetIndex: number) {
-  // 回退到指定层级
-  const targetLevel = targetIndex + 1;
-  while (processPieDrilldownStack.value.length > targetLevel) {
-    processPieDrilldownStack.value.pop();
-    processPieData.value = processPieDataStack.value.pop() || processPieData.value;
-  }
-}
-
-// 处理步骤饼图面包屑点击
-function handleStepBreadcrumbClick(targetIndex: number) {
-  // 回退到指定层级
-  const targetLevel = targetIndex + 1;
-  while (stepPieDrilldownStack.value.length > targetLevel) {
-    stepPieDrilldownStack.value.pop();
-    stepPieData.value = stepPieDataStack.value.pop() || stepPieData.value;
-  }
-}
 </script>
 
 <style scoped>
@@ -728,26 +701,12 @@ function handleStepBreadcrumbClick(targetIndex: number) {
   color: #757575;
 }
 
-.step-duration-compare {
-  color: #d81b60;
-}
-
 .step-name {
   font-weight: 500;
   margin-bottom: 12px;
   white-space: nowrap;
-  /* 禁止文本换行 */
   overflow: hidden;
-  /* 隐藏超出部分 */
   text-overflow: ellipsis;
-  /* 显示省略号 */
-}
-
-/* 对比区域样式 */
-.comparison-container {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 32px;
 }
 
 .data-panel {
@@ -770,59 +729,11 @@ function handleStepBreadcrumbClick(targetIndex: number) {
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 0.8em;
-
-  .data-panel:nth-child(1) & {
-    background: #e3f2fd;
-    color: #1976d2;
-  }
-
-  .data-panel:nth-child(3) & {
-    background: #fce4ec;
-    color: #d81b60;
-  }
-}
-
-/* 差异指示器 */
-.indicator {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-}
-
-.diff-box {
-  width: 120px;
-  height: 120px;
-  border: 2px solid;
-  border-radius: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.diff-value {
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.diff-label {
-  font-size: 12px;
-  color: #757575;
-}
-
-.time-diff {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #757575;
+  background: #e3f2fd;
+  color: #1976d2;
 }
 
 .beautified-descriptions {
-  /* 设置容器的背景颜色和边框 */
   background-color: #f9f9f9;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
@@ -831,32 +742,11 @@ function handleStepBreadcrumbClick(targetIndex: number) {
   margin-bottom: 10px;
 }
 
-/* 标题样式 */
 .beautified-descriptions .el-descriptions__title {
   font-size: 24px;
   font-weight: 600;
   color: #333;
   margin-bottom: 16px;
-}
-
-/* 描述项容器样式 */
-.beautified-descriptions .el-descriptions__body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* 描述项标签样式 */
-.beautified-descriptions .el-descriptions__label {
-  font-size: 16px;
-  font-weight: 500;
-  color: #666;
-}
-
-/* 描述项内容样式 */
-.beautified-descriptions .el-descriptions__content {
-  font-size: 16px;
-  color: #333;
 }
 
 .description-item-content {
@@ -894,7 +784,6 @@ function handleStepBreadcrumbClick(targetIndex: number) {
 
 .primary-btn {
   background-color: #3B82F6;
-  /* 蓝色 */
   color: white;
 }
 
@@ -907,65 +796,6 @@ function handleStepBreadcrumbClick(targetIndex: number) {
 .primary-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
-}
-
-/* 标签页导航样式 */
-.tab-nav {
-  display: flex;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.tab-button {
-  flex: 1;
-  padding: 1rem;
-  font-size: 1rem;
-  font-weight: 500;
-  color: #4a5568;
-  background-color: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-  outline: none;
-}
-
-.tab-button:hover {
-  color: #2b6cb0;
-  background-color: #edf2f7;
-}
-
-.tab-button.active {
-  color: #2b6cb0;
-  border-bottom-color: #2b6cb0;
-  font-weight: 600;
-}
-
-.tab-pane {
-  display: none;
-}
-
-.tab-pane.active {
-  display: block;
-}
-
-/* 图标样式 */
-.fa {
-  margin-right: 0.5rem;
-}
-
-/* 响应式设计 */
-@media (max-width: 640px) {
-  .tab-button {
-    padding: 0.75rem;
-    font-size: 0.9rem;
-  }
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 /* 面包屑导航样式 */
@@ -998,6 +828,3 @@ function handleStepBreadcrumbClick(targetIndex: number) {
   font-weight: 500;
 }
 </style>
-
-
-

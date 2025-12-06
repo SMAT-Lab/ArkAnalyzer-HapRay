@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="step-load-container">
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
@@ -129,11 +129,11 @@
 <script lang="ts" setup>
 import { ref, computed, watch } from 'vue';
 //import { Download } from '@element-plus/icons-vue';
-import PerfThreadTable from './PerfThreadTable.vue';
-import PerfFileTable from './PerfFileTable.vue';
-import PerfSymbolTable from './PerfSymbolTable.vue';
-import PieChart from './PieChart.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import PerfThreadTable from './tables/PerfThreadTable.vue';
+import PerfFileTable from './tables/PerfFileTable.vue';
+import PerfSymbolTable from './tables/PerfSymbolTable.vue';
+import PieChart from '../../../common/charts/PieChart.vue';
+import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
 import { 
   calculateComponentNameData, 
   calculateFileData, 

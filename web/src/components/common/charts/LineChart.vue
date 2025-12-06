@@ -6,7 +6,7 @@
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue';
 import type { PropType } from 'vue';
 import * as echarts from 'echarts';
-import { ComponentCategory, type PerfData } from '../stores/jsonDataStore.ts';
+import { ComponentCategory, type PerfData } from '../../../stores/jsonDataStore.ts';
 
 const props = defineProps({
   chartData: {
