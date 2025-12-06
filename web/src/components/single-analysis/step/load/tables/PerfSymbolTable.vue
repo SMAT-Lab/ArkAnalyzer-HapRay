@@ -7,7 +7,17 @@
         <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
       <el-input
-v-model="fileNameQuery.fileNameQuery" placeholder="根据文件名搜索" clearable class="search-input"
+v-model="symbolNameQuery.symbolNameQuery" placeholder="根据函数搜索" clearable class="search-input"
+        @input="handleFilterChange">
+        <template #prefix>
+          <el-icon>
+            <search />
+          </el-icon>
+        </template>
+      </el-input>
+
+      <el-input
+v-model="fileNameQuery.fileNameQuery" placeholder="根据文件搜索" clearable class="search-input"
         @input="handleFilterChange">
         <template #prefix>
           <el-icon>
@@ -78,7 +88,12 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
 :data="paginatedData" style="width: 100%" :default-sort="{ prop: 'instructions', order: 'descending' }"
       stripe highlight-current-row @row-click="handleRowClick"
       @sort-change="handleSortChange">
-      <el-table-column prop="name" label="文件" sortable>
+      <el-table-column prop="name" label="函数" sortable>
+        <template #default="{ row }">
+          <div class="name-cell">{{ row.symbol }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="file" label="所属文件" sortable>
         <template #default="{ row }">
           <div class="name-cell">{{ row.file }}</div>
         </template>
@@ -103,7 +118,7 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
           <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
+      <el-table-column label="指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value" :title="formatNumber(row.instructions)">{{ formatScientific(row.instructions) }}</span>
@@ -124,7 +139,7 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isHidden" label="负载增长指百分比" width="160" prop="increasePercentage" sortable>
+      <el-table-column v-if="isHidden" label="负载增长百分比" width="160" prop="increasePercentage" sortable>
         <template #default="{ row }">
           <div class="count-cell">
             <span class="value">{{ row.increasePercentage }} %</span>
@@ -154,13 +169,13 @@ v-model:current-page="currentPage" :page-size="pageSize" :total="total" :backgro
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useFileNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../stores/jsonDataStore.ts';
-import type { FileDataItem } from '../utils/jsonUtil.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useFileNameQueryStore, useSymbolNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../../../../../stores/jsonDataStore.ts';
+import type { SymbolDataItem } from '../../../../../utils/jsonUtil.ts';
 const emit = defineEmits(['custom-event']);
 
 const props = defineProps({
   data: {
-    type: Array as PropType<FileDataItem[]>,
+    type: Array as PropType<SymbolDataItem[]>,
     required: true,
   },
   hideColumn: {
@@ -199,6 +214,7 @@ const handleRowClick = (row: { name: string }) => {
 const filterModel = useFilterModeStore();// 'string' 或 'regex'
 const processNameQuery = useProcessNameQueryStore();
 const threadNameQuery = useThreadNameQueryStore();
+const symbolNameQuery = useSymbolNameQueryStore();
 const fileNameQuery = useFileNameQueryStore();
 const category = useCategoryStore();
 const componentNameQuery = useComponentNameStore();
@@ -235,8 +251,14 @@ watch(() => props.data, (newVal) => {
 }, { immediate: true });
 
 // 数据处理（添加完整类型注解）
-const filteredData = computed(() => {
+const filteredData = computed<SymbolDataItem[]>(() => {
   let result = [...props.data]
+  let beforeFilterBaseInstructions = 0;
+  let beforeFilterCompareInstructions = 0;
+  result.forEach((dataItem) => {
+    beforeFilterBaseInstructions = beforeFilterBaseInstructions + dataItem.instructions;
+    beforeFilterCompareInstructions = beforeFilterCompareInstructions + dataItem.compareInstructions;
+  });
 
   // 应用进程过滤
   if (!hasCategory) {
@@ -248,27 +270,37 @@ const filteredData = computed(() => {
     result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
   }
 
+  // 函数搜索过滤
+  result = filterQueryCondition('symbol', symbolNameQuery.symbolNameQuery, result);
+
+  // 文件搜索过滤
+  result = filterQueryCondition('file', fileNameQuery.fileNameQuery, result);
+
   // 应用小分类过滤
   if (hasCategory) {
     result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
   }
 
-  // 文件搜索过滤
-  result = filterQueryCondition('file', fileNameQuery.fileNameQuery, result);
-
   // 应用分类过滤
   if (category.categoriesQuery && hasCategory) {
     if (category.categoriesQuery.length > 0) {
-      result = result.filter((item: FileDataItem) =>
+      result = result.filter((item: SymbolDataItem) =>
         category.categoriesQuery.includes(item.category))
     }
   }
+
+  let afterFilterBaseInstructions = 0;
+  let afterFilterCompareInstructions = 0;
+  result.forEach((dataItem) => {
+    afterFilterBaseInstructions = afterFilterBaseInstructions + dataItem.instructions;
+    afterFilterCompareInstructions = afterFilterCompareInstructions + dataItem.compareInstructions;
+  });
 
   // 排序
   if (sortState.value.order) {
     const sortProp = sortState.value.prop
     const modifier = sortState.value.order === 'ascending' ? 1 : -1
-    result = [...result].sort((a: FileDataItem, b: FileDataItem) => {
+    result = [...result].sort((a: SymbolDataItem, b: SymbolDataItem) => {
       const aVal = a[sortProp] as number
       const bVal = b[sortProp] as number
       return (aVal - bVal) * modifier
@@ -278,21 +310,7 @@ const filteredData = computed(() => {
   return result
 })
 
-// 副作用赋值移到watch
-watch(filteredData, (newVal) => {
-  let afterFilterBaseInstructions = 0;
-  let afterFilterCompareInstructions = 0;
-  newVal.forEach((dataItem) => {
-    afterFilterBaseInstructions += dataItem.instructions;
-    afterFilterCompareInstructions += dataItem.compareInstructions;
-  });
-  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions.value) * 100;
-  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? '100%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
-  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions.value) * 100;
-  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? '100%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
-}, { immediate: true });
-
-function filterQueryCondition(queryName: string, queryCondition: string, result: FileDataItem[]): FileDataItem[] {
+function filterQueryCondition(queryName: string, queryCondition: string, result: SymbolDataItem[]): SymbolDataItem[] {
   try {
     if (filterModel.filterMode === 'regex') {
       // 正则表达式模式
@@ -309,23 +327,23 @@ function filterQueryCondition(queryName: string, queryCondition: string, result:
       }
 
       const regex = new RegExp(pattern, flags);
-      result = result.filter((item: FileDataItem) => {
+      result = result.filter((item: SymbolDataItem) => {
         return regex.test(getDataItemProperty(queryName, item));
       })
       return result;
     } else {
       const searchTerm = queryCondition.toLowerCase()
-      result = result.filter((item: FileDataItem) =>
+      result = result.filter((item: SymbolDataItem) =>
         getDataItemProperty(queryName, item).toLowerCase().includes(searchTerm))
       return result;
     }
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return result;
   }
 }
 
-function getDataItemProperty(queryName: string, dataItem: FileDataItem): string {
+function getDataItemProperty(queryName: string, dataItem: SymbolDataItem): string {
   if (queryName === 'process') {
     return dataItem.process;
   } else if (queryName === 'thread') {
@@ -334,6 +352,8 @@ function getDataItemProperty(queryName: string, dataItem: FileDataItem): string 
     return dataItem.subCategoryName;
   } else if (queryName === 'file') {
     return dataItem.file;
+  } else if (queryName === 'symbol') {
+    return dataItem.symbol;
   } else {
     return ''
   }
@@ -370,7 +390,7 @@ const handlePageSizeChange = (newSize: number) => {
 };
 
 // 1. 定义严格的类型
-type SortKey = keyof FileDataItem; // 例如：'name' | 'category' | 'instructions'
+type SortKey = keyof SymbolDataItem; // 例如：'name' | 'category' | 'instructions'
 type SortOrder = 'ascending' | 'descending' | null;
 
 // 2. 修改事件处理函数类型
@@ -379,7 +399,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['category', 'subCategoryName', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
+  const validKeys: SortKey[] = ['symbol', 'subCategoryName', 'category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'file', 'thread', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
@@ -408,6 +428,20 @@ const categoryFilters = Array.from(categoriesExit).map(item => ({
   text: item,
   value: item
 }));
+
+// 副作用赋值移到watch
+watch(filteredData, (newVal) => {
+  let afterFilterBaseInstructions = 0;
+  let afterFilterCompareInstructions = 0;
+  newVal.forEach((dataItem) => {
+    afterFilterBaseInstructions += dataItem.instructions;
+    afterFilterCompareInstructions += dataItem.compareInstructions;
+  });
+  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions.value) * 100;
+  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? '100%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
+  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions.value) * 100;
+  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? '100%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
+}, { immediate: true });
 
 </script>
 
@@ -527,5 +561,11 @@ const categoryFilters = Array.from(categoriesExit).map(item => ({
 .pagination-info {
   color: #606266;
   font-size: 0.9em;
+}
+
+.no-body-card .el-card__body {
+  display: none;
+  padding: 0;
+  /* 确保没有额外的间距 */
 }
 </style>

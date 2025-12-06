@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="perf-multi">
     <div class="info-box">
       多版本负载趋势分析：
@@ -176,9 +176,9 @@
 import { ref, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
-import TrendChart from './TrendChart.vue';
-import type { JSONData, BasicInfo, PerfData } from '../stores/jsonDataStore';
-import { processJson2PieChartData, calculateCategorysData } from '../utils/jsonUtil';
+import TrendChart from '../common/charts/TrendChart.vue';
+import type { JSONData, BasicInfo, PerfData } from '../../stores/jsonDataStore';
+import { processJson2PieChartData, calculateCategorysData } from '../../utils/jsonUtil';
 import * as pako from 'pako';
 
 interface PieChartData {

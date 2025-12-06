@@ -180,7 +180,7 @@ v-for="suggestion in getDiagnosisSuggestions()" :key="suggestion.category"
 
 <script setup>
 import { computed } from 'vue';
-import { useJsonDataStore, getDefaultFaultTreeStepData } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore, getDefaultFaultTreeStepData } from '../../../../stores/jsonDataStore.ts';
 
 const props = defineProps({
   step: {

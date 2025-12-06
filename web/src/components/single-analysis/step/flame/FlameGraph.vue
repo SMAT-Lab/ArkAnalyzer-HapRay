@@ -41,9 +41,9 @@
 import { ref, computed, watch, onMounted } from 'vue';
 //import { ElMessage } from 'element-plus';
 //import { Download } from '@element-plus/icons-vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
 //import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
-import flameTemplateHtml from '../../../third-party/report.html?raw';
+import flameTemplateHtml from '../../../../../../third-party/report.html?raw';
 import pako from 'pako';
 
 // 定义props
