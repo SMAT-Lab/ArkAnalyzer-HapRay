@@ -288,6 +288,11 @@ class PerfAction:
             default=None,
             help='Target application bundle name for manual testing (performance data will be collected for 30 seconds)',
         )
+        parser.add_argument(
+            '--ui-tech-stack',
+            action='store_true',
+            help='Enable UI technology stack dynamic recognition mode',
+        )
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
             parsed_args.circles = True
@@ -305,6 +310,9 @@ class PerfAction:
             Config.set('so_dir', parsed_args.so_dir)
         if parsed_args.manual:
             Config.set('run_testcases', ['PerformanceDynamic_Manual'])
+            Config.set('package_name', parsed_args.package_name)
+        if parsed_args.ui_tech_stack:
+            Config.set('run_testcases', ['PerfLoad_UIAnalyzer'])
             Config.set('package_name', parsed_args.package_name)
 
         # Configure collection modes
