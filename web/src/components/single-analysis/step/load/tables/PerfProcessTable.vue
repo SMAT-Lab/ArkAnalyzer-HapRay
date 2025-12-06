@@ -7,17 +7,8 @@
         <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
       <el-input
-v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable
-        class="search-input" @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
-      <el-input
-v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable
-        class="search-input" @input="handleFilterChange">
+v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable class="search-input"
+        @input="handleFilterChange">
         <template #prefix>
           <el-icon>
             <search />
@@ -25,19 +16,10 @@ v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根
         </template>
       </el-input>
       <el-select
-v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类"
-        clearable class="category-select" @change="handleFilterChange">
+v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable
+        class="category-select" @change="handleFilterChange">
         <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
       </el-select>
-      <el-input
-v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder="根据小分类搜索" clearable
-        class="search-input" @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
     </div>
 
     <!-- 过滤后占比 -->
@@ -69,44 +51,34 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
 :data="paginatedData" style="width: 100%" :default-sort="{ prop: 'instructions', order: 'descending' }"
       stripe highlight-current-row @row-click="handleRowClick"
       @sort-change="handleSortChange">
-      <el-table-column v-if="!hasCategory" prop="category" label="线程">
-        <template #default="{ row }">
-          <div class="category-cell">{{ row.thread }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="!hasCategory" prop="category" label="所属进程">
+      <el-table-column v-if="!hasCategory" prop="process" label="进程">
         <template #default="{ row }">
           <div class="category-cell">{{ row.process }}</div>
         </template>
       </el-table-column>
-      <el-table-column v-if="hasCategory" prop="category" label="大分类">
+      <el-table-column v-if="hasCategory" prop="category" label="分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.category }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="hasCategory" prop="category" label="小分类">
-        <template #default="{ row }">
-          <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value" :title="formatNumber(row.instructions)">{{ formatScientific(row.instructions) }}</span>
+            <span class="value">{{ formatScientific(row.instructions) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="isHidden" label="迭代指令数" width="160" prop="compareInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value" :title="formatNumber(row.compareInstructions)">{{ formatScientific(row.compareInstructions) }}</span>
+            <span class="value">{{ formatScientific(row.compareInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="isHidden" label="负载增长指令数" width="160" prop="increaseInstructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
-            <span class="value" :title="formatNumber(row.increaseInstructions)">{{ formatScientific(row.increaseInstructions) }}</span>
+            <span class="value">{{ formatScientific(row.increaseInstructions) }}</span>
           </div>
         </template>
       </el-table-column>
@@ -140,13 +112,13 @@ v-model:current-page="currentPage" :page-size="pageSize" :total="total" :backgro
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../stores/jsonDataStore.ts';
-import type { ThreadDataItem } from '../utils/jsonUtil.ts';
+import { useProcessNameQueryStore, useCategoryStore, useFilterModeStore } from '../../../../../stores/jsonDataStore.ts';
+import type { ProcessDataItem } from '../../../../../utils/jsonUtil.ts';
 const emit = defineEmits(['custom-event']);
 
 const props = defineProps({
   data: {
-    type: Array as PropType<ThreadDataItem[]>,
+    type: Array as PropType<ProcessDataItem[]>,
     required: true,
   },
   hideColumn: {
@@ -170,14 +142,6 @@ const formatScientific = (num: number) => {
   return num.toExponential(2);
 };
 
-const formatNumber = (num: number) => {
-  if (typeof num !== 'number') {
-    num = Number(num);
-  }
-  // 格式化为带千分位分隔符的完整数字，用于tooltip显示
-  return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
-};
-
 const handleRowClick = (row: { name: string }) => {
   emit('custom-event', row.name);
 };
@@ -185,9 +149,7 @@ const handleRowClick = (row: { name: string }) => {
 // 搜索功能
 const filterModel = useFilterModeStore();// 'string' 或 'regex'
 const processNameQuery = useProcessNameQueryStore();
-const threadNameQuery = useThreadNameQueryStore();
 const category = useCategoryStore();
-const componentNameQuery = useComponentNameStore();
 
 
 // 分页状态
@@ -222,40 +184,28 @@ watch(() => props.data, (newVal) => {
   beforeFilterCompareInstructions.value = compare;
 }, { immediate: true });
 
-// 数据处理（添加完整类型注解）
-const filteredData = computed<ThreadDataItem[]>(() => {
-  let result = [...props.data]
+// computed 只返回数据
+const filteredData = computed(() => {
+  let result = [...props.data];
 
   // 应用进程过滤
-  if (!hasCategory) {
+  if(!hasCategory){
     result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
   }
-
-  // 应用线程过滤
-  if (!hasCategory) {
-    result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
-  }
-
-  // 应用小分类过滤
-  if (hasCategory) {
-    result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
-  }
-
+  
   // 应用分类过滤
-  if (category.categoriesQuery && hasCategory) {
+  if (category.categoriesQuery&&hasCategory) {
     if (category.categoriesQuery.length > 0) {
-      result = result.filter((item: ThreadDataItem) =>
+      result = result.filter((item: ProcessDataItem) =>
         category.categoriesQuery.includes(item.category))
     }
   }
 
-  // 应用排序（添加类型安全）
+  // 排序
   if (sortState.value.order) {
     const sortProp = sortState.value.prop
     const modifier = sortState.value.order === 'ascending' ? 1 : -1
-
-    result.sort((a: ThreadDataItem, b: ThreadDataItem) => {
-      // 添加类型断言确保数值比较
+    result = [...result].sort((a: ProcessDataItem, b: ProcessDataItem) => {
       const aVal = a[sortProp] as number
       const bVal = b[sortProp] as number
       return (aVal - bVal) * modifier
@@ -265,7 +215,21 @@ const filteredData = computed<ThreadDataItem[]>(() => {
   return result
 })
 
-function filterQueryCondition(queryName: string, queryCondition: string, result: ThreadDataItem[]): ThreadDataItem[] {
+// 副作用赋值移到watch
+watch(filteredData, (newVal) => {
+  let afterFilterBaseInstructions = 0;
+  let afterFilterCompareInstructions = 0;
+  newVal.forEach((dataItem) => {
+    afterFilterBaseInstructions += dataItem.instructions;
+    afterFilterCompareInstructions += dataItem.compareInstructions;
+  });
+  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions.value) * 100;
+  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? '100%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
+  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions.value) * 100;
+  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? '100%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
+}, { immediate: true });
+
+function filterQueryCondition(queryName: string, queryCondition: string, result: ProcessDataItem[]): ProcessDataItem[] {
   try {
     if (filterModel.filterMode === 'regex') {
       // 正则表达式模式
@@ -282,13 +246,13 @@ function filterQueryCondition(queryName: string, queryCondition: string, result:
       }
 
       const regex = new RegExp(pattern, flags);
-      result = result.filter((item: ThreadDataItem) => {
+      result = result.filter((item: ProcessDataItem) => {
         return regex.test(getDataItemProperty(queryName, item));
       })
       return result;
     } else {
       const searchTerm = queryCondition.toLowerCase()
-      result = result.filter((item: ThreadDataItem) =>
+      result = result.filter((item: ProcessDataItem) =>
         getDataItemProperty(queryName, item).toLowerCase().includes(searchTerm))
       return result;
     }
@@ -298,17 +262,15 @@ function filterQueryCondition(queryName: string, queryCondition: string, result:
   }
 }
 
-function getDataItemProperty(queryName: string, dataItem: ThreadDataItem): string {
+function getDataItemProperty(queryName: string, dataItem: ProcessDataItem): string {
   if (queryName === 'process') {
     return dataItem.process;
-  } else if (queryName === 'thread') {
-    return dataItem.thread;
-  } else if (queryName === 'subCategoryName') {
-    return dataItem.subCategoryName;
   } else {
     return ''
   }
 }
+
+
 
 
 // 分页数据
@@ -342,7 +304,7 @@ const handlePageSizeChange = (newSize: number) => {
 };
 
 // 1. 定义严格的类型
-type SortKey = keyof ThreadDataItem; // 例如：'name' | 'category' | 'instructions'
+type SortKey = keyof ProcessDataItem; // 例如：'name' | 'category' | 'instructions'
 type SortOrder = 'ascending' | 'descending' | null;
 
 // 2. 修改事件处理函数类型
@@ -351,7 +313,7 @@ const handleSortChange = (sort: {
   order: SortOrder;
 }) => {
   // 3. 添加类型保护
-  const validKeys: SortKey[] = ['category', 'subCategoryName', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'thread', 'process'];
+  const validKeys: SortKey[] = ['category', 'instructions', 'compareInstructions', 'increaseInstructions', 'increasePercentage', 'process'];
 
   if (validKeys.includes(sort.prop as SortKey)) {
     sortState.value = {
@@ -381,20 +343,6 @@ const categoryFilters = Array.from(categoriesExit).map(item => ({
   value: item
 }));
 
-// 副作用赋值移到watch
-watch(filteredData, (newVal) => {
-  let afterFilterBaseInstructions = 0;
-  let afterFilterCompareInstructions = 0;
-  newVal.forEach((dataItem) => {
-    afterFilterBaseInstructions += dataItem.instructions;
-    afterFilterCompareInstructions += dataItem.compareInstructions;
-  });
-  const basePercent = (afterFilterBaseInstructions / beforeFilterBaseInstructions.value) * 100;
-  filterAllBaseInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(basePercent.toFixed(2))) ? '100%' : Number.parseFloat(basePercent.toFixed(2)) + '%';
-  const comparePercent = (afterFilterCompareInstructions / beforeFilterCompareInstructions.value) * 100;
-  filterAllCompareInstructionsCompareTotal.value = Number.isNaN(Number.parseFloat(comparePercent.toFixed(2))) ? '100%' : Number.parseFloat(comparePercent.toFixed(2)) + '%';
-}, { immediate: true });
-
 </script>
 
 <style scoped>
@@ -417,8 +365,6 @@ watch(filteredData, (newVal) => {
 
   .value {
     font-family: monospace;
-    cursor: help;
-    text-decoration: underline dotted;
   }
 
   .trend {

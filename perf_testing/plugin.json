@@ -129,6 +129,57 @@
         }
       }
     },
+    "ui-tech-stack": {
+      "name": "页面技术栈动态识别",
+      "description": "页面技术栈动态识别模式，自动分析UI技术栈",
+      "action_mapping": {
+        "type": "map",
+        "command": ["perf", "--ui-tech-stack"]
+      },
+      "parameters": {
+        "package-name": {
+          "type": "choice",
+          "label": "应用包名",
+          "required": false,
+          "choices": "get_installed_apps",
+          "help": "目标应用包名（从设备已安装应用列表中选择，不指定则自动检测）"
+        },
+        "so_dir": {
+          "type": "dir",
+          "label": "SO文件目录",
+          "required": false,
+          "help": "符号化后的.so文件目录"
+        },
+        "trace": {
+          "type": "bool",
+          "label": "Trace捕获",
+          "required": false,
+          "default": true,
+          "help": "启用trace捕获"
+        },
+        "perf": {
+          "type": "bool",
+          "label": "Perf捕获",
+          "required": false,
+          "default": true,
+          "help": "启用perf捕获"
+        },
+        "memory": {
+          "type": "bool",
+          "label": "内存捕获",
+          "required": false,
+          "default": false,
+          "help": "启用内存分析"
+        },
+        "round": {
+          "type": "int",
+          "label": "测试轮数",
+          "required": false,
+          "default": 1,
+          "help": "测试执行的轮数"
+        }
+      }
+    },
     "prepare": {
       "name": "简化测试执行",
       "description": "简化的测试执行，不生成复杂报告",

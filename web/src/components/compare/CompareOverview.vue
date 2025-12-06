@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="compare-overview">
     <!-- 上传组件 -->
     <div v-if="!hasCompareData" style="margin-bottom: 16px;">
@@ -169,10 +169,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { TrendCharts, DataLine, Histogram, Guide, PieChart as PieChartIcon } from '@element-plus/icons-vue';
-import PieChart from '../PieChart.vue';
-import BarChart from '../BarChart.vue';
-import LineChart from '../LineChart.vue';
-import UploadHtml from '../UploadHtml.vue';
+import PieChart from '../common/charts/PieChart.vue';
+import BarChart from '../common/charts/BarChart.vue';
+import LineChart from '../common/charts/LineChart.vue';
+import UploadHtml from '../common/UploadHtml.vue';
 import { useJsonDataStore, ComponentCategory, type PerfData } from '../../stores/jsonDataStore';
 import { processJson2PieChartData } from '@/utils/jsonUtil';
 

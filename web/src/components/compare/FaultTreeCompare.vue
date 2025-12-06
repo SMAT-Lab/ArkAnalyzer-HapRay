@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="performance-comparison">
     <!-- 上传组件 -->
     <div v-if="!hasCompareData" style="margin-bottom: 16px;">
@@ -362,7 +362,7 @@ v-if="compareFaultTree.av_codec.soft_decoder !== baselineFaultTree.av_codec.soft
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import UploadHtml from '../UploadHtml.vue';
+import UploadHtml from '../common/UploadHtml.vue';
 import { useJsonDataStore, getDefaultFaultTreeStepData } from '../../stores/jsonDataStore';
 
 const props = defineProps<{

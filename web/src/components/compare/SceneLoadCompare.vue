@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="scene-load-compare">
     <!-- 上传组件 -->
     <div v-if="!hasCompareData" style="margin-bottom: 16px;">
@@ -9,14 +9,14 @@
       <!-- 负载分类说明 -->
       <div class="info-box">
         负载分类说明：
-        <p>APP_ABC => 应用代码 |
-          APP_LIB => 应用三方ArkTS库 |
-          APP_SO => 应用native库 |
+        <p>APP => 应用（包含应用代码、应用三方库、应用native库等） |
+          ArkUI => ArkUI框架 |
           OS_Runtime => 系统运行时 |
           SYS_SDK => 系统SDK |
           RN => 三方框架React Native |
           Flutter => 三方框架Flutter |
-          WEB => 三方框架ArkWeb</p>
+          WEB => 三方框架ArkWeb |
+          KMP => Kotlin Multiplatform</p>
       </div>
 
       <!-- 版本信息对比 -->
@@ -114,9 +114,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { TrendCharts, DataLine } from '@element-plus/icons-vue';
-import PieChart from '../PieChart.vue';
-import LineChart from '../LineChart.vue';
-import UploadHtml from '../UploadHtml.vue';
+import PieChart from '../common/charts/PieChart.vue';
+import LineChart from '../common/charts/LineChart.vue';
+import UploadHtml from '../common/UploadHtml.vue';
 import { useJsonDataStore, ComponentCategory, type PerfData } from '../../stores/jsonDataStore';
 import { processJson2PieChartData } from '@/utils/jsonUtil';
 

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="performance-comparison">
     <el-card v-if="loading" class="loading-card">
       <div class="loading-content">
@@ -416,16 +416,16 @@ v-for="(step, index) in testSteps" :key="index" :class="[
 
 <script lang="ts" setup>
 import { ref, computed, watch, onMounted } from 'vue';
-import PerfProcessTable from './PerfProcessTable.vue';
-import PerfThreadTable from './PerfThreadTable.vue';
-import PerfFileTable from './PerfFileTable.vue';
-import PerfSymbolTable from './PerfSymbolTable.vue';
-import PieChart from './PieChart.vue';
-import BarChart from './BarChart.vue';
-import LineChart from './LineChart.vue';
-import { ComponentCategory, useJsonDataStore, type PerfData } from '../stores/jsonDataStore.ts';
+import PerfProcessTable from './tables/PerfProcessTable.vue';
+import PerfThreadTable from './tables/PerfThreadTable.vue';
+import PerfFileTable from './tables/PerfFileTable.vue';
+import PerfSymbolTable from './tables/PerfSymbolTable.vue';
+import PieChart from './common/charts/PieChart.vue';
+import BarChart from './common/charts/BarChart.vue';
+import LineChart from './common/charts/LineChart.vue';
+import { ComponentCategory, useJsonDataStore, type PerfData } from '../../stores/jsonDataStore.ts';
 import { calculateCategorysData, calculateComponentNameData, calculateFileData, calculateFileData1, calculateProcessData, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData } from '@/utils/jsonUtil.ts';
-import UploadHtml from './UploadHtml.vue';
+import UploadHtml from './common/UploadHtml.vue';
 
 interface SceneLoadDiff {
   category: string;
