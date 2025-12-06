@@ -9,14 +9,14 @@
       <!-- 负载分类说明 -->
       <div class="info-box">
         负载分类说明：
-        <p>APP_ABC => 应用代码 |
-          APP_LIB => 应用三方ArkTS库 |
-          APP_SO => 应用native库 |
+        <p>APP => 应用（包含应用代码、应用三方库、应用native库等） |
+          ArkUI => ArkUI框架 |
           OS_Runtime => 系统运行时 |
           SYS_SDK => 系统SDK |
           RN => 三方框架React Native |
           Flutter => 三方框架Flutter |
-          WEB => 三方框架ArkWeb</p>
+          WEB => 三方框架ArkWeb |
+          KMP => Kotlin Multiplatform</p>
       </div>
 
       <!-- 版本信息对比 -->

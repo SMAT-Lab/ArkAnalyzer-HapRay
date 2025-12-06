@@ -14,14 +14,14 @@
   <div v-if="currentTab === 'tab1'" class="performance-comparison">
     <div class="info-box">
       负载分类说明：
-      <p>APP_ABC => 应用代码 |
-        APP_LIB => 应用三方ArkTS库 |
-        APP_SO => 应用native库 |
+      <p>APP => 应用（包含应用代码、应用三方库、应用native库等） |
+        ArkUI => ArkUI框架 |
         OS_Runtime => 系统运行时 |
         SYS_SDK => 系统SDK |
         RN => 三方框架React Native |
         Flutter => 三方框架Flutter |
-        WEB => 三方框架ArkWeb</p>
+        WEB => 三方框架ArkWeb |
+        KMP => Kotlin Multiplatform</p>
     </div>
     <el-descriptions :title="performanceData.app_name" :column="1" class="beautified-descriptions">
       <el-descriptions-item label="系统版本：">{{ performanceData.rom_version }}</el-descriptions-item>
@@ -110,13 +110,10 @@ class="beautiful-btn primary-btn"
         <div class="data-panel">
           <!-- 面包屑导航 -->
           <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span class="breadcrumb-item" @click="handleProcessPieDrillup">
-              {{ getBreadcrumbLabel('process', 0) }}
-            </span>
             <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
-              <i class="breadcrumb-separator">></i>
+              <i v-if="index > 0" class="breadcrumb-separator">></i>
               <span @click="handleProcessBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('process', index + 1, item) }}
+                {{ getBreadcrumbLabel('process', index, item) }}
               </span>
             </span>
           </div>
@@ -139,13 +136,10 @@ class="beautiful-btn primary-btn"
         <div class="data-panel">
           <!-- 面包屑导航 -->
           <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span class="breadcrumb-item" @click="handleStepPieDrillup">
-              {{ getBreadcrumbLabel('category', 0) }}
-            </span>
             <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
-              <i class="breadcrumb-separator">></i>
+              <i v-if="index > 0" class="breadcrumb-separator">></i>
               <span @click="handleStepBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('category', index + 1, item) }}
+                {{ getBreadcrumbLabel('category', index, item) }}
               </span>
             </span>
           </div>
@@ -656,13 +650,13 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
 // };
 
 // 获取面包屑标签
-function getBreadcrumbLabel(type: 'process' | 'category', level: number, item?: string): string {
+function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: string): string {
   if (type === 'process') {
     const labels = ['进程', '线程', '文件', '符号'];
-    return level === 0 ? labels[0] : `${labels[level]}: ${item}`;
+    return `${labels[level]}: ${item}`;
   } else {
     const labels = ['大分类', '小分类', '文件', '符号'];
-    return level === 0 ? labels[0] : `${labels[level]}: ${item}`;
+    return `${labels[level]}: ${item}`;
   }
 }
 

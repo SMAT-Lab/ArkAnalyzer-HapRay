@@ -67,9 +67,11 @@ export interface PerfDataItem {
   symbol: string;
   symbolEvents: number;
   symbolTotalEvents: number;
+  // 新的分类字段
+  categoryName?: string;
   subCategoryName?: string;
+  thirdCategoryName?: string;
   componentCategory: number;
-  originKind?: number;
 }
 
 // 处理 JSON 数据生成steps饼状图所需数据
@@ -78,40 +80,32 @@ export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: n
         return { legendData: [], seriesData: [] };
     }
 
-    const categoryMap = new Map<ComponentCategory, number>();
+    // 使用 categoryName 作为键，而不是枚举值
+    const categoryMap = new Map<string, number>();
 
     // 处理数据并累加 symbolEvents
     jsonData.steps.forEach(step => {
         if (currentStepIndex === 0 || step.step_id === currentStepIndex) {
             step.data.forEach(item => {
-                const category = item.componentCategory;
+                // 优先使用 categoryName，如果没有则使用枚举转换
+                const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || "UNKNOWN";
                 const events = item.symbolEvents;
-                categoryMap.set(category, (categoryMap.get(category) || 0) + events);
+                categoryMap.set(categoryName, (categoryMap.get(categoryName) || 0) + events);
             });
         }
     });
 
-    // 准备按枚举值排序的数据
+    // 按值降序排序
     const sortedEntries = Array.from(categoryMap.entries())
         .filter(([, value]) => value !== 0) // 过滤掉值为零的分类
-        .sort(([catA], [catB]) => {
-            // 按枚举值升序排序
-            if (catA < catB) return -1;
-            if (catA > catB) return 1;
-            return 0;
-        });
+        .sort(([, valueA], [, valueB]) => valueB - valueA); // 按值降序排序
 
-    // 获取排序后的枚举键（按数值升序）
-    const sortedCategories = sortedEntries.map(([category]) => category);
+    // 创建图例数据
+    const legendData = sortedEntries.map(([categoryName]) => categoryName);
 
-    // 创建图例数据（按排序后的顺序）
-    const legendData = sortedCategories.map(category =>
-        ComponentCategory[category] || "UNKNOWN"
-    );
-
-    // 创建系列数据（按排序后的顺序）
-    const seriesData = sortedEntries.map(([category, value]) => ({
-        name: ComponentCategory[category] || "UNKNOWN",
+    // 创建系列数据
+    const seriesData = sortedEntries.map(([categoryName, value]) => ({
+        name: categoryName,
         value
     }));
 
@@ -344,8 +338,11 @@ export function calculateCategorysData(
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): ProcessDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}` : `${stepId}|${ComponentCategory[item.componentCategory]}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        // 使用 categoryName 作为键
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        return ignoreStep ? `${categoryName}` : `${stepId}|${categoryName}`;
+    };
 
     const resultCreator: ResultCreator<ProcessDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -368,8 +365,12 @@ export function calculateComponentNameData(
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.subCategoryName}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.subCategoryName}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        // 使用 categoryName 和 subCategoryName 作为键
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        return ignoreStep ? `${categoryName}|${subCategoryName}` : `${stepId}|${categoryName}|${subCategoryName}`;
+    };
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -393,8 +394,12 @@ export function calculateFileData1(
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): FileDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        // 使用 categoryName 和 subCategoryName 作为键
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        return ignoreStep ? `${categoryName}|${subCategoryName}|${item.file}` : `${stepId}|${categoryName}|${subCategoryName}|${item.file}`;
+    };
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -419,8 +424,12 @@ export function calculateSymbolData1(
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}|${item.symbol}` : `${stepId}|${ComponentCategory[item.componentCategory]}|${item.subCategoryName}|${item.file}|${item.symbol}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        // 使用 categoryName 和 subCategoryName 作为键
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        return ignoreStep ? `${categoryName}|${subCategoryName}|${item.file}|${item.symbol}` : `${stepId}|${categoryName}|${subCategoryName}|${item.file}|${item.symbol}`;
+    };
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
