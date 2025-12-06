@@ -1,6 +1,4 @@
 import time
-from hypium import BY
-from tensorflow import double
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -35,7 +33,6 @@ class PerfLoad_Wechat_0060(PerfTestCase):
                 # 点击下方微信栏收起小程序页面
                 self.touch_by_coordinates(534, 2277, 1)
 
-
         def step2():
             self.swipes_up(5, 2, 300)
             self.swipes_down(5, 2, 300)
@@ -48,15 +45,3 @@ class PerfLoad_Wechat_0060(PerfTestCase):
         # 点击京东购物小程序（在第一个位置）
         self.touch_by_coordinates(200, 933, 1)
         self.execute_performance_step('微信-京东购物小程序浏览场景-step2京东购物小程序浏览', 50, step2)
- 
-
-
-
-
-    
-        
-
-
-
-
-
