@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="new-data-analysis">
     <!-- 上传组件 -->
     <div v-if="!hasCompareData" style="margin-bottom: 16px;">
@@ -161,9 +161,9 @@ const props = defineProps({
 import {
   DocumentAdd, FolderAdd, CirclePlus, Plus, DataAnalysis
 } from '@element-plus/icons-vue';
-import PerfFileTable from '../PerfFileTable.vue';
-import PerfSymbolTable from '../PerfSymbolTable.vue';
-import UploadHtml from '../UploadHtml.vue';
+import PerfFileTable from '../single-analysis/step/load/tables/PerfFileTable.vue';
+import PerfSymbolTable from '../single-analysis/step/load/tables/PerfSymbolTable.vue';
+import UploadHtml from '../common/UploadHtml.vue';
 import { useJsonDataStore } from '../../stores/jsonDataStore';
 import { 
   calculateFileData, 

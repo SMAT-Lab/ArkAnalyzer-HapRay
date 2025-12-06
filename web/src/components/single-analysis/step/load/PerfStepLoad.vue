@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="step-load-container">
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
@@ -10,13 +10,10 @@
           </h3>
           <!-- 面包屑导航 -->
           <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span class="breadcrumb-item" @click="handleProcessPieDrillup">
-              {{ getBreadcrumbLabel('process', 0) }}
-            </span>
             <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
-              <i class="breadcrumb-separator">></i>
+              <i v-if="index > 0" class="breadcrumb-separator">></i>
               <span @click="handleProcessBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('process', index + 1, item) }}
+                {{ getBreadcrumbLabel('process', index, item) }}
               </span>
             </span>
           </div>
@@ -35,13 +32,10 @@
           </h3>
           <!-- 面包屑导航 -->
           <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span class="breadcrumb-item" @click="handleStepPieDrillup">
-              {{ getBreadcrumbLabel('category', 0) }}
-            </span>
             <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
-              <i class="breadcrumb-separator">></i>
+              <i v-if="index > 0" class="breadcrumb-separator">></i>
               <span @click="handleStepBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('category', index + 1, item) }}
+                {{ getBreadcrumbLabel('category', index, item) }}
               </span>
             </span>
           </div>
@@ -135,11 +129,11 @@
 <script lang="ts" setup>
 import { ref, computed, watch } from 'vue';
 //import { Download } from '@element-plus/icons-vue';
-import PerfThreadTable from './PerfThreadTable.vue';
-import PerfFileTable from './PerfFileTable.vue';
-import PerfSymbolTable from './PerfSymbolTable.vue';
-import PieChart from './PieChart.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import PerfThreadTable from './tables/PerfThreadTable.vue';
+import PerfFileTable from './tables/PerfFileTable.vue';
+import PerfSymbolTable from './tables/PerfSymbolTable.vue';
+import PieChart from '../../../common/charts/PieChart.vue';
+import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
 import { 
   calculateComponentNameData, 
   calculateFileData, 
@@ -363,13 +357,13 @@ function handleStepPieDrillup() {
 }
 
 // 获取面包屑标签
-function getBreadcrumbLabel(type: 'process' | 'category', level: number, item?: string): string {
+function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: string): string {
   if (type === 'process') {
     const labels = ['进程', '线程', '文件', '符号'];
-    return level === 0 ? labels[0] : `${labels[level]}: ${item}`;
+    return `${labels[level]}: ${item}`;
   } else {
     const labels = ['大分类', '小分类', '文件', '符号'];
-    return level === 0 ? labels[0] : `${labels[level]}: ${item}`;
+    return `${labels[level]}: ${item}`;
   }
 }
 
