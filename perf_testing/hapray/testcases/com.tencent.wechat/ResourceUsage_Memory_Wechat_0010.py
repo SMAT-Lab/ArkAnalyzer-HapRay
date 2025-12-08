@@ -32,7 +32,7 @@ class ResourceUsage_Memory_Wechat_0010(PerfTestCase):
             time.sleep(2)
 
             # 2.群聊查看消息（主界面-->群聊窗口）
-            self.driver.touch(BY.text('微信用例测试群'))
+            self.driver.touch(BY.text('性能测试群'))
             self.driver.wait(0.5)
             time.sleep(2)
 
