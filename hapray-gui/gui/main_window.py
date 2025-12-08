@@ -209,6 +209,19 @@ class MainWindow(QMainWindow):
 
         plugins = self.plugin_loader.get_all_plugins()
 
+        # 定义action图标映射
+        action_icons = {
+            "prepare": "🔧",  # 用例前置条件配置
+            "perf": "📊",     # 自动化性能测试
+            "manual": "🎯",   # 手动性能测试
+            "ui-tech-stack": "🔍",  # 页面技术栈动态识别
+            "update": "🔄",   # 更新测试报告
+            "compare": "⚖️",   # 对比报告
+            "opt": "⚡",       # SO编译优化
+            "static": "📱",    # 应用技术栈分析
+            "symbol-recovery": "🔧"  # 符号恢复
+        }
+
         # 定义菜单结构映射：plugin_id -> {action_key -> display_name}
         menu_structure = {
             "负载测试": {
@@ -217,6 +230,7 @@ class MainWindow(QMainWindow):
                         "prepare": "用例前置条件配置",
                         "perf": "自动化性能测试",
                         "manual": "手动性能测试",
+                        "ui-tech-stack": "页面技术栈动态识别",
                         "update": "更新测试报告",
                         "compare": "对比报告"
                     }
@@ -269,7 +283,9 @@ class MainWindow(QMainWindow):
                     if action_info:
                         # 创建二级菜单项
                         action_item = QTreeWidgetItem(menu_item)
-                        action_item.setText(0, f"⚙️ {display_name}")
+                        # 使用对应的图标，如果没有找到则使用默认图标
+                        icon = action_icons.get(action_key, "⚙️")
+                        action_item.setText(0, f"{icon} {display_name}")
                         action_item.setData(0, Qt.UserRole, {
                             'type': 'action',
                             'plugin_id': plugin_id,

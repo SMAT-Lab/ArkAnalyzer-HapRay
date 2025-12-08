@@ -279,11 +279,12 @@ QLineEdit:hover {{
 QComboBox {{
     border: 1px solid {COLORS['border_light']};
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 6px 32px 6px 8px;
     background-color: {COLORS['background_light']};
     color: {COLORS['text_primary']};
     min-width: 120px;
     transition: all 0.3s ease;
+    selection-background-color: rgba(102, 126, 234, 0.2);
 }}
 
 QComboBox:hover {{
@@ -297,31 +298,52 @@ QComboBox:focus {{
 
 QComboBox::drop-down {{
     border: none;
-    width: 20px;
+    border-left: 1px solid {COLORS['border_light']};
+    width: 30px;
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    background-color: {COLORS['background_light']};
+    border-radius: 0 3px 3px 0;
+}}
+
+QComboBox::drop-down:hover {{
+    background-color: rgba(102, 126, 234, 0.08);
 }}
 
 QComboBox::down-arrow {{
-    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMuNSA2LjVMNi41IDMuNSA5LjUgNi41IiBzdHJva2U9IiM2YjcyODAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPg==);
-    margin-right: 4px;
+    /* 使用明确的Unicode向下箭头，确保绝对可见 */
+    color: {COLORS['text_primary']};
+    font-size: 14px;
+    font-weight: bold;
+    width: 14px;
+    height: 14px;
+    qproperty-text: "▼";  /* 强制显示向下箭头字符 */
 }}
 
 QComboBox QAbstractItemView {{
     border: 1px solid {COLORS['border_light']};
-    border-radius: 6px;
+    border-radius: 8px;
     background-color: {COLORS['background_light']};
     selection-background-color: rgba(102, 126, 234, 0.1);
     outline: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }}
 
 QComboBox QAbstractItemView::item {{
-    padding: 8px 12px;
-    border-radius: 4px;
-    margin: 2px 4px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin: 3px 6px;
+    transition: all 0.2s ease;
 }}
 
 QComboBox QAbstractItemView::item:selected {{
     background-color: rgba(102, 126, 234, 0.15);
     color: {COLORS['primary']};
+    font-weight: 500;
+}}
+
+QComboBox QAbstractItemView::item:hover {{
+    background-color: rgba(102, 126, 234, 0.08);
 }}
 
 /* 复选框 */

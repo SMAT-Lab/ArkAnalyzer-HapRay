@@ -1,5 +1,23 @@
-﻿<template>
+<template>
   <div class="step-load-container">
+    <!-- 技术栈占比卡片 -->
+    <el-row v-if="techStackData.length > 0" :gutter="20" class="tech-stack-row">
+      <el-col :span="24">
+        <div class="tech-stack-card">
+          <h3 class="card-title">
+            <span class="version-tag">技术栈占比</span>
+          </h3>
+          <div class="tech-stack-content">
+            <div v-for="item in techStackData" :key="item.name" class="tech-stack-item">
+              <div class="tech-stack-name">{{ item.name }}</div>
+              <div class="tech-stack-value">{{ item.percentage }}%</div>
+              <div class="tech-stack-instructions">{{ formatNumber(item.instructions) }}</div>
+            </div>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
       <el-col :span="12">
@@ -134,21 +152,22 @@ import PerfFileTable from './tables/PerfFileTable.vue';
 import PerfSymbolTable from './tables/PerfSymbolTable.vue';
 import PieChart from '../../../common/charts/PieChart.vue';
 import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
-import { 
-  calculateComponentNameData, 
-  calculateFileData, 
-  calculateFileData1, 
-  calculateSymbolData, 
-  calculateSymbolData1, 
-  calculateThreadData, 
-  processJson2PieChartData, 
-  processJson2ProcessPieChartData, 
-  calculateCategorysData, 
-  type ProcessDataItem, 
-  type ThreadDataItem, 
-  type FileDataItem, 
-  type SymbolDataItem 
+import {
+  calculateComponentNameData,
+  calculateFileData,
+  calculateFileData1,
+  calculateSymbolData,
+  calculateSymbolData1,
+  calculateThreadData,
+  processJson2PieChartData,
+  processJson2ProcessPieChartData,
+  calculateCategorysData,
+  type ProcessDataItem,
+  type ThreadDataItem,
+  type FileDataItem,
+  type SymbolDataItem
 } from '@/utils/jsonUtil.ts';
+import { ComponentCategory } from '@/stores/jsonDataStore.ts';
 //import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
 const props = defineProps<{
@@ -211,10 +230,10 @@ function sortByInstructions<T extends { instructions: number }>(arr: T[]): T[] {
   return [...arr].sort((a, b) => b.instructions - a.instructions);
 }
 
-// // 格式化数字
-// const formatNumber = (num: number) => {
-//   return num.toLocaleString();
-// };
+// 格式化数字
+const formatNumber = (num: number) => {
+  return num.toLocaleString();
+};
 
 // // 格式化功耗信息
 // const formatEnergy = (milliseconds: number) => {
@@ -491,6 +510,41 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   return data;
 });
 
+// 计算技术栈数据（kind > 3的分类）
+const techStackData = computed(() => {
+  // 获取大分类数据
+  const categoryData = calculateCategorysData(perfData!, null, false).filter(item => item.stepId === props.stepId);
+
+  // 定义技术栈映射（ComponentCategory中kind > 3的）
+  const techStackCategories = {
+    [ComponentCategory.RN]: 'RN',
+    [ComponentCategory.Flutter]: 'Flutter',
+    [ComponentCategory.WEB]: 'WEB',
+    [ComponentCategory.KMP]: 'KMP'
+  };
+
+  // 计算总指令数
+  const totalInstructions = categoryData.reduce((sum, item) => sum + item.instructions, 0);
+
+  // 过滤技术栈分类并计算占比
+  const techStackItems = categoryData
+    .filter(item => {
+      // 通过category名称匹配技术栈
+      return Object.values(techStackCategories).includes(item.category);
+    })
+    .map(item => {
+      const percentage = totalInstructions > 0 ? ((item.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+      return {
+        name: item.category,
+        instructions: item.instructions,
+        percentage: percentage
+      };
+    })
+    .sort((a, b) => b.instructions - a.instructions); // 按指令数降序排序
+
+  return techStackItems;
+});
+
 // 下载功能
 // const downloadPerfData = () => {
 //   if (!stepInfo.value) return;
@@ -524,6 +578,66 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
 .step-load-container {
   padding: 20px;
   background: #f5f7fa;
+}
+
+/* 技术栈卡片样式 */
+.tech-stack-row {
+  margin-bottom: 24px;
+}
+
+.tech-stack-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.tech-stack-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.tech-stack-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  min-width: 120px;
+  flex: 1;
+  border: 1px solid #e4e7ed;
+}
+
+.tech-stack-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+
+.tech-stack-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #409eff;
+  margin-bottom: 4px;
+}
+
+.tech-stack-instructions {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 500;
 }
 
 .step-info-card {
@@ -694,6 +808,27 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
 
   .step-actions .el-button {
     flex: 1;
+  }
+
+  .tech-stack-card {
+    padding: 16px;
+  }
+
+  .tech-stack-content {
+    gap: 12px;
+  }
+
+  .tech-stack-item {
+    min-width: 100px;
+    padding: 12px;
+  }
+
+  .tech-stack-name {
+    font-size: 14px;
+  }
+
+  .tech-stack-value {
+    font-size: 16px;
   }
 }
 
