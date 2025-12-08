@@ -28,6 +28,7 @@ from PySide6.QtWidgets import QApplication
 
 from core.logger import get_logger
 from gui.main_window import MainWindow
+from gui.styles import apply_styles
 
 logger = get_logger(__name__)
 
@@ -42,6 +43,9 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName('HapRay GUI')
     app.setOrganizationName('HapRay')
+
+    # 应用样式
+    apply_styles(app)
 
     # 创建主窗口
     window = MainWindow()
