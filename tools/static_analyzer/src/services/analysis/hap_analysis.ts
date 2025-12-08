@@ -720,6 +720,67 @@ export class HapAnalysisService {
     }
 
     /**
+     * 为Excel安全清理字符串
+     * 移除或替换可能导致Excel文件损坏的特殊字符
+     */
+    private sanitizeForExcel(value: string): string {
+        if (!value) return value;
+
+        return value
+            // 移除控制字符（除了换行符）
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+            // 替换零宽字符和其他不可见字符
+            .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+            // 限制字符串长度，避免Excel单元格过大
+            // .substring(0, 32767);
+    }
+
+    /**
+     * 验证Excel数据，确保没有可能导致文件损坏的内容
+     */
+    private validateExcelData(sheets: SheetData[]): void {
+        for (let sheetIndex = 0; sheetIndex < sheets.length; sheetIndex++) {
+            const sheet = sheets[sheetIndex];
+            if (!Array.isArray(sheet)) {
+                logger.warn(`Sheet ${sheetIndex} is not an array, skipping validation`);
+                continue;
+            }
+
+            for (let rowIndex = 0; rowIndex < sheet.length; rowIndex++) {
+                const row = sheet[rowIndex];
+                if (!Array.isArray(row)) {
+                    logger.warn(`Row ${rowIndex} in sheet ${sheetIndex} is not an array`);
+                    continue;
+                }
+
+                for (let cellIndex = 0; cellIndex < row.length; cellIndex++) {
+                    const cell = row[cellIndex];
+                    if (!cell || typeof cell !== 'object') {
+                        logger.warn(`Invalid cell at [${sheetIndex}][${rowIndex}][${cellIndex}]`);
+                        continue;
+                    }
+
+                    // 验证必需字段
+                    if (!cell.hasOwnProperty('value')) {
+                        logger.warn(`Cell missing 'value' property at [${sheetIndex}][${rowIndex}][${cellIndex}]`);
+                        continue;
+                    }
+
+                    // 确保字符串值被正确清理
+                    if (cell.type === String && typeof cell.value === 'string') {
+                        const originalValue = cell.value;
+                        const sanitizedValue = this.sanitizeForExcel(cell.value);
+                        if (originalValue !== sanitizedValue) {
+                            cell.value = sanitizedValue;
+                            logger.debug(`Sanitized cell value at [${sheetIndex}][${rowIndex}][${cellIndex}]`);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * 生成汇总Excel文件
      */
     private async generateSummaryExcel(
@@ -754,6 +815,9 @@ export class HapAnalysisService {
 
         // 4. 创建Dart开源库汇总工作表
         const dartPackagesSheetData = this.createDartPackagesSheetData(allResults);
+
+        // 数据验证和清理
+        this.validateExcelData([summarySheetData, detailSheetData, analysisSheetData, dartPackagesSheetData]);
 
         // 写入Excel文件
         const sheets = [summarySheetData, detailSheetData, analysisSheetData];
@@ -800,13 +864,13 @@ export class HapAnalysisService {
             const totalFileSize = filteredDetections.reduce((sum, item) => sum + item.size, 0);
 
             sheetData.push([
-                { value: appDir, type: String },
-                { value: result.bundleName, type: String },
-                { value: result.appName, type: String },
-                { value: result.versionName, type: String },
-                { value: result.versionCode, type: Number },
+                { value: this.sanitizeForExcel(appDir || '-'), type: String },
+                { value: this.sanitizeForExcel(result.bundleName || '-'), type: String },
+                { value: this.sanitizeForExcel(result.appName || '-'), type: String },
+                { value: this.sanitizeForExcel(result.versionName || '-'), type: String },
+                { value: result.versionCode || 0, type: Number },
                 { value: filteredDetections.length, type: Number },
-                { value: detectedTechStacks.join(', ') || '无', type: String },
+                { value: this.sanitizeForExcel(detectedTechStacks.join(', ') || '无'), type: String },
                 { value: this.formatFileSize(totalFileSize), type: String }
             ]);
         }
@@ -860,19 +924,19 @@ export class HapAnalysisService {
                     detection.isBinary === false ? 'Text' : '-';
 
                 const row = [
-                    { value: appDir, type: String },
-                    { value: result.bundleName, type: String },
-                    { value: detection.folder, type: String },
-                    { value: detection.file, type: String },
-                    { value: detection.techStack, type: String },
-                    { value: detection.fileType ?? '-', type: String },
+                    { value: this.sanitizeForExcel(appDir || '-'), type: String },
+                    { value: this.sanitizeForExcel(result.bundleName || '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.folder || '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.file || '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.techStack || '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.fileType || '-'), type: String },
                     { value: binaryTypeStr, type: String },
-                    { value: this.formatFileSize(detection.size), type: String },
+                    { value: this.formatFileSize(detection.size || 0), type: String },
                     { value: confidenceStr, type: String },
-                    { value: detection.sourceHapPath ?? '-', type: String },
-                    { value: detection.sourceBundleName ?? '-', type: String },
-                    { value: detection.sourceVersionCode?.toString() ?? '-', type: String },
-                    { value: detection.sourceVersionName ?? '-', type: String }
+                    { value: this.sanitizeForExcel(detection.sourceHapPath || '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.sourceBundleName || '-'), type: String },
+                    { value: detection.sourceVersionCode?.toString() || '-', type: String },
+                    { value: this.sanitizeForExcel(detection.sourceVersionName || '-'), type: String }
                 ];
 
                 // 添加 metadata 字段
@@ -881,11 +945,27 @@ export class HapAnalysisService {
                     let cellValue = '';
                     if (value !== undefined && value !== null) {
                         if (Array.isArray(value)) {
-                            cellValue = value.join(os.EOL);
+                            // 安全处理数组元素，过滤掉null/undefined，并转换为字符串
+                            const safeArray = value
+                                .filter(item => item !== null && item !== undefined)
+                                .map(item => {
+                                    try {
+                                        return String(item);
+                                    } catch {
+                                        return '[无法转换]';
+                                    }
+                                });
+                            cellValue = safeArray.join('\n'); // 使用\n而不是os.EOL以保证Excel兼容性
                         } else {
-                            cellValue = String(value);
+                            try {
+                                cellValue = String(value);
+                            } catch {
+                                cellValue = '[无法转换]';
+                            }
                         }
                     }
+                    // 清理可能导致Excel损坏的特殊字符
+                    cellValue = this.sanitizeForExcel(cellValue);
                     row.push({ value: cellValue, type: String });
                 }
 
@@ -1008,8 +1088,8 @@ export class HapAnalysisService {
         for (const { appDir, result } of allResults) {
             const appTechStacks: Map<string, number> = appTechStackStats.get(appDir) ?? new Map<string, number>();
             const row: Array<{ value: string | number; type?: typeof String | typeof Number }> = [
-                { value: result.appName, type: String },
-                { value: result.bundleName, type: String }
+                { value: this.sanitizeForExcel(result.appName || '-'), type: String },
+                { value: this.sanitizeForExcel(result.bundleName || '-'), type: String }
             ];
 
             for (const techStack of techStacks) {
@@ -1217,10 +1297,11 @@ export class HapAnalysisService {
 
         // 添加数据行
         for (const [packageName, info] of sortedPackages) {
+            const safeFilePaths = info.filePaths.map(path => this.sanitizeForExcel(path || '-'));
             sheetData.push([
-                { value: packageName, type: String },
-                { value: info.version, type: String },
-                { value: info.filePaths.join(os.EOL), type: String },
+                { value: this.sanitizeForExcel(packageName || '-'), type: String },
+                { value: this.sanitizeForExcel(info.version || '-'), type: String },
+                { value: safeFilePaths.join('\n'), type: String }, // 使用\n保证Excel兼容性
                 { value: info.filePaths.length, type: Number },
                 { value: info.apps.size, type: Number }
             ]);
