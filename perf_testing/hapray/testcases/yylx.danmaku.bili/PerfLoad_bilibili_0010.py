@@ -23,6 +23,7 @@ class PerfLoad_bilibili_0010(PerfTestCase):
     def process(self):
         def step1():
             self.start_app()
+
         def step2():
             # b站首页上滑操作
             self.swipes_up(swip_num=10, sleep=2)

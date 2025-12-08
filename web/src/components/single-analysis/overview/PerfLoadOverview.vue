@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="load-overview-container">
     <div class="info-box">
       负载分类说明：
@@ -137,10 +137,10 @@
 
 <script lang="ts" setup>
 import { ref } from 'vue';
-import PieChart from './PieChart.vue';
-import BarChart from './BarChart.vue';
-import LineChart from './LineChart.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import PieChart from '../../common/charts/PieChart.vue';
+import BarChart from '../../common/charts/BarChart.vue';
+import LineChart from '../../common/charts/LineChart.vue';
+import { useJsonDataStore } from '../../../stores/jsonDataStore.ts';
 import { processJson2PieChartData } from '@/utils/jsonUtil.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="memory-outstanding-flame-graph">
     <div class="memory-outstanding-flame-graph__panel">
       <div class="memory-outstanding-flame-graph__panel-header">
@@ -43,7 +43,7 @@
 
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
-import MemoryFlameGraph from '@/components/MemoryFlameGraph.vue';
+import MemoryFlameGraph from '@/components/single-analysis/step/memory/MemoryFlameGraph.vue';
 import {
   EventType,
   fetchCallchainFrames,

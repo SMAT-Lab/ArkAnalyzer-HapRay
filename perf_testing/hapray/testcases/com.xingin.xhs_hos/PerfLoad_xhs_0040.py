@@ -42,4 +42,3 @@ class PerfLoad_xhs_0040(PerfTestCase):
 
         self.find_by_text_up(video_tag)
         self.execute_performance_step('小红书-观看长视频场景-step1收藏视频观看、横竖屏切换', 40, step1)
-

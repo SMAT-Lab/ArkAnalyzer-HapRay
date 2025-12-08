@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="frame-analysis-container">
     <!-- 当前步骤信息卡片 -->
     <!-- <div v-if="currentStepInfo" class="step-info-card">
@@ -32,7 +32,7 @@
 <script lang="ts" setup>
 import { ref, watch } from 'vue';
 import FrameAnalysis from './FrameAnalysis.vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
+import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
 //import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
 // 定义props

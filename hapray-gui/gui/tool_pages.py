@@ -6,8 +6,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -29,10 +30,46 @@ from PySide6.QtWidgets import (
 from core.base_tool import BaseTool
 from core.config_manager import ConfigManager
 from core.file_utils import FileUtils
+from core.logger import get_logger
 from core.plugin_loader import PluginLoader
 from core.result_processor import ResultProcessor
 from core.tool_executor import ToolExecutor
 from gui.multi_select_combobox import MultiSelectComboBox
+
+logger = get_logger(__name__)
+
+
+class DynamicChoicesLoader(QThread):
+    """异步加载动态选项的线程"""
+
+    choices_loaded = Signal(str, list)  # param_name, choices
+
+    def __init__(self, param_name: str, choices_func_name: str):
+        super().__init__()
+        self.param_name = param_name
+        self.choices_func_name = choices_func_name
+
+    def run(self):
+        """后台加载选项"""
+        try:
+            choices = []
+            if self.choices_func_name == 'get_testcases':
+                choices = FileUtils.get_testcases()
+            elif self.choices_func_name == 'get_installed_apps':
+                # 添加超时处理，避免长时间卡顿
+                import time
+                start_time = time.time()
+                choices = FileUtils.get_installed_apps()
+                elapsed = time.time() - start_time
+                if elapsed > 2.0:  # 如果加载时间超过2秒，记录警告
+                    logger.warning(f'加载应用列表耗时: {elapsed:.2f}秒')
+            else:
+                logger.warning(f'未知的动态选项函数: {self.choices_func_name}')
+
+            self.choices_loaded.emit(self.param_name, choices)
+        except Exception as e:
+            logger.error(f'加载动态选项失败: {e}')
+            self.choices_loaded.emit(self.param_name, [])
 
 
 class ExecutionThread(QThread):
@@ -126,6 +163,7 @@ class ToolPage(QWidget):
         self.execution_thread: ExecutionThread = None
         self.current_action: str = None  # 当前选中的action
         self.params_group: QGroupBox = None  # 参数组控件引用
+        self.dynamic_loaders: dict[str, DynamicChoicesLoader] = {}  # param_name -> loader
         self.init_ui()
 
     def init_ui(self):
@@ -138,40 +176,34 @@ class ToolPage(QWidget):
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 
-        # Action选择器（如果工具支持多个action）
+        # 初始化current_action（从外部设置，如main_window中的show_tool_config）
         actions = self.tool.get_all_actions() if hasattr(self.tool, 'get_all_actions') else []
-        if len(actions) > 1:
-            action_group = QGroupBox('操作选择')
-            action_layout = QHBoxLayout()
-
-            action_label = QLabel('选择操作:')
-            action_layout.addWidget(action_label)
-
-            self.action_selector = QComboBox()
-            for action in actions:
-                action_info = self.tool.get_action_info(action) if hasattr(self.tool, 'get_action_info') else {}
-                action_name = action_info.get('name', action)
-                action_desc = action_info.get('description', '')
-                self.action_selector.addItem(action_name, action)
-                # 设置工具提示
-                if action_desc:
-                    self.action_selector.setItemData(self.action_selector.count() - 1, action_desc, Qt.ToolTipRole)
-
-            self.action_selector.currentIndexChanged.connect(self.on_action_changed)
-            action_layout.addWidget(self.action_selector)
-            action_layout.addStretch()
-
-            action_group.setLayout(action_layout)
-            layout.addWidget(action_group)
-
-            # 设置初始action
-            self.current_action = actions[0]
-        elif len(actions) == 1:
-            # 只有一个action，直接使用
-            self.current_action = actions[0]
+        if actions:
+            self.current_action = actions[0]  # 默认使用第一个action
+        else:
+            self.current_action = None
 
         # 参数表单
-        self.params_group = QGroupBox('参数配置')
+        self.params_group = QGroupBox('⚙️ 参数配置')
+        self.params_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e5e7eb;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 16px;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 4px 8px;
+                color: #667eea;
+                font-weight: bold;
+                background-color: #ffffff;
+                border-radius: 4px;
+            }
+        """)
         self.params_layout = QFormLayout()
         self.params_group.setLayout(self.params_layout)
         layout.addWidget(self.params_group)
@@ -180,7 +212,26 @@ class ToolPage(QWidget):
         self.rebuild_param_form()
 
         # 输出区域
-        output_group = QGroupBox('执行输出')
+        output_group = QGroupBox('📝 执行输出')
+        output_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e5e7eb;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 16px;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 4px 8px;
+                color: #667eea;
+                font-weight: bold;
+                background-color: #ffffff;
+                border-radius: 4px;
+            }
+        """)
         output_layout = QVBoxLayout()
 
         self.output_text = QTextEdit()
@@ -200,6 +251,7 @@ class ToolPage(QWidget):
         button_layout = QHBoxLayout()
 
         self.execute_button = QPushButton('执行')
+        self.execute_button.setObjectName('primary_button')
         self.execute_button.clicked.connect(self.execute_tool)
         button_layout.addWidget(self.execute_button)
 
@@ -219,6 +271,9 @@ class ToolPage(QWidget):
 
     def rebuild_param_form(self):
         """重建参数表单"""
+        # 清理异步加载器
+        self.cleanup_loaders()
+
         # 清空现有参数控件
         while self.params_layout.count():
             item = self.params_layout.takeAt(0)
@@ -312,13 +367,64 @@ class ToolPage(QWidget):
                 widget = MultiSelectComboBox()
                 choices = param_def.get('choices', [])
 
-                # 如果choices是函数名，则动态获取选项
+                # 如果choices是函数名，则异步加载选项
                 if isinstance(choices, str):
-                    if choices == 'get_testcases':
-                        choices = FileUtils.get_testcases()
-                    elif choices == 'get_installed_apps':
-                        choices = FileUtils.get_installed_apps()
+                    self._setup_dynamic_choices_async(param_name, choices, widget, multi_select=True, default=default)
+                    # 先添加占位符选项
+                    widget.addItems(['加载中...'])
+                else:
+                    widget.addItems(choices)
+                    # 设置默认选中项
+                    if default:
+                        if isinstance(default, list):
+                            widget.set_checked_items(default)
+                        else:
+                            widget.set_checked_items([str(default)])
 
+                return widget
+            # 单选下拉框
+            widget = QComboBox()
+            choices = param_def.get('choices', [])
+
+            # 如果choices是函数名，则异步加载选项
+            if isinstance(choices, str):
+                self._setup_dynamic_choices_async(param_name, choices, widget, multi_select=False, default=default)
+                # 先添加占位符选项
+                widget.addItem('加载中...')
+            else:
+                widget.addItems(choices)
+                if default:
+                    index = widget.findText(str(default))
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+            return widget
+
+        # str
+        widget = QLineEdit()
+        widget.setText(str(default) if default else '')
+        return widget
+
+    def _setup_dynamic_choices_async(self, param_name: str, choices_func_name: str, widget: QWidget, multi_select: bool = False, default: Any = None):
+        """设置异步加载动态选项"""
+        # 创建加载器
+        loader = DynamicChoicesLoader(param_name, choices_func_name)
+        loader.choices_loaded.connect(lambda p, c: self._on_choices_loaded(p, c, widget, multi_select, default))
+        self.dynamic_loaders[param_name] = loader
+
+        # 延迟启动加载，避免界面初始化时的卡顿
+        QTimer.singleShot(100, loader.start)
+
+    def _on_choices_loaded(self, param_name: str, choices: list, widget: QWidget, multi_select: bool, default: Any):
+        """动态选项加载完成回调"""
+        try:
+            # 清理之前的加载器
+            if param_name in self.dynamic_loaders:
+                del self.dynamic_loaders[param_name]
+
+            # 更新控件选项
+            if multi_select and isinstance(widget, MultiSelectComboBox):
+                # 清空现有选项
+                widget.clear()
                 widget.addItems(choices)
 
                 # 设置默认选中项
@@ -328,29 +434,21 @@ class ToolPage(QWidget):
                     else:
                         widget.set_checked_items([str(default)])
 
-                return widget
-            # 单选下拉框
-            widget = QComboBox()
-            choices = param_def.get('choices', [])
+            elif not multi_select and isinstance(widget, QComboBox):
+                # 清空现有选项
+                widget.clear()
+                widget.addItems(choices)
 
-            # 如果choices是函数名，则动态获取选项
-            if isinstance(choices, str):
-                if choices == 'get_testcases':
-                    choices = FileUtils.get_testcases()
-                elif choices == 'get_installed_apps':
-                    choices = FileUtils.get_installed_apps()
+                # 设置默认选中项
+                if default:
+                    index = widget.findText(str(default))
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
 
-            widget.addItems(choices)
-            if default:
-                index = widget.findText(str(default))
-                if index >= 0:
-                    widget.setCurrentIndex(index)
-            return widget
+            logger.debug(f'动态选项加载完成: {param_name}, {len(choices)} 个选项')
 
-        # str
-        widget = QLineEdit()
-        widget.setText(str(default) if default else '')
-        return widget
+        except Exception as e:
+            logger.error(f'更新动态选项失败: {e}')
 
     def browse_file(self, line_edit: QLineEdit, filter: str):
         """浏览文件"""
@@ -438,6 +536,14 @@ class ToolPage(QWidget):
             self.execution_thread.wait()
             self.output_text.append('\n执行已取消')
             self.on_execution_finished(self.tool.get_name(), '')
+
+    def cleanup_loaders(self):
+        """清理异步加载器"""
+        for loader in self.dynamic_loaders.values():
+            if loader.isRunning():
+                loader.terminate()
+                loader.wait()
+        self.dynamic_loaders.clear()
 
     def on_output_received(self, text: str):
         """接收输出"""

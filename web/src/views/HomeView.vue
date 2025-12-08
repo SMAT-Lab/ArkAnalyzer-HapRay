@@ -130,12 +130,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import AppNavigation from '@/components/AppNavigation.vue';
-import PerfLoadOverview from '@/components/PerfLoadOverview.vue';
-import PerfStepLoad from '@/components/PerfStepLoad.vue';
-import PerfLoadAnalysis from '@/components/PerfLoadAnalysis.vue';
-import PerfFrameAnalysis from '@/components/PerfFrameAnalysis.vue';
-import FaultTreeAnalysis from '@/components/FaultTreeAnalysis.vue';
+import AppNavigation from '@/components/common/AppNavigation.vue';
+import PerfLoadOverview from '@/components/single-analysis/overview/PerfLoadOverview.vue';
+import PerfStepLoad from '@/components/single-analysis/step/load/PerfStepLoad.vue';
+import PerfLoadAnalysis from '@/components/single-analysis/step/load/PerfLoadAnalysis.vue';
+import PerfFrameAnalysis from '@/components/single-analysis/step/frame/PerfFrameAnalysis.vue';
+import FaultTreeAnalysis from '@/components/single-analysis/step/fault-tree/FaultTreeAnalysis.vue';
 import CompareOverview from '@/components/compare/CompareOverview.vue';
 import CompareStepLoad from '@/components/compare/CompareStepLoad.vue';
 import SceneLoadCompare from '@/components/compare/SceneLoadCompare.vue';
@@ -144,12 +144,12 @@ import DetailDataCompare from '@/components/compare/DetailDataCompare.vue';
 import NewDataAnalysis from '@/components/compare/NewDataAnalysis.vue';
 import Top10DataCompare from '@/components/compare/Top10DataCompare.vue';
 import FaultTreeCompare from '@/components/compare/FaultTreeCompare.vue';
-import PerfSingle from '@/components/PerfSingle.vue';
-import PerfMulti from '@/components/PerfMulti.vue';
-import FlameGraph from '@/components/FlameGraph.vue';
-import NativeMemory from '@/components/NativeMemory.vue';
-import PerfUIAnimate from '@/components/PerfUIAnimate.vue';
-import ComponentsDeps from '@/components/ComponentsDeps.vue';
+import PerfSingle from '@/components/single-analysis/step/load/PerfSingle.vue';
+import PerfMulti from '@/components/multi-version/PerfMulti.vue';
+import FlameGraph from '@/components/single-analysis/step/flame/FlameGraph.vue';
+import NativeMemory from '@/components/single-analysis/step/memory/NativeMemory.vue';
+import PerfUIAnimate from '@/components/single-analysis/step/ui-animate/PerfUIAnimate.vue';
+import ComponentsDeps from '@/components/single-analysis/deps/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
