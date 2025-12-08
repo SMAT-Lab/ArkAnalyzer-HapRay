@@ -207,8 +207,8 @@
 
 <script lang="ts" setup>
 import { ref, watch, computed } from 'vue';
-import { useJsonDataStore } from '../stores/jsonDataStore.ts';
-import { getDbApi } from '../utils/dbApi';
+import { useJsonDataStore } from '../../stores/jsonDataStore.ts';
+import { getDbApi } from '../../utils/dbApi';
 import {
   DataAnalysis,
   Switch,

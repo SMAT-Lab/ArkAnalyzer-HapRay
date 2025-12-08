@@ -6,7 +6,7 @@
 import { ref, onMounted } from 'vue';
 import * as echarts from 'echarts';
 import type { PropType } from 'vue';
-import { type PerfData } from '../stores/jsonDataStore.ts';
+import { type PerfData } from '../../../stores/jsonDataStore.ts';
 
 const props = defineProps({
   chartData: {

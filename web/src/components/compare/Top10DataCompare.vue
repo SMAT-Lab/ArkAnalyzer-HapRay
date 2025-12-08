@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="top10-data-compare">
     <!-- 上传组件 -->
     <div v-if="!hasCompareData" style="margin-bottom: 16px;">
@@ -191,8 +191,8 @@ const props = defineProps({
 import {
   Trophy, Medal, Star, DataAnalysis
 } from '@element-plus/icons-vue';
-import PerfSymbolTable from '../PerfSymbolTable.vue';
-import UploadHtml from '../UploadHtml.vue';
+import PerfSymbolTable from '../single-analysis/step/load/tables/PerfSymbolTable.vue';
+import UploadHtml from '../common/UploadHtml.vue';
 import { useJsonDataStore } from '../../stores/jsonDataStore';
 import { calculateSymbolData, calculateSymbolData1 } from '@/utils/jsonUtil';
 

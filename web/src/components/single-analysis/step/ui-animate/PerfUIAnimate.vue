@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="perf-ui-animate">
     <el-card v-if="!hasData" shadow="never">
       <el-empty description="暂无 UI 动画分析数据" />
@@ -88,7 +88,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useJsonDataStore, type UIAnimateStepData } from '../stores/jsonDataStore';
+import { useJsonDataStore, type UIAnimateStepData } from '../../../../stores/jsonDataStore';
 import PhaseAnalysis from './UIAnimatePhaseAnalysis.vue';
 
 interface Props {

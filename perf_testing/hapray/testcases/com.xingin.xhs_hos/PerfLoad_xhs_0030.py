@@ -82,4 +82,3 @@ class PerfLoad_xhs_0030(PerfTestCase):
 
         self.execute_performance_step('小红书-浏览图文详情及评论场景-step1收藏图片浏览、双指捏合放大/缩小', 35, step1)
         self.execute_performance_step('小红书-浏览图文详情及评论场景-step2评论页浏览、长文笔记浏览', 50, step2)
-
