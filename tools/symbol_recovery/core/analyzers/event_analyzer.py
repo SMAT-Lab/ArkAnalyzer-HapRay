@@ -125,8 +125,10 @@ class EventCountAnalyzer:
             target_so_name = None
             if self.so_dir and self.so_dir.is_file():
                 target_so_name = self.so_dir.name
-            
-            event_count_top100 = self._get_event_count_top100(cursor, file_id_to_path, name_to_data, top_n=100, target_so_name=target_so_name)
+
+            event_count_top100 = self._get_event_count_top100(
+                cursor, file_id_to_path, name_to_data, top_n=100, target_so_name=target_so_name
+            )
             logger.info(f'[OK] Found {len(event_count_top100)} addresses (event_count top100)')
 
             # 4. 找出差异
@@ -219,7 +221,7 @@ class EventCountAnalyzer:
 
     def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None, target_so_name=None):
         """按 event_count 求和统计 topN
-        
+
         Args:
             cursor: 数据库游标
             file_id_to_path: 文件ID到路径的映射
@@ -233,12 +235,15 @@ class EventCountAnalyzer:
         # 如果指定了 target_so_name，在 SQL 查询时就过滤
         if target_so_name:
             # 先找到匹配的 file_id
-            cursor.execute("""
-                SELECT DISTINCT file_id FROM perf_files 
+            cursor.execute(
+                """
+                SELECT DISTINCT file_id FROM perf_files
                 WHERE path LIKE ? OR path LIKE ?
-            """, (f'%{target_so_name}', f'%/{target_so_name}'))
+            """,
+                (f'%{target_so_name}', f'%/{target_so_name}'),
+            )
             matching_file_ids = [row[0] for row in cursor.fetchall()]
-            
+
             if matching_file_ids:
                 # 使用 IN 子句过滤 file_id
                 placeholders = ','.join('?' * len(matching_file_ids))
@@ -290,7 +295,7 @@ class EventCountAnalyzer:
                         'ip': ip,
                         'depth': depth,
                     }
-        
+
         logger.debug(f'处理后的 address_event_counts 包含 {len(address_event_counts)} 个地址')
 
         # 过滤和排序
@@ -304,10 +309,10 @@ class EventCountAnalyzer:
                 continue
             if any(file_path.startswith(prefix) for prefix in excluded_prefixes):
                 continue
-            
+
             # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，这里不需要再次过滤
             # 但为了安全，仍然可以从地址字符串中验证一下（可选）
-            
+
             filtered[key] = {
                 **data['info'],
                 'event_count': data['event_count'],
@@ -319,7 +324,7 @@ class EventCountAnalyzer:
         result = {k: v for k, v in sorted_items[:top_n]}
         if target_so_name:
             logger.debug(f'_get_event_count_top100 返回 {len(result)} 个地址（指定 SO 文件: {target_so_name}）')
-            for key, data in list(result.items())[:3]:
+            for _key, data in list(result.items())[:3]:
                 logger.debug(f'  地址: {data["address"]}, file_path: {data["file_path"]}')
         return result
 
@@ -449,9 +454,11 @@ class EventCountAnalyzer:
                 if self.so_dir and self.so_dir.is_file():
                     target_so_name = self.so_dir.name
                     logger.info(f'Filtering by SO file: {target_so_name}')
-                
+
                 # Get all data before closing connection
-                event_count_top = self._get_event_count_top100(cursor, file_id_to_path, name_to_data, top_n, target_so_name)
+                event_count_top = self._get_event_count_top100(
+                    cursor, file_id_to_path, name_to_data, top_n, target_so_name
+                )
                 logger.info(f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n})')
             except Exception:
                 logger.exception('[ERROR] Failed to calculate event_count statistics')
@@ -466,7 +473,7 @@ class EventCountAnalyzer:
                     key=lambda x: x[1]['event_count'],
                     reverse=True,
                 )
-                
+
                 # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，这里不需要再次过滤
                 # 但为了安全，仍然可以从地址字符串中验证一下（可选）
                 # 直接取 top_n，因为 SQL 查询已经过滤了
@@ -520,7 +527,7 @@ class EventCountAnalyzer:
                             # Skip unresolvable HAP addresses
                             logger.warning(f'  ⚠️  HAP address cannot be resolved, skipping: {address}')
                             continue  # 跳过这个地址，不添加到 results 中
-                    
+
                     # 提取偏移量（从 address 中提取，格式如 "libxwebcore.so+0x50338a0"）
                     offset = None
                     if '+' in address:
@@ -552,7 +559,7 @@ class EventCountAnalyzer:
                     )
                 logger.info(f'[OK] Prepared {len(results)} results')
                 if self.so_dir and self.so_dir.is_file():
-                    logger.info(f'Results 中的地址列表:')
+                    logger.info('Results 中的地址列表:')
                     for r in results:
                         logger.info(f'  - {r.get("address", "unknown")} (file_path: {r.get("file_path", "unknown")})')
             except Exception:

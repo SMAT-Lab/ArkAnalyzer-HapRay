@@ -9,28 +9,23 @@ COLORS = {
     'primary': '#667eea',
     'primary_dark': '#5a67d8',
     'primary_light': '#7c3aed',
-
     # 背景色
     'background': '#f5f7fa',
     'background_light': '#ffffff',
     'background_dark': '#f8f9fa',
-
     # 文字颜色
     'text_primary': '#1f2937',
     'text_secondary': '#6b7280',
     'text_light': '#9ca3af',
-
     # 边框颜色
     'border_light': '#e5e7eb',
     'border_medium': '#d1d5db',
     'border_dark': '#9ca3af',
-
     # 状态颜色
     'success': '#10b981',
     'warning': '#f59e0b',
     'error': '#ef4444',
     'info': '#3b82f6',
-
     # 阴影
     'shadow_sm': '0 1px 2px rgba(0, 0, 0, 0.05)',
     'shadow_md': '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -477,9 +472,11 @@ QDialog QLabel {{
 }}
 """
 
+
 def apply_styles(app):
     """应用样式到应用程序"""
     app.setStyleSheet(MAIN_STYLE)
+
 
 def get_color(name):
     """获取颜色值"""
