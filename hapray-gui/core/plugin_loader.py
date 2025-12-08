@@ -46,7 +46,7 @@ class PluginLoader:
                     plugins_dir = exe_dir.parent
             else:
                 # 开发环境
-                plugins_dir = Path(__file__).parent.parent.parent
+                plugins_dir = Path(__file__).parent.parent.parent / 'tools'
         self.plugins_dir = Path(plugins_dir).resolve()
         self.plugins: dict[str, BaseTool] = {}
         self.plugin_metadata: dict[str, dict[str, Any]] = {}
