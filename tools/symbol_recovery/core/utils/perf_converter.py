@@ -641,11 +641,11 @@ class MissingSymbolFunctionAnalyzer:
             # 如果 address 中的 SO 文件名与指定的 SO 文件匹配，直接使用指定的文件
             if address_so_name == self.so_dir.name:
                 so_file = self.so_dir.resolve()
-        
+
         # 如果还没有找到，尝试从 file_path 查找
         if not so_file:
             so_file = self.find_so_file(file_path)
-        
+
         if not so_file:
             logger.warning(' SO file not found: %s (address: %s)', file_path, address)
             return None
@@ -1066,7 +1066,7 @@ class MissingSymbolFunctionAnalyzer:
                         logger.debug(f'跳过格式不正确的地址: {address}')
                 filtered_data = so_filtered_data
                 logger.info(f'✅ 过滤后剩余 {len(filtered_data):,} 个地址（指定 SO 文件: {self.so_dir.name}）')
-            
+
             # 6. 按调用次数排序，取前 N 个
             sorted_data = sorted(filtered_data, key=lambda x: x['call_count'], reverse=True)[:top_n]
             logger.info(f'✅ After filtering, {len(filtered_data):,} records remaining, selecting top {top_n}')
@@ -1131,7 +1131,7 @@ class MissingSymbolFunctionAnalyzer:
                     # 如果没有指定 --so-file，记录所有地址
                     address = row.get('地址', '')
                     logger.debug(f'从 Excel 读取地址: {address}')
-                
+
                 # 读取 event_count，处理 NaN 值
                 event_count = None
                 if '指令数(event_count)' in row:
@@ -1207,7 +1207,9 @@ class MissingSymbolFunctionAnalyzer:
                     # 确保调用堆栈信息被正确传递
                     call_stack_info = result.get('call_stack_info')
                     if call_stack_info:
-                        logger.debug(f'函数 #{rank} 已有调用堆栈信息: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者')
+                        logger.debug(
+                            f'函数 #{rank} 已有调用堆栈信息: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者'
+                        )
                     else:
                         logger.debug(f'函数 #{rank} 没有调用堆栈信息，将在批量分析时重新获取')
                     # 准备批量分析的数据
@@ -1227,7 +1229,9 @@ class MissingSymbolFunctionAnalyzer:
 
                     # 处理字符串：如果是逗号分隔的字符串，转换为列表
                     strings_value = result.get('strings', '')
-                    logger.debug(f'Function #{rank} strings_value from result: {repr(strings_value)[:100]}, type: {type(strings_value)}')
+                    logger.debug(
+                        f'Function #{rank} strings_value from result: {repr(strings_value)[:100]}, type: {type(strings_value)}'
+                    )
                     if isinstance(strings_value, str):
                         strings_list = (
                             [s.strip() for s in strings_value.split(',') if s.strip()] if strings_value else []
@@ -1249,15 +1253,19 @@ class MissingSymbolFunctionAnalyzer:
                             if '+' in address:
                                 offset_str = address.split('+', 1)[1]
                                 try:
-                                    vaddr = int(offset_str, 16) if not offset_str.startswith('0x') else int(offset_str, 16)
+                                    vaddr = (
+                                        int(offset_str, 16) if not offset_str.startswith('0x') else int(offset_str, 16)
+                                    )
                                     call_stack_info = self._get_call_stack_info(file_path, address, vaddr)
                                     if call_stack_info:
-                                        logger.info(f'函数 #{rank} 重新获取调用堆栈信息成功: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者')
+                                        logger.info(
+                                            f'函数 #{rank} 重新获取调用堆栈信息成功: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者'
+                                        )
                                 except (ValueError, Exception) as e:
                                     logger.debug(f'函数 #{rank} 无法解析地址 {address}: {e}')
                         except Exception as e:
                             logger.debug(f'函数 #{rank} 获取调用堆栈信息失败: {e}')
-                    
+
                     functions_data.append(
                         {
                             'function_id': f'func_{rank}',
@@ -1277,7 +1285,9 @@ class MissingSymbolFunctionAnalyzer:
                             'call_stack_info': call_stack_info,  # 添加调用堆栈信息
                         }
                     )
-                    logger.debug(f'Function #{rank} added to functions_data: strings={len(strings_list)}, called_functions={len(result.get("called_functions", []))}, call_stack_info={call_stack_info is not None}')
+                    logger.debug(
+                        f'Function #{rank} added to functions_data: strings={len(strings_list)}, called_functions={len(result.get("called_functions", []))}, call_stack_info={call_stack_info is not None}'
+                    )
                     logger.debug(
                         f'✅ 函数 #{rank} ({address}) 已添加到 functions_data，指令数: {len(inst_list)}, 反编译: {"有" if result.get("decompiled") else "无"}'
                     )
@@ -1292,7 +1302,7 @@ class MissingSymbolFunctionAnalyzer:
                 logger.debug(
                     f'functions_data 长度: {len(functions_data)}, llm_analyzer: {self.llm_analyzer is not None}'
                 )
-                
+
                 # 按 SO 文件分组
                 functions_by_so = {}
                 for func_data in functions_data:
@@ -1312,20 +1322,20 @@ class MissingSymbolFunctionAnalyzer:
                     else:
                         # 从 SO 文件路径中提取文件名
                         so_name = Path(so_file_path).name if so_file_path else 'unknown'
-                    
+
                     if so_name not in functions_by_so:
                         functions_by_so[so_name] = []
                     functions_by_so[so_name].append(func_data)
-                
+
                 logger.info(f'按 SO 文件分组: {len(functions_by_so)} 个不同的 SO 文件')
                 for so_name, funcs in functions_by_so.items():
                     logger.info(f'  - {so_name}: {len(funcs)} 个函数')
-                
+
                 # 对每个 SO 文件组分别进行批量分析
                 all_batch_results = []
                 for so_name, so_functions in functions_by_so.items():
                     logger.info(f'\n分析 {so_name} 中的 {len(so_functions)} 个函数...')
-                    
+
                     # 为这个 SO 文件组构建上下文（包含调用堆栈信息）
                     context = None
                     if so_functions:
@@ -1334,24 +1344,20 @@ class MissingSymbolFunctionAnalyzer:
                         so_file_path = first_func.get('so_file')
                         file_path = first_func.get('file_path', '')
                         address = first_func.get('address', '')
-                        
+
                         if so_file_path:
                             so_file = Path(so_file_path)
-                            base_context = (
-                                self.context if self.context else self._build_context(so_file, file_path)
-                            )
+                            base_context = self.context if self.context else self._build_context(so_file, file_path)
                         elif file_path:
                             # 如果没有 so_file，尝试从 file_path 查找
                             so_file = self.find_so_file(file_path)
                             if so_file:
-                                base_context = (
-                                    self.context if self.context else self._build_context(so_file, file_path)
-                                )
+                                base_context = self.context if self.context else self._build_context(so_file, file_path)
                             else:
                                 base_context = self.context if self.context else ''
                         else:
                             base_context = self.context if self.context else ''
-                        
+
                         # 确保每个函数都有调用堆栈信息（如果缺失则重新获取）
                         # 注意：调用堆栈信息是每个地址特有的，不应该合并到整体背景信息中
                         # 每个函数的调用堆栈信息会在 batch_analyzer 中单独显示
@@ -1359,32 +1365,40 @@ class MissingSymbolFunctionAnalyzer:
                             call_stack_info = func.get('call_stack_info')
                             func_file_path = func.get('file_path', '')
                             func_address = func.get('address', '')
-                            
-                            if not call_stack_info and self.perf_db_file and self.perf_db_file.exists():
-                                # 尝试重新获取调用堆栈信息
-                                if func_file_path and func_address:
-                                    try:
-                                        # 从地址中提取偏移量
-                                        if '+' in func_address:
-                                            offset_str = func_address.split('+', 1)[1]
-                                            try:
-                                                vaddr = int(offset_str, 16)
-                                                call_stack_info = self._get_call_stack_info(func_file_path, func_address, vaddr)
-                                                if call_stack_info:
-                                                    func['call_stack_info'] = call_stack_info
-                                                    logger.debug(f'函数 {func.get("function_id", "unknown")} 重新获取调用堆栈信息成功: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者')
-                                            except (ValueError, Exception) as e:
-                                                logger.debug(f'无法解析地址 {func_address}: {e}')
-                                    except Exception as e:
-                                        logger.debug(f'获取调用堆栈信息失败: {e}')
-                        
+
+                            if (
+                                not call_stack_info
+                                and self.perf_db_file
+                                and self.perf_db_file.exists()
+                                and func_file_path
+                                and func_address
+                            ):
+                                try:
+                                    # 从地址中提取偏移量
+                                    if '+' in func_address:
+                                        offset_str = func_address.split('+', 1)[1]
+                                        try:
+                                            vaddr = int(offset_str, 16)
+                                            call_stack_info = self._get_call_stack_info(
+                                                func_file_path, func_address, vaddr
+                                            )
+                                            if call_stack_info:
+                                                func['call_stack_info'] = call_stack_info
+                                                logger.debug(
+                                                    f'函数 {func.get("function_id", "unknown")} 重新获取调用堆栈信息成功: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者'
+                                                )
+                                        except (ValueError, Exception) as e:
+                                            logger.debug(f'无法解析地址 {func_address}: {e}')
+                                except Exception as e:
+                                    logger.debug(f'获取调用堆栈信息失败: {e}')
+
                         # 使用基础上下文，不添加调用堆栈信息（调用堆栈信息会在每个函数中单独显示）
                         context = base_context
-                    
+
                     # 对该 SO 文件组的函数进行批量分析
                     batch_results = self.llm_analyzer.batch_analyze_functions(so_functions, context=context)
                     all_batch_results.extend(batch_results)
-                
+
                 batch_results = all_batch_results
 
                 # 第三步：将 LLM 分析结果合并到 results 中
@@ -1556,16 +1570,16 @@ class MissingSymbolFunctionAnalyzer:
             # 处理调用链信息（call_stack_info），合并调用者和被调用者信息
             call_stack_info = result.get('call_stack_info')
             call_stack_str = ''
-            
+
             # 收集所有调用关系
             callers_list = []
             callees_list = []
-            
+
             # 从 call_stack_info 获取调用者和被调用者
             if call_stack_info:
                 callers = call_stack_info.get('callers', [])
                 callees = call_stack_info.get('callees', [])
-                
+
                 if callers:
                     for caller in callers[:5]:  # 最多显示5个调用者
                         caller_name = caller.get('symbol_name', '')
@@ -1574,7 +1588,7 @@ class MissingSymbolFunctionAnalyzer:
                             callers_list.append(f'{caller_name}({caller_addr})')
                         elif caller_addr:
                             callers_list.append(caller_addr)
-                
+
                 if callees:
                     for callee in callees[:5]:  # 最多显示5个被调用者
                         callee_name = callee.get('symbol_name', '')
@@ -1583,20 +1597,20 @@ class MissingSymbolFunctionAnalyzer:
                             callees_list.append(f'{callee_name}({callee_addr})')
                         elif callee_addr:
                             callees_list.append(callee_addr)
-            
+
             # 如果没有从 call_stack_info 获取到被调用者，尝试从 called_functions 获取
             if not callees_list:
                 called_functions = result.get('called_functions', [])
                 if called_functions:
                     callees_list = called_functions[:10]  # 最多显示10个
-            
+
             # 格式化调用链信息
             call_stack_parts = []
             if callers_list:
                 call_stack_parts.append(f'调用者: {", ".join(callers_list)}')
             if callees_list:
                 call_stack_parts.append(f'被调用: {", ".join(callees_list)}')
-            
+
             if call_stack_parts:
                 call_stack_str = ' | '.join(call_stack_parts)
 
@@ -1668,7 +1682,7 @@ class MissingSymbolFunctionAnalyzer:
         # 确保字符串常量列是字符串类型，避免空字符串被转换为 nan
         if '字符串常量' in df.columns:
             df['字符串常量'] = df['字符串常量'].fillna('').astype(str).replace('nan', '').replace('None', '')
-        
+
         # 确保调用链信息列是字符串类型
         if '调用链信息' in df.columns:
             df['调用链信息'] = df['调用链信息'].fillna('').astype(str).replace('nan', '').replace('None', '')
