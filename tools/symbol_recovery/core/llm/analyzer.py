@@ -430,10 +430,10 @@ class LLMFunctionAnalyzer:
 
         prompt_parts.append('请分析以下 ARM64 反汇编代码，推断函数的功能和可能的函数名。')
         prompt_parts.append('')
-        
+
         # 添加开源库相关的 prompt（如果指定了开源库）
         self._add_open_source_lib_prompt(prompt_parts, open_source_lib)
-        
+
         prompt_parts.append('⚠️ 重要提示：这是一个性能分析场景，该函数被识别为高指令数负载的热点函数。')
         prompt_parts.append('请重点关注可能导致性能问题的因素，包括但不限于：')
         prompt_parts.append('  - 循环和迭代（特别是嵌套循环、大循环次数）')
@@ -570,16 +570,18 @@ class LLMFunctionAnalyzer:
     def _add_open_source_lib_prompt(self, prompt_parts: list[str], open_source_lib: Optional[str] = None):
         """
         添加开源库和 SIMD 相关的 prompt 内容（共享方法，避免重复代码）
-        
+
         Args:
             prompt_parts: prompt 内容列表
             open_source_lib: 开源库名称（可选）
         """
         if not open_source_lib:
             return
-        
+
         prompt_parts.append(f'🔍 重要提示：这是一个基于开源库 {open_source_lib} 的定制版本（三方库）。')
-        prompt_parts.append(f'   该 SO 文件是基于 {open_source_lib} 开源项目进行定制开发的，函数实现可能与标准 {open_source_lib} 库相似。')
+        prompt_parts.append(
+            f'   该 SO 文件是基于 {open_source_lib} 开源项目进行定制开发的，函数实现可能与标准 {open_source_lib} 库相似。'
+        )
         prompt_parts.append(f'   请利用您对 {open_source_lib} 开源库的知识，结合反编译代码的特征，')
         prompt_parts.append(f'   直接根据 {open_source_lib} 库中常见的函数名和功能模式来推断函数名和功能。')
         prompt_parts.append(f'   如果反编译代码的特征与 {open_source_lib} 库中的某个函数匹配，请优先使用该函数名。')
@@ -621,7 +623,9 @@ class LLMFunctionAnalyzer:
         prompt_parts.append('')
         prompt_parts.append('   📌 开源库功能相关性：')
         prompt_parts.append(f'   在功能描述中，请结合 {open_source_lib} 开源库的典型功能和特性，')
-        prompt_parts.append(f'   说明该函数在 {open_source_lib} 库中的作用和定位，以及与其他 {open_source_lib} 函数的关联性。')
+        prompt_parts.append(
+            f'   说明该函数在 {open_source_lib} 库中的作用和定位，以及与其他 {open_source_lib} 函数的关联性。'
+        )
         prompt_parts.append(f'   例如：该函数是 {open_source_lib} 中哪个模块/组件的核心功能，')
         prompt_parts.append(f'   在 {open_source_lib} 的典型使用场景中扮演什么角色，')
         prompt_parts.append(f'   与 {open_source_lib} 库中哪些常见函数或功能相关。')

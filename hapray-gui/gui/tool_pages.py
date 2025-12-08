@@ -3,12 +3,12 @@
 """
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -57,7 +57,6 @@ class DynamicChoicesLoader(QThread):
                 choices = FileUtils.get_testcases()
             elif self.choices_func_name == 'get_installed_apps':
                 # 添加超时处理，避免长时间卡顿
-                import time
                 start_time = time.time()
                 choices = FileUtils.get_installed_apps()
                 elapsed = time.time() - start_time
@@ -404,7 +403,9 @@ class ToolPage(QWidget):
         widget.setText(str(default) if default else '')
         return widget
 
-    def _setup_dynamic_choices_async(self, param_name: str, choices_func_name: str, widget: QWidget, multi_select: bool = False, default: Any = None):
+    def _setup_dynamic_choices_async(
+        self, param_name: str, choices_func_name: str, widget: QWidget, multi_select: bool = False, default: Any = None
+    ):
         """设置异步加载动态选项"""
         # 创建加载器
         loader = DynamicChoicesLoader(param_name, choices_func_name)

@@ -724,21 +724,21 @@ export class HapAnalysisService {
      * 移除或替换可能导致Excel文件损坏的特殊字符
      */
     private sanitizeForExcel(value: string): string {
-        if (!value) return value;
+        if (!value) {return value;}
 
         return value
             // 移除控制字符（除了换行符）
             .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
             // 替换零宽字符和其他不可见字符
-            .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
-            // 限制字符串长度，避免Excel单元格过大
-            // .substring(0, 32767);
+            .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '');
+        // 限制字符串长度，避免Excel单元格过大
+        // .substring(0, 32767);
     }
 
     /**
      * 验证Excel数据，确保没有可能导致文件损坏的内容
      */
-    private validateExcelData(sheets: SheetData[]): void {
+    private validateExcelData(sheets: Array<SheetData>): void {
         for (let sheetIndex = 0; sheetIndex < sheets.length; sheetIndex++) {
             const sheet = sheets[sheetIndex];
             if (!Array.isArray(sheet)) {
@@ -929,14 +929,14 @@ export class HapAnalysisService {
                     { value: this.sanitizeForExcel(detection.folder || '-'), type: String },
                     { value: this.sanitizeForExcel(detection.file || '-'), type: String },
                     { value: this.sanitizeForExcel(detection.techStack || '-'), type: String },
-                    { value: this.sanitizeForExcel(detection.fileType || '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.fileType ?? '-'), type: String },
                     { value: binaryTypeStr, type: String },
                     { value: this.formatFileSize(detection.size || 0), type: String },
                     { value: confidenceStr, type: String },
-                    { value: this.sanitizeForExcel(detection.sourceHapPath || '-'), type: String },
-                    { value: this.sanitizeForExcel(detection.sourceBundleName || '-'), type: String },
-                    { value: detection.sourceVersionCode?.toString() || '-', type: String },
-                    { value: this.sanitizeForExcel(detection.sourceVersionName || '-'), type: String }
+                    { value: this.sanitizeForExcel(detection.sourceHapPath ?? '-'), type: String },
+                    { value: this.sanitizeForExcel(detection.sourceBundleName ?? '-'), type: String },
+                    { value: detection.sourceVersionCode?.toString() ?? '-', type: String },
+                    { value: this.sanitizeForExcel(detection.sourceVersionName ?? '-'), type: String }
                 ];
 
                 // 添加 metadata 字段
