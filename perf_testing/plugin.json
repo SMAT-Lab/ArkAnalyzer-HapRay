@@ -1,6 +1,6 @@
 {
   "id": "perf_testing",
-  "name": "应用负载测试",
+  "name": "负载测试",
   "description": "执行性能测试，收集性能数据和trace信息",
   "version": "1.0.0",
   "author": "HapRay Team",
@@ -15,7 +15,7 @@
   },
   "actions": {
     "perf": {
-      "name": "性能测试",
+      "name": "自动化性能测试",
       "description": "执行性能测试，收集性能数据和trace信息",
       "action_mapping": {
         "type": "position"
@@ -79,8 +79,8 @@
       }
     },
     "manual": {
-      "name": "手动测试",
-      "description": "手动测试模式，交互式收集性能数据",
+      "name": "手动性能测试",
+      "description": "手动性能测试模式，交互式收集性能数据",
       "action_mapping": {
         "type": "map",
         "command": ["perf", "--manual"]
@@ -181,7 +181,7 @@
       }
     },
     "prepare": {
-      "name": "简化测试执行",
+      "name": "用例前置条件配置",
       "description": "简化的测试执行，不生成复杂报告",
       "action_mapping": {
         "type": "position"
@@ -211,8 +211,8 @@
       }
     },
     "update": {
-      "name": "更新报告",
-      "description": "更新现有性能报告",
+      "name": "更新测试报告",
+      "description": "更新现有测试性能报告",
       "action_mapping": {
         "type": "position"
       },
