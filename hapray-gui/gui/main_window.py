@@ -8,7 +8,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QSplitter,
@@ -22,7 +24,6 @@ from core.config_manager import ConfigManager
 from core.plugin_loader import PluginLoader
 from gui.plugin_config_dialog import PluginConfigDialog
 from gui.result_viewer import ResultViewer
-from gui.styles import apply_styles
 from gui.tool_pages import ToolPage
 
 
@@ -83,9 +84,8 @@ class MainWindow(QMainWindow):
         tree_layout.setContentsMargins(0, 0, 0, 0)
 
         # 标题
-        from PySide6.QtWidgets import QLabel
-        title_label = QLabel("功能列表")
-        title_label.setObjectName("title_label")
+        title_label = QLabel('功能列表')
+        title_label.setObjectName('title_label')
         tree_layout.addWidget(title_label)
 
         # 功能树
@@ -120,7 +120,6 @@ class MainWindow(QMainWindow):
 
     def show_welcome_message(self):
         """显示欢迎信息"""
-        from PySide6.QtWidgets import QLabel, QFrame
         welcome_widget = QWidget()
         welcome_layout = QVBoxLayout(welcome_widget)
         welcome_layout.setAlignment(Qt.AlignCenter)
@@ -138,20 +137,20 @@ class MainWindow(QMainWindow):
         icon_layout = QVBoxLayout(icon_frame)
         icon_layout.setAlignment(Qt.AlignCenter)
 
-        icon_label = QLabel("🚀")
-        icon_label.setStyleSheet("font-size: 32px; color: white;")
+        icon_label = QLabel('🚀')
+        icon_label.setStyleSheet('font-size: 32px; color: white;')
         icon_layout.addWidget(icon_label)
 
         welcome_layout.addWidget(icon_frame)
 
         # 欢迎标题
-        welcome_label = QLabel("欢迎使用 HapRay GUI")
-        welcome_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #667eea; margin: 8px 0px;")
+        welcome_label = QLabel('欢迎使用 HapRay GUI')
+        welcome_label.setStyleSheet('font-size: 24px; font-weight: bold; color: #667eea; margin: 8px 0px;')
         welcome_layout.addWidget(welcome_label)
 
         # 副标题
-        subtitle_label = QLabel("HapRay 工具集成平台")
-        subtitle_label.setStyleSheet("font-size: 16px; color: #6b7280; margin-bottom: 16px;")
+        subtitle_label = QLabel('HapRay 工具集成平台')
+        subtitle_label.setStyleSheet('font-size: 16px; color: #6b7280; margin-bottom: 16px;')
         welcome_layout.addWidget(subtitle_label)
 
         # 功能介绍
@@ -159,15 +158,15 @@ class MainWindow(QMainWindow):
         features_layout.setSpacing(8)
 
         feature_items = [
-            "🔧 动态测试 - 性能测试和trace收集",
-            "⚡ 优化检测 - 二进制文件优化级别检测",
-            "🔍 符号恢复 - 二进制符号恢复工具",
-            "📊 静态分析 - HAP包静态分析"
+            '🔧 动态测试 - 性能测试和trace收集',
+            '⚡ 优化检测 - 二进制文件优化级别检测',
+            '🔍 符号恢复 - 二进制符号恢复工具',
+            '📊 静态分析 - HAP包静态分析',
         ]
 
         for feature in feature_items:
             feature_label = QLabel(feature)
-            feature_label.setStyleSheet("font-size: 14px; color: #4b5563; padding: 4px 0px;")
+            feature_label.setStyleSheet('font-size: 14px; color: #4b5563; padding: 4px 0px;')
             features_layout.addWidget(feature_label)
 
         welcome_layout.addLayout(features_layout)
@@ -183,12 +182,12 @@ class MainWindow(QMainWindow):
         """)
         hint_layout = QVBoxLayout(hint_frame)
 
-        hint_title = QLabel("开始使用")
-        hint_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #667eea; margin-bottom: 8px;")
+        hint_title = QLabel('开始使用')
+        hint_title.setStyleSheet('font-size: 16px; font-weight: bold; color: #667eea; margin-bottom: 8px;')
         hint_layout.addWidget(hint_title)
 
-        hint_label = QLabel("请在左侧的功能列表中选择您要使用的工具")
-        hint_label.setStyleSheet("font-size: 14px; color: #6b7280; line-height: 1.4;")
+        hint_label = QLabel('请在左侧的功能列表中选择您要使用的工具')
+        hint_label.setStyleSheet('font-size: 14px; color: #6b7280; line-height: 1.4;')
         hint_layout.addWidget(hint_label)
 
         welcome_layout.addWidget(hint_frame)
@@ -211,44 +210,38 @@ class MainWindow(QMainWindow):
 
         # 定义action图标映射
         action_icons = {
-            "prepare": "🔧",  # 用例前置条件配置
-            "perf": "📊",     # 自动化性能测试
-            "manual": "🎯",   # 手动性能测试
-            "ui-tech-stack": "🔍",  # 页面技术栈动态识别
-            "update": "🔄",   # 更新测试报告
-            "compare": "⚖️",   # 对比报告
-            "opt": "⚡",       # SO编译优化
-            "static": "📱",    # 应用技术栈分析
-            "symbol-recovery": "🔧"  # 符号恢复
+            'prepare': '🔧',  # 用例前置条件配置
+            'perf': '📊',  # 自动化性能测试
+            'manual': '🎯',  # 手动性能测试
+            'ui-tech-stack': '🔍',  # 页面技术栈动态识别
+            'update': '🔄',  # 更新测试报告
+            'compare': '⚖️',  # 对比报告
+            'opt': '⚡',  # SO编译优化
+            'static': '📱',  # 应用技术栈分析
+            'symbol-recovery': '🔧',  # 符号恢复
         }
 
         # 定义菜单结构映射：plugin_id -> {action_key -> display_name}
         menu_structure = {
-            "负载测试": {
-                "plugin_actions": {
-                    "perf_testing": {
-                        "prepare": "用例前置条件配置",
-                        "perf": "自动化性能测试",
-                        "manual": "手动性能测试",
-                        "ui-tech-stack": "页面技术栈动态识别",
-                        "update": "更新测试报告",
-                        "compare": "对比报告"
+            '负载测试': {
+                'plugin_actions': {
+                    'perf_testing': {
+                        'prepare': '用例前置条件配置',
+                        'perf': '自动化性能测试',
+                        'manual': '手动性能测试',
+                        'ui-tech-stack': '页面技术栈动态识别',
+                        'update': '更新测试报告',
+                        'compare': '对比报告',
                     }
                 }
             },
-            "应用分析": {
-                "plugin_actions": {
-                    "optimization_detector": {
-                        "opt": "SO编译优化"
-                    },
-                    "static_analyzer": {
-                        "static": "应用技术栈分析"
-                    },
-                    "symbol_recovery": {
-                        "symbol-recovery": "符号恢复"
-                    }
+            '应用分析': {
+                'plugin_actions': {
+                    'optimization_detector': {'opt': 'SO编译优化'},
+                    'static_analyzer': {'static': '应用技术栈分析'},
+                    'symbol_recovery': {'symbol-recovery': '符号恢复'},
                 }
-            }
+            },
         }
 
         # 构建菜单结构
@@ -256,16 +249,16 @@ class MainWindow(QMainWindow):
             menu_item = QTreeWidgetItem(self.function_tree)
 
             # 为一级菜单添加图标
-            if menu_name == "负载测试":
-                menu_item.setText(0, f"📊 {menu_name}")
-            elif menu_name == "应用分析":
-                menu_item.setText(0, f"🔍 {menu_name}")
-            elif menu_name == "符号恢复":
-                menu_item.setText(0, f"🔧 {menu_name}")
+            if menu_name == '负载测试':
+                menu_item.setText(0, f'📊 {menu_name}')
+            elif menu_name == '应用分析':
+                menu_item.setText(0, f'🔍 {menu_name}')
+            elif menu_name == '符号恢复':
+                menu_item.setText(0, f'🔧 {menu_name}')
             else:
                 menu_item.setText(0, menu_name)
 
-            plugin_actions = menu_config.get("plugin_actions", {})
+            plugin_actions = menu_config.get('plugin_actions', {})
 
             for plugin_id, action_mapping in plugin_actions.items():
                 # 检查插件是否存在且启用
@@ -284,13 +277,11 @@ class MainWindow(QMainWindow):
                         # 创建二级菜单项
                         action_item = QTreeWidgetItem(menu_item)
                         # 使用对应的图标，如果没有找到则使用默认图标
-                        icon = action_icons.get(action_key, "⚙️")
-                        action_item.setText(0, f"{icon} {display_name}")
-                        action_item.setData(0, Qt.UserRole, {
-                            'type': 'action',
-                            'plugin_id': plugin_id,
-                            'action': action_key
-                        })
+                        icon = action_icons.get(action_key, '⚙️')
+                        action_item.setText(0, f'{icon} {display_name}')
+                        action_item.setData(
+                            0, Qt.UserRole, {'type': 'action', 'plugin_id': plugin_id, 'action': action_key}
+                        )
 
             # 如果一级菜单下没有子项，隐藏该菜单
             if menu_item.childCount() == 0:
@@ -301,7 +292,7 @@ class MainWindow(QMainWindow):
 
         # 添加结果查看器节点
         result_item = QTreeWidgetItem(self.function_tree)
-        result_item.setText(0, "📋 结果查看")
+        result_item.setText(0, '📋 结果查看')
         result_item.setData(0, Qt.UserRole, {'type': 'result_viewer'})
 
     def on_function_selected(self, item, column):
@@ -327,11 +318,9 @@ class MainWindow(QMainWindow):
 
         # 创建工具页面
         tool_page = ToolPage(tool)
-        if action:
-            # 如果指定了action，设置当前action
-            if hasattr(tool_page, 'current_action') and hasattr(tool_page, 'rebuild_param_form'):
-                tool_page.current_action = action
-                tool_page.rebuild_param_form()
+        if action and hasattr(tool_page, 'current_action') and hasattr(tool_page, 'rebuild_param_form'):
+            tool_page.current_action = action
+            tool_page.rebuild_param_form()
 
         tool_page.execution_finished.connect(self.on_execution_finished)
 
@@ -439,7 +428,6 @@ class MainWindow(QMainWindow):
         self.show_result_viewer()
         # 刷新结果查看器
         self.result_viewer.refresh_results()
-
 
     def closeEvent(self, event):
         """关闭事件"""
