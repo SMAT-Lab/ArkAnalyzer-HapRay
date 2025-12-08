@@ -69,7 +69,7 @@ class ResultViewer(QWidget):
         left_layout = QVBoxLayout(left_widget)
 
         list_label = QLabel('📋 执行历史')
-        list_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;")
+        list_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;')
         left_layout.addWidget(list_label)
 
         self.result_list = QListWidget()
@@ -105,7 +105,7 @@ class ResultViewer(QWidget):
         right_layout = QVBoxLayout(right_widget)
 
         detail_label = QLabel('📄 结果详情')
-        detail_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;")
+        detail_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;')
         right_layout.addWidget(detail_label)
 
         self.result_detail = QTextEdit()
