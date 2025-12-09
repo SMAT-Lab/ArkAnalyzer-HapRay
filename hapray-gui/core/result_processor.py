@@ -10,17 +10,23 @@ from pathlib import Path
 from typing import Any, Optional
 
 from core.base_tool import ToolResult
+from core.config_manager import ConfigManager
 
 
 class ResultProcessor:
     """结果处理器"""
 
     def __init__(self, output_dir: Optional[str] = None):
+        self.config = ConfigManager()
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            self.output_dir = Path.home() / 'hapray_output'
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir_path = self.config.get_output_dir()
+            if output_dir_path:
+                self.output_dir = Path(output_dir_path)
+            else:
+                # 源码运行时不创建输出目录
+                self.output_dir = None
 
     def save_result(self, tool_name: str, result: ToolResult, params: dict[str, Any]) -> str:
         """
@@ -29,6 +35,11 @@ class ResultProcessor:
         Returns:
             保存的文件路径
         """
+        if self.output_dir is None:
+            # 源码运行时不保存结果
+            print(f"源码运行模式：跳过保存结果到本地目录 (工具: {tool_name})")
+            return ""
+
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         result_dir = self.output_dir / tool_name / timestamp
         result_dir.mkdir(parents=True, exist_ok=True)
