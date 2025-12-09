@@ -167,7 +167,6 @@ import {
   type FileDataItem,
   type SymbolDataItem
 } from '@/utils/jsonUtil.ts';
-import { ComponentCategory } from '@/stores/jsonDataStore.ts';
 //import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
 const props = defineProps<{
@@ -510,28 +509,16 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   return data;
 });
 
-// 计算技术栈数据（kind > 3的分类）
+// 计算技术栈数据（所有kind的分类，动态从数据中获取）
 const techStackData = computed(() => {
   // 获取大分类数据
   const categoryData = calculateCategorysData(perfData!, null, false).filter(item => item.stepId === props.stepId);
 
-  // 定义技术栈映射（ComponentCategory中kind > 3的）
-  const techStackCategories = {
-    [ComponentCategory.RN]: 'RN',
-    [ComponentCategory.Flutter]: 'Flutter',
-    [ComponentCategory.WEB]: 'WEB',
-    [ComponentCategory.KMP]: 'KMP'
-  };
-
   // 计算总指令数
   const totalInstructions = categoryData.reduce((sum, item) => sum + item.instructions, 0);
 
-  // 过滤技术栈分类并计算占比
+  // 直接使用数据中的所有分类，不再硬编码映射
   const techStackItems = categoryData
-    .filter(item => {
-      // 通过category名称匹配技术栈
-      return Object.values(techStackCategories).includes(item.category);
-    })
     .map(item => {
       const percentage = totalInstructions > 0 ? ((item.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
       return {
