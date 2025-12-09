@@ -141,8 +141,8 @@ class ToolExecutor:
 
             logger.info(f'执行命令: {" ".join(cmd)}')
 
-            # 确定工作目录：使用插件根目录，如果未提供则使用当前工作目录
-            working_dir = plugin_root_dir if plugin_root_dir else os.getcwd()
+            # 确定工作目录：使用当前工作目录
+            working_dir = os.getcwd()
             if working_dir:
                 working_dir = str(Path(working_dir).resolve())
 
