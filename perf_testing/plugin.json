@@ -137,13 +137,6 @@
         "command": ["perf", "--ui-tech-stack"]
       },
       "parameters": {
-        "package-name": {
-          "type": "choice",
-          "label": "应用包名",
-          "required": false,
-          "choices": "get_installed_apps",
-          "help": "目标应用包名（从设备已安装应用列表中选择，不指定则自动检测）"
-        },
         "so_dir": {
           "type": "dir",
           "label": "SO文件目录",
