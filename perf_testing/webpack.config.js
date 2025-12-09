@@ -11,28 +11,20 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
     },
     plugins: [
-        // 使用 CopyPlugin 拷贝文件到根目录的 dist
-        // 将 dist/perf_testing 目录下的内容拷贝到 ../dist/tools/perf_testing
+        // 拷贝 plugin.json 到目标目录
         new CopyPlugin({
             patterns: [
                 {
-                    from: path.resolve(__dirname, 'dist/perf-testing'),
-                    to: path.resolve(__dirname, '../dist/tools/perf-testing'),
-                    noErrorOnMissing: true,
-                    globOptions: {
-                        followSymbolicLinks: false,
-                    },
-                },
-                { 
-                    from: path.resolve(__dirname, 'plugin.json'), 
-                    to: path.resolve(__dirname, '../dist/tools/perf-testing/plugin.json') 
+                    from: path.resolve(__dirname, 'plugin.json'),
+                    to: path.resolve(__dirname, '../dist/tools/perf-testing/plugin.json')
                 },
             ],
         }),
+        // 保持文件权限插件
         new PreservePermissionsPlugin({
             mappings: [
                 {
-                    from: path.resolve(__dirname, 'dist/perf-testing'),
+                    from: path.resolve(__dirname, '../dist/tools/perf-testing'),
                     to: path.resolve(__dirname, '../dist/tools/perf-testing'),
                 },
             ],
