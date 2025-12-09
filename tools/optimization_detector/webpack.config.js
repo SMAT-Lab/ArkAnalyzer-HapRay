@@ -1,6 +1,5 @@
 const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
-const { PreservePermissionsPlugin, PackPlugin } = require('../../scripts/webpack_plugin');
 const version = require('./package.json').version;
 
 /**
@@ -40,22 +39,9 @@ module.exports = {
         path: path.resolve(__dirname, 'dist'),
     },
     plugins: [
-        // 使用 CopyPlugin 拷贝文件到 dist/tools 目录
+        // 拷贝 README.md 和 plugin.json 到目标目录
         new CopyPlugin({
             patterns: [
-                {
-                    from: path.resolve(__dirname, 'dist/opt-detector'),
-                    to: path.resolve(__dirname, '../../dist/tools/opt-detector'),
-                    noErrorOnMissing: true,
-                    // 保持符号链接，不解析为实际文件
-                    globOptions: {
-                        followSymbolicLinks: false,
-                    },
-                    // filter: (resourcePath) => {
-                    //     // 使用 shouldSkipFile 函数过滤文件
-                    //     return !shouldSkipFile(resourcePath);
-                    // },
-                },
                 {
                     from: path.resolve(__dirname, 'README.md'),
                     to: path.resolve(__dirname, '../../dist/tools/opt-detector/README.md'),
@@ -64,16 +50,6 @@ module.exports = {
                 { from: path.resolve(__dirname, 'plugin.json'), to: path.resolve(__dirname, '../../dist/tools/opt-detector/plugin.json') },
             ],
         }),
-        // 保持文件权限插件：在文件拷贝后保持可执行权限
-        // 需要处理整个 _internal 目录，特别是 .so 文件和 Python 可执行文件
-        new PreservePermissionsPlugin({
-            mappings: [
-                {
-                    from: path.resolve(__dirname, 'dist/opt-detector'),
-                    to: path.resolve(__dirname, '../../dist/tools/opt-detector'),
-                },
-            ],
-        })
     ],
 };
 
