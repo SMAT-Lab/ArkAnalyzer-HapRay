@@ -11,7 +11,7 @@
     "setup:unix": "python3 setup_env.py",
     "build": "npm run build:python",
     "postbuild": "webpack --config webpack.config.js",
-    "build:python": "./.venv/bin/pyinstaller -y main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y main.spec",
+    "build:python": "./.venv/bin/pyinstaller -y --distpath ../dist/tools main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y --distpath ../dist/tools main.spec",
     "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint || python3 -m ruff check .",
     "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix || python3 -m ruff check --fix .",
     "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe"
