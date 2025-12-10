@@ -1,7 +1,7 @@
 <template>
   <div class="step-load-container">
     <!-- 技术栈占比卡片 -->
-    <!-- <el-row v-if="techStackData.length > 0" :gutter="20" class="tech-stack-row">
+    <el-row v-if="techStackData.length > 0" :gutter="20" class="tech-stack-row">
       <el-col :span="24">
         <div class="tech-stack-card">
           <h3 class="card-title">
@@ -16,7 +16,7 @@
           </div>
         </div>
       </el-col>
-    </el-row> -->
+    </el-row>
 
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
@@ -514,10 +514,13 @@ const techStackData = computed(() => {
   // 获取大分类数据
   const categoryData = calculateCategorysData(perfData!, null, false).filter(item => item.stepId === props.stepId);
 
-  // 计算总指令数
+  // 计算总指令数（基于所有数据）
   const totalInstructions = categoryData.reduce((sum, item) => sum + item.instructions, 0);
 
-  // 直接使用数据中的所有分类，不再硬编码映射
+  // 需要隐藏的分类名称（对应 kind = 1, 3, 4, -1）
+  const hiddenCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
+
+  // 生成所有分类数据，然后过滤掉需要隐藏的
   const techStackItems = categoryData
     .map(item => {
       const percentage = totalInstructions > 0 ? ((item.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
@@ -527,7 +530,8 @@ const techStackData = computed(() => {
         percentage: percentage
       };
     })
-    .sort((a, b) => b.instructions - a.instructions); // 按指令数降序排序
+    .filter(item => !hiddenCategories.includes(item.name))
+    .sort((a, b) => b.instructions - a.instructions);
 
   return techStackItems;
 });
