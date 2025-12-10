@@ -12,6 +12,8 @@ from typing import Optional
 
 import numpy as np
 
+from optimization_detector.file_info import FileInfo
+
 try:
     import joblib
 except ImportError:
@@ -220,12 +222,12 @@ class LtoDetector:
             logging.debug('Feature extraction failed for %s: %s', so_path, e)
             return None
 
-    def detect(self, so_path: str, opt_level: Optional[str] = None) -> dict:
+    def detect(self, file_info: FileInfo, opt_level: Optional[str] = None) -> dict:
         """
         检测单个SO文件是否使用LTO
 
         Args:
-            so_path: SO文件路径
+            file_info: FileInfo对象，包含文件路径、ID和哈希等信息
             opt_level: 优化级别 (O0/O1/O2/O3/Os/Mixed/None)
                       如果为None，将使用集成预测（所有模型）
 
@@ -236,9 +238,36 @@ class LtoDetector:
                 'model_used': str    # 使用的模型名称
             }
         """
+        so_path = file_info.absolute_path
+
+        # 尝试从缓存读取
+        cache_result = self._load_from_cache(file_info)
+        if cache_result is not None:
+            logging.debug('LTO cache hit for %s', so_path)
+            return cache_result
+
         # 如果优化级别未知，使用集成预测
         if opt_level is None or opt_level not in self.MODEL_MAPPING:
-            return self._detect_with_ensemble(so_path)
+            result = self._detect_with_ensemble(so_path)
+        else:
+            result = self._detect_with_model(so_path, opt_level)
+
+        # 保存到缓存
+        self._save_to_cache(file_info, result)
+
+        return result
+
+    def _detect_with_model(self, so_path: str, opt_level: str) -> dict:
+        """
+        使用指定模型进行检测（内部方法，从detect中提取）
+
+        Args:
+            so_path: SO文件路径
+            opt_level: 优化级别
+
+        Returns:
+            检测结果字典
+        """
 
         # 选择模型
         model_name = self.MODEL_MAPPING.get(opt_level, 'O2')
@@ -330,3 +359,57 @@ class LtoDetector:
         logging.debug('Ensemble scores: %s, weighted=%.4f, max=%.4f(%s)', scores, weighted_score, max_score, max_model)
 
         return {'score': final_score, 'prediction': 'LTO' if lto_label == 1 else 'No LTO', 'model_used': model_str}
+
+    def _get_cache_path(self, file_info: FileInfo) -> Path:
+        """
+        获取缓存文件路径
+
+        Args:
+            file_info: FileInfo对象，包含文件ID和哈希等信息
+
+        Returns:
+            缓存文件路径
+        """
+        cache_dir = Path(FileInfo.CACHE_DIR)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_filename = f'lto_{file_info.file_id}_{file_info.file_hash}.json'
+        return cache_dir / cache_filename
+
+    def _load_from_cache(self, file_info: FileInfo) -> Optional[dict]:
+        """
+        从缓存加载LTO检测结果
+
+        Args:
+            file_info: FileInfo对象，包含文件ID和哈希等信息
+
+        Returns:
+            检测结果字典，如果缓存不存在则返回 None
+        """
+        cache_path = self._get_cache_path(file_info)
+        if not cache_path.exists():
+            return None
+
+        try:
+            with open(cache_path, encoding='utf-8') as f:
+                result = json.load(f)
+            logging.debug('Loaded LTO cache from %s', cache_path)
+            return result
+        except Exception as e:
+            logging.warning('Failed to load LTO cache from %s: %s', cache_path, e)
+            return None
+
+    def _save_to_cache(self, file_info: FileInfo, result: dict) -> None:
+        """
+        保存LTO检测结果到缓存
+
+        Args:
+            file_info: FileInfo对象，包含文件ID和哈希等信息
+            result: 检测结果字典
+        """
+        cache_path = self._get_cache_path(file_info)
+        try:
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            logging.debug('Saved LTO cache to %s', cache_path)
+        except Exception as e:
+            logging.warning('Failed to save LTO cache to %s: %s', cache_path, e)
