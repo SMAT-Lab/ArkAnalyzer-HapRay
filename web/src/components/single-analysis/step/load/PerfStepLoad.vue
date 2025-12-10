@@ -1,7 +1,7 @@
 <template>
   <div class="step-load-container">
     <!-- 技术栈占比卡片 -->
-    <el-row v-if="techStackData.length > 0" :gutter="20" class="tech-stack-row">
+    <!-- <el-row v-if="techStackData.length > 0" :gutter="20" class="tech-stack-row">
       <el-col :span="24">
         <div class="tech-stack-card">
           <h3 class="card-title">
@@ -16,7 +16,7 @@
           </div>
         </div>
       </el-col>
-    </el-row>
+    </el-row> -->
 
     <!-- 步骤负载分析 -->
     <el-row :gutter="20">
