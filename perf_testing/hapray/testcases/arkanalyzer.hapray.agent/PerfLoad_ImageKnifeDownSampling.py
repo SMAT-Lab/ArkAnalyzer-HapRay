@@ -27,10 +27,11 @@ class PerfLoad_ImageKnifeDownSampling(PerfTestCase):
         self.driver.wait(5)
 
         def step1():
+            self.driver.wait(5)
             self.driver.start_app(
                 self.app_package,
                 'ExecutorAbility',
-                '--ps testSuite test_suite --ps testCase ImageKnifeDownSamplingPageTest',
+                '--ps testSuite test_suite --ps testCase ImageKnifeDownSamplingTest',
             )
             self.swipes_up(swip_num=1, sleep=2, timeout=300)
             self.swipes_down(swip_num=1, sleep=2, timeout=300)
