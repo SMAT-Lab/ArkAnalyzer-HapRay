@@ -1,6 +1,5 @@
 const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
-const { PreservePermissionsPlugin } = require('../scripts/webpack_plugin');
 
 module.exports = {
     target: 'node',
@@ -42,23 +41,6 @@ module.exports = {
                     globOptions: {
                         followSymbolicLinks: false,
                     },
-                },
-            ],
-        }),
-        // 保持文件权限插件：在文件拷贝后保持可执行权限
-        new PreservePermissionsPlugin({
-            mappings: [
-                {
-                    from: path.resolve(__dirname, 'dist/hapray/ArkAnalyzer-HapRay'),
-                    to: path.resolve(__dirname, '../dist/ArkAnalyzer-HapRay'),
-                },
-                {
-                    from: path.resolve(__dirname, 'dist/hapray/ArkAnalyzer-HapRay-GUI'),
-                    to: path.resolve(__dirname, '../dist/ArkAnalyzer-HapRay-GUI'),
-                },
-                {
-                    from: path.resolve(__dirname, 'dist/hapray/_internal'),
-                    to: path.resolve(__dirname, '../dist/_internal'),
                 },
             ],
         }),

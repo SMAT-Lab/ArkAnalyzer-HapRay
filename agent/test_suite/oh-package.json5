@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "packageType": "InterfaceHar",
   "dependencies": {
-    "libtest_suite.so": "file:./src/main/cpp/types/libtest_suite"
+    "libtest_suite.so": "file:./src/main/cpp/types/libtest_suite",
+    "@ohos/imageknifepro": "^1.0.9"
   }
 }
