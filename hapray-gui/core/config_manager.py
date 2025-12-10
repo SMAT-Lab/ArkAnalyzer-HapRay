@@ -3,6 +3,7 @@
 """
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -43,6 +44,10 @@ class ConfigManager:
 
     def _get_default_config(self) -> dict[str, Any]:
         """获取默认配置"""
+        # 默认输出目录：相对于exe文件的目录
+        executable_dir = Path(sys.executable).parent
+        default_output_dir = executable_dir / 'hapray_output'
+
         return {
             'plugins': {},
             'ui': {
@@ -51,7 +56,7 @@ class ConfigManager:
                 'window_width': 1200,
                 'window_height': 800,
             },
-            'output': {'default_dir': str(Path.home() / 'hapray_output')},
+            'output': {'default_dir': str(default_output_dir)},
         }
 
     def _save_config(self):
@@ -105,4 +110,9 @@ class ConfigManager:
         if output_dir:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             return output_dir
-        return str(Path.home() / 'hapray_output')
+
+        # 默认输出目录：相对于exe文件的目录
+        executable_dir = Path(sys.executable).parent
+        default_dir = executable_dir / 'hapray_output'
+        default_dir.mkdir(parents=True, exist_ok=True)
+        return str(default_dir)

@@ -10,17 +10,18 @@ from pathlib import Path
 from typing import Any, Optional
 
 from core.base_tool import ToolResult
+from core.config_manager import ConfigManager
 
 
 class ResultProcessor:
     """结果处理器"""
 
     def __init__(self, output_dir: Optional[str] = None):
+        self.config = ConfigManager()
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            self.output_dir = Path.home() / 'hapray_output'
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+            self.output_dir = Path(self.config.get_output_dir())
 
     def save_result(self, tool_name: str, result: ToolResult, params: dict[str, Any]) -> str:
         """
