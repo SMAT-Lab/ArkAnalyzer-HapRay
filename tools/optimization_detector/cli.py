@@ -20,10 +20,8 @@ import multiprocessing
 import sys
 from typing import Optional
 
-import pandas as pd
-
 from optimization_detector import FileCollector, OptimizationDetector, __version__
-from optimization_detector.excel_utils import ExcelReportSaver
+from optimization_detector.report_formatters import ReportFormatterFactory
 
 _STDOUT_WRAPPER = None
 
@@ -52,7 +50,15 @@ class OptAction:
             '--output',
             '-o',
             default='binary_analysis_report.xlsx',
-            help='Output Excel file path (default: binary_analysis_report.xlsx)',
+            help='Output file path (default: binary_analysis_report.xlsx). Format is auto-detected from extension, or use --format to specify.',
+        )
+        parser.add_argument(
+            '--format',
+            '-f',
+            choices=['excel', 'json', 'csv', 'xml'],
+            nargs='+',
+            default=None,
+            help='Output format(s): excel, json, csv, or xml. Can specify multiple formats (e.g., -f excel json). If not specified, format is inferred from output file extension.',
         )
         parser.add_argument('--jobs', '-j', type=int, default=1, help='Number of parallel jobs (default: 1)')
         parser.add_argument(
@@ -106,8 +112,8 @@ class OptAction:
                 parsed_args.lto,
                 parsed_args.opt,
             )
-            action.generate_excel_report(data, parsed_args.output)
-            logging.info('Analysis report saved to: %s', parsed_args.output)
+            # 保存报告到指定格式
+            ReportFormatterFactory.save_reports(data, parsed_args.format, parsed_args.output)
             return 0
         finally:
             file_collector.cleanup()
@@ -121,15 +127,6 @@ class OptAction:
         except Exception as e:
             logging.error('OptimizationDetector error: %s', str(e))
             return []
-
-    @staticmethod
-    def generate_excel_report(data: list[tuple[str, pd.DataFrame]], output_file: str) -> None:
-        """Generate Excel report using pandas"""
-        report_saver = ExcelReportSaver(output_file)
-        for row in data:
-            report_saver.add_sheet(row[1], row[0])
-        report_saver.save()
-        logging.info('Report saved to %s', output_file)
 
     @staticmethod
     def setup_logging(verbose: bool = False, log_file: Optional[str] = None):
