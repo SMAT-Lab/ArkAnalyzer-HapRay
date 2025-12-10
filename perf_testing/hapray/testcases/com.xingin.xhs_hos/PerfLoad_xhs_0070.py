@@ -1,7 +1,5 @@
 import time
 
-from hypium import BY
-
 from hapray.core.perf_testcase import PerfTestCase
 
 
@@ -30,7 +28,6 @@ class PerfLoad_xhs_0070(PerfTestCase):
         self.touch_by_text('我', 2)
         self.touch_by_text('赞过', 2)
 
-        
         def step1():
             # 点击第一个视频
             self.touch_by_coordinates(279, 1745, 1)

@@ -19,6 +19,9 @@ module.exports = {
                     from: path.resolve(__dirname, 'dist/perf-testing'),
                     to: path.resolve(__dirname, '../dist/tools/perf-testing'),
                     noErrorOnMissing: true,
+                    globOptions: {
+                        followSymbolicLinks: false,
+                    },
                 },
                 { 
                     from: path.resolve(__dirname, 'plugin.json'), 
@@ -29,8 +32,8 @@ module.exports = {
         new PreservePermissionsPlugin({
             mappings: [
                 {
-                    from: path.resolve(__dirname, 'dist/perf-testing/perf-testing'),
-                    to: path.resolve(__dirname, '../dist/tools/perf-testing/perf-testing'),
+                    from: path.resolve(__dirname, 'dist/perf-testing'),
+                    to: path.resolve(__dirname, '../dist/tools/perf-testing'),
                 },
             ],
         }),

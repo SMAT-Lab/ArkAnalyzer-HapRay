@@ -102,7 +102,11 @@ class DeviceBoundTestRunner:
     def _run_single_round(self, case_name: str, all_testcases: dict, device_sn: str, round_num: int) -> str:
         """Execute a single test round on bound device"""
         case_dir, file_extension = all_testcases[case_name]
-        output_dir = os.path.join(self.reports_path, f'{case_name}_round{round_num}')
+        # Only add round suffix when round_num is not None (i.e., multiple rounds)
+        if self.round > 1:
+            output_dir = os.path.join(self.reports_path, f'{case_name}_round{round_num}')
+        else:
+            output_dir = os.path.join(self.reports_path, case_name)
         device_arg = f'-sn {device_sn}' if device_sn else ''
         command = f'run -l {case_name} {device_arg} -tcpath {case_dir} -rp {output_dir}'
 
@@ -284,6 +288,11 @@ class PerfAction:
             default=None,
             help='Target application bundle name for manual testing (performance data will be collected for 30 seconds)',
         )
+        parser.add_argument(
+            '--ui-tech-stack',
+            action='store_true',
+            help='Enable UI technology stack dynamic recognition mode',
+        )
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
             parsed_args.circles = True
@@ -301,6 +310,9 @@ class PerfAction:
             Config.set('so_dir', parsed_args.so_dir)
         if parsed_args.manual:
             Config.set('run_testcases', ['PerformanceDynamic_Manual'])
+            Config.set('package_name', parsed_args.package_name)
+        if parsed_args.ui_tech_stack:
+            Config.set('run_testcases', ['PerfLoad_UIAnalyzer'])
             Config.set('package_name', parsed_args.package_name)
 
         # Configure collection modes

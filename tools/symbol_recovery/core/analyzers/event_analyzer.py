@@ -50,6 +50,7 @@ class EventCountAnalyzer:
         save_prompts=False,
         output_dir=None,
         skip_decompilation=False,
+        open_source_lib=None,
     ):
         """
         初始化分析器
@@ -77,8 +78,11 @@ class EventCountAnalyzer:
 
         if not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 不存在: {perf_db_file}')
+        # 如果 so_dir 是文件（通过 --so-file 指定），允许；如果是目录，检查是否存在
         if not self.so_dir.exists():
-            raise FileNotFoundError(f'SO 文件目录不存在: {so_dir}')
+            raise FileNotFoundError(f'SO 文件或目录不存在: {so_dir}')
+        if self.so_dir.is_file() and not self.so_dir.suffix == '.so':
+            raise ValueError(f'指定的文件不是 SO 文件: {so_dir}')
 
         # 初始化 LLM 分析器（公共工具）
         self.llm_analyzer, self.use_llm, self.use_batch_llm = init_llm_analyzer(
@@ -87,6 +91,7 @@ class EventCountAnalyzer:
             batch_size=self.batch_size,
             save_prompts=save_prompts,
             output_dir=output_dir,
+            open_source_lib=open_source_lib,
         )
 
     def analyze(self):
@@ -116,7 +121,14 @@ class EventCountAnalyzer:
 
             # 3. 按 event_count 求和统计 top100（新逻辑）
             logger.info('\nStep 3: Statistics by event_count sum top100...')
-            event_count_top100 = self._get_event_count_top100(cursor, file_id_to_path, name_to_data)
+            # 如果 so_dir 是文件（通过 --so-file 指定），只统计该SO文件的函数
+            target_so_name = None
+            if self.so_dir and self.so_dir.is_file():
+                target_so_name = self.so_dir.name
+
+            event_count_top100 = self._get_event_count_top100(
+                cursor, file_id_to_path, name_to_data, top_n=100, target_so_name=target_so_name
+            )
             logger.info(f'[OK] Found {len(event_count_top100)} addresses (event_count top100)')
 
             # 4. 找出差异
@@ -207,22 +219,61 @@ class EventCountAnalyzer:
         top_n = DEFAULT_TOP_N
         return {k: v for k, v in sorted_items[:top_n]}
 
-    def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None):
-        """按 event_count 求和统计 topN"""
+    def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None, target_so_name=None):
+        """按 event_count 求和统计 topN
+
+        Args:
+            cursor: 数据库游标
+            file_id_to_path: 文件ID到路径的映射
+            name_to_data: 名称ID到地址数据的映射
+            top_n: 返回前N个结果
+            target_so_name: 目标SO文件名（如果指定，只统计该SO文件的函数）
+        """
         if top_n is None:
             top_n = DEFAULT_TOP_N
         # 查询 perf_sample 和 perf_callchain 的关联
-        cursor.execute("""
-            SELECT pc.file_id, pc.name, SUM(ps.event_count) as total_event_count,
-                   COUNT(*) as call_count, pc.ip, pc.depth
-            FROM perf_sample ps
-            JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
-            WHERE pc.symbol_id = -1
-            GROUP BY pc.file_id, pc.name
-        """)
+        # 如果指定了 target_so_name，在 SQL 查询时就过滤
+        if target_so_name:
+            # 先找到匹配的 file_id
+            cursor.execute(
+                """
+                SELECT DISTINCT file_id FROM perf_files
+                WHERE path LIKE ? OR path LIKE ?
+            """,
+                (f'%{target_so_name}', f'%/{target_so_name}'),
+            )
+            matching_file_ids = [row[0] for row in cursor.fetchall()]
+
+            if matching_file_ids:
+                # 使用 IN 子句过滤 file_id
+                placeholders = ','.join('?' * len(matching_file_ids))
+                query = f"""
+                    SELECT pc.file_id, pc.name, SUM(ps.event_count) as total_event_count,
+                           COUNT(*) as call_count, pc.ip, pc.depth
+                    FROM perf_sample ps
+                    JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
+                    WHERE pc.symbol_id = -1 AND pc.file_id IN ({placeholders})
+                    GROUP BY pc.file_id, pc.name
+                """
+                cursor.execute(query, matching_file_ids)
+                all_rows = cursor.fetchall()
+            else:
+                # 如果没有匹配的 file_id，返回空结果
+                all_rows = []
+        else:
+            # 没有指定 target_so_name，使用原来的查询
+            cursor.execute("""
+                SELECT pc.file_id, pc.name, SUM(ps.event_count) as total_event_count,
+                       COUNT(*) as call_count, pc.ip, pc.depth
+                FROM perf_sample ps
+                JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
+                WHERE pc.symbol_id = -1
+                GROUP BY pc.file_id, pc.name
+            """)
+            all_rows = cursor.fetchall()
 
         # 立即获取所有结果，避免后续连接关闭后无法访问
-        all_rows = cursor.fetchall()
+        logger.debug(f'SQL 查询返回 {len(all_rows)} 行结果')
 
         address_event_counts = defaultdict(lambda: {'event_count': 0, 'call_count': 0, 'info': None})
 
@@ -245,6 +296,8 @@ class EventCountAnalyzer:
                         'depth': depth,
                     }
 
+        logger.debug(f'处理后的 address_event_counts 包含 {len(address_event_counts)} 个地址')
+
         # 过滤和排序
         excluded_exact = ['[shmm]', 'Unknown file', '/bin/devhost.elf']
         excluded_prefixes = ['/system', '/vendor/lib64', '/lib', '/chip_prod']
@@ -256,6 +309,10 @@ class EventCountAnalyzer:
                 continue
             if any(file_path.startswith(prefix) for prefix in excluded_prefixes):
                 continue
+
+            # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，这里不需要再次过滤
+            # 但为了安全，仍然可以从地址字符串中验证一下（可选）
+
             filtered[key] = {
                 **data['info'],
                 'event_count': data['event_count'],
@@ -264,7 +321,12 @@ class EventCountAnalyzer:
 
         # 取 topN
         sorted_items = sorted(filtered.items(), key=lambda x: x[1]['event_count'], reverse=True)
-        return {k: v for k, v in sorted_items[:top_n]}
+        result = {k: v for k, v in sorted_items[:top_n]}
+        if target_so_name:
+            logger.debug(f'_get_event_count_top100 返回 {len(result)} 个地址（指定 SO 文件: {target_so_name}）')
+            for _key, data in list(result.items())[:3]:
+                logger.debug(f'  地址: {data["address"]}, file_path: {data["file_path"]}')
+        return result
 
     def _analyze_differences(self, diff_keys, event_count_top100):
         """对差异部分进行 LLM 分析"""
@@ -387,8 +449,16 @@ class EventCountAnalyzer:
             # 2. 按 event_count 求和统计 topN
             logger.info(f'\nStep 2: Statistics by event_count sum top{top_n}...')
             try:
+                # 如果 so_dir 是文件（通过 --so-file 指定），只统计该SO文件的函数
+                target_so_name = None
+                if self.so_dir and self.so_dir.is_file():
+                    target_so_name = self.so_dir.name
+                    logger.info(f'Filtering by SO file: {target_so_name}')
+
                 # Get all data before closing connection
-                event_count_top = self._get_event_count_top100(cursor, file_id_to_path, name_to_data, top_n)
+                event_count_top = self._get_event_count_top100(
+                    cursor, file_id_to_path, name_to_data, top_n, target_so_name
+                )
                 logger.info(f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n})')
             except Exception:
                 logger.exception('[ERROR] Failed to calculate event_count statistics')
@@ -402,7 +472,12 @@ class EventCountAnalyzer:
                     event_count_top.items(),
                     key=lambda x: x[1]['event_count'],
                     reverse=True,
-                )[:top_n]
+                )
+
+                # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，这里不需要再次过滤
+                # 但为了安全，仍然可以从地址字符串中验证一下（可选）
+                # 直接取 top_n，因为 SQL 查询已经过滤了
+                sorted_items = sorted_items[:top_n]
 
                 # 3.1 检测并批量解析 HAP 地址
                 hap_addresses = []
@@ -435,6 +510,7 @@ class EventCountAnalyzer:
                         logger.warning(f'⚠️  HAP address resolution failed: {e}')
 
                 # 3.2 转换为结果格式
+                # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，这里不需要再次过滤
                 for rank, (_key, info) in enumerate(sorted_items, 1):
                     address = info['address']
                     file_path = info['file_path']
@@ -482,6 +558,10 @@ class EventCountAnalyzer:
                         }
                     )
                 logger.info(f'[OK] Prepared {len(results)} results')
+                if self.so_dir and self.so_dir.is_file():
+                    logger.info('Results 中的地址列表:')
+                    for r in results:
+                        logger.info(f'  - {r.get("address", "unknown")} (file_path: {r.get("file_path", "unknown")})')
             except Exception:
                 logger.exception('[ERROR] Failed to prepare analysis data')
                 raise
@@ -498,6 +578,7 @@ class EventCountAnalyzer:
             output_dir = config.get_output_dir()
             config.ensure_output_dir(output_dir)
             # 创建临时 Excel 文件用于分析（包含 event_count 列）
+            # 注意：如果指定了 target_so_name，已经在 SQL 查询时过滤了，results 中应该只包含指定 SO 文件的地址
             temp_excel = output_dir / f'{TEMP_FILE_PREFIX}event_count.xlsx'
             temp_excel.parent.mkdir(exist_ok=True)
             temp_data = []
@@ -508,10 +589,11 @@ class EventCountAnalyzer:
                     '调用次数': r.get('call_count', 0),
                 }
                 # 如果存在 event_count，也添加到临时 Excel 中
-                if 'event_count' in r and r.get('event_count', 0) > 0:
+                if 'event_count' in r and (r.get('event_count') or 0) > 0:
                     row['指令数(event_count)'] = r['event_count']
                 temp_data.append(row)
             pd.DataFrame(temp_data).to_excel(temp_excel, index=False)
+            logger.info(f'✅ 创建临时 Excel 文件，包含 {len(temp_data)} 个地址')
 
             # 创建分析器（无论是否使用 LLM，都需要进行反汇编和字符串提取）
             if self.llm_analyzer:
@@ -519,6 +601,7 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
+                    perf_db_file=str(self.perf_db_file),  # 传递 perf_db_file 以便获取调用堆栈信息
                     so_dir=str(self.so_dir),
                     use_llm=False,  # 先不启用，避免重复初始化
                     llm_model=self.llm_model,
@@ -537,6 +620,7 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
+                    perf_db_file=str(self.perf_db_file),  # 传递 perf_db_file 以便获取调用堆栈信息
                     so_dir=str(self.so_dir),
                     use_llm=self.use_llm,
                     llm_model=self.llm_model,
@@ -551,12 +635,17 @@ class EventCountAnalyzer:
             # 将 event_count 和 call_count 添加到结果中（因为 analyze_top_functions 可能不包含这些字段）
             event_count_map = {r['address']: r['event_count'] for r in results}
             call_count_map = {r['address']: r.get('call_count', 0) for r in results}
+            logger.debug(f'event_count_map 包含 {len(event_count_map)} 个地址: {list(event_count_map.keys())}')
             for result in analyzed_results:
                 address = result.get('address', '')
                 if address in event_count_map:
                     result['event_count'] = event_count_map[address]
+                else:
+                    logger.warning(f'⚠️  地址 {address} 在 event_count_map 中未找到，无法设置 event_count')
                 if address in call_count_map:
                     result['call_count'] = call_count_map[address]
+                else:
+                    logger.warning(f'⚠️  地址 {address} 在 call_count_map 中未找到，无法设置 call_count')
             # 注意：字符串常量已经在 analyze_top_functions -> analyze_function 中提取了
 
             # 清理临时文件
@@ -591,9 +680,9 @@ class EventCountAnalyzer:
             config.ensure_output_dir(output_dir)
             # 确保 results 按 event_count 排序（如果存在）
             # 因为后续的 save_results 可能会重新排序，我们需要确保顺序正确
-            if results and any('event_count' in r and r.get('event_count', 0) > 0 for r in results):
+            if results and any('event_count' in r and (r.get('event_count') or 0) > 0 for r in results):
                 # 按 event_count 降序排序
-                results = sorted(results, key=lambda x: x.get('event_count', 0), reverse=True)
+                results = sorted(results, key=lambda x: x.get('event_count') or 0, reverse=True)
                 # 更新排名
                 for rank, result in enumerate(results, 1):
                     result['rank'] = rank
@@ -611,7 +700,7 @@ class EventCountAnalyzer:
                     '调用次数': r.get('call_count', 0),
                 }
                 # 如果存在 event_count，也添加到临时 Excel 中，以便后续按 event_count 排序
-                if 'event_count' in r and r.get('event_count', 0) > 0:
+                if 'event_count' in r and (r.get('event_count') or 0) > 0:
                     row['指令数(event_count)'] = r['event_count']
                 temp_data.append(row)
 
@@ -631,6 +720,7 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
+                    perf_db_file=str(self.perf_db_file),  # 传递 perf_db_file 以便获取调用堆栈信息
                     so_dir=str(self.so_dir),
                     use_llm=False,  # 先不启用，避免重复初始化
                     llm_model=self.llm_model,
@@ -646,6 +736,7 @@ class EventCountAnalyzer:
                 analyzer = MissingSymbolFunctionAnalyzer(
                     skip_decompilation=self.skip_decompilation,
                     excel_file=str(temp_excel),
+                    perf_db_file=str(self.perf_db_file),  # 传递 perf_db_file 以便获取调用堆栈信息
                     so_dir=str(self.so_dir),
                     use_llm=self.use_llm,
                     llm_model=self.llm_model,

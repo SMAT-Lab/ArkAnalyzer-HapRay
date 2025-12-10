@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 const os = require('os');
+const { execSync } = require('child_process');
 
 const packageJson = require('../package.json');
 const version = packageJson.version;
@@ -36,8 +37,27 @@ function generateNewReadme() {
     return newContent;
 }
 
+async function signBinaries(distDir) {
+  // 仅在 macOS 上执行代码签名
+  if (os.platform() === 'darwin') {
+    console.log('正在签名二进制文件...');
+    const signScript = path.resolve(__dirname, 'sign_binaries.sh');
+    try {
+      // 传递 dist 目录的绝对路径给脚本
+      execSync(`bash "${signScript}" "${distDir}"`, { stdio: 'inherit' });
+      console.log('代码签名完成');
+    } catch (error) {
+      console.warn('警告: 代码签名失败，继续打包:', error.message);
+    }
+  }
+}
+
 async function zipDistDirectory(outputPath) {
   const sourceDir = path.resolve(__dirname, '../dist');
+  
+  // 在打包前执行代码签名（仅 macOS）
+  await signBinaries(sourceDir);
+  
   const output = fs.createWriteStream(outputPath);
   const archive = archiver('zip', { zlib: { level: 9 } });
 

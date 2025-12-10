@@ -43,16 +43,16 @@ class ResultViewer(QWidget):
         # 工具栏
         toolbar_layout = QHBoxLayout()
 
-        refresh_button = QPushButton('刷新')
+        refresh_button = QPushButton('🔄 刷新')
         refresh_button.clicked.connect(self.refresh_results)
         toolbar_layout.addWidget(refresh_button)
 
-        self.open_dir_button = QPushButton('打开输出目录')
+        self.open_dir_button = QPushButton('📁 打开输出目录')
         self.open_dir_button.clicked.connect(self.open_output_directory)
         self.open_dir_button.setEnabled(False)
         toolbar_layout.addWidget(self.open_dir_button)
 
-        self.copy_path_button = QPushButton('复制路径')
+        self.copy_path_button = QPushButton('📋 复制路径')
         self.copy_path_button.clicked.connect(self.copy_output_path)
         self.copy_path_button.setEnabled(False)
         toolbar_layout.addWidget(self.copy_path_button)
@@ -68,11 +68,34 @@ class ResultViewer(QWidget):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
 
-        list_label = QLabel('执行历史')
+        list_label = QLabel('📋 执行历史')
+        list_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;')
         left_layout.addWidget(list_label)
 
         self.result_list = QListWidget()
         self.result_list.itemSelectionChanged.connect(self.on_result_selected)
+        self.result_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                background-color: #ffffff;
+                alternate-background-color: rgba(102, 126, 234, 0.02);
+            }
+            QListWidget::item {
+                padding: 8px 12px;
+                border-radius: 4px;
+                margin: 2px 4px;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            }
+            QListWidget::item:selected {
+                background-color: rgba(102, 126, 234, 0.15);
+                color: #667eea;
+                font-weight: bold;
+            }
+            QListWidget::item:hover {
+                background-color: rgba(102, 126, 234, 0.08);
+            }
+        """)
         left_layout.addWidget(self.result_list)
 
         splitter.addWidget(left_widget)
@@ -81,12 +104,29 @@ class ResultViewer(QWidget):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
 
-        detail_label = QLabel('结果详情')
+        detail_label = QLabel('📄 结果详情')
+        detail_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;')
         right_layout.addWidget(detail_label)
 
         self.result_detail = QTextEdit()
         self.result_detail.setReadOnly(True)
         self.result_detail.setFontFamily('Consolas')
+        self.result_detail.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+                color: #1f2937;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 13px;
+                selection-background-color: rgba(102, 126, 234, 0.2);
+            }
+            QTextEdit:focus {
+                border-color: #667eea;
+                box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+            }
+        """)
         right_layout.addWidget(self.result_detail)
 
         splitter.addWidget(right_widget)

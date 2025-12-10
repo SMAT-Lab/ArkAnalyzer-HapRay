@@ -46,6 +46,3 @@ hapray-sa
 .cache/
 .npm-cache/
 
-# Local scripts
-hapray
-
