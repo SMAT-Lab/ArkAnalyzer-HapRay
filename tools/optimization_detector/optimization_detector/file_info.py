@@ -46,6 +46,12 @@ class FileInfo:
     TEXT_SECTION = '.text'
     CACHE_DIR = 'files_results_cache'
 
+    @staticmethod
+    def _is_so_file(file_path: str) -> bool:
+        """Check if file is a so file: ends with .so or contains .so. in filename"""
+        filename = os.path.basename(file_path)
+        return file_path.endswith('.so') or '.so.' in filename
+
     def __init__(self, absolute_path: str, logical_path: Optional[str] = None):
         self.absolute_path = absolute_path
         self.logical_path = logical_path or absolute_path
@@ -54,7 +60,7 @@ class FileInfo:
         self.file_id = self._generate_file_id()
         if absolute_path.endswith('.a'):
             self.file_type = FileType.AR
-        elif absolute_path.endswith('.so'):
+        elif self._is_so_file(absolute_path):
             self.file_type = FileType.SO
         else:
             self.file_type = FileType.NOT_SUPPORT
@@ -124,11 +130,25 @@ class FileCollector:
         for temp_dir in self.temp_dirs:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    @staticmethod
+    def _is_symlink(file_path: str) -> bool:
+        """Check if file is a symbolic link"""
+        return os.path.islink(file_path)
+
+    @staticmethod
+    def _is_binary_file(file_path: str) -> bool:
+        """Check if file is a binary file (.so, .so.*, or .a)"""
+        filename = os.path.basename(file_path)
+        return file_path.endswith('.a') or file_path.endswith('.so') or '.so.' in filename
+
     def collect_binary_files(self, input_path: str) -> list[FileInfo]:
         """Collect binary files for analysis"""
         file_infos = []
         if os.path.isfile(input_path):
-            if input_path.endswith(('.so', '.a')):
+            # Skip symlinks
+            if self._is_symlink(input_path):
+                return file_infos
+            if self._is_binary_file(input_path):
                 file_infos.append(FileInfo(input_path))
             elif input_path.endswith(('.hap', '.hsp', '.apk', '.har')):
                 file_infos.extend(self._extract_hap_file(input_path))
@@ -136,7 +156,10 @@ class FileCollector:
             for root, _, _files in os.walk(input_path):
                 for file in _files:
                     file_path = os.path.join(root, file)
-                    if file.endswith(('.so', '.a')):
+                    # Skip symlinks
+                    if self._is_symlink(file_path):
+                        continue
+                    if self._is_binary_file(file_path):
                         logical_path = os.path.relpath(file_path, input_path)
                         file_infos.append(FileInfo(file_path, logical_path))
                     elif file.endswith(('.hap', '.hsp', '.apk', '.har')):
