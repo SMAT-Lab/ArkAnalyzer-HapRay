@@ -308,12 +308,12 @@ class PerfAction:
             Config.set('hiperf.event', 'raw-cpu-cycles')
         if parsed_args.so_dir is not None:
             Config.set('so_dir', parsed_args.so_dir)
+        if parsed_args.package_name:
+            Config.set('package_name', parsed_args.package_name)
         if parsed_args.manual:
             Config.set('run_testcases', ['PerformanceDynamic_Manual'])
-            Config.set('package_name', parsed_args.package_name)
         if parsed_args.ui_tech_stack:
             Config.set('run_testcases', ['PerfLoad_UIAnalyzer'])
-            Config.set('package_name', parsed_args.package_name)
 
         # Configure collection modes
         Config.set('trace.enable', not parsed_args.no_trace)

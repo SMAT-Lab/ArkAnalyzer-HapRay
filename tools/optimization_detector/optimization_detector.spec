@@ -98,48 +98,8 @@ datas += tmp_ret[0]
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
-# 收集 pkg_resources 及其依赖（PyInstaller runtime hook 需要）
-try:
-    tmp_ret = collect_all('pkg_resources')
-    datas += tmp_ret[0]
-    binaries += tmp_ret[1]
-    hiddenimports += tmp_ret[2]
-except Exception:
-    pass
-
-# 收集 jaraco（pkg_resources 的依赖）
-try:
-    tmp_ret = collect_all('jaraco')
-    datas += tmp_ret[0]
-    binaries += tmp_ret[1]
-    hiddenimports += tmp_ret[2]
-except Exception:
-    pass
-
-# 收集 backports（jaraco.context 的依赖）
-try:
-    tmp_ret = collect_all('backports')
-    datas += tmp_ret[0]
-    binaries += tmp_ret[1]
-    hiddenimports += tmp_ret[2]
-except Exception:
-    pass
-
-# 添加 jaraco 和 backports 的关键隐藏导入
-hiddenimports += [
-    'jaraco',
-    'jaraco.text',
-    'jaraco.functools',
-    'jaraco.context',
-    'jaraco.collections',
-    'jaraco.classes',
-    'jaraco.itertools',
-    'jaraco.packaging',
-    'jaraco.versioning',
-    'backports',
-    'backports.functools_lru_cache',
-    'backports.tarfile',
-]
+# 不再收集 pkg_resources（已弃用，使用 importlib.metadata 和 importlib.resources 替代）
+# 如果某些依赖需要 pkg_resources，PyInstaller 会自动处理
 
 # 收集 scipy - sklearn 的依赖
 tmp_ret = collect_all('scipy')
@@ -227,6 +187,7 @@ a = Analysis(
         'sphinx',
         'numpy.tests',
         'pandas.tests',
+        'pkg_resources',  # 排除已弃用的 pkg_resources，使用 importlib.metadata 和 importlib.resources 替代
     ],
     noarchive=False,
     optimize=0,
