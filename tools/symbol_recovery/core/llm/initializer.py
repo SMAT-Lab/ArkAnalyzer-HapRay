@@ -20,16 +20,16 @@ def init_llm_analyzer(
     batch_size: int,
     save_prompts: bool = False,
     output_dir: Optional[str] = None,
+    open_source_lib: Optional[str] = None,
 ) -> tuple[Optional[LLMFunctionAnalyzer], bool, bool]:
     """初始化 LLM 分析器
     Args:
         use_llm: 是否使用 LLM 分析
         llm_model: LLM 模型名称
-        use_batch_llm: 是否使用批量 LLM 分析
         batch_size: 批量分析时每个 prompt 包含的函数数量
-        logger: 日志打印函数
         save_prompts: 是否保存生成的 prompt 到文件
         output_dir: 输出目录，用于保存 prompt 文件
+        open_source_lib: 开源库名称（可选，如 "ffmpeg", "openssl" 等）
     Returns:
         (llm_analyzer, use_llm, use_batch_llm) 其中use_llm和use_batch_llm是实际使用的LLM分析器类型
     """
@@ -61,6 +61,7 @@ def init_llm_analyzer(
                 enable_cache=True,
                 save_prompts=save_prompts,
                 output_dir=output_dir,
+                open_source_lib=open_source_lib,
             )
             logger.info(
                 f'Using batch LLM analyzer: service={service_type}, model={model_name}, batch_size={batch_size}'
@@ -76,6 +77,7 @@ def init_llm_analyzer(
             enable_cache=True,
             save_prompts=save_prompts,
             output_dir=output_dir,
+            open_source_lib=open_source_lib,
         )
         logger.info(f'Using single LLM analyzer: service={service_type}, model={model_name}')
         if save_prompts:

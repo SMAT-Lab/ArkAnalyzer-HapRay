@@ -1,7 +1,7 @@
 # 核心依赖
-pyelftools>=0.29          # ELF 文件解析
+pyelftools>=0.32          # ELF 文件解析
 capstone>=5.0.0            # ARM64 反汇编（回退方案）
-pandas>=2.0.0              # 数据处理和 Excel 操作
+pandas              # 数据处理和 Excel 操作
 openpyxl>=3.1.0            # Excel 文件读写
 python-dotenv>=1.0.0       # 环境变量管理（.env 文件）
 openai>=1.0.0              # LLM API 调用（Poe API 兼容）

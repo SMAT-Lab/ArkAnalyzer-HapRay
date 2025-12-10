@@ -8,7 +8,12 @@ import Logger, { LOG_MODULE_TYPE, LOG_LEVEL } from 'arkanalyzer/lib/utils/logger
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 Logger.configure('arkanalyzer-toolbox.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
 
-const TEMP = '.tmp';
+// 扩展 Ohpm 接口，添加 fileName 属性
+interface OhpmWithFileName extends Ohpm {
+    fileName?: string;
+}
+
+const TEMP = '.ohpm';
 
 /**
  * https://ohpm.openharmony.cn/ohpmweb/registry/oh-package/openapi/v1/search?condition=&pageNum=1&pageSize=50&sortedType=latest&isHomePage=false
@@ -38,15 +43,18 @@ async function listOhpmPage(pageNum: number, username?: string, password?: strin
     return pkgs;
 }
 
-async function parseTarball(tarballUrl: string, files: Set<string>): Promise<void> {
+async function parseTarball(tarballUrl: string, files: Set<string>, pkgName: string): Promise<string> {
     let tarballName = tarballUrl.split('/').reverse()[0];
     let response = await axios.get(tarballUrl, { responseType: 'arraybuffer' });
     if (response.status !== 200) {
-        return undefined;
+        return '';
     }
-    fs.writeFileSync(path.join(TEMP, tarballName), response.data);
+    // 将 pkgName 添加到文件名中，替换 / 为 - 以避免路径问题
+    const safePkgName = pkgName.replace(/\//g, '-');
+    const fileName = `${safePkgName}-${tarballName}`;
+    fs.writeFileSync(path.join(TEMP, fileName), response.data);
     tar.list({
-        file: path.join(TEMP, tarballName),
+        file: path.join(TEMP, fileName),
         sync: true,
         onReadEntry: (entry) => {
             logger.info(`${entry.path}`);
@@ -61,28 +69,67 @@ async function parseTarball(tarballUrl: string, files: Set<string>): Promise<voi
             }
         },
     });
+    return fileName;
 }
 
-async function getPkgInfo(pkgName: string): Promise<Ohpm | undefined> {
+async function getPkgInfo(pkgName: string): Promise<OhpmWithFileName | undefined> {
     const url = 'https://ohpm.openharmony.cn/ohpm';
-    let response = await axios.get(`${url}/${pkgName}`);
-    if (response.status !== 200) {
+    // 对 scoped package 进行 URL 编码：@scope/package -> @scope%2Fpackage
+    const encodedPkgName = pkgName.replace(/\//g, '%2F');
+    let response;
+    try {
+        response = await axios.get(`${url}/${encodedPkgName}`);
+        if (response.status !== 200) {
+            logger.error(`get ohpm ${pkgName} fail: HTTP ${response.status}`);
+            return undefined;
+        }
+    } catch (error: any) {
+        if (error.response) {
+            logger.error(`get ohpm ${pkgName} fail: HTTP ${error.response.status} - ${error.response.statusText}`);
+        } else if (error.request) {
+            logger.error(`get ohpm ${pkgName} fail: Network error - ${error.message}`);
+        } else {
+            logger.error(`get ohpm ${pkgName} fail: ${error.message}`);
+        }
         return undefined;
     }
 
-    let pkg: Ohpm = {
+    // 检查必要的数据字段
+    if (!response.data || !response.data['dist-tags'] || !response.data['dist-tags'].latest) {
+        logger.error(`get ohpm ${pkgName} fail: Missing dist-tags.latest`);
+        return undefined;
+    }
+
+    const latestVersion = response.data['dist-tags'].latest;
+    if (!response.data.versions || !response.data.versions[latestVersion]) {
+        logger.error(`get ohpm ${pkgName} fail: Missing version ${latestVersion}`);
+        return undefined;
+    }
+
+    const latestVersionData = response.data.versions[latestVersion];
+    if (!latestVersionData.dist || !latestVersionData.dist.tarball) {
+        logger.error(`get ohpm ${pkgName} fail: Missing dist.tarball for version ${latestVersion}`);
+        return undefined;
+    }
+
+    let pkg: OhpmWithFileName = {
         name: pkgName,
-        version: response.data['dist-tags'].latest,
+        version: latestVersion,
         versions: Object.keys(response.data.versions),
         files: [],
     };
-    pkg.main = response.data.versions[pkg.version].main;
-    pkg.module = response.data.versions[pkg.version].module;
-    pkg.types = response.data.versions[pkg.version].types;
+    pkg.main = latestVersionData.main;
+    pkg.module = latestVersionData.module;
+    pkg.types = latestVersionData.types;
     let files: Set<string> = new Set();
 
-    for (const pkgVersion of Object.values<any>(response.data.versions)) {
-        await parseTarball(pkgVersion.dist.tarball, files);
+    // 只下载最新版本
+    try {
+        let fileName = await parseTarball(latestVersionData.dist.tarball, files, pkgName);
+        pkg.fileName = fileName;
+    } catch (error: any) {
+        logger.error(`parse tarball for ${pkgName}@${latestVersion} fail: ${error.message}`);
+        // 即使解析失败，也返回包信息（files 可能为空）
     }
 
     files.delete('BuildProfile');
@@ -93,7 +140,7 @@ async function getPkgInfo(pkgName: string): Promise<Ohpm | undefined> {
 }
 
 async function main() {
-    let pkgs: Ohpm[] = [];
+    let pkgs: OhpmWithFileName[] = [];
     let pageNum = 1;
     let pkgNames: string[] = [];
     fs.mkdirSync(TEMP, { recursive: true });
@@ -104,13 +151,10 @@ async function main() {
                 let pkg = await getPkgInfo(pkgName);
                 if (pkg) {
                     pkgs.push(pkg);
-                } else {
-                    logger.error(`get ohpm ${pkgName} fail.`);
+                    logger.info(`Successfully processed ${pkgName}@${pkg.version}`);
                 }
-            } catch (error) {
-                logger.error(error);
-            } finally {
-                logger.error(`get ohpm ${pkgName} fail.`);
+            } catch (error: any) {
+                logger.error(`get ohpm ${pkgName} fail: ${error.message || error}`);
             }
         }
     } while (pkgNames.length > 0);

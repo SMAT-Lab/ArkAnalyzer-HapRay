@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="detail-data-compare">
     <!-- 上传组件 -->
     <div v-if="!hasCompareData" style="margin-bottom: 16px;">
@@ -167,11 +167,11 @@ import {
   Monitor, DataBoard, Connection, Grid,
   Document, FolderOpened, Operation, SetUp
 } from '@element-plus/icons-vue';
-import PerfProcessTable from '../PerfProcessTable.vue';
-import PerfThreadTable from '../PerfThreadTable.vue';
-import PerfFileTable from '../PerfFileTable.vue';
-import PerfSymbolTable from '../PerfSymbolTable.vue';
-import UploadHtml from '../UploadHtml.vue';
+import PerfProcessTable from '../single-analysis/step/load/tables/PerfProcessTable.vue';
+import PerfThreadTable from '../single-analysis/step/load/tables/PerfThreadTable.vue';
+import PerfFileTable from '../single-analysis/step/load/tables/PerfFileTable.vue';
+import PerfSymbolTable from '../single-analysis/step/load/tables/PerfSymbolTable.vue';
+import UploadHtml from '../common/UploadHtml.vue';
 import { useJsonDataStore } from '../../stores/jsonDataStore';
 import { 
   calculateProcessData, 

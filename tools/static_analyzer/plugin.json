@@ -1,6 +1,6 @@
 {
   "id": "static_analyzer",
-  "name": "HAP包静态分析",
+  "name": "应用技术栈分析",
   "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
   "version": "1.0.0",
   "author": "HapRay Team",

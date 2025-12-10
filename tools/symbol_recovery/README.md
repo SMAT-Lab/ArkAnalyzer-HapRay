@@ -20,6 +20,9 @@ SymRecover（Symbol Recovery）是一个专业的二进制符号恢复工具，�
 - **反编译支持**：支持多种反编译插件（r2dec/r2ghidra/pdq），自动按优先级选择
 - **精准字符串提取**：通过分析 ARM64 指令引用（`adrp`/`add`/`ldr`），精准提取函数相关的字符串常量，自动过滤错误消息和调试信息
 - **LLM 分析**：使用 GPT-5、Claude-Sonnet-4.5 等大模型分析函数功能和推断函数名
+- **开源库增强**：支持指定开源库名称（如 `--open-source-lib ffmpeg`），LLM 会利用对开源库的知识进行更准确的符号推断
+  - **SIMD 向量化识别**：自动识别函数中使用的 SIMD 向量化指令（ARM NEON/SVE），并在功能描述中说明向量化优化的用途
+  - **功能相关性分析**：结合开源库的典型功能和特性，说明函数在库中的作用和定位，以及与库中其他功能的关联性
 - **性能分析**：针对高指令数负载的热点函数，自动识别性能瓶颈、分析高指令数负载原因，并提供优化建议
 - **上下文信息增强**：自动提取函数边界信息（起始/结束地址、大小）、复杂度指标（基本块、控制流边、参数、局部变量）和调用堆栈信息
 - **批量分析**：支持批量 LLM 分析，一个 prompt 包含多个函数（默认 batch_size=3），显著提高效率
@@ -28,10 +31,15 @@ SymRecover（Symbol Recovery）是一个专业的二进制符号恢复工具，�
 ### 4. 报告生成
 - **Excel 报告**：包含所有分析结果的详细 Excel 报告（自动列宽、文本换行）
   - 函数功能描述：LLM 推断的函数功能说明
-  - **负载问题识别与优化建议**：性能瓶颈分析、高指令数负载原因和优化建议（新增）
+  - **负载问题识别与优化建议**：客观识别函数所属的性能类型（计算热点 vs 潜在瓶颈）、高指令数负载原因和优化建议
   - 函数名推断：LLM 推断的函数名（带 "Function: " 前缀）
+  - **调用链信息**：包含调用者（谁调用了这个函数）和被调用者（这个函数调用了哪些函数）的完整调用关系
+  - **字符串常量**：函数相关的字符串常量（如果存在）
   - 函数元信息：函数边界、大小、复杂度指标等
 - **HTML 报告**：统一的交互式 HTML 报告，包含技术原理、Token 统计和时间统计
+  - **优化的表格显示**：支持横向滚动，适配不同屏幕尺寸
+  - **文件路径优化**：文件路径列自动截断显示，鼠标悬停可查看完整路径
+  - **列宽优化**：精简列数，优化列宽，提升可读性
 - **HTML 符号替换**：自动将推断的函数名替换到原始性能报告中
 
 ## 快速开始
@@ -108,7 +116,7 @@ DEEPSEEK_API_KEY=your_deepseek_key
 
 ```bash
 # 运行完整工作流（默认按 event_count 统计，分析前 100 个函数）
-python main.py --perf-data data/taobao/10.55.1/perf.data --so-dir data/taobao/10.55.1/so/
+python main.py --perf-data data/example_app/10.55.1/perf.data --so-dir data/example_app/10.55.1/so/
 
 # 指定分析数量和输出目录
 python main.py --perf-data perf.data --so-dir so/ --top-n 50 --output-dir output/
@@ -136,7 +144,7 @@ python main.py --batch-size 3
 
 ```bash
 # 基本用法
-python main.py --excel-file data/test.xlsx --so-file data/wechat/libs/arm64/libxwebcore.so
+python main.py --excel-file data/test.xlsx --so-file data/example_app/libs/arm64/libexample.so
 
 # 不使用 LLM
 python main.py --excel-file data/test.xlsx --so-file libxwebcore.so --no-llm
@@ -199,8 +207,10 @@ Excel 文件（包含偏移量）
 |------|------|--------|
 | `--perf-data` | perf.data 文件路径 | `perf.data` |
 | `--perf-db` | perf.db 文件路径 | 自动生成在输出目录 |
-| `--so-dir` | SO 文件目录 | **必需**（无默认值） |
+| `--so-dir` | SO 文件目录 | 如果未指定 `--so-file` 则必需 |
+| `--so-file` | 单个 SO 文件路径（可选） | 如果指定，只分析该文件的地址 |
 | `--stat-method` | 统计方式（call_count/event_count） | `event_count` |
+| `--open-source-lib` | 开源库名称（如 "ffmpeg", "openssl"） | 可选，用于提升基于开源库定制版本的符号恢复准确性。LLM 会识别 SIMD 向量化指令，并结合开源库功能特性进行相关性分析 |
 | `--skip-step1` | 跳过 Step 1（perf.data → perf.db） | `False` |
 | `--skip-step3` | 跳过 Step 3（LLM 分析） | `False` |
 | `--skip-step4` | 跳过 Step 4（HTML 符号替换） | `False` |
@@ -284,6 +294,11 @@ Excel 文件（包含偏移量）
 - 支持单个函数和批量函数的 prompt 保存
 
 ### 6. 智能缓存
+
+## 相关文档
+
+- **[ANALYSIS_FLOW.md](ANALYSIS_FLOW.md)**: 详细的分析流程说明，包括函数定位、反编译、上下文提取和 LLM 分析等步骤
+- **[SYMBOL_MATCHING_TECHNICAL_REPORT.md](SYMBOL_MATCHING_TECHNICAL_REPORT.md)**: 基于开源库指纹识别的符号恢复技术方案（未来规划）
 - LLM 分析结果自动缓存到 `cache/` 目录
 - 避免重复分析相同的函数代码，节省成本
 - Token 统计自动保存和累积
@@ -322,8 +337,8 @@ soanalyzer/
 │   ├── llm_analysis_cache.json   # LLM 分析缓存
 │   └── llm_token_stats.json      # Token 统计
 ├── data/                         # 数据目录
-│   ├── wechat/                   # 微信应用数据
-│   ├── taobao/                   # 淘宝应用数据
+│   ├── example_app_1/            # 示例应用数据 1
+│   ├── example_app_2/            # 示例应用数据 2
 │   └── test.xlsx                 # 测试样例
 ├── output/                       # 默认输出目录
 ├── docs/                         # 文档
@@ -374,31 +389,60 @@ pip install -r requirements.txt
 
 ```bash
 # 运行完整工作流，恢复前 100 个缺失符号（按 event_count）
-python main.py \
-    --perf-data data/taobao/10.55.1/perf.data \
-    --so-dir data/taobao/10.55.1/so/ \
-    --output-dir data/taobao/10.55.1/ \
+python3 main.py \
+    --perf-data data/example_app/10.55.1/perf.data \
+    --so-dir data/example_app/10.55.1/so/ \
+    --output-dir data/example_app/10.55.1/ \
     --top-n 100 \
-    --html-input data/taobao/10.55.1/hiperf_report.html
+    --html-input data/example_app/10.55.1/hiperf_report.html
 ```
 
-### 示例 2：call_count 模式
+### 示例 2：指定单个 SO 文件（perf 模式）
 
 ```bash
-python main.py \
-    --perf-data data/taobao/perf.data \
-    --so-dir data/taobao/so/ \
+# 只分析指定 SO 文件的地址（适用于已知 SO 文件的情况）
+python3 main.py \
+    --perf-data perf.data \
+    --so-file libttffmpeg.so \
+    --output-dir output \
+    --top-n 100
+```
+
+### 示例 3：基于开源库的定制版本（提升准确性）
+
+```bash
+# 指定开源库名称，大模型会利用对开源库的知识进行更准确的符号推断
+# LLM 会自动识别 SIMD 向量化指令，并结合开源库功能特性进行相关性分析
+python3 main.py \
+    --perf-data perf.data \
+    --so-file libttffmpeg.so \
+    --open-source-lib ffmpeg \
+    --output-dir output \
+    --top-n 100
+```
+
+**开源库增强功能说明**：
+- **SIMD 向量化识别**：LLM 会自动检查反汇编代码中的 SIMD 向量化指令（ARM NEON/SVE），并在功能描述中说明向量化优化的用途（如批量数据处理、并行计算、矩阵运算等）
+- **功能相关性分析**：LLM 会结合开源库的典型功能和特性，说明函数在库中的作用和定位，以及与库中其他功能的关联性
+- **适用场景**：适用于分析基于开源库（如 FFmpeg、OpenSSL、libcurl 等）进行定制开发的 SO 文件
+
+### 示例 4：call_count 模式
+
+```bash
+python3 main.py \
+    --perf-data data/example_app/perf.data \
+    --so-dir data/example_app/so/ \
     --stat-method call_count \
     --top-n 50
 ```
 
-### 示例 3：Excel 偏移量模式
+### 示例 5：Excel 偏移量模式
 
 ```bash
 # 从 Excel 文件读取偏移量进行符号恢复
 python main.py \
     --excel-file data/test.xlsx \
-    --so-file data/wechat/libs/arm64/libxwebcore.so
+    --so-file data/example_app/libs/arm64/libexample.so
 ```
 
 ### 示例 4：仅反汇编（不使用 LLM）
@@ -530,7 +574,29 @@ A: 请参考 `docs/CODE_DEPENDENCIES.md` 文档。
 
 ## 更新日志
 
-### v4.4（当前版本）
+### v4.6（当前版本）
+- **HTML 报告优化**：
+  - 移除"字符串常量"和"置信度"列，简化表格显示
+  - 优化文件路径列宽度，使用省略号显示，鼠标悬停可查看完整路径
+  - 添加表格横向滚动支持，适配不同屏幕尺寸
+  - 优化表格列宽和布局，提升可读性
+- **Excel 报告增强**：
+  - 修复字符串常量为空的问题，改进字符串常量处理逻辑
+  - 新增"调用链信息"列，包含调用者和被调用者的完整调用关系
+  - 合并"调用的函数"和"调用链信息"列，避免重复信息
+  - 优化 Excel 列宽和文本换行设置
+
+### v4.5
+- **开源库增强功能**：
+  - **SIMD 向量化识别**：LLM 会自动识别函数中使用的 SIMD 向量化指令（ARM NEON/SVE），并在功能描述中说明向量化优化的用途
+  - **功能相关性分析**：结合开源库的典型功能和特性，说明函数在库中的作用和定位，以及与库中其他功能的关联性
+  - 适用于分析基于开源库（如 FFmpeg、OpenSSL、libcurl 等）进行定制开发的 SO 文件
+- **Prompt 优化**：
+  - 在开源库模式下，添加 SIMD 向量化指令识别指导
+  - 添加开源库功能相关性分析要求
+  - 更新 JSON 返回格式说明，包含 SIMD 和开源库相关性要求
+
+### v4.4
 - **性能分析功能**：新增性能瓶颈识别和优化建议功能
   - LLM prompt 中添加性能分析指导，重点关注高指令数负载的原因
   - 新增"负载问题识别与优化建议"列，与功能描述分开

@@ -42,6 +42,7 @@ class ExcelOffsetAnalyzer:
         save_prompts: bool = False,
         output_dir: str = None,
         skip_decompilation: bool = False,
+        open_source_lib: str = None,
     ):
         """
         初始化分析器
@@ -81,6 +82,7 @@ class ExcelOffsetAnalyzer:
             use_llm=self.use_llm,
             llm_model=self.llm_model,
             batch_size=self.batch_size,
+            open_source_lib=open_source_lib,
             save_prompts=save_prompts,
             output_dir=output_dir,
         )

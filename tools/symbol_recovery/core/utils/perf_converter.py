@@ -110,6 +110,7 @@ class MissingSymbolFunctionAnalyzer:
         save_prompts=False,
         output_dir=None,
         skip_decompilation=False,
+        open_source_lib=None,
     ):
         """
         初始化分析器
@@ -149,8 +150,12 @@ class MissingSymbolFunctionAnalyzer:
         if self.perf_db_file and not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 文件不存在: {perf_db_file}')
 
-        if self.so_dir and not self.so_dir.exists():
-            raise FileNotFoundError(f'SO 文件目录不存在: {so_dir}')
+        if self.so_dir:
+            # 如果 so_dir 是文件（通过 --so-file 指定），允许；如果是目录，检查是否存在
+            if not self.so_dir.exists():
+                raise FileNotFoundError(f'SO 文件或目录不存在: {so_dir}')
+            if self.so_dir.is_file() and not self.so_dir.suffix == '.so':
+                raise ValueError(f'指定的文件不是 SO 文件: {so_dir}')
 
         # 初始化反汇编器
         self.md = util.create_disassembler()
@@ -168,6 +173,7 @@ class MissingSymbolFunctionAnalyzer:
             batch_size=self.batch_size,
             save_prompts=save_prompts,
             output_dir=output_dir,
+            open_source_lib=open_source_lib,
         )
 
     def find_so_file(self, file_path):
@@ -180,6 +186,19 @@ class MissingSymbolFunctionAnalyzer:
         Returns:
             SO 文件路径，如果找不到返回 None
         """
+        # 如果 so_dir 是一个文件（通过 --so-file 指定），直接返回它（如果文件名匹配）
+        if self.so_dir and self.so_dir.is_file():
+            # 提取目标文件名（从 file_path）
+            target_so_name = file_path.split('/')[-1] if '/' in file_path else file_path
+            # 如果指定的 SO 文件名匹配，直接返回
+            if self.so_dir.name == target_so_name:
+                return self.so_dir.resolve()
+            # 如果不匹配，返回 None（只分析指定的 SO 文件）
+            # 注意：这里不匹配可能是因为 file_path 来自调用栈，而不是函数所在的文件
+            # 真正的 SO 文件名可能在 address 中，但这里我们无法访问 address
+            # 所以这个检查会在 analyze_function 调用时再次进行
+            return None
+
         # 提取文件名（如 libxwebcore.so）
         so_name = None
         so_name = file_path.split('/')[-1] if '/' in file_path else file_path
@@ -436,18 +455,17 @@ class MissingSymbolFunctionAnalyzer:
                 if name_id is None:
                     return None
 
-                # 查询调用堆栈：找到调用这个函数的函数（depth 更小的）
-                # 限制查询数量以提高性能
+                # 查询调用堆栈：找到调用这个函数的函数（depth 更大的，因为 depth 越大代表源头/调用者）
+                # 直接在同一个 callchain_id 中查找，不需要 JOIN perf_sample
                 cursor.execute(
                     """
                     SELECT DISTINCT pc2.file_id, pc2.name, pc2.depth, pc2.symbol_id as caller_symbol_id
                     FROM perf_callchain pc1
-                    JOIN perf_sample ps ON pc1.callchain_id = ps.callchain_id
-                    JOIN perf_callchain pc2 ON ps.callchain_id = pc2.callchain_id
+                    JOIN perf_callchain pc2 ON pc1.callchain_id = pc2.callchain_id
                     WHERE pc1.file_id = ? AND pc1.name = ? AND pc1.symbol_id = -1
-                      AND pc2.depth < pc1.depth
+                      AND pc2.depth > pc1.depth
                       AND pc2.symbol_id != -1
-                    ORDER BY pc2.depth DESC
+                    ORDER BY pc2.depth ASC
                     LIMIT 10
                 """,
                     (file_id, name_id),
@@ -462,10 +480,14 @@ class MissingSymbolFunctionAnalyzer:
                     # 获取调用者函数名（如果有符号）
                     caller_symbol_name = None
                     if caller_symbol_id and caller_symbol_id != -1:
-                        cursor.execute('SELECT name FROM perf_symbols WHERE id = ?', (caller_symbol_id,))
-                        symbol_row = cursor.fetchone()
-                        if symbol_row:
-                            caller_symbol_name = symbol_row[0]
+                        try:
+                            cursor.execute('SELECT name FROM perf_symbols WHERE id = ?', (caller_symbol_id,))
+                            symbol_row = cursor.fetchone()
+                            if symbol_row:
+                                caller_symbol_name = symbol_row[0]
+                        except sqlite3.OperationalError:
+                            # perf_symbols 表可能不存在，忽略
+                            pass
 
                     if caller_file_path and caller_address:
                         callers.append(
@@ -477,17 +499,17 @@ class MissingSymbolFunctionAnalyzer:
                             }
                         )
 
-                # 查询被调用者：找到这个函数调用的函数（depth 更大的，且有符号的）
+                # 查询被调用者：找到这个函数调用的函数（depth 更小的，因为 depth 越小代表被调用到的）
+                # 直接在同一个 callchain_id 中查找，不需要 JOIN perf_sample
                 cursor.execute(
                     """
                     SELECT DISTINCT pc2.file_id, pc2.name, pc2.depth, pc2.symbol_id as callee_symbol_id
                     FROM perf_callchain pc1
-                    JOIN perf_sample ps ON pc1.callchain_id = ps.callchain_id
-                    JOIN perf_callchain pc2 ON ps.callchain_id = pc2.callchain_id
+                    JOIN perf_callchain pc2 ON pc1.callchain_id = pc2.callchain_id
                     WHERE pc1.file_id = ? AND pc1.name = ? AND pc1.symbol_id = -1
-                      AND pc2.depth > pc1.depth
+                      AND pc2.depth < pc1.depth
                       AND pc2.symbol_id != -1
-                    ORDER BY pc2.depth ASC
+                    ORDER BY pc2.depth DESC
                     LIMIT 10
                 """,
                     (file_id, name_id),
@@ -502,10 +524,14 @@ class MissingSymbolFunctionAnalyzer:
                     # 获取被调用者函数名（如果有符号）
                     callee_symbol_name = None
                     if callee_symbol_id and callee_symbol_id != -1:
-                        cursor.execute('SELECT name FROM perf_symbols WHERE id = ?', (callee_symbol_id,))
-                        symbol_row = cursor.fetchone()
-                        if symbol_row:
-                            callee_symbol_name = symbol_row[0]
+                        try:
+                            cursor.execute('SELECT name FROM perf_symbols WHERE id = ?', (callee_symbol_id,))
+                            symbol_row = cursor.fetchone()
+                            if symbol_row:
+                                callee_symbol_name = symbol_row[0]
+                        except sqlite3.OperationalError:
+                            # perf_symbols 表可能不存在，忽略
+                            pass
 
                     if callee_file_path and callee_address:
                         callees.append(
@@ -607,9 +633,21 @@ class MissingSymbolFunctionAnalyzer:
             return None
 
         # 找到 SO 文件
-        so_file = self.find_so_file(file_path)
+        # 如果指定了 --so-file，且 address 中包含 SO 文件名，优先使用 address 中的信息
+        so_file = None
+        if self.so_dir and self.so_dir.is_file() and '+' in address:
+            # 从 address 中提取 SO 文件名（如 libquickjs.so+0x123 -> libquickjs.so）
+            address_so_name = address.split('+')[0]
+            # 如果 address 中的 SO 文件名与指定的 SO 文件匹配，直接使用指定的文件
+            if address_so_name == self.so_dir.name:
+                so_file = self.so_dir.resolve()
+
+        # 如果还没有找到，尝试从 file_path 查找
         if not so_file:
-            logger.warning(' SO file not found: %s', file_path)
+            so_file = self.find_so_file(file_path)
+
+        if not so_file:
+            logger.warning(' SO file not found: %s (address: %s)', file_path, address)
             return None
 
         logger.info(f'✅ Found SO file: {so_file}')
@@ -744,9 +782,9 @@ class MissingSymbolFunctionAnalyzer:
         if self.use_llm and self.llm_analyzer and not skip_llm:
             logger.info('Analyzing function with LLM...')
             try:
-                # 构建上下文信息（包含调用堆栈信息）
+                # 构建上下文信息（不包含调用堆栈信息，调用堆栈信息应该在每个函数的上下文中单独显示）
                 base_context = self.context if self.context else self._build_context(so_file, file_path)
-                context = self._enhance_context_with_call_stack(base_context, call_stack_info)
+                context = base_context
 
                 # 获取函数名（如果有）
                 symbol_name = func_info.get('name', '')
@@ -789,6 +827,7 @@ class MissingSymbolFunctionAnalyzer:
             'decompiled': decompiled,  # 添加反编译代码（如果可用）
             'llm_result': llm_result,
             'func_info': func_info,  # 额外的函数信息
+            'call_stack_info': call_stack_info,  # 添加调用堆栈信息
         }
 
     def _analyze_function_with_capstone(
@@ -876,6 +915,14 @@ class MissingSymbolFunctionAnalyzer:
                         logger.exception('❌ LLM 分析失败')
 
                 # 返回结果
+                # 获取调用堆栈信息（从 perf.db）
+                call_stack_info = None
+                if self.perf_db_file and self.perf_db_file.exists():
+                    try:
+                        call_stack_info = self._get_call_stack_info(file_path, address, vaddr)
+                    except Exception as e:
+                        logger.warning(f' Failed to get call stack information: {e}')
+
                 return {
                     'rank': rank,
                     'file_path': file_path,
@@ -889,6 +936,7 @@ class MissingSymbolFunctionAnalyzer:
                     'strings': ', '.join(strings[:5]) if strings else '',
                     'called_functions': [],  # capstone 方法暂不支持获取调用函数列表
                     'llm_result': llm_result,
+                    'call_stack_info': call_stack_info,  # 添加调用堆栈信息
                 }
         except Exception:
             logger.exception('❌ 分析失败')
@@ -1001,7 +1049,25 @@ class MissingSymbolFunctionAnalyzer:
                             item['hap_resolution'] = resolution
                             logger.warning(f'   {address} SO file not found')
 
-            # 5. 按调用次数排序，取前 N 个
+            # 5. 如果指定了 --so-file，过滤地址（只保留指定 SO 文件的地址）
+            if self.so_dir and self.so_dir.is_file():
+                so_filtered_data = []
+                for item in filtered_data:
+                    address = item.get('address', '')
+                    # 从 address 中提取 SO 文件名（如 libquickjs.so+0x123 -> libquickjs.so）
+                    if address and '+' in str(address):
+                        address_so_name = str(address).split('+')[0]
+                        if address_so_name == self.so_dir.name:
+                            so_filtered_data.append(item)
+                        else:
+                            logger.debug(f'跳过不匹配的地址: {address} (期望: {self.so_dir.name})')
+                    elif not address or '+' not in str(address):
+                        # 如果地址格式不正确，也跳过
+                        logger.debug(f'跳过格式不正确的地址: {address}')
+                filtered_data = so_filtered_data
+                logger.info(f'✅ 过滤后剩余 {len(filtered_data):,} 个地址（指定 SO 文件: {self.so_dir.name}）')
+
+            # 6. 按调用次数排序，取前 N 个
             sorted_data = sorted(filtered_data, key=lambda x: x['call_count'], reverse=True)[:top_n]
             logger.info(f'✅ After filtering, {len(filtered_data):,} records remaining, selecting top {top_n}')
 
@@ -1024,11 +1090,8 @@ class MissingSymbolFunctionAnalyzer:
         logger.info(f'Analyzing top {top_n} functions with missing symbols (by call count)')
         logger.info('=' * 80)
 
-        # 如果提供了 perf_db_file，直接从数据库读取
-        if self.perf_db_file:
-            data_list = self._get_missing_symbols_from_perf_db(top_n)
-        else:
-            # 否则从 Excel 文件读取
+        # 如果提供了 excel_file，优先从 Excel 文件读取（因为 Excel 文件可能已经按 event_count 排序）
+        if self.excel_file and self.excel_file.exists():
             df = pd.read_excel(self.excel_file)
             logger.info(f'\nReading Excel file: {len(df)} records')
 
@@ -1048,7 +1111,27 @@ class MissingSymbolFunctionAnalyzer:
 
             # 转换为列表格式
             data_list = []
+            logger.info(f'从 Excel 读取 {len(top_df)} 行数据，开始过滤...')
             for _, row in top_df.iterrows():
+                # 如果指定了 --so-file，过滤地址（从 Excel 读取时也需要过滤）
+                if self.so_dir and self.so_dir.is_file():
+                    address = row.get('地址', '')
+                    # 从 address 中提取 SO 文件名（如 libquickjs.so+0x123 -> libquickjs.so）
+                    if address and '+' in str(address):
+                        address_so_name = str(address).split('+')[0]
+                        # 如果 address 中的 SO 文件名与指定的 SO 文件不匹配，跳过
+                        if address_so_name != self.so_dir.name:
+                            logger.warning(f'⚠️  从 Excel 读取时跳过不匹配的地址: {address} (期望: {self.so_dir.name})')
+                            continue
+                    elif not address or '+' not in str(address):
+                        # 如果地址格式不正确，也跳过
+                        logger.warning(f'⚠️  从 Excel 读取时跳过格式不正确的地址: {address}')
+                        continue
+                else:
+                    # 如果没有指定 --so-file，记录所有地址
+                    address = row.get('地址', '')
+                    logger.debug(f'从 Excel 读取地址: {address}')
+
                 # 读取 event_count，处理 NaN 值
                 event_count = None
                 if '指令数(event_count)' in row:
@@ -1056,6 +1139,9 @@ class MissingSymbolFunctionAnalyzer:
                     # 处理 pandas 的 NaN 值
                     if pd.notna(event_count_val) and event_count_val > 0:
                         event_count = int(event_count_val)
+                    else:
+                        # 如果 event_count 是 NaN 或 0，记录警告
+                        logger.warning(f'⚠️  地址 {row.get("地址", "unknown")} 的 event_count 为 NaN 或 0')
 
                 data_list.append(
                     {
@@ -1065,6 +1151,9 @@ class MissingSymbolFunctionAnalyzer:
                         'event_count': event_count,  # 如果存在且有效，则使用
                     }
                 )
+        elif self.perf_db_file:
+            # 否则从数据库读取
+            data_list = self._get_missing_symbols_from_perf_db(top_n)
 
         # 分析每个函数
         # 如果使用批量 LLM 分析，先收集所有函数信息，然后批量分析
@@ -1115,6 +1204,14 @@ class MissingSymbolFunctionAnalyzer:
                 result = self.analyze_function(file_path, address, call_count, rank, event_count, skip_llm=True)
                 if result:
                     results.append(result)
+                    # 确保调用堆栈信息被正确传递
+                    call_stack_info = result.get('call_stack_info')
+                    if call_stack_info:
+                        logger.debug(
+                            f'函数 #{rank} 已有调用堆栈信息: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者'
+                        )
+                    else:
+                        logger.debug(f'函数 #{rank} 没有调用堆栈信息，将在批量分析时重新获取')
                     # 准备批量分析的数据
                     instructions = result.get('instructions', [])
                     if isinstance(instructions, list) and len(instructions) > 0:
@@ -1132,17 +1229,42 @@ class MissingSymbolFunctionAnalyzer:
 
                     # 处理字符串：如果是逗号分隔的字符串，转换为列表
                     strings_value = result.get('strings', '')
+                    logger.debug(
+                        f'Function #{rank} strings_value from result: {repr(strings_value)[:100]}, type: {type(strings_value)}'
+                    )
                     if isinstance(strings_value, str):
                         strings_list = (
                             [s.strip() for s in strings_value.split(',') if s.strip()] if strings_value else []
                         )
                     else:
                         strings_list = strings_value if strings_value else []
+                    logger.debug(f'Function #{rank} strings_list after processing: {len(strings_list)} items')
 
                     # 确保所有函数都被添加到批量分析中，即使指令为空
                     # 注意：offset 字段应该使用原始地址字符串（如 "libxxx.so+0x123456"），这样在 prompt 中能正确显示原始地址
                     # result.get('offset') 返回的是 '0x...' 格式，但我们需要原始地址字符串
                     offset_value = address  # 使用原始地址字符串（如 "libquick.so+0xc8ef4"），而不是解析后的偏移量
+
+                    call_stack_info = result.get('call_stack_info')
+                    # 如果没有调用堆栈信息，尝试重新获取
+                    if not call_stack_info and self.perf_db_file and self.perf_db_file.exists():
+                        try:
+                            # 从地址中提取偏移量
+                            if '+' in address:
+                                offset_str = address.split('+', 1)[1]
+                                try:
+                                    vaddr = (
+                                        int(offset_str, 16) if not offset_str.startswith('0x') else int(offset_str, 16)
+                                    )
+                                    call_stack_info = self._get_call_stack_info(file_path, address, vaddr)
+                                    if call_stack_info:
+                                        logger.info(
+                                            f'函数 #{rank} 重新获取调用堆栈信息成功: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者'
+                                        )
+                                except (ValueError, Exception) as e:
+                                    logger.debug(f'函数 #{rank} 无法解析地址 {address}: {e}')
+                        except Exception as e:
+                            logger.debug(f'函数 #{rank} 获取调用堆栈信息失败: {e}')
 
                     functions_data.append(
                         {
@@ -1160,7 +1282,11 @@ class MissingSymbolFunctionAnalyzer:
                             'rank': rank,
                             'file_path': file_path,
                             'address': address,  # 保留原始地址字符串
+                            'call_stack_info': call_stack_info,  # 添加调用堆栈信息
                         }
+                    )
+                    logger.debug(
+                        f'Function #{rank} added to functions_data: strings={len(strings_list)}, called_functions={len(result.get("called_functions", []))}, call_stack_info={call_stack_info is not None}'
                     )
                     logger.debug(
                         f'✅ 函数 #{rank} ({address}) 已添加到 functions_data，指令数: {len(inst_list)}, 反编译: {"有" if result.get("decompiled") else "无"}'
@@ -1170,24 +1296,110 @@ class MissingSymbolFunctionAnalyzer:
                     if len(results) % 10 == 0:
                         logger.info(f'  Progress: {len(results)}/{top_n} function information collection completed')
 
-            # 第二步：批量 LLM 分析
+            # 第二步：批量 LLM 分析（按 SO 文件分组）
             if functions_data and self.llm_analyzer:
                 logger.info(f'\nStep 2: Batch LLM analysis of {len(functions_data)} functions...')
                 logger.debug(
                     f'functions_data 长度: {len(functions_data)}, llm_analyzer: {self.llm_analyzer is not None}'
                 )
-                # 构建上下文信息（使用第一个函数的上下文）
-                context = None
-                if results:
-                    first_result = results[0]
-                    so_file = self.find_so_file(first_result['file_path'])
-                    if so_file:
-                        context = (
-                            self.context if self.context else self._build_context(so_file, first_result['file_path'])
-                        )
 
-                # 批量分析
-                batch_results = self.llm_analyzer.batch_analyze_functions(functions_data, context=context)
+                # 按 SO 文件分组
+                functions_by_so = {}
+                for func_data in functions_data:
+                    # 从 func_data 中提取 SO 文件名
+                    so_file_path = func_data.get('so_file')
+                    if not so_file_path:
+                        # 如果没有 so_file，尝试从 file_path 或 address 中提取
+                        file_path = func_data.get('file_path', '')
+                        address = func_data.get('address', '')
+                        # 从地址中提取 SO 文件名（如 libquickjs.so+0x123 -> libquickjs.so）
+                        if '+' in address:
+                            so_name = address.split('+')[0]
+                        elif '/' in file_path:
+                            so_name = file_path.split('/')[-1]
+                        else:
+                            so_name = 'unknown'
+                    else:
+                        # 从 SO 文件路径中提取文件名
+                        so_name = Path(so_file_path).name if so_file_path else 'unknown'
+
+                    if so_name not in functions_by_so:
+                        functions_by_so[so_name] = []
+                    functions_by_so[so_name].append(func_data)
+
+                logger.info(f'按 SO 文件分组: {len(functions_by_so)} 个不同的 SO 文件')
+                for so_name, funcs in functions_by_so.items():
+                    logger.info(f'  - {so_name}: {len(funcs)} 个函数')
+
+                # 对每个 SO 文件组分别进行批量分析
+                all_batch_results = []
+                for so_name, so_functions in functions_by_so.items():
+                    logger.info(f'\n分析 {so_name} 中的 {len(so_functions)} 个函数...')
+
+                    # 为这个 SO 文件组构建上下文（包含调用堆栈信息）
+                    context = None
+                    if so_functions:
+                        # 使用该组中第一个函数来构建上下文
+                        first_func = so_functions[0]
+                        so_file_path = first_func.get('so_file')
+                        file_path = first_func.get('file_path', '')
+                        address = first_func.get('address', '')
+
+                        if so_file_path:
+                            so_file = Path(so_file_path)
+                            base_context = self.context if self.context else self._build_context(so_file, file_path)
+                        elif file_path:
+                            # 如果没有 so_file，尝试从 file_path 查找
+                            so_file = self.find_so_file(file_path)
+                            if so_file:
+                                base_context = self.context if self.context else self._build_context(so_file, file_path)
+                            else:
+                                base_context = self.context if self.context else ''
+                        else:
+                            base_context = self.context if self.context else ''
+
+                        # 确保每个函数都有调用堆栈信息（如果缺失则重新获取）
+                        # 注意：调用堆栈信息是每个地址特有的，不应该合并到整体背景信息中
+                        # 每个函数的调用堆栈信息会在 batch_analyzer 中单独显示
+                        for func in so_functions:
+                            call_stack_info = func.get('call_stack_info')
+                            func_file_path = func.get('file_path', '')
+                            func_address = func.get('address', '')
+
+                            if (
+                                not call_stack_info
+                                and self.perf_db_file
+                                and self.perf_db_file.exists()
+                                and func_file_path
+                                and func_address
+                            ):
+                                try:
+                                    # 从地址中提取偏移量
+                                    if '+' in func_address:
+                                        offset_str = func_address.split('+', 1)[1]
+                                        try:
+                                            vaddr = int(offset_str, 16)
+                                            call_stack_info = self._get_call_stack_info(
+                                                func_file_path, func_address, vaddr
+                                            )
+                                            if call_stack_info:
+                                                func['call_stack_info'] = call_stack_info
+                                                logger.debug(
+                                                    f'函数 {func.get("function_id", "unknown")} 重新获取调用堆栈信息成功: {len(call_stack_info.get("callers", []))} 个调用者, {len(call_stack_info.get("callees", []))} 个被调用者'
+                                                )
+                                        except (ValueError, Exception) as e:
+                                            logger.debug(f'无法解析地址 {func_address}: {e}')
+                                except Exception as e:
+                                    logger.debug(f'获取调用堆栈信息失败: {e}')
+
+                        # 使用基础上下文，不添加调用堆栈信息（调用堆栈信息会在每个函数中单独显示）
+                        context = base_context
+
+                    # 对该 SO 文件组的函数进行批量分析
+                    batch_results = self.llm_analyzer.batch_analyze_functions(so_functions, context=context)
+                    all_batch_results.extend(batch_results)
+
+                batch_results = all_batch_results
 
                 # 第三步：将 LLM 分析结果合并到 results 中
                 logger.info('\nStep 3: Merging LLM analysis results...')
@@ -1347,19 +1559,66 @@ class MissingSymbolFunctionAnalyzer:
             if strings_value is None:
                 strings_value = ''
             elif isinstance(strings_value, list):
+                # 如果是列表，转换为逗号分隔的字符串
                 strings_value = ', '.join(str(s) for s in strings_value if s)
+            elif isinstance(strings_value, str):
+                # 如果已经是字符串，直接使用（可能是逗号分隔的字符串）
+                strings_value = strings_value if strings_value else ''
             else:
                 strings_value = str(strings_value) if strings_value else ''
+
+            # 处理调用链信息（call_stack_info），合并调用者和被调用者信息
+            call_stack_info = result.get('call_stack_info')
+            call_stack_str = ''
+
+            # 收集所有调用关系
+            callers_list = []
+            callees_list = []
+
+            # 从 call_stack_info 获取调用者和被调用者
+            if call_stack_info:
+                callers = call_stack_info.get('callers', [])
+                callees = call_stack_info.get('callees', [])
+
+                if callers:
+                    for caller in callers[:5]:  # 最多显示5个调用者
+                        caller_name = caller.get('symbol_name', '')
+                        caller_addr = caller.get('address', '')
+                        if caller_name:
+                            callers_list.append(f'{caller_name}({caller_addr})')
+                        elif caller_addr:
+                            callers_list.append(caller_addr)
+
+                if callees:
+                    for callee in callees[:5]:  # 最多显示5个被调用者
+                        callee_name = callee.get('symbol_name', '')
+                        callee_addr = callee.get('address', '')
+                        if callee_name:
+                            callees_list.append(f'{callee_name}({callee_addr})')
+                        elif callee_addr:
+                            callees_list.append(callee_addr)
+
+            # 如果没有从 call_stack_info 获取到被调用者，尝试从 called_functions 获取
+            if not callees_list:
+                called_functions = result.get('called_functions', [])
+                if called_functions:
+                    callees_list = called_functions[:10]  # 最多显示10个
+
+            # 格式化调用链信息
+            call_stack_parts = []
+            if callers_list:
+                call_stack_parts.append(f'调用者: {", ".join(callers_list)}')
+            if callees_list:
+                call_stack_parts.append(f'被调用: {", ".join(callees_list)}')
+
+            if call_stack_parts:
+                call_stack_str = ' | '.join(call_stack_parts)
 
             # 获取函数边界信息（用于地址匹配）
             func_info = result.get('func_info', {})
             func_start = func_info.get('minbound', func_info.get('offset', 0))
             func_size = func_info.get('size', 0)
             func_end = func_info.get('maxbound', func_start + func_size) if func_size > 0 else func_start + 2000
-
-            # 处理调用的函数列表
-            called_functions = result.get('called_functions', [])
-            called_functions_str = ', '.join(called_functions[:10]) if called_functions else ''  # 最多显示10个
 
             # 确保 llm_result 存在，如果不存在则使用默认值
             if 'llm_result' not in result or result.get('llm_result') is None:
@@ -1391,7 +1650,7 @@ class MissingSymbolFunctionAnalyzer:
                 'SO文件': result['so_file'],
                 '指令数': result['instruction_count'],
                 '字符串常量': strings_value,  # 确保是字符串类型，不是 None
-                '调用的函数': called_functions_str,  # 添加调用的函数列表
+                '调用链信息': call_stack_str,  # 合并了调用者和被调用者信息
                 'LLM推断函数名': safe_get_llm_field('function_name', llm_result, ''),
                 'LLM功能描述': safe_get_llm_field('functionality', llm_result, '未知'),
                 '负载问题识别与优化建议': safe_get_llm_field('performance_analysis', llm_result, ''),
@@ -1423,6 +1682,10 @@ class MissingSymbolFunctionAnalyzer:
         # 确保字符串常量列是字符串类型，避免空字符串被转换为 nan
         if '字符串常量' in df.columns:
             df['字符串常量'] = df['字符串常量'].fillna('').astype(str).replace('nan', '').replace('None', '')
+
+        # 确保调用链信息列是字符串类型
+        if '调用链信息' in df.columns:
+            df['调用链信息'] = df['调用链信息'].fillna('').astype(str).replace('nan', '').replace('None', '')
 
         # 确保 LLM 相关列不是 nan（处理 None 值）
         llm_columns = ['LLM推断函数名', 'LLM功能描述', '负载问题识别与优化建议', 'LLM置信度', 'LLM推理过程']
@@ -1502,7 +1765,7 @@ class MissingSymbolFunctionAnalyzer:
             'SO文件': 50,
             '指令数': 10,
             '字符串常量': 40,
-            '调用的函数': 50,  # 新增：调用的函数列表
+            '调用链信息': 60,  # 合并了调用者和被调用者信息
             'LLM推断函数名': 30,
             'LLM功能描述': 80,
             '负载问题识别与优化建议': 100,
@@ -1523,8 +1786,8 @@ class MissingSymbolFunctionAnalyzer:
                 '负载问题识别与优化建议',
                 'LLM推理过程',
                 '文件路径',
-                '调用的函数',
                 '字符串常量',
+                '调用链信息',
             ]:
                 for row_idx in range(2, len(df) + 2):
                     cell = ws[f'{col_letter}{row_idx}']

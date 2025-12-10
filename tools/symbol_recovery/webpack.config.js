@@ -19,6 +19,9 @@ module.exports = {
                     from: path.resolve(__dirname, 'dist/symbol-recovery'),
                     to: path.resolve(__dirname, '../../dist/tools/symbol-recovery'),
                     noErrorOnMissing: true,
+                    globOptions: {
+                        followSymbolicLinks: false,
+                    },
                 },
                 {
                     from: path.resolve(__dirname, 'README.md'),
@@ -32,22 +35,11 @@ module.exports = {
         new PreservePermissionsPlugin({
             mappings: [
                 {
-                    from: path.resolve(__dirname, 'dist/symbol-recovery/symbol-recovery'),
-                    to: path.resolve(__dirname, '../../dist/tools/symbol-recovery/symbol-recovery'),
+                    from: path.resolve(__dirname, 'dist/symbol-recovery'),
+                    to: path.resolve(__dirname, '../../dist/tools/symbol-recovery'),
                 },
             ],
-        }),
-        // 使用 PackPlugin 创建 zip 文件
-        new PackPlugin({
-            zipName: 'symbol-recovery',
-            version: version,
-            sourceDir: 'dist/symbol-recovery',
-            additionalFiles: [
-                '../../dist/tools/trace_streamer_binary',
-                'README.md'
-            ],
-            mergeAdditionalDirectories: true // symbol-recovery 需要合并目录内容到 zip 根目录
-        }),
+        })
     ],
 };
 

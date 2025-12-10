@@ -27,15 +27,18 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=2.0",
-    "pandas>=2.0.3",
-    "tensorflow>=2.20.0",
+    "numpy",
+    "pandas",
+    # TensorFlow 依赖：macOS 使用 tensorflow-macos，其他平台使用标准 tensorflow
+    "tensorflow>=2.16.2; platform_system != 'Darwin'",
+    "tensorflow-macos>=2.16.2; platform_system == 'Darwin'",
+    "tensorflow-metal>=1.0.0; platform_system == 'Darwin'",
     "tqdm>=4.67.1",
     "pyelftools>=0.32",
     "arpy~=2.3.0",
     "joblib>=1.3.0",
     "xlsxwriter>=3.0.0",
-    "scikit-learn>=1.6.1",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]
