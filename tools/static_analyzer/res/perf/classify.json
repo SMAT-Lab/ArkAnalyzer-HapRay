@@ -4594,6 +4594,7 @@
         ["^(?!\\[anon:ArkTS[^\\]]*\\])\\[.*\\]", ".*"],
         ["^(?!.*devhost\\.elf$).*\\.elf$", ".*"],
         ["/proc/.*/bundle/libs/arm64/libkn.so", "EnterFrame"],
-        ["/proc/.*/bundle/libs/arm64/libkn.so", "LeaveFrame"]
+        ["/proc/.*/bundle/libs/arm64/libkn.so", "LeaveFrame"],
+        ["/proc/.*/bundle/libs/arm64/libc\\+\\+_shared.so", ".*"]
     ]
 }
