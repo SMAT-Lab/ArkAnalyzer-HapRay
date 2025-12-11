@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from core.config_manager import ConfigManager
 from core.plugin_loader import PluginLoader
-from gui.plugin_config_dialog import PluginConfigDialog
+from gui.global_config_dialog import GlobalConfigDialog
 from gui.result_viewer import ResultViewer
 from gui.tool_pages import ToolPage
 
@@ -36,9 +36,9 @@ class MainWindow(QMainWindow):
         self.plugin_loader = PluginLoader()
         self.current_tool_page = None  # 当前显示的工具页面
         self.init_ui()
-        self.setup_menu()
+        self.load_plugins()  # 先加载插件
+        self.setup_menu()  # 再设置菜单（需要插件信息）
         self.setup_statusbar()
-        self.load_plugins()
 
     def init_ui(self):
         """初始化UI"""
@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
             return
 
         # 创建工具页面
-        tool_page = ToolPage(tool)
+        tool_page = ToolPage(tool, self)
         if action and hasattr(tool_page, 'current_action') and hasattr(tool_page, 'rebuild_param_form'):
             tool_page.current_action = action
             tool_page.rebuild_param_form()
@@ -366,9 +366,25 @@ class MainWindow(QMainWindow):
         # 设置菜单
         settings_menu = menubar.addMenu('设置(&S)')
 
-        plugin_config_action = QAction('插件配置(&P)', self)
-        plugin_config_action.triggered.connect(self.show_plugin_config)
-        settings_menu.addAction(plugin_config_action)
+        # 全局配置
+        global_config_action = QAction('全局配置(&G)', self)
+        global_config_action.triggered.connect(self.show_global_config)
+        settings_menu.addAction(global_config_action)
+
+        # 动态添加插件配置菜单
+        plugins = self.plugin_loader.get_all_plugins()
+        has_plugin_config = False
+        for plugin_id, tool in plugins.items():
+            if hasattr(tool, 'get_config_schema'):
+                config_schema = tool.get_config_schema()
+                if config_schema.get('items'):
+                    if not has_plugin_config:
+                        settings_menu.addSeparator()
+                        has_plugin_config = True
+                    plugin_name = tool.get_name()
+                    action = QAction(f'{plugin_name}', self)
+                    action.triggered.connect(lambda checked, pid=plugin_id: self.show_plugin_config_with_plugin(pid))
+                    settings_menu.addAction(action)
 
         # 帮助菜单
         help_menu = menubar.addMenu('帮助(&H)')
@@ -402,9 +418,16 @@ class MainWindow(QMainWindow):
                 return path
         return None
 
-    def show_plugin_config(self):
-        """显示插件配置对话框"""
-        dialog = PluginConfigDialog(self)
+    def show_global_config(self):
+        """显示全局配置对话框"""
+        dialog = GlobalConfigDialog(self)
+        dialog.exec()
+
+    def show_plugin_config_with_plugin(self, plugin_id: str):
+        """显示指定插件的配置对话框"""
+        from gui.plugin_config_dialog import PluginConfigDialog
+
+        dialog = PluginConfigDialog(self, plugin_id)
         dialog.exec()
 
     def show_about(self):
@@ -412,7 +435,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             '关于 HapRay GUI',
-            'HapRay GUI v1.4.1\n\n'
+            'HapRay GUI v1.4.0\n\n'
             '工具集成平台\n'
             '整合了以下工具：\n'
             '- 动态测试 (perf_testing)\n'

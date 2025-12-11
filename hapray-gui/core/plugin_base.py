@@ -152,6 +152,10 @@ class PluginTool(BaseTool):
         """获取配置项定义（从元数据中读取）"""
         return self.metadata.get('config', {})
 
+    def get_global_config_schema(self) -> dict[str, Any]:
+        """获取全局配置项定义（从元数据中读取）"""
+        return self.metadata.get('global-config', {})
+
     def get_config_value(self, config_key: str, default: Any = None) -> Any:
         """
         获取插件配置值
@@ -178,6 +182,29 @@ class PluginTool(BaseTool):
     def get_all_config(self) -> dict[str, Any]:
         """获取所有插件配置"""
         return self.config.get(f'plugins.{self.plugin_id}.config', {})
+
+    def get_global_config_value(self, config_key: str, default: Any = None) -> Any:
+        """
+        获取全局配置值
+
+        Args:
+            config_key: 配置键名
+            default: 默认值
+
+        Returns:
+            配置值
+        """
+        return self.config.get_global_config(config_key, default)
+
+    def set_global_config_value(self, config_key: str, value: Any):
+        """
+        设置全局配置值
+
+        Args:
+            config_key: 配置键名
+            value: 配置值
+        """
+        self.config.set_global_config(config_key, value)
 
     def validate_parameters(self, params: dict[str, Any]) -> tuple[bool, Optional[str]]:
         """验证参数"""

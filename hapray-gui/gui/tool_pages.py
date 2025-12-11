@@ -155,13 +155,13 @@ class ToolPage(QWidget):
 
     execution_finished = Signal(str, str)  # tool_name, result_path
 
-    def __init__(self, tool: BaseTool):
-        super().__init__()
+    def __init__(self, tool: BaseTool, parent=None):
+        super().__init__(parent)
         self.tool = tool
         self.param_widgets: dict[str, Any] = {}
         self.execution_thread: ExecutionThread = None
         self.current_action: str = None  # 当前选中的action
-        self.params_group: QGroupBox = None  # 参数组控件引用
+        self.params_group: QWidget = None  # 参数组控件引用
         self.dynamic_loaders: dict[str, DynamicChoicesLoader] = {}  # param_name -> loader
         self.init_ui()
 
@@ -183,28 +183,7 @@ class ToolPage(QWidget):
             self.current_action = None
 
         # 参数表单
-        self.params_group = QGroupBox('⚙️ 参数配置')
-        self.params_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #e5e7eb;
-                border-radius: 8px;
-                margin-top: 8px;
-                padding-top: 16px;
-                background-color: #ffffff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 4px 8px;
-                color: #667eea;
-                font-weight: bold;
-                background-color: #ffffff;
-                border-radius: 4px;
-            }
-        """)
-        self.params_layout = QFormLayout()
-        self.params_group.setLayout(self.params_layout)
+        self.params_group = self.create_params_group()
         layout.addWidget(self.params_group)
 
         # 初始化参数表单
@@ -262,6 +241,91 @@ class ToolPage(QWidget):
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
+    def create_params_group(self) -> QWidget:
+        """创建带按钮的参数配置组"""
+        # 创建一个包装器来容纳标题和按钮
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(0)
+
+        # 标题栏（包含标题和按钮）
+        title_bar = QWidget()
+        title_bar.setFixedHeight(32)  # 稍微调小一点
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(12, 4, 12, 4)
+
+        # 标题标签
+        title_label = QLabel('⚙️ 参数配置')
+        title_label.setStyleSheet("""
+            color: #667eea;
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        title_layout.addWidget(title_label)
+
+        # 弹性空间
+        title_layout.addStretch()
+
+        # 插件配置按钮
+        plugin_config_button = QPushButton('设置')
+        plugin_config_button.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(102, 126, 234, 0.1);
+                border: 1px solid rgba(102, 126, 234, 0.2);
+                border-radius: 4px;
+                color: #667eea;
+                font-size: 12px;
+                font-weight: normal;
+                padding: 4px 8px;
+            }
+            QPushButton:hover {
+                background-color: rgba(102, 126, 234, 0.2);
+            }
+            QPushButton:pressed {
+                background-color: rgba(102, 126, 234, 0.3);
+            }
+        """)
+        plugin_config_button.clicked.connect(self.open_plugin_config)
+        title_layout.addWidget(plugin_config_button)
+
+        wrapper_layout.addWidget(title_bar)
+
+        # QGroupBox - 使用原来的样式
+        params_group = QGroupBox()
+        params_group.setTitle("")  # 空标题，我们用上面的自定义标题栏
+        params_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #e5e7eb;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 16px;
+                background-color: #ffffff;
+            }
+        """)
+
+        self.params_layout = QFormLayout()
+        self.params_layout.setSpacing(8)
+        params_group.setLayout(self.params_layout)
+
+        wrapper_layout.addWidget(params_group)
+
+        return wrapper
+
+    def open_plugin_config(self):
+        """打开插件配置对话框并跳转到当前插件的配置页面"""
+        # 获取主窗口
+        main_window = self.window()
+        if not hasattr(main_window, 'show_plugin_config_with_plugin'):
+            return
+
+        # 获取当前插件ID
+        plugin_id = getattr(self.tool, 'plugin_id', None) or self.tool.get_name()
+
+        # 打开插件配置对话框
+        main_window.show_plugin_config_with_plugin(plugin_id)
+
     def on_action_changed(self, index: int):
         """Action选择改变时的回调"""
         if hasattr(self, 'action_selector'):
@@ -317,6 +381,24 @@ class ToolPage(QWidget):
         """创建参数控件"""
         param_type = param_def.get('type', 'str')
         default = param_def.get('default')
+
+        # 插件界面配置优先级高于全局配置
+        # 如果参数定义中没有默认值，尝试从插件配置中获取
+        if default is None and hasattr(self.tool, 'get_config_value'):
+            # 首先检查参数定义中是否指定了 config_key
+            config_key = param_def.get('config_key', param_name)
+
+            # 如果指定了特定的配置键，直接使用
+            if config_key != param_name or param_def.get('config_key') is not None:
+                config_value = self.tool.get_config_value(config_key)
+                if config_value is not None:
+                    default = config_value
+            else:
+                # 尝试直接匹配的参数名
+                config_value = self.tool.get_config_value(param_name)
+                if config_value is not None:
+                    default = config_value
+
         param_def.get('required', False)
 
         if param_type == 'bool':
@@ -648,6 +730,6 @@ class ToolPages(QWidget):
             # 检查插件是否启用（优先使用插件ID，然后使用工具名称）
             enabled = self.config.is_plugin_enabled(plugin_id) or self.config.is_tool_enabled(tool.get_name())
             if enabled:
-                tool_page = ToolPage(tool)
+                tool_page = ToolPage(tool, self)
                 tool_page.execution_finished.connect(self.execution_finished.emit)
                 self.tool_tabs.addTab(tool_page, tool.get_name())

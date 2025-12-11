@@ -67,6 +67,26 @@
         }
       }
     }
+  },
+  "global-config": {
+    "description": "全局配置项",
+    "items": {
+      "output_dir": {
+        "type": "str",
+        "label": "默认输出目录",
+        "default": "./hapray_output",
+        "help": "工具的默认输出目录",
+        "required": false
+      },
+      "log_level": {
+        "type": "choice",
+        "label": "日志级别",
+        "default": "INFO",
+        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
+        "help": "全局日志输出级别",
+        "required": false
+      }
+    }
   }
 }
 

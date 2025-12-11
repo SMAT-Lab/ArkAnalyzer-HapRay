@@ -57,6 +57,10 @@ class ConfigManager:
                 'window_height': 800,
             },
             'output': {'default_dir': str(default_output_dir)},
+            'global': {
+                'output_dir': './hapray_output',
+                'log_level': 'INFO',
+            },
         }
 
     def _save_config(self):
@@ -116,3 +120,30 @@ class ConfigManager:
         default_dir = executable_dir / 'hapray_output'
         default_dir.mkdir(parents=True, exist_ok=True)
         return str(default_dir)
+
+    def get_global_config(self, key: str, default: Any = None) -> Any:
+        """
+        获取全局配置值
+
+        Args:
+            key: 配置键名
+            default: 默认值
+
+        Returns:
+            配置值
+        """
+        return self.get(f'global.{key}', default)
+
+    def set_global_config(self, key: str, value: Any):
+        """
+        设置全局配置值
+
+        Args:
+            key: 配置键名
+            value: 配置值
+        """
+        self.set(f'global.{key}', value)
+
+    def get_all_global_config(self) -> dict[str, Any]:
+        """获取所有全局配置"""
+        return self.get('global', {})
