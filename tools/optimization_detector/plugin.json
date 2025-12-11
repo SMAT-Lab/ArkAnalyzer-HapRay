@@ -44,6 +44,16 @@
           "short": "j",
           "help": "并行处理的任务数量"
         },
+        "format": {
+          "type": "choice",
+          "label": "输出格式",
+          "required": false,
+          "multi_select": true,
+          "choices": ["excel", "json", "csv", "xml"],
+          "default": ["excel"],
+          "short": "f",
+          "help": "输出格式: excel, json, csv, or xml. Can specify multiple formats (e.g., -f excel json)."
+        },
         "no_lto": {
           "type": "bool",
           "label": "禁用LTO检测",
