@@ -14,13 +14,14 @@ limitations under the License.
 """
 
 import contextlib
+import json
 import os
 from typing import Any, Optional
 
 import pandas as pd
 
 from hapray.analyze.base_analyzer import BaseAnalyzer, BaseModel
-from hapray.core.common.memory import MemoryAnalyzerCore
+from hapray.core.common.memory import MemoryAnalyzerCore, MemoryMeminfoParser
 from hapray.core.common.memory.memory_aggregator import MemoryAggregator
 from hapray.core.common.memory.memory_comparison_exporter import MemoryComparisonExporter
 
@@ -133,6 +134,20 @@ class MemoryDataDictModel(BaseModel):
     }
 
 
+class MemoryMeminfoModel(BaseModel):
+    """Memory meminfo data model
+
+    Stores meminfo data as JSON for flexibility, since categories are dynamic.
+    """
+
+    table_name = 'memory_meminfo'
+    fields = {
+        'timestamp': 'TEXT',
+        'timestamp_epoch': 'INTEGER',
+        'data': 'TEXT',  # JSON string containing all meminfo categories (gpu, smaps categories, dma categories)
+    }
+
+
 class MemoryAnalyzer(BaseAnalyzer):
     """Memory analyzer
 
@@ -168,6 +183,10 @@ class MemoryAnalyzer(BaseAnalyzer):
             'callchain_cache': {},
         }
 
+        # 保存 app_pids 和 app_process_name，用于 meminfo 解析
+        self.app_pids: list[int] = []
+        self.app_process_name: Optional[str] = None
+
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
     ) -> Optional[dict[str, Any]]:
@@ -182,12 +201,28 @@ class MemoryAnalyzer(BaseAnalyzer):
         Returns:
             Analysis results dictionary
         """
+        # 保存 app_pids 用于 meminfo 解析
+        if app_pids:
+            self.app_pids = app_pids
+
         # Use core analyzer for analysis
         result = self.core_analyzer.analyze_memory(
             scene_dir=self.scene_dir,
             memory_db_path=trace_db_path,
             app_pids=app_pids,
         )
+
+        # 解析 meminfo 数据并存入 result
+        meminfo_dir = os.path.join(self.scene_dir, 'meminfo', step_dir)
+        if os.path.exists(meminfo_dir):
+            try:
+                parser = MemoryMeminfoParser(self.app_pids, self.app_process_name)
+                meminfo_data = parser.parse_meminfo_directory(meminfo_dir)
+                if result is None:
+                    result = {}
+                result['meminfo'] = meminfo_data
+            except Exception as e:
+                self.logger.warning('Failed to parse meminfo data: %s', str(e))
 
         # 如果启用了对比导出，收集对比数据并添加步骤标记
         if self.export_comparison and result and 'original_records' in result:
@@ -250,6 +285,8 @@ class MemoryAnalyzer(BaseAnalyzer):
                 all_rows.extend(self._extract_unreleased_rows(unreleased_end, step_name, 'end'))
 
             self._write_excel_sheets(writer, all_rows)
+            # Write meminfo data
+            self._write_meminfo_sheets(writer)
 
         # Excel writing complete; parent class has already written structure to JSON
 
@@ -370,6 +407,56 @@ class MemoryAnalyzer(BaseAnalyzer):
         else:
             ws_sub.set_column(0, 4, 18)
 
+    def _write_meminfo_sheets(self, writer: pd.ExcelWriter):
+        """Write meminfo data to Excel sheets
+
+        Args:
+            writer: Excel writer object
+        """
+        meminfo_rows = []
+
+        # 收集所有步骤的 meminfo 数据
+        for step_name, step_data in self.results.items():
+            if not isinstance(step_data, dict):
+                continue
+
+            meminfo_data = step_data.get('meminfo')
+            if not meminfo_data or not isinstance(meminfo_data, list):
+                continue
+
+            # 将 meminfo 数据转换为行数据，添加 step 列
+            for meminfo_record in meminfo_data:
+                if not isinstance(meminfo_record, dict):
+                    continue
+
+                row = {'step': step_name}
+                row.update(meminfo_record)
+                meminfo_rows.append(row)
+
+        if not meminfo_rows:
+            return
+
+        # 创建 DataFrame
+        df_meminfo = pd.DataFrame(meminfo_rows)
+
+        if df_meminfo.empty:
+            return
+
+        # 将字节转换为 MB（更易读），保留 2 位小数
+        byte_columns = [col for col in df_meminfo.columns if col not in ['step', 'timestamp', 'timestamp_epoch']]
+        for col in byte_columns:
+            if col in df_meminfo.columns and df_meminfo[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                df_meminfo[col] = (df_meminfo[col] / (1024 * 1024)).round(2)  # 转换为 MB，保留 2 位小数
+
+        # 写入 Excel
+        meminfo_sheet = 'Meminfo'
+        df_meminfo.to_excel(writer, sheet_name=meminfo_sheet, index=False)
+        ws_meminfo = writer.sheets[meminfo_sheet]
+        if not df_meminfo.empty:
+            ws_meminfo.set_column(0, len(df_meminfo.columns) - 1, 20)
+        else:
+            ws_meminfo.set_column(0, 5, 18)
+
     def _create_category_summary(self, df: pd.DataFrame, groupby_cols: list[str]) -> pd.DataFrame:
         """Create category summary DataFrame
 
@@ -406,6 +493,7 @@ class MemoryAnalyzer(BaseAnalyzer):
             self.create_model_table(MemoryRecordStorageModel)
             self.create_model_table(MemoryCallchainStorageModel)
             self.create_model_table(MemoryDataDictModel)
+            self.create_model_table(MemoryMeminfoModel)
 
             # 先构建紧凑存储表，再创建兼容视图
             self._create_memory_callchains_view()
@@ -420,6 +508,7 @@ class MemoryAnalyzer(BaseAnalyzer):
             self._create_memory_records_indexes()
             self._create_memory_callchains_indexes()
             self._create_memory_data_dict_indexes()
+            self._create_memory_meminfo_indexes()
 
             # Save data
             for step_name, step_data in self.results.items():
@@ -495,6 +584,13 @@ class MemoryAnalyzer(BaseAnalyzer):
         self.create_index('idx_memory_data_dicts_step_dict', 'memory_data_dicts', 'step_id, dictId')
         self.create_index('idx_memory_data_dicts_value', 'memory_data_dicts', 'value')
 
+    def _create_memory_meminfo_indexes(self):
+        """Create indexes for memory_meminfo table to improve query performance"""
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_meminfo_timestamp_epoch')
+        self.create_index('idx_memory_meminfo_timestamp_epoch', 'memory_meminfo', 'timestamp_epoch')
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_meminfo_timestamp')
+        self.create_index('idx_memory_meminfo_timestamp', 'memory_meminfo', 'timestamp')
+
     def _save_step_data_to_db(self, step_id: int, step_data: dict):
         """Save step data to database
 
@@ -518,6 +614,7 @@ class MemoryAnalyzer(BaseAnalyzer):
         self.exec_sql('DELETE FROM memory_records WHERE step_id = ?', (step_id,))
         self.exec_sql('DELETE FROM memory_callchains_raw WHERE step_id = ?', (step_id,))
         self.exec_sql('DELETE FROM memory_data_dicts WHERE step_id = ?', (step_id,))
+        self.exec_sql('DELETE FROM memory_meminfo WHERE step_id = ?', (step_id,))
 
         # Batch save detailed records
         data_dict = dict(step_data.get('dataDict') or {})
@@ -536,6 +633,13 @@ class MemoryAnalyzer(BaseAnalyzer):
             data_dict_models = self._create_data_dict_models(data_dict)
             if data_dict_models:
                 self.batch_save_models(step_id, data_dict_models, replace=False)
+
+        # Save meminfo data
+        meminfo_data = step_data.get('meminfo')
+        if meminfo_data and isinstance(meminfo_data, list):
+            meminfo_models = self._create_meminfo_models(meminfo_data)
+            if meminfo_models:
+                self.batch_save_models(step_id, meminfo_models, replace=False)
 
     def _create_record_models(
         self, records: list[dict], data_dict: dict[int, str]
@@ -641,6 +745,37 @@ class MemoryAnalyzer(BaseAnalyzer):
             model = MemoryDataDictModel(
                 dictId=dict_id,
                 value=value,
+            )
+            models.append(model)
+        return models
+
+    def _create_meminfo_models(self, meminfo_data: list[dict]) -> list[MemoryMeminfoModel]:
+        """Create MemoryMeminfoModel instances from meminfo data
+
+        Args:
+            meminfo_data: List of meminfo record dictionaries
+
+        Returns:
+            List of MemoryMeminfoModel instances
+        """
+        models: list[MemoryMeminfoModel] = []
+        for record in meminfo_data:
+            if not isinstance(record, dict):
+                continue
+
+            timestamp = record.get('timestamp', '')
+            timestamp_epoch = record.get('timestamp_epoch', 0)
+
+            # 提取所有内存分类数据（排除 timestamp 和 timestamp_epoch）
+            data_dict = {k: v for k, v in record.items() if k not in ['timestamp', 'timestamp_epoch']}
+
+            # 将数据字典转换为 JSON 字符串
+            data_json = json.dumps(data_dict, ensure_ascii=False)
+
+            model = MemoryMeminfoModel(
+                timestamp=timestamp,
+                timestamp_epoch=timestamp_epoch,
+                data=data_json,
             )
             models.append(model)
         return models
