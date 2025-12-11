@@ -58,6 +58,7 @@ const ConfigSchema = z.object({
                     components: z.array(
                         z.object({
                             name: z.string().optional(),
+                            priority: z.number().optional(),
                             files: z.array(z.string()),
                             threads: z.array(z.string()).optional(),
                         })
