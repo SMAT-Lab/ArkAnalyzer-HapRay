@@ -22,6 +22,7 @@ from .memory_classifier import MemoryClassifier
 from .memory_comparison_exporter import MemoryComparisonExporter
 from .memory_core_analyzer import MemoryAnalyzerCore
 from .memory_data_loader import MemoryDataLoader
+from .memory_meminfo_parser import MemoryMeminfoParser
 from .memory_record_generator import MemoryRecordGenerator
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     'CallchainFilterConfig',
     'CallchainRefiner',
     'MemoryComparisonExporter',
+    'MemoryMeminfoParser',
 ]

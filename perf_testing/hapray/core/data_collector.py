@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import os
+from datetime import datetime
 from typing import Any
 
 from xdevice import platform_logger
@@ -91,6 +92,7 @@ class DataCollector:
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
         self.process_manager.save_process_info(perf_step_dir)
         self.capture_ui_handler.capture_ui(step_id, report_path, 'start')
+        self.collect_memory_data(step_id, report_path)
 
         Log.info(f'步骤 {step_id} 开始采集准备完成')
 
@@ -120,6 +122,7 @@ class DataCollector:
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
         self.capture_ui_handler.capture_ui(step_id, report_path, 'end')
+        self.collect_memory_data(step_id, report_path)
 
         Log.info(f'步骤 {step_id} 数据采集结束处理完成')
 
@@ -147,3 +150,81 @@ class DataCollector:
         """
         for path in paths:
             os.makedirs(path, exist_ok=True)
+
+    def collect_memory_data(self, step_id: int, report_path: str):
+        """
+        采集一级内存数据（smaps、GPU、DMA）
+
+        Args:
+            step_id: 步骤ID
+            report_path: 报告路径
+        """
+        Log.info(f'开始步骤 {step_id} 的内存数据采集')
+
+        # 生成时间戳（yyyymmdd-hhmmss格式）
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+
+        # 创建内存数据目录
+        meminfo_step_dir = os.path.join(report_path, 'meminfo', f'step{step_id}')
+        showmap_dir = os.path.join(meminfo_step_dir, 'dynamic_showmap')
+        gpu_mem_dir = os.path.join(meminfo_step_dir, 'dynamic_gpuMem')
+        dmabuf_dir = os.path.join(meminfo_step_dir, 'dynamic_process_dmabuff_info')
+
+        self._ensure_directories_exist(showmap_dir, gpu_mem_dir, dmabuf_dir)
+
+        # 1. 采集应用进程smaps
+        try:
+            process_ids, process_names = self.process_manager.get_app_pids()
+            for pid, process_name in zip(process_ids, process_names):
+                # 清理进程名，移除路径和特殊字符
+                clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
+                filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
+                filepath = os.path.join(showmap_dir, filename)
+
+                cmd = f'hidumper --mem-smaps {pid}'
+                Log.info(f'采集smaps数据: {cmd}')
+                result = self.driver.shell(cmd)
+
+                # 保存到本地文件
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(result)
+
+                Log.info(f'smaps数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集smaps数据失败: {e}')
+
+        # 2. 采集GPU数据（需要root权限）
+        try:
+            filename = f'gpuMen_{timestamp}.txt'
+            filepath = os.path.join(gpu_mem_dir, filename)
+
+            cmd = 'cat /proc/gpu_memory'
+            Log.info(f'采集GPU数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.info(f'GPU数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
+
+        # 3. 采集DMA数据（需要root权限）
+        try:
+            filename = f'process_dmabuff_info_{timestamp}.txt'
+            filepath = os.path.join(dmabuf_dir, filename)
+
+            cmd = 'cat /proc/process_dmabuf_info'
+            Log.info(f'采集DMA数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.info(f'DMA数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+
+        Log.info(f'步骤 {step_id} 内存数据采集完成')
