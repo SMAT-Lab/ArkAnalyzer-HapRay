@@ -8,10 +8,30 @@
             <span class="version-tag">技术栈占比</span>
           </h3>
           <div class="tech-stack-content">
-            <div v-for="item in techStackData" :key="item.name" class="tech-stack-item">
-              <div class="tech-stack-name">{{ item.name }}</div>
-              <div class="tech-stack-value">{{ item.percentage }}%</div>
-              <div class="tech-stack-instructions">{{ formatNumber(item.instructions) }}</div>
+            <div v-for="item in techStackData" :key="item.name" class="tech-stack-category">
+              <!-- 大分类 -->
+              <div class="tech-stack-item category-item" @click="toggleCategory(item.name)">
+                <div class="tech-stack-header">
+                  <div class="tech-stack-name">
+                    <i :class="item.expanded ? 'el-icon-arrow-down' : 'el-icon-arrow-right'" class="expand-icon"></i>
+                    {{ item.name }}
+                  </div>
+                  <div class="tech-stack-stats">
+                    <div class="tech-stack-value">{{ item.percentage }}%</div>
+                    <div class="tech-stack-instructions">{{ formatNumber(item.instructions) }}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- 小分类 -->
+              <div v-if="item.expanded && item.subCategories.length > 0" class="sub-categories">
+                <div v-for="subItem in item.subCategories" :key="subItem.name" class="tech-stack-item sub-item">
+                  <div class="tech-stack-name sub-name">{{ subItem.name }}</div>
+                  <div class="tech-stack-stats">
+                    <div class="tech-stack-value">{{ subItem.percentage }}%</div>
+                    <div class="tech-stack-instructions">{{ formatNumber(subItem.instructions) }}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -509,28 +529,67 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   return data;
 });
 
+// 展开/折叠状态（使用 null 表示初始状态，空 Set 表示用户已交互）
+const expandedCategories = ref<Set<string> | null>(null);
+
+// 切换分类展开状态
+function toggleCategory(categoryName: string) {
+  // 首次点击时，初始化为空 Set（表示用户开始交互）
+  if (expandedCategories.value === null) {
+    expandedCategories.value = new Set();
+  }
+
+  if (expandedCategories.value.has(categoryName)) {
+    expandedCategories.value.delete(categoryName);
+  } else {
+    expandedCategories.value.add(categoryName);
+  }
+}
+
 // 计算技术栈数据（所有kind的分类，动态从数据中获取）
 const techStackData = computed(() => {
-  // 获取大分类数据
-  const categoryData = calculateCategorysData(perfData!, null, false).filter(item => item.stepId === props.stepId);
+  // 需要排除的分类名称（对应 kind = 1, 3, 4, -1）
+  const excludedCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
 
-  // 计算总指令数（基于所有数据）
+  // 获取大分类数据并排除
+  const categoryData = calculateCategorysData(perfData!, null, false)
+    .filter(item => item.stepId === props.stepId && !excludedCategories.includes(item.category));
+
+  // 获取小分类数据并排除
+  const subCategoryData = calculateComponentNameData(perfData!, null, false)
+    .filter(item => item.stepId === props.stepId && !excludedCategories.includes(item.category));
+
+  // 计算总指令数（仅基于未排除的数据）
   const totalInstructions = categoryData.reduce((sum, item) => sum + item.instructions, 0);
 
-  // 需要隐藏的分类名称（对应 kind = 1, 3, 4, -1）
-  const hiddenCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
-
-  // 生成所有分类数据，然后过滤掉需要隐藏的
+  // 生成所有分类数据
   const techStackItems = categoryData
     .map(item => {
       const percentage = totalInstructions > 0 ? ((item.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+
+      // 获取该大分类下的所有小分类
+      const subCategories = subCategoryData
+        .filter(sub => sub.category === item.category)
+        .map(sub => {
+          const subPercentage = totalInstructions > 0 ? ((sub.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+          return {
+            name: sub.subCategoryName,
+            instructions: sub.instructions,
+            percentage: subPercentage
+          };
+        })
+        .sort((a, b) => b.instructions - a.instructions);
+
+      const isExpanded = expandedCategories.value === null ? true : expandedCategories.value.has(item.category);
+
       return {
         name: item.category,
         instructions: item.instructions,
-        percentage: percentage
+        percentage: percentage,
+        subCategories: subCategories,
+        expanded: isExpanded
       };
     })
-    .filter(item => !hiddenCategories.includes(item.name))
     .sort((a, b) => b.instructions - a.instructions);
 
   return techStackItems;
@@ -599,36 +658,109 @@ const techStackData = computed(() => {
   gap: 16px;
 }
 
-.tech-stack-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  min-width: 120px;
+.tech-stack-category {
   flex: 1;
-  border: 1px solid #e4e7ed;
+  min-width: 280px;
+  max-width: calc(33.333% - 11px);
 }
 
-.tech-stack-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
+.tech-stack-item {
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  transition: all 0.3s ease;
+}
+
+.tech-stack-item.category-item {
+  cursor: pointer;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   margin-bottom: 8px;
 }
 
+.tech-stack-item.category-item:hover {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transform: translateY(-2px);
+}
+
+.tech-stack-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tech-stack-name {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.category-item .tech-stack-name {
+  color: white;
+}
+
+.tech-stack-name .expand-icon {
+  font-size: 12px;
+  transition: transform 0.3s ease;
+}
+
+.tech-stack-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .tech-stack-value {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #409eff;
-  margin-bottom: 4px;
+}
+
+.category-item .tech-stack-value {
+  color: white;
 }
 
 .tech-stack-instructions {
-  font-size: 12px;
+  font-size: 11px;
   color: #909399;
   font-weight: 500;
+}
+
+.category-item .tech-stack-instructions {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.sub-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tech-stack-item.sub-item {
+  background: white;
+  padding: 8px 12px;
+}
+
+.tech-stack-item.sub-item:hover {
+  background: #f0f7ff;
+  border-color: #409eff;
+}
+
+.sub-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.sub-item .tech-stack-value {
+  font-size: 14px;
+}
+
+.sub-item .tech-stack-instructions {
+  font-size: 10px;
 }
 
 .step-info-card {
@@ -809,17 +941,25 @@ const techStackData = computed(() => {
     gap: 12px;
   }
 
+  .tech-stack-category {
+    max-width: calc(50% - 6px);
+    min-width: 240px;
+  }
+
   .tech-stack-item {
-    min-width: 100px;
-    padding: 12px;
+    padding: 10px;
   }
 
   .tech-stack-name {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .tech-stack-value {
-    font-size: 16px;
+    font-size: 14px;
+  }
+
+  .tech-stack-stats {
+    gap: 10px;
   }
 }
 
@@ -835,6 +975,27 @@ const techStackData = computed(() => {
   .step-badge {
     padding: 8px 16px;
     font-size: 14px;
+  }
+
+  .tech-stack-category {
+    max-width: 100%;
+    min-width: 100%;
+  }
+
+  .tech-stack-item.category-item {
+    padding: 10px;
+  }
+
+  .tech-stack-name {
+    font-size: 12px;
+  }
+
+  .tech-stack-value {
+    font-size: 13px;
+  }
+
+  .tech-stack-instructions {
+    font-size: 10px;
   }
 }
 </style>
