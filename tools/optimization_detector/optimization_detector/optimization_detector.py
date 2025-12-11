@@ -198,8 +198,8 @@ class OptimizationDetector:
                     opt_level_map = {0: 'O0', 1: 'O1', 2: 'O2', 3: 'O3', 4: 'Os'}
                     opt_level = opt_level_map.get(prediction, 'O2')
 
-                # 调用LTO检测器
-                lto_result = self.lto_detector.detect(file_info.absolute_path, opt_level)
+                # 调用LTO检测器（传递file_info以支持缓存）
+                lto_result = self.lto_detector.detect(file_info, opt_level)
                 lto_results[file_info.file_id] = lto_result
 
             except Exception as e:
