@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
+const os = require('os');
+
 
 /**
  * 打包插件：创建 zip 文件
@@ -20,8 +22,10 @@ class PackPlugin {
     apply(compiler) {
         compiler.hooks.done.tap('PackPlugin', (stats) => {
             const sourcePath = path.resolve(__dirname, this.options.sourceDir);
-            const zipName = `${this.options.zipName}-${this.options.version}.zip`;
-            const zipPath = path.resolve(__dirname, zipName);
+            const platform = os.platform();
+            const arch = os.arch();
+            const zipName = `${this.options.zipName}-${platform}-${arch}-${this.options.version}.zip`;
+            const zipPath = path.resolve(__dirname, '..', zipName);
 
             // 检查源目录是否存在
             if (!fs.existsSync(sourcePath)) {

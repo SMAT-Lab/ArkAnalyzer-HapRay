@@ -100,3 +100,4 @@ jobs:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
         path: |
           ArkAnalyzer-HapRay-*.zip
+          opt-detector-*.zip
