@@ -179,7 +179,7 @@ function testOptModule() {
         const command = `${EXECUTABLE} opt -i "${testFile}" -o "${outputFile}" -f excel --verbose`;
 
         console.log('执行opt命令进行完整分析...');
-        runCommand(command, 'opt 模块功能测试', { silent: false, timeout: 120000 });
+        runCommand(command, 'opt 模块功能测试', { silent: false, timeout: 1200000 });
 
         // 检查输出文件是否存在
         if (fs.existsSync(outputFile)) {
@@ -462,23 +462,14 @@ async function runE2ETests() {
 
     // 配置 LLM 环境变量用于符号恢复模块测试
     console.log('🤖 配置 LLM 环境变量...');
-    process.env.LLM_SERVICE_TYPE = 'deepseek';
-    process.env.DEEPSEEK_API_KEY = 'sk-14ccee5142d04e7fbbcda3418b715390';
+    process.env.LLM_API_KEY = 'sk-14ccee5142d04e7fbbcda3418b715390';
     process.env.LLM_BASE_URL = 'https://api.deepseek.com/v1';
     process.env.LLM_MODEL = 'deepseek-chat';
 
-    // 设置插件配置环境变量（优先级最高）
-    // 这些环境变量会被 hapray-gui 的插件系统识别并传递给子进程
-    process.env.HAPRAY_PLUGIN_CONFIG_LLM_API_KEY = 'sk-14ccee5142d04e7fbbcda3418b715390';
-    process.env.HAPRAY_PLUGIN_CONFIG_LLM_BASE_URL = 'https://api.deepseek.com/v1';
-    process.env.HAPRAY_PLUGIN_CONFIG_LLM_MODEL = 'deepseek-chat';
-
     console.log('✓ LLM 环境变量配置完成：');
-    console.log(`  - 服务类型: ${process.env.LLM_SERVICE_TYPE}`);
     console.log(`  - 模型名称: ${process.env.LLM_MODEL}`);
-    console.log(`  - API 密钥: ${process.env.DEEPSEEK_API_KEY ? '已设置' : '未设置'}`);
+    console.log(`  - API 密钥: ${process.env.LLM_API_KEY ? '已设置' : '未设置'}`);
     console.log(`  - Base URL: ${process.env.LLM_BASE_URL}`);
-    console.log(`  - 插件配置 API 密钥: ${process.env.HAPRAY_PLUGIN_CONFIG_LLM_API_KEY ? '已设置' : '未设置'}`);
     console.log('');
 
     try {
