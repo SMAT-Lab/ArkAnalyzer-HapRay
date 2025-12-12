@@ -5,12 +5,12 @@
   "private": true,
   "files": [],
   "workspaces": [
+    "hapray-gui",
     "web",
     "tools/static_analyzer",
     "perf_testing",
     "tools/optimization_detector",
-    "tools/symbol_recovery",
-    "hapray-gui"
+    "tools/symbol_recovery"
   ],
   "scripts": {
     "build": "node scripts/unzip_third-party.js && npm run build --ws",

@@ -255,6 +255,7 @@ exe_cmd = EXE(
 )
 
 # 使用一个 COLLECT 收集所有内容到一个目录（共用一个 _internal）
+# name 设置为空字符串或 None，使输出直接到 distpath 指定的目录
 coll = COLLECT(
     exe_gui,
     exe_cmd,
@@ -264,7 +265,7 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='hapray',
+    name='',  # 空名称，使输出直接到 distpath 目录
     copy_metadata=False,
 )
 
