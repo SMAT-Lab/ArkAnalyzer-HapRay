@@ -65,10 +65,16 @@ function extractTraceZip() {
         console.log(`发现 trace.zip 文件: ${traceZipPath}`);
         console.log(`准备解压到目录: ${extractDir}`);
 
-        // 使用 PowerShell 的 Expand-Archive cmdlet 解压
-        const extractCommand = `powershell -command "Expand-Archive -Path '${traceZipPath}' -DestinationPath '${extractDir}' -Force"`;
+        // 根据操作系统选择解压命令
+        let extractCommand;
+        if (process.platform === 'win32') {
+            // Windows 使用 PowerShell 的 Expand-Archive cmdlet
+            extractCommand = `powershell -command "Expand-Archive -Path '${traceZipPath}' -DestinationPath '${extractDir}' -Force"`;
+        } else {
+            // Linux 和 macOS 使用 unzip
+            extractCommand = `unzip -o '${traceZipPath}' -d '${extractDir}'`;
+        }
         console.log('正在解压 trace.zip...');
-
         execSync(extractCommand, { stdio: 'inherit' });
 
         // 删除原来的 zip 文件
