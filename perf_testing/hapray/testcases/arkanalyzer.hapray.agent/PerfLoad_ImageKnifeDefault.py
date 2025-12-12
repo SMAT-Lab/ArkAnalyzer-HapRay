@@ -27,8 +27,9 @@ class PerfLoad_ImageKnifeDefault(PerfTestCase):
         self.driver.wait(5)
 
         def step1():
+            self.driver.wait(5)
             self.driver.start_app(
-                self.app_package, 'ExecutorAbility', '--ps testSuite test_suite --ps testCase ImageKnifeDefaultPageTest'
+                self.app_package, 'ExecutorAbility', '--ps testSuite test_suite --ps testCase ImageKnifeDefaultTest'
             )
             self.swipes_up(swip_num=1, sleep=2, timeout=300)
             self.swipes_down(swip_num=1, sleep=2, timeout=300)

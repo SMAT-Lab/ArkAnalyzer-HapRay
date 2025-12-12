@@ -48,6 +48,7 @@ class PerfDataToSqliteConverter:
         # 检查常见位置
         search_paths = [
             Path.cwd(),
+            Path.cwd() / 'dist' / 'tools' / 'trace_streamer_binary',
             Path.cwd() / '..' / 'trace_streamer_binary',
             Path.cwd() / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
             Path.cwd() / 'tools' / 'trace_streamer_binary',
