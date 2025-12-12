@@ -228,18 +228,37 @@ python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/co
 ```
 
 ### Guide: Running Release Program on macOS
-1. Open Terminal (Applications > Utilities)
-2. Grant Execution Permission
+
+When you download the release package (ZIP file) and extract it, macOS may mark the files with a quarantine attribute that prevents execution. You need to remove this attribute before running the program.
+
+#### Using the Helper Script
+The release package includes a helper script `run_macos.sh` that automatically removes quarantine attributes from all files in the extracted directory:
+
 ```bash
-chmod +x /path/to/ArkAnalyzer-HapRay
+# Extract the ZIP file
+unzip ArkAnalyzer-HapRay-darwin-arm64.zip
+
+# Navigate to the extracted directory
+cd ArkAnalyzer-HapRay-darwin-arm64  # or the actual directory name
+
+# Remove quarantine attributes
+./run_macos.sh
 ```
-3. Remove Quarantine Attribute
-macOS marks downloaded files with a security flag. Remove it with:
+
+The script will:
+1. Automatically remove quarantine attributes from all files in the current directory
+2. You can then run the executable program directly
+
+After removing quarantine attributes, you can run the executable:
 ```bash
-sudo xattr -r -d com.apple.quarantine /path/to/ArkAnalyzer-HapRay
+# Run GUI version
+./ArkAnalyzer-HapRay-GUI
+
+# Run CLI version
+./ArkAnalyzer-HapRay
 ```
-Replace /path/to/ArkAnalyzer-HapRay with your actual program path
-Enter your administrator password when prompted
+
+> **Note:** The `run_macos.sh` script is included in the release package. If you don't see it after extraction, make sure the ZIP file was extracted completely.
 
 ### Dependencies
 - pip > 23.0.1
