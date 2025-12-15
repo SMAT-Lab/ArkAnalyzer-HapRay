@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const XLSX = require('xlsx');
 
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 const TOOLS_DIR = path.join(DIST_DIR, 'tools');
@@ -18,6 +19,9 @@ const USE_EXTERNAL_RESOURCES = true;
 
 // 输出目录
 const OUTPUT_DIR = path.join(TEST_PRODUCTS_DIR, 'output');
+
+// 基准结果目录
+const ORIGIN_RESULT_DIR = path.join(TEST_PRODUCTS_DIR, 'origin-result');
 
 // 需要检查的工具目录列表
 const REQUIRED_TOOLS = [
@@ -110,8 +114,7 @@ function runCommand(command, description, options = {}) {
     try {
         const result = execSync(command, {
             stdio: options.silent ? 'pipe' : 'inherit',
-            timeout: options.timeout || 30000,
-            env: { ...process.env, ...options.env },  // 传递环境变量
+            env: { ...process.env, ...options.env },
             ...options
         });
         console.log(`✓ ${description} 成功`);
@@ -125,32 +128,16 @@ function runCommand(command, description, options = {}) {
 /**
  * 测试单个模块的基本功能
  */
-function testModule(command, moduleName, args = []) {
-    const fullCommand = `${EXECUTABLE} ${command} ${args.join(' ')}`;
-
+function testModule(command, moduleName, testFunc) {
     try {
-        // 先尝试 --help 参数来测试模块是否能正常加载
-        runCommand(`${EXECUTABLE} ${command} --help`, `${moduleName} 模块帮助`, { silent: true });
-        console.log(`✓ ${moduleName} 模块加载正常`);
-
-        // 对某些模块进行基本的实际功能测试
-        switch (command) {
-            case 'opt':
-                testOptModule();
-                break;
-            case 'static':
-                testStaticModule();
-                break;
-            case 'perf':
-                testPerfModule();
-                break;
-            case 'symbol-recovery':
-                testSymbolRecoveryModule();
-                break;
+        if (command !== 'update') {
+            runCommand(`${EXECUTABLE} ${command} --help`, `${moduleName} 模块帮助`, { silent: true });
+            console.log(`✓ ${moduleName} 模块加载正常`);
         }
+        return testFunc ? testFunc() : { success: true };
     } catch (error) {
         console.error(`✗ ${moduleName} 模块测试失败:`, error.message);
-        throw error;
+        return { success: false, error: error.message };
     }
 }
 
@@ -158,7 +145,6 @@ function testModule(command, moduleName, args = []) {
  * 测试优化检测模块的基本功能
  */
 function testOptModule() {
-    // 优先使用外部测试资源
     const testFile = getTestFilePath(
         path.join(TEST_PRODUCTS_DIR, 'resource', 'opt-detector', 'meituan.hap'),
         path.join('opt-detector', 'meituan.hap')
@@ -166,45 +152,29 @@ function testOptModule() {
 
     if (!fs.existsSync(testFile)) {
         console.log('⚠ 跳过 opt 模块实际测试：meituan.hap文件不存在');
-        return;
+        return { success: false, error: 'meituan.hap文件不存在' };
     }
 
     console.log('使用meituan.hap进行opt模块测试');
 
     try {
-        // 测试完整的优化检测功能
         const outputFile = path.join(OUTPUT_DIR, 'temp_opt_test.xlsx');
-
-        // 正常分析 hap 包（启用 LTO 和优化级别检测）
         const command = `${EXECUTABLE} opt -i "${testFile}" -o "${outputFile}" -f excel --verbose`;
 
         console.log('执行opt命令进行完整分析...');
-        runCommand(command, 'opt 模块功能测试', { silent: false, timeout: 1200000 });
+        runCommand(command, 'opt 模块功能测试', { silent: false });
 
-        // 检查输出文件是否存在
         if (fs.existsSync(outputFile)) {
             console.log('✓ opt 模块实际功能测试成功');
             console.log(`输出文件保存在: ${outputFile}`);
+            return { success: true };
         } else {
-            console.log('⚠ opt 命令执行完成但未生成预期输出文件（可能由于依赖限制）');
+            console.log('✗ opt 命令执行完成但未生成预期输出文件');
+            return { success: false, error: '未生成输出文件' };
         }
     } catch (error) {
-        // 如果是依赖问题或其他已知问题，标记为跳过而不是失败
-        const errorMsg = error.message || '';
-        const errorOutput = error.stderr ? error.stderr.toString() : '';
-        const combinedError = errorMsg + errorOutput;
-
-        if (combinedError.includes('tensorflow') ||
-            combinedError.includes('TensorFlow') ||
-            combinedError.includes('DLL load failed') ||
-            combinedError.includes('Failed to load the native TensorFlow runtime') ||
-            combinedError.includes('_pywrap_tensorflow_internal') ||
-            combinedError.includes('ImportError') ||
-            combinedError.includes('UnicodeEncodeError')) {
-            console.log('⚠ 跳过 opt 模块实际功能测试：TensorFlow 依赖问题或编码问题');
-        } else {
-            console.log('⚠ opt 模块测试完成（可能由于环境限制部分功能被跳过）');
-        }
+        console.error(`✗ opt 模块测试失败: ${error.message}`);
+        return { success: false, error: error.message };
     }
 }
 
@@ -212,39 +182,52 @@ function testOptModule() {
  * 测试静态分析模块的基本功能
  */
 function testStaticModule() {
-    // 使用与opt模块相同的测试文件
     const testFile = path.join(TEST_PRODUCTS_DIR, 'opt-detector', 'meituan.hap');
 
     if (!fs.existsSync(testFile)) {
         console.log('⚠ 跳过 static 模块实际测试：meituan.hap文件不存在');
-        return;
+        return { success: false, error: 'meituan.hap文件不存在' };
     }
 
-    const outputDir = path.join(OUTPUT_DIR, 'static_test_output');
+    const outputDir = path.join(OUTPUT_DIR, 'static_test_output', 'meituan');
 
     try {
-        // 确保输出目录存在
         if (!fs.existsSync(outputDir)) {
             fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        // 测试静态分析功能 - 增加超时时间到180秒（3分钟）
-        runCommand(`${EXECUTABLE} static -i "${testFile}" -o "${outputDir}"`, 'static 模块实际功能测试', { silent: false, timeout: 180000 });
+        runCommand(`${EXECUTABLE} static -i "${testFile}" -o "${outputDir}"`, 'static 模块实际功能测试', { silent: false });
 
-        // 检查输出目录是否有内容
         const files = fs.readdirSync(outputDir);
-        if (files.length > 0) {
-            console.log('✓ static 模块实际功能测试成功');
+        if (files.length >= 3) {
+            console.log(`✓ static 模块实际功能测试成功 (生成${files.length}个文件)`);
             console.log(`输出文件保存在: ${outputDir}`);
+            return { success: true };
         } else {
-            throw new Error('输出目录为空');
+            console.log(`✗ static 模块输出文件不足 (需要>=3个，实际${files.length}个)`);
+            return { success: false, error: `输出文件不足: ${files.length} < 3` };
         }
-
-        // 保留输出结果，不再清理
     } catch (error) {
         console.error(`✗ static 模块实际功能测试失败:`, error.message);
-        throw error;
+        return { success: false, error: error.message };
     }
+}
+
+/**
+ * 获取reports目录下最新的时间戳文件夹
+ */
+function getLatestReportFolder(reportsDir) {
+    if (!fs.existsSync(reportsDir)) return null;
+
+    const folders = fs.readdirSync(reportsDir).filter(f => {
+        const fullPath = path.join(reportsDir, f);
+        return fs.statSync(fullPath).isDirectory() && /^\d+$/.test(f);
+    });
+
+    if (folders.length === 0) return null;
+
+    const maxFolder = folders.sort((a, b) => parseInt(b) - parseInt(a))[0];
+    return path.join(reportsDir, maxFolder, 'PerfLoad_meituan_0010');
 }
 
 /**
@@ -258,117 +241,104 @@ function moveReportsDirectory() {
         if (fs.existsSync(reportsDir)) {
             console.log('正在移动perf测试结果...');
 
-            // 如果目标目录已存在，先删除
             if (fs.existsSync(targetDir)) {
                 fs.rmSync(targetDir, { recursive: true, force: true });
             }
 
-            // 移动reports目录
             fs.renameSync(reportsDir, targetDir);
             console.log(`✓ perf测试结果已移动到: ${targetDir}`);
+            return targetDir;
         } else {
             console.log('⚠ reports目录不存在，跳过移动操作');
+            return null;
         }
     } catch (error) {
         console.error('移动reports目录失败:', error.message);
-        // 不终止整个测试流程
+        return null;
     }
 }
 
 /**
- * 测试性能测试模块的基本功能（perf和update命令）
+ * 测试perf命令
  */
 function testPerfModule() {
-    console.log('开始测试perf模块功能');
+    console.log('开始测试perf命令功能');
 
     try {
-        // 1. 测试perf命令的基本功能
-        console.log('测试perf命令基本功能...');
-        try {
-            runCommand(`${EXECUTABLE} perf --help`, 'perf 命令帮助', { silent: true });
-            console.log('✓ perf 命令帮助显示正常');
-        } catch (error) {
-            console.log('⚠ perf 命令帮助测试失败，但继续其他测试');
-        }
-
-        // 2. 检查meituan_0010测试用例是否存在并测试
-        // 优先检查dist目录下的构建后文件
         const distTestCaseDir = path.join(DIST_DIR, 'tools', 'perf-testing', '_internal', 'hapray', 'testcases', 'com.sankuai.hmeituan');
         const distTestCaseFile = path.join(distTestCaseDir, 'PerfLoad_meituan_0010.json');
-
-        // 备选：源码目录下的文件
         const sourceTestCaseDir = path.join(__dirname, '..', 'perf_testing', 'hapray', 'testcases', 'com.sankuai.hmeituan');
         const sourceTestCaseFile = path.join(sourceTestCaseDir, 'PerfLoad_meituan_0010.json');
-
         const testCaseFile = fs.existsSync(distTestCaseFile) ? distTestCaseFile : sourceTestCaseFile;
 
-        if (fs.existsSync(testCaseFile)) {
-            console.log(`发现meituan_0010测试用例 (${fs.existsSync(distTestCaseFile) ? 'dist目录' : '源码目录'})，尝试执行perf命令...`);
-            try {
-                // 使用完整的测试用例名称 PerfLoad_meituan_0010
-                // 移除 silent: true 以便看到日志输出
-                const perfOutput = runCommand(`${EXECUTABLE} perf --run_testcases "PerfLoad_meituan_0010" --round 1`, 'perf 命令实际测试', { silent: false, timeout: 300000 });
-                console.log('✓ perf 命令执行成功');
+        if (!fs.existsSync(testCaseFile)) {
+            return { success: false, error: 'meituan_0010测试用例不存在' };
+        }
 
-                // 移动reports目录到tests/output目录下
-                moveReportsDirectory();
-            } catch (error) {
-                if (error.message.includes('device') || error.message.includes('connection') ||
-                    error.message.includes('no device') || error.message.includes('timeout') ||
-                    error.message.includes('No device attached')) {
-                    console.log('⚠ perf 命令需要实际设备环境，跳过完整测试');
-                } else {
-                    console.log('⚠ perf 命令执行遇到问题，但模块加载正常');
-                    console.log(`错误详情: ${error.message}`);
-                }
+        console.log(`发现meituan_0010测试用例，尝试执行perf命令...`);
+
+        // 检查reports目录是否已存在，如果存在则删除
+        const oldReportsDir = path.join(__dirname, '..', 'reports');
+        if (fs.existsSync(oldReportsDir)) {
+            fs.rmSync(oldReportsDir, { recursive: true, force: true });
+        }
+
+        runCommand(`${EXECUTABLE} perf --run_testcases "PerfLoad_meituan_0010" --round 1`, 'perf 命令实际测试', { silent: false });
+        console.log('✓ perf 命令执行成功');
+
+        // 检查是否生成了新的reports目录
+        if (!fs.existsSync(oldReportsDir)) {
+            console.log('⚠ perf命令执行完成但未生成reports目录（可能是设备连接失败）');
+            return { success: false, error: 'perf命令未生成reports目录' };
+        }
+
+        const reportsDir = moveReportsDirectory();
+        if (reportsDir) {
+            const latestFolder = getLatestReportFolder(reportsDir);
+            if (latestFolder && fs.existsSync(path.join(latestFolder, 'report', 'hapray_report.html'))) {
+                console.log('✓ perf 命令校验成功: hapray_report.html 存在');
+                return { success: true };
+            } else {
+                console.log(`⚠ 查找路径: ${latestFolder ? path.join(latestFolder, 'report', 'hapray_report.html') : '未找到文件夹'}`);
+                return { success: false, error: 'hapray_report.html 不存在' };
             }
         } else {
-            console.log('⚠ meituan_0010测试用例不存在，跳过perf实际测试');
-            console.log(`  - 检查路径: ${distTestCaseFile}`);
-            console.log(`  - 检查路径: ${sourceTestCaseFile}`);
+            return { success: false, error: 'reports目录不存在' };
         }
-
-        // 3. 测试update命令功能
-        console.log('测试update命令功能...');
-        const reportDir = getTestFilePath(
-            null,
-            path.join('perf-testing', 'PerfLoad_meituan_0010')
-        );
-
-        if (fs.existsSync(reportDir)) {
-            console.log('发现测试报告目录，尝试执行update命令...');
-            try {
-                const updateCommand = `${EXECUTABLE} update -r "${reportDir}" --mode 0`;
-                // 移除 silent: true 以便看到日志输出
-                runCommand(updateCommand, 'update 命令功能测试', { silent: false, timeout: 120000 });
-                console.log('✓ update 命令执行成功');
-            } catch (error) {
-                if (error.message.includes('no data') || error.message.includes('empty') ||
-                    error.message.includes('not found')) {
-                    console.log('⚠ update 命令执行完成（数据处理完成）');
-                } else {
-                    console.log('⚠ update 命令执行遇到问题，但模块加载正常');
-                    console.log(`错误详情: ${error.message}`);
-                }
-            }
-        } else {
-            console.log('⚠ 测试报告目录不存在，跳过update命令测试');
-        }
-
-        // 4. 测试其他perf相关功能
-        console.log('测试perf相关功能...');
-        try {
-            runCommand(`${EXECUTABLE} perf --help`, 'perf 参数验证', { silent: true });
-            console.log('✓ perf 模块参数验证正常');
-        } catch (error) {
-            console.log('⚠ perf 参数验证失败');
-        }
-
-        console.log('✓ perf 模块功能测试完成');
-
     } catch (error) {
-        console.error(`✗ perf 模块测试失败:`, error.message);
-        throw error;
+        console.error(`✗ perf 命令测试失败:`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * 测试update命令
+ */
+function testUpdateModule() {
+    console.log('开始测试update命令功能');
+
+    try {
+        const reportDir = getTestFilePath(null, path.join('perf-testing', 'PerfLoad_meituan_0010'));
+
+        if (!fs.existsSync(reportDir)) {
+            return { success: false, error: '测试报告目录不存在' };
+        }
+
+        console.log('发现测试报告目录，尝试执行update命令...');
+        const updateCommand = `${EXECUTABLE} update -r "${reportDir}" --mode 0`;
+        runCommand(updateCommand, 'update 命令功能测试', { silent: false });
+        console.log('✓ update 命令执行成功');
+
+        const reportFile = path.join(reportDir, 'report', 'hapray_report.html');
+        if (fs.existsSync(reportFile)) {
+            console.log('✓ update 命令校验成功: hapray_report.html 存在');
+            return { success: true };
+        } else {
+            return { success: false, error: 'hapray_report.html 不存在' };
+        }
+    } catch (error) {
+        console.error(`✗ update 命令测试失败:`, error.message);
+        return { success: false, error: error.message };
     }
 }
 
@@ -379,21 +349,6 @@ function testSymbolRecoveryModule() {
     console.log('开始测试symbol-recovery模块功能');
 
     try {
-        // 1. 测试基本参数验证
-        console.log('测试symbol-recovery命令参数...');
-        try {
-            runCommand(`${EXECUTABLE} symbol-recovery --help`, 'symbol-recovery 命令帮助', { silent: true });
-            console.log('✓ symbol-recovery 命令帮助显示正常');
-        } catch (error) {
-            console.log('⚠ symbol-recovery 命令帮助测试失败');
-        }
-
-        // 2. 使用外部测试资源进行完整功能测试
-        // 用户提供的三个参数：
-        // 1. D:\gitcode\B1A2\HapRayTestProducts\symbol-recovery\hiperf_report.html (HTML报告)
-        // 2. D:\gitcode\B1A2\HapRayTestProducts\symbol-recovery\perf.data (perf数据)
-        // 3. D:\gitcode\B1A2\HapRayTestProducts\symbol-recovery (SO目录)
-
         const htmlFile = path.join(TEST_PRODUCTS_DIR, 'symbol-recovery', 'hiperf_report.html');
         const perfDataFile = path.join(TEST_PRODUCTS_DIR, 'symbol-recovery', 'perf.data');
         const soDir = path.join(TEST_PRODUCTS_DIR, 'symbol-recovery');
@@ -403,55 +358,234 @@ function testSymbolRecoveryModule() {
         console.log(`  - perf数据: ${perfDataFile}`);
         console.log(`  - SO目录: ${soDir}`);
 
-        // 检查所有测试文件是否存在
         const hasHtmlFile = fs.existsSync(htmlFile);
         const hasPerfData = fs.existsSync(perfDataFile);
         const hasSoDir = fs.existsSync(soDir);
 
-        if (hasHtmlFile && hasPerfData && hasSoDir) {
-            console.log('发现完整的测试资源，尝试执行symbol-recovery命令...');
-
-            const outputDir = path.join(OUTPUT_DIR, 'temp_symbol_recovery_output');
-
-            try {
-                // 确保输出目录存在
-                if (!fs.existsSync(outputDir)) {
-                    fs.mkdirSync(outputDir, { recursive: true });
-                }
-
-                // 使用perf.data + HTML + SO的完整模式
-                const command = `${EXECUTABLE} symbol-recovery --perf-data "${perfDataFile}" --html-input "${htmlFile}" --so-dir "${soDir}" --output "${outputDir}" --top-n 5`;
-                console.log('使用perf.data + HTML + SO完整模式测试');
-
-                // 移除 silent: true 以便看到日志输出
-                runCommand(command, 'symbol-recovery 功能测试', { silent: false, timeout: 120000 });
-
-                console.log('✓ symbol-recovery 命令执行成功');
-                console.log(`输出结果保存在: ${outputDir}`);
-
-            } catch (error) {
-                // symbol-recovery 命令失败通常是因为 trace_streamer 工具未找到
-                // 这是一个已知的配置问题，不应该导致整个测试失败
-                console.log('⚠ 跳过 symbol-recovery 功能测试：trace_streamer 工具未找到或配置问题');
-                console.log('   提示：trace_streamer 工具需要正确配置在 dist/tools/trace_streamer_binary 目录');
-
-                if (fs.existsSync(outputDir)) {
-                    console.log(`部分输出结果保存在: ${outputDir}`);
-                }
-            }
-        } else {
+        if (!hasHtmlFile || !hasPerfData || !hasSoDir) {
             console.log('⚠ 测试文件不完整，跳过symbol-recovery实际功能测试');
-            console.log(`  - HTML文件: ${hasHtmlFile ? '✓' : '✗'} ${htmlFile}`);
-            console.log(`  - perf数据: ${hasPerfData ? '✓' : '✗'} ${perfDataFile}`);
-            console.log(`  - SO目录: ${hasSoDir ? '✓' : '✗'} ${soDir}`);
+            return { success: false, error: '测试文件不完整' };
         }
 
-        console.log('✓ symbol-recovery 模块功能测试完成');
+        console.log('发现完整的测试资源，尝试执行symbol-recovery命令...');
+        const outputDir = path.join(OUTPUT_DIR, 'temp_symbol_recovery_output');
+
+        try {
+            if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir, { recursive: true });
+            }
+
+            const command = `${EXECUTABLE} symbol-recovery --perf-data "${perfDataFile}" --html-input "${htmlFile}" --so-dir "${soDir}" --output "${outputDir}" --top-n 5`;
+            console.log('使用perf.data + HTML + SO完整模式测试');
+
+            runCommand(command, 'symbol-recovery 功能测试', { silent: false });
+
+            console.log('✓ symbol-recovery 命令执行成功');
+            console.log(`输出结果保存在: ${outputDir}`);
+
+            // 校验 cache/llm_analysis_cache.json 中的对象数
+            const cacheFile = path.join(__dirname, '..', 'cache', 'llm_analysis_cache.json');
+            if (fs.existsSync(cacheFile)) {
+                const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                const objectCount = Object.keys(cacheData).length;
+                if (objectCount === 3) {
+                    console.log(`✓ symbol-recovery 校验成功: cache中有${objectCount}个对象`);
+                    return { success: true };
+                } else {
+                    console.log(`✗ symbol-recovery 校验失败: cache中有${objectCount}个对象，期望3个`);
+                    return { success: false, error: `cache对象数不匹配: ${objectCount} != 3` };
+                }
+            } else {
+                console.log('✗ symbol-recovery 校验失败: cache文件不存在');
+                return { success: false, error: 'cache文件不存在' };
+            }
+
+        } catch (error) {
+            console.error(`✗ symbol-recovery 功能测试失败: ${error.message}`);
+            return { success: false, error: error.message };
+        }
 
     } catch (error) {
         console.error(`✗ symbol-recovery 模块测试失败:`, error.message);
-        throw error;
+        return { success: false, error: error.message };
     }
+}
+
+/**
+ * 对比两个xlsx文件内容是否相同（排除时间戳等动态字段）
+ */
+function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
+    const wb1 = XLSX.readFile(file1);
+    const wb2 = XLSX.readFile(file2);
+
+    if (showDetails) {
+        console.log(`  文件1: ${path.basename(file1)}`);
+        console.log(`  文件2: ${path.basename(file2)}`);
+        console.log(`  Sheet数量: ${wb1.SheetNames.length} vs ${wb2.SheetNames.length}`);
+    }
+
+    if (wb1.SheetNames.length !== wb2.SheetNames.length) {
+        if (showDetails) console.log(`  ✗ Sheet数量不同`);
+        return false;
+    }
+
+    for (let i = 0; i < wb1.SheetNames.length; i++) {
+        const sheetName = wb1.SheetNames[i];
+        if (showDetails) console.log(`  检查Sheet: ${sheetName}`);
+
+        const sheet1 = XLSX.utils.sheet_to_json(wb1.Sheets[sheetName], { header: 1, defval: '' });
+        const sheet2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[i]], { header: 1, defval: '' });
+
+        if (showDetails) console.log(`    行数: ${sheet1.length} vs ${sheet2.length}`);
+
+        if (sheet1.length !== sheet2.length) {
+            if (showDetails) console.log(`    ✗ 行数不同`);
+            return false;
+        }
+
+        const sheetSkip = skipRules[sheetName] || {};
+
+        for (let row = 0; row < sheet1.length; row++) {
+            // 跳过指定的行（行号从0开始）
+            if (sheetSkip.rows && sheetSkip.rows.includes(row)) continue;
+
+            const row1 = sheet1[row];
+            const row2 = sheet2[row];
+
+            if (row1.length !== row2.length) {
+                if (showDetails) console.log(`    ✗ 第${row + 1}行列数不同: ${row1.length} vs ${row2.length}`);
+                return false;
+            }
+
+            for (let col = 0; col < row1.length; col++) {
+                // 跳过指定的列（列号从0开始）
+                if (sheetSkip.cols && sheetSkip.cols.includes(col)) continue;
+
+                const val1 = String(row1[col] || '');
+                const val2 = String(row2[col] || '');
+
+                // 跳过时间戳格式（支持 - 和 / 分隔符）
+                if (/\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(val1) && /\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(val2)) {
+                    continue;
+                }
+
+                // 跳过hash值（32位或64位十六进制字符串）
+                if (/^[a-f0-9]{32,64}$/i.test(val1) && /^[a-f0-9]{32,64}$/i.test(val2)) {
+                    continue;
+                }
+
+                if (val1 !== val2) {
+                    if (showDetails) {
+                        console.log(`    ✗ 第${row + 1}行第${col + 1}列不同:`);
+                        console.log(`      期望: "${val1.substring(0, 100)}${val1.length > 100 ? '...' : ''}"`);
+                        console.log(`      实际: "${val2.substring(0, 100)}${val2.length > 100 ? '...' : ''}"`);
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * 获取static命令生成的最新xlsx文件
+ */
+function getStaticXlsxFile() {
+    const staticDir = path.join(OUTPUT_DIR, 'static_test_output', 'meituan', 'meituan');
+    if (!fs.existsSync(staticDir)) return null;
+    const files = fs.readdirSync(staticDir)
+        .filter(f => f.endsWith('.xlsx'))
+        .map(f => ({ name: f, path: path.join(staticDir, f), time: fs.statSync(path.join(staticDir, f)).mtime }))
+        .sort((a, b) => b.time - a.time);
+    return files.length > 0 ? files[0].path : null;
+}
+
+/**
+ * 获取update命令生成的最新xlsx文件
+ */
+function getUpdateXlsxFile() {
+    const reportDir = path.join(TEST_PRODUCTS_DIR, 'perf-testing', 'PerfLoad_meituan_0010', 'report');
+    if (!fs.existsSync(reportDir)) return null;
+    const files = fs.readdirSync(reportDir)
+        .filter(f => f.startsWith('ecol_load_perf') && f.endsWith('.xlsx'))
+        .map(f => ({ name: f, path: path.join(reportDir, f), time: fs.statSync(path.join(reportDir, f)).mtime }))
+        .sort((a, b) => b.time - a.time);
+    return files.length > 0 ? files[0].path : null;
+}
+
+/**
+ * 校验关键产物内容
+ */
+function verifyArtifactsHash(results) {
+    console.log('🔍 开始校验关键产物内容...\n');
+
+    const artifacts = {
+        opt: {
+            actual: path.join(OUTPUT_DIR, 'temp_opt_test.xlsx'),
+            expected: path.join(ORIGIN_RESULT_DIR, 'opt.xlsx')
+        },
+        update: {
+            actual: getUpdateXlsxFile(),
+            expected: path.join(ORIGIN_RESULT_DIR, 'update.xlsx')
+        },
+        static: {
+            actual: getStaticXlsxFile(),
+            expected: path.join(ORIGIN_RESULT_DIR, 'static.xlsx')
+        }
+    };
+
+    let allMatch = true;
+
+    for (const [key, files] of Object.entries(artifacts)) {
+        if (!results[key] || !results[key].success) {
+            console.log(`⊘ 跳过 ${key}: 测试未通过`);
+            continue;
+        }
+
+        if (!files.actual || !fs.existsSync(files.actual)) {
+            console.log(`⊘ 跳过 ${key}: 实际文件不存在`);
+            continue;
+        }
+
+        if (!fs.existsSync(files.expected)) {
+            console.log(`⊘ 跳过 ${key}: 基准文件不存在`);
+            continue;
+        }
+
+        // 定义跳过规则
+        let skipRules = {};
+        if (key === 'update') {
+            skipRules = {
+                'ecol_load_hiperf_detail': { cols: [9] },  // 第10列（索引9）
+                'ecol_load_step': { cols: [2, 4, 8] }      // 第3,5,9列（索引2,4,8）
+            };
+        } else if (key === 'static') {
+            skipRules = {
+                '分析摘要': { rows: [0, 6, 7] },           // 第1,7,8行（索引0,6,7）
+                '技术栈信息': { cols: [6] }                // 第7列（索引6）
+            };
+        } else if (key === 'opt') {
+            skipRules = {
+                'optimization': { cols: [1] }                       // 第2列（索引1）
+            };
+        }
+
+        if (compareXlsxFiles(files.actual, files.expected, true, skipRules)) {
+            console.log(`✓ ${key}: 内容匹配`);
+        } else {
+            console.log(`✗ ${key}: 内容不匹配`);
+            allMatch = false;
+        }
+    }
+
+    if (!allMatch) {
+        console.log('\n⚠️  检测到产物内容变化');
+        return { success: false };
+    }
+
+    return { success: true };
 }
 
 /**
@@ -471,6 +605,8 @@ async function runE2ETests() {
     console.log(`  - API 密钥: ${process.env.LLM_API_KEY ? '已设置' : '未设置'}`);
     console.log(`  - Base URL: ${process.env.LLM_BASE_URL}`);
     console.log('');
+
+    const results = {};
 
     try {
         // 0. 确保输出目录存在
@@ -500,30 +636,73 @@ async function runE2ETests() {
         runCommand(`${EXECUTABLE} --help`, '主程序帮助信息', { silent: true });
         console.log('✓ 主程序运行正常\n');
 
-        // 3. 测试各个模块
-        console.log('🧪 测试各个模块...');
+        // 3. 并行测试各个模块
+        console.log('🧪 并行测试各个模块...\n');
 
-        // 测试 opt 模块 (优化检测)
-        testModule('opt', '优化检测 (opt-detector)');
+        const tests = [
+            { key: 'opt', command: 'opt', name: '优化检测 (opt-detector)', func: testOptModule },
+            { key: 'static', command: 'static', name: '静态分析 (sa-cmd)', func: testStaticModule },
+            { key: 'perf', command: 'perf', name: '性能测试 (perf)', func: testPerfModule },
+            { key: 'update', command: 'update', name: '报告更新 (update)', func: testUpdateModule },
+            { key: 'symbol-recovery', command: 'symbol-recovery', name: '符号恢复 (symbol-recovery)', func: testSymbolRecoveryModule }
+        ];
 
-        // 测试 perf 模块 (性能测试)
-        testModule('perf', '性能测试 (perf-testing)');
+        await Promise.all(tests.map(async (test) => {
+            console.log(`=== 测试 ${test.key} 模块 ===`);
+            results[test.key] = await Promise.resolve(testModule(test.command, test.name, test.func));
+            console.log('');
+        }));
 
-        // 测试 static 模块 (静态分析)
-        testModule('static', '静态分析 (sa-cmd)');
+        // 4. 统计结果
+        console.log('=' .repeat(60));
+        console.log('📊 测试结果统计\n');
 
-        // 测试 symbol-recovery 模块
-        testModule('symbol-recovery', '符号恢复 (symbol-recovery)');
+        const successModules = [];
+        const failedModules = [];
 
-        console.log('✓ 所有模块测试完成\n');
+        for (const [module, result] of Object.entries(results)) {
+            if (result && result.success) {
+                successModules.push(module);
+                console.log(`✓ ${module}: 成功`);
+            } else {
+                failedModules.push(module);
+                console.log(`✗ ${module}: 失败 - ${result ? result.error : '未知错误'}`);
+            }
+        }
 
-        console.log('🎉 端到端测试通过！所有检查都成功。');
-        process.exit(0);
+        console.log('\n' + '=' .repeat(60));
+        console.log(`成功: ${successModules.length}/${Object.keys(results).length}`);
+        console.log(`失败: ${failedModules.length}/${Object.keys(results).length}`);
+
+        // 5. 校验关键产物hash
+        console.log('\n' + '=' .repeat(60));
+        const hashVerification = verifyArtifactsHash(results);
+
+        if (failedModules.length === 0 && hashVerification.success) {
+            console.log('🎉 所有模块测试通过，产物hash校验通过！');
+            process.exit(0);
+        } else {
+            if (failedModules.length > 0) {
+                console.log('⚠️  部分模块测试失败');
+            }
+            if (!hashVerification.success) {
+                console.log('⚠️  产物hash校验失败');
+            }
+            process.exit(1);
+        }
 
     } catch (error) {
         console.error('\n❌ 端到端测试失败:', error.message);
         console.error('请检查构建过程和配置。');
         process.exit(1);
+    } finally {
+        // 清理缓存目录
+        const ROOT_DIR = path.join(__dirname, '..');
+        const cacheDir = path.join(ROOT_DIR, 'files_results_cache');
+        if (fs.existsSync(cacheDir)) {
+            fs.rmSync(cacheDir, { recursive: true, force: true });
+            console.log('\n🧹 已清理缓存目录: files_results_cache');
+        }
     }
 }
 

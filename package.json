@@ -27,5 +27,8 @@
   "bugs": {
     "url": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/issues"
   },
-  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme"
+  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme",
+  "devDependencies": {
+    "xlsx": "^0.18.5"
+  }
 }
