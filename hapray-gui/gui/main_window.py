@@ -412,7 +412,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             '关于 HapRay GUI',
-            'HapRay GUI v1.4.1\n\n'
+            'HapRay GUI v1.4.2\n\n'
             '工具集成平台\n'
             '整合了以下工具：\n'
             '- 动态测试 (perf_testing)\n'
