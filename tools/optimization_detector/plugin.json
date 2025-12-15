@@ -10,7 +10,7 @@
       "script": "cli.py"
     },
     "release": {
-      "cmd": ["opt-detector", "opt-detector.exe", "dist/opt-detector/opt-detector.exe", "dist/opt-detector/opt-detector"]
+      "cmd": ["../opt-detector/opt-detector.exe", "../opt-detector/opt-detector", "opt-detector.exe", "opt-detector"]
     }
   },
   "actions": {

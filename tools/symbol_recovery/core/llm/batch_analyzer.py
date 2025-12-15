@@ -384,7 +384,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                             {'role': 'user', 'content': batch_prompt},
                         ],
                         temperature=0.0,  # 最低随机性，最高一致性和稳定性
-                        max_tokens=20000,  # 批量模式下需要更多 tokens（增加缓冲，避免 JSON 截断，特别是当反编译代码较长时）
+                        max_tokens=8000,  # DeepSeek API 限制为 8192，设置为 8000 留有余量
                         timeout=120,  # 批量模式下增加超时时间
                     )
 

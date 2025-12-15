@@ -215,7 +215,10 @@ class ResultViewer(QWidget):
         data = result_data.get('data')
         if data:
             lines.append('执行数据:')
-            lines.append(json.dumps(data, indent=2, ensure_ascii=False))
+            if isinstance(data, dict) and 'output' in data:
+                lines.append(data['output'])
+            else:
+                lines.append(json.dumps(data, indent=2, ensure_ascii=False))
 
         return '\n'.join(lines)
 
