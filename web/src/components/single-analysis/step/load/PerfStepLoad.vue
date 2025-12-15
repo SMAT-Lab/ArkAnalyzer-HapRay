@@ -39,133 +39,152 @@
     </el-row>
 
     <!-- 步骤负载分析 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 进程负载饼图 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">进程负载分布</span>
-          </h3>
-          <!-- 面包屑导航 -->
-          <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
-              <i v-if="index > 0" class="breadcrumb-separator">></i>
-              <span @click="handleProcessBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('process', index, item) }}
-              </span>
-            </span>
-          </div>
-          <PieChart
-            :step-id="stepId" height="400px" :chart-data="processPieData" :title="pieChartTitle"
-            :drilldown-stack="processPieDrilldownStack" :legend-truncate="false" 
-            @drilldown="handleProcessPieDrilldown" @drillup="handleProcessPieDrillup"
-          />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 分类负载饼图 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">分类负载分布</span>
-          </h3>
-          <!-- 面包屑导航 -->
-          <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
-              <i v-if="index > 0" class="breadcrumb-separator">></i>
-              <span @click="handleStepBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('category', index, item) }}
-              </span>
-            </span>
-          </div>
-          <PieChart
-            :step-id="stepId" height="400px" :chart-data="stepPieData" :title="pieChartTitle"
-            :drilldown-stack="stepPieDrilldownStack" :legend-truncate="false" 
-            @drilldown="handleStepPieDrilldown" @drillup="handleStepPieDrillup"
-          />
-        </div>
-      </el-col>
-    </el-row>
+    <el-tabs v-model="activeTab" class="analysis-tabs" @tab-change="handleTabChange">
+      <el-tab-pane label="按进程拆解" name="process">
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 进程负载饼图 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">进程负载分布</span>
+              </h3>
+              <!-- 面包屑导航 -->
+              <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
+                <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
+                  <i v-if="index > 0" class="breadcrumb-separator">></i>
+                  <span @click="handleProcessBreadcrumbClick(index)">
+                    {{ getBreadcrumbLabel('process', index, item) }}
+                  </span>
+                </span>
+              </div>
+              <PieChart
+                :step-id="stepId" height="600px" :chart-data="processPieData" :title="pieChartTitle"
+                :drilldown-stack="processPieDrilldownStack" :legend-truncate="false"
+                @drilldown="handleProcessPieDrilldown" @drillup="handleProcessPieDrillup"
+              />
+            </div>
+          </el-col>
+        </el-row>
 
-    <!-- 详细负载表格 -->
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 线程负载 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">线程负载</span>
-          </h3>
-          <PerfThreadTable
-            :step-id="stepId" :data="filteredThreadPerformanceDataDrill" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 小分类负载 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">小分类负载</span>
-          </h3>
-          <PerfThreadTable
-            :step-id="stepId" :data="filteredComponentNamePerformanceDataDrill"
-            :hide-column="isHidden" :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
+        <!-- 详细负载表格 -->
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 线程负载 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">线程负载</span>
+              </h3>
+              <PerfThreadTable
+                :step-id="stepId" :data="filteredThreadPerformanceDataDrill" :hide-column="isHidden"
+                :has-category="false" />
+            </div>
+          </el-col>
+        </el-row>
 
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 文件负载 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">文件负载</span>
-          </h3>
-          <PerfFileTable
-            :step-id="stepId" :data="filteredFilePerformanceDataDrill" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 文件负载（分类） -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">文件负载（分类）</span>
-          </h3>
-          <PerfFileTable
-            :step-id="stepId" :data="filteredFilePerformanceData1Drill" :hide-column="isHidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 文件负载 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">文件负载</span>
+              </h3>
+              <PerfFileTable
+                :step-id="stepId" :data="filteredFilePerformanceDataDrill" :hide-column="isHidden"
+                :has-category="false" />
+            </div>
+          </el-col>
+        </el-row>
 
-    <el-row :gutter="20">
-      <el-col :span="12">
-        <!-- 函数负载 -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">函数负载</span>
-          </h3>
-          <PerfSymbolTable
-            :step-id="stepId" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden"
-            :has-category="false" />
-        </div>
-      </el-col>
-      <el-col :span="12">
-        <!-- 函数负载（分类） -->
-        <div class="data-panel">
-          <h3 class="panel-title">
-            <span class="version-tag">函数负载（分类）</span>
-          </h3>
-          <PerfSymbolTable
-            :step-id="stepId" :data="filteredSymbolPerformanceData1Drill" :hide-column="isHidden"
-            :has-category="true" />
-        </div>
-      </el-col>
-    </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 函数负载 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">函数负载</span>
+              </h3>
+              <PerfSymbolTable
+                :step-id="stepId" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden"
+                :has-category="false" />
+            </div>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
+      <el-tab-pane label="按分类拆解" name="category">
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 分类负载饼图 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">分类负载分布</span>
+              </h3>
+              <!-- 面包屑导航 -->
+              <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
+                <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
+                  <i v-if="index > 0" class="breadcrumb-separator">></i>
+                  <span @click="handleStepBreadcrumbClick(index)">
+                    {{ getBreadcrumbLabel('category', index, item) }}
+                  </span>
+                </span>
+              </div>
+              <PieChart
+                :step-id="stepId" height="600px" :chart-data="stepPieData" :title="pieChartTitle"
+                :drilldown-stack="stepPieDrilldownStack" :legend-truncate="false"
+                @drilldown="handleStepPieDrilldown" @drillup="handleStepPieDrillup"
+              />
+            </div>
+          </el-col>
+        </el-row>
+
+        <!-- 详细负载表格 -->
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 小分类负载 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">小分类负载</span>
+              </h3>
+              <PerfThreadTable
+                :step-id="stepId" :data="filteredComponentNamePerformanceDataDrill"
+                :hide-column="isHidden" :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 文件负载（分类） -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">文件负载（分类）</span>
+              </h3>
+              <PerfFileTable
+                :step-id="stepId" :data="filteredFilePerformanceData1Drill" :hide-column="isHidden"
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 函数负载（分类） -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">函数负载（分类）</span>
+              </h3>
+              <PerfSymbolTable
+                :step-id="stepId" :data="filteredSymbolPerformanceData1Drill" :hide-column="isHidden"
+                :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 //import { Download } from '@element-plus/icons-vue';
 import PerfThreadTable from './tables/PerfThreadTable.vue';
 import PerfFileTable from './tables/PerfFileTable.vue';
@@ -194,6 +213,7 @@ const props = defineProps<{
 }>();
 
 const isHidden = true;
+const activeTab = ref('process');
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -594,6 +614,13 @@ const techStackData = computed(() => {
 
   return techStackItems;
 });
+
+// 处理tab切换
+function handleTabChange() {
+  nextTick(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+}
 
 // 下载功能
 // const downloadPerfData = () => {
