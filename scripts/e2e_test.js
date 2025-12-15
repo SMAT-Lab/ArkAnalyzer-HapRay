@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const XLSX = require('xlsx');
 
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 const TOOLS_DIR = path.join(DIST_DIR, 'tools');
@@ -18,6 +19,9 @@ const USE_EXTERNAL_RESOURCES = true;
 
 // 输出目录
 const OUTPUT_DIR = path.join(TEST_PRODUCTS_DIR, 'output');
+
+// 基准结果目录
+const ORIGIN_RESULT_DIR = path.join(TEST_PRODUCTS_DIR, 'origin-result');
 
 // 需要检查的工具目录列表
 const REQUIRED_TOOLS = [
@@ -210,7 +214,7 @@ function testStaticModule() {
 }
 
 /**
- * 获取reports目录下最大数字的文件夹
+ * 获取reports目录下最新的时间戳文件夹
  */
 function getLatestReportFolder(reportsDir) {
     if (!fs.existsSync(reportsDir)) return null;
@@ -223,7 +227,7 @@ function getLatestReportFolder(reportsDir) {
     if (folders.length === 0) return null;
 
     const maxFolder = folders.sort((a, b) => parseInt(b) - parseInt(a))[0];
-    return path.join(reportsDir, maxFolder);
+    return path.join(reportsDir, maxFolder, 'PerfLoad_meituan_0010');
 }
 
 /**
@@ -272,16 +276,30 @@ function testPerfModule() {
         }
 
         console.log(`发现meituan_0010测试用例，尝试执行perf命令...`);
+
+        // 检查reports目录是否已存在，如果存在则删除
+        const oldReportsDir = path.join(__dirname, '..', 'reports');
+        if (fs.existsSync(oldReportsDir)) {
+            fs.rmSync(oldReportsDir, { recursive: true, force: true });
+        }
+
         runCommand(`${EXECUTABLE} perf --run_testcases "PerfLoad_meituan_0010" --round 1`, 'perf 命令实际测试', { silent: false });
         console.log('✓ perf 命令执行成功');
+
+        // 检查是否生成了新的reports目录
+        if (!fs.existsSync(oldReportsDir)) {
+            console.log('⚠ perf命令执行完成但未生成reports目录（可能是设备连接失败）');
+            return { success: false, error: 'perf命令未生成reports目录' };
+        }
 
         const reportsDir = moveReportsDirectory();
         if (reportsDir) {
             const latestFolder = getLatestReportFolder(reportsDir);
-            if (latestFolder && fs.existsSync(path.join(latestFolder, 'hapray_report.html'))) {
+            if (latestFolder && fs.existsSync(path.join(latestFolder, 'report', 'hapray_report.html'))) {
                 console.log('✓ perf 命令校验成功: hapray_report.html 存在');
                 return { success: true };
             } else {
+                console.log(`⚠ 查找路径: ${latestFolder ? path.join(latestFolder, 'report', 'hapray_report.html') : '未找到文件夹'}`);
                 return { success: false, error: 'hapray_report.html 不存在' };
             }
         } else {
@@ -394,6 +412,183 @@ function testSymbolRecoveryModule() {
 }
 
 /**
+ * 对比两个xlsx文件内容是否相同（排除时间戳等动态字段）
+ */
+function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
+    const wb1 = XLSX.readFile(file1);
+    const wb2 = XLSX.readFile(file2);
+
+    if (showDetails) {
+        console.log(`  文件1: ${path.basename(file1)}`);
+        console.log(`  文件2: ${path.basename(file2)}`);
+        console.log(`  Sheet数量: ${wb1.SheetNames.length} vs ${wb2.SheetNames.length}`);
+    }
+
+    if (wb1.SheetNames.length !== wb2.SheetNames.length) {
+        if (showDetails) console.log(`  ✗ Sheet数量不同`);
+        return false;
+    }
+
+    for (let i = 0; i < wb1.SheetNames.length; i++) {
+        const sheetName = wb1.SheetNames[i];
+        if (showDetails) console.log(`  检查Sheet: ${sheetName}`);
+
+        const sheet1 = XLSX.utils.sheet_to_json(wb1.Sheets[sheetName], { header: 1, defval: '' });
+        const sheet2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[i]], { header: 1, defval: '' });
+
+        if (showDetails) console.log(`    行数: ${sheet1.length} vs ${sheet2.length}`);
+
+        if (sheet1.length !== sheet2.length) {
+            if (showDetails) console.log(`    ✗ 行数不同`);
+            return false;
+        }
+
+        const sheetSkip = skipRules[sheetName] || {};
+
+        for (let row = 0; row < sheet1.length; row++) {
+            // 跳过指定的行（行号从0开始）
+            if (sheetSkip.rows && sheetSkip.rows.includes(row)) continue;
+
+            const row1 = sheet1[row];
+            const row2 = sheet2[row];
+
+            if (row1.length !== row2.length) {
+                if (showDetails) console.log(`    ✗ 第${row + 1}行列数不同: ${row1.length} vs ${row2.length}`);
+                return false;
+            }
+
+            for (let col = 0; col < row1.length; col++) {
+                // 跳过指定的列（列号从0开始）
+                if (sheetSkip.cols && sheetSkip.cols.includes(col)) continue;
+
+                const val1 = String(row1[col] || '');
+                const val2 = String(row2[col] || '');
+
+                // 跳过时间戳格式（支持 - 和 / 分隔符）
+                if (/\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(val1) && /\d{4}[-\/]\d{2}[-\/]\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(val2)) {
+                    continue;
+                }
+
+                // 跳过hash值（32位或64位十六进制字符串）
+                if (/^[a-f0-9]{32,64}$/i.test(val1) && /^[a-f0-9]{32,64}$/i.test(val2)) {
+                    continue;
+                }
+
+                if (val1 !== val2) {
+                    if (showDetails) {
+                        console.log(`    ✗ 第${row + 1}行第${col + 1}列不同:`);
+                        console.log(`      期望: "${val1.substring(0, 100)}${val1.length > 100 ? '...' : ''}"`);
+                        console.log(`      实际: "${val2.substring(0, 100)}${val2.length > 100 ? '...' : ''}"`);
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * 获取static命令生成的最新xlsx文件
+ */
+function getStaticXlsxFile() {
+    const staticDir = path.join(OUTPUT_DIR, 'static_test_output', 'meituan', 'meituan');
+    if (!fs.existsSync(staticDir)) return null;
+    const files = fs.readdirSync(staticDir)
+        .filter(f => f.endsWith('.xlsx'))
+        .map(f => ({ name: f, path: path.join(staticDir, f), time: fs.statSync(path.join(staticDir, f)).mtime }))
+        .sort((a, b) => b.time - a.time);
+    return files.length > 0 ? files[0].path : null;
+}
+
+/**
+ * 获取update命令生成的最新xlsx文件
+ */
+function getUpdateXlsxFile() {
+    const reportDir = path.join(TEST_PRODUCTS_DIR, 'perf-testing', 'PerfLoad_meituan_0010', 'report');
+    if (!fs.existsSync(reportDir)) return null;
+    const files = fs.readdirSync(reportDir)
+        .filter(f => f.startsWith('ecol_load_perf') && f.endsWith('.xlsx'))
+        .map(f => ({ name: f, path: path.join(reportDir, f), time: fs.statSync(path.join(reportDir, f)).mtime }))
+        .sort((a, b) => b.time - a.time);
+    return files.length > 0 ? files[0].path : null;
+}
+
+/**
+ * 校验关键产物内容
+ */
+function verifyArtifactsHash(results) {
+    console.log('🔍 开始校验关键产物内容...\n');
+
+    const artifacts = {
+        opt: {
+            actual: path.join(OUTPUT_DIR, 'temp_opt_test.xlsx'),
+            expected: path.join(ORIGIN_RESULT_DIR, 'opt.xlsx')
+        },
+        update: {
+            actual: getUpdateXlsxFile(),
+            expected: path.join(ORIGIN_RESULT_DIR, 'update.xlsx')
+        },
+        static: {
+            actual: getStaticXlsxFile(),
+            expected: path.join(ORIGIN_RESULT_DIR, 'static.xlsx')
+        }
+    };
+
+    let allMatch = true;
+
+    for (const [key, files] of Object.entries(artifacts)) {
+        if (!results[key] || !results[key].success) {
+            console.log(`⊘ 跳过 ${key}: 测试未通过`);
+            continue;
+        }
+
+        if (!files.actual || !fs.existsSync(files.actual)) {
+            console.log(`⊘ 跳过 ${key}: 实际文件不存在`);
+            continue;
+        }
+
+        if (!fs.existsSync(files.expected)) {
+            console.log(`⊘ 跳过 ${key}: 基准文件不存在`);
+            continue;
+        }
+
+        // 定义跳过规则
+        let skipRules = {};
+        if (key === 'update') {
+            skipRules = {
+                'ecol_load_hiperf_detail': { cols: [9] },  // 第10列（索引9）
+                'ecol_load_step': { cols: [2, 4, 8] }      // 第3,5,9列（索引2,4,8）
+            };
+        } else if (key === 'static') {
+            skipRules = {
+                '分析摘要': { rows: [0, 6, 7] },           // 第1,7,8行（索引0,6,7）
+                '技术栈信息': { cols: [6] }                // 第7列（索引6）
+            };
+        } else if (key === 'opt') {
+            skipRules = {
+                'optimization': { cols: [1] }                       // 第2列（索引1）
+            };
+        }
+
+        if (compareXlsxFiles(files.actual, files.expected, true, skipRules)) {
+            console.log(`✓ ${key}: 内容匹配`);
+        } else {
+            console.log(`✗ ${key}: 内容不匹配`);
+            allMatch = false;
+        }
+    }
+
+    if (!allMatch) {
+        console.log('\n⚠️  检测到产物内容变化');
+        return { success: false };
+    }
+
+    return { success: true };
+}
+
+/**
  * 主测试函数
  */
 async function runE2ETests() {
@@ -479,11 +674,20 @@ async function runE2ETests() {
         console.log(`成功: ${successModules.length}/${Object.keys(results).length}`);
         console.log(`失败: ${failedModules.length}/${Object.keys(results).length}`);
 
-        if (failedModules.length === 0) {
-            console.log('\n🎉 所有模块测试通过！');
+        // 5. 校验关键产物hash
+        console.log('\n' + '=' .repeat(60));
+        const hashVerification = verifyArtifactsHash(results);
+
+        if (failedModules.length === 0 && hashVerification.success) {
+            console.log('🎉 所有模块测试通过，产物hash校验通过！');
             process.exit(0);
         } else {
-            console.log('\n⚠️  部分模块测试失败');
+            if (failedModules.length > 0) {
+                console.log('⚠️  部分模块测试失败');
+            }
+            if (!hashVerification.success) {
+                console.log('⚠️  产物hash校验失败');
+            }
             process.exit(1);
         }
 
@@ -491,6 +695,14 @@ async function runE2ETests() {
         console.error('\n❌ 端到端测试失败:', error.message);
         console.error('请检查构建过程和配置。');
         process.exit(1);
+    } finally {
+        // 清理缓存目录
+        const ROOT_DIR = path.join(__dirname, '..');
+        const cacheDir = path.join(ROOT_DIR, 'files_results_cache');
+        if (fs.existsSync(cacheDir)) {
+            fs.rmSync(cacheDir, { recursive: true, force: true });
+            console.log('\n🧹 已清理缓存目录: files_results_cache');
+        }
     }
 }
 
