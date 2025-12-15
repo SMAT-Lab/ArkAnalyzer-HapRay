@@ -1,23 +1,24 @@
 {
   "name": "hapray",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Code-oriented Performance Analysis for OpenHarmony Apps",
   "private": true,
   "files": [],
   "workspaces": [
+    "hapray-gui",
     "web",
     "tools/static_analyzer",
     "perf_testing",
     "tools/optimization_detector",
-    "tools/symbol_recovery",
-    "hapray-gui"
+    "tools/symbol_recovery"
   ],
   "scripts": {
-    "build": "node scripts/unzip_third-party.js && npm run build --ws",
+    "build": "npm run build --ws && node scripts/unzip_third-party.js",
     "release": "node scripts/merge_duplicates.js && node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
-    "test": "npm run test -w perf_testing"
+    "download:test-products": "node scripts/download_test_products.js",
+    "test": "npm run download:test-products && node scripts/e2e_test.js"
   },
   "repository": {
     "type": "git",
@@ -26,5 +27,8 @@
   "bugs": {
     "url": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/issues"
   },
-  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme"
+  "homepage": "https://gitcode.com/SMAT/ArkAnalyzer-HapRay#readme",
+  "devDependencies": {
+    "xlsx": "^0.18.5"
+  }
 }
