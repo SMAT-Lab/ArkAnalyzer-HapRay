@@ -10,17 +10,13 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const TEST_PRODUCTS_REPO = 'https://gitcode.com/B1A2/HapRayTestProducts.git';
-const TESTS_DIR = path.join(__dirname, '..', 'tests');
+// 从命令行参数读取下载目录，如果未提供则使用默认值
+const DIST_DIR = process.argv[2];
+const TESTS_DIR = path.join(DIST_DIR, 'tests');
 
 function downloadTestProducts() {
     try {
         console.log('正在下载测试工程资源...');
-
-        // 确保 tests 目录存在
-        if (!fs.existsSync(TESTS_DIR)) {
-            fs.mkdirSync(TESTS_DIR, { recursive: true });
-            console.log(`创建目录: ${TESTS_DIR}`);
-        }
 
         // 检查是否已经存在 .git 目录（表示已经是一个 git 仓库）
         const gitDir = path.join(TESTS_DIR, '.git');
@@ -32,7 +28,7 @@ function downloadTestProducts() {
             console.log('正在克隆测试工程仓库...');
             // 如果不存在，则克隆仓库
             execSync(`git clone ${TEST_PRODUCTS_REPO} tests`, {
-                cwd: path.join(__dirname, '..'),
+                cwd: DIST_DIR,
                 stdio: 'inherit'
             });
         }
