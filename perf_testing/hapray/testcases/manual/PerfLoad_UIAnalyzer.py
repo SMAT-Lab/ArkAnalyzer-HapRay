@@ -92,6 +92,6 @@ class PerfLoad_UIAnalyzer(PerfTestCase):
     def process(self):
         def step1():
             self.swipes_up(1, 2)
-            time.sleep(3)
+            time.sleep(20)
 
-        self.execute_performance_step('UI测试', 5, step1)
+        self.execute_performance_step('UI测试', 25, step1)
