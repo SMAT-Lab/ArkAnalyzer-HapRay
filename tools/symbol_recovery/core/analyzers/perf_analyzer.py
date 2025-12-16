@@ -45,13 +45,19 @@ class PerfDataToSqliteConverter:
         else:  # Linux
             possible_names = ['trace_streamer_linux', 'trace_streamer']
 
-        # 检查常见位置
+        # 基于当前文件所在目录检查常见位置
+        base_dir = Path(__file__).resolve()
+        # 打包: symbol-recovery/_internal
+        # 开发: symbol_recovery
+        symbol_recovery_root = base_dir.parents[2]
+
         search_paths = [
-            Path.cwd(),
-            Path.cwd() / 'dist' / 'tools' / 'trace_streamer_binary',
-            Path.cwd() / '..' / 'trace_streamer_binary',
-            Path.cwd() / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
-            Path.cwd() / 'tools' / 'trace_streamer_binary',
+            # 打包：.../tools/trace_streamer_binary
+            symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'trace_streamer_binary',
+            # 开发：.../dist/tools/trace_streamer_binary
+            symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
+            # 可选：插件本目录下放一份
+            symbol_recovery_root / '..' / 'trace_streamer_binary',
         ]
 
         for search_path in search_paths:
