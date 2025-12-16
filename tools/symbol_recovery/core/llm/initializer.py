@@ -60,9 +60,7 @@ def init_llm_analyzer(
                 output_dir=output_dir,
                 open_source_lib=open_source_lib,
             )
-            logger.info(
-                f'Using batch LLM analyzer: model={model_name}, batch_size={batch_size}'
-            )
+            logger.info(f'Using batch LLM analyzer: model={model_name}, batch_size={batch_size}')
             if save_prompts:
                 logger.info('Prompt saving enabled')
             return analyzer, True, True
