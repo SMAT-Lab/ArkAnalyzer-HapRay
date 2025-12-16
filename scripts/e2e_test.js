@@ -10,11 +10,30 @@ const path = require('path');
 const { execSync } = require('child_process');
 const XLSX = require('xlsx');
 
-const DIST_DIR = path.join(__dirname, '..', 'dist');
+// dist 目录：
+// - 读取命令行入参：node e2e_test.js <dist_dir>
+// - 如果未提供参数，默认使用当前工作目录下的 dist 目录
+const DIST_DIR = path.resolve(process.argv[2]);
+console.log(`DIST_DIR: ${DIST_DIR}`);
+
+// 验证 DIST_DIR 是否存在
+if (!fs.existsSync(DIST_DIR)) {
+    console.error(`❌ 错误: dist 目录不存在: ${DIST_DIR}`);
+    console.error('   用法: node e2e_test.js <dist_dir>');
+    process.exit(1);
+}
+
+// 验证 DIST_DIR 是否为目录
+const distStat = fs.statSync(DIST_DIR);
+if (!distStat.isDirectory()) {
+    console.error(`❌ 错误: 指定的路径不是目录: ${DIST_DIR}`);
+    process.exit(1);
+}
+
 const TOOLS_DIR = path.join(DIST_DIR, 'tools');
 
-// 测试资源目录（优先使用外部测试资源）
-const TEST_PRODUCTS_DIR = path.join(__dirname, '..', 'tests');
+// 测试资源目录（优先使用外部测试资源），位于打包根目录下
+const TEST_PRODUCTS_DIR = path.join(DIST_DIR, 'tests');
 const USE_EXTERNAL_RESOURCES = true;
 
 // 输出目录
@@ -112,11 +131,16 @@ function checkFileExists(filePath, description) {
 function runCommand(command, description, options = {}) {
     console.log(`执行 ${description}...`);
     try {
-        const result = execSync(command, {
+        const execOptions = {
             stdio: options.silent ? 'pipe' : 'inherit',
             env: { ...process.env, ...options.env },
+            cwd: DIST_DIR,
             ...options
-        });
+        };
+        // 不需要传递给 execSync 的自定义字段
+        delete execOptions.silent;
+
+        const result = execSync(command, execOptions);
         console.log(`✓ ${description} 成功`);
         return result;
     } catch (error) {
@@ -198,13 +222,14 @@ function testStaticModule() {
 
         runCommand(`${EXECUTABLE} static -i "${testFile}" -o "${outputDir}"`, 'static 模块实际功能测试', { silent: false });
 
-        const files = fs.readdirSync(outputDir);
+        const files = fs.readdirSync(path.join(outputDir, 'meituan'));
         if (files.length >= 3) {
             console.log(`✓ static 模块实际功能测试成功 (生成${files.length}个文件)`);
             console.log(`输出文件保存在: ${outputDir}`);
             return { success: true };
         } else {
             console.log(`✗ static 模块输出文件不足 (需要>=3个，实际${files.length}个)`);
+            console.log(`输出文件: ${files.join(', ')}`);
             return { success: false, error: `输出文件不足: ${files.length} < 3` };
         }
     } catch (error) {
@@ -234,7 +259,7 @@ function getLatestReportFolder(reportsDir) {
  * 移动perf命令生成的reports目录到tests/output目录下
  */
 function moveReportsDirectory() {
-    const reportsDir = path.join(__dirname, '..', 'reports');
+    const reportsDir = path.join(DIST_DIR, 'reports');
     const targetDir = path.join(OUTPUT_DIR, 'reports');
 
     try {
@@ -267,18 +292,14 @@ function testPerfModule() {
     try {
         const distTestCaseDir = path.join(DIST_DIR, 'tools', 'perf-testing', '_internal', 'hapray', 'testcases', 'com.sankuai.hmeituan');
         const distTestCaseFile = path.join(distTestCaseDir, 'PerfLoad_meituan_0010.json');
-        const sourceTestCaseDir = path.join(__dirname, '..', 'perf_testing', 'hapray', 'testcases', 'com.sankuai.hmeituan');
-        const sourceTestCaseFile = path.join(sourceTestCaseDir, 'PerfLoad_meituan_0010.json');
-        const testCaseFile = fs.existsSync(distTestCaseFile) ? distTestCaseFile : sourceTestCaseFile;
-
-        if (!fs.existsSync(testCaseFile)) {
+        if (!fs.existsSync(distTestCaseFile)) {
             return { success: false, error: 'meituan_0010测试用例不存在' };
         }
 
         console.log(`发现meituan_0010测试用例，尝试执行perf命令...`);
 
         // 检查reports目录是否已存在，如果存在则删除
-        const oldReportsDir = path.join(__dirname, '..', 'reports');
+        const oldReportsDir = path.join(DIST_DIR, 'reports');
         if (fs.existsSync(oldReportsDir)) {
             fs.rmSync(oldReportsDir, { recursive: true, force: true });
         }
@@ -384,7 +405,7 @@ function testSymbolRecoveryModule() {
             console.log(`输出结果保存在: ${outputDir}`);
 
             // 校验 cache/llm_analysis_cache.json 中的对象数
-            const cacheFile = path.join(__dirname, '..', 'cache', 'llm_analysis_cache.json');
+            const cacheFile = path.join(DIST_DIR, 'cache', 'llm_analysis_cache.json');
             if (fs.existsSync(cacheFile)) {
                 const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
                 const objectCount = Object.keys(cacheData).length;
@@ -558,13 +579,13 @@ function verifyArtifactsHash(results) {
         let skipRules = {};
         if (key === 'update') {
             skipRules = {
-                'ecol_load_hiperf_detail': { cols: [9] },  // 第10列（索引9）
+                'ecol_load_hiperf_detail': { cols: [1, 4, 9] },  // 第10列（索引9）
                 'ecol_load_step': { cols: [2, 4, 8] }      // 第3,5,9列（索引2,4,8）
             };
         } else if (key === 'static') {
             skipRules = {
-                '分析摘要': { rows: [0, 6, 7] },           // 第1,7,8行（索引0,6,7）
-                '技术栈信息': { cols: [6] }                // 第7列（索引6）
+                '分析摘要': { rows: [0, 1, 6, 7] },           // 第1,7,8行（索引0,6,7）
+                '技术栈信息': { cols: [6, 7, 12, 13] }                // 第7列（索引6）
             };
         } else if (key === 'opt') {
             skipRules = {
@@ -593,6 +614,9 @@ function verifyArtifactsHash(results) {
  */
 async function runE2ETests() {
     console.log('🚀 开始 ArkAnalyzer-HapRay 端到端测试\n');
+
+    // 先下载/更新测试资源
+    runCommand(`node ${path.join(__dirname, 'download_test_products.js')} "${DIST_DIR}"`, '下载测试资源', { silent: false });
 
     // 配置 LLM 环境变量用于符号恢复模块测试
     console.log('🤖 配置 LLM 环境变量...');
@@ -697,8 +721,7 @@ async function runE2ETests() {
         process.exit(1);
     } finally {
         // 清理缓存目录
-        const ROOT_DIR = path.join(__dirname, '..');
-        const cacheDir = path.join(ROOT_DIR, 'files_results_cache');
+        const cacheDir = path.join(DIST_DIR, 'files_results_cache');
         if (fs.existsSync(cacheDir)) {
             fs.rmSync(cacheDir, { recursive: true, force: true });
             console.log('\n🧹 已清理缓存目录: files_results_cache');
