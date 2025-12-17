@@ -40,16 +40,13 @@ def init_llm_analyzer(
     llm_config = config.get_llm_config()
     api_key = llm_config['api_key']
     if not api_key:
-        service_type = llm_config['service_type']
-        api_key_env = llm_config['api_key_env']
-        logger.info(f'{service_type.upper()} API key not found ({api_key_env}), will skip LLM analysis')
+        logger.info('LLM API key not found (LLM_API_KEY), will skip LLM analysis')
         return None, False, False
 
     model_name = llm_model if llm_model is not None else llm_config['model']
 
     # 从配置获取 base_url
     base_url = llm_config['base_url']
-    service_type = llm_config['service_type']
 
     try:
         if batch_size > 1:
@@ -64,7 +61,7 @@ def init_llm_analyzer(
                 open_source_lib=open_source_lib,
             )
             logger.info(
-                f'Using batch LLM analyzer: service={service_type}, model={model_name}, batch_size={batch_size}'
+                f'Using batch LLM analyzer: model={model_name}, batch_size={batch_size}'
             )
             if save_prompts:
                 logger.info('Prompt saving enabled')
@@ -79,7 +76,7 @@ def init_llm_analyzer(
             output_dir=output_dir,
             open_source_lib=open_source_lib,
         )
-        logger.info(f'Using single LLM analyzer: service={service_type}, model={model_name}')
+        logger.info(f'Using single LLM analyzer: model={model_name}')
         if save_prompts:
             logger.info('Prompt saving enabled')
         return analyzer, True, False

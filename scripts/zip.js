@@ -7,9 +7,35 @@ const { execSync } = require('child_process');
 const packageJson = require('../package.json');
 const version = packageJson.version;
 
+// 获取平台和架构信息
+function getPlatformName() {
+  const platform = os.platform();
+  // 标准化平台名称
+  const platformMap = {
+    'darwin': 'darwin',
+    'win32': 'win32',
+    'linux': 'linux'
+  };
+  return platformMap[platform] || platform;
+}
+
+function getArchName() {
+  const arch = os.arch();
+  // 标准化架构名称
+  const archMap = {
+    'x64': 'x64',
+    'arm64': 'arm64',
+    'ia32': 'ia32',
+    'arm': 'arm'
+  };
+  return archMap[arch] || arch;
+}
+
 // 获取命令行参数
 const args = process.argv.slice(2);
-const outputFilename = path.resolve(__dirname, `../${args[0] || 'dist'}-${version}.zip`);
+const platform = getPlatformName();
+const arch = getArchName();
+const outputFilename = path.resolve(__dirname, `../${args[0] || 'dist'}-${platform}-${arch}-${version}.zip`);
 
 // 生成新的README内容
 function generateNewReadme() {

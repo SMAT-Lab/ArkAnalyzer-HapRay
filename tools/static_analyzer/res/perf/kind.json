@@ -108,7 +108,34 @@
                 "files": [
                     ".*libhermes.so",
                     ".*librnoh.so",
+                    "/proc/.*/data/storage/.*/bundle/.*libjsi.so$",
                     "/proc/.*/data/storage/.*/bundle/.*libjsvm.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_config.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_nativemodule_core.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_animations.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_attributedstring.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_componentregistry.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_core.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_graphics.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_imagemanager.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_leakchecker.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_mapbuffer.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_mounting.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_runtimescheduler.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_scheduler.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_telemetry.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_templateprocessor.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_textlayoutmanager.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreact_render_unimanager.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libreactnative.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_app.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_async_storage.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_core.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_core_package.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_datetime_picker.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_flash_list.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_fs.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*librnoh_gesture_handler.so$",
                     "/proc/.*/data/storage/.*/bundle/.*libv8_shared.so$"
                 ],
                 "threads": [
@@ -117,6 +144,75 @@
                     "RNOH_JS",
                     "V8 DefaultWorke",
                     "RNJS_\\d+"
+                ]
+            },
+            {
+                "name": "AJX",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libajx.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libajxbiz2.so$"
+                ]
+            },
+            {
+                "name": "CUBE",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libantcube.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libBifrost.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libBloxohos.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libcube.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libentry.so$"
+                ]
+            },
+            {
+                "name": "DX",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libdinamicx.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libtbdinamicx.so$"
+                ]
+            },
+            {
+                "name": "Hippy",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libhippy.so$"
+                ]
+            },
+            {
+                "name": "Lynx",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*liblynx.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*liblynx_security_service.so$"
+                ]
+            },
+            {
+                "name": "MRN",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libmrn.so$"
+                ]
+            },
+            {
+                "name": "MSC",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libmsc.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libmscjsi.so$"
+                ]
+            },
+            {
+                "name": "Taro",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libJDTaroNativeOH.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libtaro_native_core.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libTaroHarmonyLibrary.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libSilkTaroKit.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libtaronativelib.so$"
+
                 ]
             }
         ]
@@ -141,6 +237,14 @@
                     "io.flutter.work",
                     "io.worker."
                 ]
+            },
+            {
+                "name": "Weex",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libweex_ability.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libweex_framework.so$"
+                ]
             }
         ]
     },
@@ -153,6 +257,7 @@
                 "priority": 10,
                 "files": [
                     ".*libarkweb_engine.so",
+                    ".*libarkweb_render.so",
                     ".*NWeb.hap",
                     "/proc/.*/bundle/arkwebcore/libs/arm64/.*\\.so$",
                     "/system/lib64/libapp_fwk_update_service.z.so",
@@ -161,10 +266,12 @@
                     "/system/lib64/libnweb_ohos_wrapper.z.so",
                     "/system/lib64/libohos_adapter_glue_source.z.so",
                     "/system/lib64/libweb_configs.z.so",
+                    "/system/lib64/libwebview_common.z.so",
                     "/system/lib64/module/web/libneterrorlist_napi.z.so",
                     "/system/lib64/module/web/libwebview_napi.z.so",
                     "/system/lib64/ndk/libohweb.so",
                     "/system/lib64/platformsdk/libarkweb_core_loader.z.so",
+                    "/system/lib64/platformsdk/libarkweb_utils.z.so",
                     "/system/lib64/platformsdk/libcj_webview_ffi.z.so",
                     "/system/lib64/platformsdk/libnweb_ohos_adapter.z.so"
                 ],
@@ -181,6 +288,17 @@
                     "gpu-work-server",
                     "ThreadPoolServi"
                 ]
+            },
+            {
+                "name": "XWEB",
+                "priority": 10,
+                "files": [
+                    "/proc/.*/data/storage/.*/bundle/.*libfeat_webview.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libfeat_xweb.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libxweb_glue.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libxwebadapter.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libxwebcore.so$"
+                ]
             }
         ]
     },
@@ -192,7 +310,17 @@
                 "name": "KMP Runtime",
                 "priority": 10,
                 "files": [
-                    "/proc/.*/bundle/libs/arm64/libkn.so"
+                    "/proc/.*/data/storage/.*/bundle/.*libALIPAYKMP.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libconnectionclass.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libkmp_launcher.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libkn.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libkntr.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libkuikly_qqmusic.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*liblauncher.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libshared.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libtaolivekmp.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libTBKMP.so$",
+                    "/proc/.*/data/storage/.*/bundle/.*libtkmp.so$"
                 ]
             },
             {

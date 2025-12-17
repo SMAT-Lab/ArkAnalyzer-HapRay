@@ -32,6 +32,8 @@ class PerfLoad_kuaishou_0040(PerfTestCase):
         self.driver.wait(5)
         time.sleep(2)
 
+        self.driver.touch(BY.text('首页'))
+        time.sleep(2)
         self.driver.touch(BY.text('直播'))
         time.sleep(2)
         # 点击第一个直播间
