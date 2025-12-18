@@ -100,7 +100,7 @@ ONEDIR_MODE=true ./build.sh
 opt-detector -i libexample.so -o report.xlsx
 
 # 检测目录中的所有二进制文件
-opt-detector -i /path/to/binaries -o report.xlsx --workers 4
+opt-detector -i /path/to/binaries -o report.xlsx --jobs 4
 
 # 只检测优化级别，不检测LTO
 opt-detector -i libexample.so -o report.xlsx --no-lto
@@ -109,7 +109,7 @@ opt-detector -i libexample.so -o report.xlsx --no-lto
 opt-detector -i libexample.so -o report.xlsx --no-opt
 
 # 使用4个并行工作线程
-opt-detector -i /path/to/binaries -o report.xlsx -w 4
+opt-detector -i /path/to/binaries -o report.xlsx -j 4
 
 # 设置文件分析超时时间（秒）
 opt-detector -i libexample.so -o report.xlsx --timeout 300

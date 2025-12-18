@@ -228,3 +228,121 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libweex_ability\\.so$", "libweex_framework\\.so$"]
+
+  # ==================== Cangjie (仓颉) ====================
+  - id: "Cangjie_Framework"
+    name: "Cangjie Framework"
+    type: "Cangjie"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libcj_.*\\.so$", "libcjhybridview\\.so$", "libcontact_cj.*\\.so$"]
+
+  # ==================== @duke/logan ====================
+  - id: "@duke/logan"
+    name: "@duke/logan"
+    type: "@duke/logan"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblogan\\.so$"]
+
+  # ==================== LevelDB ====================
+  - id: "@devzeng/leveldb"
+    name: "@devzeng/leveldb"
+    type: "@devzeng/leveldb"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libleveldb\\.so$"]
+
+  # ==================== WebSocket/Crypto ====================
+  - id: "@duke/websocket-client"
+    name: "@duke/websocket-client"
+    type: "@duke/websocket-client"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libwebsocketClient\\.so$"]
+
+  # ==================== @ohos/flate2 ====================
+  - id: "@ohos/flate2"
+    name: "@ohos/flate2"
+    type: "@ohos/flate2"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libflate2\\.so$"]
+
+  # ==================== @ohos/gpu_transform ====================
+  - id: "GPU_Transform"
+    name: "@ohos/gpu_transform"
+    type: "@ohos/gpu_transform"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libnativeGpu\\.so$"]
+
+  # ==================== @ohos/imageknifepro ====================
+  - id: "@ohos/imageknifepro"
+    name: "@ohos/imageknifepro"
+    type: "@ohos/imageknifepro"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libimageknifepro\\.so$"]
+
+  # ==================== @tencent/libpag ====================
+  - id: "PAG_Framework"
+    name: "@tencent/libpag"
+    type: "@tencent/libpag"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libpag\\.so$", "libnative_libpag\\.so$"]
+
+  # ==================== @ohos/linphone ====================
+  - id: "@ohos/linphone"
+    name: "@ohos/linphone"
+    type: "@ohos/linphone"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblinphone\\.so$", "libbelle-sip\\.so$", "libmediastreamer2\\.so$", "libohos_linphone\\.so$", "libbctoolbox\\.so$", "libbelr\\.so$", "libortp\\.so$"]
+
+  # ==================== @ohos/lottie-turbo ====================
+  - id: "@ohos/lottie-turbo"
+    name: "@ohos/lottie-turbo"
+    type: "@ohos/lottie-turbo"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblottie-turbo\\.so$"]
+
+  # ==================== @tencent/mmkv ====================
+  - id: "@tencent/mmkv"
+    name: "@tencent/mmkv"
+    type: "@tencent/mmkv"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libmmkv\\.so$"]
+
+  # ==================== @ohos/mp4parser ====================
+  - id: "@ohos/mp4parser"
+    name: "@ohos/mp4parser"
+    type: "@ohos/mp4parser"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libmp4parser_napi\\.so$"]
+
+   # ==================== @ohos/vap ====================
+  - id: "@ohos/vap"
+    name: "@ohos/vap"
+    type: "@ohos/vap"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libvap\\.so$"]
+
