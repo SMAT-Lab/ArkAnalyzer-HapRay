@@ -317,7 +317,12 @@ class ToolPage(QWidget):
         """创建参数控件"""
         param_type = param_def.get('type', 'str')
         default = param_def.get('default')
+        nargs = param_def.get('nargs')
         param_def.get('required', False)
+
+        # 处理需要多个值的参数
+        if nargs:
+            return self._create_multi_value_widget(param_name, param_def, param_type, default, nargs)
 
         if param_type == 'bool':
             widget = QCheckBox()
@@ -403,6 +408,96 @@ class ToolPage(QWidget):
         widget.setText(str(default) if default else '')
         return widget
 
+    def _create_multi_value_widget(self, param_name: str, param_def: dict[str, Any], param_type: str, default: Any, nargs: str) -> QWidget:
+        """创建支持多个值的参数控件"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # 创建输入区域
+        input_widget = QWidget()
+        input_layout = QHBoxLayout(input_widget)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 根据参数类型创建不同的输入控件
+        if param_type == 'int':
+            value_input = QSpinBox()
+            value_input.setMinimum(-999999)
+            value_input.setMaximum(999999)
+            value_input.setValue(0)
+        else:  # str, file, dir等
+            value_input = QLineEdit()
+
+            # 如果是文件或目录类型，添加浏览按钮
+            if param_def.get('type') == 'file':
+                browse_button = QPushButton('浏览文件...')
+                browse_button.clicked.connect(
+                    lambda: self.browse_file(value_input, param_def.get('filter', 'All Files (*.*)'))
+                )
+                input_layout.addWidget(browse_button)
+            elif param_def.get('type') == 'dir':
+                browse_button = QPushButton('浏览目录...')
+                browse_button.clicked.connect(lambda: self.browse_directory(value_input))
+                input_layout.addWidget(browse_button)
+
+        input_layout.addWidget(value_input)
+
+        # 添加按钮
+        add_button = QPushButton('添加')
+        add_button.clicked.connect(lambda: self._add_multi_value_item(layout, param_name, param_def, value_input))
+        input_layout.addWidget(add_button)
+
+        layout.addWidget(input_widget)
+
+        # 如果有默认值，预先添加
+        if default:
+            if isinstance(default, list):
+                for value in default:
+                    self._add_multi_value_item(layout, param_name, param_def, value_input, str(value))
+            else:
+                self._add_multi_value_item(layout, param_name, param_def, value_input, str(default))
+
+        return widget
+
+    def _add_multi_value_item(self, parent_layout: QVBoxLayout, param_name: str, param_def: dict[str, Any], value_input: QWidget, value: str = None):
+        """添加多值项目"""
+        # 如果没有提供值，从输入控件获取
+        if value is None:
+            if isinstance(value_input, QSpinBox):
+                value = str(value_input.value())
+            elif isinstance(value_input, QLineEdit):
+                value = value_input.text().strip()
+                if not value:
+                    return  # 空值不添加
+            value_input.clear()  # 清空输入框
+
+        if not value:
+            return
+
+        # 创建项目控件
+        item_widget = QWidget()
+        item_layout = QHBoxLayout(item_widget)
+        item_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 值标签
+        value_label = QLabel(value)
+        item_layout.addWidget(value_label)
+
+        # 删除按钮
+        remove_button = QPushButton('删除')
+        remove_button.clicked.connect(lambda: self._remove_multi_value_item(parent_layout, item_widget, param_name))
+        item_layout.addWidget(remove_button)
+
+        # 调整间距
+        item_layout.addStretch()
+
+        parent_layout.addWidget(item_widget)
+
+    def _remove_multi_value_item(self, parent_layout: QVBoxLayout, item_widget: QWidget, param_name: str):
+        """删除多值项目"""
+        parent_layout.removeWidget(item_widget)
+        item_widget.deleteLater()
+
     def _setup_dynamic_choices_async(
         self, param_name: str, choices_func_name: str, widget: QWidget, multi_select: bool = False, default: Any = None
     ):
@@ -478,12 +573,44 @@ class ToolPage(QWidget):
                     params[param_name] = checked_items
             elif isinstance(widget, QComboBox):
                 params[param_name] = widget.currentText()
-            elif isinstance(widget, QWidget):  # file or dir
-                line_edit = widget.findChild(QLineEdit)
-                if line_edit:
-                    value = line_edit.text().strip()
-                    if value:
-                        params[param_name] = value
+            elif isinstance(widget, QWidget):
+                # 检查是否是多值控件（有QVBoxLayout）
+                layout = widget.layout()
+                if isinstance(layout, QVBoxLayout):
+                    # 多值控件，收集所有值标签的内容
+                    values = []
+                    for i in range(layout.count()):
+                        item_widget = layout.itemAt(i).widget()
+                        if item_widget and hasattr(item_widget, 'layout'):
+                            item_layout = item_widget.layout()
+                            if isinstance(item_layout, QHBoxLayout):
+                                # 查找值标签（第一个QLabel）
+                                for j in range(item_layout.count()):
+                                    child_widget = item_layout.itemAt(j).widget()
+                                    if isinstance(child_widget, QLabel) and child_widget != item_layout.itemAt(item_layout.count()-2).widget():  # 不是删除按钮
+                                        value_text = child_widget.text().strip()
+                                        if value_text:
+                                            values.append(value_text)
+                                        break
+                    if values:
+                        # 根据参数定义决定返回格式
+                        param_def = self.tool.get_parameters(self.current_action).get(param_name, {}) if self.current_action else {}
+                        param_type = param_def.get('type', 'str')
+                        if param_type == 'int':
+                            # 转换为整数列表
+                            try:
+                                params[param_name] = [int(v) for v in values]
+                            except ValueError:
+                                params[param_name] = values
+                        else:
+                            params[param_name] = values
+                else:
+                    # file or dir 单值控件
+                    line_edit = widget.findChild(QLineEdit)
+                    if line_edit:
+                        value = line_edit.text().strip()
+                        if value:
+                            params[param_name] = value
             else:  # QLineEdit
                 value = widget.text().strip()
                 if value:
