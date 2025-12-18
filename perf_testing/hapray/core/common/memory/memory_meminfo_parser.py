@@ -159,14 +159,15 @@ class MemoryMeminfoParser:
         category_idx = -1
         name_idx = -1
         header_line_idx = -1
+        has_category_column = False
 
         for idx, raw_line in enumerate(lines):
             line = raw_line.strip()
             if not line:
                 continue
 
-            # 查找包含 Size 和 Category 的表头行
-            if 'Size' in line and 'Category' in line:
+            # 查找包含 Size 的表头行
+            if 'Size' in line and 'Pss' in line:
                 header_line_idx = idx
                 # 按照2个以上空格分隔表头
                 header_parts = re.split(r'\s{2,}', line)
@@ -174,15 +175,24 @@ class MemoryMeminfoParser:
                     size_idx = header_parts.index('Size')
                     pss_idx = header_parts.index('Pss')
                     swappss_idx = header_parts.index('SwapPss')
-                    category_idx = header_parts.index('Category')
                     name_idx = header_parts.index('Name') if 'Name' in header_parts else -1
+
+                    # 检查是否有Category列
+                    if 'Category' in header_parts:
+                        category_idx = header_parts.index('Category')
+                        has_category_column = True
+                        logger.info('Found Category column in smaps header')
+                    else:
+                        # 没有Category列，需要从文件名推导
+                        has_category_column = False
+                        logger.info('No Category column found, will derive from filename')
                 except ValueError:
-                    logger.warning('Failed to find required columns (Size, Pss, SwapPss, Category) in header')
+                    logger.warning('Failed to find required columns (Size, Pss, SwapPss) in header')
                     return {}
                 break
 
-        if size_idx < 0 or pss_idx < 0 or swappss_idx < 0 or category_idx < 0:
-            logger.warning('Failed to find required columns (Size, Pss, SwapPss, Category) in header')
+        if size_idx < 0 or pss_idx < 0 or swappss_idx < 0:
+            logger.warning('Failed to find required columns (Size, Pss, SwapPss) in header')
             return {}
 
         # 解析数据行（从表头行之后开始）
@@ -195,7 +205,10 @@ class MemoryMeminfoParser:
             parts = re.split(r'\s{2,}', line)
 
             # 检查是否有足够的列
-            max_idx = max(size_idx, pss_idx, swappss_idx, category_idx)
+            required_cols = [size_idx, pss_idx, swappss_idx]
+            if has_category_column:
+                required_cols.append(category_idx)
+            max_idx = max(required_cols)
             if len(parts) <= max_idx:
                 continue
 
@@ -206,12 +219,21 @@ class MemoryMeminfoParser:
                 total_kb = pss_kb + swappss_kb
                 size_bytes = total_kb * 1024
 
-                # 读取 Category 列
-                category = parts[category_idx] if category_idx < len(parts) else ''
+                # 读取 Category 列或从文件名推导
+                category = ''
+                name = ''
+
+                if has_category_column and category_idx >= 0:
+                    # 有Category列，直接读取
+                    category = parts[category_idx] if category_idx < len(parts) else ''
+                else:
+                    # 没有Category列，从文件名推导
+                    if name_idx >= 0 and name_idx < len(parts):
+                        name = parts[name_idx]
+                        category = self._derive_category_from_filename(name)
 
                 # 读取 Name 列（用于分类的细分）
-                name = ''
-                if name_idx >= 0 and name_idx < len(parts):
+                if not name and name_idx >= 0 and name_idx < len(parts):
                     name = parts[name_idx]
 
                 # 对 AnonPage other 进行细分
@@ -290,6 +312,49 @@ class MemoryMeminfoParser:
 
         # 其他情况
         return 'FilePage other(normal)'
+
+    def _derive_category_from_filename(self, filename: str) -> str:
+        """从文件名推导出内存分类
+
+        Args:
+            filename: 文件名/路径
+
+        Returns:
+            内存分类名称
+        """
+        if not filename:
+            return 'other'
+
+        # 提取文件名（去除路径）
+        basename = filename.split('/')[-1] if '/' in filename else filename
+
+        # 根据文件扩展名分类
+        if basename.endswith('.so'):
+            return '.so'
+        elif basename.endswith('.hap'):
+            return '.hap'
+        elif basename.endswith('.ttf'):
+            return '.ttf'
+        elif basename.endswith('.dex'):
+            return '.dex'
+        elif basename.endswith('.jar'):
+            return '.jar'
+        elif basename.startswith('anon:') or basename.startswith('[anon:'):
+            return 'AnonPage other'
+        elif 'ashmem' in filename:
+            return 'FilePage other(ashmem)'
+        elif basename in ['[stack]', '[heap]', '[vdso]', '[vsyscall]']:
+            return 'AnonPage other'
+        elif any(basename.endswith(ext) for ext in ['.xml', '.json', '.txt', '.png', '.jpg', '.jpeg']):
+            return 'FilePage other'
+        else:
+            # 检查是否是设备文件或其他特殊文件
+            if filename.startswith('/dev/'):
+                return 'dev'
+            elif filename.startswith('/proc/') or filename.startswith('/sys/'):
+                return 'other'
+            else:
+                return 'FilePage other'
 
     def _parse_gpu_files(self, meminfo_dir: str, timestamps: set) -> dict[str, int]:
         """解析 gpu 内存文件
