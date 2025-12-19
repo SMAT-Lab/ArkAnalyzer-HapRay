@@ -33,7 +33,8 @@ const processData = (data: PerfData | null, seriesType: string) => {
   }
 
   const { steps } = data;
-  const xData = steps.map((step) => step.step_name);
+  // step_name 已移到 jsonDataStore.steps 中，这里使用默认值
+  const xData = steps.map((step, index) => `步骤${index + 1}`);
   const categoryMap = new Map<ComponentCategory, number[]>();
 
   // 初始化categoryMap，为每个x轴位置创建一个数组
@@ -92,7 +93,7 @@ const updateChart = () => {
   if (!myChart || !chartRef.value) return;
 
   const { xData, legendData, series } = processData(props.chartData, props.seriesType);
-  const title = props.chartData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
+  const title = props.chartData?.steps[0]?.data[0]?.eventType == 0 ? 'cycles' : 'instructions';
   const option = {
     title: {
       text: '步骤负载：' + title,
