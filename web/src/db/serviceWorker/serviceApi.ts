@@ -95,6 +95,17 @@ export async function queryMemoryResults(db: Database, stepId?: number): Promise
 }
 
 /**
+ * Query memory meminfo data
+ * @param db - Database instance
+ * @param stepId - Step id
+ * @returns Memory meminfo data array
+ */
+export async function queryMemoryMeminfo(db: Database, stepId: number): Promise<SqlRow[]> {
+  const { sql, params } = MemoryDao.buildQueryMemoryMeminfo(stepId);
+  return executeQueryWithExec(db, sql, params);
+}
+
+/**
  * Query overview level timeline data (aggregated by time point and category/process)
  * @param db - Database instance
  * @param stepId - Step id

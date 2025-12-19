@@ -89,7 +89,7 @@
               <span>Memory分析</span>
             </el-menu-item>
 
-            <el-menu-item :index="`ui_animate_step_${step.id}`" :title="step.step_name">
+            <el-menu-item v-if="getHasUIAnimateData(step.id)" :index="`ui_animate_step_${step.id}`" :title="step.step_name">
               <el-icon>
                 <VideoPlay />
               </el-icon>
@@ -267,6 +267,7 @@ const perfData = jsonDataStore.perfData;
 
 // 存储每个步骤是否有Memory数据的缓存（使用对象而不是Map以保持响应性）
 const memoryDataCache = ref<Record<number, boolean>>({});
+const uiAnimateDataCache = ref<Record<number, boolean>>({});
 
 const testSteps = computed(() => {
   if (!perfData?.steps) return [];
@@ -288,19 +289,36 @@ const checkMemoryData = async (stepId: number): Promise<void> => {
 
   try {
     const dbApi = getDbApi();
-    // 检查memory_results表中是否有该步骤的数据
-    const results = await dbApi.queryMemoryResults(stepId);
 
-    // 如果memory_results表中有数据，还需要检查memory_records表中是否有实际的记录
+    // 检查memory_meminfo表
+    console.log(`[AppNavigation] Checking meminfo data for step ${stepId}...`);
+    try {
+      const meminfoData = await dbApi.queryMemoryMeminfo(stepId);
+      console.log(`[AppNavigation] Meminfo data for step ${stepId}:`, meminfoData?.length || 0, 'rows');
+      if (meminfoData && meminfoData.length > 0) {
+        console.log(`[AppNavigation] Step ${stepId} has meminfo data, showing Memory menu`);
+        memoryDataCache.value[stepId] = true;
+        return;
+      }
+    } catch (meminfoError) {
+      console.log(`[AppNavigation] Error querying meminfo (table may not exist):`, meminfoError);
+    }
+
+    // 检查memory_results表中是否有该步骤的数据
+    console.log(`[AppNavigation] Checking memory_results for step ${stepId}...`);
+    const results = await dbApi.queryMemoryResults(stepId);
+    console.log(`[AppNavigation] Memory results for step ${stepId}:`, results?.length || 0, 'rows');
     if (results && results.length > 0) {
       // 查询该步骤的memory_records数量
       const records = await dbApi.queryOverviewTimeline(stepId);
+      console.log(`[AppNavigation] Memory records for step ${stepId}:`, records?.length || 0, 'rows');
       memoryDataCache.value[stepId] = records && records.length > 0;
     } else {
       memoryDataCache.value[stepId] = false;
     }
+    console.log(`[AppNavigation] Final memory data status for step ${stepId}:`, memoryDataCache.value[stepId]);
   } catch (error) {
-    console.warn(`Failed to check memory data for step ${stepId}:`, error);
+    console.warn(`[AppNavigation] Failed to check memory data for step ${stepId}:`, error);
     memoryDataCache.value[stepId] = false;
   }
 };
@@ -310,10 +328,23 @@ const getHasMemoryData = (stepId: number): boolean => {
   return memoryDataCache.value[stepId] || false;
 };
 
+// 检查UI动画数据
+const checkUIAnimateData = (stepId: number) => {
+  const uiAnimateData = jsonDataStore.uiAnimateData;
+  const stepKey = `step${stepId}`;
+  uiAnimateDataCache.value[stepId] = !!(uiAnimateData && uiAnimateData[stepKey]);
+};
+
+// 获取步骤是否有UI动画数据
+const getHasUIAnimateData = (stepId: number): boolean => {
+  return uiAnimateDataCache.value[stepId] || false;
+};
+
 // 当步骤改变时，检查Memory数据
 watch(() => testSteps.value, (newSteps) => {
   newSteps.forEach(step => {
     void checkMemoryData(step.id);
+    checkUIAnimateData(step.id);
   });
 }, { immediate: true });
 
