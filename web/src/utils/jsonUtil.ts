@@ -84,8 +84,10 @@ export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: n
     const categoryMap = new Map<string, number>();
 
     // 处理数据并累加 symbolEvents
-    jsonData.steps.forEach(step => {
-        if (currentStepIndex === 0 || step.step_id === currentStepIndex) {
+    // step_id 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
+    jsonData.steps.forEach((step, index) => {
+        const stepId = index + 1;
+        if (currentStepIndex === 0 || stepId === currentStepIndex) {
             step.data.forEach(item => {
                 // 优先使用 categoryName，如果没有则使用枚举转换
                 const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || "UNKNOWN";
@@ -122,8 +124,10 @@ export function processJson2ProcessPieChartData(jsonData: PerfData, currentStepI
     const processMap = new Map<string, number>();
 
     // 处理数据并累加进程负载
-    jsonData.steps.forEach(step => {
-        if (currentStepIndex === 0 || step.step_id === currentStepIndex) {
+    // step_id 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
+    jsonData.steps.forEach((step, index) => {
+        const stepId = index + 1;
+        if (currentStepIndex === 0 || stepId === currentStepIndex) {
             step.data.forEach(item => {
                 const processName = item.processName || "Unknown Process";
                 const currentTotal = processMap.get(processName) || 0;
@@ -171,15 +175,17 @@ function compareJsonDataByLevel<T>(
     const processData = (data: PerfData): Map<string, number> => {
         const map = new Map<string, number>();
 
-        for (const step of data.steps) {
+        // step_id 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
+        data.steps.forEach((step, index) => {
+            const stepId = index + 1;
             for (const item of step.data) {
                 const key = ignoreStep
                     ? keyGenerator(item, 0) // stepId=0
-                    : keyGenerator(item, step.step_id);
+                    : keyGenerator(item, stepId);
                 const current = map.get(key) || 0;
                 map.set(key, current + item.symbolEvents);
             }
-        }
+        });
 
         return map;
     };

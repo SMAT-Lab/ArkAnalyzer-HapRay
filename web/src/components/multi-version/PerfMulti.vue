@@ -394,9 +394,10 @@ const processJsonData = async (jsonData: JSONData, fileName: string): Promise<Mu
     try {
       scenePieData = processJson2PieChartData(jsonData.perf, 0);
       categoryData = calculateCategorysData(jsonData.perf, null, true);
-      stepData = jsonData.perf.steps.map(step => ({
-        stepId: step.step_id,
-        stepName: step.step_name,
+      const steps = jsonData.steps || [];
+      stepData = jsonData.perf.steps.map((step, index) => ({
+        stepId: steps[index]?.step_id ?? (index + 1),
+        stepName: steps[index]?.step_name ?? `步骤${index + 1}`,
         count: step.count
       }));
     } catch (error) {

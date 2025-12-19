@@ -66,8 +66,8 @@
         ]" @click="handleStepClick(0)">
         <div class="step-header">
           <span class="step-order">STEP 0</span>
-          <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
-          <span class="step-duration">{{ formatEnergy(getTotalTestStepsCount(testSteps)) }}</span>
+          <span class="step-duration">{{ getTotalTestStepsCount() }}</span>
+          <span class="step-duration">{{ formatEnergy(getTotalTestStepsCount()) }}</span>
         </div>
         <div class="step-name">全部步骤</div>
       </div>
@@ -80,8 +80,8 @@
         ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
-          <span class="step-duration">{{ formatDuration(step.count) }}</span>
-          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
+          <span class="step-duration">{{ formatDuration(getStepPerfData(index).count) }}</span>
+          <span class="step-duration">{{ formatEnergy(getStepPerfData(index).count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
         <!-- <button
@@ -258,30 +258,32 @@ console.log('负载分析组件获取到的 JSON 数据:');
 // 检查是否有负载数据
 const hasPerfData = computed(() => perfData !== null && perfData !== undefined);
 
-const testSteps = ref(
-  perfData?.steps.map((step, index) => ({
-    id: index + 1,
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
+const testSteps = computed(() => {
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
+  }));
+});
+
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData = (stepIndex: number) => {
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const step = perfData.steps[stepIndex];
+  return {
     count: step.count,
     round: step.round,
     perf_data_path: step.perf_data_path,
-  })) || []
-);
+  };
+};
 
-interface TestStep {
-  id: number;
-  step_name: string;
-  count: number;
-  round: number;
-  perf_data_path: string;
-}
-
-const getTotalTestStepsCount = (testSteps: TestStep[]) => {
-  let total = 0;
-  testSteps.forEach((step) => {
-    total += step.count;
-  });
-  return total;
+// 获取所有步骤的总计数
+const getTotalTestStepsCount = () => {
+  if (!perfData || !perfData.steps) return 0;
+  return perfData.steps.reduce((total, step) => total + step.count, 0);
 };
 
 const performanceData = ref({

@@ -62,6 +62,8 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         # 处理perf文件
         if i < len(perf_paths):
             _process_perf_file(perf_paths[i], hiperf_step_dir, target_db_files, package_name, pids)
+        else:
+            _create_pids_json(None, hiperf_step_dir, package_name, pids)
 
         # 处理trace文件（仅当提供了trace文件时）
         if trace_paths and i < len(trace_paths):
@@ -121,7 +123,7 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
     if not package_name:
         raise ValueError('包名不能为空')
     result = {'pids': [], 'process_names': []}
-    if os.path.exists(target_db_file) and target_db_file:
+    if target_db_file and os.path.exists(target_db_file):
         # 连接trace数据库
         perf_conn = sqlite3.connect(target_db_file)
         try:
@@ -198,8 +200,7 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
     _copy_ps_ef_file(perf_path, hiperf_step_dir)
 
     # 创建pids.json
-    if current_db_file:
-        _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids)
+    _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids)
 
 
 def _process_trace_file(trace_path, htrace_step_dir):
