@@ -518,4 +518,22 @@ export class MemoryDao {
     return { sql, params };
   }
 
+  /**
+   * Build SQL query for memory meminfo data
+   * 查询内存meminfo数据
+   *
+   * @param stepId - Step id
+   * @returns SQL statement and parameters
+   */
+  static buildQueryMemoryMeminfo(stepId: number): QueryResult {
+    const sql = `
+      SELECT timestamp, timestamp_epoch, data
+      FROM memory_meminfo
+      WHERE step_id = ?
+      ORDER BY timestamp_epoch
+    `;
+    const params: SqlParam[] = [stepId];
+    return { sql, params };
+  }
+
 }
