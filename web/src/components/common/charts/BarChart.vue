@@ -21,8 +21,9 @@ function processData(data: PerfData|null) {
     return { xData: [], yData: [], fullNames: [] }
   }
     const { steps } = data;
+    // step_name 已移到 jsonDataStore.steps 中，这里使用默认值
     const stepCounts = steps.map((step, index) => ({
-        stepName: step.step_name,
+        stepName: `步骤${index + 1}`,
         count: step.count,
         originalIndex: index // 保存原始索引
     }));
@@ -40,7 +41,7 @@ function processData(data: PerfData|null) {
 const processedData = processData(props.chartData);
 const { xData, yData, fullNames } = processedData;
 
-const title = props.chartData?.steps[0].data[0].eventType==0?'cycles':'instructions';
+const title = props.chartData?.steps?.[0]?.data?.[0]?.eventType == 0 ? 'cycles' : 'instructions';
 
 const option = {
     title: {
