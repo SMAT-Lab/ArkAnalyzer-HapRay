@@ -50,6 +50,8 @@ class FrameLoadCalculator:
         """
         self.debug_vsync_enabled = debug_vsync_enabled
         self.cache_manager = cache_manager
+        # 新增：进程级CPU计算开关（默认启用）
+        self.use_process_level_cpu = True
 
     def analyze_perf_callchain(
         self,
@@ -336,15 +338,68 @@ class FrameLoadCalculator:
 
         return frame_load, sample_callchains
 
-    def calculate_frame_load_simple(self, frame: dict[str, Any], perf_df: pd.DataFrame) -> int:
-        """简单计算帧负载（不包含调用链分析）
+    def calculate_frame_load_multi_process(
+        self, frame: dict[str, Any], trace_conn, perf_conn, app_pids: list[int]
+    ) -> int:
+        """使用进程级统计计算帧负载，支持多进程（如ArkWeb）
+        
+        Args:
+            frame: 帧数据字典，必须包含 'ts', 'dur' 字段
+            trace_conn: trace数据库连接
+            perf_conn: perf数据库连接
+            app_pids: 应用进程ID列表（支持多个进程，如ArkWeb的主进程+render进程）
+        
+        Returns:
+            int: 帧负载（多进程级统计，包含系统线程）
+        """
+        from .frame_utils import calculate_process_instructions
+        
+        frame_start = frame['ts']
+        frame_end = frame['ts'] + frame['dur']
+        
+        total_cpu = 0
+        
+        # 对每个进程分别计算CPU，然后汇总
+        for pid in app_pids:
+            # 使用进程级统计（包含系统线程，如OS_VSyncThread）
+            app_instructions, sys_instructions = calculate_process_instructions(
+                perf_conn=perf_conn,
+                trace_conn=trace_conn,
+                app_pid=pid,
+                frame_start=frame_start,
+                frame_end=frame_end
+            )
+            
+            # 包含系统线程CPU（OS_VSyncThread等系统线程也在应用进程中运行）
+            total_cpu += app_instructions + sys_instructions
+        
+        return int(total_cpu)
+    
+    def calculate_frame_load_process_level(
+        self, frame: dict[str, Any], trace_conn, perf_conn, app_pid: int
+    ) -> int:
+        """使用进程级统计计算帧负载（单进程版本，兼容旧代码）
+        
+        Args:
+            frame: 帧数据字典，必须包含 'ts', 'dur' 字段
+            trace_conn: trace数据库连接
+            perf_conn: perf数据库连接
+            app_pid: 应用进程ID
+        
+        Returns:
+            int: 帧负载（进程级统计，包含系统线程）
+        """
+        return self.calculate_frame_load_multi_process(frame, trace_conn, perf_conn, [app_pid])
+
+    def _calculate_single_thread_load(self, frame: dict[str, Any], perf_df: pd.DataFrame) -> int:
+        """单线程CPU计算（旧方法，用于回退）
 
         Args:
             frame: 帧数据字典，必须包含 'ts', 'dur', 'tid' 字段
             perf_df: perf样本DataFrame
 
         Returns:
-            int: 帧负载
+            int: 帧负载（单线程）
         """
         frame_start_time = frame['ts']
         frame_end_time = frame['ts'] + frame['dur']
@@ -362,8 +417,43 @@ class FrameLoadCalculator:
 
         return int(frame_samples['event_count'].sum())
 
+    def calculate_frame_load_simple(self, frame: dict[str, Any], perf_df: pd.DataFrame) -> int:
+        """简单计算帧负载（支持进程级统计）
+
+        Args:
+            frame: 帧数据字典，必须包含 'ts', 'dur', 'tid' 字段
+            perf_df: perf样本DataFrame
+
+        Returns:
+            int: 帧负载
+        """
+        # 如果启用了进程级CPU计算，且有cache_manager，则使用进程级统计
+        if self.use_process_level_cpu and self.cache_manager:
+            app_pid = frame.get('app_pid') or frame.get('pid')
+            # 如果frame中没有app_pid，尝试从cache_manager获取
+            if not app_pid and self.cache_manager.app_pids:
+                app_pid = self.cache_manager.app_pids[0]
+            
+            if app_pid and self.cache_manager.trace_conn and self.cache_manager.perf_conn:
+                try:
+                    cpu_load = self.calculate_frame_load_process_level(
+                        frame,
+                        self.cache_manager.trace_conn,
+                        self.cache_manager.perf_conn,
+                        app_pid
+                    )
+                    return cpu_load
+                except Exception as e:
+                    logging.warning(f'进程级CPU计算失败，回退到单线程计算: {e}')
+                    # 继续执行单线程计算
+        
+        # 向后兼容：使用原有的单线程计算方式
+        return self._calculate_single_thread_load(frame, perf_df)
+
     def calculate_all_frame_loads_fast(self, frames: pd.DataFrame, perf_df: pd.DataFrame) -> list[dict[str, Any]]:
         """快速计算所有帧的负载值，不分析调用链
+
+        注意：如果启用了进程级CPU计算，将使用数据库查询而不是perf_df
 
         Args:
             frames: 帧数据DataFrame
@@ -374,10 +464,40 @@ class FrameLoadCalculator:
         """
         frame_loads = []
 
+        # 检查是否使用进程级CPU计算
+        use_process_level = (
+            self.use_process_level_cpu 
+            and self.cache_manager 
+            and self.cache_manager.trace_conn 
+            and self.cache_manager.perf_conn
+            and self.cache_manager.app_pids
+        )
+
+        if use_process_level:
+            app_pids = self.cache_manager.app_pids
+            logging.info(f'使用进程级CPU计算（PIDs={app_pids}），共{len(frames)}帧')
+        else:
+            logging.info(f'使用单线程CPU计算，共{len(frames)}帧')
+
         # 批量计算开始
         for i, (_, frame) in enumerate(frames.iterrows()):
-            # 使用现有的简单方法，只计算负载值
-            frame_load = self.calculate_frame_load_simple(frame, perf_df)
+            # 根据配置选择计算方法
+            if use_process_level:
+                try:
+                    # 计算所有app_pids的CPU总和（支持ArkWeb的多进程架构）
+                    frame_load = self.calculate_frame_load_multi_process(
+                        frame,
+                        self.cache_manager.trace_conn,
+                        self.cache_manager.perf_conn,
+                        app_pids
+                    )
+                except Exception as e:
+                    if i < 5:  # 只记录前5个错误，避免日志过多
+                        logging.warning(f'帧{i}进程级CPU计算失败，回退到单线程: {e}')
+                    frame_load = self._calculate_single_thread_load(frame, perf_df)
+            else:
+                # 使用单线程计算（快速但不准确）
+                frame_load = self._calculate_single_thread_load(frame, perf_df)
 
             # 检查并记录NaN值
             nan_fields = []

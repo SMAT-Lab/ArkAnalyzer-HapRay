@@ -137,6 +137,10 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
 
         FramePerfAccessor.__init__(self, self.perf_conn)
         FrameTraceAccessor.__init__(self, self.trace_conn)
+        
+        # 【新增】自动查找并添加ArkWeb render进程
+        if self.trace_conn and self.app_pids:
+            self._expand_arkweb_render_processes()
 
         # ==================== 实例变量：缓存存储 ====================
         self._callchain_cache = None
@@ -256,6 +260,71 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
             logging.warning('perf_conn未建立，无法获取文件缓存')
             return pd.DataFrame()
         return FramePerfAccessor.get_files_cache(self)
+
+    def get_total_load_for_pids(self, app_pids: list[int]) -> int:
+        """获取指定进程的总负载（重写父类方法，使用trace_conn关联thread表）
+        
+        修复：原方法错误地用进程ID直接匹配thread_id，现在通过trace数据库的thread表
+        找到属于指定进程的所有线程ID，然后统计这些线程的perf_sample总和。
+        
+        Args:
+            app_pids: 应用进程ID列表
+        
+        Returns:
+            int: 总负载值（只包含指定进程的线程的perf_sample）
+        """
+        # 验证app_pids参数
+        if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
+            logging.warning('app_pids参数无效，返回0')
+            return 0
+
+        # 过滤掉无效的PID值
+        valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
+        if not valid_pids:
+            logging.warning('没有有效的PID值，返回0')
+            return 0
+
+        if not self.trace_conn or not self.perf_conn:
+            logging.warning('数据库连接未建立，返回0')
+            return 0
+
+        try:
+            # 步骤1：通过trace数据库的thread表，找到属于指定进程的所有线程ID（tid）
+            cursor = self.trace_conn.cursor()
+            placeholders = ','.join('?' * len(valid_pids))
+            thread_query = f"""
+                SELECT DISTINCT t.tid
+                FROM thread t
+                INNER JOIN process p ON t.ipid = p.ipid
+                WHERE p.pid IN ({placeholders})
+            """
+            cursor.execute(thread_query, valid_pids)
+            thread_rows = cursor.fetchall()
+            thread_ids = [row[0] for row in thread_rows if row[0] is not None]
+            
+            if not thread_ids:
+                logging.warning('未找到进程 %s 的线程，返回0', valid_pids)
+                return 0
+            
+            # 步骤2：统计这些线程的perf_sample总和
+            perf_cursor = self.perf_conn.cursor()
+            thread_placeholders = ','.join('?' * len(thread_ids))
+            perf_query = f"""
+                SELECT SUM(event_count) as total_load
+                FROM perf_sample
+                WHERE thread_id IN ({thread_placeholders})
+            """
+            perf_cursor.execute(perf_query, thread_ids)
+            result = perf_cursor.fetchone()
+            total_load = result[0] if result and result[0] else 0
+            
+            logging.info('获取总负载: %d (进程ID: %s, 线程数: %d)', total_load, valid_pids, len(thread_ids))
+            return int(total_load)
+        except Exception as e:
+            logging.error('获取总负载失败: %s', str(e))
+            import traceback
+            logging.error('异常堆栈跟踪:\n%s', traceback.format_exc())
+            return 0
 
     @cached('_process_cache', 'process')
     def get_process_cache(self) -> pd.DataFrame:
@@ -572,6 +641,126 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
 
     # ==================== Private 方法：数据库检查 ====================
 
+    def _expand_arkweb_render_processes(self) -> None:
+        """自动查找并添加ArkWeb render进程到app_pids列表
+        
+        ArkWeb使用多进程架构：主进程和render进程
+        - 主进程：如 com.jd.hm.mall
+        - render进程：如 .hm.mall:render 或 com.jd.hm.mall:render
+        
+        此方法会自动识别ArkWeb应用的render进程并添加到app_pids中
+        """
+        if not self.trace_conn or not self.app_pids:
+            return
+        
+        try:
+            cursor = self.trace_conn.cursor()
+            original_pids = list(self.app_pids)
+            
+            # 查找所有以":render"结尾的进程（ArkWeb render进程）
+            cursor.execute("""
+                SELECT DISTINCT p.pid, p.name
+                FROM process p
+                WHERE p.name LIKE '%:render'
+                AND p.name != 'render_service'
+                AND p.name != 'rmrenderservice'
+            """)
+            
+            all_render_processes = cursor.fetchall()
+            
+            if not all_render_processes:
+                return
+            
+            # 对每个主进程，尝试匹配对应的render进程
+            for main_pid in original_pids:
+                # 查找主进程名
+                cursor.execute("SELECT name FROM process WHERE pid = ? LIMIT 1", (main_pid,))
+                result = cursor.fetchone()
+                if not result:
+                    continue
+                
+                main_process_name = result[0]
+                
+                # 如果主进程名不包含"."，可能不是ArkWeb，跳过
+                if '.' not in main_process_name:
+                    continue
+                
+                # 提取主进程名的关键部分（去掉com.前缀）
+                main_key = main_process_name.split('.', 1)[-1] if '.' in main_process_name else main_process_name
+                
+                # 尝试匹配render进程
+                for render_pid, render_process_name in all_render_processes:
+                    # 检查render进程名是否包含主进程的关键部分
+                    if main_key in render_process_name or main_process_name.split('.')[-1] in render_process_name:
+                        if render_pid not in self.app_pids:
+                            self.app_pids.append(render_pid)
+                            logging.info(f'检测到ArkWeb render进程: {render_process_name} (PID={render_pid})，已添加到app_pids')
+        
+        except Exception as e:
+            logging.warning(f'查找ArkWeb render进程失败: {e}')
+    
+    def _expand_arkweb_render_processes(self) -> None:
+        """自动查找并添加ArkWeb render进程到app_pids列表
+        
+        ArkWeb使用多进程架构：主进程和render进程
+        - 主进程：如 com.jd.hm.mall (PID=5489)
+        - render进程：如 .hm.mall:render (PID=35301)
+        
+        此方法会自动识别ArkWeb应用的render进程并添加到app_pids中，
+        确保CPU计算包含render进程的开销
+        """
+        if not self.trace_conn or not self.app_pids:
+            return
+        
+        try:
+            cursor = self.trace_conn.cursor()
+            original_pids = list(self.app_pids)
+            
+            # 查找所有以":render"结尾的进程（ArkWeb render进程）
+            cursor.execute("""
+                SELECT DISTINCT p.pid, p.name
+                FROM process p
+                WHERE p.name LIKE '%:render'
+                AND p.name != 'render_service'
+                AND p.name != 'rmrenderservice'
+            """)
+            
+            all_render_processes = cursor.fetchall()
+            
+            if not all_render_processes:
+                return
+            
+            # 对每个主进程，尝试匹配对应的render进程
+            for main_pid in original_pids:
+                # 查找主进程名
+                cursor.execute("SELECT name FROM process WHERE pid = ? LIMIT 1", (main_pid,))
+                result = cursor.fetchone()
+                if not result:
+                    continue
+                
+                main_process_name = result[0]
+                
+                # 如果主进程名不包含"."，可能不是ArkWeb，跳过
+                if '.' not in main_process_name:
+                    continue
+                
+                # 提取主进程名的关键部分（去掉com.前缀）
+                main_key = main_process_name.split('.', 1)[-1] if '.' in main_process_name else main_process_name
+                
+                # 尝试匹配render进程
+                # 可能的匹配模式：
+                # 1. com.jd.hm.mall -> com.jd.hm.mall:render
+                # 2. com.jd.hm.mall -> .hm.mall:render (去掉com前缀)
+                # 3. com.jd.hm.mall -> hm.mall:render
+                for render_pid, render_process_name in all_render_processes:
+                    if main_key in render_process_name or main_process_name.split('.')[-1] in render_process_name:
+                        if render_pid not in self.app_pids:
+                            self.app_pids.append(render_pid)
+                            logging.info(f'检测到ArkWeb render进程: {render_process_name} (PID={render_pid})，已添加到app_pids')
+        
+        except Exception as e:
+            logging.warning(f'查找ArkWeb render进程失败: {e}')
+    
     def _check_perf_db_size(self, perf_db_path: str) -> None:
         """检查性能数据库文件大小
 
