@@ -202,16 +202,14 @@ watch(() => props.step, (newStep) => {
   currentStepIndex.value = newStep || 0;
 }, { immediate: true });
 
-// 测试步骤数据
-const testSteps = computed(() =>
-  perfData.steps.map((step, index) => ({
-    id: index + 1,
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
+const testSteps = computed(() => {
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
-  }))
-);
+  }));
+});
 
 // 合并数据
 const mergedProcessPerformanceData = computed(() =>

@@ -263,19 +263,15 @@ watch(() => props.currentPage, (newPage) => {
 
 // 获取步骤数据
 const jsonDataStore = useJsonDataStore();
-const perfData = jsonDataStore.perfData;
 
 // 存储每个步骤是否有Memory数据的缓存（使用对象而不是Map以保持响应性）
 const memoryDataCache = ref<Record<number, boolean>>({});
 
 const testSteps = computed(() => {
-  if (!perfData?.steps) return [];
-  return perfData.steps.map((step, index) => ({
-    id: index + 1,
+  if (!jsonDataStore?.steps) return [];
+  return jsonDataStore.steps.map((step) => ({
+    id: step.step_id,
     step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
   }));
 });
 
