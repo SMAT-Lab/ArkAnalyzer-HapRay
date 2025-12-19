@@ -230,7 +230,7 @@ const comparePerformanceData = computed(() =>
 const testSteps = computed(() => {
   const steps = jsonDataStore.steps || [];
   return steps.map((step, index) => ({
-    id: step.step_idx ?? (index + 1),
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
   }));
 });

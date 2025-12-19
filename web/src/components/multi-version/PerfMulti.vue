@@ -396,7 +396,7 @@ const processJsonData = async (jsonData: JSONData, fileName: string): Promise<Mu
       categoryData = calculateCategorysData(jsonData.perf, null, true);
       const steps = jsonData.steps || [];
       stepData = jsonData.perf.steps.map((step, index) => ({
-        stepId: steps[index]?.step_idx ?? (index + 1),
+        stepId: steps[index]?.step_id ?? (index + 1),
         stepName: steps[index]?.step_name ?? `步骤${index + 1}`,
         count: step.count
       }));
