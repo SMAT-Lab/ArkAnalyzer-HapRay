@@ -152,6 +152,7 @@ interface CallstackFrame {
   path: string;
   symbol_id: number;
   symbol: string;
+  value?: number;  // 每个深度的负载值
 }
 
 interface SampleCallchain {
