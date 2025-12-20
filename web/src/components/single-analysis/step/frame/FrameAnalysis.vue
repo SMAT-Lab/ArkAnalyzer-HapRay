@@ -266,6 +266,9 @@ width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
                     <EmptyFrameFlameGraph
                         v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
                         :data="selectedEmptyFrame.sample_callchains"
+                        :thread-name="selectedEmptyFrame.thread_name"
+                        :process-name="selectedEmptyFrame.process_name"
+                        :thread-id="selectedEmptyFrame.thread_id"
                     />
                     <div v-else class="placeholder">
                         <i class="fas fa-exclamation-circle"></i>

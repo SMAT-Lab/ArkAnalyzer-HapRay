@@ -18,6 +18,18 @@ const props = defineProps({
   data: {
     type: Array,
     default: () => []
+  },
+  threadName: {
+    type: String,
+    default: ''
+  },
+  processName: {
+    type: String,
+    default: ''
+  },
+  threadId: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -56,13 +68,34 @@ function buildFlameGraphData(sampleCallchains) {
   sampleCallchains.forEach(sample => {
     const callchain = sample.callchain || [];
     const sampleValue = sample.event_count || 0;
+    const threadId = sample.thread_id || 'unknown';
+    const threadName = sample.thread_name || props.threadName || '';
 
-    let currentLevel = root;
+    // 第一层：线程分组
+    const threadKey = `Thread-${threadId}`;
+    let threadNode = root.get(threadKey);
+    if (!threadNode) {
+      threadNode = {
+        name: threadName ? `${threadName} (TID:${threadId})` : `线程 ${threadId}`,
+        value: 0,
+        threadId: threadId,
+        threadName: threadName,
+        isThread: true,
+        mergeCount: 0,
+        children: new Map()
+      };
+      root.set(threadKey, threadNode);
+    }
+    threadNode.value += sampleValue;
+    threadNode.mergeCount += 1;
+
+    // 第二层开始：符号调用栈
+    let currentLevel = threadNode.children;
     callchain.forEach((call, idx) => {
-      // 使用 getFrameLabel 获取标签，避免 unknown
       const label = getFrameLabel(call, idx);
+      const key = `${label}_${call.depth || idx}`;
 
-      let node = currentLevel.get(label);
+      let node = currentLevel.get(key);
       if (!node) {
         node = {
           name: label,
@@ -72,20 +105,10 @@ function buildFlameGraphData(sampleCallchains) {
           mergeCount: 0,
           children: new Map()
         };
-        currentLevel.set(label, node);
+        currentLevel.set(key, node);
       }
-      // 每个节点累加所有经过它的sample的event_count
       node.value += sampleValue;
       node.mergeCount += 1;
-
-      // 更新 file 和 symbol 信息
-      if (call.path && !node.file) {
-        node.file = call.path;
-      }
-      if (call.symbol && !node.symbol) {
-        node.symbol = call.symbol;
-      }
-
       currentLevel = node.children;
     });
   });
@@ -98,6 +121,7 @@ function buildFlameGraphData(sampleCallchains) {
         value: node.value,
         file: node.file,
         symbol: node.symbol,
+        threadId: node.threadId,
         mergeCount: node.mergeCount
       };
       if (node.children.size > 0) {
@@ -112,26 +136,62 @@ function buildFlameGraphData(sampleCallchains) {
 }
 
 function buildTooltipHtml(node) {
-  const name = node.data.symbol || node.data.name || '未知符号';
-  const file = node.data.file || '未知文件';
+  const name = node.data.name || '未知';
+  const file = node.data.file || '';
   const value = node.data.value || 0;
   const mergeCount = node.data.mergeCount || 0;
+  const threadId = node.data.threadId;
+  const threadName = node.data.threadName;
+  const isThread = node.data.isThread;
 
   return `
     <div style="background: rgba(30, 41, 59, 0.95); padding: 14px; border-radius: 6px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      <div style="font-size: 15px; font-weight: 700; color: #ffffff; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3);">${name}</div>
+      <div style="font-size: 15px; font-weight: 700; color: #ffffff; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3);">
+        ${name}
+      </div>
+      ${isThread ? `
+        <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
+          <span style="color: #e2e8f0; font-weight: 600;">类型：</span>
+          <span style="color: #ffffff; font-weight: 700;">线程</span>
+        </div>
+        ${threadName ? `
+          <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
+            <span style="color: #e2e8f0; font-weight: 600;">线程名：</span>
+            <span style="color: #ffffff; font-weight: 700;">${threadName}</span>
+          </div>
+        ` : ''}
+        <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
+          <span style="color: #e2e8f0; font-weight: 600;">线程ID：</span>
+          <span style="color: #ffffff; font-weight: 700;">${threadId}</span>
+        </div>
+      ` : `
+        <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
+          <span style="color: #e2e8f0; font-weight: 600;">类型：</span>
+          <span style="color: #ffffff; font-weight: 700;">符号</span>
+        </div>
+        ${file ? `
+          <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
+            <span style="color: #e2e8f0; font-weight: 600;">文件：</span>
+            <span style="color: #ffffff; font-weight: 700; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file}</span>
+          </div>
+        ` : ''}
+      `}
       <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
         <span style="color: #e2e8f0; font-weight: 600;">负载：</span>
-        <span style="color: #ffffff; font-weight: 700;">${value}</span>
-      </div>
-      <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
-        <span style="color: #e2e8f0; font-weight: 600;">文件：</span>
-        <span style="color: #ffffff; font-weight: 700; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file}</span>
+        <span style="color: #ffffff; font-weight: 700;">${value.toLocaleString()}</span>
       </div>
       <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
         <span style="color: #e2e8f0; font-weight: 600;">合并次数：</span>
         <span style="color: #ffffff; font-weight: 700;">${mergeCount}</span>
       </div>
+      ${props.processName ? `
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">
+          <div style="font-size: 12px; margin: 4px 0; display: flex; justify-content: space-between; gap: 16px;">
+            <span style="color: #94a3b8; font-weight: 500;">进程：</span>
+            <span style="color: #e2e8f0; font-weight: 600;">${props.processName}</span>
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -146,11 +206,6 @@ function renderFlameGraph() {
   if (!isMounted || !chartContainer.value || !hasData.value) return;
 
   const flameData = buildFlameGraphData(props.data);
-  const rootData = {
-    name: '调用栈',
-    value: flameData.reduce((sum, node) => sum + (node.value || 0), 0),
-    children: flameData
-  };
 
   const width = chartContainer.value.clientWidth || 800;
   // 根据最大深度动态计算高度
@@ -186,7 +241,20 @@ function renderFlameGraph() {
     chartContainer.value.style.height = `${height}px`;
   }
 
-  containerSelection.datum(rootData).call(flameGraphInstance);
+  // 直接使用flameData，不需要额外的根节点
+  // 如果有多个线程，每个线程会作为独立的根节点显示
+  if (flameData.length === 1) {
+    // 单个线程，直接使用
+    containerSelection.datum(flameData[0]).call(flameGraphInstance);
+  } else {
+    // 多个线程，创建虚拟根节点（但不显示）
+    const rootData = {
+      name: '',
+      value: flameData.reduce((sum, node) => sum + (node.value || 0), 0),
+      children: flameData
+    };
+    containerSelection.datum(rootData).call(flameGraphInstance);
+  }
 }
 
 watch(() => props.data, () => {
