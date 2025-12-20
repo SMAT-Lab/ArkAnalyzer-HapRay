@@ -52,7 +52,8 @@ class ReportData:
                 'type': DataType.BASE64_GZIP_JSON.value,
                 'versionCode': 1,
                 'basicInfo': {},
-                'perf': {'steps': []},  # 默认空步骤
+                'steps': [],  # 步骤基本信息（step_id, step_name）
+                'perf': {'steps': []},  # 性能数据步骤（不包含step_id和step_name）
             },
             **result,
         }
@@ -67,7 +68,10 @@ class ReportData:
         """
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         data = cls(scene_dir, result)
-        data.load_perf_data(perf_data_path)
+        steps_path = os.path.join(scene_dir, 'hiperf', 'steps.json')
+        data._load_steps_data(steps_path)
+        # 当perf.data不存在时，hiperf_info.json可能不存在，设为非必需
+        data.load_perf_data(perf_data_path, required=False)
         data.load_trace_data(scene_dir)
         return data
 
@@ -293,6 +297,26 @@ class ReportData:
                 continue
 
         return data
+
+    def _load_steps_data(self, path: str):
+        """加载步骤基本信息
+
+        Args:
+            path: steps.json 文件路径
+        """
+        steps_data = self._load_json_safe(path, default=[])
+        if len(steps_data) == 0:
+            raise FileNotFoundError(f'steps.json not found: {path}')
+
+        # 提取 step_id 和 step_name 到 self.result['steps']
+        self.result['steps'] = [
+            {
+                'step_id': step.get('stepIdx'),
+                'step_name': step.get('name'),
+            }
+            for step in steps_data
+            if 'stepIdx' in step and 'name' in step
+        ]
 
     def load_perf_data(self, path, required: bool = True):
         """加载性能数据
@@ -810,8 +834,9 @@ def create_perf_summary_excel(input_path: str) -> bool:
         merged_data = merge_summary_info(input_path)
 
         if not merged_data:
-            logging.error('错误: 没有找到任何summary_info.json文件或文件内容为空')
-            return False
+            # summary_info.json不存在时不影响报告生成，只记录警告
+            logging.warning('警告: 没有找到任何summary_info.json文件或文件内容为空，跳过Excel汇总报告生成')
+            return True
 
         # 转为DataFrame
         df = pd.DataFrame(merged_data)

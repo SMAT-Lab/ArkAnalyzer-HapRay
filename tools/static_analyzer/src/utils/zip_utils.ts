@@ -60,6 +60,10 @@ export class ZipUtils {
             const fullPath = basePath ? path.posix.join(basePath, relativePath) : relativePath;
             const fileName = path.posix.basename(relativePath);
             const folder = path.posix.dirname(relativePath);
+            // skip armeabi-v7a and x86_64 folders
+            if (folder === 'libs/armeabi-v7a' || folder === 'libs/x86_64') {
+                continue;
+            }
             
             try {
                 const content = await zipEntry.async('nodebuffer');

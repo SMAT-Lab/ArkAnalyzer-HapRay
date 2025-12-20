@@ -244,6 +244,8 @@ class FrameTraceAccessor:
             logging.warning('没有有效的PID值，返回空DataFrame')
             return pd.DataFrame()
 
+        # 学习Checker的逻辑：排除系统进程，查找应用进程的空刷帧
+        # 系统进程包括：render_service, rmrenderservice, ohos.sceneboard, system_*, com.ohos.*
         query = f"""
         WITH filtered_frames AS (
             -- 首先获取符合条件的帧
@@ -253,12 +255,15 @@ class FrameTraceAccessor:
             AND fs.type = {FRAME_TYPE_ACTUAL}
         ),
         process_filtered AS (
-            -- 通过process表过滤出app_pids中的帧
+            -- 通过process表过滤出app_pids中的帧，并排除系统进程
             SELECT ff.*, p.pid, p.name as process_name, t.tid, t.name as thread_name, t.is_main_thread
             FROM filtered_frames ff
             JOIN process p ON ff.ipid = p.ipid
             JOIN thread t ON ff.itid = t.itid
             WHERE p.pid IN ({','.join('?' * len(valid_pids))})
+            AND p.name NOT IN ('render_service', 'rmrenderservice', 'ohos.sceneboard')
+            AND p.name NOT LIKE 'system_%'
+            AND p.name NOT LIKE 'com.ohos.%'
         )
         -- 最后获取调用栈信息
         SELECT pf.*, cs.name as callstack_name
