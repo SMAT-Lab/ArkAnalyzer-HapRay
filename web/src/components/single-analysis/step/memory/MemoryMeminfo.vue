@@ -31,6 +31,7 @@ const emit = defineEmits<{
 
 const loading = ref(false);
 const hasData = ref(false);
+
 const tableData = ref<Record<string, unknown>[]>([]);
 const dataColumns = ref<string[]>([]);
 
