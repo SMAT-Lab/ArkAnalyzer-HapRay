@@ -224,11 +224,14 @@ class FrameLoadCalculator:
                 )
             return frame_load, sample_callchains
 
-        # 样本分析
+        # 样本分析：收集所有调用链
         sample_analysis_start = time.time()
         callchain_analysis_total = 0
         vsync_filter_total = 0
         sample_count = 0
+
+        # 存储每个sample的调用链信息
+        sample_callchain_list = []
 
         for _, sample in frame_samples.iterrows():
             sample_count += 1
@@ -268,24 +271,43 @@ class FrameLoadCalculator:
 
                     if not is_vsync_chain:
                         frame_load += sample['event_count']
-                        try:
-                            sample_load_percentage = (sample['event_count'] / frame_load) * 100
-                            sample_callchains.append(
-                                {
-                                    'timestamp': int(sample['timestamp_trace']),
-                                    'event_count': int(sample['event_count']),
-                                    'load_percentage': float(sample_load_percentage),
-                                    'callchain': callchain_info,
-                                }
-                            )
-                        except Exception as e:
-                            logging.error(
-                                '处理样本时出错: %s, sample: %s, frame_load: %s', str(e), sample.to_dict(), frame_load
-                            )
-                            continue
+
+                        # 直接保存sample信息，每个深度的value就是sample的event_count
+                        # 火焰图的宽度差异来自于前端合并不同调用栈时的累加
+                        sample_callchain_list.append({
+                            'timestamp': int(sample['timestamp_trace']),
+                            'event_count': int(sample['event_count']),
+                            'callchain_info': callchain_info
+                        })
 
             except Exception as e:
                 logging.error('分析调用链时出错: %s', str(e))
+                continue
+
+        # 为每个sample的调用链添加负载信息
+        for sample_data in sample_callchain_list:
+            try:
+                sample_load_percentage = (sample_data['event_count'] / frame_load) * 100 if frame_load > 0 else 0
+
+                # 每个深度的value都是sample的event_count
+                # 火焰图会在前端合并时自动累加
+                callchain_with_load = []
+                for call in sample_data['callchain_info']:
+                    call_with_load = call.copy()
+                    call_with_load['value'] = sample_data['event_count']
+                    callchain_with_load.append(call_with_load)
+
+                sample_callchains.append({
+                    'timestamp': sample_data['timestamp'],
+                    'event_count': sample_data['event_count'],
+                    'load_percentage': float(sample_load_percentage),
+                    'callchain': callchain_with_load,
+                })
+            except Exception as e:
+                logging.error(
+                    '处理样本时出错: %s, sample: %s, frame_load: %s',
+                    str(e), sample_data, frame_load
+                )
                 continue
 
         sample_analysis_time = time.time() - sample_analysis_start
