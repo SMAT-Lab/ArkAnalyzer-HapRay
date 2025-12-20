@@ -297,12 +297,6 @@ const getStepPerfData = (stepIndex: number) => {
   };
 };
 
-// 获取所有步骤的总计数
-const getTotalTestStepsCount = () => {
-  if (!perfData || !perfData.steps) return 0;
-  return perfData.steps.reduce((total, step) => total + step.count, 0);
-};
-
 // interface TestStep {
 //   id: number;
 //   step_name: string;

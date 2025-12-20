@@ -158,7 +158,7 @@ const isNavCollapsed = ref(false);
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
-const perfData = jsonDataStore.perfData;
+//const perfData = jsonDataStore.perfData;
 
 // 步骤数据
 // testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦

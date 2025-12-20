@@ -31,7 +31,8 @@ const emit = defineEmits<{
 
 const loading = ref(false);
 const hasData = ref(false);
-const tableData = ref<any[]>([]);
+
+const tableData = ref<Record<string, unknown>[]>([]);
 const dataColumns = ref<string[]>([]);
 
 onMounted(() => {
@@ -59,15 +60,15 @@ async function loadData() {
 
     // 收集所有列名
     const columnsSet = new Set<string>();
-    rows.forEach((row: any) => {
-      const data = JSON.parse(row.data);
+    rows.forEach((row: Record<string, unknown>) => {
+      const data = JSON.parse(row.data as string);
       Object.keys(data).forEach(key => columnsSet.add(key));
     });
     dataColumns.value = Array.from(columnsSet);
 
     // 构建表格数据
-    tableData.value = rows.map((row: any) => {
-      const data = JSON.parse(row.data);
+    tableData.value = rows.map((row: Record<string, unknown>) => {
+      const data = JSON.parse(row.data as string);
       return {
         timestamp: row.timestamp,
         ...data
