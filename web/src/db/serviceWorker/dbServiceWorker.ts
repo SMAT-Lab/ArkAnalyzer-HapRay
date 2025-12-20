@@ -28,6 +28,7 @@ export type WorkerMessageType =
   | 'query'
   | 'close'
   | 'memory.queryResults'
+  | 'memory.queryMeminfo'
   | 'memory.queryOverviewTimeline'
   | 'memory.queryCategoryRecords'
   | 'memory.querySubCategoryRecords'
@@ -289,6 +290,8 @@ function sendErrorResponse(id: string, error: unknown): void {
 self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> {
   const { id, type, payload } = e.data;
 
+  console.log(`[Worker] Received message: type=${type}, id=${id}`);
+
   try {
     switch (type) {
       case 'init': {
@@ -303,6 +306,16 @@ self.onmessage = async function (e: MessageEvent<WorkerRequest>): Promise<void> 
         }
         const { stepId } = (payload as { stepId?: number }) || {};
         const result = await serviceApi.queryMemoryResults(db, stepId);
+        sendSuccessResponse(id, { result });
+        break;
+      }
+
+      case 'memory.queryMeminfo': {
+        if (!db) {
+          throw new Error('Database not initialized');
+        }
+        const { stepId } = (payload as { stepId: number }) || {};
+        const result = await serviceApi.queryMemoryMeminfo(db, stepId);
         sendSuccessResponse(id, { result });
         break;
       }

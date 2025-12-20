@@ -32,17 +32,17 @@
                 <span class="metric">
                   <span class="metric-icon">📊</span>
                   <span class="metric-label">指令数:</span>
-                  <span class="metric-value">{{ formatNumber(currentStepInfo.count) }}</span>
+                  <span class="metric-value">{{ formatNumber(currentStepPerfData.count) }}</span>
                 </span>
                 <span class="metric">
                   <span class="metric-icon">⚡</span>
                   <span class="metric-label">功耗:</span>
-                  <span class="metric-value">{{ formatEnergy(currentStepInfo.count) }}</span>
+                  <span class="metric-value">{{ formatEnergy(currentStepPerfData.count) }}</span>
                 </span>
                 <span class="metric">
                   <span class="metric-icon">📈</span>
                   <span class="metric-label">占比:</span>
-                  <span class="metric-value">{{ getStepPercentage(currentStepInfo) }}%</span>
+                  <span class="metric-value">{{ currentStepInfo ? getStepPercentage(currentStepInfo.id) : '0.0' }}%</span>
                 </span>
               </div>
             </div>
@@ -158,17 +158,15 @@ const isNavCollapsed = ref(false);
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
-const perfData = jsonDataStore.perfData;
+//const perfData = jsonDataStore.perfData;
 
 // 步骤数据
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
 const testSteps = computed(() => {
-  if (!perfData) return [];
-  return perfData.steps.map((step, index) => ({
-    id: index + 1,
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
   }));
 });
 
@@ -468,6 +466,15 @@ const currentStepInfo = computed(() => {
   return null;
 });
 
+// 获取当前步骤的性能数据
+const currentStepPerfData = computed(() => {
+  if (!currentStepInfo.value) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const stepIndex = testSteps.value.findIndex(step => step.id === currentStepInfo.value!.id);
+  return getStepPerfData(stepIndex);
+});
+
 // 格式化数字
 const formatNumber = (num: number) => {
   return num.toLocaleString();
@@ -479,19 +486,36 @@ const formatEnergy = (count: number) => {
   return `${energy} mAs`;
 };
 
-// 步骤数据类型定义
-interface TestStep {
-  id: number;
-  step_name: string;
-  count: number;
-  round: number;
-  perf_data_path: string;
-}
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData = (stepIndex: number) => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const step = perfData.steps[stepIndex];
+  return {
+    count: step.count,
+    round: step.round,
+    perf_data_path: step.perf_data_path,
+  };
+};
+
+// 获取所有步骤的总计数
+const getTotalTestStepsCount = () => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps) return 0;
+  return perfData.steps.reduce((total, step) => total + step.count, 0);
+};
 
 // 计算步骤占比
-const getStepPercentage = (step: TestStep) => {
-  const total = testSteps.value.reduce((sum, s) => sum + s.count, 0);
-  return total > 0 ? ((step.count / total) * 100).toFixed(1) : '0.0';
+const getStepPercentage = (stepId: number) => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps) return '0.0';
+  const total = getTotalTestStepsCount();
+  const stepIndex = testSteps.value.findIndex(s => s.id === stepId);
+  if (stepIndex < 0 || stepIndex >= perfData.steps.length) return '0.0';
+  const stepCount = perfData.steps[stepIndex].count;
+  return total > 0 ? ((stepCount / total) * 100).toFixed(1) : '0.0';
 };
 </script>
 

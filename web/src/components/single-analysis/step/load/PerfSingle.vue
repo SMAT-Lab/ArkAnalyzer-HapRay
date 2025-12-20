@@ -69,7 +69,7 @@
       ]" @click="handleStepClick(0)">
         <div class="step-header">
           <span class="step-order">STEP 0</span>
-          <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
+          <span class="step-duration">{{ getTotalTestStepsCount() }}</span>
           <span class="step-duration">{{ formatEnergy(getTotalTestStepsCount(testSteps)) }}</span>
         </div>
         <div class="step-name">全部步骤</div>
@@ -83,12 +83,12 @@ v-for="(step, index) in testSteps" :key="index" :class="[
       ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
-          <span class="step-duration">{{ formatDuration(step.count) }}</span>
-          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
+          <span class="step-duration">{{ formatDuration(getStepPerfData(index).count) }}</span>
+          <span class="step-duration">{{ formatEnergy(getStepPerfData(index).count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
-        <div class="step-name">测试轮次：{{ step.round }}</div>
-        <div class="step-name" :title="step.perf_data_path">perf文件位置：{{ step.perf_data_path }}</div>
+        <div class="step-name">测试轮次：{{ getStepPerfData(index).round }}</div>
+        <div class="step-name" :title="getStepPerfData(index).perf_data_path">perf文件位置：{{ getStepPerfData(index).perf_data_path }}</div>
         <button
 class="beautiful-btn primary-btn"
           @click="handleDownloadAndRedirect('perf.data', step.id, step.step_name)">
@@ -236,8 +236,8 @@ v-for="(step, index) in testSteps" :key="index" :class="[
       ]" @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
-          <span class="step-duration">{{ formatDuration(step.count) }}</span>
-          <span class="step-duration">{{ formatEnergy(step.count) }}</span>
+          <span class="step-duration">{{ formatDuration(getStepPerfData(index).count) }}</span>
+          <span class="step-duration">{{ formatEnergy(getStepPerfData(index).count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
       </div>
@@ -275,16 +275,27 @@ const perfData = jsonDataStore.perfData;
 const frameData = jsonDataStore.frameData;
 console.log('从元素获取到的 JSON 数据:');
 
-const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
-    //从1开始
-    id: index + 1,
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
+const testSteps = computed(() => {
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
+  }));
+});
+
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData = (stepIndex: number) => {
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const step = perfData.steps[stepIndex];
+  return {
     count: step.count,
     round: step.round,
     perf_data_path: step.perf_data_path,
-  }))
-);
+  };
+};
 
 // interface TestStep {
 //   id: number;

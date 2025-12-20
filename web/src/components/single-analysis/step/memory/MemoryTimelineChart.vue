@@ -295,6 +295,7 @@ const emit = defineEmits<{
     selectedFile: string;
     memoryAtPoint: number;
   }];
+  'has-data': [hasData: boolean];
 }>();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
@@ -1123,6 +1124,7 @@ async function loadCurrentLevelData() {
 async function loadProcessedData() {
   if (currentRecords.value.length === 0) {
     processedData.value = createEmptyProcessedData();
+    emit('has-data', false);
     return;
   }
 
@@ -1135,9 +1137,11 @@ async function loadProcessedData() {
     const result = processTimelineDataSync();
 
     processedData.value = result;
+    emit('has-data', result.chartData.length > 0);
   } catch (error) {
     console.error('[MemoryTimelineChart] Failed to process timeline data:', error);
     processedData.value = createEmptyProcessedData();
+    emit('has-data', false);
   } finally {
     isLoadingData.value = false;
   }
