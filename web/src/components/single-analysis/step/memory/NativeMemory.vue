@@ -1,11 +1,25 @@
 ﻿<template>
   <div class="native-memory-container">
-    <div v-if="!hasData" class="no-data-tip">
+    <div v-if="isLoading" class="no-data-tip">
+      <el-empty description="加载中..." />
+    </div>
+    <div v-else-if="!hasAnyData" class="no-data-tip">
       <el-empty description="暂无内存分析数据" />
     </div>
 
     <template v-else>
       <el-row :gutter="20">
+        <el-col :span="24">
+          <div class="data-panel">
+            <h3 class="panel-title">
+              <span class="version-tag">一级内存</span>
+            </h3>
+            <MemoryMeminfo :step-id="props.stepId" @has-data="handleMeminfoDataStatus" />
+          </div>
+        </el-col>
+      </el-row>
+
+      <el-row v-if="hasNativeMemoryData && hasTimelineData" :gutter="20">
         <el-col :span="24">
           <div class="data-panel">
             <h3 class="panel-title">
@@ -23,6 +37,7 @@
               @time-point-stats-updated="handleTimePointStatsUpdated"
               @drill-state-change="handleDrillStateChange"
               @point-selection-context="handlePointSelectionContext"
+              @has-data="handleTimelineDataStatus"
             />
           </div>
         </el-col>
@@ -108,6 +123,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import MemoryTimelineChart from './MemoryTimelineChart.vue';
 import MemoryOutstandingFlameGraph from './MemoryOutstandingFlameGraph.vue';
+import MemoryMeminfo from './MemoryMeminfo.vue';
 import { loadNativeMemoryMetadataFromDb } from '@/stores/nativeMemory';
 import type { NativeMemoryStepData } from '@/stores/nativeMemory';
 
@@ -128,11 +144,15 @@ const props = defineProps<{ stepId: number }>();
 
 const nativeMemoryData = ref<NativeMemoryStepData | null>(null);
 const isNativeMemoryLoading = ref(false);
+const hasMeminfoData = ref(false);
+const hasTimelineData = ref(false);
 
 const selectedTimePoint = ref<number | null>(null);
 
 const stepData = computed(() => nativeMemoryData.value);
-const hasData = computed(() => Boolean(stepData.value));
+const hasNativeMemoryData = computed(() => Boolean(stepData.value));
+const isLoading = computed(() => isNativeMemoryLoading.value);
+const hasAnyData = computed(() => hasNativeMemoryData.value || hasMeminfoData.value);
 
 const selectedTimePointStats = ref<TimePointStats>(createEmptyTimePointStats());
 
@@ -218,6 +238,14 @@ async function ensureNativeMemoryDataLoaded() {
   } finally {
     isNativeMemoryLoading.value = false;
   }
+}
+
+function handleMeminfoDataStatus(hasData: boolean) {
+  hasMeminfoData.value = hasData;
+}
+
+function handleTimelineDataStatus(hasData: boolean) {
+  hasTimelineData.value = hasData;
 }
 
 function handleTimePointSelected(timePoint: number | null) {

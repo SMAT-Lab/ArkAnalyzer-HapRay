@@ -228,3 +228,251 @@ detections:
     fileRules:
       - type: "filename"
         patterns: ["libweex_ability\\.so$", "libweex_framework\\.so$"]
+
+  # ==================== Cangjie (仓颉) ====================
+  - id: "Cangjie_Framework"
+    name: "Cangjie Framework"
+    type: "Cangjie"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libcj_.*\\.so$", "libcjhybridview\\.so$", "libcontact_cj.*\\.so$"]
+
+  # ==================== @duke/logan ====================
+  - id: "@duke/logan"
+    name: "@duke/logan"
+    type: "@duke/logan"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblogan\\.so$"]
+
+  # ==================== LevelDB ====================
+  - id: "@devzeng/leveldb"
+    name: "@devzeng/leveldb"
+    type: "@devzeng/leveldb"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libleveldb\\.so$"]
+
+  # ==================== WebSocket/Crypto ====================
+  - id: "@duke/websocket-client"
+    name: "@duke/websocket-client"
+    type: "@duke/websocket-client"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libwebsocketClient\\.so$"]
+
+  # ==================== @ohos/flate2 ====================
+  - id: "@ohos/flate2"
+    name: "@ohos/flate2"
+    type: "@ohos/flate2"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libflate2\\.so$"]
+
+  # ==================== @ohos/gpu_transform ====================
+  - id: "GPU_Transform"
+    name: "@ohos/gpu_transform"
+    type: "@ohos/gpu_transform"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libnativeGpu\\.so$"]
+
+  # ==================== @ohos/imageknifepro ====================
+  - id: "@ohos/imageknifepro"
+    name: "@ohos/imageknifepro"
+    type: "@ohos/imageknifepro"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libimageknifepro\\.so$"]
+
+  # ==================== @tencent/libpag ====================
+  - id: "PAG_Framework"
+    name: "@tencent/libpag"
+    type: "@tencent/libpag"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libpag\\.so$", "libnative_libpag\\.so$"]
+
+  # ==================== @ohos/linphone ====================
+  - id: "@ohos/linphone"
+    name: "@ohos/linphone"
+    type: "@ohos/linphone"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblinphone\\.so$", "libbelle-sip\\.so$", "libmediastreamer2\\.so$", "libohos_linphone\\.so$", "libbctoolbox\\.so$", "libbelr\\.so$", "libortp\\.so$"]
+
+  # ==================== @ohos/lottie-turbo ====================
+  - id: "@ohos/lottie-turbo"
+    name: "@ohos/lottie-turbo"
+    type: "@ohos/lottie-turbo"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["liblottie-turbo\\.so$"]
+
+  # ==================== @tencent/mmkv ====================
+  - id: "@tencent/mmkv"
+    name: "@tencent/mmkv"
+    type: "@tencent/mmkv"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libmmkv\\.so$"]
+
+  # ==================== @ohos/mp4parser ====================
+  - id: "@ohos/mp4parser"
+    name: "@ohos/mp4parser"
+    type: "@ohos/mp4parser"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libmp4parser_napi\\.so$"]
+
+   # ==================== @ohos/vap ====================
+  - id: "@ohos/vap"
+    name: "@ohos/vap"
+    type: "@ohos/vap"
+    confidence: 0.95
+    fileRules:
+      - type: "filename"
+        patterns: ["libvap\\.so$"]
+
+  - id: '@hw-agconnect/hmcore'
+    name: '@hw-agconnect/hmcore'
+    type: '@hw-agconnect/hmcore'
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libagccrypto\\.so$"
+          - "libagcmbedtls\\.so$"
+
+  - id: '@kuiklybase/knoi'
+    name: '@kuiklybase/knoi'
+    type: '@kuiklybase/knoi'
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libknoi\\.so$"
+
+  - id: '@mysoft/archive'
+    name: '@mysoft/archive'
+    type: '@mysoft/archive'
+    confidence: 0.95
+    fileRules:
+    - type: filename
+      patterns:
+          - "libarchive\\.so$"
+          - "libmyarchive\\.so$"
+
+  - id: '@tencentyun/libiotvideo'
+    name: '@tencentyun/libiotvideo'
+    type: '@tencentyun/libiotvideo'
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "liblibiotvideo\\.so$"
+
+  - id: '@volcengine/apmplus'
+    name: '@volcengine/apmplus'
+    type: '@volcengine/apmplus'
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libnpth\\.so$"
+
+  - id: '@wolfx/untar'
+    name: '@wolfx/untar'
+    type: '@wolfx/untar'
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libboundscheck\\.so$"
+          - "libctar\\.so$"
+          - "libtar\\.so$"
+
+  - id: '@ohos/ijkplayer'
+    name: '@ohos/ijkplayer'
+    type: '@ohos/ijkplayer'
+    confidence: 0.95
+    fileRules:
+    - type: filename
+      patterns:
+        - "libijkplayer\\.so$"
+        - "libijkplayer_audio_napi\\.so$"
+        - "libijkplayer_napi\\.so$"
+        - "libijksdl\\.so$"
+          
+
+  - id: '@zaiohos/ijkplayer-surface'
+    name: '@zaiohos/ijkplayer-surface'
+    type: '@zaiohos/ijkplayer-surface'
+    confidence: 0.95
+    fileRules:
+    - type: filename
+      patterns:
+        - "libijkplayer_surface_napi\\.so$"
+
+  - id: jlreader
+    name: jlreader
+    type: jlreader
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libjlreader\\.so$"
+
+  - id: ksadsdk
+    name: ksadsdk
+    type: ksadsdk
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libksadsdk\\.so$"
+          - "libkwai-v8-lite\\.so$"
+
+  - id: '@ohos/aki'
+    name: '@ohos/aki'
+    type: '@ohos/aki'
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libaki\\.so$"
+          - "libaki_jsbind\\.so$"
+
+  - id: rapid_kit
+    name: rapid_kit
+    type: rapid_kit
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libPPCS\\.so$"
+          - "libRapidCore\\.so$"
+          - "libRapidMedia\\.so$"
+          - "libRapidSDL\\.so$"
+          - "libnative_rapid_kit\\.so$"
+
+  - id: shiply
+    name: shiply
+    type: shiply
+    confidence: 0.95
+    fileRules:
+      - type: filename
+        patterns:
+          - "libshiply\\.so$"
