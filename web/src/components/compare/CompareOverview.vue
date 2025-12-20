@@ -144,10 +144,10 @@
               <div class="nav-section">
                 <h4>按步骤对比分析</h4>
                 <div class="nav-cards">
-                  <div v-for="step in testSteps" :key="step.id" class="nav-card" @click="navigateToStep(step.id)">
+                  <div v-for="(step, index) in testSteps" :key="step.id" class="nav-card" @click="navigateToStep(step.id)">
                     <div class="nav-card-header">
                       <span class="step-number">步骤{{ step.id }}</span>
-                      <span class="step-count">{{ formatNumber(step.count) }}</span>
+                      <span class="step-count">{{ formatNumber(getStepPerfData(index).count) }}</span>
                     </div>
                     <div class="nav-card-title" :title="step.step_name">{{ step.step_name }}</div>
                     <div class="nav-card-actions">
@@ -226,16 +226,27 @@ const comparePerformanceData = computed(() =>
   }
 );
 
-// 测试步骤数据
-const testSteps = computed(() =>
-  perfData.steps.map((step, index) => ({
-    id: index + 1,
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
+const testSteps = computed(() => {
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
+  }));
+});
+
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData = (stepIndex: number) => {
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const step = perfData.steps[stepIndex];
+  return {
     count: step.count,
     round: step.round,
     perf_data_path: step.perf_data_path,
-  }))
-);
+  };
+};
 
 // 图表数据
 const pieChartTitle = computed(() => 

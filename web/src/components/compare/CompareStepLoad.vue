@@ -240,25 +240,31 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
   const mergedData: PerfData = { steps: [] };
 
   // 合并基线数据
+  // step_id 和 step_name 已移到 jsonDataStore.steps 中
   const baselineStep = {
-    step_name: "基线",
-    step_id: 0,
     count: baselineData.steps.reduce((sum, step) => sum + step.count, 0),
     round: baselineData.steps.reduce((sum, step) => sum + step.round, 0),
     perf_data_path: baselineData.steps.map(s => s.perf_data_path).join(";"),
-    data: baselineData.steps.filter(step => step.step_id === cur_step_id).flatMap(step =>
+    data: baselineData.steps.filter((step, index) => {
+      // step_id 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
+      const stepId = index + 1;
+      return stepId === cur_step_id;
+    }).flatMap(step =>
       step.data.map(item => ({ ...item }))
     )
   };
 
   // 合并对比数据
+  // step_id 和 step_name 已移到 jsonDataStore.steps 中
   const comparisonStep = {
-    step_name: "迭代",
-    step_id: 1,
     count: compareData.steps.reduce((sum, step) => sum + step.count, 0),
     round: compareData.steps.reduce((sum, step) => sum + step.round, 0),
     perf_data_path: compareData.steps.map(s => s.perf_data_path).join(";"),
-    data: compareData.steps.filter(step => step.step_id === cur_step_id).flatMap(step =>
+    data: compareData.steps.filter((step, index) => {
+      // step_id 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
+      const stepId = index + 1;
+      return stepId === cur_step_id;
+    }).flatMap(step =>
       step.data.map(item => ({ ...item }))
     )
   };

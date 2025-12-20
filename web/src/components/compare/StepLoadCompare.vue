@@ -26,7 +26,7 @@
         @click="handleStepClick(0)">
         <div class="step-header">
           <span class="step-order">STEP 0</span>
-          <span class="step-duration">{{ getTotalTestStepsCount(testSteps) }}</span>
+          <span class="step-duration">{{ getTotalTestStepsCount() }}</span>
         </div>
         <div class="step-name">全部步骤</div>
       </div>
@@ -37,7 +37,7 @@
         @click="handleStepClick(step.id)">
         <div class="step-header">
           <span class="step-order">STEP {{ step.id }}</span>
-          <span class="step-duration">{{ formatDuration(step.count) }}</span>
+          <span class="step-duration">{{ formatDuration(getStepPerfData(index).count) }}</span>
         </div>
         <div class="step-name" :title="step.step_name">{{ step.step_name }}</div>
       </div>
@@ -207,16 +207,33 @@ const hasCompareData = computed(() => {
 // 当前步骤索引
 const currentStepIndex = ref(0);
 
-// 测试步骤数据
-const testSteps = computed(() =>
-  perfData.steps.map((step, index) => ({
-    id: index + 1,
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
+const testSteps = computed(() => {
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
+  }));
+});
+
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData = (stepIndex: number) => {
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const step = perfData.steps[stepIndex];
+  return {
     count: step.count,
     round: step.round,
     perf_data_path: step.perf_data_path,
-  }))
-);
+  };
+};
+
+// 获取所有步骤的总计数
+const getTotalTestStepsCount = () => {
+  if (!perfData || !perfData.steps) return 0;
+  return perfData.steps.reduce((total, step) => total + step.count, 0);
+};
 
 // 图表数据
 const pieChartTitle = computed(() => 
@@ -239,10 +256,6 @@ watch(currentStepIndex, (stepId) => {
   stepDiff.value = compareLineChartData.value && compareLineChartData.value.steps.length >= 2 ? calculateCategoryCountDifference(compareLineChartData.value) : [];
 });
 
-// 工具函数
-const getTotalTestStepsCount = (testSteps: {count: number}[]) => {
-  return testSteps.reduce((total, step) => total + step.count, 0);
-};
 
 const formatDuration = (milliseconds: number) => {
   return `指令数：${milliseconds}`;
@@ -261,9 +274,8 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
   const mergedData: PerfData = { steps: [] };
 
   // 合并基线数据
+  // step_id 和 step_name 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
   const baselineStep = cur_step_id === 0 ? {
-    step_name: "基线",
-    step_id: 0,
     count: baselineData.steps.reduce((sum, step) => sum + step.count, 0),
     round: baselineData.steps.reduce((sum, step) => sum + step.round, 0),
     perf_data_path: baselineData.steps.map(s => s.perf_data_path).join(";"),
@@ -271,20 +283,20 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
       step.data.map(item => ({ ...item }))
     )
   } : {
-    step_name: "基线",
-    step_id: 0,
     count: baselineData.steps.reduce((sum, step) => sum + step.count, 0),
     round: baselineData.steps.reduce((sum, step) => sum + step.round, 0),
     perf_data_path: baselineData.steps.map(s => s.perf_data_path).join(";"),
-    data: baselineData.steps.filter(step => step.step_id === cur_step_id).flatMap(step =>
+    data: baselineData.steps.filter((step, index) => {
+      const stepId = index + 1;
+      return stepId === cur_step_id;
+    }).flatMap(step =>
       step.data.map(item => ({ ...item }))
     )
   };
 
   // 合并对比数据
+  // step_id 和 step_name 已移到 jsonDataStore.steps 中，这里使用索引 + 1 作为 step_id
   const comparisonStep = cur_step_id === 0 ? {
-    step_name: "迭代",
-    step_id: 1,
     count: compareData.steps.reduce((sum, step) => sum + step.count, 0),
     round: compareData.steps.reduce((sum, step) => sum + step.round, 0),
     perf_data_path: compareData.steps.map(s => s.perf_data_path).join(";"),
@@ -292,12 +304,13 @@ function mergeJSONData(baselineData: PerfData, compareData: PerfData, cur_step_i
       step.data.map(item => ({ ...item }))
     )
   } : {
-    step_name: "迭代",
-    step_id: 1,
     count: compareData.steps.reduce((sum, step) => sum + step.count, 0),
     round: compareData.steps.reduce((sum, step) => sum + step.round, 0),
     perf_data_path: compareData.steps.map(s => s.perf_data_path).join(";"),
-    data: compareData.steps.filter(step => step.step_id === cur_step_id).flatMap(step =>
+    data: compareData.steps.filter((step, index) => {
+      const stepId = index + 1;
+      return stepId === cur_step_id;
+    }).flatMap(step =>
       step.data.map(item => ({ ...item }))
     )
   };
