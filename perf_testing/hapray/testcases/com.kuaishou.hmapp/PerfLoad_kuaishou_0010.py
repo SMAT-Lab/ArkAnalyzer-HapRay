@@ -47,7 +47,7 @@ class PerfLoad_kuaishou_0010(PerfTestCase):
         time.sleep(2)
 
         # 点击收藏的第一个视频
-        self.driver.touch(self.convert_coordinate(195, 1489))
+        self.driver.touch(self.convert_coordinate(195, 1767))
         time.sleep(2)
         # 点击收藏的第一个视频
         self.driver.touch(self.convert_coordinate(997, 1468))
