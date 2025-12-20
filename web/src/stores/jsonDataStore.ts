@@ -33,9 +33,12 @@ export interface BasicInfo {
   timestamp: number;
 }
 
-interface PerfDataStep {
+interface Step {
   step_name: string;
   step_id: number;
+}
+
+export interface PerfDataStep {
   count: number;
   round: number;
   perf_data_path: string;
@@ -152,6 +155,7 @@ interface CallstackFrame {
   path: string;
   symbol_id: number;
   symbol: string;
+  value?: number;  // 每个深度的负载值
 }
 
 interface SampleCallchain {
@@ -371,6 +375,7 @@ export interface JSONData {
   type: number;
   versionCode: number;
   basicInfo: BasicInfo;
+  steps: Step[];
   perf?: PerfData; // 负载数据（可选）
   trace?: TraceData;
   more?: MoreData;
@@ -899,6 +904,7 @@ export interface CompressedUIAnimateData {
 interface JsonDataState {
   version: string | null;
   basicInfo: BasicInfo | null;
+  steps: Step[] | null;
   compareBasicInfo: BasicInfo | null;
   perfData: PerfData | null;
   frameData: FrameData | null;
@@ -987,6 +993,7 @@ export const useJsonDataStore = defineStore('config', {
   state: (): JsonDataState => ({
     version: null,
     basicInfo: null,
+    steps: null,
     compareBasicInfo: null,
     perfData: null,
     frameData: null,
@@ -1104,7 +1111,7 @@ export const useJsonDataStore = defineStore('config', {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
-
+      this.steps = jsonData.steps;
       this.perfData = jsonData.perf || null;
       this.baseMark = window.baseMark;
       this.compareMark = window.compareMark;

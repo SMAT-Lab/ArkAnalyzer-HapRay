@@ -248,6 +248,7 @@
           "type": "str",
           "label": "应用包名",
           "required": false,
+          "nargs": "+",
           "help": "SIMPLE模式需要的应用包名"
         },
         "pids": {

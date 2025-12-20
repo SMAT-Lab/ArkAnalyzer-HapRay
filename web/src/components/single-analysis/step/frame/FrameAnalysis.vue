@@ -254,34 +254,22 @@ width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
                         </div>
                     </div>
                 </div>
+            </div>
 
+            <!-- 火焰图单独一行 -->
+            <div class="flamegraph-section">
                 <div class="callstack-info">
                     <div class="info-title">
-                        <i class="fas fa-code-branch"></i>
-                        调用栈信息
+                        <i class="fas fa-fire"></i>
+                        调用栈火焰图
                     </div>
-                    <div
-v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
-                        class="callstack-list">
-                        <div
-v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
-                            class="callstack-item">
-                            <div class="callstack-header">
-                                <div class="callstack-timestamp">
-                                    调用栈 {{ idx + 1 }}
-                                </div>
-                                <div class="callstack-load">
-                                    负载: {{ chain.load_percentage.toFixed(2) }}%
-                                </div>
-                            </div>
-                            <div class="callstack-chain">
-                                <div v-for="(call, cidx) in chain.callchain" :key="cidx" class="callstack-frame">
-                                    <i class="fas fa-level-down-alt"></i>
-                                    <div>[{{ call.depth }}] {{ call.path }} - {{ call.symbol }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <EmptyFrameFlameGraph
+                        v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
+                        :data="selectedEmptyFrame.sample_callchains"
+                        :thread-name="selectedEmptyFrame.thread_name"
+                        :process-name="selectedEmptyFrame.process_name"
+                        :thread-id="selectedEmptyFrame.thread_id"
+                    />
                     <div v-else class="placeholder">
                         <i class="fas fa-exclamation-circle"></i>
                         <h3>未找到调用栈信息</h3>
@@ -564,6 +552,7 @@ class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
 import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultVSyncAnomalyData, getDefaultVSyncAnomalyStepData, safeProcessVSyncAnomalyData } from '../../../../stores/jsonDataStore.ts';
+import EmptyFrameFlameGraph from './EmptyFrameFlameGraph.vue';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -1946,9 +1935,12 @@ body {
 }
 
 .detail-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 25px;
+    display: block;
+    margin-bottom: 25px;
+}
+
+.flamegraph-section {
+    margin-top: 25px;
 }
 
 

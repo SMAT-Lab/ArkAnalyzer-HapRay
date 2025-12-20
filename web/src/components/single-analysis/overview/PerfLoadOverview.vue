@@ -37,7 +37,7 @@
         <div class="card-icon">⚡</div>
         <div class="card-content">
           <h3>总指令数</h3>
-          <div class="card-value">{{ formatNumber(getTotalTestStepsCount(testSteps)) }}</div>
+          <div class="card-value">{{ formatNumber(getTotalTestStepsCount()) }}</div>
           <p class="card-desc">所有步骤的指令数总和</p>
         </div>
       </div>
@@ -46,7 +46,7 @@
         <div class="card-icon">🔋</div>
         <div class="card-content">
           <h3>总功耗</h3>
-          <div class="card-value">{{ formatEnergy(getTotalTestStepsCount(testSteps)) }}</div>
+          <div class="card-value">{{ formatEnergy(getTotalTestStepsCount()) }}</div>
           <p class="card-desc">预估的总功耗消耗</p>
         </div>
       </div>
@@ -55,7 +55,7 @@
         <div class="card-icon">📈</div>
         <div class="card-content">
           <h3>平均负载</h3>
-          <div class="card-value">{{ formatNumber(Math.round(getTotalTestStepsCount(testSteps) / testSteps.length)) }}</div>
+          <div class="card-value">{{ formatNumber(Math.round(getTotalTestStepsCount() / testSteps.length)) }}</div>
           <p class="card-desc">每个步骤的平均指令数</p>
         </div>
       </div> -->
@@ -120,7 +120,7 @@
         </el-table-column>
         <el-table-column label="占比" width="100">
           <template #default="scope">
-            {{ ((scope.row.count / getTotalTestStepsCount(testSteps)) * 100).toFixed(1) }}%
+            {{ ((scope.row.count / getTotalTestStepsCount()) * 100).toFixed(1) }}%
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200">
@@ -136,7 +136,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import PieChart from '../../common/charts/PieChart.vue';
 import BarChart from '../../common/charts/BarChart.vue';
 import LineChart from '../../common/charts/LineChart.vue';
@@ -151,23 +151,30 @@ const perfData = jsonDataStore.perfData;
 
 console.log('负载总览组件获取到的 JSON 数据:');
 
-const testSteps = ref(
-  perfData!.steps.map((step, index) => ({
-    id: index + 1,
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
+const testSteps = computed(() => {
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step) => ({
+    id: step.step_id,
     step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
-  }))
-);
+    count: getStepPerfData(step.step_id - 1),
+  }));
+});
 
-interface TestStep {
-  id: number;
-  step_name: string;
-  count: number;
-  round: number;
-  perf_data_path: string;
-}
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData  = (stepIndex: number) => {
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return 0;
+  }
+  const step = perfData.steps[stepIndex];
+  return step.count;
+};
+
+// 获取所有步骤的总计数
+const getTotalTestStepsCount = () => {
+  if (!perfData || !perfData.steps) return 0;
+  return perfData.steps.reduce((total, step) => total + step.count, 0);
+};
 
 const performanceData = ref({
   app_name: basicInfo!.app_name,
@@ -175,14 +182,6 @@ const performanceData = ref({
   app_version: basicInfo!.app_version,
   scene: basicInfo!.scene,
 });
-
-const getTotalTestStepsCount = (testSteps: TestStep[]) => {
-  let total = 0;
-  testSteps.forEach((step) => {
-    total += step.count;
-  });
-  return total;
-};
 
 // 格式化数字
 const formatNumber = (num: number) => {
@@ -205,8 +204,8 @@ const formatInstructions = (cellValue: number) => {
   return formatNumber(cellValue);
 };
 
-const scenePieData = ref(processJson2PieChartData(perfData!, 0));
-const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
+const scenePieData = ref(perfData ? processJson2PieChartData(perfData, 0) : { legendData: [], seriesData: [] });
+const pieChartTitle = perfData?.steps?.[0]?.data?.[0]?.eventType == 0 ? 'cycles' : 'instructions';
 
 // 事件处理
 const emit = defineEmits<{
