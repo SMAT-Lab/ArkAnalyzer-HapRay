@@ -36,6 +36,15 @@ class PerfLoad_kuaishou_0050(PerfTestCase):
         self.driver.touch(self.convert_coordinate(540, 2253))
         time.sleep(2)
 
+        self.touch_by_text('翻转', 2)
+        self.touch_by_text('美化', 2)
+        self.touch_by_text('美颜', 2)
+        self.touch_by_text('磨皮', 2)
+        self.touch_by_text('滤镜', 2)
+        self.touch_by_text('自然', 2)
+        # 点击空白退出美化
+        self.driver.touch(self.convert_coordinate(649, 911))
+
         def step1():
             # 点击拍摄按钮
             self.driver.touch(self.convert_coordinate(541, 2000))
