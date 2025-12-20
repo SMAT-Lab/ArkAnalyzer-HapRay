@@ -91,7 +91,11 @@ class DataCollector:
         perf_step_dir, trace_step_dir = self._get_step_directories(step_id, report_path)
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
         self.process_manager.save_process_info(perf_step_dir)
-        self.capture_ui_handler.capture_ui(step_id, report_path, 'start')
+
+        # 检查UI采集开关
+        if Config.get('ui.capture_enable', False):
+            self.capture_ui_handler.capture_ui(step_id, report_path, 'start')
+
         self.collect_memory_data(step_id, report_path)
 
         Log.info(f'步骤 {step_id} 开始采集准备完成')
@@ -121,7 +125,11 @@ class DataCollector:
         self.data_transfer.transfer_trace_data(device_file, local_trace_path)
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
-        self.capture_ui_handler.capture_ui(step_id, report_path, 'end')
+
+        # 检查UI采集开关
+        if Config.get('ui.capture_enable', False):
+            self.capture_ui_handler.capture_ui(step_id, report_path, 'end')
+
         self.collect_memory_data(step_id, report_path)
 
         Log.info(f'步骤 {step_id} 数据采集结束处理完成')

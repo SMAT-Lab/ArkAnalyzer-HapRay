@@ -312,6 +312,47 @@
           "help": "输出Excel文件路径（默认：当前目录下的compare_result.xlsx）"
         }
       }
+    },
+    "ui-compare": {
+      "name": "UI组件树对比",
+      "description": "对比两个UI组件树并标记差异",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "tree1": {
+          "type": "file",
+          "label": "组件树1",
+          "required": true,
+          "help": "第一个组件树文件路径"
+        },
+        "screenshot1": {
+          "type": "file",
+          "label": "截图1",
+          "required": true,
+          "help": "第一个截图文件路径"
+        },
+        "tree2": {
+          "type": "file",
+          "label": "组件树2",
+          "required": true,
+          "help": "第二个组件树文件路径"
+        },
+        "screenshot2": {
+          "type": "file",
+          "label": "截图2",
+          "required": true,
+          "help": "第二个截图文件路径"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "default": "./ui_compare_output",
+          "short": "o",
+          "help": "输出目录（默认：./ui_compare_output）"
+        }
+      }
     }
   }
 }
