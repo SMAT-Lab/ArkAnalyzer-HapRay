@@ -571,18 +571,41 @@ class ToolPage(QWidget):
     def get_params(self) -> dict[str, Any]:
         """获取参数值"""
         params = {}
+        logger.debug(f'开始收集参数，共有 {len(self.param_widgets)} 个控件')
         for param_name, widget in self.param_widgets.items():
+            logger.debug(f'处理参数: {param_name}, 控件类型: {type(widget).__name__}')
             if isinstance(widget, QCheckBox):
                 params[param_name] = widget.isChecked()
+                logger.debug(f'  -> QCheckBox 值: {params[param_name]}')
             elif isinstance(widget, QSpinBox):
                 params[param_name] = widget.value()
+                logger.debug(f'  -> QSpinBox 值: {params[param_name]}')
             elif isinstance(widget, MultiSelectComboBox):
                 # 多选下拉框，返回选中项列表
                 checked_items = widget.get_checked_items()
                 if checked_items:
                     params[param_name] = checked_items
+                    logger.debug(f'  -> MultiSelectComboBox 值: {params[param_name]}')
+                else:
+                    logger.debug(f'  -> MultiSelectComboBox 无选中项，跳过')
             elif isinstance(widget, QComboBox):
-                params[param_name] = widget.currentText()
+                current_text = widget.currentText()
+                logger.debug(f'  -> QComboBox 原始值: "{current_text}"')
+                # 过滤掉占位符文本和空值
+                if current_text and current_text not in ['加载中...', '请选择...', '']:
+                    params[param_name] = current_text
+                    logger.debug(f'  -> QComboBox 最终值: "{current_text}"')
+                else:
+                    logger.debug(f'  -> QComboBox 值被过滤: "{current_text}"')
+            elif isinstance(widget, QLineEdit):
+                # 直接处理 QLineEdit（必须在 QWidget 之前检查）
+                value = widget.text().strip()
+                logger.debug(f'  -> QLineEdit 原始值: "{value}"')
+                if value:
+                    params[param_name] = value
+                    logger.debug(f'  -> QLineEdit 最终值: "{value}"')
+                else:
+                    logger.debug(f'  -> QLineEdit 值为空，跳过')
             elif isinstance(widget, QWidget):
                 # 检查是否是多值控件（有QVBoxLayout）
                 layout = widget.layout()
@@ -614,17 +637,27 @@ class ToolPage(QWidget):
                                 params[param_name] = values
                         else:
                             params[param_name] = values
+                        logger.debug(f'  -> 多值控件 值: {params[param_name]}')
+                    else:
+                        logger.debug(f'  -> 多值控件 无值，跳过')
                 else:
                     # file or dir 单值控件
                     line_edit = widget.findChild(QLineEdit)
                     if line_edit:
                         value = line_edit.text().strip()
+                        logger.debug(f'  -> file/dir控件 原始值: "{value}"')
                         if value:
                             params[param_name] = value
-            else:  # QLineEdit
-                value = widget.text().strip()
-                if value:
-                    params[param_name] = value
+                            logger.debug(f'  -> file/dir控件 最终值: "{value}"')
+                        else:
+                            logger.debug(f'  -> file/dir控件 值为空，跳过')
+                    else:
+                        logger.debug(f'  -> QWidget 未找到 QLineEdit 子控件')
+            else:
+                # 未知控件类型
+                logger.warning(f'  -> 未知控件类型: {type(widget).__name__}')
+
+        logger.info(f'收集到的参数: {params}')
         return params
 
     def execute_tool(self):

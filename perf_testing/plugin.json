@@ -231,25 +231,22 @@
           "help": "选择模式：0 COMMUNITY, 1 SIMPLE"
         },
         "perfs": {
-          "type": "str",
+          "type": "file",
           "label": "Perf数据路径",
           "required": false,
-          "nargs": "+",
-          "help": "SIMPLE模式需要的perf数据路径（支持多个文件）"
+          "help": "SIMPLE模式需要的perf数据文件（支持多个文件）"
         },
         "traces": {
-          "type": "str",
+          "type": "file",
           "label": "Trace文件路径",
           "required": false,
-          "nargs": "+",
-          "help": "SIMPLE模式可选的trace文件路径（支持多个文件）"
+          "help": "SIMPLE模式可选的trace文件（支持多个文件）"
         },
         "package-name": {
           "type": "str",
           "label": "应用包名",
           "required": false,
-          "nargs": "+",
-          "help": "SIMPLE模式需要的应用包名"
+          "help": "SIMPLE模式需要的应用包名（单个包名字符串）"
         },
         "pids": {
           "type": "int",
