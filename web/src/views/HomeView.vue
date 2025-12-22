@@ -68,6 +68,7 @@
           <NewDataAnalysis v-else-if="showPage.startsWith('compare_step_new_')" :step="getCompareStepId(showPage)" />
           <Top10DataCompare v-else-if="showPage.startsWith('compare_step_top10_')" :step="getCompareStepId(showPage)" />
           <FaultTreeCompare v-else-if="showPage.startsWith('compare_step_fault_tree_')" :step="getCompareStepId(showPage)" />
+          <UICompare v-else-if="showPage.startsWith('compare_step_ui_')" :step-id="getCompareStepId(showPage)" />
           <SceneLoadCompare v-else-if="showPage === 'compare_scene_load'" />
           <StepLoadCompare v-else-if="showPage === 'compare_step_load'" />
           <DetailDataCompare v-else-if="showPage === 'compare_detail_data'" />
@@ -137,6 +138,7 @@ import PerfLoadAnalysis from '@/components/single-analysis/step/load/PerfLoadAna
 import PerfFrameAnalysis from '@/components/single-analysis/step/frame/PerfFrameAnalysis.vue';
 import FaultTreeAnalysis from '@/components/single-analysis/step/fault-tree/FaultTreeAnalysis.vue';
 import CompareOverview from '@/components/compare/CompareOverview.vue';
+import UICompare from '@/components/compare/UICompare.vue';
 import CompareStepLoad from '@/components/compare/CompareStepLoad.vue';
 import SceneLoadCompare from '@/components/compare/SceneLoadCompare.vue';
 import StepLoadCompare from '@/components/compare/StepLoadCompare.vue';
@@ -193,6 +195,7 @@ const pageTitles: Record<string, string> = {
   'perf_load_overview': '负载总览',
   'perf_frame': '帧分析',
   'compare_overview': '版本对比总览',
+  'compare_ui': 'UI对比',
   'compare_scene_load': '场景负载对比',
   'compare_step_load': '步骤负载对比',
   'compare_detail_data': '详细数据对比',
@@ -208,6 +211,7 @@ const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
   'perf_load_overview': '单版本分析 / 负载总览',
   'compare_overview': '版本对比 / 总览对比',
+  'compare_ui': '版本对比 / UI对比',
   'compare_scene_load': '版本对比 / 场景负载对比',
   'compare_step_load': '版本对比 / 步骤负载对比',
   'compare_detail_data': '版本对比 / 详细数据对比',

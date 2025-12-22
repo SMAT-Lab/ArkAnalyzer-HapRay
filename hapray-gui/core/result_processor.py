@@ -23,9 +23,16 @@ class ResultProcessor:
         else:
             self.output_dir = Path(self.config.get_output_dir())
 
-    def save_result(self, tool_name: str, result: ToolResult, params: dict[str, Any]) -> str:
+    def save_result(self, tool_name: str, result: ToolResult, params: dict[str, Any], action_name: str = None, menu_category: str = None) -> str:
         """
         保存执行结果
+
+        Args:
+            tool_name: 工具名称
+            result: 执行结果
+            params: 参数
+            action_name: 动作名称（可选）
+            menu_category: 菜单分类（可选）
 
         Returns:
             保存的文件路径
@@ -38,6 +45,8 @@ class ResultProcessor:
         result_file = result_dir / 'result.json'
         result_data = {
             'tool_name': tool_name,
+            'action_name': action_name,
+            'menu_category': menu_category,
             'timestamp': timestamp,
             'success': result.success,
             'message': result.message,

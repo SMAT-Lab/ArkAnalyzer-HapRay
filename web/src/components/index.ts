@@ -63,6 +63,7 @@ export { default as NewDataAnalysis } from './compare/NewDataAnalysis.vue';
 export { default as Top10DataCompare } from './compare/Top10DataCompare.vue';
 export { default as FaultTreeCompare } from './compare/FaultTreeCompare.vue';
 export { default as SceneLoadCompare } from './compare/SceneLoadCompare.vue';
+export { default as UICompare } from './compare/UICompare.vue';
 
 // ==================== 多版本趋势 ====================
 export { default as PerfMulti } from './multi-version/PerfMulti.vue';
