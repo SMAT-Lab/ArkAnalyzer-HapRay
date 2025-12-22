@@ -13,11 +13,12 @@ from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMessageBox,
     QPushButton,
     QSplitter,
     QTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -72,31 +73,32 @@ class ResultViewer(QWidget):
         list_label.setStyleSheet('font-size: 16px; font-weight: bold; color: #667eea; padding: 8px 0px;')
         left_layout.addWidget(list_label)
 
-        self.result_list = QListWidget()
-        self.result_list.itemSelectionChanged.connect(self.on_result_selected)
-        self.result_list.setStyleSheet("""
-            QListWidget {
+        self.result_tree = QTreeWidget()
+        self.result_tree.setHeaderHidden(True)
+        self.result_tree.itemSelectionChanged.connect(self.on_result_selected)
+        self.result_tree.setStyleSheet("""
+            QTreeWidget {
                 border: 1px solid #e5e7eb;
                 border-radius: 8px;
                 background-color: #ffffff;
                 alternate-background-color: rgba(102, 126, 234, 0.02);
             }
-            QListWidget::item {
+            QTreeWidget::item {
                 padding: 8px 12px;
                 border-radius: 4px;
                 margin: 2px 4px;
                 border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             }
-            QListWidget::item:selected {
+            QTreeWidget::item:selected {
                 background-color: rgba(102, 126, 234, 0.15);
                 color: #667eea;
                 font-weight: bold;
             }
-            QListWidget::item:hover {
+            QTreeWidget::item:hover {
                 background-color: rgba(102, 126, 234, 0.08);
             }
         """)
-        left_layout.addWidget(self.result_list)
+        left_layout.addWidget(self.result_tree)
 
         splitter.addWidget(left_widget)
 
@@ -136,38 +138,59 @@ class ResultViewer(QWidget):
 
     def refresh_results(self):
         """刷新结果列表"""
-        self.result_list.clear()
+        self.result_tree.clear()
 
         # 获取所有工具的结果历史
         history = self.processor.get_result_history()
 
+        # 按时间戳降序排序（最新的在前）
+        history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+
+        # 按菜单分类组织数据
+        menu_groups = {}
         for result_data in history:
-            tool_name = result_data.get('tool_name', 'Unknown')
-            timestamp = result_data.get('timestamp', '')
-            success = result_data.get('success', False)
+            menu_category = result_data.get('menu_category', '其他')
+            if menu_category not in menu_groups:
+                menu_groups[menu_category] = []
+            menu_groups[menu_category].append(result_data)
 
-            status = '✓' if success else '✗'
-            item_text = f'[{status}] {tool_name} - {timestamp}'
+        # 构建树形结构
+        for menu_category in sorted(menu_groups.keys()):
+            results = menu_groups[menu_category]
 
-            self.result_list.addItem(item_text)
-            # 保存结果数据到item
-            item = self.result_list.item(self.result_list.count() - 1)
-            item.setData(Qt.UserRole, result_data)
+            # 创建一级菜单项
+            menu_item = QTreeWidgetItem(self.result_tree)
+            menu_item.setText(0, f'{menu_category} ({len(results)})')
+            menu_item.setExpanded(True)
+
+            # 添加二级结果项
+            for result_data in results:
+                action_name = result_data.get('action_name', '')
+                timestamp = result_data.get('timestamp', '')
+                success = result_data.get('success', False)
+
+                status = '✓' if success else '✗'
+                item_text = f'[{status}] {action_name} - {timestamp}' if action_name else f'[{status}] {timestamp}'
+
+                result_item = QTreeWidgetItem(menu_item)
+                result_item.setText(0, item_text)
+                result_item.setData(0, Qt.UserRole, result_data)
 
     def on_result_selected(self):
         """结果项被选中"""
-        current_item = self.result_list.currentItem()
+        current_item = self.result_tree.currentItem()
         if not current_item:
             # 没有选中项时禁用按钮
             self.open_dir_button.setEnabled(False)
             self.copy_path_button.setEnabled(False)
             return
 
-        result_data = current_item.data(Qt.UserRole)
+        result_data = current_item.data(0, Qt.UserRole)
         if not result_data:
-            # 没有数据时禁用按钮
+            # 没有数据时禁用按钮（可能是一级菜单项）
             self.open_dir_button.setEnabled(False)
             self.copy_path_button.setEnabled(False)
+            self.result_detail.clear()
             return
 
         # 显示结果详情
@@ -185,6 +208,16 @@ class ResultViewer(QWidget):
         lines = []
         lines.append('=' * 60)
         lines.append(f'工具名称: {result_data.get("tool_name", "Unknown")}')
+
+        # 显示菜单分类和动作名称
+        menu_category = result_data.get('menu_category')
+        if menu_category:
+            lines.append(f'菜单分类: {menu_category}')
+
+        action_name = result_data.get('action_name')
+        if action_name:
+            lines.append(f'动作名称: {action_name}')
+
         lines.append(f'执行时间: {result_data.get("timestamp", "Unknown")}')
         lines.append(f'执行状态: {"成功" if result_data.get("success") else "失败"}')
         lines.append(f'消息: {result_data.get("message", "")}')
@@ -224,11 +257,11 @@ class ResultViewer(QWidget):
 
     def open_output_directory(self):
         """打开输出目录"""
-        current_item = self.result_list.currentItem()
+        current_item = self.result_tree.currentItem()
         if not current_item:
             return
 
-        result_data = current_item.data(Qt.UserRole)
+        result_data = current_item.data(0, Qt.UserRole)
         if not result_data:
             return
 
@@ -259,11 +292,11 @@ class ResultViewer(QWidget):
 
     def copy_output_path(self):
         """复制输出路径到剪贴板"""
-        current_item = self.result_list.currentItem()
+        current_item = self.result_tree.currentItem()
         if not current_item:
             return
 
-        result_data = current_item.data(Qt.UserRole)
+        result_data = current_item.data(0, Qt.UserRole)
         if not result_data:
             return
 

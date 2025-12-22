@@ -169,9 +169,20 @@
               </el-icon>
               <span>故障树对比</span>
             </el-menu-item>
+
+            <el-menu-item
+              v-if="hasUICompareData(step.id)"
+              :index="`compare_step_ui_${step.id}`"
+              :title="step.step_name">
+              <el-icon>
+                <Picture />
+              </el-icon>
+              <span>UI对比</span>
+            </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
 
+        <!-- 移除独立的UI对比菜单 -->
         <!-- 无数据时的提示菜单项 -->
         <el-menu-item v-if="!hasCompareData" index="compare_no_data" disabled>
           <el-icon>
@@ -227,7 +238,8 @@ import {
   Trophy,
   Upload,
   Share,
-  Coin
+  Coin,
+  Picture
 } from '@element-plus/icons-vue';
 
 const props = defineProps<{
@@ -348,6 +360,15 @@ watch(() => testSteps.value, (newSteps) => {
 const hasCompareData = computed(() => {
   return jsonDataStore.comparePerfData && jsonDataStore.comparePerfData.steps.length > 0;
 });
+
+// 检查指定步骤是否有UI对比数据
+const hasUICompareData = (stepId: number): boolean => {
+  if (!jsonDataStore.uiCompareData) {
+    return false;
+  }
+  const stepKey = `step${stepId}`;
+  return !!jsonDataStore.uiCompareData[stepKey];
+};
 
 // 从 jsonDataStore 读取版本号，提供响应式和默认值
 const version = computed(() => {
