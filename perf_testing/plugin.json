@@ -312,6 +312,35 @@
           "help": "输出Excel文件路径（默认：当前目录下的compare_result.xlsx）"
         }
       }
+    },
+    "ui-compare": {
+      "name": "UI组件树对比",
+      "description": "对比两个报告的UI组件树",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "base_dir": {
+          "type": "dir",
+          "label": "基准报告目录",
+          "required": true,
+          "help": "基准报告根目录（如：PerfLoad_meituan_0010）"
+        },
+        "compare_dir": {
+          "type": "dir",
+          "label": "对比报告目录",
+          "required": true,
+          "help": "对比报告根目录（如：PerfLoad_meituan_0010）"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "default": "./ui_compare_output",
+          "short": "o",
+          "help": "输出目录（默认：./ui_compare_output）"
+        }
+      }
     }
   }
 }

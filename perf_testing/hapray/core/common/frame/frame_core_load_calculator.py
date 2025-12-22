@@ -277,6 +277,7 @@ class FrameLoadCalculator:
                         sample_callchain_list.append({
                             'timestamp': int(sample['timestamp_trace']),
                             'event_count': int(sample['event_count']),
+                            'thread_id': int(sample['thread_id']),
                             'callchain_info': callchain_info
                         })
 
@@ -301,6 +302,7 @@ class FrameLoadCalculator:
                     'timestamp': sample_data['timestamp'],
                     'event_count': sample_data['event_count'],
                     'load_percentage': float(sample_load_percentage),
+                    'thread_id': sample_data['thread_id'],
                     'callchain': callchain_with_load,
                 })
             except Exception as e:
