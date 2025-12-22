@@ -77,10 +77,12 @@ class ExecutionThread(QThread):
     output_received = Signal(str)
     finished = Signal(str, str)  # tool_name, result_path
 
-    def __init__(self, tool: BaseTool, params: dict[str, Any]):
+    def __init__(self, tool: BaseTool, params: dict[str, Any], action_name: str = None, menu_category: str = None):
         super().__init__()
         self.tool = tool
         self.params = params
+        self.action_name = action_name
+        self.menu_category = menu_category
         self.executor = ToolExecutor()
         self.processor = ResultProcessor()
 
@@ -145,7 +147,13 @@ class ExecutionThread(QThread):
         )
 
         # 保存结果
-        result_path = self.processor.save_result(self.tool.get_name(), result, self.params)
+        result_path = self.processor.save_result(
+            self.tool.get_name(),
+            result,
+            self.params,
+            action_name=self.action_name,
+            menu_category=self.menu_category
+        )
 
         self.finished.emit(self.tool.get_name(), result_path)
 
@@ -155,9 +163,11 @@ class ToolPage(QWidget):
 
     execution_finished = Signal(str, str)  # tool_name, result_path
 
-    def __init__(self, tool: BaseTool):
+    def __init__(self, tool: BaseTool, action_name: str = None, menu_category: str = None):
         super().__init__()
         self.tool = tool
+        self.action_name = action_name
+        self.menu_category = menu_category
         self.param_widgets: dict[str, Any] = {}
         self.execution_thread: ExecutionThread = None
         self.current_action: str = None  # 当前选中的action
@@ -649,7 +659,12 @@ class ToolPage(QWidget):
         self.cancel_button.setEnabled(True)
 
         # 创建执行线程
-        self.execution_thread = ExecutionThread(self.tool, params)
+        self.execution_thread = ExecutionThread(
+            self.tool,
+            params,
+            action_name=action_name if self.current_action else None,
+            menu_category=self.menu_category
+        )
         self.execution_thread.output_received.connect(self.on_output_received)
         self.execution_thread.finished.connect(self.on_execution_finished)
         self.execution_thread.start()
