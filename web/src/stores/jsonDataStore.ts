@@ -1549,6 +1549,9 @@ export const useJsonDataStore = defineStore('config', {
     /**
      * 对比两个组件的attributes（后端逻辑）
      * 后端代码位置: perf_testing/hapray/ui_detector/arkui_tree_parser.py ArkUITreeComparator._compare_attributes
+     *
+     * 注意：Python的 != 运算符对列表和字典进行内容比较，而JavaScript的 !== 是引用比较
+     * 因此需要添加深度比较逻辑以保持与后端一致
      */
     compareAttributes(comp1: ArkUITreeNode, comp2: ArkUITreeNode): UIAttributeDifference[] {
       const differences: UIAttributeDifference[] = [];
@@ -1563,12 +1566,70 @@ export const useJsonDataStore = defineStore('config', {
         const value2 = attrs2[key];
 
         // 检查是否存在差异（后端第631行）
-        if (value1 !== value2) {
+        // Python的 != 对列表/字典进行内容比较，JavaScript需要特殊处理
+        if (!this.deepEqual(value1, value2)) {
           differences.push({ attribute: key, value1: value1, value2: value2 });
         }
       }
 
       return differences;
+    },
+
+    /**
+     * 深度比较两个值是否相等（模拟Python的 == 运算符）
+     * Python中列表和字典的比较是内容比较，JavaScript需要手动实现
+     */
+    deepEqual(value1: any, value2: any): boolean {
+      // 严格相等（包括 undefined === undefined, null === null）
+      if (value1 === value2) {
+        return true;
+      }
+
+      // 一个是null/undefined，另一个不是
+      if (value1 == null || value2 == null) {
+        return false;
+      }
+
+      // 类型不同
+      if (typeof value1 !== typeof value2) {
+        return false;
+      }
+
+      // 数组比较（内容比较）
+      if (Array.isArray(value1) && Array.isArray(value2)) {
+        if (value1.length !== value2.length) {
+          return false;
+        }
+        for (let i = 0; i < value1.length; i++) {
+          if (!this.deepEqual(value1[i], value2[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // 对象比较（内容比较）
+      if (typeof value1 === 'object' && typeof value2 === 'object') {
+        const keys1 = Object.keys(value1);
+        const keys2 = Object.keys(value2);
+
+        if (keys1.length !== keys2.length) {
+          return false;
+        }
+
+        for (const key of keys1) {
+          if (!keys2.includes(key)) {
+            return false;
+          }
+          if (!this.deepEqual(value1[key], value2[key])) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // 其他类型（数字、字符串、布尔值等）已经在第一个if中处理
+      return false;
     },
 
     /**

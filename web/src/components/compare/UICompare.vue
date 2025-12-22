@@ -229,6 +229,8 @@ const currentPairData = computed(() => {
 });
 
 // 绘制带差异标记的图片
+// 注意：此函数需要与后端逻辑完全一致
+// 后端代码位置: perf_testing/hapray/ui_detector/ui_tree_comparator.py UITreeComparator._mark_differences (第148-165行)
 const drawMarkedImage = async (canvasRef: HTMLCanvasElement | null, imageBase64: string, differences: UIComponentDifference[]) => {
   if (!canvasRef || !imageBase64) return;
 
@@ -244,21 +246,31 @@ const drawMarkedImage = async (canvasRef: HTMLCanvasElement | null, imageBase64:
     // 绘制原图
     ctx.drawImage(img, 0, 0);
 
-    // 绘制差异标记框
+    // 绘制差异标记框（与后端完全一致）
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 3;
-    ctx.font = '16px Arial';
+    // 修改字体以更接近PIL默认字体效果
+    // 后端使用PIL的默认字体，这里使用sans-serif模拟
+    ctx.font = '12px sans-serif';
     ctx.fillStyle = 'red';
+    // 设置文本基线为top，使文本Y坐标行为更接近PIL
+    // Canvas默认基线是alphabetic（字母基线），改为top后y坐标表示文本顶部
+    ctx.textBaseline = 'top';
 
     differences.forEach((diff, index) => {
       const bounds = diff.component?.bounds_rect;
       if (bounds && bounds.length === 4) {
         const [x1, y1, x2, y2] = bounds;
+        // 后端第161行：验证坐标有效性
         if (x2 >= x1 && y2 >= y1) {
-          // 绘制红框
+          // 后端第162行：绘制红框
+          // draw.rectangle([x1, y1, x2, y2], outline='red', width=3)
           ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-          // 绘制标记编号
-          ctx.fillText(`D${index + 1}`, x1 + 5, y1 + 20);
+
+          // 后端第163行：绘制标记编号
+          // draw.text((x1 + 5, y1 + 5), f'D{i}', fill='red')
+          // ⚠️ 关键修复：文本Y坐标从 y1+20 改为 y1+5，与后端一致
+          ctx.fillText(`D${index + 1}`, x1 + 5, y1 + 5);
         }
       }
     });
