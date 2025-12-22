@@ -942,7 +942,7 @@ export class HapAnalysisService {
                     { value: this.sanitizeForExcel(detection.sourceBundleName ?? '-'), type: String },
                     { value: detection.sourceVersionCode?.toString() ?? '-', type: String },
                     { value: this.sanitizeForExcel(detection.sourceVersionName ?? '-'), type: String },
-                    { value: soExportsCount.toString(), type: String }
+                    { value: soExportsCount, type: Number }
                 ];
 
                 // 添加 metadata 字段
