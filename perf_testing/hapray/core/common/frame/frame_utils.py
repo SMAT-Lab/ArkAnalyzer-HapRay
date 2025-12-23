@@ -45,6 +45,9 @@ def clean_frame_data(frame_data: dict[str, Any]) -> dict[str, Any]:
     skip_fields = {'frame_samples', 'index'}
 
     for key, value in frame_data.items():
+        # 跳过内部字段（以下划线开头的字段，如 _sample_details, _callchain_ids）
+        if key.startswith('_'):
+            continue
         if key in skip_fields:
             continue
         cleaned_data[key] = clean_single_value(value)

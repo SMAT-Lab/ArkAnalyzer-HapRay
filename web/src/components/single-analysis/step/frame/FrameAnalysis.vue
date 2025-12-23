@@ -892,60 +892,38 @@ const initCharts = () => {
 
         // 收集空刷帧点
         const emptyFramePoints = [];
-        // 主线程空刷帧
-        emptyFrameData.value.top_frames.main_thread_empty_frames.forEach(frame => {
+        // 统一处理所有空刷帧（不再区分主线程和后台线程）
+        emptyFrameData.value.top_frames.forEach(frame => {
             const timeMs = frame.ts / 1000000; // 转换为毫秒
             if (timeMs !== 0) {
                 allTimestamps.push(timeMs);
+                // 根据 is_main_thread 字段判断类型
+                const frameType = frame.is_main_thread === 1 ? 'main_thread' : 'background_thread';
                 emptyFramePoints.push({
                     time: timeMs,
                     frame: frame,
-                    type: 'main_thread'
+                    type: frameType
                 });
             }
-
-        });
-        // 后台线程空刷帧
-        emptyFrameData.value.top_frames.background_thread.forEach(frame => {
-            const timeMs = frame.ts / 1000000; // 转换为毫秒
-            if (timeMs !== 0) {
-                allTimestamps.push(timeMs);
-                emptyFramePoints.push({
-                    time: timeMs,
-                    frame: frame,
-                    type: 'background_thread'
-                });
-            }
-
         });
 
         // 收集空刷负载（用于柱状图）
         const frameLoadData = [];
         const loadData = [];
 
-        // 主线程空刷帧
-        emptyFrameData.value.top_frames.main_thread_empty_frames.forEach(frame => {
+        // 统一处理所有空刷帧（不再区分主线程和后台线程）
+        emptyFrameData.value.top_frames.forEach(frame => {
             const timeMs = frame.ts / 1000000; // 转换为毫秒
+            // 根据 is_main_thread 字段判断类型
+            const frameType = frame.is_main_thread === 1 ? 'main_thread' : 'background_thread';
             frameLoadData.push({
                 time: timeMs,
                 load: frame.frame_load,
                 frame: frame,  // 添加完整的帧对象
-                type: 'main_thread'
+                type: frameType
             });
             loadData.push(frame.frame_load);
         });
-
-        // 后台线程空刷帧
-        //emptyFrameData.value.top_frames.background_thread.forEach(frame => {
-        //    const timeMs = frame.ts / 1000000; // 转换为毫秒
-        //    frameLoadData.push({
-        //        time: timeMs,
-        //        load: frame.frame_load,
-        //        frame: frame,  // 添加完整的帧对象
-        //        type: 'background_thread'
-        //    });
-        //    loadData.push(frame.frame_load);
-        //});
 
 
 
