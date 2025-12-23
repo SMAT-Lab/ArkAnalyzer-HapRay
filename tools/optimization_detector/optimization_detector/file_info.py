@@ -30,6 +30,7 @@ from elftools.elf.elffile import ELFFile
 FILE_STATUS_MAPPING = {
     'analyzed': 'Successfully Analyzed',
     'skipped': 'Skipped (System Library)',
+    'skipped_few_chunks': 'Skipped (Too Few Chunks)',
     'failed': 'Analysis Failed',
 }
 
@@ -47,8 +48,34 @@ class FileInfo:
     CACHE_DIR = 'files_results_cache'
 
     @staticmethod
+    def _is_elf_file(file_path: str) -> bool:
+        """Check if file is an ELF file by reading magic number
+        
+        ELF files start with 0x7f followed by 'ELF' (bytes: 0x7f 0x45 0x4c 0x46)
+        This method directly checks the file content rather than relying on file extension.
+        
+        Args:
+            file_path: Path to the file to check
+            
+        Returns:
+            bool: True if file is an ELF file, False otherwise
+        """
+        try:
+            with open(file_path, 'rb') as f:
+                magic = f.read(4)
+                # ELF magic number: 0x7f 'E' 'L' 'F'
+                return magic == b'\x7fELF'
+        except Exception:
+            return False
+
+    @staticmethod
     def _is_so_file(file_path: str) -> bool:
-        """Check if file is a so file: ends with .so or contains .so. in filename"""
+        """Check if file is a so file: ends with .so or contains .so. in filename
+        
+        Note: This is a fallback check. The actual ELF detection should use _is_elf_file()
+        for more accurate results, as it can detect ELF files regardless of extension
+        and avoid false positives (e.g., linkerscript files with .so extension).
+        """
         filename = os.path.basename(file_path)
         return file_path.endswith('.so') or '.so.' in filename
 
@@ -58,9 +85,17 @@ class FileInfo:
         self.file_size = self._get_file_size()
         self.file_hash = self._calculate_file_hash()
         self.file_id = self._generate_file_id()
+        
+        # 优先通过ELF magic number检测，更准确
         if absolute_path.endswith('.a'):
             self.file_type = FileType.AR
+        elif self._is_elf_file(absolute_path):
+            # 直接检测ELF文件，不依赖文件扩展名
+            # 这样可以匹配 xx.so.653 这样的文件，也能避免误判 linkerscript 文件
+            self.file_type = FileType.SO
         elif self._is_so_file(absolute_path):
+            # 回退到扩展名检查（用于向后兼容，但可能误判）
+            # 如果文件扩展名看起来像so文件，但实际不是ELF，会在后续分析时失败
             self.file_type = FileType.SO
         else:
             self.file_type = FileType.NOT_SUPPORT
@@ -137,9 +172,27 @@ class FileCollector:
 
     @staticmethod
     def _is_binary_file(file_path: str) -> bool:
-        """Check if file is a binary file (.so, .so.*, or .a)"""
+        """Check if file is a binary file by detecting ELF magic number or checking extension
+        
+        Priority:
+        1. Check if it's an ELF file by reading magic number (most accurate)
+        2. Check if it's an .a archive file
+        3. Fallback to extension check (.so, .so.*)
+        
+        This ensures files like xx.so.653 are detected correctly, and non-ELF files
+        with .so extension (like linkerscript files) are filtered out early.
+        """
+        # 优先检测ELF文件（最准确）
+        if FileInfo._is_elf_file(file_path):
+            return True
+        
+        # 检查是否是 .a 归档文件
+        if file_path.endswith('.a'):
+            return True
+        
+        # 回退到扩展名检查（向后兼容）
         filename = os.path.basename(file_path)
-        return file_path.endswith('.a') or file_path.endswith('.so') or '.so.' in filename
+        return file_path.endswith('.so') or '.so.' in filename
 
     def collect_binary_files(self, input_path: str) -> list[FileInfo]:
         """Collect binary files for analysis"""
@@ -193,15 +246,20 @@ class FileCollector:
                                 file_path = file_path[8:]  # Remove 'package/' prefix
                             if (
                                 file_path.startswith('libs/arm64') or file_path.startswith('lib/arm64')
-                            ) and file_path.endswith('.so'):
+                            ) and (file_path.endswith('.so') or '.so.' in file_path):
                                 output_path = os.path.join(temp_dir, file_path)
                                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                                 with tar_ref.extractfile(member) as src, open(output_path, 'wb') as dest:
                                     dest.write(src.read())
-                                file_info = FileInfo(
-                                    absolute_path=output_path, logical_path=f'{hap_path}/{member.name}'
-                                )
-                                extracted_files.append(file_info)
+                                
+                                # 提取后再次检查是否是有效的ELF文件，过滤掉无效文件
+                                if FileInfo._is_elf_file(output_path):
+                                    file_info = FileInfo(
+                                        absolute_path=output_path, logical_path=f'{hap_path}/{member.name}'
+                                    )
+                                    extracted_files.append(file_info)
+                                else:
+                                    logging.debug('Skipping non-ELF file from archive: %s', file_path)
             except Exception as e:
                 logging.error('Failed to extract tar.gz file %s: %s', hap_path, e)
         else:
@@ -209,13 +267,20 @@ class FileCollector:
             try:
                 with zipfile.ZipFile(hap_path, 'r') as zip_ref:
                     for file in zip_ref.namelist():
-                        if (file.startswith('libs/arm64') or file.startswith('lib/arm64')) and file.endswith('.so'):
+                        if (file.startswith('libs/arm64') or file.startswith('lib/arm64')) and (
+                            file.endswith('.so') or '.so.' in file
+                        ):
                             output_path = os.path.join(temp_dir, file[5:])
                             os.makedirs(os.path.dirname(output_path), exist_ok=True)
                             with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
                                 dest.write(src.read())
-                            file_info = FileInfo(absolute_path=output_path, logical_path=f'{hap_path}/{file}')
-                            extracted_files.append(file_info)
+                            
+                            # 提取后再次检查是否是有效的ELF文件，过滤掉无效文件
+                            if FileInfo._is_elf_file(output_path):
+                                file_info = FileInfo(absolute_path=output_path, logical_path=f'{hap_path}/{file}')
+                                extracted_files.append(file_info)
+                            else:
+                                logging.debug('Skipping non-ELF file from archive: %s', file)
             except Exception as e:
                 logging.error('Failed to extract HAP file %s: %s', hap_path, e)
         return extracted_files
