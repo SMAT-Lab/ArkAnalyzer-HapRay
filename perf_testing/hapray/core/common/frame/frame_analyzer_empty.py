@@ -981,13 +981,15 @@ class EmptyFrameAnalyzer:
             }
         
         # 按唤醒链顺序构建结果列表
+        # 注意：使用 thread_id 而不是 tid，以保持与 sample_callchains 中字段命名的一致性
+        # thread_id 和 tid 在语义上相同，都是线程号（来自 thread.tid 或 perf_sample.thread_id）
         wakeup_threads = []
         for itid, depth in related_itids_ordered:
             if itid in thread_info_map:
                 thread_info = thread_info_map[itid]
                 wakeup_threads.append({
                     'itid': itid,
-                    'tid': thread_info['tid'],
+                    'thread_id': thread_info['tid'],  # 使用 thread_id 保持与 sample_callchains 一致
                     'thread_name': thread_info['thread_name'],
                     'pid': thread_info['pid'],
                     'process_name': thread_info['process_name'],
