@@ -140,17 +140,22 @@ class OptimizationDetector:
 
     @staticmethod
     def _extract_features(file_info: FileInfo, features: int = 2048) -> Optional[list[int]]:
-        data = file_info.extract_dot_text()
-        if not data or len(data) == 0:
-            return None
+        """Extract features from file, returns None if no data, empty list if error, list if success"""
+        try:
+            data = file_info.extract_dot_text()
+            if not data or len(data) == 0:
+                return None
 
-        sequences = []
-        for counter in range(0, len(data), features):
-            seq = data[counter : counter + features]
-            if len(seq) < features:
-                seq = np.pad(seq, (0, features - len(seq)), 'constant')
-            sequences.append(seq)
-        return sequences
+            sequences = []
+            for counter in range(0, len(data), features):
+                seq = data[counter : counter + features]
+                if len(seq) < features:
+                    seq = np.pad(seq, (0, features - len(seq)), 'constant')
+                sequences.append(seq)
+            return sequences
+        except Exception:
+            # 如果提取失败，返回 None（会在 _run_analysis 中捕获异常）
+            return None
 
     def apply_model(self, data, model):
         if not data.size:
@@ -208,8 +213,53 @@ class OptimizationDetector:
 
         return lto_results
 
-    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]]]:
-        """Run optimization flag detection on a single file with optional timeout"""
+    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]], Optional[str]]:
+        """Run optimization flag detection on a single file with optional timeout
+        Returns: (file_info, flags, error_reason)
+        - flags: None means skip (too few chunks), [] means no data, list means success
+        - error_reason: None means no error, str means failure reason
+        """
+        try:
+            # 检查chunk数量，如果小于10个chunk，跳过预测
+            MIN_CHUNKS = 10
+            # 先尝试直接打开 ELF 文件，以便捕获更详细的错误信息
+            try:
+                from elftools.elf.elffile import ELFFile
+                with open(file_info.absolute_path, 'rb') as f:
+                    elf = ELFFile(f)
+                    section = elf.get_section_by_name('.text')
+                    if not section:
+                        error_msg = 'No .text section found in ELF file'
+                        return file_info, [], error_msg
+            except Exception as e:
+                # 捕获 ELF 文件读取异常（如 Magic number does not match）
+                error_msg = f'Failed to read ELF file: {str(e)}'
+                logging.error('Error reading ELF file %s: %s', file_info.absolute_path, e)
+                return file_info, [], error_msg
+            
+            # 如果 ELF 文件读取成功，再尝试提取 .text 段数据
+            text_data = file_info.extract_dot_text()
+            if not text_data:
+                # 检查文件类型
+                if file_info.file_type.value == 0xFF:  # NOT_SUPPORT
+                    error_msg = 'File type not supported (not .so or .a)'
+                else:
+                    error_msg = 'No .text section data extracted (section exists but data is empty)'
+                return file_info, [], error_msg
+            
+            # 提取特征
+            features_array = self._extract_features(file_info, features=2048)
+            # 只有当有数据但chunk数量不足时才跳过预测
+            # 如果没有数据（features_array is None），继续执行让_run_inference返回[]，最终标记为failed
+            if features_array is not None and len(features_array) < MIN_CHUNKS:
+                logging.debug('Skipping file with too few chunks (%d < %d): %s', len(features_array), MIN_CHUNKS, file_info.absolute_path)
+                # 返回特殊标记，表示跳过（使用None表示skip，与"没有数据"区分）
+                return file_info, None, None
+        except Exception as e:
+            error_msg = f'Failed to extract features: {str(e)}'
+            logging.error('Error extracting features from %s: %s', file_info.absolute_path, e)
+            return file_info, [], error_msg
+        
         # Lazy load model
         if self.model is None:
             # 使用 GPU 策略（如果可用）
@@ -232,24 +282,31 @@ class OptimizationDetector:
                 self.model.compile(optimizer=self.model.optimizer, loss=self.model.loss, metrics=['accuracy'])
                 logging.info('Model loaded with CPU')
 
-        if self.timeout is None:
-            # No timeout, run normally
-            return file_info, self._run_inference(file_info)
+        try:
+            if self.timeout is None:
+                # No timeout, run normally
+                result = self._run_inference(file_info)
+                return file_info, result, None
+            else:
+                # Use ThreadPoolExecutor with timeout for cross-platform compatibility
+                from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+                from concurrent.futures import TimeoutError as FutureTimeoutError  # noqa: PLC0415
 
-        # Use ThreadPoolExecutor with timeout for cross-platform compatibility
-        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
-        from concurrent.futures import TimeoutError as FutureTimeoutError  # noqa: PLC0415
-
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(self._run_inference, file_info)
-            try:
-                result = future.result(timeout=self.timeout)
-                return file_info, result
-            except FutureTimeoutError:
-                logging.warning('File analysis timeout after %d seconds: %s', self.timeout, file_info.absolute_path)
-                # Cancel the future if possible
-                future.cancel()
-                return file_info, None
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self._run_inference, file_info)
+                    try:
+                        result = future.result(timeout=self.timeout)
+                        return file_info, result, None
+                    except FutureTimeoutError:
+                        error_msg = f'Analysis timeout after {self.timeout} seconds'
+                        logging.warning('File analysis timeout after %d seconds: %s', self.timeout, file_info.absolute_path)
+                        # Cancel the future if possible
+                        future.cancel()
+                        return file_info, [], error_msg
+        except Exception as e:
+            error_msg = f'Analysis error: {str(e)}'
+            logging.error('Error analyzing file %s: %s', file_info.absolute_path, e)
+            return file_info, [], error_msg
 
     def _analyze_files(self, file_infos: list[FileInfo]) -> tuple[int, int, dict]:
         # Filter out analyzed files
@@ -281,27 +338,102 @@ class OptimizationDetector:
                 results = [process_func(fi) for fi in tqdm(remaining_files, desc='Analyzing binaries optimization')]
 
             # Save intermediate results
-            for file_info, flags in results:
-                if flags:
-                    flags_path = os.path.join(FileInfo.CACHE_DIR, f'flags_{file_info.file_id}.csv')
+            for file_info, flags, error_reason in results:
+                flags_path = os.path.join(FileInfo.CACHE_DIR, f'flags_{file_info.file_id}.csv')
+                error_path = os.path.join(FileInfo.CACHE_DIR, f'error_{file_info.file_id}.txt')
+                
+                if flags is None:
+                    # 跳过预测（chunk数量太少），创建skip标记文件
+                    with open(flags_path, 'w', encoding='UTF-8') as f:
+                        f.write('file,prediction,confidence\n')
+                        f.write(f'{file_info.file_id},skip,0.0\n')
+                elif flags:
+                    # 正常预测结果
                     with open(flags_path, 'w', encoding='UTF-8') as f:
                         f.write('file,prediction,confidence\n')
                         for pred, conf in flags:
                             f.write(f'{file_info.file_id},{pred},{conf}\n')
+                # 如果flags是空列表[]，表示没有数据或失败
+                if error_reason:
+                    # 保存失败原因
+                    with open(error_path, 'w', encoding='UTF-8') as f:
+                        f.write(error_reason)
+                elif not flags and flags is not None:
+                    # 没有数据但没有错误信息，这种情况不应该发生（应该在 _run_analysis 中已经捕获）
+                    # 但为了安全起见，仍然尝试提取失败原因
+                    if not os.path.exists(error_path):
+                        try:
+                            text_data = file_info.extract_dot_text()
+                            if not text_data:
+                                # 检查文件类型
+                                if file_info.file_type.value == 0xFF:  # NOT_SUPPORT
+                                    error_reason = 'File type not supported (not .so or .a)'
+                                else:
+                                    error_reason = 'No .text section found in ELF file'
+                            else:
+                                error_reason = 'Unknown error: extracted data is empty'
+                            with open(error_path, 'w', encoding='UTF-8') as f:
+                                f.write(error_reason)
+                        except Exception as e:
+                            error_reason = f'Failed to extract .text section: {str(e)}'
+                            with open(error_path, 'w', encoding='UTF-8') as f:
+                                f.write(error_reason)
 
         flags_results = {}
         files_with_results = 0
         for file_info in file_infos:
             flags_path = os.path.join(FileInfo.CACHE_DIR, f'flags_{file_info.file_id}.csv')
+            error_path = os.path.join(FileInfo.CACHE_DIR, f'error_{file_info.file_id}.txt')
+            
+            # 读取失败原因（如果存在）
+            error_reason = None
+            if os.path.exists(error_path):
+                try:
+                    with open(error_path, 'r', encoding='UTF-8') as f:
+                        error_reason = f.read().strip()
+                except Exception:
+                    pass
+            
             if os.path.exists(flags_path):
                 try:
                     flags_df = pd.read_csv(flags_path)
                     if not flags_df.empty:
-                        file_results = self._merge_chunk_results(flags_df)
-                        flags_results.update(file_results)
-                        files_with_results += 1
+                        # 检查是否是skip标记
+                        if len(flags_df) == 1 and flags_df.iloc[0]['prediction'] == 'skip':
+                            # 跳过预测的文件，标记为skip
+                            flags_results[file_info.file_id] = {
+                                'prediction': 'skip',
+                                'confidence': 0.0,
+                                'distribution': {},
+                                'opt_score': None,
+                                'opt_category': None,
+                                'total_chunks': 0,
+                                'error_reason': None,
+                            }
+                            files_with_results += 1
+                        else:
+                            # 正常预测结果
+                            file_results = self._merge_chunk_results(flags_df)
+                            for file_id, result in file_results.items():
+                                result['error_reason'] = None
+                            flags_results.update(file_results)
+                            files_with_results += 1
                 except Exception as e:
                     logging.error('Error loading results for %s: %s', file_info.absolute_path, e)
+                    if not error_reason:
+                        error_reason = f'Error loading results: {str(e)}'
+            
+            # 如果没有结果但有错误原因，保存错误信息
+            if file_info.file_id not in flags_results and error_reason:
+                flags_results[file_info.file_id] = {
+                    'prediction': None,
+                    'confidence': None,
+                    'distribution': {},
+                    'opt_score': None,
+                    'opt_category': None,
+                    'total_chunks': 0,
+                    'error_reason': error_reason,
+                }
 
         return files_with_results, len(file_infos) - files_with_results, flags_results
 
@@ -314,6 +446,7 @@ class OptimizationDetector:
         report_data = []
         for file_info in sorted(file_infos, key=lambda x: x.logical_path):
             result = flags_results.get(file_info.file_id)
+            error_reason = None
             if result is None:
                 status = FILE_STATUS_MAPPING['failed']
                 opt_category = 'N/A'
@@ -321,6 +454,25 @@ class OptimizationDetector:
                 distribution = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
                 total_chunks = 0
                 size_optimized = 'N/A'
+                error_reason = 'No analysis result found'
+            elif result.get('prediction') == 'skip':
+                # 跳过预测的文件（chunk数量太少）
+                status = FILE_STATUS_MAPPING['skipped_few_chunks']
+                opt_category = 'N/A'
+                opt_score = 'N/A'
+                distribution = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+                total_chunks = 0
+                size_optimized = 'N/A'
+                error_reason = None
+            elif result.get('error_reason'):
+                # 有错误原因
+                status = FILE_STATUS_MAPPING['failed']
+                opt_category = 'N/A'
+                opt_score = 'N/A'
+                distribution = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+                total_chunks = 0
+                size_optimized = 'N/A'
+                error_reason = result.get('error_reason')
             else:
                 status = FILE_STATUS_MAPPING['analyzed']
                 opt_category = result['opt_category']
@@ -330,6 +482,7 @@ class OptimizationDetector:
                 os_chunks = distribution.get(4, 0)
                 os_ratio = os_chunks / total_chunks if total_chunks > 0 else 0
                 size_optimized = f'{"Yes" if os_ratio >= 0.5 else "No"} ({os_ratio:.1%})'
+                error_reason = None
 
             row = {
                 'File': file_info.logical_path,
@@ -344,6 +497,7 @@ class OptimizationDetector:
                 'Total Chunks': total_chunks,
                 'File Size (bytes)': file_info.file_size,
                 'Size Optimized': size_optimized,
+                'Failure Reason': error_reason if error_reason else 'N/A',
             }
 
             # 添加LTO检测列
