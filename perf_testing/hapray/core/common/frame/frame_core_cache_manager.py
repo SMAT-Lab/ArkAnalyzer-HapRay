@@ -261,6 +261,42 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
             return pd.DataFrame()
         return FramePerfAccessor.get_files_cache(self)
 
+    @cached('_tid_to_info_cache', 'tid_to_info')
+    def get_tid_to_info(self) -> dict:
+        """获取tid到线程信息的映射（带缓存）
+
+        查询thread表获取所有thread_id和thread_name的对应关系，并缓存结果。
+        这个映射用于快速查找线程名称，避免重复查询数据库。
+        注意：查询所有线程信息，不仅限于应用进程，因为perf_sample可能包含系统线程。
+
+        Returns:
+            dict: {tid: {'thread_name': str, 'process_name': str}} 的字典
+        """
+        if not self.trace_conn:
+            logging.warning('trace_conn未建立，无法获取线程信息')
+            return {}
+        
+        tid_to_info = {}
+        try:
+            trace_cursor = self.trace_conn.cursor()
+            # 查询所有线程信息，不仅限于应用进程
+            # 因为perf_sample可能包含系统线程或其他进程的线程
+            trace_cursor.execute("""
+                SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                FROM thread t
+                INNER JOIN process p ON t.ipid = p.ipid
+            """)
+            
+            for tid, thread_name, process_name in trace_cursor.fetchall():
+                tid_to_info[tid] = {
+                    'thread_name': thread_name,
+                    'process_name': process_name
+                }
+        except Exception as e:
+            logging.warning('查询线程信息失败: %s', str(e))
+        
+        return tid_to_info
+
     def get_total_load_for_pids(self, app_pids: list[int], time_ranges: Optional[List[Tuple[int, int]]] = None) -> int:
         """获取指定进程的总负载（重写父类方法，使用trace_conn关联thread表）
         
