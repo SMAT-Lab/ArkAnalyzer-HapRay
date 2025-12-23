@@ -64,27 +64,28 @@ export class ElfAnalyzer {
         const exportedSymbols: Array<string> = [];
         const importedSymbols: Array<string> = [];
 
-        // Extract exported symbols from .dynsym
+        // Extract exported symbols from .dynsym (与 nm -D 一致)
+        // 只提取 GLOBAL FUNC 类型的符号（与 grep " T " 一致，T 表示全局函数）
         if (elf.body.symbols) {
             for (const sym of elf.body.symbols) {
+                // 跳过空符号
+                if (!sym.name || sym.name.length === 0) {
+                    continue;
+                }
+                
                 if (sym.section === 'SHN_UNDEF') {
                     importedSymbols.push((await demangle(sym.name)) || sym.name);
                 } else {
-                    exportedSymbols.push((await demangle(sym.name)) || sym.name);
+                    // 只提取 GLOBAL FUNC 类型的导出符号（与 nm -D | grep " T " 一致）
+                    // T 表示全局函数（GLOBAL FUNC），t 表示局部函数（LOCAL FUNC）
+                    if (sym.type === 'FUNC' && sym.binding === 'GLOBAL') {
+                        exportedSymbols.push((await demangle(sym.name)) || sym.name);
+                    }
                 }
             }
         }
 
-        // Extract exported symbols from .symtab
-        if (elf.body.symtabSymbols) {
-            for (const sym of elf.body.symtabSymbols) {
-                if (sym.section === 'SHN_UNDEF') {
-                    importedSymbols.push((await demangle(sym.name)) || sym.name);
-                } else {
-                    exportedSymbols.push((await demangle(sym.name)) || sym.name);
-                }
-            }
-        }
+        // 注意：不提取 .symtab 中的符号，因为 nm -D 只显示 .dynsym
 
         // 提取依赖库
         const dependencies = this.extractDependencies(elf);

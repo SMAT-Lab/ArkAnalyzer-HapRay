@@ -19,7 +19,7 @@ import os from 'os';
 import writeXlsxFile from 'write-excel-file/node';
 import type { SheetData } from 'write-excel-file';
 import type { FormatResult } from './index';
-import { BaseFormatter } from './index';
+import { BaseFormatter } from './base-formatter';
 import type { Hap } from '../../hap/hap_parser';
 
 /**
