@@ -212,9 +212,8 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
         if self.frame_loads_results:
             self._write_single_report(self.frame_loads_results, self.report_paths['frameLoads'])
 
-        # 写入空帧分析结果
-        if self.empty_frame_results:
-            self._write_single_report(self.empty_frame_results, self.report_paths['emptyFrame'])
+        # 写入空帧分析结果（即使为空也写入，以更新已存在的文件）
+        self._write_single_report(self.empty_frame_results, self.report_paths['emptyFrame'])
 
         # 写入卡顿帧分析结果
         if self.frame_drop_results:
@@ -244,11 +243,16 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
         """写入单个报告文件"""
         if not results:
             self.logger.warning('No results to write. Skipping report generation for %s', report_path)
-            return
+            # return
 
         try:
             file_path = os.path.join(self.scene_dir, 'report', report_path.replace('/', '_') + '.json')
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            # 强制删除旧文件，确保重新写入（避免缓存问题）
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, sort_keys=True)
         except Exception as e:

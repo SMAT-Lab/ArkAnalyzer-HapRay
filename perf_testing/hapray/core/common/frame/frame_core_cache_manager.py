@@ -17,7 +17,7 @@ import functools
 import logging
 import os
 import sqlite3
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -261,7 +261,7 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
             return pd.DataFrame()
         return FramePerfAccessor.get_files_cache(self)
 
-    def get_total_load_for_pids(self, app_pids: list[int]) -> int:
+    def get_total_load_for_pids(self, app_pids: list[int], time_ranges: Optional[List[Tuple[int, int]]] = None) -> int:
         """获取指定进程的总负载（重写父类方法，使用trace_conn关联thread表）
         
         修复：原方法错误地用进程ID直接匹配thread_id，现在通过trace数据库的thread表
@@ -269,6 +269,9 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
         
         Args:
             app_pids: 应用进程ID列表
+            time_ranges: 可选的时间范围列表，格式为 [(start_ts, end_ts), ...]
+                        如果为None，则统计整个trace的CPU
+                        如果提供，只统计这些时间范围内的CPU
         
         Returns:
             int: 总负载值（只包含指定进程的线程的perf_sample）
@@ -309,22 +312,246 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
             # 步骤2：统计这些线程的perf_sample总和
             perf_cursor = self.perf_conn.cursor()
             thread_placeholders = ','.join('?' * len(thread_ids))
-            perf_query = f"""
-                SELECT SUM(event_count) as total_load
-                FROM perf_sample
-                WHERE thread_id IN ({thread_placeholders})
-            """
-            perf_cursor.execute(perf_query, thread_ids)
-            result = perf_cursor.fetchone()
-            total_load = result[0] if result and result[0] else 0
             
-            logging.info('获取总负载: %d (进程ID: %s, 线程数: %d)', total_load, valid_pids, len(thread_ids))
+            if time_ranges:
+                # 使用时间范围过滤
+                # 如果时间范围太多，SQLite 的表达式树会太大（最大深度 1000）
+                # 解决方案：分批查询，每批最多 200 个时间范围
+                MAX_RANGES_PER_BATCH = 200
+                total_load = 0
+                
+                if len(time_ranges) <= MAX_RANGES_PER_BATCH:
+                    # 时间范围不多，直接查询
+                    time_conditions = []
+                    time_params = []
+                    
+                    for start_ts, end_ts in time_ranges:
+                        time_conditions.append('(timestamp_trace >= ? AND timestamp_trace <= ?)')
+                        time_params.extend([start_ts, end_ts])
+                    
+                    time_condition_str = ' OR '.join(time_conditions)
+                    perf_query = f"""
+                        SELECT SUM(event_count) as total_load
+                        FROM perf_sample
+                        WHERE thread_id IN ({thread_placeholders})
+                        AND ({time_condition_str})
+                    """
+                    perf_cursor.execute(perf_query, thread_ids + time_params)
+                    result = perf_cursor.fetchone()
+                    total_load = result[0] if result and result[0] else 0
+                else:
+                    # 时间范围太多，分批查询
+                    logging.info('时间范围数量 (%d) 超过限制 (%d)，分批查询', len(time_ranges), MAX_RANGES_PER_BATCH)
+                    
+                    for i in range(0, len(time_ranges), MAX_RANGES_PER_BATCH):
+                        batch_ranges = time_ranges[i:i + MAX_RANGES_PER_BATCH]
+                        time_conditions = []
+                        time_params = []
+                        
+                        for start_ts, end_ts in batch_ranges:
+                            time_conditions.append('(timestamp_trace >= ? AND timestamp_trace <= ?)')
+                            time_params.extend([start_ts, end_ts])
+                        
+                        time_condition_str = ' OR '.join(time_conditions)
+                        perf_query = f"""
+                            SELECT SUM(event_count) as total_load
+                            FROM perf_sample
+                            WHERE thread_id IN ({thread_placeholders})
+                            AND ({time_condition_str})
+                        """
+                        perf_cursor.execute(perf_query, thread_ids + time_params)
+                        result = perf_cursor.fetchone()
+                        batch_load = result[0] if result and result[0] else 0
+                        total_load += batch_load
+                    
+                    logging.info('分批查询完成: %d 批，总负载: %d', (len(time_ranges) + MAX_RANGES_PER_BATCH - 1) // MAX_RANGES_PER_BATCH, total_load)
+            else:
+                # 原有逻辑：统计整个trace
+                perf_query = f"""
+                    SELECT SUM(event_count) as total_load
+                    FROM perf_sample
+                    WHERE thread_id IN ({thread_placeholders})
+                """
+                perf_cursor.execute(perf_query, thread_ids)
+                result = perf_cursor.fetchone()
+                total_load = result[0] if result and result[0] else 0
+            
+            if time_ranges:
+                total_time_ns = sum(end - start for start, end in time_ranges)
+                logging.info('获取总负载: %d (进程ID: %s, 线程数: %d, 时间范围: %d个区间, 总时长: %.2f秒)', 
+                            total_load, valid_pids, len(thread_ids), len(time_ranges), total_time_ns / 1_000_000_000)
+            else:
+                logging.info('获取总负载: %d (进程ID: %s, 线程数: %d)', total_load, valid_pids, len(thread_ids))
+            
             return int(total_load)
         except Exception as e:
             logging.error('获取总负载失败: %s', str(e))
             import traceback
             logging.error('异常堆栈跟踪:\n%s', traceback.format_exc())
             return 0
+
+    def get_thread_loads_for_pids(
+        self, 
+        app_pids: list[int], 
+        time_ranges: Optional[List[Tuple[int, int]]] = None,
+        filter_main_thread: Optional[bool] = None
+    ) -> dict[int, int]:
+        """获取指定进程的按线程分组的负载（支持时间范围去重）
+        
+        Args:
+            app_pids: 应用进程ID列表
+            time_ranges: 时间范围列表，格式为 [(start_ts, end_ts), ...]
+                        如果为None，则统计整个trace的CPU
+                        如果提供，只统计这些时间范围内的CPU（已去重）
+            filter_main_thread: 是否过滤主线程
+                               None: 不过滤，返回所有线程
+                               True: 只返回主线程（thread_name == process_name）
+                               False: 只返回后台线程（thread_name != process_name）
+        
+        Returns:
+            dict[int, int]: {thread_id: total_load, ...}
+        """
+        # 验证app_pids参数
+        if not app_pids or not isinstance(app_pids, (list, tuple)) or len(app_pids) == 0:
+            logging.warning('app_pids参数无效，返回空字典')
+            return {}
+        
+        # 过滤掉无效的PID值
+        valid_pids = [pid for pid in app_pids if pd.notna(pid) and isinstance(pid, (int, float))]
+        if not valid_pids:
+            logging.warning('没有有效的PID值，返回空字典')
+            return {}
+        
+        if not self.trace_conn or not self.perf_conn:
+            logging.warning('数据库连接未建立，返回空字典')
+            return {}
+        
+        try:
+            # 步骤1：通过trace数据库的thread表，找到属于指定进程的所有线程信息
+            cursor = self.trace_conn.cursor()
+            placeholders = ','.join('?' * len(valid_pids))
+            
+            # 根据filter_main_thread构建查询条件
+            if filter_main_thread is True:
+                # 只要主线程
+                thread_query = f"""
+                    SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                    FROM thread t
+                    INNER JOIN process p ON t.ipid = p.ipid
+                    WHERE p.pid IN ({placeholders})
+                    AND t.name = p.name
+                """
+            elif filter_main_thread is False:
+                # 只要后台线程
+                thread_query = f"""
+                    SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                    FROM thread t
+                    INNER JOIN process p ON t.ipid = p.ipid
+                    WHERE p.pid IN ({placeholders})
+                    AND t.name != p.name
+                """
+            else:
+                # 不过滤，返回所有线程
+                thread_query = f"""
+                    SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                    FROM thread t
+                    INNER JOIN process p ON t.ipid = p.ipid
+                    WHERE p.pid IN ({placeholders})
+                """
+            
+            cursor.execute(thread_query, valid_pids)
+            thread_rows = cursor.fetchall()
+            thread_ids = [row[0] for row in thread_rows if row[0] is not None]
+            
+            if not thread_ids:
+                logging.warning('未找到进程 %s 的线程，返回空字典', valid_pids)
+                return {}
+            
+            # 步骤2：统计这些线程的perf_sample总和（按线程分组）
+            perf_cursor = self.perf_conn.cursor()
+            thread_placeholders = ','.join('?' * len(thread_ids))
+            
+            if time_ranges:
+                # 使用时间范围过滤
+                MAX_RANGES_PER_BATCH = 200
+                thread_loads = {}  # {thread_id: total_load}
+                
+                if len(time_ranges) <= MAX_RANGES_PER_BATCH:
+                    # 时间范围不多，直接查询
+                    time_conditions = []
+                    time_params = []
+                    
+                    for start_ts, end_ts in time_ranges:
+                        time_conditions.append('(timestamp_trace >= ? AND timestamp_trace <= ?)')
+                        time_params.extend([start_ts, end_ts])
+                    
+                    time_condition_str = ' OR '.join(time_conditions)
+                    perf_query = f"""
+                        SELECT thread_id, SUM(event_count) as total_load
+                        FROM perf_sample
+                        WHERE thread_id IN ({thread_placeholders})
+                        AND ({time_condition_str})
+                        GROUP BY thread_id
+                    """
+                    perf_cursor.execute(perf_query, thread_ids + time_params)
+                    results = perf_cursor.fetchall()
+                    
+                    for thread_id, total_load in results:
+                        if thread_id is not None and total_load is not None:
+                            thread_loads[thread_id] = int(total_load)
+                else:
+                    # 时间范围太多，分批查询
+                    logging.info('时间范围数量 (%d) 超过限制 (%d)，分批查询', len(time_ranges), MAX_RANGES_PER_BATCH)
+                    
+                    for i in range(0, len(time_ranges), MAX_RANGES_PER_BATCH):
+                        batch_ranges = time_ranges[i:i + MAX_RANGES_PER_BATCH]
+                        time_conditions = []
+                        time_params = []
+                        
+                        for start_ts, end_ts in batch_ranges:
+                            time_conditions.append('(timestamp_trace >= ? AND timestamp_trace <= ?)')
+                            time_params.extend([start_ts, end_ts])
+                        
+                        time_condition_str = ' OR '.join(time_conditions)
+                        perf_query = f"""
+                            SELECT thread_id, SUM(event_count) as total_load
+                            FROM perf_sample
+                            WHERE thread_id IN ({thread_placeholders})
+                            AND ({time_condition_str})
+                            GROUP BY thread_id
+                        """
+                        perf_cursor.execute(perf_query, thread_ids + time_params)
+                        batch_results = perf_cursor.fetchall()
+                        
+                        for thread_id, batch_load in batch_results:
+                            if thread_id is not None and batch_load is not None:
+                                if thread_id not in thread_loads:
+                                    thread_loads[thread_id] = 0
+                                thread_loads[thread_id] += int(batch_load)
+                    
+                    logging.info('分批查询完成: %d 批，线程数: %d', (len(time_ranges) + MAX_RANGES_PER_BATCH - 1) // MAX_RANGES_PER_BATCH, len(thread_loads))
+            else:
+                # 原有逻辑：统计整个trace
+                perf_query = f"""
+                    SELECT thread_id, SUM(event_count) as total_load
+                    FROM perf_sample
+                    WHERE thread_id IN ({thread_placeholders})
+                    GROUP BY thread_id
+                """
+                perf_cursor.execute(perf_query, thread_ids)
+                results = perf_cursor.fetchall()
+                thread_loads = {}
+                
+                for thread_id, total_load in results:
+                    if thread_id is not None and total_load is not None:
+                        thread_loads[thread_id] = int(total_load)
+            
+            return thread_loads
+        except Exception as e:
+            logging.error('获取线程负载失败: %s', str(e))
+            import traceback
+            logging.error('异常堆栈跟踪:\n%s', traceback.format_exc())
+            return {}
 
     @cached('_process_cache', 'process')
     def get_process_cache(self) -> pd.DataFrame:
