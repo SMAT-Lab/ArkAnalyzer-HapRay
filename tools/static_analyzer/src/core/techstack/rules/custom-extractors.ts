@@ -5,6 +5,7 @@
 import type { CustomExtractor, FileInfo, MetadataPattern } from '../types';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import { ElfAnalyzer } from '../../elf/elf_analyzer';
 
 /**
@@ -410,7 +411,7 @@ async function extractLastModified(fileInfo: FileInfo, _pattern?: MetadataPatter
 }
 
 /**
- * SO文件ELF信息缓存（基于文件路径）
+ * SO文件ELF信息缓存（基于文件hash值）
  * 避免同一个文件被多次解析
  */
 const soElfInfoCache = new Map<string, Promise<{ dependencies: Array<string>; exports: Array<string>; imports: Array<string> } | null>>();
@@ -429,8 +430,8 @@ async function getSoElfInfo(fileInfo: FileInfo): Promise<{ dependencies: Array<s
         return null;
     }
 
-    // 使用文件路径作为缓存键
-    const cacheKey = fileInfo.file;
+    // 使用文件内容的hash值作为缓存键
+    const cacheKey = createHash('sha256').update(fileInfo.content).digest('hex');
 
     // 如果缓存中存在，直接返回
     if (soElfInfoCache.has(cacheKey)) {

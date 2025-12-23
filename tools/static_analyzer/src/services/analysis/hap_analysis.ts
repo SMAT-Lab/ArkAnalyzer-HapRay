@@ -901,7 +901,8 @@ export class HapAnalysisService {
             { value: '来源HAP包', fontWeight: 'bold' as const },
             { value: '来源包名', fontWeight: 'bold' as const },
             { value: '来源版本号', fontWeight: 'bold' as const },
-            { value: '来源版本名称', fontWeight: 'bold' as const }
+            { value: '来源版本名称', fontWeight: 'bold' as const },
+            { value: '导出符号数量', fontWeight: 'bold' as const }
         ];
 
         // 添加 metadata 列到表头
@@ -923,6 +924,10 @@ export class HapAnalysisService {
                 const binaryTypeStr = detection.isBinary === true ? 'Binary' :
                     detection.isBinary === false ? 'Text' : '-';
 
+                // 统计导出符号数量
+                const soExports = detection.metadata.soExports;
+                const soExportsCount = Array.isArray(soExports) ? soExports.length : 0;
+
                 const row = [
                     { value: this.sanitizeForExcel(appDir || '-'), type: String },
                     { value: this.sanitizeForExcel(result.bundleName || '-'), type: String },
@@ -936,7 +941,8 @@ export class HapAnalysisService {
                     { value: this.sanitizeForExcel(detection.sourceHapPath ?? '-'), type: String },
                     { value: this.sanitizeForExcel(detection.sourceBundleName ?? '-'), type: String },
                     { value: detection.sourceVersionCode?.toString() ?? '-', type: String },
-                    { value: this.sanitizeForExcel(detection.sourceVersionName ?? '-'), type: String }
+                    { value: this.sanitizeForExcel(detection.sourceVersionName ?? '-'), type: String },
+                    { value: soExportsCount, type: Number }
                 ];
 
                 // 添加 metadata 字段
