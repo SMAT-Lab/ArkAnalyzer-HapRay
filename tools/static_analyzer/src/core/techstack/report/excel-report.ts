@@ -19,7 +19,7 @@ import os from 'os';
 import writeXlsxFile from 'write-excel-file/node';
 import type { SheetData } from 'write-excel-file';
 import type { FormatResult } from './index';
-import { BaseFormatter } from './index';
+import { BaseFormatter } from './base-formatter';
 import type { Hap } from '../../hap/hap_parser';
 
 /**
@@ -183,7 +183,8 @@ export class ExcelFormatter extends BaseFormatter {
             ...sortedMetadataColumns.map(column => ({
                 value: column,
                 fontWeight: 'bold' as const
-            }))
+            })),
+            { value: 'soExports数量', fontWeight: 'bold' as const }
         ];
         sheetData.push(headerRow);
 
@@ -230,6 +231,11 @@ export class ExcelFormatter extends BaseFormatter {
                 }
                 row.push({ value: cellValue, type: String });
             }
+
+            // 添加 soExports 符号数量统计
+            const soExports = detection.metadata.soExports;
+            const soExportsCount = Array.isArray(soExports) ? soExports.length : 0;
+            row.push({ value: soExportsCount.toString(), type: String });
 
             sheetData.push(row);
         });
