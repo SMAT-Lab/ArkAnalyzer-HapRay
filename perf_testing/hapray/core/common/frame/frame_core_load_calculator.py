@@ -291,7 +291,12 @@ class FrameLoadCalculator:
                 logging.error('分析调用链时出错: %s', str(e))
                 continue
 
-        # 为每个sample的调用链添加负载信息
+        # 获取thread_id到thread_name的映射（从缓存中获取，避免重复查询）
+        tid_to_info = {}
+        if self.cache_manager:
+            tid_to_info = self.cache_manager.get_tid_to_info()
+
+        # 为每个sample的调用链添加负载信息和thread_name
         for sample_data in sample_callchain_list:
             try:
                 sample_load_percentage = (sample_data['event_count'] / frame_load) * 100 if frame_load > 0 else 0
@@ -304,11 +309,17 @@ class FrameLoadCalculator:
                     call_with_load['value'] = sample_data['event_count']
                     callchain_with_load.append(call_with_load)
 
+                # 从缓存中获取thread_name
+                thread_id = sample_data['thread_id']
+                thread_info = tid_to_info.get(thread_id, {})
+                thread_name = thread_info.get('thread_name', 'unknown')
+
                 sample_callchains.append({
                     'timestamp': sample_data['timestamp'],
                     'event_count': sample_data['event_count'],
                     'load_percentage': float(sample_load_percentage),
-                    'thread_id': sample_data['thread_id'],
+                    'thread_id': thread_id,
+                    'thread_name': thread_name,  # 添加thread_name
                     'callchain': callchain_with_load,
                 })
             except Exception as e:
