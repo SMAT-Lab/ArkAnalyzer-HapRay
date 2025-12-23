@@ -136,8 +136,23 @@ interface EmptyFrameSummary {
   empty_frame_percentage: number;
   background_thread_load: number;
   background_thread_percentage: number;
+  main_thread_load?: number; // 主线程负载（可选）
+  main_thread_percentage?: number; // 主线程占比（可选）
   total_empty_frames: number;
   empty_frames_with_load: number;
+  severity_level?: string; // 严重程度级别（可选）
+  severity_description?: string; // 严重程度描述（可选）
+  thread_statistics?: { // 线程统计（可选）
+    top_threads: Array<{
+      thread_id: number;
+      tid: number;
+      thread_name: string;
+      process_name: string;
+      total_load: number;
+      percentage: number;
+      frame_count: number;
+    }>;
+  };
 }
 
 interface ColdStartSummary {
@@ -172,29 +187,42 @@ interface FileInfo {
   parent_module: string;  // 注意：实际数据中包含多行文本
 }
 
+interface WakeupThread {
+  itid: number;
+  tid: number;
+  pid: number;
+  thread_name: string;
+  process_name: string;
+  is_system_thread: boolean;
+  wakeup_depth?: number; // 唤醒链深度（可选）
+}
+
 interface EmptyFrame {
   ts: number;
   dur: number;
-  ipid: number;
-  itid: number;
-  pid: number;
-  tid: number;
-  callstack_id: number;
+  ipid?: number;
+  itid?: number;
+  pid?: number; // 进程ID（可选，向后兼容）
+  tid?: number; // 线程ID（可选，向后兼容）
+  thread_id?: number; // 线程ID（新字段名，与tid相同）
+  callstack_id?: number;
   process_name: string;
   thread_name: string;
-  callstack_name: string;
+  callstack_name?: string;
   frame_load: number;
   is_main_thread: number;
   sample_callchains: SampleCallchain[];
+  vsync?: number | string; // VSync标识
+  flag?: number; // 帧标志
+  type?: number; // 帧类型
+  wakeup_threads?: WakeupThread[]; // 唤醒链线程（新字段名）
+  related_threads?: WakeupThread[]; // 唤醒链线程（旧字段名，向后兼容）
 }
 
 interface EmptyFrameStepData {
   status: string;
   summary: EmptyFrameSummary;
-  top_frames: {
-    main_thread_empty_frames: EmptyFrame[];
-    background_thread: EmptyFrame[];
-  };
+  top_frames: EmptyFrame[];  // 统一列表，不再区分主线程和后台线程
 }
 
 export type EmptyFrameData = Record<string, EmptyFrameStepData>;
@@ -432,6 +460,7 @@ function createDefaultEmptyFrame(): EmptyFrame {
     itid: 0,
     pid: 0,
     tid: 0,
+    thread_id: 0,
     callstack_id: 0,
     process_name: "",
     thread_name: "",
@@ -443,7 +472,12 @@ function createDefaultEmptyFrame(): EmptyFrame {
       event_count: 0,
       load_percentage: 0,
       callchain: [createDefaultCallstackFrame()]
-    }]
+    }],
+    vsync: 0,
+    flag: 0,
+    type: 0,
+    wakeup_threads: [],
+    related_threads: []
   };
 }
 
@@ -533,13 +567,17 @@ export function getDefaultEmptyFrameStepData(): EmptyFrameStepData {
       empty_frame_percentage: 0,
       background_thread_load: 0,
       background_thread_percentage: 0,
+      main_thread_load: 0,
+      main_thread_percentage: 0,
       total_empty_frames: 0,
-      empty_frames_with_load: 0
+      empty_frames_with_load: 0,
+      severity_level: "normal",
+      severity_description: "正常：未检测到空刷帧",
+      thread_statistics: {
+        top_threads: []
+      }
     },
-    top_frames: {
-      main_thread_empty_frames: [createDefaultEmptyFrame()],
-      background_thread: [createDefaultEmptyFrame()]
-    }
+    top_frames: [createDefaultEmptyFrame()]  // 统一列表，不再区分主线程和后台线程
   };
 }
 

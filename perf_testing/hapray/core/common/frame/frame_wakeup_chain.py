@@ -4,7 +4,7 @@
 分析逻辑：
 1. 找到 flag=2 的空刷帧（没有送到 RS 线程）
 2. 找到这个帧最后事件绑定的线程
-3. 通过线程唤醒关系（sched_wakeup 事件）找到所有相关的线程
+3. 通过线程唤醒关系（sched_wakeup事件，使用instant.wakeup_from字段）找到所有相关的线程
 4. 统计这些线程在帧时间范围内的 CPU 指令数（浪费的 CPU）
 """
 
@@ -242,7 +242,7 @@ def filter_threads_executed_in_frame(trace_conn, itids: Set[int], frame_start: i
 
 def find_wakeup_chain(trace_conn, start_itid: int, frame_start: int, frame_end: int, 
                      max_depth: int = 20, instant_cache: Optional[Dict] = None,
-                     app_pid: Optional[int] = None) -> Set[int]:
+                     app_pid: Optional[int] = None) -> List[Tuple[int, int]]:
     """通过线程唤醒关系找到所有相关的线程（唤醒链）
     
     策略：从最后的线程开始，反向追溯唤醒链，直到找到系统VSync线程或达到最大深度
@@ -257,7 +257,8 @@ def find_wakeup_chain(trace_conn, start_itid: int, frame_start: int, frame_end: 
         instant_cache: instant表数据缓存 {(ref, ts_range): [(wakeup_from, ts), ...]}
         
     Returns:
-        所有相关线程的 itid 集合
+        所有相关线程的 itid 列表，按唤醒链顺序（从起始线程到最远的唤醒线程）
+        每个元素为 (itid, depth)，depth 表示在唤醒链中的深度（0为起始线程）
     """
     try:
         # 扩展时间范围：往前追溯50ms，确保能找到完整的唤醒链（参考RN实现）
@@ -280,7 +281,8 @@ def find_wakeup_chain(trace_conn, start_itid: int, frame_start: int, frame_end: 
         # 使用 BFS 反向搜索唤醒链（优先反向，找到谁唤醒了当前线程）
         visited = set()
         queue = deque([(start_itid, 0, frame_start)])  # (itid, depth, last_seen_ts)
-        related_threads = {start_itid}
+        related_threads_ordered = [(start_itid, 0)]  # 按唤醒链顺序存储 (itid, depth)
+        related_threads_set = {start_itid}  # 用于快速查找是否已包含
         
         logger.debug(f'开始追溯唤醒链，起始线程 itid={start_itid}，搜索时间范围: {search_start} - {search_end}')
         
@@ -380,13 +382,16 @@ def find_wakeup_chain(trace_conn, start_itid: int, frame_start: int, frame_end: 
                     woken_by_results = cursor.fetchall()
             
             for (waker_itid, wakeup_ts) in woken_by_results:
+                waker_itid = int(waker_itid)
                 if waker_itid and waker_itid not in visited:
-                    related_threads.add(int(waker_itid))
+                    # 按唤醒链顺序添加到列表（深度递增）
+                    related_threads_ordered.append((waker_itid, depth + 1))
+                    related_threads_set.add(waker_itid)
                     # 继续从这个唤醒时间点往前追溯
-                    queue.append((int(waker_itid), depth + 1, wakeup_ts))
+                    queue.append((waker_itid, depth + 1, wakeup_ts))
             
-        logger.debug(f'唤醒链追溯完成，共找到 {len(related_threads)} 个相关线程')
-        return related_threads
+        logger.debug(f'唤醒链追溯完成，共找到 {len(related_threads_ordered)} 个相关线程')
+        return related_threads_ordered
         
     except Exception as e:
         logger.error('查找唤醒链失败: %s', str(e))
@@ -627,7 +632,7 @@ def analyze_empty_frame_wakeup_chain(trace_db_path: str, perf_db_path: str,
         - frame_id: 帧 ID
         - frame_info: 帧基本信息
         - last_event: 最后事件信息
-        - related_threads: 相关线程列表
+        - wakeup_threads: 唤醒链线程列表（通过唤醒链分析找到的线程）
         - total_wasted_instructions: 浪费的总指令数
         - thread_instructions: 每个线程的指令数
     
@@ -1124,11 +1129,13 @@ def analyze_empty_frame_wakeup_chain(trace_db_path: str, perf_db_path: str,
                 # 例如：com.qunar.hos的OS_VSyncThread，应用进程就是com.qunar.hos
                 app_pid = frame_info.get('pid')
             
-            related_itids = find_wakeup_chain(trace_conn, start_itid, frame_start, frame_end, 
-                                             instant_cache=instant_cache, app_pid=app_pid)
+            related_itids_ordered = find_wakeup_chain(trace_conn, start_itid, frame_start, frame_end, 
+                                                      instant_cache=instant_cache, app_pid=app_pid)
+            # related_itids_ordered 是 [(itid, depth), ...] 列表，按唤醒链顺序
+            related_itids = {itid for itid, _ in related_itids_ordered}  # 转换为集合用于后续查找
             elapsed = time.time() - stage_start
             stage_timings['find_wakeup_chain'] += elapsed
-            logger.debug(f'  [帧{frame_id}] find_wakeup_chain: {elapsed:.3f}秒 (找到{len(related_itids)}个线程)')
+            logger.debug(f'  [帧{frame_id}] find_wakeup_chain: {elapsed:.3f}秒 (找到{len(related_itids_ordered)}个线程)')
             
             logger.debug('帧 %d: 找到 %d 个相关线程（唤醒链）', frame_id, len(related_itids))
             
@@ -1296,7 +1303,7 @@ def analyze_empty_frame_wakeup_chain(trace_db_path: str, perf_db_path: str,
                     )
                     total_wasted_instructions = app_instructions + sys_instructions
                     total_system_instructions = sys_instructions
-                    # 为了兼容性，构建空的字典（唤醒链分析仍然用于related_threads）
+                    # 为了兼容性，构建空的字典（唤醒链分析仍然用于wakeup_threads）
                     app_thread_instructions = {}
                     system_thread_instructions = {}
                     logger.debug(f'  [帧{frame_id}] 进程级CPU统计: {total_wasted_instructions:,} 指令 (进程PID={app_pid_for_cpu})')
@@ -1358,8 +1365,8 @@ def analyze_empty_frame_wakeup_chain(trace_db_path: str, perf_db_path: str,
                             'process_name': process_name
                         }
                 
-                # 构建线程详细信息列表
-                for itid in related_itids:
+                # 构建线程详细信息列表（按唤醒链顺序）
+                for itid, depth in related_itids_ordered:
                     thread_info = thread_info_map.get(itid)
                     if thread_info:
                         # 优先使用itid_to_perf_thread映射，如果没有则直接使用thread_info中的tid
@@ -1401,7 +1408,8 @@ def analyze_empty_frame_wakeup_chain(trace_db_path: str, perf_db_path: str,
                             'process_name': process_name,
                         'perf_thread_id': perf_thread_id,
                             'instruction_count': instruction_count,
-                        'is_system_thread': is_system
+                        'is_system_thread': is_system,
+                        'wakeup_depth': depth  # 添加唤醒链深度信息
                     })
             elapsed = time.time() - stage_start
             stage_timings['build_thread_info'] += elapsed
@@ -1435,7 +1443,7 @@ def analyze_empty_frame_wakeup_chain(trace_db_path: str, perf_db_path: str,
                 'frame_id': frame_id,
                 'frame_info': frame_info,
                 'last_event': last_event,
-                'related_threads': related_threads_info,
+                'wakeup_threads': related_threads_info,  # 通过唤醒链分析找到的线程
                 'top_5_waste_threads': top_5_threads,  # 新增：Top 5浪费线程（便于开发者快速定位问题）
                 'total_wasted_instructions': total_wasted_instructions,  # 只包含应用线程
                 'total_system_instructions': total_system_instructions,  # 系统线程指令数（用于统计）
@@ -1555,7 +1563,7 @@ def print_results(results: List[Dict[str, Any]], top_n: int = 10, framework_name
     for idx, result in enumerate(results[:top_n], 1):
         frame_info = result['frame_info']
         last_event = result['last_event']
-        related_threads = result['related_threads']
+        wakeup_threads = result.get('wakeup_threads', [])
         total_instructions = result['total_wasted_instructions']
         
         print(f'\n[{idx}] 帧 ID: {result["frame_id"]}')
@@ -1565,7 +1573,7 @@ def print_results(results: List[Dict[str, Any]], top_n: int = 10, framework_name
               f'(持续 {frame_info["dur"]/1_000_000:.2f}ms)')
         print(f'    VSync: {frame_info.get("vsync", "N/A")}')
         print(f'    最后事件: {last_event.get("name", "N/A")} (ts: {last_event.get("ts", "N/A")})')
-        print(f'    相关线程数: {len(related_threads)}')
+        print(f'    唤醒链线程数: {len(wakeup_threads)}')
         print(f'    浪费的 CPU 指令数（所有线程）: {total_instructions:,}')
         if result.get('total_system_instructions', 0) > 0:
             print(f'    系统线程 CPU 指令数: {result.get("total_system_instructions", 0):,}')
@@ -1584,11 +1592,11 @@ def print_results(results: List[Dict[str, Any]], top_n: int = 10, framework_name
                 percentage = thread.get('percentage', 0)
                 print(f'    {idx:<6} {thread_type:<8} {process_name:<25} {thread_name:<30} {instruction_count:<15,} {percentage:>6.2f}%')
         
-        if related_threads:
-            print(f'\n    相关线程列表（供人工验证）:')
+        if wakeup_threads:
+            print(f'\n    唤醒链线程列表（供人工验证）:')
             print(f'    {"序号":<6} {"类型":<8} {"进程名":<25} {"PID":<8} {"线程名":<30} {"TID":<8} {"ITID":<8} {"指令数":<15}')
             print(f'    {"-"*110}')
-            for thread_idx, thread_info in enumerate(related_threads, 1):
+            for thread_idx, thread_info in enumerate(wakeup_threads, 1):
                 process_name = (thread_info.get("process_name") or "N/A")[:24]
                 thread_name = (thread_info.get("thread_name") or "N/A")[:29]
                 pid = thread_info.get("pid", "N/A")
@@ -1614,7 +1622,7 @@ def print_results(results: List[Dict[str, Any]], top_n: int = 10, framework_name
     # 统计所有涉及的线程
     all_threads = {}
     for result in results:
-        for thread_info in result['related_threads']:
+        for thread_info in result.get('wakeup_threads', []):
             thread_key = (thread_info.get('pid'), thread_info.get('tid'), thread_info.get('thread_name'))
             if thread_key not in all_threads:
                 all_threads[thread_key] = {

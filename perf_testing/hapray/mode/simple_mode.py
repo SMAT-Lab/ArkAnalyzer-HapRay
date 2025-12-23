@@ -204,10 +204,21 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
 
 
 def _process_trace_file(trace_path, htrace_step_dir):
-    """处理单个trace文件"""
-    target_htrace_file = os.path.join(htrace_step_dir, 'trace.htrace')
-    shutil.copy2(trace_path, target_htrace_file)
-    logging.info('Copied %s to %s', trace_path, target_htrace_file)
+    """处理单个trace文件
+    
+    如果输入是.db文件，直接复制为trace.db
+    如果输入是.htrace文件，复制为trace.htrace（后续会转换为trace.db）
+    """
+    if trace_path.endswith('.db'):
+        # 如果输入是.db文件，直接复制为trace.db
+        target_db_file = os.path.join(htrace_step_dir, 'trace.db')
+        shutil.copy2(trace_path, target_db_file)
+        logging.info('Copied %s to %s', trace_path, target_db_file)
+    else:
+        # 如果输入是.htrace文件，复制为trace.htrace
+        target_htrace_file = os.path.join(htrace_step_dir, 'trace.htrace')
+        shutil.copy2(trace_path, target_htrace_file)
+        logging.info('Copied %s to %s', trace_path, target_htrace_file)
 
 
 def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files):
