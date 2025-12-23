@@ -1368,6 +1368,7 @@ class Parser {
         if (!symtabSection) {
             throw new Error('No .symtab section found in ELF file');
         }
+        logger.warn('Found .dynsym section, may no strip this section');
 
         // Find the associated string table (.strtab)
         const strtabSection = elf.body.sections.find((sec) => sec.name === '.strtab' && sec.type === 'strtab');
@@ -1448,7 +1449,7 @@ export function parseELF(buf: Buffer): ELF {
         elfHeader.body.symtabSymbols = symtabSymbols;
     } catch (error) {
         // Handle cases where .symtab or .strtab might not exist
-        logger.warn('Symbol parsing for .symtab failed:', (error as Error).message);
+        logger.debug('Symbol parsing for .symtab failed:', (error as Error).message);
     }
 
     // Optionally parse PLT

@@ -17,7 +17,7 @@ import fs from 'fs';
 import path from 'path';
 import Handlebars from 'handlebars';
 import type { FormatResult } from './index';
-import { BaseFormatter } from './index';
+import { BaseFormatter } from './base-formatter';
 import type { Hap, TechStackDetection } from '../../hap/hap_parser';
 
 /**
@@ -293,6 +293,10 @@ export class HtmlFormatter extends BaseFormatter {
 
         // 构建数据项
         for (const detection of detections) {
+            // 统计 soExports 符号数量
+            const soExports = detection.metadata.soExports;
+            const soExportsCount = Array.isArray(soExports) ? soExports.length : 0;
+
             const item: Record<string, unknown> = {
                 fileName: detection.file,
                 filePath: `${detection.folder}/${detection.file}`,
@@ -303,7 +307,8 @@ export class HtmlFormatter extends BaseFormatter {
                 sourceHapPath: detection.sourceHapPath ?? '',
                 sourceBundleName: detection.sourceBundleName ?? '',
                 sourceVersionCode: detection.sourceVersionCode?.toString() ?? '',
-                sourceVersionName: detection.sourceVersionName ?? ''
+                sourceVersionName: detection.sourceVersionName ?? '',
+                soExportsCount
             };
 
             // 添加 metadata 字段（已过滤掉 soDependencies、soExports 和 soImports）
@@ -325,7 +330,7 @@ export class HtmlFormatter extends BaseFormatter {
 
         return {
             items,
-            metadataColumns: sortedMetadataColumns
+            metadataColumns: ['soExportsCount', ...sortedMetadataColumns]
         };
     }
 
