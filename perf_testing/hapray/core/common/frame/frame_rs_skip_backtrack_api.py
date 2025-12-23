@@ -6,7 +6,7 @@ RS系统API流程：从RS skip帧追溯到应用进程提交的帧
 支持框架：ArkUI, RN, KMP
 
 追溯方法：
-1. 优先：通过IPC线程的runnable状态，wake up from tid直接找到应用线程的帧
+1. 优先：通过IPC线程的runnable状态，wakeup_from tid直接找到应用线程的帧
 2. 备选：通过唤醒链追溯（RS进程IPC线程 → 应用进程IPC线程 → UI线程）
 """
 
@@ -123,7 +123,7 @@ def trace_by_runnable_wakeup_from(
     app_frames_cache: Optional[Dict] = None
 ) -> Optional[Dict]:
     """
-    通过IPC线程的runnable状态，wake up from tid追溯应用帧
+    通过IPC线程的runnable状态，wakeup_from tid追溯应用帧
     
     Args:
         trace_conn: trace数据库连接
@@ -135,7 +135,7 @@ def trace_by_runnable_wakeup_from(
     Returns:
         应用帧信息，如果找到；否则None
     """
-    # 步骤1: 查找IPC线程的runnable状态下的wake up from tid
+    # 步骤1: 查找IPC线程的runnable状态下的wakeup_from tid
     # 在instant表中查找sched_wakeup事件，ref是IPC线程，wakeup_from是应用线程
     app_thread_id = None
     wakeup_ts = None
@@ -186,7 +186,7 @@ def trace_by_runnable_wakeup_from(
             wakeup_ts = wakeup_result[1]
     
     if not app_thread_id or not wakeup_ts:
-        logger.debug(f'未找到IPC线程 {rs_ipc_thread_id} 的wake up from tid')
+        logger.debug(f'未找到IPC线程 {rs_ipc_thread_id} 的wakeup_from tid')
         return None
     
     # 步骤2: 验证应用线程是否属于指定的应用进程
@@ -713,7 +713,7 @@ def trace_rs_skip_to_app_frame(
     frame_id, frame_ts, frame_dur, frame_flag, frame_vsync, frame_itid = rs_frame
     frame_dur = frame_dur if frame_dur else 0
     
-    logger.info(f'RS帧 {frame_id}: 时间={frame_ts}, dur={frame_dur}, flag={frame_flag}, vsync={frame_vsync}')
+    # logger.info(f'RS帧 {frame_id}: 时间={frame_ts}, dur={frame_dur}, flag={frame_flag}, vsync={frame_vsync}')
     
     # 步骤2: 在RS帧时间窗口内查找UnMarsh事件
     perf_t2 = time.time()
@@ -741,7 +741,7 @@ def trace_rs_skip_to_app_frame(
             'error': '未找到UnMarsh事件'
         }
     
-    logger.info(f'找到 {len(unmarsh_events)} 个UnMarsh事件')
+    # logger.info(f'找到 {len(unmarsh_events)} 个UnMarsh事件')
     
     # 步骤3: 对每个UnMarsh事件尝试追溯
     for unmarsh_event in unmarsh_events:
@@ -755,7 +755,7 @@ def trace_rs_skip_to_app_frame(
         if not app_pid:
             continue
         
-        logger.info(f'UnMarsh事件: 时间={event_ts}, RS IPC线程={rs_ipc_thread_name}, 应用PID={app_pid}')
+        # logger.info(f'UnMarsh事件: 时间={event_ts}, RS IPC线程={rs_ipc_thread_name}, 应用PID={app_pid}')
         
         # 方法1: 优先使用runnable方法
         perf_t4 = time.time()
@@ -773,7 +773,7 @@ def trace_rs_skip_to_app_frame(
         perf_timings['runnable_done'] = perf_t5 - perf_t4
         
         if app_frame:
-            logger.info(f'通过runnable方法找到应用帧: {app_frame["frame_id"]}')
+            # logger.info(f'通过runnable方法找到应用帧: {app_frame["frame_id"]}')
             
             # 计算CPU浪费
             tid_to_info_cache = caches.get('tid_to_info') if caches else None
@@ -789,11 +789,11 @@ def trace_rs_skip_to_app_frame(
             
             perf_end = time.time()
             perf_timings['total'] = perf_end - perf_start
-            print(f'[性能] RS帧{frame_id} 追溯耗时: {perf_timings["total"]*1000:.2f}ms | '
-                  f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
-                  f'查找UnMarsh: {perf_timings["find_unmarsh"]*1000:.2f}ms | '
-                  f'UnMarsh查询: {perf_timings["find_unmarsh_done"]*1000:.2f}ms | '
-                  f'Runnable追溯: {perf_timings["runnable_done"]*1000:.2f}ms')
+            # print(f'[性能] RS帧{frame_id} 追溯耗时: {perf_timings["total"]*1000:.2f}ms | '
+            #       f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
+            #       f'查找UnMarsh: {perf_timings["find_unmarsh"]*1000:.2f}ms | '
+            #       f'UnMarsh查询: {perf_timings["find_unmarsh_done"]*1000:.2f}ms | '
+            #       f'Runnable追溯: {perf_timings["runnable_done"]*1000:.2f}ms')
             return {
                 'rs_frame': {
                     'frame_id': frame_id,
@@ -819,7 +819,7 @@ def trace_rs_skip_to_app_frame(
         perf_timings['wakeup_chain_done'] = perf_t7 - perf_t6
         
         if app_frame:
-            logger.info(f'通过唤醒链方法找到应用帧: {app_frame["frame_id"]}')
+            # logger.info(f'通过唤醒链方法找到应用帧: {app_frame["frame_id"]}')
             
             # 计算CPU浪费
             tid_to_info_cache = caches.get('tid_to_info') if caches else None
@@ -835,12 +835,12 @@ def trace_rs_skip_to_app_frame(
             
             perf_end = time.time()
             perf_timings['total'] = perf_end - perf_start
-            print(f'[性能] RS帧{frame_id} 追溯耗时: {perf_timings["total"]*1000:.2f}ms | '
-                  f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
-                  f'查找UnMarsh: {perf_timings["find_unmarsh"]*1000:.2f}ms | '
-                  f'UnMarsh查询: {perf_timings["find_unmarsh_done"]*1000:.2f}ms | '
-                  f'Runnable追溯: {perf_timings.get("runnable_done", 0)*1000:.2f}ms | '
-                  f'唤醒链追溯: {perf_timings["wakeup_chain_done"]*1000:.2f}ms')
+            # print(f'[性能] RS帧{frame_id} 追溯耗时: {perf_timings["total"]*1000:.2f}ms | '
+            #       f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
+            #       f'查找UnMarsh: {perf_timings["find_unmarsh"]*1000:.2f}ms | '
+            #       f'UnMarsh查询: {perf_timings["find_unmarsh_done"]*1000:.2f}ms | '
+            #       f'Runnable追溯: {perf_timings.get("runnable_done", 0)*1000:.2f}ms | '
+            #       f'唤醒链追溯: {perf_timings["wakeup_chain_done"]*1000:.2f}ms')
             return {
                 'rs_frame': {
                     'frame_id': frame_id,
@@ -856,10 +856,10 @@ def trace_rs_skip_to_app_frame(
     # 所有方法都失败
     perf_end = time.time()
     perf_timings['total'] = perf_end - perf_start
-    print(f'[性能] RS帧{frame_id} 追溯失败，耗时: {perf_timings["total"]*1000:.2f}ms | '
-          f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
-          f'查找UnMarsh: {perf_timings["find_unmarsh"]*1000:.2f}ms | '
-          f'UnMarsh查询: {perf_timings["find_unmarsh_done"]*1000:.2f}ms')
+    # print(f'[性能] RS帧{frame_id} 追溯失败，耗时: {perf_timings["total"]*1000:.2f}ms | '
+    #       f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
+    #       f'查找UnMarsh: {perf_timings["find_unmarsh"]*1000:.2f}ms | '
+    #       f'UnMarsh查询: {perf_timings["find_unmarsh_done"]*1000:.2f}ms')
     return {
         'rs_frame': {
             'frame_id': frame_id,
@@ -949,7 +949,7 @@ def main():
                         print(f'  错误: {result["error"]}')
         else:
             # 查找所有包含skip的RS帧并追溯
-            logger.info('查找所有包含skip的RS帧...')
+            # logger.info('查找所有包含skip的RS帧...')
             # 这里可以调用rs_skip_analyzer.py的逻辑来找到skip帧
             print('请使用 --rs-frame-id 指定要追溯的RS帧ID')
             print('或者先运行 rs_skip_analyzer.py 找到skip帧，然后使用 --rs-frame-id 追溯')

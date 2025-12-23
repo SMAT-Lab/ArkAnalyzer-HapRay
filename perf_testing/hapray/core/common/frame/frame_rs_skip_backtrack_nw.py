@@ -380,7 +380,7 @@ def trace_rs_skip_to_app_frame(
     frame_id, frame_ts, frame_dur, frame_flag, frame_vsync, frame_itid = rs_frame
     frame_dur = frame_dur if frame_dur else 0
     
-    logger.info(f'RS帧 {frame_id}: 时间={frame_ts}, dur={frame_dur}, flag={frame_flag}, vsync={frame_vsync}')
+    # logger.info(f'RS帧 {frame_id}: 时间={frame_ts}, dur={frame_dur}, flag={frame_flag}, vsync={frame_vsync}')
     
     # 步骤2: 在RS帧时间窗口内查找NativeWindow API事件
     perf_t2 = time.time()
@@ -423,7 +423,7 @@ def trace_rs_skip_to_app_frame(
         thread_name = rs_event[4]
         process_name = rs_event[5]
         
-        logger.info(f'RS事件: {event_name[:60]}... | 时间={event_ts}, 线程={thread_name}')
+        # logger.info(f'RS事件: {event_name[:60]}... | 时间={event_ts}, 线程={thread_name}')
         
         # 在RS事件时间窗口内查找应用帧
         perf_t5 = time.time()
@@ -461,12 +461,12 @@ def trace_rs_skip_to_app_frame(
     perf_timings['match_frames_done'] = perf_t7 - perf_t4
     perf_end = time.time()
     perf_timings['total'] = perf_end - perf_start
-    print(f'[性能] RS帧{frame_id} 追溯耗时: {perf_timings["total"]*1000:.2f}ms | '
-          f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
-          f'查找NativeWindow事件: {perf_timings["find_nativewindow_events"]*1000:.2f}ms | '
-          f'NativeWindow事件查询: {perf_timings["find_nativewindow_events_done"]*1000:.2f}ms | '
-          f'匹配应用帧: {perf_timings["match_frames_done"]*1000:.2f}ms | '
-          f'查找应用帧(累计): {perf_timings.get("find_app_frames", 0)*1000:.2f}ms')
+    # print(f'[性能] RS帧{frame_id} 追溯耗时: {perf_timings["total"]*1000:.2f}ms | '
+    #       f'获取RS帧: {perf_timings["get_rs_frame"]*1000:.2f}ms | '
+    #       f'查找NativeWindow事件: {perf_timings["find_nativewindow_events"]*1000:.2f}ms | '
+    #       f'NativeWindow事件查询: {perf_timings["find_nativewindow_events_done"]*1000:.2f}ms | '
+    #       f'匹配应用帧: {perf_timings["match_frames_done"]*1000:.2f}ms | '
+    #       f'查找应用帧(累计): {perf_timings.get("find_app_frames", 0)*1000:.2f}ms')
     
     if best_match:
         app_frame = best_match['app_frame']
