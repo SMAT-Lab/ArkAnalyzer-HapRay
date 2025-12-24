@@ -52,12 +52,12 @@ class UICompareAction:
             result[step_name] = {
                 'screenshots': {
                     'start': sorted(glob.glob(os.path.join(step_dir, 'screenshot_start_*.png'))),
-                    'end': sorted(glob.glob(os.path.join(step_dir, 'screenshot_end_*.png')))
+                    'end': sorted(glob.glob(os.path.join(step_dir, 'screenshot_end_*.png'))),
                 },
                 'trees': {
                     'start': sorted(glob.glob(os.path.join(step_dir, 'element_tree_start_*.txt'))),
-                    'end': sorted(glob.glob(os.path.join(step_dir, 'element_tree_end_*.txt')))
-                }
+                    'end': sorted(glob.glob(os.path.join(step_dir, 'element_tree_end_*.txt'))),
+                },
             }
 
         return result
@@ -138,8 +138,8 @@ class UICompareAction:
                     if i >= len(base_trees) or i >= len(compare_trees):
                         continue
 
-                    logging.info(f'  对比 {phase}_{i+1}...')
-                    step_output = os.path.join(parsed_args.output, step, f'{phase}_{i+1}')
+                    logging.info(f'  对比 {phase}_{i + 1}...')
+                    step_output = os.path.join(parsed_args.output, step, f'{phase}_{i + 1}')
 
                     result = comparator.compare_ui_trees(
                         base_trees[i],
@@ -147,19 +147,19 @@ class UICompareAction:
                         compare_trees[i],
                         compare_screenshots[i],
                         step_output,
-                        filter_minor_changes=True  # 启用微小变化过滤
+                        filter_minor_changes=True,  # 启用微小变化过滤
                     )
 
                     # 将图片转换为base64用于HTML
                     result['marked_images_base64'] = [
                         UICompareAction._image_to_base64(result['marked_images'][0]),
-                        UICompareAction._image_to_base64(result['marked_images'][1])
+                        UICompareAction._image_to_base64(result['marked_images'][1]),
                     ]
                     result['phase'] = phase
                     result['index'] = i + 1
 
                     step_results.append(result)
-                    logging.info(f'  {phase}_{i+1} 对比完成，发现 {result["diff_count"]} 处差异')
+                    logging.info(f'  {phase}_{i + 1} 对比完成，发现 {result["diff_count"]} 处差异')
 
             all_results[step] = step_results
 
@@ -167,7 +167,7 @@ class UICompareAction:
         html_path = os.path.join(parsed_args.output, 'ui_compare_report.html')
         UICompareAction._generate_html_report(all_results, html_path, parsed_args.base_dir, parsed_args.compare_dir)
 
-        logging.info(f'所有对比完成')
+        logging.info('所有对比完成')
         logging.info(f'HTML报告: {html_path}')
 
         return all_results
@@ -175,7 +175,7 @@ class UICompareAction:
     @staticmethod
     def _generate_html_report(results: dict, output_path: str, base_dir: str, compare_dir: str):
         """生成HTML对比报告"""
-        html = f'''<!DOCTYPE html>
+        html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -222,7 +222,7 @@ class UICompareAction:
                 <div><strong>生成时间:</strong> {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>
             </div>
         </div>
-'''
+"""
 
         for step, step_results in sorted(results.items()):
             total_diffs = sum(r['diff_count'] for r in step_results)
@@ -231,7 +231,9 @@ class UICompareAction:
             options = []
             for idx, result in enumerate(step_results):
                 phase_label = '开始阶段' if result['phase'] == 'start' else '结束阶段'
-                options.append(f'<option value="{idx}">{phase_label} #{result["index"]} (差异: {result["diff_count"]})</option>')
+                options.append(
+                    f'<option value="{idx}">{phase_label} #{result["index"]} (差异: {result["diff_count"]})</option>'
+                )
 
             html += f'''
         <div class="step-section" id="{step}">
@@ -268,7 +270,7 @@ class UICompareAction:
 '''
 
                 if result['differences']:
-                    html += '''
+                    html += """
                 <details open>
                     <summary style="cursor: pointer; font-weight: 600; padding: 10px; background: #fff; border-radius: 4px; margin-top: 15px;">
                         📋 差异详情列表
@@ -284,13 +286,13 @@ class UICompareAction:
                             </tr>
                         </thead>
                         <tbody>
-'''
+"""
                     for diff_idx, diff in enumerate(result['differences'], 1):
                         comp_type = diff.get('component', {}).get('type', '未知')
                         for attr_diff in diff.get('comparison_result', []):
                             val1 = str(attr_diff.get('value1', 'N/A'))
                             val2 = str(attr_diff.get('value2', 'N/A'))
-                            html += f'''
+                            html += f"""
                             <tr>
                                 <td>{diff_idx}</td>
                                 <td><span class="component-type">{comp_type}</span></td>
@@ -298,24 +300,24 @@ class UICompareAction:
                                 <td class="value-cell">{val1}</td>
                                 <td class="value-cell">{val2}</td>
                             </tr>
-'''
-                    html += '''
+"""
+                    html += """
                         </tbody>
                     </table>
                 </details>
-'''
+"""
                 else:
                     html += '<div class="no-diff">✅ 未发现差异</div>'
 
-                html += '''
+                html += """
             </div>
-'''
+"""
 
-            html += '''
+            html += """
         </div>
-'''
+"""
 
-        html += '''
+        html += """
     </div>
     <script>
         function showPhase(step, index) {
@@ -326,8 +328,7 @@ class UICompareAction:
         }
     </script>
 </body>
-</html>'''
+</html>"""
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
-

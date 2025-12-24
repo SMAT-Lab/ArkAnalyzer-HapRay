@@ -28,6 +28,7 @@ from .frame_constants import (
     VSYNC_SYMBOL_ON_READABLE,
 )
 from .frame_core_cache_manager import FrameCacheManager
+from .frame_utils import calculate_process_instructions
 
 
 class FrameLoadCalculator:
@@ -205,10 +206,7 @@ class FrameLoadCalculator:
         # 注意：一帧可能包含多个线程的样本，每个样本都有自己的callchain_id和thread_id
         # 因此只按时间范围过滤，不限制线程，确保能分析该帧时间范围内所有线程的样本
         filter_start = time.time()
-        mask = (
-            (perf_df['timestamp_trace'] >= frame_start_time_ts)
-            & (perf_df['timestamp_trace'] <= frame_end_time_ts)
-        )
+        mask = (perf_df['timestamp_trace'] >= frame_start_time_ts) & (perf_df['timestamp_trace'] <= frame_end_time_ts)
         # 如果提供了app_pid，可以进一步过滤应用进程的样本（可选优化）
         if 'app_pid' in frame and frame['app_pid']:
             # 这里可以添加进程过滤，但需要perf_df中有pid字段
@@ -280,12 +278,14 @@ class FrameLoadCalculator:
 
                         # 直接保存sample信息，每个深度的value就是sample的event_count
                         # 火焰图的宽度差异来自于前端合并不同调用栈时的累加
-                        sample_callchain_list.append({
-                            'timestamp': int(sample['timestamp_trace']),
-                            'event_count': int(sample['event_count']),
-                            'thread_id': int(sample['thread_id']),
-                            'callchain_info': callchain_info
-                        })
+                        sample_callchain_list.append(
+                            {
+                                'timestamp': int(sample['timestamp_trace']),
+                                'event_count': int(sample['event_count']),
+                                'thread_id': int(sample['thread_id']),
+                                'callchain_info': callchain_info,
+                            }
+                        )
 
             except Exception as e:
                 logging.error('分析调用链时出错: %s', str(e))
@@ -314,19 +314,18 @@ class FrameLoadCalculator:
                 thread_info = tid_to_info.get(thread_id, {})
                 thread_name = thread_info.get('thread_name', 'unknown')
 
-                sample_callchains.append({
-                    'timestamp': sample_data['timestamp'],
-                    'event_count': sample_data['event_count'],
-                    'load_percentage': float(sample_load_percentage),
-                    'thread_id': thread_id,
-                    'thread_name': thread_name,  # 添加thread_name
-                    'callchain': callchain_with_load,
-                })
-            except Exception as e:
-                logging.error(
-                    '处理样本时出错: %s, sample: %s, frame_load: %s',
-                    str(e), sample_data, frame_load
+                sample_callchains.append(
+                    {
+                        'timestamp': sample_data['timestamp'],
+                        'event_count': sample_data['event_count'],
+                        'load_percentage': float(sample_load_percentage),
+                        'thread_id': thread_id,
+                        'thread_name': thread_name,  # 添加thread_name
+                        'callchain': callchain_with_load,
+                    }
                 )
+            except Exception as e:
+                logging.error('处理样本时出错: %s, sample: %s, frame_load: %s', str(e), sample_data, frame_load)
                 continue
 
         sample_analysis_time = time.time() - sample_analysis_start
@@ -384,50 +383,42 @@ class FrameLoadCalculator:
         self, frame: dict[str, Any], trace_conn, perf_conn, app_pids: list[int]
     ) -> int:
         """使用进程级统计计算帧负载，支持多进程（如ArkWeb）
-        
+
         Args:
             frame: 帧数据字典，必须包含 'ts', 'dur' 字段
             trace_conn: trace数据库连接
             perf_conn: perf数据库连接
             app_pids: 应用进程ID列表（支持多个进程，如ArkWeb的主进程+render进程）
-        
+
         Returns:
             int: 帧负载（多进程级统计，包含系统线程）
         """
-        from .frame_utils import calculate_process_instructions
-        
         frame_start = frame['ts']
         frame_end = frame['ts'] + frame['dur']
-        
+
         total_cpu = 0
-        
+
         # 对每个进程分别计算CPU，然后汇总
         for pid in app_pids:
             # 使用进程级统计（包含系统线程，如OS_VSyncThread）
             app_instructions, sys_instructions = calculate_process_instructions(
-                perf_conn=perf_conn,
-                trace_conn=trace_conn,
-                app_pid=pid,
-                frame_start=frame_start,
-                frame_end=frame_end
+                perf_conn=perf_conn, trace_conn=trace_conn, app_pid=pid, frame_start=frame_start, frame_end=frame_end
             )
-            
+
             # 包含系统线程CPU（OS_VSyncThread等系统线程也在应用进程中运行）
             total_cpu += app_instructions + sys_instructions
-        
+
         return int(total_cpu)
-    
-    def calculate_frame_load_process_level(
-        self, frame: dict[str, Any], trace_conn, perf_conn, app_pid: int
-    ) -> int:
+
+    def calculate_frame_load_process_level(self, frame: dict[str, Any], trace_conn, perf_conn, app_pid: int) -> int:
         """使用进程级统计计算帧负载（单进程版本，兼容旧代码）
-        
+
         Args:
             frame: 帧数据字典，必须包含 'ts', 'dur' 字段
             trace_conn: trace数据库连接
             perf_conn: perf数据库连接
             app_pid: 应用进程ID
-        
+
         Returns:
             int: 帧负载（进程级统计，包含系统线程）
         """
@@ -475,20 +466,16 @@ class FrameLoadCalculator:
             # 如果frame中没有app_pid，尝试从cache_manager获取
             if not app_pid and self.cache_manager.app_pids:
                 app_pid = self.cache_manager.app_pids[0]
-            
+
             if app_pid and self.cache_manager.trace_conn and self.cache_manager.perf_conn:
                 try:
-                    cpu_load = self.calculate_frame_load_process_level(
-                        frame,
-                        self.cache_manager.trace_conn,
-                        self.cache_manager.perf_conn,
-                        app_pid
+                    return self.calculate_frame_load_process_level(
+                        frame, self.cache_manager.trace_conn, self.cache_manager.perf_conn, app_pid
                     )
-                    return cpu_load
                 except Exception as e:
                     logging.warning(f'进程级CPU计算失败，回退到单线程计算: {e}')
                     # 继续执行单线程计算
-        
+
         # 向后兼容：使用原有的单线程计算方式
         return self._calculate_single_thread_load(frame, perf_df)
 
@@ -508,9 +495,9 @@ class FrameLoadCalculator:
 
         # 检查是否使用进程级CPU计算
         use_process_level = (
-            self.use_process_level_cpu 
-            and self.cache_manager 
-            and self.cache_manager.trace_conn 
+            self.use_process_level_cpu
+            and self.cache_manager
+            and self.cache_manager.trace_conn
             and self.cache_manager.perf_conn
             and self.cache_manager.app_pids
         )
@@ -528,10 +515,7 @@ class FrameLoadCalculator:
                 try:
                     # 计算所有app_pids的CPU总和（支持ArkWeb的多进程架构）
                     frame_load = self.calculate_frame_load_multi_process(
-                        frame,
-                        self.cache_manager.trace_conn,
-                        self.cache_manager.perf_conn,
-                        app_pids
+                        frame, self.cache_manager.trace_conn, self.cache_manager.perf_conn, app_pids
                     )
                 except Exception as e:
                     if i < 5:  # 只记录前5个错误，避免日志过多

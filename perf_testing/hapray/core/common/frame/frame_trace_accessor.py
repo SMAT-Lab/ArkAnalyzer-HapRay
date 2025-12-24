@@ -240,7 +240,7 @@ class FrameTraceAccessor:
                 - frames_df: 包含详细信息的空帧数据（保留所有原始信息）
                 - merged_time_ranges: 去重后的时间范围列表 [(start_ts, end_ts), ...]
         """
-        
+
         # 验证app_pids参数
         valid_pids = validate_app_pids(app_pids)
         if not valid_pids:
@@ -277,7 +277,7 @@ class FrameTraceAccessor:
 
         try:
             frames_df = pd.read_sql_query(query, self.trace_conn, params=valid_pids)
-            
+
             # 计算合并后的时间范围（去重）
             merged_time_ranges = []
             if not frames_df.empty:
@@ -287,35 +287,35 @@ class FrameTraceAccessor:
                     dur = row.get('dur', 0)
                     if ts > 0 and dur >= 0:
                         time_ranges.append((ts, ts + dur))
-                
+
                 # 合并重叠的时间范围
                 if time_ranges:
                     merged_time_ranges = self._merge_time_ranges(time_ranges)
-            
+
             return frames_df, merged_time_ranges
         except Exception as e:
             logging.error('获取空帧详细信息失败: %s', str(e))
             return pd.DataFrame(), []
-    
+
     def _merge_time_ranges(self, time_ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
         """合并重叠的时间范围
-        
+
         Args:
             time_ranges: 时间范围列表，格式为 [(start_ts, end_ts), ...]
-        
+
         Returns:
             合并后的时间范围列表（无重叠）
         """
         if not time_ranges:
             return []
-        
+
         # 按开始时间排序
         sorted_ranges = sorted(time_ranges, key=lambda x: x[0])
         merged = [sorted_ranges[0]]
-        
+
         for current_start, current_end in sorted_ranges[1:]:
             last_start, last_end = merged[-1]
-            
+
             # 如果当前范围与最后一个合并范围重叠
             if current_start <= last_end:
                 # 合并：扩展结束时间
@@ -323,7 +323,7 @@ class FrameTraceAccessor:
             else:
                 # 无重叠，添加新范围
                 merged.append((current_start, current_end))
-        
+
         return merged
 
     # ==================== 工具方法 ====================
