@@ -177,7 +177,7 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
 
     def _analyze_rs_skip_frames(self, core_analyzer: FrameAnalyzerCore, step_dir: str) -> Optional[dict[str, Any]]:
         """分析RS Skip帧（向后兼容接口）
-        
+
         注意：RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
         此方法调用EmptyFrameAnalyzer，然后提取RS traced相关统计
         用于生成独立的trace_rsSkip.json报告（向后兼容）
@@ -192,7 +192,7 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
                     summary.get('total_skip_frames', 0),
                     summary.get('traced_success_count', 0),
                     summary.get('trace_accuracy', 0.0),
-                    summary.get('total_wasted_cpu', 0)
+                    summary.get('total_wasted_cpu', 0),
                 )
             return result
 
@@ -248,11 +248,11 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
         try:
             file_path = os.path.join(self.scene_dir, 'report', report_path.replace('/', '_') + '.json')
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
+
             # 强制删除旧文件，确保重新写入（避免缓存问题）
             if os.path.exists(file_path):
                 os.remove(file_path)
-            
+
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, sort_keys=True)
         except Exception as e:

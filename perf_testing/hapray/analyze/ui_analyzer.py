@@ -785,11 +785,15 @@ class UIAnalyzer(BaseAnalyzer):
             for phase in ['start', 'end']:
                 trees = sorted(glob.glob(os.path.join(step_dir, f'element_tree_{phase}_*.txt')))
                 for tree in trees:
-                    with open(tree, 'r', encoding='utf-8') as f:
+                    with open(tree, encoding='utf-8') as f:
                         step_data['trees'][phase].append(f.read())
 
-            if step_data['screenshots']['start'] or step_data['screenshots']['end'] or \
-               step_data['trees']['start'] or step_data['trees']['end']:
+            if (
+                step_data['screenshots']['start']
+                or step_data['screenshots']['end']
+                or step_data['trees']['start']
+                or step_data['trees']['end']
+            ):
                 raw_data[step_name] = step_data
 
         if raw_data:
