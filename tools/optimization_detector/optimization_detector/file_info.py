@@ -50,13 +50,13 @@ class FileInfo:
     @staticmethod
     def _is_elf_file(file_path: str) -> bool:
         """Check if file is an ELF file by reading magic number
-        
+
         ELF files start with 0x7f followed by 'ELF' (bytes: 0x7f 0x45 0x4c 0x46)
         This method directly checks the file content rather than relying on file extension.
-        
+
         Args:
             file_path: Path to the file to check
-            
+
         Returns:
             bool: True if file is an ELF file, False otherwise
         """
@@ -71,7 +71,7 @@ class FileInfo:
     @staticmethod
     def _is_so_file(file_path: str) -> bool:
         """Check if file is a so file: ends with .so or contains .so. in filename
-        
+
         Note: This is a fallback check. The actual ELF detection should use _is_elf_file()
         for more accurate results, as it can detect ELF files regardless of extension
         and avoid false positives (e.g., linkerscript files with .so extension).
@@ -85,7 +85,7 @@ class FileInfo:
         self.file_size = self._get_file_size()
         self.file_hash = self._calculate_file_hash()
         self.file_id = self._generate_file_id()
-        
+
         # 优先通过ELF magic number检测，更准确
         if absolute_path.endswith('.a'):
             self.file_type = FileType.AR
@@ -173,23 +173,23 @@ class FileCollector:
     @staticmethod
     def _is_binary_file(file_path: str) -> bool:
         """Check if file is a binary file by detecting ELF magic number or checking extension
-        
+
         Priority:
         1. Check if it's an ELF file by reading magic number (most accurate)
         2. Check if it's an .a archive file
         3. Fallback to extension check (.so, .so.*)
-        
+
         This ensures files like xx.so.653 are detected correctly, and non-ELF files
         with .so extension (like linkerscript files) are filtered out early.
         """
         # 优先检测ELF文件（最准确）
         if FileInfo._is_elf_file(file_path):
             return True
-        
+
         # 检查是否是 .a 归档文件
         if file_path.endswith('.a'):
             return True
-        
+
         # 回退到扩展名检查（向后兼容）
         filename = os.path.basename(file_path)
         return file_path.endswith('.so') or '.so.' in filename
@@ -244,14 +244,14 @@ class FileCollector:
                             # Handle both 'package/' prefix and direct paths
                             if file_path.startswith('package/'):
                                 file_path = file_path[8:]  # Remove 'package/' prefix
-                            if (
-                                file_path.startswith('libs/arm64') or file_path.startswith('lib/arm64')
-                            ) and (file_path.endswith('.so') or '.so.' in file_path):
+                            if (file_path.startswith('libs/arm64') or file_path.startswith('lib/arm64')) and (
+                                file_path.endswith('.so') or '.so.' in file_path
+                            ):
                                 output_path = os.path.join(temp_dir, file_path)
                                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                                 with tar_ref.extractfile(member) as src, open(output_path, 'wb') as dest:
                                     dest.write(src.read())
-                                
+
                                 # 提取后再次检查是否是有效的ELF文件，过滤掉无效文件
                                 if FileInfo._is_elf_file(output_path):
                                     file_info = FileInfo(
@@ -274,7 +274,7 @@ class FileCollector:
                             os.makedirs(os.path.dirname(output_path), exist_ok=True)
                             with zip_ref.open(file) as src, open(output_path, 'wb') as dest:
                                 dest.write(src.read())
-                            
+
                             # 提取后再次检查是否是有效的ELF文件，过滤掉无效文件
                             if FileInfo._is_elf_file(output_path):
                                 file_info = FileInfo(absolute_path=output_path, logical_path=f'{hap_path}/{file}')

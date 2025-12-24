@@ -13,10 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import sqlite3
 import logging
-import traceback
-from typing import Any, Optional, Dict, Set, Tuple
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -127,7 +125,7 @@ def validate_app_pids(app_pids: Optional[list]) -> list[int]:
 
 def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) -> bool:
     """判断线程是否为系统线程（参考RN实现）
-    
+
     系统线程包括：
     - hiperf（性能采集工具）
     - render_service（渲染服务）
@@ -136,19 +134,19 @@ def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) ->
     - ohos.开头的线程
     - pp.开头的线程
     - 其他系统服务
-    
+
     Args:
         process_name: 进程名
         thread_name: 线程名
-        
+
     Returns:
         True 如果是系统线程，False 如果是应用线程
     """
     if not process_name:
-        process_name = ""
+        process_name = ''
     if not thread_name:
-        thread_name = ""
-    
+        thread_name = ''
+
     # 系统进程名模式
     system_process_patterns = [
         'hiperf',
@@ -186,7 +184,7 @@ def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) ->
         'rmrenderservice',
         'ohos.sceneboard',
     ]
-    
+
     # 系统线程名模式
     system_thread_patterns = [
         'OS_%',
@@ -242,7 +240,7 @@ def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) ->
         'chr_web_thread',
         'ldk-kallocd',
     ]
-    
+
     # 检查进程名
     for pattern in system_process_patterns:
         if pattern.endswith('%'):
@@ -251,10 +249,9 @@ def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) ->
         elif pattern.endswith('.'):
             if process_name.startswith(pattern):
                 return True
-        else:
-            if pattern in process_name or process_name == pattern:
-                return True
-    
+        elif pattern in process_name or process_name == pattern:
+            return True
+
     # 检查线程名
     for pattern in system_thread_patterns:
         if pattern.endswith('%'):
@@ -263,10 +260,9 @@ def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) ->
         elif pattern.endswith('_'):
             if thread_name.startswith(pattern):
                 return True
-        else:
-            if pattern in thread_name or thread_name == pattern:
-                return True
-    
+        elif pattern in thread_name or thread_name == pattern:
+            return True
+
     return False
 
 
@@ -274,13 +270,13 @@ def is_system_thread(process_name: Optional[str], thread_name: Optional[str]) ->
 # 向后兼容：从frame_empty_common导入CPU计算函数和公共模块类
 # ============================================================================
 # 注意：必须在文件末尾导入，避免循环导入
-from .frame_empty_common import (
-    calculate_thread_instructions,
-    calculate_process_instructions,
-    calculate_app_frame_cpu_waste,
-    EmptyFrameCPUCalculator,
+from .frame_empty_common import (  # noqa: E402
     EmptyFrameCallchainAnalyzer,
-    EmptyFrameResultBuilder
+    EmptyFrameCPUCalculator,
+    EmptyFrameResultBuilder,
+    calculate_app_frame_cpu_waste,
+    calculate_process_instructions,
+    calculate_thread_instructions,
 )
 
 # 导出列表，确保向后兼容
@@ -296,7 +292,7 @@ __all__ = [
     'calculate_app_frame_cpu_waste',
     'EmptyFrameCPUCalculator',
     'EmptyFrameCallchainAnalyzer',
-    'EmptyFrameResultBuilder'
+    'EmptyFrameResultBuilder',
 ]
 
 

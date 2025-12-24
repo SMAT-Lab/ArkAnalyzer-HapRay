@@ -167,9 +167,9 @@ class FramePerfAccessor:
         # 先检查perf_thread表是否存在process_id字段
         try:
             cursor = self.perf_conn.cursor()
-            cursor.execute("PRAGMA table_info(perf_thread)")
+            cursor.execute('PRAGMA table_info(perf_thread)')
             columns = [row[1] for row in cursor.fetchall()]
-            
+
             if 'process_id' in columns:
                 # 使用perf_thread表的process_id字段
                 query = f"""
@@ -182,13 +182,12 @@ class FramePerfAccessor:
                 total_load = result[0] if result and result[0] else 0
                 logging.info('通过perf_thread.process_id获取总负载: %d (进程ID: %s)', total_load, valid_pids)
                 return int(total_load)
-            else:
-                # 如果没有process_id字段，需要通过trace数据库的thread表来关联
-                # 但FramePerfAccessor没有trace_conn，所以需要从外部传入
-                # 这里先记录警告，返回0，让调用者知道需要修复
-                logging.warning('perf_thread表没有process_id字段，无法按进程ID过滤总负载，返回0')
-                logging.warning('建议：需要在FrameCacheManager中实现get_total_load_for_pids，使用trace_conn关联thread表')
-                return 0
+            # 如果没有process_id字段，需要通过trace数据库的thread表来关联
+            # 但FramePerfAccessor没有trace_conn，所以需要从外部传入
+            # 这里先记录警告，返回0，让调用者知道需要修复
+            logging.warning('perf_thread表没有process_id字段，无法按进程ID过滤总负载，返回0')
+            logging.warning('建议：需要在FrameCacheManager中实现get_total_load_for_pids，使用trace_conn关联thread表')
+            return 0
         except Exception as e:
             logging.error('获取总负载失败: %s', str(e))
             # 如果出错，返回0而不是所有数据，避免占比计算错误

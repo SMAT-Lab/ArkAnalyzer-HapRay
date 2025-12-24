@@ -19,8 +19,8 @@ from typing import Any, Optional
 from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_analyzer_vsync import VSyncAnomalyAnalyzer
-# RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
 
+# RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
 # 导入新的模块化组件
 from .frame_constants import TOP_FRAMES_FOR_CALLCHAIN
 from .frame_core_cache_manager import FrameCacheManager
@@ -105,7 +105,7 @@ class FrameAnalyzerCore:
 
     def analyze_rs_skip_frames(self) -> Optional[dict]:
         """分析RS Skip帧（已合并到EmptyFrameAnalyzer）
-        
+
         为了向后兼容，保留此方法，但实际调用EmptyFrameAnalyzer
         EmptyFrameAnalyzer现在包含了正向检测和反向追溯两种方法
 
@@ -114,12 +114,12 @@ class FrameAnalyzerCore:
         """
         # 调用统一的空刷帧分析
         result = self.empty_frame_analyzer.analyze_empty_frames()
-        
+
         # 提取RS traced相关的统计信息（用于单独展示）
         if result and 'summary' in result:
             rs_stats = result['summary'].get('rs_trace_stats', {})
             detection_breakdown = result['summary'].get('detection_breakdown', {})
-            
+
             # 构建兼容的RS Skip结果格式
             return {
                 'status': result['status'],
@@ -133,14 +133,15 @@ class FrameAnalyzerCore:
                     'failed': rs_stats.get('failed', 0),
                     'total_wasted_cpu': rs_stats.get('rs_skip_cpu', 0),
                     # 添加空刷帧相关统计
-                    'total_empty_frames': detection_breakdown.get('rs_traced_only', 0) + detection_breakdown.get('both', 0),
+                    'total_empty_frames': detection_breakdown.get('rs_traced_only', 0)
+                    + detection_breakdown.get('both', 0),
                     'empty_frame_load': result['summary'].get('empty_frame_load', 0),
                     'severity_level': result['summary'].get('severity_level', 'normal'),
-                    'severity_description': result['summary'].get('severity_description', '')
+                    'severity_description': result['summary'].get('severity_description', ''),
                 },
-                'top_frames': result.get('top_frames', {})
+                'top_frames': result.get('top_frames', {}),
             }
-        
+
         return result
 
     def analyze_frame_loads_fast(self, step_id: str = None) -> dict[str, Any]:

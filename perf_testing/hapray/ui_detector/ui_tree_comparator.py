@@ -26,9 +26,14 @@ class UITreeComparator:
 
     # 默认忽略的属性（系统内部状态，不影响UI）
     DEFAULT_IGNORE_ATTRS = {
-        'id', 'accessibilityId',  # 系统自动生成的ID
-        'rsNode', 'frameProxy', 'frameRecord',  # 渲染引擎内部状态
-        'contentConstraint', 'parentLayoutConstraint', 'user defined constraint',  # 布局约束
+        'id',
+        'accessibilityId',  # 系统自动生成的ID
+        'rsNode',
+        'frameProxy',
+        'frameRecord',  # 渲染引擎内部状态
+        'contentConstraint',
+        'parentLayoutConstraint',
+        'user defined constraint',  # 布局约束
     }
 
     def compare_ui_trees(
@@ -163,4 +168,3 @@ class UITreeComparator:
                 draw.text((x1 + 5, y1 + 5), f'D{i}', fill='red')
 
         img.save(output_path)
-
