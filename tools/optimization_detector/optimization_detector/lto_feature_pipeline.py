@@ -1867,6 +1867,11 @@ class HybridFeatureExtractor:
         return feats, names, k
 
 
+# AllFeatureExtractor 是 HybridFeatureExtractor 的别名（用于统一模型）
+# 两者实现相同，只是命名不同以保持与 lto_demo 的兼容性
+AllFeatureExtractor = HybridFeatureExtractor
+
+
 class HybridFeatureTrainer(_BaseTrainer):
     """
     混合特征训练器：
