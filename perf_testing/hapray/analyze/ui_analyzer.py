@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import base64
+import glob
 import json
 import os
 import re
@@ -751,5 +752,54 @@ class UIAnalyzer(BaseAnalyzer):
         except Exception as e:
             self.logger.exception('Failed to convert images to base64: %s', str(e))
 
-        # 调用基类的 write_report 方法
+        # 调用基类的 write_report 方法（保存ui_animate.json）
         super().write_report(result)
+
+        # 额外保存UI原始数据（用于对比）
+        self._save_ui_raw_data()
+
+    def _save_ui_raw_data(self):
+        """保存UI原始数据用于前端对比"""
+        ui_dir = os.path.join(self.scene_dir, 'ui')
+        if not os.path.exists(ui_dir):
+            return
+
+        raw_data = {}
+        for step_dir in sorted(glob.glob(os.path.join(ui_dir, 'step*'))):
+            step_name = os.path.basename(step_dir)
+
+            step_data = {
+                'screenshots': {'start': [], 'end': []},
+                'trees': {'start': [], 'end': []},
+            }
+
+            # 保存所有截图
+            for phase in ['start', 'end']:
+                screenshots = sorted(glob.glob(os.path.join(step_dir, f'screenshot_{phase}_*.png')))
+                for screenshot in screenshots:
+                    with open(screenshot, 'rb') as f:
+                        img_data = f.read()
+                        step_data['screenshots'][phase].append(base64.b64encode(img_data).decode('ascii'))
+
+            # 保存所有组件树（只保存文本，前端不需要解析）
+            for phase in ['start', 'end']:
+                trees = sorted(glob.glob(os.path.join(step_dir, f'element_tree_{phase}_*.txt')))
+                for tree in trees:
+                    with open(tree, encoding='utf-8') as f:
+                        step_data['trees'][phase].append(f.read())
+
+            if (
+                step_data['screenshots']['start']
+                or step_data['screenshots']['end']
+                or step_data['trees']['start']
+                or step_data['trees']['end']
+            ):
+                raw_data[step_name] = step_data
+
+        if raw_data:
+            report_dir = os.path.join(self.scene_dir, 'report')
+            os.makedirs(report_dir, exist_ok=True)
+            output_path = os.path.join(report_dir, 'ui_raw.json')
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(raw_data, f, ensure_ascii=False)
+            self.logger.info(f'UI原始数据已保存: {output_path}')

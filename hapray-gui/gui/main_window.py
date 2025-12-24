@@ -219,6 +219,7 @@ class MainWindow(QMainWindow):
             'opt': '⚡',  # SO编译优化
             'static': '📱',  # 应用技术栈分析
             'symbol-recovery': '🔧',  # 符号恢复
+            'ui-compare': '📌',  # UI组件树对比
         }
 
         # 定义菜单结构映射：plugin_id -> {action_key -> display_name}
@@ -232,6 +233,7 @@ class MainWindow(QMainWindow):
                         'ui-tech-stack': '页面技术栈动态识别',
                         'update': '更新测试报告',
                         'compare': '对比报告',
+                        'ui-compare': 'UI组件树对比',
                     }
                 }
             },
@@ -280,7 +282,15 @@ class MainWindow(QMainWindow):
                         icon = action_icons.get(action_key, '⚙️')
                         action_item.setText(0, f'{icon} {display_name}')
                         action_item.setData(
-                            0, Qt.UserRole, {'type': 'action', 'plugin_id': plugin_id, 'action': action_key}
+                            0,
+                            Qt.UserRole,
+                            {
+                                'type': 'action',
+                                'plugin_id': plugin_id,
+                                'action': action_key,
+                                'action_name': display_name,
+                                'menu_category': menu_name,
+                            },
                         )
 
             # 如果一级菜单下没有子项，隐藏该菜单
@@ -308,16 +318,18 @@ class MainWindow(QMainWindow):
         elif function_type in ['plugin', 'action']:
             plugin_id = data.get('plugin_id')
             action = data.get('action')
-            self.show_tool_config(plugin_id, action)
+            action_name = data.get('action_name')
+            menu_category = data.get('menu_category')
+            self.show_tool_config(plugin_id, action, action_name, menu_category)
 
-    def show_tool_config(self, plugin_id, action=None):
+    def show_tool_config(self, plugin_id, action=None, action_name=None, menu_category=None):
         """显示工具配置界面"""
         tool = self.plugin_loader.get_plugin(plugin_id)
         if not tool:
             return
 
         # 创建工具页面
-        tool_page = ToolPage(tool)
+        tool_page = ToolPage(tool, action_name=action_name, menu_category=menu_category)
         if action and hasattr(tool_page, 'current_action') and hasattr(tool_page, 'rebuild_param_form'):
             tool_page.current_action = action
             tool_page.rebuild_param_form()

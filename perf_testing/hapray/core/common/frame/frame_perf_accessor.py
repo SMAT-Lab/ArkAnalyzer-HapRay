@@ -162,18 +162,35 @@ class FramePerfAccessor:
             logging.warning('没有有效的PID值，返回0')
             return 0
 
-        query = f"""
-            SELECT SUM(event_count) as total_load
-            FROM perf_sample
-            WHERE thread_id IN ({','.join('?' * len(valid_pids))})
-        """
-
+        # 修复：需要通过进程ID找到所有属于这些进程的线程ID
+        # perf_sample表只有thread_id，需要通过perf_thread表关联进程ID
+        # 先检查perf_thread表是否存在process_id字段
         try:
-            result = self.perf_conn.execute(query, valid_pids).fetchone()
-            total_load = result[0] if result and result[0] else 0
-            return int(total_load)
+            cursor = self.perf_conn.cursor()
+            cursor.execute('PRAGMA table_info(perf_thread)')
+            columns = [row[1] for row in cursor.fetchall()]
+
+            if 'process_id' in columns:
+                # 使用perf_thread表的process_id字段
+                query = f"""
+                    SELECT SUM(ps.event_count) as total_load
+                    FROM perf_sample ps
+                    INNER JOIN perf_thread pt ON ps.thread_id = pt.thread_id
+                    WHERE pt.process_id IN ({','.join('?' * len(valid_pids))})
+                """
+                result = cursor.execute(query, valid_pids).fetchone()
+                total_load = result[0] if result and result[0] else 0
+                logging.info('通过perf_thread.process_id获取总负载: %d (进程ID: %s)', total_load, valid_pids)
+                return int(total_load)
+            # 如果没有process_id字段，需要通过trace数据库的thread表来关联
+            # 但FramePerfAccessor没有trace_conn，所以需要从外部传入
+            # 这里先记录警告，返回0，让调用者知道需要修复
+            logging.warning('perf_thread表没有process_id字段，无法按进程ID过滤总负载，返回0')
+            logging.warning('建议：需要在FrameCacheManager中实现get_total_load_for_pids，使用trace_conn关联thread表')
+            return 0
         except Exception as e:
             logging.error('获取总负载失败: %s', str(e))
+            # 如果出错，返回0而不是所有数据，避免占比计算错误
             return 0
 
     # ==================== 数据标准化方法 ====================

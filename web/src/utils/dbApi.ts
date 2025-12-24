@@ -208,6 +208,16 @@ export class DbApi {
   }
 
   /**
+   * Query memory meminfo data
+   *
+   * @param stepId - Step id
+   * @returns Query result array
+   */
+  async queryMemoryMeminfo(stepId: number): Promise<SqlRow[]> {
+    return await this.client.request<SqlRow[]>('memory.queryMeminfo', { stepId });
+  }
+
+  /**
    * Query records up to a specific timestamp (inclusive) with category filters
    * Used for category view mode
    *

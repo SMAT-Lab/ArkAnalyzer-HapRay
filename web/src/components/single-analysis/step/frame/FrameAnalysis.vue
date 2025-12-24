@@ -254,34 +254,22 @@ width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#409EFF"
                         </div>
                     </div>
                 </div>
+            </div>
 
+            <!-- 火焰图单独一行 -->
+            <div class="flamegraph-section">
                 <div class="callstack-info">
                     <div class="info-title">
-                        <i class="fas fa-code-branch"></i>
-                        调用栈信息
+                        <i class="fas fa-fire"></i>
+                        调用栈火焰图
                     </div>
-                    <div
-v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
-                        class="callstack-list">
-                        <div
-v-for="(chain, idx) in selectedEmptyFrame.sample_callchains" :key="idx"
-                            class="callstack-item">
-                            <div class="callstack-header">
-                                <div class="callstack-timestamp">
-                                    调用栈 {{ idx + 1 }}
-                                </div>
-                                <div class="callstack-load">
-                                    负载: {{ chain.load_percentage.toFixed(2) }}%
-                                </div>
-                            </div>
-                            <div class="callstack-chain">
-                                <div v-for="(call, cidx) in chain.callchain" :key="cidx" class="callstack-frame">
-                                    <i class="fas fa-level-down-alt"></i>
-                                    <div>[{{ call.depth }}] {{ call.path }} - {{ call.symbol }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <EmptyFrameFlameGraph
+                        v-if="selectedEmptyFrame.sample_callchains && selectedEmptyFrame.sample_callchains.length > 0"
+                        :data="selectedEmptyFrame.sample_callchains"
+                        :thread-name="selectedEmptyFrame.thread_name"
+                        :process-name="selectedEmptyFrame.process_name"
+                        :thread-id="selectedEmptyFrame.thread_id"
+                    />
                     <div v-else class="placeholder">
                         <i class="fas fa-exclamation-circle"></i>
                         <h3>未找到调用栈信息</h3>
@@ -564,6 +552,7 @@ class="filter-item" :class="{ active: fileUsageFilter === 'unused' }"
 import { ref, onMounted, computed, watch } from 'vue';
 import * as echarts from 'echarts';
 import { useJsonDataStore, getDefaultEmptyFrameData, getDefaultColdStartData, safeProcessColdStartData, getDefaultGcThreadStepData, getDefaultFrameStepData, getDefaultEmptyFrameStepData, getDefaultComponentResuStepData, getDefaultColdStartStepData, safeProcessGcThreadData, getDefaultGcThreadData, getDefaultVSyncAnomalyData, getDefaultVSyncAnomalyStepData, safeProcessVSyncAnomalyData } from '../../../../stores/jsonDataStore.ts';
+import EmptyFrameFlameGraph from './EmptyFrameFlameGraph.vue';
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -903,60 +892,38 @@ const initCharts = () => {
 
         // 收集空刷帧点
         const emptyFramePoints = [];
-        // 主线程空刷帧
-        emptyFrameData.value.top_frames.main_thread_empty_frames.forEach(frame => {
+        // 统一处理所有空刷帧（不再区分主线程和后台线程）
+        emptyFrameData.value.top_frames.forEach(frame => {
             const timeMs = frame.ts / 1000000; // 转换为毫秒
             if (timeMs !== 0) {
                 allTimestamps.push(timeMs);
+                // 根据 is_main_thread 字段判断类型
+                const frameType = frame.is_main_thread === 1 ? 'main_thread' : 'background_thread';
                 emptyFramePoints.push({
                     time: timeMs,
                     frame: frame,
-                    type: 'main_thread'
+                    type: frameType
                 });
             }
-
-        });
-        // 后台线程空刷帧
-        emptyFrameData.value.top_frames.background_thread.forEach(frame => {
-            const timeMs = frame.ts / 1000000; // 转换为毫秒
-            if (timeMs !== 0) {
-                allTimestamps.push(timeMs);
-                emptyFramePoints.push({
-                    time: timeMs,
-                    frame: frame,
-                    type: 'background_thread'
-                });
-            }
-
         });
 
         // 收集空刷负载（用于柱状图）
         const frameLoadData = [];
         const loadData = [];
 
-        // 主线程空刷帧
-        emptyFrameData.value.top_frames.main_thread_empty_frames.forEach(frame => {
+        // 统一处理所有空刷帧（不再区分主线程和后台线程）
+        emptyFrameData.value.top_frames.forEach(frame => {
             const timeMs = frame.ts / 1000000; // 转换为毫秒
+            // 根据 is_main_thread 字段判断类型
+            const frameType = frame.is_main_thread === 1 ? 'main_thread' : 'background_thread';
             frameLoadData.push({
                 time: timeMs,
                 load: frame.frame_load,
                 frame: frame,  // 添加完整的帧对象
-                type: 'main_thread'
+                type: frameType
             });
             loadData.push(frame.frame_load);
         });
-
-        // 后台线程空刷帧
-        //emptyFrameData.value.top_frames.background_thread.forEach(frame => {
-        //    const timeMs = frame.ts / 1000000; // 转换为毫秒
-        //    frameLoadData.push({
-        //        time: timeMs,
-        //        load: frame.frame_load,
-        //        frame: frame,  // 添加完整的帧对象
-        //        type: 'background_thread'
-        //    });
-        //    loadData.push(frame.frame_load);
-        //});
 
 
 
@@ -1946,9 +1913,12 @@ body {
 }
 
 .detail-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 25px;
+    display: block;
+    margin-bottom: 25px;
+}
+
+.flamegraph-section {
+    margin-top: 25px;
 }
 
 
