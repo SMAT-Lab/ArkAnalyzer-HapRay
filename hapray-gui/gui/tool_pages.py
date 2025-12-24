@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QTextEdit,
@@ -148,11 +149,7 @@ class ExecutionThread(QThread):
 
         # 保存结果
         result_path = self.processor.save_result(
-            self.tool.get_name(),
-            result,
-            self.params,
-            action_name=self.action_name,
-            menu_category=self.menu_category
+            self.tool.get_name(), result, self.params, action_name=self.action_name, menu_category=self.menu_category
         )
 
         self.finished.emit(self.tool.get_name(), result_path)
@@ -352,11 +349,13 @@ class ToolPage(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             line_edit = QLineEdit()
             line_edit.setText(str(default) if default else '')
+            line_edit.setMinimumWidth(500)  # 设置最小宽度
+            line_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
             browse_button = QPushButton('浏览...')
             browse_button.clicked.connect(
                 lambda: self.browse_file(line_edit, param_def.get('filter', 'All Files (*.*)'))
             )
-            layout.addWidget(line_edit)
+            layout.addWidget(line_edit, 1)  # 设置拉伸因子，让 line_edit 占据更多空间
             layout.addWidget(browse_button)
             return widget
 
@@ -366,9 +365,11 @@ class ToolPage(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             line_edit = QLineEdit()
             line_edit.setText(str(default) if default else '')
+            line_edit.setMinimumWidth(500)  # 设置最小宽度
+            line_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
             browse_button = QPushButton('浏览...')
             browse_button.clicked.connect(lambda: self.browse_directory(line_edit))
-            layout.addWidget(line_edit)
+            layout.addWidget(line_edit, 1)  # 设置拉伸因子，让 line_edit 占据更多空间
             layout.addWidget(browse_button)
             return widget
 
@@ -379,6 +380,8 @@ class ToolPage(QWidget):
             if multi_select:
                 # 多选下拉框
                 widget = MultiSelectComboBox()
+                widget.setMinimumWidth(500)  # 设置最小宽度
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
                 choices = param_def.get('choices', [])
 
                 # 如果choices是函数名，则异步加载选项
@@ -398,6 +401,8 @@ class ToolPage(QWidget):
                 return widget
             # 单选下拉框
             widget = QComboBox()
+            widget.setMinimumWidth(500)  # 设置最小宽度
+            widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
             choices = param_def.get('choices', [])
 
             # 如果choices是函数名，则异步加载选项
@@ -416,9 +421,13 @@ class ToolPage(QWidget):
         # str
         widget = QLineEdit()
         widget.setText(str(default) if default else '')
+        widget.setMinimumWidth(500)  # 设置最小宽度
+        widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
         return widget
 
-    def _create_multi_value_widget(self, param_name: str, param_def: dict[str, Any], param_type: str, default: Any, nargs: str) -> QWidget:
+    def _create_multi_value_widget(
+        self, param_name: str, param_def: dict[str, Any], param_type: str, default: Any, nargs: str
+    ) -> QWidget:
         """创建支持多个值的参数控件"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -435,8 +444,12 @@ class ToolPage(QWidget):
             value_input.setMinimum(-999999)
             value_input.setMaximum(999999)
             value_input.setValue(0)
+            value_input.setMinimumWidth(200)  # 设置最小宽度
+            value_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
         else:  # str, file, dir等
             value_input = QLineEdit()
+            value_input.setMinimumWidth(500)  # 设置最小宽度
+            value_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # 允许水平扩展
 
             # 如果是文件或目录类型，添加浏览按钮
             if param_def.get('type') == 'file':
@@ -450,7 +463,7 @@ class ToolPage(QWidget):
                 browse_button.clicked.connect(lambda: self.browse_directory(value_input))
                 input_layout.addWidget(browse_button)
 
-        input_layout.addWidget(value_input)
+        input_layout.addWidget(value_input, 1)  # 设置拉伸因子，让输入控件占据更多空间
 
         # 添加按钮
         add_button = QPushButton('添加')
@@ -469,7 +482,14 @@ class ToolPage(QWidget):
 
         return widget
 
-    def _add_multi_value_item(self, parent_layout: QVBoxLayout, param_name: str, param_def: dict[str, Any], value_input: QWidget, value: str = None):
+    def _add_multi_value_item(
+        self,
+        parent_layout: QVBoxLayout,
+        param_name: str,
+        param_def: dict[str, Any],
+        value_input: QWidget,
+        value: str = None,
+    ):
         """添加多值项目"""
         # 如果没有提供值，从输入控件获取
         if value is None:
@@ -508,6 +528,19 @@ class ToolPage(QWidget):
         parent_layout.removeWidget(item_widget)
         item_widget.deleteLater()
 
+    def _is_widget_valid(self, widget: QWidget) -> bool:
+        """检查 widget 是否仍然有效（未被删除）"""
+        try:
+            # 尝试访问对象的一个属性来检查是否已被删除
+            _ = widget.isVisible()
+            return True
+        except RuntimeError:
+            # RuntimeError: Internal C++ object (xxx) already deleted.
+            return False
+        except Exception:
+            # 其他异常也视为无效
+            return False
+
     def _setup_dynamic_choices_async(
         self, param_name: str, choices_func_name: str, widget: QWidget, multi_select: bool = False, default: Any = None
     ):
@@ -527,8 +560,20 @@ class ToolPage(QWidget):
             if param_name in self.dynamic_loaders:
                 del self.dynamic_loaders[param_name]
 
+            # 检查 widget 是否仍然有效
+            if not self._is_widget_valid(widget):
+                logger.warning(f'动态选项加载完成，但 widget 已被删除: {param_name}')
+                return
+
             # 更新控件选项
             if multi_select and isinstance(widget, MultiSelectComboBox):
+                # 确保最小宽度和大小策略设置
+                widget.setMinimumWidth(500)
+                widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                line_edit = widget.lineEdit()
+                if line_edit and self._is_widget_valid(line_edit):
+                    line_edit.setMinimumWidth(500)
+
                 # 清空现有选项
                 widget.clear()
                 widget.addItems(choices)
@@ -553,8 +598,11 @@ class ToolPage(QWidget):
 
             logger.debug(f'动态选项加载完成: {param_name}, {len(choices)} 个选项')
 
+        except RuntimeError as e:
+            # RuntimeError: Internal C++ object (xxx) already deleted.
+            logger.warning(f'更新动态选项时 widget 已被删除: {param_name}, {e}')
         except Exception as e:
-            logger.error(f'更新动态选项失败: {e}')
+            logger.error(f'更新动态选项失败: {param_name}, {e}')
 
     def browse_file(self, line_edit: QLineEdit, filter: str):
         """浏览文件"""
@@ -587,7 +635,7 @@ class ToolPage(QWidget):
                     params[param_name] = checked_items
                     logger.debug(f'  -> MultiSelectComboBox 值: {params[param_name]}')
                 else:
-                    logger.debug(f'  -> MultiSelectComboBox 无选中项，跳过')
+                    logger.debug('  -> MultiSelectComboBox 无选中项，跳过')
             elif isinstance(widget, QComboBox):
                 current_text = widget.currentText()
                 logger.debug(f'  -> QComboBox 原始值: "{current_text}"')
@@ -605,7 +653,7 @@ class ToolPage(QWidget):
                     params[param_name] = value
                     logger.debug(f'  -> QLineEdit 最终值: "{value}"')
                 else:
-                    logger.debug(f'  -> QLineEdit 值为空，跳过')
+                    logger.debug('  -> QLineEdit 值为空，跳过')
             elif isinstance(widget, QWidget):
                 # 检查是否是多值控件（有QVBoxLayout）
                 layout = widget.layout()
@@ -620,14 +668,21 @@ class ToolPage(QWidget):
                                 # 查找值标签（第一个QLabel）
                                 for j in range(item_layout.count()):
                                     child_widget = item_layout.itemAt(j).widget()
-                                    if isinstance(child_widget, QLabel) and child_widget != item_layout.itemAt(item_layout.count()-2).widget():  # 不是删除按钮
+                                    if (
+                                        isinstance(child_widget, QLabel)
+                                        and child_widget != item_layout.itemAt(item_layout.count() - 2).widget()
+                                    ):  # 不是删除按钮
                                         value_text = child_widget.text().strip()
                                         if value_text:
                                             values.append(value_text)
                                         break
                     if values:
                         # 根据参数定义决定返回格式
-                        param_def = self.tool.get_parameters(self.current_action).get(param_name, {}) if self.current_action else {}
+                        param_def = (
+                            self.tool.get_parameters(self.current_action).get(param_name, {})
+                            if self.current_action
+                            else {}
+                        )
                         param_type = param_def.get('type', 'str')
                         if param_type == 'int':
                             # 转换为整数列表
@@ -639,7 +694,7 @@ class ToolPage(QWidget):
                             params[param_name] = values
                         logger.debug(f'  -> 多值控件 值: {params[param_name]}')
                     else:
-                        logger.debug(f'  -> 多值控件 无值，跳过')
+                        logger.debug('  -> 多值控件 无值，跳过')
                 else:
                     # file or dir 单值控件
                     line_edit = widget.findChild(QLineEdit)
@@ -650,9 +705,9 @@ class ToolPage(QWidget):
                             params[param_name] = value
                             logger.debug(f'  -> file/dir控件 最终值: "{value}"')
                         else:
-                            logger.debug(f'  -> file/dir控件 值为空，跳过')
+                            logger.debug('  -> file/dir控件 值为空，跳过')
                     else:
-                        logger.debug(f'  -> QWidget 未找到 QLineEdit 子控件')
+                        logger.debug('  -> QWidget 未找到 QLineEdit 子控件')
             else:
                 # 未知控件类型
                 logger.warning(f'  -> 未知控件类型: {type(widget).__name__}')
@@ -696,7 +751,7 @@ class ToolPage(QWidget):
             self.tool,
             params,
             action_name=action_name if self.current_action else None,
-            menu_category=self.menu_category
+            menu_category=self.menu_category,
         )
         self.execution_thread.output_received.connect(self.on_output_received)
         self.execution_thread.finished.connect(self.on_execution_finished)
