@@ -33,9 +33,12 @@ export interface BasicInfo {
   timestamp: number;
 }
 
-interface PerfDataStep {
+interface Step {
   step_name: string;
   step_id: number;
+}
+
+export interface PerfDataStep {
   count: number;
   round: number;
   perf_data_path: string;
@@ -133,8 +136,23 @@ interface EmptyFrameSummary {
   empty_frame_percentage: number;
   background_thread_load: number;
   background_thread_percentage: number;
+  main_thread_load?: number; // 主线程负载（可选）
+  main_thread_percentage?: number; // 主线程占比（可选）
   total_empty_frames: number;
   empty_frames_with_load: number;
+  severity_level?: string; // 严重程度级别（可选）
+  severity_description?: string; // 严重程度描述（可选）
+  thread_statistics?: { // 线程统计（可选）
+    top_threads: Array<{
+      thread_id: number;
+      tid: number;
+      thread_name: string;
+      process_name: string;
+      total_load: number;
+      percentage: number;
+      frame_count: number;
+    }>;
+  };
 }
 
 interface ColdStartSummary {
@@ -152,6 +170,7 @@ interface CallstackFrame {
   path: string;
   symbol_id: number;
   symbol: string;
+  value?: number;  // 每个深度的负载值
 }
 
 interface SampleCallchain {
@@ -168,29 +187,42 @@ interface FileInfo {
   parent_module: string;  // 注意：实际数据中包含多行文本
 }
 
+interface WakeupThread {
+  itid: number;
+  tid: number;
+  pid: number;
+  thread_name: string;
+  process_name: string;
+  is_system_thread: boolean;
+  wakeup_depth?: number; // 唤醒链深度（可选）
+}
+
 interface EmptyFrame {
   ts: number;
   dur: number;
-  ipid: number;
-  itid: number;
-  pid: number;
-  tid: number;
-  callstack_id: number;
+  ipid?: number;
+  itid?: number;
+  pid?: number; // 进程ID（可选，向后兼容）
+  tid?: number; // 线程ID（可选，向后兼容）
+  thread_id?: number; // 线程ID（新字段名，与tid相同）
+  callstack_id?: number;
   process_name: string;
   thread_name: string;
-  callstack_name: string;
+  callstack_name?: string;
   frame_load: number;
   is_main_thread: number;
   sample_callchains: SampleCallchain[];
+  vsync?: number | string; // VSync标识
+  flag?: number; // 帧标志
+  type?: number; // 帧类型
+  wakeup_threads?: WakeupThread[]; // 唤醒链线程（新字段名）
+  related_threads?: WakeupThread[]; // 唤醒链线程（旧字段名，向后兼容）
 }
 
 interface EmptyFrameStepData {
   status: string;
   summary: EmptyFrameSummary;
-  top_frames: {
-    main_thread_empty_frames: EmptyFrame[];
-    background_thread: EmptyFrame[];
-  };
+  top_frames: EmptyFrame[];  // 统一列表，不再区分主线程和后台线程
 }
 
 export type EmptyFrameData = Record<string, EmptyFrameStepData>;
@@ -371,11 +403,13 @@ export interface JSONData {
   type: number;
   versionCode: number;
   basicInfo: BasicInfo;
+  steps: Step[];
   perf?: PerfData; // 负载数据（可选）
   trace?: TraceData;
   more?: MoreData;
   ui?: {
     animate?: UIAnimateData; // UI 动画数据
+    raw?: UIRawData; // UI 原始数据（用于前端实时对比）
   };
   dataType?: DataType; // 数据类型标记，用于前台判断显示哪些页面
 }
@@ -426,6 +460,7 @@ function createDefaultEmptyFrame(): EmptyFrame {
     itid: 0,
     pid: 0,
     tid: 0,
+    thread_id: 0,
     callstack_id: 0,
     process_name: "",
     thread_name: "",
@@ -437,7 +472,12 @@ function createDefaultEmptyFrame(): EmptyFrame {
       event_count: 0,
       load_percentage: 0,
       callchain: [createDefaultCallstackFrame()]
-    }]
+    }],
+    vsync: 0,
+    flag: 0,
+    type: 0,
+    wakeup_threads: [],
+    related_threads: []
   };
 }
 
@@ -527,13 +567,17 @@ export function getDefaultEmptyFrameStepData(): EmptyFrameStepData {
       empty_frame_percentage: 0,
       background_thread_load: 0,
       background_thread_percentage: 0,
+      main_thread_load: 0,
+      main_thread_percentage: 0,
       total_empty_frames: 0,
-      empty_frames_with_load: 0
+      empty_frames_with_load: 0,
+      severity_level: "normal",
+      severity_description: "正常：未检测到空刷帧",
+      thread_statistics: {
+        top_threads: []
+      }
     },
-    top_frames: {
-      main_thread_empty_frames: [createDefaultEmptyFrame()],
-      background_thread: [createDefaultEmptyFrame()]
-    }
+    top_frames: [createDefaultEmptyFrame()]  // 统一列表，不再区分主线程和后台线程
   };
 }
 
@@ -885,6 +929,70 @@ export interface UIAnimateData {
   [stepKey: string]: UIAnimateStepData; // step1, step2, etc.
 }
 
+// UI原始数据类型（用于对比）
+export interface UIRawStepData {
+  screenshots: {
+    start: string[]; // base64编码的截图数组
+    end: string[];
+  };
+  trees: {
+    start: string[]; // 组件树文本数组
+    end: string[];
+  };
+}
+
+export interface UIRawData {
+  [stepKey: string]: UIRawStepData; // step1, step2, etc.
+}
+
+// ArkUI 组件树节点类型
+export interface ArkUITreeNode {
+  name: string;
+  children: ArkUITreeNode[];
+  attributes: Record<string, unknown>;
+  depth: number;
+}
+
+// UI 对比差异类型
+export interface UIAttributeDifference {
+  attribute: string;
+  value1: unknown;
+  value2: unknown;
+}
+
+export interface UIComponent {
+  type: string;
+  id?: string;
+  bounds_rect?: number[];
+  path?: string;
+  attributes?: Record<string, unknown>;
+}
+
+export interface UIComponentDifference {
+  component_path: string;
+  component?: UIComponent;
+  comparison_result: UIAttributeDifference[];
+  is_animation?: boolean;
+  animate_type?: string;
+}
+
+// UI 对比数据类型
+export interface UIComparePairResult {
+  phase: 'start' | 'end';
+  index: number;
+  base_screenshot: string;
+  compare_screenshot: string;
+  diff_count: number;
+  total_differences: number;
+  filtered_count: number;
+  differences: UIComponentDifference[];
+  marked_images_base64: string[];
+}
+
+export interface UICompareResult {
+  pairs: UIComparePairResult[];
+}
+
 // 压缩后的 UI 动画数据类型
 export interface CompressedUIAnimateStepData {
   compressed: true;
@@ -899,6 +1007,7 @@ export interface CompressedUIAnimateData {
 interface JsonDataState {
   version: string | null;
   basicInfo: BasicInfo | null;
+  steps: Step[] | null;
   compareBasicInfo: BasicInfo | null;
   perfData: PerfData | null;
   frameData: FrameData | null;
@@ -915,6 +1024,7 @@ interface JsonDataState {
   compareMark: string | null;
   flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
   uiAnimateData: UIAnimateData | null; // UI 动画数据
+  uiCompareData: Record<string, UICompareResult> | null; // UI 对比数据
 }
 
 /**
@@ -987,6 +1097,7 @@ export const useJsonDataStore = defineStore('config', {
   state: (): JsonDataState => ({
     version: null,
     basicInfo: null,
+    steps: null,
     compareBasicInfo: null,
     perfData: null,
     frameData: null,
@@ -1003,6 +1114,7 @@ export const useJsonDataStore = defineStore('config', {
     compareMark: null,
     flameGraph: null,
     uiAnimateData: null,
+    uiCompareData: null,
   }),
 
   actions: {
@@ -1104,7 +1216,7 @@ export const useJsonDataStore = defineStore('config', {
     setJsonData(jsonData: JSONData, compareJsonData: JSONData) {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
-
+      this.steps = jsonData.steps;
       this.perfData = jsonData.perf || null;
       this.baseMark = window.baseMark;
       this.compareMark = window.compareMark;
@@ -1153,13 +1265,16 @@ export const useJsonDataStore = defineStore('config', {
       if (jsonData.ui && jsonData.ui.animate) {
         // May need decompression
         this.uiAnimateData = this.decompressUIAnimateData(jsonData.ui.animate as CompressedUIAnimateData);
+        console.log('[setJsonData] 基准报告UI动画数据已加载:', Object.keys(this.uiAnimateData || {}));
       } else {
         this.uiAnimateData = null;
+        console.log('[setJsonData] 基准报告无UI动画数据');
       }
 
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {
         window.initialPage = 'perf';
         this.compareFaultTreeData = null;
+        this.uiCompareData = null;
       } else {
         this.compareBasicInfo = compareJsonData.basicInfo;
         this.comparePerfData = compareJsonData.perf || null;
@@ -1171,10 +1286,458 @@ export const useJsonDataStore = defineStore('config', {
           this.compareFaultTreeData = getDefaultFaultTreeData();
         }
 
+        // 前端实时对比UI数据（逻辑已与后端完全一致）
+        if (jsonData.ui?.raw && compareJsonData.ui?.raw) {
+          this.uiCompareData = this.compareUIData(jsonData.ui.raw, compareJsonData.ui.raw);
+          console.log('[setJsonData] 前端实时对比UI数据:', Object.keys(this.uiCompareData || {}));
+        } else {
+          this.uiCompareData = null;
+          console.log('[setJsonData] 无法进行UI对比：缺少UI原始数据');
+        }
+
         window.initialPage = 'perf_compare';
       }
     },
-  },
+
+    /**
+     * 对比两个报告的UI数据
+     */
+    compareUIData(baseUIRaw: UIRawData, compareUIRaw: UIRawData): Record<string, UICompareResult> | null {
+      console.log('[compareUIData] 开始对比UI数据');
+
+      const result: Record<string, UICompareResult> = {};
+
+      // 遍历所有共同的step
+      for (const stepKey in baseUIRaw) {
+        if (compareUIRaw[stepKey]) {
+          const baseStep = baseUIRaw[stepKey];
+          const compareStep = compareUIRaw[stepKey];
+
+          // 检查是否有截图和组件树
+          if (!baseStep.screenshots?.end?.length || !baseStep.trees?.end?.length ||
+              !compareStep.screenshots?.end?.length || !compareStep.trees?.end?.length) {
+            console.log(`[compareUIData] ${stepKey}: 缺少截图或组件树数据`);
+            continue;
+          }
+
+          // 对比start和end两个阶段的组件树（按截图对分组）
+          const pairResults: UIComparePairResult[] = [];
+
+          // 对比start阶段和end阶段
+          for (const phase of ['start', 'end'] as const) {
+            const baseTrees = baseStep.trees[phase] || [];
+            const compareTrees = compareStep.trees[phase] || [];
+            const baseScreenshots = baseStep.screenshots[phase] || [];
+            const compareScreenshots = compareStep.screenshots[phase] || [];
+            const maxPairs = Math.min(baseTrees.length, compareTrees.length);
+
+            for (let i = 0; i < maxPairs; i++) {
+              const baseTree = this.parseArkUITree(baseTrees[i]);
+              const compareTree = this.parseArkUITree(compareTrees[i]);
+
+              let allDifferences: UIComponentDifference[] = [];
+              let filteredDifferences: UIComponentDifference[] = [];
+
+              if (baseTree && compareTree) {
+                // 先获取所有差异（不过滤）
+                allDifferences = this.compareArkUITreesWithoutFilter(baseTree, compareTree);
+                // 再应用过滤（后端逻辑：不返回过滤原因）
+                filteredDifferences = this.filterDifferences(allDifferences);
+              }
+
+              pairResults.push({
+                index: i + 1,
+                phase: phase,
+                base_screenshot: baseScreenshots[i] || '',
+                compare_screenshot: compareScreenshots[i] || '',
+                diff_count: filteredDifferences.length,
+                total_differences: allDifferences.length,
+                filtered_count: allDifferences.length - filteredDifferences.length,
+                differences: filteredDifferences,
+                marked_images_base64: [baseScreenshots[i] || '', compareScreenshots[i] || '']
+              });
+            }
+          }
+
+          const stepResult = {
+            pairs: pairResults,  // 所有截图对的对比结果
+            total_diff_count: pairResults.reduce((sum, p) => sum + p.diff_count, 0)
+          };
+
+          result[stepKey] = stepResult;
+          console.log(`[compareUIData] ${stepKey}: ${pairResults.length} 对截图，共发现 ${stepResult.total_diff_count} 处差异`);
+        }
+      }
+
+      console.log(`[compareUIData] 对比完成，共 ${Object.keys(result).length} 个步骤`);
+      return Object.keys(result).length > 0 ? result : null;
+    },
+
+    /**
+     * 解析ArkUI组件树文本
+     */
+    parseArkUITree(treeText: string): ArkUITreeNode | null {
+      const lines = treeText.split('\n');
+      const root: ArkUITreeNode = { name: 'Root', children: [], attributes: {}, depth: 0 };
+      const stack: ArkUITreeNode[] = [root];
+      let currentNode: ArkUITreeNode | null = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // 匹配组件行：|-> ComponentName childSize:N
+        const componentMatch = line.match(/^(\s*)\|->\s*(\w+)\s+childSize:(\d+)/);
+        if (componentMatch) {
+          const indent = componentMatch[1];
+          const componentName = componentMatch[2];
+          const depth = (indent.length / 2) + 1;
+
+          currentNode = {
+            name: componentName,
+            depth,
+            children: [],
+            attributes: { type: componentName }
+          };
+
+          // 找到父节点
+          while (stack.length > 0 && stack[stack.length - 1].depth >= depth) {
+            stack.pop();
+          }
+
+          if (stack.length > 0) {
+            stack[stack.length - 1].children.push(currentNode);
+          }
+
+          stack.push(currentNode);
+          continue;
+        }
+
+        // 解析属性行
+        if (currentNode && line.includes('|')) {
+          const cleanLine = line.trim().replace(/^\|/, '').trim();
+
+          // ID
+          const idMatch = cleanLine.match(/ID:\s*(\d+)/);
+          if (idMatch) {
+            currentNode.attributes.id = idMatch[1];
+          }
+
+          // FrameRect: RectT (x, y) - [width x height]
+          const frameMatch = cleanLine.match(/FrameRect:\s*RectT\s*\(([^,]+),\s*([^)]+)\)\s*-\s*\[([^\sx]+)\s*x\s*([^\]]+)\]/);
+          if (frameMatch) {
+            const left = parseFloat(frameMatch[1]);
+            const top = parseFloat(frameMatch[2]);
+            const width = parseFloat(frameMatch[3]);
+            const height = parseFloat(frameMatch[4]);
+            currentNode.attributes.left = left;
+            currentNode.attributes.top = top;
+            currentNode.attributes.width = width;
+            currentNode.attributes.height = height;
+            currentNode.attributes.bounds_rect = [
+              Math.floor(left),
+              Math.floor(top),
+              Math.floor(left + width),
+              Math.floor(top + height)
+            ];
+          }
+
+          // top: xxx left: xxx
+          const topLeftMatch = cleanLine.match(/top:\s*([\d.]+)\s+left:\s*([\d.]+)/);
+          if (topLeftMatch && !currentNode.attributes.top) {
+            currentNode.attributes.top = parseFloat(topLeftMatch[1]);
+            currentNode.attributes.left = parseFloat(topLeftMatch[2]);
+          }
+
+          // BackgroundColor
+          const bgMatch = cleanLine.match(/BackgroundColor:\s*(#[0-9A-F]+)/i);
+          if (bgMatch) {
+            currentNode.attributes.backgroundColor = bgMatch[1];
+          }
+
+          // zIndex
+          const zIndexMatch = cleanLine.match(/zIndex:\s*([\d-]+)/);
+          if (zIndexMatch) {
+            currentNode.attributes.zIndex = parseInt(zIndexMatch[1]);
+          }
+
+          // 其他通用属性（key: value格式）
+          const attrMatch = cleanLine.match(/^(\w+):\s*(.+)$/);
+          if (attrMatch) {
+            const key = attrMatch[1];
+            const value = attrMatch[2].trim();
+            // 首字母小写
+            const normalizedKey = key.charAt(0).toLowerCase() + key.slice(1);
+            if (!currentNode.attributes[normalizedKey]) {
+              currentNode.attributes[normalizedKey] = value;
+            }
+          }
+        }
+      }
+
+      // 最终计算bounds_rect（如果还没有）
+      const finalizeBounds = (node: ArkUITreeNode) => {
+        if (node.attributes && !node.attributes.bounds_rect) {
+          const { left, top, width, height } = node.attributes as Record<string, number>;
+          if (left !== undefined && top !== undefined && width !== undefined && height !== undefined) {
+            node.attributes.bounds_rect = [
+              Math.floor(left),
+              Math.floor(top),
+              Math.floor(left + width),
+              Math.floor(top + height)
+            ];
+          }
+        }
+        if (node.children) {
+          node.children.forEach(finalizeBounds);
+        }
+      };
+      finalizeBounds(root);
+
+      return root.children.length > 0 ? root.children[0] : root;
+    },
+
+    /**
+     * 对比两个ArkUI组件树（不过滤，返回所有差异）- 完全复制后端逻辑
+     * 后端代码位置: perf_testing/hapray/ui_detector/arkui_tree_parser.py ArkUITreeComparator._compare_components
+     */
+    compareArkUITreesWithoutFilter(tree1: ArkUITreeNode, tree2: ArkUITreeNode): UIComponentDifference[] {
+      const differences: UIComponentDifference[] = [];
+
+      const compareNodes = (comp1: ArkUITreeNode, comp2: ArkUITreeNode, path: string = '') => {
+        if (!comp1 || !comp2) return;
+
+        // 构建当前组件路径（后端第538-539行）
+        const compName = comp1.name || (comp1.attributes?.type as string) || 'Unknown';
+        const currentPath = path ? `${path}/${compName}` : compName;
+
+        // 比较当前组件的attributes（后端第542-557行）
+        const attrsDiff = this.compareAttributes(comp1, comp2);
+        if (attrsDiff.length > 0) {
+          differences.push({
+            component: {
+              type: compName,
+              bounds_rect: comp1.attributes?.bounds_rect as number[] | undefined,
+              path: currentPath,
+              attributes: comp1.attributes || {},
+              id: comp1.attributes?.id as string | undefined
+            },
+            is_animation: true,
+            comparison_result: attrsDiff,
+            animate_type: 'attribute_animate',
+            component_path: currentPath
+          });
+        }
+
+        // 递归比较子组件（后端第559-566行）
+        const children1 = comp1.children || [];
+        const children2 = comp2.children || [];
+        const minChildren = Math.min(children1.length, children2.length);
+
+        for (let i = 0; i < minChildren; i++) {
+          compareNodes(children1[i], children2[i], currentPath);
+        }
+
+        // 处理多余的子组件（后端第568-605行）
+        // 注意：后端在第583和602行使用了父组件的attrs_diff，这是一个bug，但前端必须复制这个行为
+        if (children1.length > children2.length) {
+          for (let i = children2.length; i < children1.length; i++) {
+            const comp = children1[i];
+            const name = (comp.name || comp.attributes?.type || 'Unknown') as string;
+            const childPath = `${currentPath}/${name}`;
+            differences.push({
+              component: {
+                type: name,
+                bounds_rect: comp.attributes?.bounds_rect as number[] | undefined,
+                path: childPath,
+                attributes: comp.attributes || {},
+                id: comp.attributes?.id as string | undefined
+              },
+              is_animation: true,
+              comparison_result: attrsDiff,  // 使用父组件的attrsDiff（复制后端bug）
+              animate_type: 'attribute_animate',
+              component_path: childPath
+            });
+          }
+        } else if (children2.length > children1.length) {
+          for (let i = children1.length; i < children2.length; i++) {
+            const comp = children2[i];
+            const name = (comp.name || comp.attributes?.type || 'Unknown') as string;
+            const childPath = `${currentPath}/${name}`;
+            differences.push({
+              component: {
+                type: name,
+                bounds_rect: comp.attributes?.bounds_rect as number[] | undefined,
+                path: childPath,
+                attributes: comp.attributes || {},
+                id: comp.attributes?.id as string | undefined
+              },
+              is_animation: true,
+              comparison_result: attrsDiff,  // 使用父组件的attrsDiff（复制后端bug）
+              animate_type: 'attribute_animate',
+              component_path: childPath
+            });
+          }
+        }
+      };
+
+      compareNodes(tree1, tree2);
+      return differences;
+    },
+
+    /**
+     * 对比两个组件的attributes（后端逻辑）
+     * 后端代码位置: perf_testing/hapray/ui_detector/arkui_tree_parser.py ArkUITreeComparator._compare_attributes
+     *
+     * 注意：Python的 != 运算符对列表和字典进行内容比较，而JavaScript的 !== 是引用比较
+     * 因此需要添加深度比较逻辑以保持与后端一致
+     */
+    compareAttributes(comp1: ArkUITreeNode, comp2: ArkUITreeNode): UIAttributeDifference[] {
+      const differences: UIAttributeDifference[] = [];
+      const attrs1 = comp1.attributes || {};
+      const attrs2 = comp2.attributes || {};
+
+      // 获取所有attributes键（后端第624行）
+      const allKeys = new Set([...Object.keys(attrs1), ...Object.keys(attrs2)]);
+
+      for (const key of allKeys) {
+        const value1 = attrs1[key];
+        const value2 = attrs2[key];
+
+        // 检查是否存在差异（后端第631行）
+        // Python的 != 对列表/字典进行内容比较，JavaScript需要特殊处理
+        if (!this.deepEqual(value1, value2)) {
+          differences.push({ attribute: key, value1: value1, value2: value2 });
+        }
+      }
+
+      return differences;
+    },
+
+    /**
+     * 深度比较两个值是否相等（模拟Python的 == 运算符）
+     * Python中列表和字典的比较是内容比较，JavaScript需要手动实现
+     */
+    deepEqual(value1: unknown, value2: unknown): boolean {
+      // 严格相等（包括 undefined === undefined, null === null）
+      if (value1 === value2) {
+        return true;
+      }
+
+      // 一个是null/undefined，另一个不是
+      if (value1 == null || value2 == null) {
+        return false;
+      }
+
+      // 类型不同
+      if (typeof value1 !== typeof value2) {
+        return false;
+      }
+
+      // 数组比较（内容比较）
+      if (Array.isArray(value1) && Array.isArray(value2)) {
+        if (value1.length !== value2.length) {
+          return false;
+        }
+        for (let i = 0; i < value1.length; i++) {
+          if (!this.deepEqual(value1[i], value2[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // 对象比较（内容比较）
+      if (typeof value1 === 'object' && typeof value2 === 'object' && value1 !== null && value2 !== null) {
+        const obj1 = value1 as Record<string, unknown>;
+        const obj2 = value2 as Record<string, unknown>;
+        const keys1 = Object.keys(obj1);
+        const keys2 = Object.keys(obj2);
+
+        if (keys1.length !== keys2.length) {
+          return false;
+        }
+
+        for (const key of keys1) {
+          if (!keys2.includes(key)) {
+            return false;
+          }
+          if (!this.deepEqual(obj1[key], obj2[key])) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // 其他类型（数字、字符串、布尔值等）已经在第一个if中处理
+      return false;
+    },
+
+    /**
+     * 过滤差异（完全复制后端逻辑）
+     * 后端代码位置: perf_testing/hapray/ui_detector/ui_tree_comparator.py UITreeComparator._filter_differences
+     * 注意：后端不返回过滤原因，只返回过滤后的列表
+     */
+    filterDifferences(allDifferences: UIComponentDifference[]): UIComponentDifference[] {
+      // 后端默认忽略的属性（第28-32行）
+      const DEFAULT_IGNORE_ATTRS = new Set([
+        'id', 'accessibilityId',  // 系统自动生成的ID
+        'rsNode', 'frameProxy', 'frameRecord',  // 渲染引擎内部状态
+        'contentConstraint', 'parentLayoutConstraint', 'user defined constraint'  // 布局约束
+      ]);
+
+      const filtered: UIComponentDifference[] = [];
+
+      // 后端第99-120行的逻辑
+      for (const diff of allDifferences) {
+        const filteredAttrs: UIAttributeDifference[] = [];
+
+        for (const attrDiff of diff.comparison_result || []) {
+          const attrName = attrDiff.attribute;
+
+          // 跳过忽略的属性（后端第106-107行）
+          if (DEFAULT_IGNORE_ATTRS.has(attrName)) {
+            continue;
+          }
+
+          // 过滤微小变化（后端第110-111行）
+          // filter_minor_changes 在后端默认为 True（ui_compare_action.py 第150行）
+          if (this.isMinorChange(attrName, attrDiff)) {
+            continue;
+          }
+
+          filteredAttrs.push(attrDiff);
+        }
+
+        // 如果还有差异，保留该组件（后端第116-119行）
+        if (filteredAttrs.length > 0) {
+          const diffCopy = { ...diff };
+          diffCopy.comparison_result = filteredAttrs;
+          filtered.push(diffCopy);
+        }
+      }
+
+      return filtered;
+    },
+
+    /**
+     * 判断是否为微小变化（完全复制后端逻辑）
+     * 后端代码位置: perf_testing/hapray/ui_detector/ui_tree_comparator.py UITreeComparator._is_minor_change
+     */
+    isMinorChange(attrName: string, attrDiff: UIAttributeDifference): boolean {
+      // 位置和尺寸的微小变化（<5px）（后端第126-132行）
+      if (['top', 'left', 'width', 'height'].includes(attrName)) {
+        try {
+          const v1 = parseFloat(String(attrDiff.value1 || '0'));
+          const v2 = parseFloat(String(attrDiff.value2 || '0'));
+          return Math.abs(v1 - v2) < 5;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    },
+
+    },
 });
 
 export const useFilterModeStore = defineStore('filterMode', {

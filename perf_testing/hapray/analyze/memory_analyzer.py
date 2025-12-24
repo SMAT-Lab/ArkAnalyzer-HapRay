@@ -586,10 +586,12 @@ class MemoryAnalyzer(BaseAnalyzer):
 
     def _create_memory_meminfo_indexes(self):
         """Create indexes for memory_meminfo table to improve query performance"""
+        self.exec_sql('DROP INDEX IF EXISTS idx_memory_meminfo_step_id')
+        self.create_index('idx_memory_meminfo_step_id', 'memory_meminfo', 'step_id')
         self.exec_sql('DROP INDEX IF EXISTS idx_memory_meminfo_timestamp_epoch')
-        self.create_index('idx_memory_meminfo_timestamp_epoch', 'memory_meminfo', 'timestamp_epoch')
+        self.create_index('idx_memory_meminfo_timestamp_epoch', 'memory_meminfo', 'step_id, timestamp_epoch')
         self.exec_sql('DROP INDEX IF EXISTS idx_memory_meminfo_timestamp')
-        self.create_index('idx_memory_meminfo_timestamp', 'memory_meminfo', 'timestamp')
+        self.create_index('idx_memory_meminfo_timestamp', 'memory_meminfo', 'step_id, timestamp')
 
     def _save_step_data_to_db(self, step_id: int, step_data: dict):
         """Save step data to database

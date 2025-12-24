@@ -25,11 +25,17 @@ from hapray.core.common.frame.frame_core_analyzer import FrameAnalyzerCore
 class UnifiedFrameAnalyzer(BaseAnalyzer):
     """统一帧分析器 - 整合帧负载、空帧、卡顿帧和VSync异常分析
 
-    合并了以下四个分析器的功能：
+    合并了以下分析器的功能：
     1. FrameLoadAnalyzer - 帧负载分析
-    2. EmptyFrameAnalyzer - 空帧分析
+    2. EmptyFrameAnalyzer - 空刷帧分析（包含正向检测 + RS Skip反向追溯）
     3. FrameDropAnalyzer - 卡顿帧分析
     4. VSyncAnomalyAnalyzer - VSync异常分析
+
+    注意：RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
+    - EmptyFrameAnalyzer现在包含两种检测方法：
+      1. 正向检测：flag=2帧
+      2. 反向追溯：RS skip → app frame
+    - 输出仍保留trace_rsSkip.json（向后兼容）
 
     主要职责：
     1. 统一管理所有帧相关的分析
@@ -55,12 +61,14 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
             'emptyFrame': 'trace/emptyFrame',
             'frames': 'trace/frames',
             'vsyncAnomaly': 'trace/vsyncAnomaly',
+            'rsSkip': 'trace/rsSkip',
         }
         # 存储各分析器的结果
         self.frame_loads_results = {}
         self.empty_frame_results = {}
         self.frame_drop_results = {}
         self.vsync_anomaly_results = {}
+        self.rs_skip_results = {}
 
     def _analyze_impl(
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
@@ -82,9 +90,9 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
             logging.warning('Trace database not found: %s', trace_db_path)
             return None
 
-        if not os.path.exists(perf_db_path):
-            logging.warning('Perf database not found: %s', perf_db_path)
-            return None
+        # perf_db_path现在是可选的，如果不存在会从trace.db读取perf数据
+        if perf_db_path and not os.path.exists(perf_db_path):
+            logging.info('Perf database not found: %s, will try to use perf data from trace.db', perf_db_path)
 
         try:
             # 新建 FrameAnalyzerCore，传入 trace_db_path, perf_db_path, app_pids, step_dir
@@ -116,12 +124,20 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
             if vsync_anomaly_result:
                 self.vsync_anomaly_results[step_dir] = vsync_anomaly_result
 
+            # 5. RS Skip分析（已合并到EmptyFrameAnalyzer，此处调用兼容接口）
+            # 注意：EmptyFrameAnalyzer.analyze_empty_frames()已包含RS Skip检测
+            # 此处调用analyze_rs_skip_frames()仅用于生成独立的rsSkip报告（向后兼容）
+            rs_skip_result = self._analyze_rs_skip_frames(core_analyzer, step_dir)
+            if rs_skip_result:
+                self.rs_skip_results[step_dir] = rs_skip_result
+
             # 返回合并结果（用于主报告）
             return {
                 'frameLoads': frame_loads_result,
                 'emptyFrame': empty_frame_result,
                 'frames': frame_drop_result,
                 'vsyncAnomaly': vsync_anomaly_result,
+                'rsSkip': rs_skip_result,
             }
 
         except Exception as e:
@@ -159,6 +175,31 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
             logging.error('Frame drop analysis failed for step %s: %s', step_dir, str(e))
             return None
 
+    def _analyze_rs_skip_frames(self, core_analyzer: FrameAnalyzerCore, step_dir: str) -> Optional[dict[str, Any]]:
+        """分析RS Skip帧（向后兼容接口）
+
+        注意：RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
+        此方法调用EmptyFrameAnalyzer，然后提取RS traced相关统计
+        用于生成独立的trace_rsSkip.json报告（向后兼容）
+        """
+        try:
+            result = core_analyzer.analyze_rs_skip_frames()
+            if result and result.get('summary'):
+                summary = result['summary']
+                logging.info(
+                    'RS Skip analysis for %s: skip_frames=%d, traced=%d, accuracy=%.1f%%, cpu_waste=%d',
+                    step_dir,
+                    summary.get('total_skip_frames', 0),
+                    summary.get('traced_success_count', 0),
+                    summary.get('trace_accuracy', 0.0),
+                    summary.get('total_wasted_cpu', 0),
+                )
+            return result
+
+        except Exception as e:
+            logging.error('RS Skip frame analysis failed for step %s: %s', step_dir, str(e))
+            return None
+
     def write_report(self, result: dict):
         """写入报告 - 支持多个输出路径
 
@@ -171,9 +212,8 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
         if self.frame_loads_results:
             self._write_single_report(self.frame_loads_results, self.report_paths['frameLoads'])
 
-        # 写入空帧分析结果
-        if self.empty_frame_results:
-            self._write_single_report(self.empty_frame_results, self.report_paths['emptyFrame'])
+        # 写入空帧分析结果（即使为空也写入，以更新已存在的文件）
+        self._write_single_report(self.empty_frame_results, self.report_paths['emptyFrame'])
 
         # 写入卡顿帧分析结果
         if self.frame_drop_results:
@@ -182,6 +222,10 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
         # 写入VSync异常分析结果
         if self.vsync_anomaly_results:
             self._write_single_report(self.vsync_anomaly_results, self.report_paths['vsyncAnomaly'])
+
+        # 写入RS Skip分析结果
+        if self.rs_skip_results:
+            self._write_single_report(self.rs_skip_results, self.report_paths['rsSkip'])
 
         # 同时更新主结果字典
         if self.frame_loads_results:
@@ -192,16 +236,23 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
             self._update_result_dict(result, self.frame_drop_results, self.report_paths['frames'])
         if self.vsync_anomaly_results:
             self._update_result_dict(result, self.vsync_anomaly_results, self.report_paths['vsyncAnomaly'])
+        if self.rs_skip_results:
+            self._update_result_dict(result, self.rs_skip_results, self.report_paths['rsSkip'])
 
     def _write_single_report(self, results: dict, report_path: str):
         """写入单个报告文件"""
         if not results:
             self.logger.warning('No results to write. Skipping report generation for %s', report_path)
-            return
+            # return
 
         try:
             file_path = os.path.join(self.scene_dir, 'report', report_path.replace('/', '_') + '.json')
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+            # 强制删除旧文件，确保重新写入（避免缓存问题）
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, sort_keys=True)
         except Exception as e:

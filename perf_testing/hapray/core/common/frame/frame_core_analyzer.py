@@ -20,6 +20,7 @@ from .frame_analyzer_empty import EmptyFrameAnalyzer
 from .frame_analyzer_stuttered import StutteredFrameAnalyzer
 from .frame_analyzer_vsync import VSyncAnomalyAnalyzer
 
+# RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
 # 导入新的模块化组件
 from .frame_constants import TOP_FRAMES_FOR_CALLCHAIN
 from .frame_core_cache_manager import FrameCacheManager
@@ -76,6 +77,7 @@ class FrameAnalyzerCore:
         self.empty_frame_analyzer = EmptyFrameAnalyzer(debug_vsync_enabled, self.cache_manager)
         self.stuttered_frame_analyzer = StutteredFrameAnalyzer(debug_vsync_enabled, self.cache_manager)
         self.vsync_anomaly_analyzer = VSyncAnomalyAnalyzer(self.cache_manager)
+        # RSSkipFrameAnalyzer已合并到EmptyFrameAnalyzer中
 
     def analyze_empty_frames(self) -> Optional[dict]:
         """分析空帧（flag=2, type=0）的负载情况
@@ -100,6 +102,47 @@ class FrameAnalyzerCore:
             Optional[dict[str, Any]]: VSync异常分析结果，如果没有数据或分析失败则返回None
         """
         return self.vsync_anomaly_analyzer.analyze_vsync_anomalies(self.app_pids)
+
+    def analyze_rs_skip_frames(self) -> Optional[dict]:
+        """分析RS Skip帧（已合并到EmptyFrameAnalyzer）
+
+        为了向后兼容，保留此方法，但实际调用EmptyFrameAnalyzer
+        EmptyFrameAnalyzer现在包含了正向检测和反向追溯两种方法
+
+        Returns:
+            dict: 包含分析结果（从统一的空刷帧结果中提取RS traced部分）
+        """
+        # 调用统一的空刷帧分析
+        result = self.empty_frame_analyzer.analyze_empty_frames()
+
+        # 提取RS traced相关的统计信息（用于单独展示）
+        if result and 'summary' in result:
+            rs_stats = result['summary'].get('rs_trace_stats', {})
+            detection_breakdown = result['summary'].get('detection_breakdown', {})
+
+            # 构建兼容的RS Skip结果格式
+            return {
+                'status': result['status'],
+                'summary': {
+                    'total_skip_events': rs_stats.get('total_skip_events', 0),
+                    'total_skip_frames': rs_stats.get('total_skip_frames', 0),
+                    'traced_success_count': rs_stats.get('traced_success_count', 0),
+                    'trace_accuracy': rs_stats.get('trace_accuracy', 0.0),
+                    'rs_api_success': rs_stats.get('rs_api_success', 0),
+                    'nativewindow_success': rs_stats.get('nativewindow_success', 0),
+                    'failed': rs_stats.get('failed', 0),
+                    'total_wasted_cpu': rs_stats.get('rs_skip_cpu', 0),
+                    # 添加空刷帧相关统计
+                    'total_empty_frames': detection_breakdown.get('rs_traced_only', 0)
+                    + detection_breakdown.get('both', 0),
+                    'empty_frame_load': result['summary'].get('empty_frame_load', 0),
+                    'severity_level': result['summary'].get('severity_level', 'normal'),
+                    'severity_description': result['summary'].get('severity_description', ''),
+                },
+                'top_frames': result.get('top_frames', {}),
+            }
+
+        return result
 
     def analyze_frame_loads_fast(self, step_id: str = None) -> dict[str, Any]:
         """快速分析所有帧的负载值（不分析调用链）

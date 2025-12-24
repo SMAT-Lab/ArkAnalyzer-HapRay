@@ -229,21 +229,26 @@ class FrameTraceAccessor:
 
     # ==================== 高级查询方法 ====================
 
-    def get_empty_frames_with_details(self, app_pids: list[int]) -> pd.DataFrame:
-        """获取空帧详细信息（包含进程、线程、调用栈信息）
+    def get_empty_frames_with_details(self, app_pids: list[int]) -> tuple[pd.DataFrame, list[tuple[int, int]]]:
+        """获取空帧详细信息（包含进程、线程、调用栈信息）及其去重后的时间范围
 
         Args:
             app_pids: 应用进程ID列表
 
         Returns:
-            pd.DataFrame: 包含详细信息的空帧数据
+            tuple: (frames_df, merged_time_ranges)
+                - frames_df: 包含详细信息的空帧数据（保留所有原始信息）
+                - merged_time_ranges: 去重后的时间范围列表 [(start_ts, end_ts), ...]
         """
+
         # 验证app_pids参数
         valid_pids = validate_app_pids(app_pids)
         if not valid_pids:
             logging.warning('没有有效的PID值，返回空DataFrame')
-            return pd.DataFrame()
+            return pd.DataFrame(), []
 
+        # 学习Checker的逻辑：排除系统进程，查找应用进程的空刷帧
+        # 系统进程包括：render_service, rmrenderservice, ohos.sceneboard, system_*, com.ohos.*
         query = f"""
         WITH filtered_frames AS (
             -- 首先获取符合条件的帧
@@ -253,12 +258,15 @@ class FrameTraceAccessor:
             AND fs.type = {FRAME_TYPE_ACTUAL}
         ),
         process_filtered AS (
-            -- 通过process表过滤出app_pids中的帧
+            -- 通过process表过滤出app_pids中的帧，并排除系统进程
             SELECT ff.*, p.pid, p.name as process_name, t.tid, t.name as thread_name, t.is_main_thread
             FROM filtered_frames ff
             JOIN process p ON ff.ipid = p.ipid
             JOIN thread t ON ff.itid = t.itid
             WHERE p.pid IN ({','.join('?' * len(valid_pids))})
+            AND p.name NOT IN ('render_service', 'rmrenderservice', 'ohos.sceneboard')
+            AND p.name NOT LIKE 'system_%'
+            AND p.name NOT LIKE 'com.ohos.%'
         )
         -- 最后获取调用栈信息
         SELECT pf.*, cs.name as callstack_name
@@ -268,10 +276,55 @@ class FrameTraceAccessor:
         """
 
         try:
-            return pd.read_sql_query(query, self.trace_conn, params=valid_pids)
+            frames_df = pd.read_sql_query(query, self.trace_conn, params=valid_pids)
+
+            # 计算合并后的时间范围（去重）
+            merged_time_ranges = []
+            if not frames_df.empty:
+                time_ranges = []
+                for _, row in frames_df.iterrows():
+                    ts = row.get('ts', 0)
+                    dur = row.get('dur', 0)
+                    if ts > 0 and dur >= 0:
+                        time_ranges.append((ts, ts + dur))
+
+                # 合并重叠的时间范围
+                if time_ranges:
+                    merged_time_ranges = self._merge_time_ranges(time_ranges)
+
+            return frames_df, merged_time_ranges
         except Exception as e:
             logging.error('获取空帧详细信息失败: %s', str(e))
-            return pd.DataFrame()
+            return pd.DataFrame(), []
+
+    def _merge_time_ranges(self, time_ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """合并重叠的时间范围
+
+        Args:
+            time_ranges: 时间范围列表，格式为 [(start_ts, end_ts), ...]
+
+        Returns:
+            合并后的时间范围列表（无重叠）
+        """
+        if not time_ranges:
+            return []
+
+        # 按开始时间排序
+        sorted_ranges = sorted(time_ranges, key=lambda x: x[0])
+        merged = [sorted_ranges[0]]
+
+        for current_start, current_end in sorted_ranges[1:]:
+            last_start, last_end = merged[-1]
+
+            # 如果当前范围与最后一个合并范围重叠
+            if current_start <= last_end:
+                # 合并：扩展结束时间
+                merged[-1] = (last_start, max(last_end, current_end))
+            else:
+                # 无重叠，添加新范围
+                merged.append((current_start, current_end))
+
+        return merged
 
     # ==================== 工具方法 ====================
 

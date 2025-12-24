@@ -14,6 +14,7 @@
  */
 
 import fs from 'fs';
+import path from 'path';
 import sqlJs from 'sql.js';
 import type { PerfSymbolDetailData, TestStep } from './perf_analyzer_base';
 import { PerfEvent } from './perf_analyzer_base';
@@ -55,7 +56,7 @@ export class PerfDatabase {
                 symbol_events INTEGER,
                 symbol_total_events INTEGER,
                 sub_category_name TEXT,
-                component_category INTEGER,
+                component_category INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS perf_test_step (
@@ -78,6 +79,11 @@ export class PerfDatabase {
             db = new SQL.Database();
             await this.initializeDatabase(db);
             const data = db.export();
+            // 确保目录存在
+            const dir = path.dirname(this.dbpath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
             fs.writeFileSync(this.dbpath, Buffer.from(data));
         }
 

@@ -32,17 +32,17 @@
                 <span class="metric">
                   <span class="metric-icon">📊</span>
                   <span class="metric-label">指令数:</span>
-                  <span class="metric-value">{{ formatNumber(currentStepInfo.count) }}</span>
+                  <span class="metric-value">{{ formatNumber(currentStepPerfData.count) }}</span>
                 </span>
                 <span class="metric">
                   <span class="metric-icon">⚡</span>
                   <span class="metric-label">功耗:</span>
-                  <span class="metric-value">{{ formatEnergy(currentStepInfo.count) }}</span>
+                  <span class="metric-value">{{ formatEnergy(currentStepPerfData.count) }}</span>
                 </span>
                 <span class="metric">
                   <span class="metric-icon">📈</span>
                   <span class="metric-label">占比:</span>
-                  <span class="metric-value">{{ getStepPercentage(currentStepInfo) }}%</span>
+                  <span class="metric-value">{{ currentStepInfo ? getStepPercentage(currentStepInfo.id) : '0.0' }}%</span>
                 </span>
               </div>
             </div>
@@ -68,6 +68,7 @@
           <NewDataAnalysis v-else-if="showPage.startsWith('compare_step_new_')" :step="getCompareStepId(showPage)" />
           <Top10DataCompare v-else-if="showPage.startsWith('compare_step_top10_')" :step="getCompareStepId(showPage)" />
           <FaultTreeCompare v-else-if="showPage.startsWith('compare_step_fault_tree_')" :step="getCompareStepId(showPage)" />
+          <UICompare v-else-if="showPage.startsWith('compare_step_ui_')" :step-id="getCompareStepId(showPage)" />
           <SceneLoadCompare v-else-if="showPage === 'compare_scene_load'" />
           <StepLoadCompare v-else-if="showPage === 'compare_step_load'" />
           <DetailDataCompare v-else-if="showPage === 'compare_detail_data'" />
@@ -137,6 +138,7 @@ import PerfLoadAnalysis from '@/components/single-analysis/step/load/PerfLoadAna
 import PerfFrameAnalysis from '@/components/single-analysis/step/frame/PerfFrameAnalysis.vue';
 import FaultTreeAnalysis from '@/components/single-analysis/step/fault-tree/FaultTreeAnalysis.vue';
 import CompareOverview from '@/components/compare/CompareOverview.vue';
+import UICompare from '@/components/compare/UICompare.vue';
 import CompareStepLoad from '@/components/compare/CompareStepLoad.vue';
 import SceneLoadCompare from '@/components/compare/SceneLoadCompare.vue';
 import StepLoadCompare from '@/components/compare/StepLoadCompare.vue';
@@ -158,17 +160,15 @@ const isNavCollapsed = ref(false);
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
-const perfData = jsonDataStore.perfData;
+//const perfData = jsonDataStore.perfData;
 
 // 步骤数据
+// testSteps 只从 jsonDataStore.steps 生成，与 perfData 解耦
 const testSteps = computed(() => {
-  if (!perfData) return [];
-  return perfData.steps.map((step, index) => ({
-    id: index + 1,
+  const steps = jsonDataStore.steps || [];
+  return steps.map((step, index) => ({
+    id: step.step_id ?? (index + 1),
     step_name: step.step_name,
-    count: step.count,
-    round: step.round,
-    perf_data_path: step.perf_data_path,
   }));
 });
 
@@ -195,6 +195,7 @@ const pageTitles: Record<string, string> = {
   'perf_load_overview': '负载总览',
   'perf_frame': '帧分析',
   'compare_overview': '版本对比总览',
+  'compare_ui': 'UI对比',
   'compare_scene_load': '场景负载对比',
   'compare_step_load': '步骤负载对比',
   'compare_detail_data': '详细数据对比',
@@ -210,6 +211,7 @@ const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
   'perf_load_overview': '单版本分析 / 负载总览',
   'compare_overview': '版本对比 / 总览对比',
+  'compare_ui': '版本对比 / UI对比',
   'compare_scene_load': '版本对比 / 场景负载对比',
   'compare_step_load': '版本对比 / 步骤负载对比',
   'compare_detail_data': '版本对比 / 详细数据对比',
@@ -468,6 +470,15 @@ const currentStepInfo = computed(() => {
   return null;
 });
 
+// 获取当前步骤的性能数据
+const currentStepPerfData = computed(() => {
+  if (!currentStepInfo.value) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const stepIndex = testSteps.value.findIndex(step => step.id === currentStepInfo.value!.id);
+  return getStepPerfData(stepIndex);
+});
+
 // 格式化数字
 const formatNumber = (num: number) => {
   return num.toLocaleString();
@@ -479,19 +490,36 @@ const formatEnergy = (count: number) => {
   return `${energy} mAs`;
 };
 
-// 步骤数据类型定义
-interface TestStep {
-  id: number;
-  step_name: string;
-  count: number;
-  round: number;
-  perf_data_path: string;
-}
+// 获取步骤的性能数据（从 perfData 中通过索引获取）
+const getStepPerfData = (stepIndex: number) => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps || stepIndex < 0 || stepIndex >= perfData.steps.length) {
+    return { count: 0, round: 0, perf_data_path: '' };
+  }
+  const step = perfData.steps[stepIndex];
+  return {
+    count: step.count,
+    round: step.round,
+    perf_data_path: step.perf_data_path,
+  };
+};
+
+// 获取所有步骤的总计数
+const getTotalTestStepsCount = () => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps) return 0;
+  return perfData.steps.reduce((total, step) => total + step.count, 0);
+};
 
 // 计算步骤占比
-const getStepPercentage = (step: TestStep) => {
-  const total = testSteps.value.reduce((sum, s) => sum + s.count, 0);
-  return total > 0 ? ((step.count / total) * 100).toFixed(1) : '0.0';
+const getStepPercentage = (stepId: number) => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps) return '0.0';
+  const total = getTotalTestStepsCount();
+  const stepIndex = testSteps.value.findIndex(s => s.id === stepId);
+  if (stepIndex < 0 || stepIndex >= perfData.steps.length) return '0.0';
+  const stepCount = perfData.steps[stepIndex].count;
+  return total > 0 ? ((stepCount / total) * 100).toFixed(1) : '0.0';
 };
 </script>
 

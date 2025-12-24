@@ -231,24 +231,22 @@
           "help": "选择模式：0 COMMUNITY, 1 SIMPLE"
         },
         "perfs": {
-          "type": "str",
+          "type": "file",
           "label": "Perf数据路径",
           "required": false,
-          "nargs": "+",
-          "help": "SIMPLE模式需要的perf数据路径（支持多个文件）"
+          "help": "SIMPLE模式需要的perf数据文件（支持多个文件）"
         },
         "traces": {
-          "type": "str",
+          "type": "file",
           "label": "Trace文件路径",
           "required": false,
-          "nargs": "+",
-          "help": "SIMPLE模式可选的trace文件路径（支持多个文件）"
+          "help": "SIMPLE模式可选的trace文件（支持多个文件）"
         },
         "package-name": {
           "type": "str",
           "label": "应用包名",
           "required": false,
-          "help": "SIMPLE模式需要的应用包名"
+          "help": "SIMPLE模式需要的应用包名（单个包名字符串）"
         },
         "pids": {
           "type": "int",
@@ -309,6 +307,35 @@
           "required": false,
           "default": "compare_result.xlsx",
           "help": "输出Excel文件路径（默认：当前目录下的compare_result.xlsx）"
+        }
+      }
+    },
+    "ui-compare": {
+      "name": "UI组件树对比",
+      "description": "对比两个报告的UI组件树",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "base_dir": {
+          "type": "dir",
+          "label": "基准报告目录",
+          "required": true,
+          "help": "基准报告根目录（如：PerfLoad_meituan_0010）"
+        },
+        "compare_dir": {
+          "type": "dir",
+          "label": "对比报告目录",
+          "required": true,
+          "help": "对比报告根目录（如：PerfLoad_meituan_0010）"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "default": "./ui_compare_output",
+          "short": "o",
+          "help": "输出目录（默认：./ui_compare_output）"
         }
       }
     }
