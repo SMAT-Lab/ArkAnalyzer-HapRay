@@ -145,7 +145,9 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
         # 尝试查找同目录下的 trace.db
         if target_db_file:
             trace_db_file = target_db_file.replace('perf.db', '../htrace/step1/trace.db')
-            trace_db_file = os.path.normpath(os.path.join(os.path.dirname(target_db_file), '../../htrace/step1/trace.db'))
+            trace_db_file = os.path.normpath(
+                os.path.join(os.path.dirname(target_db_file), '../../htrace/step1/trace.db')
+            )
         else:
             trace_db_file = None
 
@@ -235,7 +237,7 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
 
 def _process_trace_file(trace_path, htrace_step_dir):
     """处理单个trace文件
-    
+
     如果输入是.db文件，直接复制为trace.db
     如果输入是.htrace文件，复制为trace.htrace（后续会转换为trace.db）
     """

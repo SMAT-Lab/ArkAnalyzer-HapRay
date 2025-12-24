@@ -5,7 +5,7 @@ LTO (Link-Time Optimization) Detector
 
 import json
 import logging
-import sys
+import math
 import traceback
 from pathlib import Path
 from typing import Optional
@@ -41,6 +41,7 @@ class LtoDetector:
             # 默认模型目录（在 package 内）
             try:
                 from importlib.resources import files  # noqa: PLC0415
+
                 model_dir = files('optimization_detector').joinpath('models/lto')
             except Exception:  # noqa: S110
                 # 备选：相对路径
@@ -59,6 +60,7 @@ class LtoDetector:
         try:
             # 从同一目录下的 lto_feature_pipeline 导入（git 仓库内）
             from .lto_feature_pipeline import AllFeatureExtractor  # noqa: PLC0415
+
             self.AllFeatureExtractor = AllFeatureExtractor
             logging.debug('Successfully imported AllFeatureExtractor from local lto_feature_pipeline')
 
@@ -149,8 +151,12 @@ class LtoDetector:
                     matched_count += 1
 
             if matched_count == 0:
-                logging.warning('No features matched for %s. Extracted %d features, expected %d',
-                              so_path, len(names), len(self.feature_names))
+                logging.warning(
+                    'No features matched for %s. Extracted %d features, expected %d',
+                    so_path,
+                    len(names),
+                    len(self.feature_names),
+                )
                 return None
 
             return vec
@@ -194,29 +200,29 @@ class LtoDetector:
         try:
             # 预测（模型是 Pipeline，包含 StandardScaler 和 SVC）
             features_2d = features.reshape(1, -1)  # 转为2D数组
-            
+
             # 注意：SVM Pipeline 在训练时设置了 probability=False，所以没有 predict_proba
             # 使用 decision_function 并转换为概率
             decision = self.model.decision_function(features_2d)
             decision_value = float(decision[0])
-            
+
             # 将 decision_function 转换为概率 [0, 1]
             # 使用 sigmoid 函数：1 / (1 + exp(-decision))
             # 如果 scipy 可用，使用 expit；否则手动计算
             try:
                 from scipy.special import expit  # noqa: PLC0415
+
                 lto_score = float(expit(decision_value))
             except ImportError:
                 # 如果没有 scipy，手动计算 sigmoid
-                import math
                 lto_score = 1.0 / (1.0 + math.exp(-decision_value))
-            
+
             lto_label = 1 if lto_score >= 0.5 else 0
 
             result = {
                 'score': lto_score,
                 'prediction': 'LTO' if lto_label == 1 else 'No LTO',
-                'model_used': 'Unified SVM'
+                'model_used': 'Unified SVM',
             }
 
             # 保存到缓存
