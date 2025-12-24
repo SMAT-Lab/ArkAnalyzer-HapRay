@@ -505,11 +505,9 @@ class OptimizationDetector:
                 lto_result = lto_results[file_info.file_id]
                 row['LTO Score'] = f'{lto_result["score"]:.4f}' if lto_result['score'] is not None else 'N/A'
                 row['LTO Prediction'] = lto_result['prediction']
-                row['LTO Model Used'] = lto_result['model_used']
             elif self.enable_lto:
                 row['LTO Score'] = 'N/A'
                 row['LTO Prediction'] = 'N/A'
-                row['LTO Model Used'] = 'N/A'
 
             report_data.append(row)
         return pd.DataFrame(report_data)
