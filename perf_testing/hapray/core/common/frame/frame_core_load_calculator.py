@@ -202,12 +202,18 @@ class FrameLoadCalculator:
         time_calc_time = time.time() - time_calc_start
 
         # 数据过滤
+        # 注意：一帧可能包含多个线程的样本，每个样本都有自己的callchain_id和thread_id
+        # 因此只按时间范围过滤，不限制线程，确保能分析该帧时间范围内所有线程的样本
         filter_start = time.time()
         mask = (
             (perf_df['timestamp_trace'] >= frame_start_time_ts)
             & (perf_df['timestamp_trace'] <= frame_end_time_ts)
-            & (perf_df['thread_id'] == frame['tid'])
         )
+        # 如果提供了app_pid，可以进一步过滤应用进程的样本（可选优化）
+        if 'app_pid' in frame and frame['app_pid']:
+            # 这里可以添加进程过滤，但需要perf_df中有pid字段
+            # 暂时只按时间范围过滤，因为perf_df中可能没有pid字段
+            pass
         frame_samples = perf_df[mask]
         filter_time = time.time() - filter_start
 
@@ -285,7 +291,12 @@ class FrameLoadCalculator:
                 logging.error('分析调用链时出错: %s', str(e))
                 continue
 
-        # 为每个sample的调用链添加负载信息
+        # 获取thread_id到thread_name的映射（从缓存中获取，避免重复查询）
+        tid_to_info = {}
+        if self.cache_manager:
+            tid_to_info = self.cache_manager.get_tid_to_info()
+
+        # 为每个sample的调用链添加负载信息和thread_name
         for sample_data in sample_callchain_list:
             try:
                 sample_load_percentage = (sample_data['event_count'] / frame_load) * 100 if frame_load > 0 else 0
@@ -298,11 +309,17 @@ class FrameLoadCalculator:
                     call_with_load['value'] = sample_data['event_count']
                     callchain_with_load.append(call_with_load)
 
+                # 从缓存中获取thread_name
+                thread_id = sample_data['thread_id']
+                thread_info = tid_to_info.get(thread_id, {})
+                thread_name = thread_info.get('thread_name', 'unknown')
+
                 sample_callchains.append({
                     'timestamp': sample_data['timestamp'],
                     'event_count': sample_data['event_count'],
                     'load_percentage': float(sample_load_percentage),
-                    'thread_id': sample_data['thread_id'],
+                    'thread_id': thread_id,
+                    'thread_name': thread_name,  # 添加thread_name
                     'callchain': callchain_with_load,
                 })
             except Exception as e:
@@ -315,18 +332,19 @@ class FrameLoadCalculator:
         sample_analysis_time = time.time() - sample_analysis_start
 
         # 保存帧负载数据到缓存
+        # 注意：一帧是针对整个进程的，不是某个线程，因此不保存thread_id
+        # 每个sample_callchain都有自己的thread_id
         cache_save_start = time.time()
         frame_load_data = {
             'ts': frame.get('ts', frame.get('start_time', 0)),
             'dur': frame.get('dur', frame.get('end_time', 0) - frame.get('start_time', 0)),
             'frame_load': frame_load,
-            'thread_id': frame.get('tid'),
             'thread_name': frame.get('thread_name', 'unknown'),
             'process_name': frame.get('process_name', 'unknown'),
             'type': frame.get('type', 0),
             'vsync': frame.get('vsync', 'unknown'),
             'flag': frame.get('flag'),
-            'sample_callchains': sample_callchains,
+            'sample_callchains': sample_callchains,  # 每个callchain都有自己的thread_id
         }
         if self.cache_manager:
             self.cache_manager.add_frame_load(frame_load_data)
@@ -548,12 +566,13 @@ class FrameLoadCalculator:
                 )
 
             # 确保时间戳字段正确，处理NaN值
+            # 注意：一帧是针对整个进程的，不是某个线程，因此不保存thread_id
+            # 每个sample_callchain都有自己的thread_id
             frame_loads.append(
                 {
                     'ts': int(frame['ts']) if pd.notna(frame['ts']) else 0,  # 确保时间戳是整数
                     'dur': int(frame['dur']) if pd.notna(frame['dur']) else 0,  # 确保持续时间是整数
                     'frame_load': frame_load,
-                    'thread_id': int(frame['tid']) if pd.notna(frame['tid']) else 0,  # 确保线程ID是整数
                     'thread_name': frame.get('thread_name', 'unknown'),
                     'process_name': frame.get('process_name', 'unknown'),
                     'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,  # 确保类型是整数

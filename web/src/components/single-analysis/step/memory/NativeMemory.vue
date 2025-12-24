@@ -19,7 +19,7 @@
         </el-col>
       </el-row>
 
-      <el-row v-if="hasNativeMemoryData && hasTimelineData" :gutter="20">
+      <el-row v-if="hasNativeMemoryData" :gutter="20">
         <el-col :span="24">
           <div class="data-panel">
             <h3 class="panel-title">

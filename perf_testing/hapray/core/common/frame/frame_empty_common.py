@@ -22,6 +22,8 @@ import pandas as pd
 
 from .frame_utils import is_system_thread, clean_frame_data
 
+logger = logging.getLogger(__name__)
+
 """空刷帧负载分析公共模块
 
 包含：
@@ -47,8 +49,9 @@ def calculate_thread_instructions(
     frame_end: int,
     tid_to_info_cache: Optional[Dict] = None,
     perf_sample_cache: Optional[Dict] = None,
-    perf_timestamp_field: Optional[str] = None
-) -> Tuple[Dict[int, int], Dict[int, int]]:
+    perf_timestamp_field: Optional[str] = None,
+    return_callchain_ids: bool = False
+) -> Tuple[Dict[int, int], Dict[int, int]] | Tuple[Dict[int, int], Dict[int, int], list[dict]]:
     """计算线程在帧时间范围内的 CPU 指令数（区分应用线程和系统线程）
     
     参考RN实现：只计算应用线程的指令数，排除系统线程
@@ -161,15 +164,28 @@ def calculate_thread_instructions(
         
         # 优化：使用索引提示，批量查询所有线程的指令数
         # 使用EXPLAIN QUERY PLAN优化查询性能
-        instructions_query = f"""
-        SELECT 
-            ps.thread_id,
-            SUM(ps.event_count) as total_instructions
-        FROM perf_sample ps
-        WHERE ps.thread_id IN ({placeholders})
-        AND ps.{timestamp_field} >= ? AND ps.{timestamp_field} <= ?
-        GROUP BY ps.thread_id
-        """
+        if return_callchain_ids:
+            # 如果需要返回callchain_id，查询所有样本（不GROUP BY），在Python中处理
+            instructions_query = f"""
+            SELECT 
+                ps.thread_id,
+                ps.event_count,
+                ps.callchain_id
+            FROM perf_sample ps
+            WHERE ps.thread_id IN ({placeholders})
+            AND ps.{timestamp_field} >= ? AND ps.{timestamp_field} <= ?
+            """
+        else:
+            # 原有逻辑：只查询汇总结果
+            instructions_query = f"""
+            SELECT 
+                ps.thread_id,
+                SUM(ps.event_count) as total_instructions
+            FROM perf_sample ps
+            WHERE ps.thread_id IN ({placeholders})
+            AND ps.{timestamp_field} >= ? AND ps.{timestamp_field} <= ?
+            GROUP BY ps.thread_id
+            """
         
         params = thread_ids_list + [extended_start, extended_end]
         perf_cursor.execute(instructions_query, params)
@@ -178,18 +194,63 @@ def calculate_thread_instructions(
         
         app_thread_instructions = {}
         system_thread_instructions = {}
+        sample_details = []  # 保存所有样本的详细信息：thread_id, event_count, callchain_id
         
-        for thread_id, instruction_count in results:
-            thread_info = thread_info_map.get(thread_id, {})
-            process_name = thread_info.get('process_name')
-            thread_name = thread_info.get('thread_name')
+        if return_callchain_ids:
+            # 一轮遍历：累加event_count，同时保存每个样本的详细信息
+            for thread_id, event_count, callchain_id in results:
+                # 保存样本详细信息（只保存有callchain_id的样本，用于后续调用链分析）
+                if callchain_id is not None:
+                    sample_details.append({
+                        'thread_id': thread_id,
+                        'event_count': event_count,
+                        'callchain_id': callchain_id
+                    })
+                
+                # 累加event_count（区分应用线程和系统线程）
+                thread_info = thread_info_map.get(thread_id, {})
+                process_name = thread_info.get('process_name')
+                thread_name = thread_info.get('thread_name')
+                
+                if is_system_thread(process_name, thread_name):
+                    system_thread_instructions[thread_id] = system_thread_instructions.get(thread_id, 0) + event_count
+                else:
+                    app_thread_instructions[thread_id] = app_thread_instructions.get(thread_id, 0) + event_count
             
-            if is_system_thread(process_name, thread_name):
-                system_thread_instructions[thread_id] = instruction_count
-            else:
-                app_thread_instructions[thread_id] = instruction_count
+            # 打印保存的样本详细信息（用于调试）
+            if sample_details:
+                # logging.info(
+                # f'[第一轮筛选] 保存样本详细信息: 总样本数={len(sample_details)}, '
+                # f'涉及线程数={len(set(s["thread_id"] for s in sample_details))}, '
+                # f'唯一callchain_id数={len(set(s["callchain_id"] for s in sample_details))}, '
+                # f'时间范围=[{extended_start}, {extended_end}]'
+                # )
+                # 打印前5个样本的详细信息
+                for i, sample in enumerate(sample_details[:5], 1):
+                    # logging.info(
+                    # f'[第一轮筛选] 样本{i}: thread_id={sample["thread_id"]}, '
+                    # f'event_count={sample["event_count"]}, callchain_id={sample["callchain_id"]}'
+                    # )
+                    pass
+                if len(sample_details) > 5:
+                    # logging.info(f'[第一轮筛选] ... 还有 {len(sample_details) - 5} 个样本')
+                    pass
+        else:
+            # 原有逻辑：直接使用汇总结果
+            for thread_id, instruction_count in results:
+                thread_info = thread_info_map.get(thread_id, {})
+                process_name = thread_info.get('process_name')
+                thread_name = thread_info.get('thread_name')
+                
+                if is_system_thread(process_name, thread_name):
+                    system_thread_instructions[thread_id] = instruction_count
+                else:
+                    app_thread_instructions[thread_id] = instruction_count
         
-        return app_thread_instructions, system_thread_instructions
+        if return_callchain_ids:
+            return app_thread_instructions, system_thread_instructions, sample_details
+        else:
+            return app_thread_instructions, system_thread_instructions
         
     except Exception as e:
         logger.error('计算线程指令数失败: %s', str(e))
@@ -205,8 +266,9 @@ def calculate_process_instructions(
     frame_end: int,
     perf_sample_cache: Optional[Dict] = None,
     perf_timestamp_field: Optional[str] = None,
-    tid_to_info_cache: Optional[Dict] = None
-) -> Tuple[int, int]:
+    tid_to_info_cache: Optional[Dict] = None,
+    return_callchain_ids: bool = False
+) -> Tuple[int, int] | Tuple[int, int, list[dict]]:
     """计算应用进程在帧时间范围内的所有CPU指令数（进程级统计）
     
     这是推荐的CPU计算方式：直接统计应用进程所有线程的CPU指令数，简单、完整、性能好。
@@ -254,7 +316,7 @@ def calculate_process_instructions(
         # 注意：calculate_thread_instructions内部会使用扩展时间窗口（±1ms），
         # 所以这里直接传递原始的frame_start和frame_end即可
         thread_ids = set(thread_tids)
-        app_instructions_dict, system_instructions_dict = calculate_thread_instructions(
+        result = calculate_thread_instructions(
             perf_conn=perf_conn,
             trace_conn=trace_conn,
             thread_ids=thread_ids,
@@ -262,8 +324,15 @@ def calculate_process_instructions(
             frame_end=frame_end,
             tid_to_info_cache=tid_to_info_cache,
             perf_sample_cache=perf_sample_cache,
-            perf_timestamp_field=perf_timestamp_field
+            perf_timestamp_field=perf_timestamp_field,
+            return_callchain_ids=return_callchain_ids
         )
+        
+        if return_callchain_ids:
+            app_instructions_dict, system_instructions_dict, sample_details = result
+        else:
+            app_instructions_dict, system_instructions_dict = result
+            sample_details = []
         
         # 步骤3: 汇总所有线程的指令数
         app_instructions = sum(app_instructions_dict.values())
@@ -271,7 +340,10 @@ def calculate_process_instructions(
         
         logger.debug(f'进程 {app_pid} CPU统计: 应用线程={app_instructions:,} 指令, 系统线程={system_instructions:,} 指令')
         
-        return app_instructions, system_instructions
+        if return_callchain_ids:
+            return app_instructions, system_instructions, sample_details
+        else:
+            return app_instructions, system_instructions
         
     except Exception as e:
         logger.error(f'计算进程CPU指令数失败 (PID={app_pid}): {e}')
@@ -565,33 +637,166 @@ class EmptyFrameCallchainAnalyzer:
             None（直接修改frame_loads）
         """
         if not frame_loads or trace_df.empty:
+            logger.warning('analyze_callchains: frame_loads为空或trace_df为空')
             return
+        
+        if perf_df is None or perf_df.empty:
+            logger.warning(f'analyze_callchains: perf_df为空，尝试从cache_manager重新加载')
+            # 尝试从cache_manager重新加载perf_df
+            if self.cache_manager:
+                perf_df = self.cache_manager.get_perf_samples()
+                if perf_df is None or perf_df.empty:
+                    logger.warning(f'analyze_callchains: 从cache_manager加载的perf_df仍为空，无法进行调用链分析')
+                    # 即使perf_df为空，也要设置空的sample_callchains
+                    for frame_data in frame_loads:
+                        if 'sample_callchains' not in frame_data:
+                            frame_data['sample_callchains'] = []
+                    return
+            else:
+                logger.warning(f'analyze_callchains: cache_manager为空，无法重新加载perf_df')
+                for frame_data in frame_loads:
+                    if 'sample_callchains' not in frame_data:
+                        frame_data['sample_callchains'] = []
+                return
         
         from .frame_constants import TOP_FRAMES_FOR_CALLCHAIN
         
-        # 对Top N帧进行调用链分析
-        sorted_frames = sorted(frame_loads, key=lambda x: x.get('frame_load', 0), reverse=True)
+        # 对所有空刷帧按frame_load排序，取Top N（不区分主线程和后台线程）
+        # 但排除系统线程（系统线程不计入占比，也不应该分析callchain）
+        # 规则：由于frame_loads已经通过app_pids过滤，所有帧都属于应用进程
+        # 因此，只排除进程名本身是系统进程的情况
+        # 对于应用进程内的线程，即使名称像系统线程（如OS_VSyncThread），也不排除
+        non_system_frames = [
+            f for f in frame_loads 
+            if not is_system_thread(f.get('process_name'), None)  # 只检查进程名
+        ]
+        sorted_frames = sorted(non_system_frames, key=lambda x: x.get('frame_load', 0), reverse=True)
         top_n_frames = sorted_frames[:min(top_n, TOP_FRAMES_FOR_CALLCHAIN)]
         
-        for frame_data in top_n_frames:
+        # logger.info(f'analyze_callchains: 开始分析Top {len(top_n_frames)}帧的调用链, 总帧数={len(frame_loads)}')
+        # logger.info(f'analyze_callchains: Top N帧详情: {[(f.get("ts"), f.get("thread_id"), f.get("is_main_thread"), f.get("frame_load", 0), f.get("vsync")) for f in top_n_frames[:10]]}')
+        for i, frame_data in enumerate(top_n_frames):
+            # logger.info(f'analyze_callchains: 处理第{i+1}帧: ts={frame_data.get("ts")}, tid={frame_data.get("thread_id")}, '
+            #            f'is_main_thread={frame_data.get("is_main_thread")}, frame_load={frame_data.get("frame_load", 0)}, vsync={frame_data.get("vsync")}')
             # 找到对应的原始帧数据
-            frame_mask = (
-                (trace_df['ts'] == frame_data['ts'])
-                & (trace_df['dur'] == frame_data['dur'])
-                & (trace_df['tid'] == frame_data['thread_id'])
-            )
-            original_frame = trace_df[frame_mask].iloc[0] if not trace_df[frame_mask].empty else None
+            # 优先使用vsync匹配（如果有vsync，一定能匹配到frame_slice中的帧）
+            vsync = frame_data.get('vsync')
+            matching_frames = pd.DataFrame()  # 初始化为空DataFrame
             
-            if original_frame is not None:
+            # 确保vsync不是'unknown'字符串，并且trace_df中有vsync列
+            if vsync is not None and vsync != 'unknown' and 'vsync' in trace_df.columns:
                 try:
-                    _, sample_callchains = self.load_calculator.analyze_single_frame(
-                        original_frame, perf_df, perf_conn, None
+                    # 确保vsync是数值类型（可能是int或str）
+                    vsync_value = int(vsync) if not isinstance(vsync, (int, float)) else vsync
+                    # 使用vsync匹配（最可靠的方式）
+                    # 只匹配type=0的真实帧，不要期望帧
+                    # 确保trace_df中的vsync也是数值类型
+                    trace_vsync = pd.to_numeric(trace_df['vsync'], errors='coerce')
+                    # 只匹配type=0的真实帧
+                    type_mask = (trace_df['type'] == 0) if 'type' in trace_df.columns else pd.Series([True] * len(trace_df), index=trace_df.index)
+                    frame_mask = (trace_vsync == vsync_value) & type_mask
+                    matching_frames = trace_df[frame_mask]
+                    if not matching_frames.empty:
+                        # logger.info(f'使用vsync匹配成功: vsync={vsync_value}, ts={frame_data["ts"]}, 找到{len(matching_frames)}个匹配帧（type=0）')
+                        pass
+                    else:
+                        logger.warning(f'vsync匹配失败: vsync={vsync_value}, ts={frame_data["ts"]}, trace_df中vsync范围={sorted(trace_vsync.dropna().unique().astype(int))[:10] if not trace_vsync.empty else []}, type=0的帧数={len(trace_df[type_mask]) if "type" in trace_df.columns else len(trace_df)}')
+                except (ValueError, TypeError) as e:
+                    logger.warning(f'vsync类型转换失败: vsync={vsync}, error={e}, 使用备用匹配方式')
+                    matching_frames = pd.DataFrame()  # 重置为空
+            
+            # 如果vsync匹配失败，使用ts、dur、tid匹配
+            if matching_frames.empty:
+                # 如果没有vsync或vsync匹配失败，使用ts、dur、tid匹配
+                frame_mask = (
+                    (trace_df['ts'] == frame_data['ts'])
+                    & (trace_df['dur'] == frame_data['dur'])
+                    & (trace_df['tid'] == frame_data['thread_id'])
+                )
+                matching_frames = trace_df[frame_mask]
+                
+                # 如果精确匹配失败，尝试只匹配ts和tid（dur可能有微小差异）
+                if matching_frames.empty:
+                    logger.debug(f'精确匹配失败，尝试宽松匹配: ts={frame_data["ts"]}, dur={frame_data["dur"]}, tid={frame_data.get("thread_id")}')
+                    loose_mask = (
+                        (trace_df['ts'] == frame_data['ts'])
+                        & (trace_df['tid'] == frame_data['thread_id'])
                     )
-                    frame_data['sample_callchains'] = sample_callchains
+                    matching_frames = trace_df[loose_mask]
+                    if not matching_frames.empty:
+                        logger.info(f'宽松匹配成功: ts={frame_data["ts"]}, 找到{len(matching_frames)}个匹配帧')
+            
+            if not matching_frames.empty:
+                original_frame = matching_frames.iloc[0]
+                # 确保original_frame转换为字典格式，包含所有必要字段
+                if isinstance(original_frame, pd.Series):
+                    frame_dict = original_frame.to_dict()
+                else:
+                    frame_dict = dict(original_frame) if not isinstance(original_frame, dict) else original_frame
+                
+                # 确保有所有必要字段（analyze_single_frame需要）
+                if 'start_time' not in frame_dict:
+                    frame_dict['start_time'] = frame_dict.get('ts', 0)
+                if 'end_time' not in frame_dict:
+                    frame_dict['end_time'] = frame_dict.get('ts', 0) + frame_dict.get('dur', 0)
+                # 确保有tid字段（analyze_single_frame需要用于过滤perf样本）
+                if 'tid' not in frame_dict:
+                    frame_dict['tid'] = frame_data.get('thread_id')
+                # 确保有其他必要字段（进程级查询需要pid）
+                if 'pid' not in frame_dict:
+                    frame_dict['pid'] = frame_data.get('pid') or frame_data.get('process_id')
+                if 'app_pid' not in frame_dict and 'pid' in frame_dict:
+                    frame_dict['app_pid'] = frame_dict['pid']
+                if 'thread_name' not in frame_dict:
+                    frame_dict['thread_name'] = frame_data.get('thread_name', 'unknown')
+                if 'process_name' not in frame_dict:
+                    frame_dict['process_name'] = frame_data.get('process_name', 'unknown')
+                # 确保vsync字段被传递（frame_slice表必须包含vsync，用于日志和调试）
+                if 'vsync' not in frame_dict or frame_dict.get('vsync') is None:
+                    frame_dict['vsync'] = frame_data.get('vsync') or original_frame.get('vsync') if hasattr(original_frame, 'get') else None
+                
+                # 关键：将frame_data中的_sample_details传递到frame_dict中，以便analyze_single_frame使用
+                if '_sample_details' in frame_data:
+                    frame_dict['_sample_details'] = frame_data['_sample_details']
+                    # logger.info(f'传递_sample_details到frame_dict: vsync={frame_dict.get("vsync")}, 样本数={len(frame_data["_sample_details"])}')
+                
+                try:
+                    # 确保perf_df不为空（调用链分析需要）
+                    if perf_df is None or perf_df.empty:
+                        if self.cache_manager:
+                            perf_df = self.cache_manager.get_perf_samples()
+                            logger.info(f'重新加载perf_df用于调用链分析: size={len(perf_df) if perf_df is not None and not perf_df.empty else 0}')
+                    
+                    if perf_df is None or perf_df.empty:
+                        logger.warning(f'perf_df仍为空，无法进行调用链分析: ts={frame_data["ts"]}')
+                        frame_data['sample_callchains'] = []
+                    else:
+                        _, sample_callchains = self.load_calculator.analyze_single_frame(
+                            frame_dict, perf_df, perf_conn, None
+                        )
+                        frame_data['sample_callchains'] = sample_callchains if sample_callchains else []
+                        if sample_callchains:
+                            # 记录成功获取调用链
+                            # logger.info(f'帧调用链分析成功: ts={frame_data["ts"]}, tid={frame_dict.get("tid")}, '
+                            #            f'调用链数={len(sample_callchains)}, frame_load={frame_data.get("frame_load", 0)}')
+                            pass
+                        else:
+                            # 使用info级别，确保能看到日志
+                            logger.info(f'帧调用链为空: ts={frame_data["ts"]}, tid={frame_dict.get("tid")}, '
+                                       f'frame_start={frame_dict.get("start_time")}, frame_end={frame_dict.get("end_time")}, '
+                                       f'perf_df_size={len(perf_df)}, perf_df_columns={list(perf_df.columns) if not perf_df.empty else []}, '
+                                       f'frame_load={frame_data.get("frame_load", 0)}')
                 except Exception as e:
-                    logger.warning(f'帧调用链分析失败: ts={frame_data["ts"]}, error={e}')
+                    logger.warning(f'帧调用链分析失败: ts={frame_data["ts"]}, error={e}, frame_dict_keys={list(frame_dict.keys())}')
+                    import traceback
+                    logger.debug(f'异常堆栈: {traceback.format_exc()}')
                     frame_data['sample_callchains'] = []
             else:
+                logger.warning(f'未找到匹配的原始帧: ts={frame_data["ts"]}, dur={frame_data["dur"]}, '
+                             f'thread_id={frame_data.get("thread_id")}, is_main_thread={frame_data.get("is_main_thread")}, '
+                             f'frame_load={frame_data.get("frame_load", 0)}, '
+                             f'trace_df中有{len(trace_df)}帧, trace_df的tid范围={sorted(trace_df["tid"].unique())[:10] if not trace_df.empty and "tid" in trace_df.columns else []}, '
+                             f'trace_df中该ts的帧数={len(trace_df[trace_df["ts"] == frame_data["ts"]]) if not trace_df.empty and "ts" in trace_df.columns else 0}')
                 frame_data['sample_callchains'] = []
         
         # 对于非Top N帧，设置空的调用链信息
@@ -620,7 +825,12 @@ class EmptyFrameResultBuilder:
         self,
         frame_loads: list[dict],
         total_load: int = 0,
-        detection_stats: Optional[Dict] = None
+        detection_stats: Optional[Dict] = None,
+        deduplicated_empty_frame_load: Optional[int] = None,
+        deduplicated_main_thread_load: Optional[int] = None,
+        deduplicated_background_thread_load: Optional[int] = None,
+        deduplicated_thread_loads: Optional[dict[int, int]] = None,
+        tid_to_info: Optional[dict] = None
     ) -> dict:
         """构建统一的分析结果
         
@@ -640,34 +850,297 @@ class EmptyFrameResultBuilder:
         # 获取第一帧时间戳
         first_frame_time = self.cache_manager.get_first_frame_timestamp() if self.cache_manager else 0
         
-        # === 通用处理：区分主线程/后台线程 ===
+        # === 通用处理：统一显示全局Top 10帧（与sample_callchains分析保持一致）===
+        from .frame_constants import TOP_FRAMES_FOR_CALLCHAIN
+        
         result_df = pd.DataFrame(frame_loads)
         
-        main_thread_frames = (
-            result_df[result_df['is_main_thread'] == 1]
+        # 排除系统线程，按frame_load排序，取全局Top 10（不区分主线程和后台线程）
+        # 规则：由于frame_loads已经通过app_pids过滤，所有帧都属于应用进程
+        # 因此，只排除进程名本身是系统进程的情况
+        # 对于应用进程内的线程，即使名称像系统线程（如OS_VSyncThread），也不排除
+        non_system_frames = result_df[
+            ~result_df.apply(
+                lambda row: is_system_thread(
+                    row.get('process_name'), 
+                    None  # 只检查进程名，不检查线程名
+                ), axis=1
+            )
+        ]
+        
+        # 全局Top 10帧（与sample_callchains分析的帧保持一致）
+        # 不再区分主线程和后台线程，统一为一个列表
+        top_frames_global = (
+            non_system_frames
             .sort_values('frame_load', ascending=False)
-            .head(5)
-        )
-        background_thread_frames = (
-            result_df[result_df['is_main_thread'] == 0]
-            .sort_values('frame_load', ascending=False)
-            .head(5)
+            .head(TOP_FRAMES_FOR_CALLCHAIN)
         )
         
-        # 处理时间戳
-        processed_main = self._process_frame_timestamps(main_thread_frames, first_frame_time)
-        processed_bg = self._process_frame_timestamps(background_thread_frames, first_frame_time)
+        # 处理时间戳（统一处理，不区分主线程和后台线程）
+        processed_all = self._process_frame_timestamps(top_frames_global, first_frame_time)
         
         # === 通用统计 ===
-        empty_frame_load = int(sum(f['frame_load'] for f in frame_loads))
-        background_thread_load = int(sum(f['frame_load'] for f in frame_loads if f.get('is_main_thread') != 1))
+        # 如果提供了去重后的 empty_frame_load，使用它（去除重叠区域）
+        # 否则使用累加的方式（包含重叠区域）
+        if deduplicated_empty_frame_load is not None:
+            empty_frame_load = int(deduplicated_empty_frame_load)
+        else:
+            empty_frame_load = int(sum(f['frame_load'] for f in frame_loads))
         
+        # 计算主线程负载：使用去重后的值（如果提供）
+        if deduplicated_main_thread_load is not None:
+            main_thread_load = int(deduplicated_main_thread_load)
+        else:
+            # 回退到未去重的方式（从_sample_details累加）
+            main_thread_load = 0
+            
+            # 构建tid到线程信息的映射（用于判断线程是否为主线程）
+            if tid_to_info is None:
+                tid_to_info = {}
+                if self.cache_manager and self.cache_manager.trace_conn:
+                    try:
+                        trace_cursor = self.cache_manager.trace_conn.cursor()
+                        app_pids = self.cache_manager.app_pids or []
+                        if app_pids:
+                            placeholders = ','.join('?' * len(app_pids))
+                            trace_cursor.execute(f"""
+                                SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                                FROM thread t
+                                INNER JOIN process p ON t.ipid = p.ipid
+                                WHERE p.pid IN ({placeholders})
+                            """, app_pids)
+                            
+                            for tid, thread_name, process_name in trace_cursor.fetchall():
+                                tid_to_info[tid] = {
+                                    'thread_name': thread_name,
+                                    'process_name': process_name,
+                                    'is_main_thread': 1 if thread_name == process_name else 0
+                                }
+                    except Exception as e:
+                        # logging.warning(f'查询线程信息失败: {e}')
+                        pass
+            
+            # 从所有空刷帧的_sample_details中提取主线程的CPU
+            for f in frame_loads:
+                # 排除系统进程
+                if is_system_thread(f.get('process_name'), None):
+                    continue
+                
+                # 从_sample_details中提取该帧的主线程CPU
+                sample_details = f.get('_sample_details', [])
+                if sample_details:
+                    # 累加所有主线程的event_count（不区分帧是主线程还是后台线程的帧）
+                    for sample in sample_details:
+                        tid = sample.get('thread_id')
+                        if tid is None:
+                            continue
+                        
+                        # 判断该线程是否为主线程
+                        thread_info = tid_to_info.get(tid, {})
+                        thread_is_main = thread_info.get('is_main_thread', 0)
+                        
+                        # 只累加主线程的CPU（无论这个帧是主线程还是后台线程的帧）
+                        if thread_is_main == 1:
+                            event_count = sample.get('event_count', 0)
+                            main_thread_load += event_count
+        
+        # 计算后台线程负载：使用去重后的值（如果提供）
+        if deduplicated_background_thread_load is not None:
+            background_thread_load = int(deduplicated_background_thread_load)
+        else:
+            # 回退到未去重的方式（从_sample_details累加）
+            background_thread_load = 0
+            
+            # 构建tid到线程信息的映射（用于判断线程是否为主线程）
+            if tid_to_info is None:
+                tid_to_info = {}
+                if self.cache_manager and self.cache_manager.trace_conn:
+                    try:
+                        trace_cursor = self.cache_manager.trace_conn.cursor()
+                        app_pids = self.cache_manager.app_pids or []
+                        if app_pids:
+                            placeholders = ','.join('?' * len(app_pids))
+                            trace_cursor.execute(f"""
+                                SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                                FROM thread t
+                                INNER JOIN process p ON t.ipid = p.ipid
+                                WHERE p.pid IN ({placeholders})
+                            """, app_pids)
+                            
+                            for tid, thread_name, process_name in trace_cursor.fetchall():
+                                tid_to_info[tid] = {
+                                    'thread_name': thread_name,
+                                    'process_name': process_name,
+                                    'is_main_thread': 1 if thread_name == process_name else 0
+                                }
+                    except Exception as e:
+                        # logging.warning(f'查询线程信息失败: {e}')
+                        pass
+            
+            # 从所有空刷帧的_sample_details中提取后台线程的CPU
+            for f in frame_loads:
+                # 排除系统进程
+                if is_system_thread(f.get('process_name'), None):
+                    continue
+                
+                # 从_sample_details中提取该帧的后台线程CPU
+                sample_details = f.get('_sample_details', [])
+                if sample_details:
+                    # 累加所有后台线程的event_count（不区分帧是主线程还是后台线程的帧）
+                    for sample in sample_details:
+                        tid = sample.get('thread_id')
+                        if tid is None:
+                            continue
+                        
+                        # 判断该线程是否为主线程
+                        thread_info = tid_to_info.get(tid, {})
+                        thread_is_main = thread_info.get('is_main_thread', 0)
+                        
+                        # 只累加后台线程的CPU（无论这个帧是主线程还是后台线程的帧）
+                        if thread_is_main == 0:
+                            event_count = sample.get('event_count', 0)
+                            background_thread_load += event_count
+        
+        # === 阶段3：统计整个trace浪费指令数占比 ===
+        # empty_frame_percentage = empty_frame_load / total_load * 100
+        # 表示空刷帧的CPU浪费占整个trace总CPU的百分比
         if total_load > 0:
             empty_frame_percentage = (empty_frame_load / total_load) * 100
+            main_thread_percentage = (main_thread_load / total_load) * 100
             background_thread_percentage = (background_thread_load / total_load) * 100
         else:
             empty_frame_percentage = 0.0
+            main_thread_percentage = 0.0
             background_thread_percentage = 0.0
+        
+        # === 线程级别统计 ===
+        # 使用去重后的线程负载（如果提供），否则回退到未去重的方式
+        if deduplicated_thread_loads is not None and tid_to_info is not None:
+            # 从去重后的线程负载构建 thread_statistics
+            thread_loads = {}
+            for tid, load in deduplicated_thread_loads.items():
+                thread_info = tid_to_info.get(tid, {})
+                thread_name = thread_info.get('thread_name', f'thread_{tid}')
+                process_name = thread_info.get('process_name', 'N/A')
+                
+                # 排除系统进程
+                if is_system_thread(process_name, None):
+                    continue
+                
+                thread_key = (tid, thread_name, process_name)
+                thread_loads[thread_key] = {
+                    'thread_id': tid,
+                    'thread_name': thread_name,
+                    'process_name': process_name,
+                    'total_load': load,
+                    'frame_count': 0  # 去重后无法直接统计帧数，需要从frame_loads统计
+                }
+            
+            # 统计涉及该线程的帧数（从frame_loads中统计）
+            for f in frame_loads:
+                sample_details = f.get('_sample_details', [])
+                if sample_details:
+                    frame_tids = set(sample.get('thread_id') for sample in sample_details if sample.get('thread_id'))
+                    for tid in frame_tids:
+                        if tid in deduplicated_thread_loads:
+                            thread_info = tid_to_info.get(tid, {})
+                            thread_name = thread_info.get('thread_name', f'thread_{tid}')
+                            process_name = thread_info.get('process_name', 'N/A')
+                            
+                            if is_system_thread(process_name, None):
+                                continue
+                            
+                            thread_key = (tid, thread_name, process_name)
+                            if thread_key in thread_loads:
+                                thread_loads[thread_key]['frame_count'] += 1
+        else:
+            # 回退到未去重的方式（从_sample_details累加）
+            thread_loads = {}
+            
+            # 构建tid到线程信息的映射（用于从_sample_details中获取线程信息）
+            if tid_to_info is None:
+                tid_to_info = {}
+                if self.cache_manager and self.cache_manager.trace_conn:
+                    try:
+                        trace_cursor = self.cache_manager.trace_conn.cursor()
+                        # 查询所有应用进程的线程信息
+                        app_pids = self.cache_manager.app_pids or []
+                        if app_pids:
+                            placeholders = ','.join('?' * len(app_pids))
+                            trace_cursor.execute(f"""
+                                SELECT DISTINCT t.tid, t.name as thread_name, p.name as process_name
+                                FROM thread t
+                                INNER JOIN process p ON t.ipid = p.ipid
+                                WHERE p.pid IN ({placeholders})
+                            """, app_pids)
+                            
+                            for tid, thread_name, process_name in trace_cursor.fetchall():
+                                tid_to_info[tid] = {
+                                    'thread_name': thread_name,
+                                    'process_name': process_name
+                                }
+                    except Exception as e:
+                        # logging.warning(f'查询线程信息失败: {e}')
+                        pass
+            
+            # 从_sample_details中统计所有线程的负载
+            # 遍历所有空刷帧，从每个帧的_sample_details中提取线程负载
+            for f in frame_loads:
+                sample_details = f.get('_sample_details', [])
+                if not sample_details:
+                    continue
+                
+                # 按thread_id分组，累加event_count
+                thread_event_counts = {}
+                for sample in sample_details:
+                    tid = sample.get('thread_id')
+                    if tid is None:
+                        continue
+                    
+                    event_count = sample.get('event_count', 0)
+                    if tid not in thread_event_counts:
+                        thread_event_counts[tid] = 0
+                    thread_event_counts[tid] += event_count
+                
+                # 将每个线程的负载添加到thread_loads中
+                for tid, event_count in thread_event_counts.items():
+                    # 从tid_to_info获取线程信息
+                    thread_info = tid_to_info.get(tid, {})
+                    thread_name = thread_info.get('thread_name', f'thread_{tid}')
+                    process_name = thread_info.get('process_name', 'N/A')
+                    
+                    # 排除系统进程
+                    if is_system_thread(process_name, None):
+                        continue
+                    
+                    # 使用(thread_id, thread_name, process_name)作为唯一标识
+                    thread_key = (tid, thread_name, process_name)
+                    if thread_key not in thread_loads:
+                        thread_loads[thread_key] = {
+                            'thread_id': tid,
+                            'thread_name': thread_name,
+                            'process_name': process_name,
+                            'total_load': 0,
+                            'frame_count': 0
+                        }
+                    # 累加该线程在这个帧中的负载
+                    thread_loads[thread_key]['total_load'] += event_count
+                    # 统计涉及该线程的帧数（每个帧只统计一次）
+                    thread_loads[thread_key]['frame_count'] += 1
+        
+        # 找出负载最多的线程
+        top_threads = sorted(
+            thread_loads.values(),
+            key=lambda x: x['total_load'],
+            reverse=True
+        )[:10]  # Top 10线程
+        
+        # 计算每个线程的占比
+        for thread_info in top_threads:
+            if total_load > 0:
+                thread_info['percentage'] = (thread_info['total_load'] / total_load) * 100
+            else:
+                thread_info['percentage'] = 0.0
         
         # 严重程度评估
         severity_level, severity_description = self._assess_severity(
@@ -684,16 +1157,50 @@ class EmptyFrameResultBuilder:
                 'empty_frame_percentage': float(empty_frame_percentage),
                 'total_empty_frames': int(len(frame_loads)),
                 'empty_frames_with_load': int(len([f for f in frame_loads if f.get('frame_load', 0) > 0])),
+                'main_thread_load': int(main_thread_load),
+                'main_thread_percentage': float(main_thread_percentage),
                 'background_thread_load': int(background_thread_load),
                 'background_thread_percentage': float(background_thread_percentage),
                 'severity_level': severity_level,
                 'severity_description': severity_description,
             },
-            'top_frames': {
-                'main_thread_empty_frames': processed_main,
-                'background_thread': processed_bg,
+            'top_frames': processed_all,  # 统一列表，不再区分主线程和后台线程
+            'thread_statistics': {
+                'top_threads': [
+                    {
+                        'thread_id': t.get('thread_id'),
+                        'tid': t.get('thread_id'),  # tid与thread_id相同（frame_loads中的thread_id就是tid）
+                        'thread_name': t.get('thread_name'),
+                        'process_name': t.get('process_name'),
+                        'total_load': int(t.get('total_load', 0)),
+                        'percentage': float(t.get('percentage', 0.0)),
+                        'frame_count': int(t.get('frame_count', 0))
+                    }
+                    for t in top_threads
+                ]
             }
         }
+        
+        # === 三个检测器的原始检测结果（在合并去重之前，不处理 overlap）===
+        # 无论 detection_stats 是否存在，都设置这三个字段（确保总是存在）
+        if detection_stats:
+            # 1. flag=2 检测器的原始检测数量
+            direct_count = detection_stats.get('direct_detected_count', 0)
+            result['summary']['direct_detected_count'] = direct_count
+            
+            # 2. RS skip 检测器的原始检测数量
+            rs_count = detection_stats.get('rs_detected_count', 0)
+            result['summary']['rs_detected_count'] = rs_count
+            
+            # 3. 框架特定检测器的原始检测数量
+            framework_counts = detection_stats.get('framework_detected_counts')
+            framework_counts = framework_counts if framework_counts is not None else {}
+            result['summary']['framework_detection_counts'] = framework_counts
+        else:
+            # 如果没有 detection_stats，设置默认值
+            result['summary']['direct_detected_count'] = 0
+            result['summary']['rs_detected_count'] = 0
+            result['summary']['framework_detection_counts'] = {}
         
         # === RS特有字段（如果有）===
         if detection_stats:
@@ -759,11 +1266,28 @@ class EmptyFrameResultBuilder:
                 'severity_level': 'normal',
                 'severity_description': '正常：未检测到空刷帧。'
             },
-            'top_frames': {
-                'main_thread_empty_frames': [],
-                'background_thread': [],
-            },
+            'top_frames': [],  # 统一列表，不再区分主线程和后台线程
+            'thread_statistics': {
+                'top_threads': []
+            }
         }
+        
+        # === 三个检测器的原始检测结果（在合并去重之前，不处理 overlap）===
+        # 同时添加到 summary 和最外层（双重保障）
+        if detection_stats:
+            direct_count = detection_stats.get('direct_detected_count', 0)
+            rs_count = detection_stats.get('rs_detected_count', 0)
+            framework_counts = detection_stats.get('framework_detected_counts', {})
+            framework_counts = framework_counts if framework_counts is not None else {}
+            
+            result['summary']['direct_detected_count'] = direct_count
+            result['summary']['rs_detected_count'] = rs_count
+            result['summary']['framework_detection_counts'] = framework_counts
+        else:
+            # 如果没有 detection_stats，设置默认值
+            result['summary']['direct_detected_count'] = 0
+            result['summary']['rs_detected_count'] = 0
+            result['summary']['framework_detection_counts'] = {}
         
         # RS特有字段
         if detection_stats and 'total_skip_frames' in detection_stats:

@@ -4,6 +4,7 @@
 
 import logging
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -72,11 +73,20 @@ class FileUtils:
     def get_project_root() -> Path:
         """获取项目根目录"""
         # 从当前文件向上查找，直到找到包含特定标记文件的目录
-        current = Path(__file__).resolve()
+        # 打包后默认路径：_internal/core
+        logger.info('当前文件路径：%s', __file__)
+        current = Path(__file__).resolve().parent
+        if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+            return current.parent.parent
+
+        # 向上遍历直到文件系统根目录（当到达根目录时，parent 等于 current）
         while current != current.parent:
-            if (current / 'hapray-gui').exists() or (current / 'perf_testing').exists():
-                return current
+            if (current / 'tools').exists() or (current / 'perf_testing').exists():
+                return current / 'dist'
             current = current.parent
+
+        # 如果找不到，记录警告并返回当前工作目录
+        logger.warning('未找到项目根目录，返回当前工作目录 ：%s', Path.cwd())
         return Path.cwd()
 
     @staticmethod

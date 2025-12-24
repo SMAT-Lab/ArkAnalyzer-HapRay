@@ -282,13 +282,15 @@ class MainWindow(QMainWindow):
                         icon = action_icons.get(action_key, '⚙️')
                         action_item.setText(0, f'{icon} {display_name}')
                         action_item.setData(
-                            0, Qt.UserRole, {
+                            0,
+                            Qt.UserRole,
+                            {
                                 'type': 'action',
                                 'plugin_id': plugin_id,
                                 'action': action_key,
                                 'action_name': display_name,
-                                'menu_category': menu_name
-                            }
+                                'menu_category': menu_name,
+                            },
                         )
 
             # 如果一级菜单下没有子项，隐藏该菜单
