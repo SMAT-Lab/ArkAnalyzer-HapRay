@@ -90,9 +90,9 @@ class UnifiedFrameAnalyzer(BaseAnalyzer):
             logging.warning('Trace database not found: %s', trace_db_path)
             return None
 
-        if not os.path.exists(perf_db_path):
-            logging.warning('Perf database not found: %s', perf_db_path)
-            return None
+        # perf_db_path现在是可选的，如果不存在会从trace.db读取perf数据
+        if perf_db_path and not os.path.exists(perf_db_path):
+            logging.info('Perf database not found: %s, will try to use perf data from trace.db', perf_db_path)
 
         try:
             # 新建 FrameAnalyzerCore，传入 trace_db_path, perf_db_path, app_pids, step_dir

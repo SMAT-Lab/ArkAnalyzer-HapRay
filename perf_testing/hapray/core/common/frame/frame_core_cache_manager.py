@@ -105,6 +105,37 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
     注意：本类继承自FrameTraceAccessor和FramePerfAccessor，可以直接使用它们的方法
     """
 
+    def _trace_db_has_perf_tables(self) -> bool:
+        """检查trace.db是否包含必要的perf数据表
+
+        Returns:
+            bool: 如果trace.db包含perf_sample, perf_callchain, perf_files表则返回True
+        """
+        if not self.trace_conn:
+            return False
+
+        required_tables = ['perf_sample', 'perf_callchain', 'perf_files']
+        try:
+            cursor = self.trace_conn.cursor()
+            # 查询所有表名
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            existing_tables = {row[0] for row in cursor.fetchall()}
+
+            # 检查是否包含所有必需的perf表
+            has_all_tables = all(table in existing_tables for table in required_tables)
+
+            if has_all_tables:
+                # 进一步检查表是否有数据（至少perf_sample表不为空）
+                cursor.execute("SELECT COUNT(*) FROM perf_sample")
+                sample_count = cursor.fetchone()[0]
+                return sample_count > 0
+
+            return False
+
+        except Exception as e:
+            logging.warning('检查trace.db中的perf表失败: %s', str(e))
+            return False
+
     def __init__(self, trace_db_path: str = None, perf_db_path: str = None, app_pids: list = None):
         """初始化FrameCacheManager
 
@@ -134,6 +165,11 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
                 self.perf_conn = sqlite3.connect(perf_db_path)
             except Exception as e:
                 logging.error('建立perf数据库连接失败: %s', str(e))
+        elif self.trace_conn and self._trace_db_has_perf_tables():
+            # 如果perf.db不存在但trace.db包含perf数据，则使用trace.db作为perf数据源
+            logging.info('perf.db不存在，使用trace.db中的perf数据进行帧分析')
+            self.perf_conn = self.trace_conn
+            self.perf_db_path = trace_db_path  # 更新perf_db_path指向trace.db
 
         FramePerfAccessor.__init__(self, self.perf_conn)
         FrameTraceAccessor.__init__(self, self.trace_conn)

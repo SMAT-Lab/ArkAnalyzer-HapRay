@@ -114,8 +114,8 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
 def parse_processes(target_db_file: str, file_path: str, package_name: str, pids: list):
     """
     解析进程文件，返回包含目标包名的进程pid和进程名列表。
-    :param target_db_file: 性能数据库文件路径
-    :param file_path: 进程信息文件路径
+    :param target_db_file: 性能数据库文件路径（perf.db）
+    :param file_path: 进程信息文件路径（ps_ef.txt）
     :param package_name: 目标包名
     :param pids: 用户提供的进程ID列表
     :return: dict { 'pids': List[int], 'process_names': List[str] }
@@ -123,8 +123,9 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
     if not package_name:
         raise ValueError('包名不能为空')
     result = {'pids': [], 'process_names': []}
+
+    # 优先从 perf.db 的 perf_thread 表中查询
     if target_db_file and os.path.exists(target_db_file):
-        # 连接trace数据库
         perf_conn = sqlite3.connect(target_db_file)
         try:
             # 获取所有perf样本
@@ -135,10 +136,37 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
                 result['pids'].append(row['process_id'])
                 result['process_names'].append(row['thread_name'])
         except Exception as e:
-            logging.error('从db中获取pids时发生异常: %s', str(e))
+            logging.error('从perf.db中获取pids时发生异常: %s', str(e))
         finally:
             perf_conn.close()
-    if os.path.exists(file_path):
+
+    # 如果从 perf.db 没有获取到数据，尝试从 trace.db 的 process 表中查询
+    if not result['pids']:
+        # 尝试查找同目录下的 trace.db
+        if target_db_file:
+            trace_db_file = target_db_file.replace('perf.db', '../htrace/step1/trace.db')
+            trace_db_file = os.path.normpath(os.path.join(os.path.dirname(target_db_file), '../../htrace/step1/trace.db'))
+        else:
+            trace_db_file = None
+
+        if trace_db_file and os.path.exists(trace_db_file):
+            trace_conn = sqlite3.connect(trace_db_file)
+            try:
+                # 从 trace.db 的 process 表中查询
+                trace_query = 'SELECT DISTINCT pid, name FROM process WHERE name LIKE ?'
+                params = (f'%{package_name}%',)
+                trace_pids = pd.read_sql_query(trace_query, trace_conn, params=params)
+                for _, row in trace_pids.iterrows():
+                    result['pids'].append(row['pid'])
+                    result['process_names'].append(row['name'])
+                logging.info('从trace.db中获取到%d个进程', len(result['pids']))
+            except Exception as e:
+                logging.error('从trace.db中获取pids时发生异常: %s', str(e))
+            finally:
+                trace_conn.close()
+
+    # 如果还是没有数据，尝试从 ps_ef.txt 文件中解析
+    if not result['pids'] and os.path.exists(file_path):
         result = {'pids': [], 'process_names': []}
         try:
             with open(file_path, encoding='utf-8') as f:
@@ -156,6 +184,8 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
                     result['process_names'].append(process_name)
         except Exception as err:
             logging.error('处理文件失败: %s', err)
+
+    # 如果用户提供了 pids，使用用户提供的
     if pids != []:
         process_names = []
         for _ in pids:
