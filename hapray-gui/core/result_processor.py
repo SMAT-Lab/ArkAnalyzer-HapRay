@@ -23,7 +23,14 @@ class ResultProcessor:
         else:
             self.output_dir = Path(self.config.get_output_dir())
 
-    def save_result(self, tool_name: str, result: ToolResult, params: dict[str, Any], action_name: str = None, menu_category: str = None) -> str:
+    def save_result(
+        self,
+        tool_name: str,
+        result: ToolResult,
+        params: dict[str, Any],
+        action_name: str = None,
+        menu_category: str = None,
+    ) -> str:
         """
         保存执行结果
 
