@@ -16,7 +16,7 @@ limitations under the License.
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -27,8 +27,10 @@ from .frame_constants import (
     VSYNC_SYMBOL_HANDLE,
     VSYNC_SYMBOL_ON_READABLE,
 )
-from .frame_core_cache_manager import FrameCacheManager
 from .frame_utils import calculate_process_instructions
+
+if TYPE_CHECKING:
+    from .frame_core_cache_manager import FrameCacheManager
 
 
 class FrameLoadCalculator:
@@ -41,7 +43,7 @@ class FrameLoadCalculator:
     4. VSync过滤
     """
 
-    def __init__(self, debug_vsync_enabled: bool = False, cache_manager: FrameCacheManager = None):
+    def __init__(self, debug_vsync_enabled: bool = False, cache_manager: 'FrameCacheManager' = None):
         """
         初始化帧负载计算器
 
