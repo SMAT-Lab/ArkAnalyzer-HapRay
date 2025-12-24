@@ -227,10 +227,10 @@ class OptimizationDetector:
             try:
                 with open(file_info.absolute_path, 'rb') as f:
                     elf = ELFFile(f)
-                section = elf.get_section_by_name('.text')
-                if not section:
-                    error_msg = 'No .text section found in ELF file'
-                    return file_info, [], error_msg
+                    section = elf.get_section_by_name('.text')
+                    if not section:
+                        error_msg = 'No .text section found in ELF file'
+                        return file_info, [], error_msg
             except Exception as e:
                 # 捕获 ELF 文件读取异常（如 Magic number does not match）
                 error_msg = f'Failed to read ELF file: {str(e)}'
