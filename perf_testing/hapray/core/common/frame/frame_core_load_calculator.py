@@ -573,6 +573,7 @@ class FrameLoadCalculator:
                     'ts': int(frame['ts']) if pd.notna(frame['ts']) else 0,  # 确保时间戳是整数
                     'dur': int(frame['dur']) if pd.notna(frame['dur']) else 0,  # 确保持续时间是整数
                     'frame_load': frame_load,
+                    'thread_id': int(frame['tid']) if pd.notna(frame['tid']) else 0,  # 添加thread_id字段，用于帧匹配
                     'thread_name': frame.get('thread_name', 'unknown'),
                     'process_name': frame.get('process_name', 'unknown'),
                     'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,  # 确保类型是整数
