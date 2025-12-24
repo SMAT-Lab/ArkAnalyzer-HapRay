@@ -3,7 +3,12 @@
 """
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QComboBox, QListView, QSizePolicy, QStyledItemDelegate
+
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class CheckableComboBox(QComboBox):
@@ -112,9 +117,19 @@ class MultiSelectComboBox(QComboBox):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        logger.debug('MultiSelectComboBox 初始化开始')
+
         # 设置为可编辑，但不允许用户输入
         self.setEditable(True)
-        self.lineEdit().setReadOnly(True)
+        line_edit = self.lineEdit()
+        line_edit.setReadOnly(True)
+        line_edit.setMinimumWidth(500)  # 设置内部 lineEdit 的最小宽度
+        # 安装事件过滤器到 lineEdit，以便处理点击事件
+        line_edit.installEventFilter(self)
+
+        # 设置控件本身的最小宽度和大小策略
+        self.setMinimumWidth(500)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         # 创建列表视图
         list_view = QListView()
@@ -128,34 +143,52 @@ class MultiSelectComboBox(QComboBox):
         # 初始化
         self.update_text()
 
+        logger.debug(f'MultiSelectComboBox 初始化完成，当前项目数量: {self.count()}')
+
     def handle_item_pressed(self, index):
         """处理项目点击"""
         item = self.model().itemFromIndex(index)
-        if item.checkState() == Qt.Checked:
-            item.setCheckState(Qt.Unchecked)
-        else:
-            item.setCheckState(Qt.Checked)
-        return False  # 阻止关闭下拉框
+        if item:
+            if item.checkState() == Qt.Checked:
+                item.setCheckState(Qt.Unchecked)
+            else:
+                item.setCheckState(Qt.Checked)
+        # 对于多选下拉框，点击选项后不自动关闭，让用户可以继续选择
+        # 用户点击外部区域时会自动关闭
 
     def update_text(self):
         """更新显示文本"""
+        row_count = self.model().rowCount()
+        logger.debug(f'MultiSelectComboBox.update_text 被调用，模型行数: {row_count}，控件 count: {self.count()}')
         checked_items = self.get_checked_items()
         if not checked_items:
-            self.lineEdit().setText('请选择测试用例...')
+            display_text = '请选择测试用例...'
+            self.lineEdit().setText(display_text)
+            logger.debug(f'更新显示文本为: "{display_text}"')
         elif len(checked_items) == 1:
-            self.lineEdit().setText(checked_items[0])
+            display_text = checked_items[0]
+            self.lineEdit().setText(display_text)
+            logger.debug(f'更新显示文本为: "{display_text}"')
         else:
-            self.lineEdit().setText(f'已选择 {len(checked_items)} 个测试用例')
+            display_text = f'已选择 {len(checked_items)} 个测试用例'
+            self.lineEdit().setText(display_text)
+            logger.debug(f'更新显示文本为: "{display_text}"')
 
         self.selection_changed.emit(checked_items)
 
     def get_checked_items(self) -> list[str]:
         """获取所有选中的项目"""
+        row_count = self.model().rowCount()
+        logger.debug(f'MultiSelectComboBox.get_checked_items 被调用，模型行数: {row_count}')
         checked_items = []
-        for i in range(self.model().rowCount()):
+        for i in range(row_count):
             item = self.model().item(i)
-            if item and item.checkState() == Qt.Checked:
-                checked_items.append(item.text())
+            if item:
+                if item.checkState() == Qt.Checked:
+                    checked_items.append(item.text())
+            else:
+                logger.warning(f'第 {i} 行的模型项为 None')
+        logger.debug(f'选中的项目: {checked_items}，共 {len(checked_items)} 个')
         return checked_items
 
     def set_checked_items(self, items: list[str]):
@@ -171,17 +204,61 @@ class MultiSelectComboBox(QComboBox):
 
     def addItem(self, text, userData=None):
         """添加项目"""
+        logger.debug(f'MultiSelectComboBox.addItem 被调用，添加项目: {text}')
         super().addItem(text, userData)
         item = self.model().item(self.count() - 1, 0)
-        item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-        item.setCheckState(Qt.Unchecked)
+        if item:
+            item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            item.setCheckState(Qt.Unchecked)
+            logger.debug(f'项目 "{text}" 添加成功，当前总数: {self.count()}')
+        else:
+            logger.error(f'项目 "{text}" 添加失败，无法获取模型项')
 
     def addItems(self, texts):
         """添加多个项目"""
+        logger.info(f'MultiSelectComboBox.addItems 被调用，准备添加 {len(texts)} 个项目')
+        logger.debug(f'项目列表: {texts}')
+        if not texts:
+            logger.warning('MultiSelectComboBox.addItems 接收到空列表')
         for text in texts:
             self.addItem(text)
+        logger.info(f'MultiSelectComboBox.addItems 完成，当前项目总数: {self.count()}')
 
     def clear(self):
         """清空所有项目"""
+        old_count = self.count()
+        logger.info(f'MultiSelectComboBox.clear 被调用，清空前项目数: {old_count}')
         super().clear()
+        new_count = self.count()
+        logger.info(f'MultiSelectComboBox.clear 完成，清空后项目数: {new_count}')
         self.update_text()
+
+    def showPopup(self):
+        """显示下拉框"""
+        logger.debug('MultiSelectComboBox.showPopup 被调用')
+        super().showPopup()
+
+    def hidePopup(self):
+        """隐藏下拉框"""
+        logger.debug('MultiSelectComboBox.hidePopup 被调用')
+        # 允许正常关闭下拉框（点击外部或按下 ESC 时）
+        super().hidePopup()
+
+    def eventFilter(self, obj, event):
+        """事件过滤器，处理 lineEdit 的点击事件"""
+        if (
+            obj == self.lineEdit()
+            and isinstance(event, QMouseEvent)
+            and event.type() == QMouseEvent.Type.MouseButtonPress
+            and event.button() == Qt.LeftButton
+        ):
+            # 点击 lineEdit 时显示下拉框（因为 lineEdit 是只读的，无法输入）
+            try:
+                view = self.view()
+                if not view.isVisible():
+                    logger.debug('点击 lineEdit，显示下拉框')
+                    self.showPopup()
+                    return True  # 阻止默认行为
+            except Exception as e:
+                logger.error(f'处理 lineEdit 点击事件时出错: {e}')
+        return super().eventFilter(obj, event)
