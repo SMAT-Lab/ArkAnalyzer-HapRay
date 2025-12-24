@@ -1,7 +1,6 @@
 import time
 
 from hypium import BY
-from tensorflow import double
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -65,9 +64,9 @@ class PerfLoad_Wechat_0010(PerfTestCase):
             self.driver.touch(comps[5])
             self.driver.wait(0.5)
             for _i in range(10):
-                self.driver.touch(self.convert_coordinate(485, 499), double)
+                self.driver.touch(self.convert_coordinate(485, 499), 'double')
                 time.sleep(2)
-                self.driver.touch(self.convert_coordinate(485, 499), double)
+                self.driver.touch(self.convert_coordinate(485, 499), 'double')
                 time.sleep(2)
 
         def step5():
