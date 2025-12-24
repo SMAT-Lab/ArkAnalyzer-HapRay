@@ -1617,7 +1617,7 @@ export const useJsonDataStore = defineStore('config', {
      * 深度比较两个值是否相等（模拟Python的 == 运算符）
      * Python中列表和字典的比较是内容比较，JavaScript需要手动实现
      */
-    deepEqual(value1: any, value2: any): boolean {
+    deepEqual(value1: unknown, value2: unknown): boolean {
       // 严格相等（包括 undefined === undefined, null === null）
       if (value1 === value2) {
         return true;
