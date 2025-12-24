@@ -22,7 +22,7 @@ from typing import Any, Optional
 
 # 注意：移除模块级别的日志配置，避免导入时的冲突
 # 从frame_empty_common和frame_utils导入函数（使用相对导入）
-from .frame_empty_common import calculate_process_instructions, calculate_thread_instructions
+from .frame_core_load_calculator import calculate_process_instructions, calculate_thread_instructions
 from .frame_utils import is_system_thread
 
 logger = logging.getLogger(__name__)
