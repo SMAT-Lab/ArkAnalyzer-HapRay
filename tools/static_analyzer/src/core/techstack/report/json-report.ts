@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { FormatOptions, FormatResult } from './index';
+import type { FormatResult } from './index';
 import { BaseFormatter } from './base-formatter';
 import type { Hap, TechStackDetection } from '../../hap/hap_parser';
 
