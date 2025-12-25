@@ -143,13 +143,15 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
     # 如果从 perf.db 没有获取到数据，尝试从 trace.db 的 process 表中查询
     if not result['pids']:
         # 尝试查找同目录下的 trace.db
+        trace_db_file = None
         if target_db_file:
-            trace_db_file = target_db_file.replace('perf.db', '../htrace/step1/trace.db')
-            trace_db_file = os.path.normpath(
-                os.path.join(os.path.dirname(target_db_file), '../../htrace/step1/trace.db')
-            )
-        else:
-            trace_db_file = None
+            # 从 target_db_file 路径中提取 step 编号
+            # 例如: .../hiperf/step1/perf.db -> .../htrace/step1/trace.db
+            target_dir = os.path.dirname(target_db_file)  # .../hiperf/step1
+            step_name = os.path.basename(target_dir)  # step1
+            parent_dir = os.path.dirname(target_dir)  # .../hiperf
+            scene_dir = os.path.dirname(parent_dir)  # 场景目录
+            trace_db_file = os.path.join(scene_dir, 'htrace', step_name, 'trace.db')
 
         if trace_db_file and os.path.exists(trace_db_file):
             trace_conn = sqlite3.connect(trace_db_file)
@@ -169,7 +171,6 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
 
     # 如果还是没有数据，尝试从 ps_ef.txt 文件中解析
     if not result['pids'] and os.path.exists(file_path):
-        result = {'pids': [], 'process_names': []}
         try:
             with open(file_path, encoding='utf-8') as f:
                 lines = [line.strip() for line in f if line.strip()]
@@ -187,11 +188,9 @@ def parse_processes(target_db_file: str, file_path: str, package_name: str, pids
         except Exception as err:
             logging.error('处理文件失败: %s', err)
 
-    # 如果用户提供了 pids，使用用户提供的
-    if pids != []:
-        process_names = []
-        for _ in pids:
-            process_names.append(package_name)
+    # 如果用户提供了 pids，优先使用用户提供的（覆盖前面所有获取的结果）
+    if pids:
+        process_names = [package_name for _ in pids]
         result['pids'] = pids
         result['process_names'] = process_names
 
