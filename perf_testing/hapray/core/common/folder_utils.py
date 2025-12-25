@@ -21,6 +21,8 @@ from typing import Any
 
 from xdevice import platform_logger
 
+from hapray.core.config.config import Config
+
 Log = platform_logger('FolderUtils')
 
 """
@@ -35,7 +37,6 @@ def scan_folders(root_dir):
     检查性能测试数据是否完整
     trace、perf、memory 三者有一种数据完整就算成功
     """
-    from hapray.core.config.config import Config
 
     root_dir_path = Path(root_dir)
     hiperf_dir = root_dir_path / 'hiperf'
