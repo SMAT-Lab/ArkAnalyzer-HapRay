@@ -532,8 +532,10 @@ class AnalyzerHelper:
             # Build pids.json file path
             pids_json_path = os.path.join(scene_dir, 'hiperf', f'step{step_number}', 'pids.json')
 
+            logging.info('尝试从 pids.json 获取 PIDs: %s', pids_json_path)
+
             if not os.path.exists(pids_json_path):
-                logging.warning('No pids.json found at %s', pids_json_path)
+                logging.warning('❌ pids.json 不存在: %s', pids_json_path)
                 return []
 
             # Read JSON file
@@ -545,7 +547,9 @@ class AnalyzerHelper:
             process_names = pids_data.get('process_names', [])
 
             if not pids or not process_names:
-                logging.warning('No valid pids or process_names found in %s', pids_json_path)
+                logging.warning('❌ pids.json 中没有有效的 pids 或 process_names')
+                logging.warning('   pids: %s', pids)
+                logging.warning('   process_names: %s', process_names)
                 return []
 
             # Ensure pids and process_names have the same length
@@ -564,7 +568,10 @@ class AnalyzerHelper:
             # Cache PID data
             AnalyzerHelper._pid_cache[cache_key] = pids
 
-            logging.debug('Cached PID data: %s, PIDs: %s', step_id, len(pids))
+            logging.info('✓ 从 pids.json 获取到 %d 个 PIDs: %s', len(pids), pids)
+            for i, (pid, name) in enumerate(zip(pids, process_names)):
+                logging.info('  [%d] pid=%s, name=%s', i + 1, pid, name)
+
             return pids
 
         except Exception as e:

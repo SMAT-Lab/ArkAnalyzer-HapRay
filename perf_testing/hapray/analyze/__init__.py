@@ -34,6 +34,7 @@ ANALYZER_CLASSES = [
     'FaultTreeAnalyzer',
     'CovAnalyzer',
     'UIAnalyzer',
+    'IpcBinderAnalyzer',  # IPC binder 事务分析器
     # Add more analyzers here
 ]
 

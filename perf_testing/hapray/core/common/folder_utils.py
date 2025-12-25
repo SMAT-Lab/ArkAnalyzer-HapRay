@@ -21,6 +21,8 @@ from typing import Any
 
 from xdevice import platform_logger
 
+from hapray.core.config.config import Config
+
 Log = platform_logger('FolderUtils')
 
 """
@@ -35,6 +37,7 @@ def scan_folders(root_dir):
     检查性能测试数据是否完整
     trace、perf、memory 三者有一种数据完整就算成功
     """
+
     root_dir_path = Path(root_dir)
     hiperf_dir = root_dir_path / 'hiperf'
 
@@ -44,6 +47,11 @@ def scan_folders(root_dir):
         return False
 
     total_steps = len(steps_json)
+
+    # 获取配置
+    trace_enabled = Config.get('trace.enable', True)
+    perf_enabled = Config.get('perf.enable', True)
+    memory_enabled = Config.get('memory.enable', False)
 
     # 统计各类数据文件数量
     perf_data_num = 0
@@ -57,26 +65,21 @@ def scan_folders(root_dir):
             if item_path.is_dir() and (item_path / 'perf.data').exists():
                 perf_data_num += 1
 
-    # 检查 htrace 目录中的 trace.htrace
+    # 检查 htrace 目录中的 trace.htrace（trace 或 memory 都会生成到这里）
     htrace_dir = root_dir_path / 'htrace'
     if htrace_dir.exists():
         for item in os.listdir(htrace_dir):
             item_path = htrace_dir / item
             if item_path.is_dir() and (item_path / 'trace.htrace').exists():
-                trace_data_num += 1
+                if trace_enabled:
+                    trace_data_num += 1
+                if memory_enabled:
+                    memory_data_num += 1
 
-    # 检查 memory 目录中的 memory.htrace
-    memory_dir = root_dir_path / 'memory'
-    if memory_dir.exists():
-        for item in os.listdir(memory_dir):
-            item_path = memory_dir / item
-            if item_path.is_dir() and (item_path / 'memory.htrace').exists():
-                memory_data_num += 1
-
-    # 计算各类数据的完整度百分比
-    perf_percent = (perf_data_num / total_steps * 100) if total_steps > 0 else 0
-    trace_percent = (trace_data_num / total_steps * 100) if total_steps > 0 else 0
-    memory_percent = (memory_data_num / total_steps * 100) if total_steps > 0 else 0
+    # 计算各类数据的完整度百分比（仅计算启用的数据类型）
+    perf_percent = (perf_data_num / total_steps * 100) if total_steps > 0 and perf_enabled else 0
+    trace_percent = (trace_data_num / total_steps * 100) if total_steps > 0 and trace_enabled else 0
+    memory_percent = (memory_data_num / total_steps * 100) if total_steps > 0 and memory_enabled else 0
 
     # 只要有一种数据完整度超过 50%，就认为测试成功
     return perf_percent > 50 or trace_percent > 50 or memory_percent > 50
