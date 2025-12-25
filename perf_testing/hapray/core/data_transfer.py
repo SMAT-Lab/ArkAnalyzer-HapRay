@@ -86,7 +86,8 @@ class DataTransfer:
             remote_path: 设备上的文件路径（不含.htrace扩展名）
             local_path: 本地保存路径
         """
-        if not Config.get('trace.enable'):
+        # trace 或 memory 启用时都会生成 .htrace 文件
+        if not Config.get('trace.enable') and not Config.get('memory.enable'):
             return
 
         trace_remote_path = f'{remote_path}.htrace'
