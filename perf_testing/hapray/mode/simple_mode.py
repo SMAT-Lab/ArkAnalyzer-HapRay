@@ -65,21 +65,32 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         os.makedirs(hiperf_step_dir, exist_ok=True)
         logging.info('创建目录: %s', hiperf_step_dir)
 
-        # 处理perf文件
-        if i < len(perf_paths):
-            _process_perf_file(perf_paths[i], hiperf_step_dir, target_db_files, package_name, pids)
-        else:
-            logging.info('没有 perf 文件，直接创建 pids.json')
-            _create_pids_json(None, hiperf_step_dir, package_name, pids)
-
-        # 处理trace文件（仅当提供了trace文件时）
+        # 先处理trace文件（如果有），确保trace.db在pids.json生成前就绪
         if trace_paths and i < len(trace_paths):
             htrace_step_dir = os.path.join(htrace_base_dir, f'step{step_num}')
             os.makedirs(htrace_step_dir, exist_ok=True)
             logging.info('创建目录: %s', htrace_step_dir)
             _process_trace_file(trace_paths[i], htrace_step_dir)
+
+            # 如果是.htrace文件，需要立即转换为.db，以便parse_processes可以查询
+            trace_htrace = os.path.join(htrace_step_dir, 'trace.htrace')
+            trace_db = os.path.join(htrace_step_dir, 'trace.db')
+            if os.path.exists(trace_htrace) and not os.path.exists(trace_db):
+                logging.info('立即转换 trace.htrace -> trace.db，以便生成 pids.json')
+                if not ExeUtils.convert_data_to_db(trace_htrace, trace_db):
+                    logging.error('❌ 转换失败: %s', trace_htrace)
+                else:
+                    logging.info('✓ 转换成功: %s', trace_db)
         else:
             logging.info('没有 trace 文件，跳过 trace 处理')
+
+        # 处理perf文件（此时trace.db已经存在，parse_processes可以从中查询）
+        if i < len(perf_paths):
+            _process_perf_file(perf_paths[i], hiperf_step_dir, target_db_files, package_name, pids)
+        else:
+            # 没有perf文件，但可能有trace文件，仍然需要创建pids.json
+            logging.info('没有 perf 文件，但需要创建 pids.json（可能从 trace.db 查询）')
+            _create_pids_json(None, hiperf_step_dir, package_name, pids)
 
         # 创建testInfo.json
         test_info = {
@@ -121,90 +132,82 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
             logging.info('Auto-generated steps.json create success: %s', target_steps_file)
 
 
-def parse_processes(target_db_file: str, file_path: str, package_name: str, pids: list):
+def parse_processes(target_db_file: str, file_path: str, scene_dir: str, step_name: str, package_name: str, pids: list):
     """
-    解析进程文件，返回包含目标包名的进程pid和进程名列表。
-    :param target_db_file: 性能数据库文件路径（perf.db）
-    :param file_path: 进程信息文件路径（ps_ef.txt）
-    :param package_name: 目标包名
-    :param pids: 用户提供的进程ID列表
-    :return: dict { 'pids': List[int], 'process_names': List[str] }
+    解析进程PID，优先级：用户提供 > trace.db > perf.db > ps_ef.txt
     """
     if not package_name:
         raise ValueError('包名不能为空')
-    result = {'pids': [], 'process_names': []}
 
-    # 优先从 perf.db 的 perf_thread 表中查询
+    # 如果用户提供了 pids（非空列表），直接使用
+    # 注意：pids 默认值是 []，所以 if pids 可以正确区分"用户提供"和"未提供"
+    if pids and pids != []:
+        logging.info('使用用户提供的pids: %s', pids)
+        return {'pids': pids, 'process_names': [package_name] * len(pids)}
+
+    # 尝试从 trace.db 查询（优先，因为内存分析需要）
+    trace_db = os.path.join(scene_dir, 'htrace', step_name, 'trace.db')
+    result = _query_db(trace_db, 'process', 'pid', 'name', package_name)
+    if result['pids']:
+        logging.info('从trace.db获取到%d个进程: %s', len(result['pids']), result['pids'])
+        return result
+
+    # 尝试从 perf.db 查询
     if target_db_file and os.path.exists(target_db_file):
-        perf_conn = sqlite3.connect(target_db_file)
-        try:
-            # 获取所有perf样本
-            perf_query = 'SELECT DISTINCT process_id, thread_name FROM perf_thread WHERE thread_name LIKE ?'
-            params = (f'%{package_name}%',)
-            perf_pids = pd.read_sql_query(perf_query, perf_conn, params=params)
-            for _, row in perf_pids.iterrows():
-                result['pids'].append(row['process_id'])
-                result['process_names'].append(row['thread_name'])
-        except Exception as e:
-            logging.error('从perf.db中获取pids时发生异常: %s', str(e))
-        finally:
-            perf_conn.close()
+        result = _query_db(target_db_file, 'perf_thread', 'process_id', 'thread_name', package_name)
+        if result['pids']:
+            logging.info('从perf.db获取到%d个进程: %s', len(result['pids']), result['pids'])
+            return result
 
-    # 如果从 perf.db 没有获取到数据，尝试从 trace.db 的 process 表中查询
-    if not result['pids']:
-        # 尝试查找同目录下的 trace.db
-        trace_db_file = None
-        if target_db_file:
-            # 从 target_db_file 路径中提取 step 编号
-            # 例如: .../hiperf/step1/perf.db -> .../htrace/step1/trace.db
-            target_dir = os.path.dirname(target_db_file)  # .../hiperf/step1
-            step_name = os.path.basename(target_dir)  # step1
-            parent_dir = os.path.dirname(target_dir)  # .../hiperf
-            scene_dir = os.path.dirname(parent_dir)  # 场景目录
-            trace_db_file = os.path.join(scene_dir, 'htrace', step_name, 'trace.db')
+    # 尝试从 ps_ef.txt 解析
+    if os.path.exists(file_path):
+        result = _parse_ps_ef(file_path, package_name)
+        if result['pids']:
+            logging.info('从ps_ef.txt获取到%d个进程: %s', len(result['pids']), result['pids'])
+            return result
 
-        if trace_db_file and os.path.exists(trace_db_file):
-            trace_conn = sqlite3.connect(trace_db_file)
-            try:
-                # 从 trace.db 的 process 表中查询
-                trace_query = 'SELECT DISTINCT pid, name FROM process WHERE name LIKE ?'
-                params = (f'%{package_name}%',)
-                trace_pids = pd.read_sql_query(trace_query, trace_conn, params=params)
-                for _, row in trace_pids.iterrows():
-                    result['pids'].append(row['pid'])
-                    result['process_names'].append(row['name'])
-                logging.info('从trace.db中获取到%d个进程', len(result['pids']))
-            except Exception as e:
-                logging.error('从trace.db中获取pids时发生异常: %s', str(e))
-            finally:
-                trace_conn.close()
+    logging.error('❌ 未能获取任何PID！package_name=%s', package_name)
+    return {'pids': [], 'process_names': []}
 
-    # 如果还是没有数据，尝试从 ps_ef.txt 文件中解析
-    if not result['pids'] and os.path.exists(file_path):
-        try:
-            with open(file_path, encoding='utf-8') as f:
-                lines = [line.strip() for line in f if line.strip()]
-            process_regex = re.compile(r'^\s*(\S+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)$')
-            for line in lines[1:]:
-                match = process_regex.match(line)
-                if not match:
-                    continue
-                pid = int(match.group(2))
-                cmd = match.group(8)
-                if package_name in cmd:
-                    process_name = cmd[5:] if cmd.startswith('init ') else cmd
-                    result['pids'].append(pid)
-                    result['process_names'].append(process_name)
-        except Exception as err:
-            logging.error('处理文件失败: %s', err)
 
-    # 如果用户提供了 pids，优先使用用户提供的（覆盖前面所有获取的结果）
-    if pids:
-        process_names = [package_name for _ in pids]
-        result['pids'] = pids
-        result['process_names'] = process_names
+def _query_db(db_file: str, table: str, pid_col: str, name_col: str, package_name: str):
+    """从数据库查询进程"""
+    if not os.path.exists(db_file):
+        return {'pids': [], 'process_names': []}
 
-    return result
+    try:
+        conn = sqlite3.connect(db_file)
+        query = f'SELECT DISTINCT {pid_col}, {name_col} FROM {table} WHERE {name_col} LIKE ?'
+        df = pd.read_sql_query(query, conn, params=(f'%{package_name}%',))
+        conn.close()
+
+        pids = df[pid_col].tolist()
+        names = df[name_col].tolist()
+        return {'pids': pids, 'process_names': names}
+    except Exception as e:
+        logging.error('查询%s失败: %s', db_file, e)
+        return {'pids': [], 'process_names': []}
+
+
+def _parse_ps_ef(file_path: str, package_name: str):
+    """从ps_ef.txt解析进程"""
+    try:
+        with open(file_path, encoding='utf-8') as f:
+            lines = [line.strip() for line in f if line.strip()]
+
+        regex = re.compile(r'^\s*\S+\s+(\d+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+(.*)$')
+        pids, names = [], []
+
+        for line in lines[1:]:
+            match = regex.match(line)
+            if match and package_name in match.group(2):
+                pids.append(int(match.group(1)))
+                names.append(match.group(2))
+
+        return {'pids': pids, 'process_names': names}
+    except Exception as e:
+        logging.error('解析ps_ef.txt失败: %s', e)
+        return {'pids': [], 'process_names': []}
 
 
 def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir):
@@ -359,11 +362,21 @@ def _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids):
     """创建pids.json文件"""
     logging.info('开始创建 pids.json...')
     logging.info('  current_db_file: %s', current_db_file)
+    logging.info('  hiperf_step_dir: %s', hiperf_step_dir)
     logging.info('  package_name: %s', package_name)
     logging.info('  用户提供的pids: %s', pids)
 
+    # 从 hiperf_step_dir 推导出 scene_dir 和 step_name
+    # hiperf_step_dir = /path/to/report/hiperf/step1
+    step_name = os.path.basename(hiperf_step_dir)  # step1
+    hiperf_base_dir = os.path.dirname(hiperf_step_dir)  # /path/to/report/hiperf
+    scene_dir = os.path.dirname(hiperf_base_dir)  # /path/to/report
+
+    logging.info('  推导出的 scene_dir: %s', scene_dir)
+    logging.info('  推导出的 step_name: %s', step_name)
+
     ps_ef_file_path = os.path.join(hiperf_step_dir, 'ps_ef.txt')
-    pids_json = parse_processes(current_db_file, ps_ef_file_path, package_name, pids)
+    pids_json = parse_processes(current_db_file, ps_ef_file_path, scene_dir, step_name, package_name, pids)
 
     pids_json_path = os.path.join(hiperf_step_dir, 'pids.json')
     with open(pids_json_path, 'w', encoding='utf-8') as f:
