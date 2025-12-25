@@ -56,20 +56,30 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         step_num = i + 1
         hiperf_step_dir = os.path.join(hiperf_base_dir, f'step{step_num}')
 
+        logging.info('')
+        logging.info('#'*60)
+        logging.info('# 处理 Step %d', step_num)
+        logging.info('#'*60)
+
         # 创建step目录
         os.makedirs(hiperf_step_dir, exist_ok=True)
+        logging.info('创建目录: %s', hiperf_step_dir)
 
         # 处理perf文件
         if i < len(perf_paths):
             _process_perf_file(perf_paths[i], hiperf_step_dir, target_db_files, package_name, pids)
         else:
+            logging.info('没有 perf 文件，直接创建 pids.json')
             _create_pids_json(None, hiperf_step_dir, package_name, pids)
 
         # 处理trace文件（仅当提供了trace文件时）
         if trace_paths and i < len(trace_paths):
             htrace_step_dir = os.path.join(htrace_base_dir, f'step{step_num}')
             os.makedirs(htrace_step_dir, exist_ok=True)
+            logging.info('创建目录: %s', htrace_step_dir)
             _process_trace_file(trace_paths[i], htrace_step_dir)
+        else:
+            logging.info('没有 trace 文件，跳过 trace 处理')
 
         # 创建testInfo.json
         test_info = {
@@ -215,6 +225,10 @@ def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir
 
 def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name, pids):
     """处理单个perf文件"""
+    logging.info('='*60)
+    logging.info('开始处理 perf 文件: %s', perf_path)
+    logging.info('='*60)
+
     if not os.path.exists(perf_path):
         logging.warning('Perf file not found: %s', perf_path)
         return
@@ -222,16 +236,21 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
     # 复制perf文件
     target_data_file = os.path.join(hiperf_step_dir, 'perf.data')
     shutil.copy2(perf_path, target_data_file)
-    logging.info('Copied %s to %s', perf_path, target_data_file)
+    logging.info('✓ 复制 perf.data: %s -> %s', perf_path, target_data_file)
 
     # 检查是否存在对应的.db文件并处理
     current_db_file = _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files)
+    logging.info('perf.db 文件: %s', current_db_file if current_db_file else '未生成')
 
     # 复制ps_ef.txt文件
     _copy_ps_ef_file(perf_path, hiperf_step_dir)
 
     # 创建pids.json
+    logging.info('-'*60)
+    logging.info('准备创建 pids.json')
+    logging.info('-'*60)
     _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids)
+    logging.info('='*60)
 
 
 def _process_trace_file(trace_path, htrace_step_dir):
@@ -240,16 +259,23 @@ def _process_trace_file(trace_path, htrace_step_dir):
     如果输入是.db文件，直接复制为trace.db
     如果输入是.htrace文件，复制为trace.htrace（后续会转换为trace.db）
     """
+    logging.info('='*60)
+    logging.info('开始处理 trace 文件: %s', trace_path)
+    logging.info('='*60)
+
     if trace_path.endswith('.db'):
         # 如果输入是.db文件，直接复制为trace.db
         target_db_file = os.path.join(htrace_step_dir, 'trace.db')
         shutil.copy2(trace_path, target_db_file)
-        logging.info('Copied %s to %s', trace_path, target_db_file)
+        logging.info('✓ 复制 trace.db: %s -> %s', trace_path, target_db_file)
     else:
         # 如果输入是.htrace文件，复制为trace.htrace
         target_htrace_file = os.path.join(htrace_step_dir, 'trace.htrace')
         shutil.copy2(trace_path, target_htrace_file)
-        logging.info('Copied %s to %s', trace_path, target_htrace_file)
+        logging.info('✓ 复制 trace.htrace: %s -> %s', trace_path, target_htrace_file)
+        logging.info('  注意：trace.htrace 需要在后续转换为 trace.db')
+
+    logging.info('='*60)
 
 
 def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files):
@@ -267,6 +293,8 @@ def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db
     Returns:
         str: 数据库文件路径，如果失败返回None
     """
+    logging.info('检查 perf.db 文件...')
+
     # 检查原始perf文件同目录下是否存在对应的.db文件
     perf_dir = os.path.dirname(perf_path)
     perf_basename = os.path.splitext(os.path.basename(perf_path))[0]
@@ -277,12 +305,12 @@ def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db
     if os.path.exists(source_db_file):
         # 如果存在.db文件，直接复制到目标路径
         shutil.copy2(source_db_file, target_db_file)
-        logging.info('Copied existing DB file %s to %s', source_db_file, target_db_file)
+        logging.info('✓ 复制已有的 perf.db: %s -> %s', source_db_file, target_db_file)
         target_db_files.append(target_db_file)
         return target_db_file
 
     # 如果不存在.db文件，需要转换perf.data为perf.db
-    logging.info('No existing DB file found, converting %s to %s', target_data_file, target_db_file)
+    logging.info('未找到已有的 perf.db，需要转换 perf.data -> perf.db')
     return _convert_perf_to_db(target_data_file, target_db_files)
 
 
@@ -300,18 +328,20 @@ def _convert_perf_to_db(target_data_file, target_db_files):
     target_db_file = target_data_file.replace('.data', '.db')
 
     if not os.path.exists(target_data_file):
-        logging.error('Source perf.data file not found: %s', target_data_file)
+        logging.error('❌ perf.data 文件不存在: %s', target_data_file)
         return None
 
     # 执行转换，ExeUtils.convert_data_to_db是同步的，会等待转换完成
-    logging.info('Starting conversion from %s to %s', target_data_file, target_db_file)
+    logging.info('开始转换 perf.data -> perf.db...')
+    logging.info('  源文件: %s', target_data_file)
+    logging.info('  目标文件: %s', target_db_file)
 
     if ExeUtils.convert_data_to_db(target_data_file, target_db_file):
         target_db_files.append(target_db_file)
-        logging.info('Successfully converted and verified DB file: %s', target_db_file)
+        logging.info('✓ 转换成功，perf.db 已生成: %s', target_db_file)
         return target_db_file
 
-    logging.error('Failed to convert perf to db for %s', target_data_file)
+    logging.error('❌ 转换失败: %s', target_data_file)
     return None
 
 
@@ -327,8 +357,21 @@ def _copy_ps_ef_file(perf_path, hiperf_step_dir):
 
 def _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids):
     """创建pids.json文件"""
+    logging.info('开始创建 pids.json...')
+    logging.info('  current_db_file: %s', current_db_file)
+    logging.info('  package_name: %s', package_name)
+    logging.info('  用户提供的pids: %s', pids)
+
     ps_ef_file_path = os.path.join(hiperf_step_dir, 'ps_ef.txt')
     pids_json = parse_processes(current_db_file, ps_ef_file_path, package_name, pids)
-    with open(os.path.join(hiperf_step_dir, 'pids.json'), 'w', encoding='utf-8') as f:
-        json.dump(pids_json, f)
-    logging.info('pids.json create success: %s', os.path.join(hiperf_step_dir, 'pids.json'))
+
+    pids_json_path = os.path.join(hiperf_step_dir, 'pids.json')
+    with open(pids_json_path, 'w', encoding='utf-8') as f:
+        json.dump(pids_json, f, indent=2)
+
+    logging.info('✓ pids.json 创建成功: %s', pids_json_path)
+    logging.info('  写入的内容: %s', pids_json)
+
+    if not pids_json.get('pids'):
+        logging.error('❌ 警告：pids.json 中的 pids 为空！')
+        logging.error('   这将导致内存分析无法获取数据！')
