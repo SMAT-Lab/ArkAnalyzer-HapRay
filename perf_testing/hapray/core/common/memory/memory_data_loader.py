@@ -122,7 +122,33 @@ class MemoryDataLoader:
         当 app_pids 为空时返回空列表。
         """
         if not app_pids:
+            logging.warning('❌ app_pids 为空，无法查询 native_hook 事件！')
             return []
+
+        logging.info('查询 native_hook 事件，app_pids: %s', app_pids)
+
+        # 先检查 process 表中是否有匹配的进程
+        cursor = conn.cursor()
+        placeholders_check = ','.join(['?'] * len(app_pids))
+        cursor.execute(f'SELECT ipid, pid, name FROM process WHERE pid IN ({placeholders_check})', app_pids)
+        matched_processes = cursor.fetchall()
+
+        if not matched_processes:
+            logging.error('❌ process 表中没有找到匹配的进程！')
+            logging.error('   提供的 app_pids: %s', app_pids)
+
+            # 显示 process 表中所有的进程
+            cursor.execute('SELECT ipid, pid, name FROM process LIMIT 10')
+            all_processes = cursor.fetchall()
+            logging.error('   process 表中的进程（前10个）:')
+            for ipid, pid, name in all_processes:
+                logging.error('     ipid=%s, pid=%s, name=%s', ipid, pid, name)
+
+            return []
+
+        logging.info('✓ 在 process 表中找到 %d 个匹配的进程:', len(matched_processes))
+        for ipid, pid, name in matched_processes:
+            logging.info('  ipid=%s, pid=%s, name=%s', ipid, pid, name)
 
         placeholders = ','.join(['?'] * len(app_pids))
         sql = f"""
@@ -157,6 +183,15 @@ class MemoryDataLoader:
                     'last_symbol_id': row[12],
                 }
             )
+
+        if not events:
+            logging.warning('⚠️  虽然 process 表中有匹配的进程，但 native_hook 表中没有对应的事件！')
+            # 检查 native_hook 表中有哪些 ipid
+            cursor.execute('SELECT DISTINCT ipid FROM native_hook LIMIT 10')
+            native_hook_ipids = [row[0] for row in cursor.fetchall()]
+            logging.warning('   native_hook 表中的 ipid（前10个）: %s', native_hook_ipids)
+        else:
+            logging.info('✓ 查询到 %d 条 native_hook 事件', len(events))
 
         return events
 
