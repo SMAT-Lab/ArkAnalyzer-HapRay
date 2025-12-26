@@ -7,30 +7,115 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 const AdmZip = require('adm-zip');
 
 // 读取命令行入参：node test_release.js <zip_file>
-const ZIP_FILE = process.argv[2];
+let ZIP_FILE = process.argv[2];
 
+/**
+ * 获取平台名称
+ */
+function getPlatformName() {
+    const platform = os.platform();
+    const platformMap = {
+        'darwin': 'darwin',
+        'win32': 'win32',
+        'linux': 'linux'
+    };
+    return platformMap[platform] || platform;
+}
+
+/**
+ * 获取架构名称
+ */
+function getArchName() {
+    const arch = os.arch();
+    const archMap = {
+        'x64': 'x64',
+        'arm64': 'arm64',
+        'ia32': 'ia32',
+        'arm': 'arm'
+    };
+    return archMap[arch] || arch;
+}
+
+/**
+ * 查找默认的 zip 文件
+ * 格式: ArkAnalyzer-HapRay-{platform}-{arch}-{version}.zip
+ */
+function findDefaultZipFile() {
+    try {
+        // 读取 package.json 获取版本号
+        const packageJsonPath = path.join(__dirname, '../package.json');
+        if (!fs.existsSync(packageJsonPath)) {
+            return null;
+        }
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        const version = packageJson.version;
+
+        // 构建文件名
+        const platform = getPlatformName();
+        const arch = getArchName();
+        const fileName = `ArkAnalyzer-HapRay-${platform}-${arch}-${version}.zip`;
+
+        console.log(`🔍 正在查找默认 zip 文件: ${fileName}`);
+
+        // 在多个位置查找
+        const searchPaths = [
+            path.join(__dirname, '..', fileName),           // 项目根目录
+            path.join(__dirname, '..', '..', fileName),     // 项目父目录
+            path.join(process.cwd(), fileName),            // 当前工作目录
+            path.join(os.homedir(), fileName),            // 用户主目录
+        ];
+
+        for (const searchPath of searchPaths) {
+            if (fs.existsSync(searchPath)) {
+                const stat = fs.statSync(searchPath);
+                if (stat.isFile()) {
+                    console.log(`✓ 找到文件: ${searchPath}\n`);
+                    return searchPath;
+                }
+            }
+        }
+
+        console.log(`ℹ️  未找到默认文件，已搜索以下位置:`);
+        searchPaths.forEach(p => console.log(`   - ${p}`));
+        console.log('');
+        return null;
+    } catch (error) {
+        console.warn(`⚠️  查找默认 zip 文件时出错: ${error.message}\n`);
+        return null;
+    }
+}
+
+// 如果未提供 zip 文件，尝试查找默认文件
+let zipPath;
 if (!ZIP_FILE) {
-    console.error('❌ 错误: 未提供 zip 文件路径');
-    console.error('   用法: node test_release.js <zip_file>');
-    process.exit(1);
-}
+    console.log('ℹ️  未提供 zip 文件路径，尝试查找默认文件...\n');
+    zipPath = findDefaultZipFile();
+    
+    if (!zipPath) {
+        console.error('❌ 错误: 未提供 zip 文件路径且未找到默认文件');
+        console.error('   用法: node test_release.js <zip_file>');
+        console.error('   或确保存在文件: ArkAnalyzer-HapRay-{platform}-{arch}-{version}.zip');
+        process.exit(1);
+    }
+} else {
+    // 验证 zip 文件是否存在
+    zipPath = path.resolve(ZIP_FILE);
+    if (!fs.existsSync(zipPath)) {
+        console.error(`❌ 错误: zip 文件不存在: ${zipPath}`);
+        process.exit(1);
+    }
 
-// 验证 zip 文件是否存在
-const zipPath = path.resolve(ZIP_FILE);
-if (!fs.existsSync(zipPath)) {
-    console.error(`❌ 错误: zip 文件不存在: ${zipPath}`);
-    process.exit(1);
-}
-
-// 验证是否为文件
-const zipStat = fs.statSync(zipPath);
-if (!zipStat.isFile()) {
-    console.error(`❌ 错误: 指定的路径不是文件: ${zipPath}`);
-    process.exit(1);
+    // 验证是否为文件
+    const zipStat = fs.statSync(zipPath);
+    if (!zipStat.isFile()) {
+        console.error(`❌ 错误: 指定的路径不是文件: ${zipPath}`);
+        process.exit(1);
+    }
 }
 
 // 创建临时解压目录
@@ -142,6 +227,26 @@ async function main() {
         }
 
         console.log(`\n✓ 解压验证通过\n`);
+
+        // 如果是 macOS，执行 run_macos.sh 移除隔离属性
+        if (process.platform === 'darwin') {
+            const runMacosScript = path.join(extractedDir, 'run_macos.sh');
+            if (fs.existsSync(runMacosScript)) {
+                console.log(`🍎 检测到 macOS 平台，执行 run_macos.sh 移除隔离属性...`);
+                try {
+                    execSync(`bash "${runMacosScript}"`, {
+                        stdio: 'inherit',
+                        cwd: extractedDir
+                    });
+                    console.log(`✓ macOS 隔离属性移除完成\n`);
+                } catch (error) {
+                    console.warn(`⚠️  执行 run_macos.sh 失败: ${error.message}`);
+                    console.warn(`   继续执行后续测试...\n`);
+                }
+            } else {
+                console.log(`ℹ️  未找到 run_macos.sh，跳过隔离属性移除\n`);
+            }
+        }
 
         // 2. 执行端到端测试
         runE2ETest(extractedDir);
