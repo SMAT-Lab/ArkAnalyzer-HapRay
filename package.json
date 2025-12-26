@@ -17,7 +17,8 @@
     "release": "node scripts/merge_duplicates.js && node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
-    "test": "node scripts/e2e_test.js ./dist"
+    "test": "node scripts/e2e_test.js ./dist",
+    "test-release": "node scripts/test_release.js"
   },
   "repository": {
     "type": "git",
