@@ -94,10 +94,14 @@ jobs:
         npm run build
         npm run release
 
-    - name: Upload artifact
+    - name: Upload ArkAnalyzer artifact
       uses: actions/upload-artifact@v4
       with:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
-        path: |
-          ArkAnalyzer-HapRay-*.zip
-          opt-detector-*.zip
+        path: ArkAnalyzer-HapRay-*.zip
+
+    - name: Upload opt-detector artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}
+        path: opt-detector-*.zip
