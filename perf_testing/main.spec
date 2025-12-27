@@ -14,18 +14,33 @@ venv_packages.append('telnetlib')
 venv_packages.append('xml.dom')
 venv_packages.append('xml.etree.ElementTree')
 
+# 添加 numpy 和 pandas 的隐藏导入
+numpy_hidden_imports = [
+    'numpy',
+    'numpy.core',
+    'numpy.core.multiarray',
+    'numpy.core.umath',
+    'numpy.linalg',
+    'numpy.linalg.lapack_lite',
+    'numpy.random',
+    'numpy.fft'
+]
+pandas_hidden_imports = [
+    'pandas',
+    'pandas.core',
+    'pandas.core.arrays',
+    'pandas.core.dtypes',
+    'pandas.io'
+]
+
+venv_packages.extend(numpy_hidden_imports)
+venv_packages.extend(pandas_hidden_imports)
+
 datas = [
     ('hapray', 'hapray'),
 ]
 
-# 收集 numpy 的数据文件和 DLL
-try:
-    numpy_datas = collect_data_files('numpy', include_py_files=False)
-    datas.extend(numpy_datas)
-except Exception as e:
-    print(f"Warning: Could not collect numpy data files: {e}")
-
-# 收集 numpy 的动态库
+# 初始化 binaries 列表
 binaries = []
 try:
     numpy_libs = collect_dynamic_libs('numpy')
