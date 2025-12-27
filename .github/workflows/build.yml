@@ -13,12 +13,12 @@ jobs:
     strategy:
       matrix:
         item:
-          # Linux - 使用静态 Python
+          # Linux - 使用标准 Python
           - os: ubuntu-22.04
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
-            use_static_python: true  # 添加此标志
+            use_static_python: false  # 使用标准Python避免numpy打包问题
             
           # Windows
           - os: windows-latest

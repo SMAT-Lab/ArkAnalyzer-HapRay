@@ -170,16 +170,16 @@ function testModule(command, moduleName, testFunc) {
  */
 function testOptModule() {
     const testFile = getTestFilePath(
-        path.join(TEST_PRODUCTS_DIR, 'resource', 'opt-detector', 'meituan.hap'),
-        path.join('opt-detector', 'meituan.hap')
+        path.join(TEST_PRODUCTS_DIR, 'resource', 'opt-detector', 'test_suite-default-unsigned.hsp'),
+        path.join('opt-detector', 'test_suite-default-unsigned.hsp')
     );
 
     if (!fs.existsSync(testFile)) {
-        console.log('⚠ 跳过 opt 模块实际测试：meituan.hap文件不存在');
-        return { success: false, error: 'meituan.hap文件不存在' };
+        console.log('⚠ 跳过 opt 模块实际测试：test_suite-default-unsigned.hsp文件不存在');
+        return { success: false, error: 'test_suite-default-unsigned.hsp文件不存在' };
     }
 
-    console.log('使用meituan.hap进行opt模块测试');
+    console.log('使用test_suite-default-unsigned.hsp进行opt模块测试');
 
     try {
         const outputFile = path.join(OUTPUT_DIR, 'temp_opt_test.xlsx');
@@ -206,14 +206,14 @@ function testOptModule() {
  * 测试静态分析模块的基本功能
  */
 function testStaticModule() {
-    const testFile = path.join(TEST_PRODUCTS_DIR, 'opt-detector', 'meituan.hap');
+    const testFile = path.join(TEST_PRODUCTS_DIR, 'opt-detector', 'test_suite-default-unsigned.hsp');
 
     if (!fs.existsSync(testFile)) {
-        console.log('⚠ 跳过 static 模块实际测试：meituan.hap文件不存在');
-        return { success: false, error: 'meituan.hap文件不存在' };
+        console.log('⚠ 跳过 static 模块实际测试：test_suite-default-unsigned.hsp文件不存在');
+        return { success: false, error: 'test_suite-default-unsigned.hsp文件不存在' };
     }
 
-    const outputDir = path.join(OUTPUT_DIR, 'static_test_output', 'meituan');
+    const outputDir = path.join(OUTPUT_DIR, 'static_test_output', 'test_suite-default-unsigned');
 
     try {
         if (!fs.existsSync(outputDir)) {
@@ -222,7 +222,7 @@ function testStaticModule() {
 
         runCommand(`${EXECUTABLE} static -i "${testFile}" -o "${outputDir}"`, 'static 模块实际功能测试', { silent: false });
 
-        const files = fs.readdirSync(path.join(outputDir, 'meituan'));
+        const files = fs.readdirSync(path.join(outputDir, 'test_suite-default-unsigned'));
         if (files.length >= 3) {
             console.log(`✓ static 模块实际功能测试成功 (生成${files.length}个文件)`);
             console.log(`输出文件保存在: ${outputDir}`);
@@ -514,7 +514,7 @@ function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
  * 获取static命令生成的最新xlsx文件
  */
 function getStaticXlsxFile() {
-    const staticDir = path.join(OUTPUT_DIR, 'static_test_output', 'meituan', 'meituan');
+    const staticDir = path.join(OUTPUT_DIR, 'static_test_output', 'test_suite-default-unsigned', 'test_suite-default-unsigned');
     if (!fs.existsSync(staticDir)) return null;
     const files = fs.readdirSync(staticDir)
         .filter(f => f.endsWith('.xlsx'))
