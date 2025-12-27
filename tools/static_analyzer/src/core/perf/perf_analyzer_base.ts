@@ -894,11 +894,11 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_ABC') ||
                 (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_LIB')
             ) {
-                if (harMap.has(data.componentCategory.categoryName)) {
-                    let value = harMap.get(data.componentCategory.categoryName)!;
+                if (harMap.has(data.componentCategory.thirdCategoryName!)) {
+                    let value = harMap.get(data.componentCategory.thirdCategoryName!)!;
                     value.count += data.symbolEvents;
                 } else {
-                    harMap.set(data.componentCategory.categoryName, { name: data.componentCategory.categoryName, count: data.symbolEvents });
+                    harMap.set(data.componentCategory.thirdCategoryName!, { name: data.componentCategory.thirdCategoryName!, count: data.symbolEvents });
                 }
             }
 
