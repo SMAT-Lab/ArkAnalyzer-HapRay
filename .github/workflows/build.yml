@@ -18,7 +18,7 @@ jobs:
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
-            use_static_python: false  # 使用标准Python避免numpy打包问题
+            use_static_python: true  # 使用标准Python避免numpy打包问题
             
           # Windows
           - os: windows-latest
