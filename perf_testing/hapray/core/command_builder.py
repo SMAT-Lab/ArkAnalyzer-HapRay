@@ -75,11 +75,16 @@ class CommandBuilder:
         """
         trace_enabled = Config.get('trace.enable', True)
         memory_enabled = Config.get('memory.enable', False)
+        try:
+            memory_pids = self.process_manager.get_memory_pids() if memory_enabled else []
+        except Exception as e:
+            Log.error(f'Failed to get memory pids: {e}')
+            memory_pids = []
+            memory_enabled = False
 
         self._validate_memory_collection_constraints(memory_enabled, sample_all)
 
         pids_args = self.process_manager.build_processes_args(sample_all)
-        memory_pids = self.process_manager.get_memory_pids() if memory_enabled else []
 
         collection_mode = self.determine_collection_mode(trace_enabled, memory_enabled)
         return self._build_command_by_mode(collection_mode, output_path, duration, pids_args, memory_pids)
