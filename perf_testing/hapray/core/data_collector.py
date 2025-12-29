@@ -14,6 +14,8 @@ limitations under the License.
 """
 
 import os
+import threading
+import time
 from datetime import datetime
 from typing import Any
 
@@ -50,6 +52,9 @@ class DataCollector:
         self.command_builder = CommandBuilder(self.process_manager)
         self.data_transfer = DataTransfer(driver, app_package, module_name)
         self.capture_ui_handler = CaptureUI(driver)
+
+        # 内存采集线程管理
+        self.memory_collection_threads: dict[int, dict] = {}  # step_id -> {'thread': thread, 'stop_event': event}
 
     def build_collection_command(self, output_path: str, duration: int, sample_all: bool) -> str:
         """
@@ -96,7 +101,7 @@ class DataCollector:
         if Config.get('ui.capture_enable', False):
             self.capture_ui_handler.capture_ui(step_id, report_path, 'start')
 
-        self.collect_memory_data(step_id, report_path)
+        self.start_collect_memory_data(step_id, report_path)  # 持续到步骤结束
 
         Log.info(f'步骤 {step_id} 开始采集准备完成')
 
@@ -130,7 +135,7 @@ class DataCollector:
         if Config.get('ui.capture_enable', False):
             self.capture_ui_handler.capture_ui(step_id, report_path, 'end')
 
-        self.collect_memory_data(step_id, report_path)
+        self.stop_memory_collection(step_id)
 
         Log.info(f'步骤 {step_id} 数据采集结束处理完成')
 
@@ -159,80 +164,169 @@ class DataCollector:
         for path in paths:
             os.makedirs(path, exist_ok=True)
 
-    def collect_memory_data(self, step_id: int, report_path: str):
+    def start_collect_memory_data(
+        self, step_id: int, report_path: str, interval_seconds: int = Config.get('memory.interval_seconds', 5)
+    ):
         """
-        采集一级内存数据（smaps、GPU、DMA）
+        启动内存采集后台线程
 
         Args:
             step_id: 步骤ID
             report_path: 报告路径
+            interval_seconds: 采集间隔（秒）
         """
-        Log.info(f'开始步骤 {step_id} 的内存数据采集')
+        # 如果该步骤已有活跃的采集线程，先停止它
+        if step_id in self.memory_collection_threads:
+            self.stop_memory_collection(step_id)
 
-        # 生成时间戳（yyyymmdd-hhmmss格式）
-        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        # 创建停止事件
+        stop_event = threading.Event()
 
-        # 创建内存数据目录
-        meminfo_step_dir = os.path.join(report_path, 'meminfo', f'step{step_id}')
-        showmap_dir = os.path.join(meminfo_step_dir, 'dynamic_showmap')
-        gpu_mem_dir = os.path.join(meminfo_step_dir, 'dynamic_gpuMem')
-        dmabuf_dir = os.path.join(meminfo_step_dir, 'dynamic_process_dmabuff_info')
+        # 创建并启动采集线程
+        thread = threading.Thread(
+            target=self._memory_collection_worker,
+            args=(step_id, report_path, None, interval_seconds, stop_event),
+            daemon=True,
+        )
 
-        self._ensure_directories_exist(showmap_dir, gpu_mem_dir, dmabuf_dir)
+        # 保存线程信息
+        self.memory_collection_threads[step_id] = {'thread': thread, 'stop_event': stop_event}
 
-        # 1. 采集应用进程smaps
-        try:
-            process_ids, process_names = self.process_manager.get_app_pids()
-            for pid, process_name in zip(process_ids, process_names):
-                # 清理进程名，移除路径和特殊字符
-                clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
-                filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
-                filepath = os.path.join(showmap_dir, filename)
+        thread.start()
+        Log.info(f'启动步骤 {step_id} 的内存数据采集线程，每 {interval_seconds}s 采集一次，持续直到停止')
 
-                cmd = f'hidumper --mem-smaps {pid}'
-                Log.info(f'采集smaps数据: {cmd}')
-                result = self.driver.shell(cmd)
+    def _memory_collection_worker(
+        self, step_id: int, report_path: str, duration_seconds: int, interval_seconds: int, stop_event: threading.Event
+    ):
+        """
+        内存采集工作线程
 
-                # 保存到本地文件
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(result)
+        Args:
+            step_id: 步骤ID
+            report_path: 报告路径
+            duration_seconds: 采集总时长（秒），如果为None则持续直到被停止
+            interval_seconds: 采集间隔（秒）
+            stop_event: 停止事件
+        """
+        if duration_seconds is None:
+            Log.info(f'内存采集线程启动：步骤 {step_id}，持续采集，间隔 {interval_seconds}s')
+            end_time = None
+        else:
+            Log.info(f'内存采集线程启动：步骤 {step_id}，总时长 {duration_seconds}s，间隔 {interval_seconds}s')
+            end_time = time.time() + duration_seconds
 
-                Log.info(f'smaps数据已保存: {filepath}')
-        except Exception as e:
-            Log.warning(f'采集smaps数据失败: {e}')
+        collection_count = 0
 
-        # 2. 采集GPU数据（需要root权限）
-        try:
-            filename = f'gpuMen_{timestamp}.txt'
-            filepath = os.path.join(gpu_mem_dir, filename)
+        while (end_time is None or time.time() < end_time) and not stop_event.is_set():
+            collection_count += 1
+            Log.info(f'步骤 {step_id} 第 {collection_count} 次内存数据采集')
 
-            cmd = 'cat /proc/gpu_memory'
-            Log.info(f'采集GPU数据: {cmd}')
-            result = self.driver.shell(cmd)
+            try:
+                # 内联的内存数据采集逻辑
+                # 生成时间戳（yyyymmdd-hhmmss格式）
+                timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+                timestamp = f'{timestamp}_count{collection_count}'
 
-            # 保存到本地文件
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(result)
+                # 创建内存数据目录
+                meminfo_step_dir = os.path.join(report_path, 'meminfo', f'step{step_id}')
+                showmap_dir = os.path.join(meminfo_step_dir, 'dynamic_showmap')
+                gpu_mem_dir = os.path.join(meminfo_step_dir, 'dynamic_gpuMem')
+                dmabuf_dir = os.path.join(meminfo_step_dir, 'dynamic_process_dmabuff_info')
 
-            Log.info(f'GPU数据已保存: {filepath}')
-        except Exception as e:
-            Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
+                self._ensure_directories_exist(showmap_dir, gpu_mem_dir, dmabuf_dir)
 
-        # 3. 采集DMA数据（需要root权限）
-        try:
-            filename = f'process_dmabuff_info_{timestamp}.txt'
-            filepath = os.path.join(dmabuf_dir, filename)
+                # 1. 采集应用进程smaps
+                try:
+                    process_ids, process_names = self.process_manager.get_app_pids()
+                    for pid, process_name in zip(process_ids, process_names):
+                        # 清理进程名，移除路径和特殊字符
+                        clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
+                        filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
+                        filepath = os.path.join(showmap_dir, filename)
 
-            cmd = 'cat /proc/process_dmabuf_info'
-            Log.info(f'采集DMA数据: {cmd}')
-            result = self.driver.shell(cmd)
+                        cmd = f'hidumper --mem-smaps {pid}'
+                        Log.debug(f'采集smaps数据: {cmd}')
+                        result = self.driver.shell(cmd)
 
-            # 保存到本地文件
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(result)
+                        # 保存到本地文件
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            f.write(result)
 
-            Log.info(f'DMA数据已保存: {filepath}')
-        except Exception as e:
-            Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+                        Log.debug(f'smaps数据已保存: {filepath}')
 
-        Log.info(f'步骤 {step_id} 内存数据采集完成')
+                except Exception as e:
+                    Log.warning(f'采集smaps数据失败: {e}')
+
+                # 2. 采集GPU数据（需要root权限）
+                try:
+                    filename = f'gpuMen_{timestamp}.txt'
+                    filepath = os.path.join(gpu_mem_dir, filename)
+
+                    cmd = 'cat /proc/gpu_memory'
+                    Log.debug(f'采集GPU数据: {cmd}')
+                    result = self.driver.shell(cmd)
+
+                    # 保存到本地文件
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(result)
+
+                    Log.debug(f'GPU数据已保存: {filepath}')
+                except Exception as e:
+                    Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
+
+                # 3. 采集DMA数据（需要root权限）
+                try:
+                    filename = f'process_dmabuff_info_{timestamp}.txt'
+                    filepath = os.path.join(dmabuf_dir, filename)
+
+                    cmd = 'cat /proc/process_dmabuf_info'
+                    Log.debug(f'采集DMA数据: {cmd}')
+                    result = self.driver.shell(cmd)
+
+                    # 保存到本地文件
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(result)
+
+                    Log.debug(f'DMA数据已保存: {filepath}')
+                except Exception as e:
+                    Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+
+                Log.debug(f'步骤 {step_id} 第 {collection_count} 次内存数据采集完成')
+            except Exception as e:
+                Log.error(f'步骤 {step_id} 第 {collection_count} 次内存数据采集失败: {e}')
+
+            # 等待下一次采集或停止事件
+            if stop_event.wait(timeout=interval_seconds):
+                # 被停止事件唤醒，退出循环
+                break
+
+        Log.info(f'步骤 {step_id} 内存数据采集线程结束，共采集 {collection_count} 次')
+
+    def stop_memory_collection(self, step_id: int):
+        """
+        停止指定步骤的内存采集线程
+
+        Args:
+            step_id: 步骤ID
+        """
+        if step_id in self.memory_collection_threads:
+            thread_info = self.memory_collection_threads[step_id]
+            thread_info['stop_event'].set()  # 设置停止事件
+            thread_info['thread'].join(timeout=5)  # 等待线程结束，最多5秒
+
+            if thread_info['thread'].is_alive():
+                Log.warning(f'步骤 {step_id} 的内存采集线程未能及时停止')
+
+            del self.memory_collection_threads[step_id]
+            Log.info(f'步骤 {step_id} 的内存采集线程已停止')
+        else:
+            Log.warning(f'步骤 {step_id} 没有活跃的内存采集线程')
+
+    def get_active_memory_collections(self) -> list[int]:
+        """
+        获取当前活跃的内存采集步骤ID列表
+
+        Returns:
+            活跃的步骤ID列表
+        """
+        return list(self.memory_collection_threads.keys())
