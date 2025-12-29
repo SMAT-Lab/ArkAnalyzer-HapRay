@@ -2,7 +2,7 @@
 import pkg_resources
 import sys
 import os
-from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files
+from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files, collect_all
 
 venv_packages = [pkg.key for pkg in pkg_resources.working_set]
 venv_packages.append('ohos')
@@ -14,46 +14,37 @@ venv_packages.append('telnetlib')
 venv_packages.append('xml.dom')
 venv_packages.append('xml.etree.ElementTree')
 
-# 添加 numpy 和 pandas 的隐藏导入
-numpy_hidden_imports = [
-    'numpy',
-    'numpy.core',
-    'numpy.core.multiarray',
-    'numpy.core.umath',
-    'numpy.linalg',
-    'numpy.linalg.lapack_lite',
-    'numpy.random',
-    'numpy.fft'
-]
-pandas_hidden_imports = [
-    'pandas',
-    'pandas.core',
-    'pandas.core.arrays',
-    'pandas.core.dtypes',
-    'pandas.io'
-]
-
-venv_packages.extend(numpy_hidden_imports)
-venv_packages.extend(pandas_hidden_imports)
-
-datas = [
-    ('hapray', 'hapray'),
+# 显式收集 numpy（pandas 的依赖）
+tmp_ret = collect_all('numpy')
+datas = tmp_ret[0]
+binaries = tmp_ret[1]
+hiddenimports = tmp_ret[2]
+# 添加 numpy 的关键隐藏导入
+hiddenimports += [
+    'numpy.core._multiarray_umath',
+    'numpy.core._multiarray_tests',
+    'numpy.linalg._umath_linalg',
+    'numpy.fft._pocketfft_internal',
+    'numpy.random._common',
+    'numpy.random._bounded_integers',
+    'numpy.random._mt19937',
+    'numpy.random._philox',
+    'numpy.random._pcg64',
+    'numpy.random._sfc64',
+    'numpy.random._generator',
 ]
 
-# 初始化 binaries 列表
-binaries = []
-try:
-    numpy_libs = collect_dynamic_libs('numpy')
-    binaries.extend(numpy_libs)
-except Exception as e:
-    print(f"Warning: Could not collect numpy dynamic libs: {e}")
+# 收集 pandas
+tmp_ret = collect_all('pandas')
+datas += tmp_ret[0]
+binaries += tmp_ret[1]
+hiddenimports += tmp_ret[2]
 
-# 收集 pandas 的动态库
-try:
-    pandas_libs = collect_dynamic_libs('pandas')
-    binaries.extend(pandas_libs)
-except Exception as e:
-    print(f"Warning: Could not collect pandas dynamic libs: {e}")
+# 添加项目特定的数据
+datas.append(('hapray', 'hapray'))
+
+# 合并所有隐藏导入
+all_hiddenimports = venv_packages + hiddenimports
 
 # 查找有效的 site-packages 目录
 site_packages_dir = None
@@ -73,11 +64,24 @@ a = Analysis(
     pathex=['./'],
     binaries=binaries,
     datas=datas,
-    hiddenimports=venv_packages,
+    hiddenimports=all_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'matplotlib',
+        'PIL',
+        'Pillow',
+        'tkinter',
+        'IPython',
+        'jupyter',
+        'notebook',
+        'pytest',
+        'sphinx',
+        'numpy.tests',
+        'pandas.tests',
+        'pkg_resources',  # 排除已弃用的 pkg_resources，使用 importlib.metadata 和 importlib.resources 替代
+    ],
     noarchive=False,
     optimize=0,
 )
