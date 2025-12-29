@@ -23,9 +23,9 @@ from concurrent.futures import ThreadPoolExecutor
 from hapray import VERSION
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
+from hapray.ext.hapflow.runner import run_hapflow_pipeline
 from hapray.mode.mode import Mode
 from hapray.mode.simple_mode import create_simple_mode_structure
-from hapray.ext.hapflow.runner import run_hapflow_pipeline
 
 
 class UpdateAction:
@@ -165,7 +165,7 @@ class UpdateAction:
             symbol_statistic=parsed_args.symbol_statistic,
             time_range_strings=parsed_args.time_ranges,
         )
-        
+
         if parsed_args.hapflow:
             try:
                 run_hapflow_pipeline(
