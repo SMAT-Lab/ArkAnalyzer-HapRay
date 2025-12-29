@@ -25,6 +25,7 @@ from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.mode.mode import Mode
 from hapray.mode.simple_mode import create_simple_mode_structure
+from hapray.ext.hapflow.runner import run_hapflow_pipeline
 
 
 class UpdateAction:
@@ -101,6 +102,12 @@ class UpdateAction:
         parser.add_argument(
             '--symbol-statistic', type=str, default=None, help='Path to SymbolsStatistic.txt for symbol analysis'
         )
+        parser.add_argument(
+            '--hapflow',
+            type=str,
+            metavar='HOMECHECK_DIR',
+            help='Enable HapFlow pipeline and specify Homecheck root directory',
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -158,6 +165,15 @@ class UpdateAction:
             symbol_statistic=parsed_args.symbol_statistic,
             time_range_strings=parsed_args.time_ranges,
         )
+        
+        if parsed_args.hapflow:
+            try:
+                run_hapflow_pipeline(
+                    reports_root=report_dir,  # HapRay 当次输出 reports/<timestamp>
+                    homecheck_root=parsed_args.hapflow,  # 你的 Homecheck 根目录
+                )
+            except Exception as e:
+                logging.getLogger().exception('HapFlow pipeline failed: %s', e)
 
     @staticmethod
     def find_testcase_dirs(report_dir):

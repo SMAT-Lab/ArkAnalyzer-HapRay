@@ -57,9 +57,9 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         hiperf_step_dir = os.path.join(hiperf_base_dir, f'step{step_num}')
 
         logging.info('')
-        logging.info('#'*60)
+        logging.info('#' * 60)
         logging.info('# 处理 Step %d', step_num)
-        logging.info('#'*60)
+        logging.info('#' * 60)
 
         # 创建step目录
         os.makedirs(hiperf_step_dir, exist_ok=True)
@@ -228,9 +228,9 @@ def _create_base_directories(report_report_dir, hiperf_base_dir, htrace_base_dir
 
 def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name, pids):
     """处理单个perf文件"""
-    logging.info('='*60)
+    logging.info('=' * 60)
     logging.info('开始处理 perf 文件: %s', perf_path)
-    logging.info('='*60)
+    logging.info('=' * 60)
 
     if not os.path.exists(perf_path):
         logging.warning('Perf file not found: %s', perf_path)
@@ -249,11 +249,11 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
     _copy_ps_ef_file(perf_path, hiperf_step_dir)
 
     # 创建pids.json
-    logging.info('-'*60)
+    logging.info('-' * 60)
     logging.info('准备创建 pids.json')
-    logging.info('-'*60)
+    logging.info('-' * 60)
     _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids)
-    logging.info('='*60)
+    logging.info('=' * 60)
 
 
 def _process_trace_file(trace_path, htrace_step_dir):
@@ -262,9 +262,9 @@ def _process_trace_file(trace_path, htrace_step_dir):
     如果输入是.db文件，直接复制为trace.db
     如果输入是.htrace文件，复制为trace.htrace（后续会转换为trace.db）
     """
-    logging.info('='*60)
+    logging.info('=' * 60)
     logging.info('开始处理 trace 文件: %s', trace_path)
-    logging.info('='*60)
+    logging.info('=' * 60)
 
     if trace_path.endswith('.db'):
         # 如果输入是.db文件，直接复制为trace.db
@@ -278,7 +278,7 @@ def _process_trace_file(trace_path, htrace_step_dir):
         logging.info('✓ 复制 trace.htrace: %s -> %s', trace_path, target_htrace_file)
         logging.info('  注意：trace.htrace 需要在后续转换为 trace.db')
 
-    logging.info('='*60)
+    logging.info('=' * 60)
 
 
 def _handle_perf_db_file(perf_path, hiperf_step_dir, target_data_file, target_db_files):

@@ -27,8 +27,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy",
-    "pandas",
+    "numpy==1.26.4",
+    "pandas==2.3.3",
     # TensorFlow 依赖：macOS 使用 tensorflow-macos，其他平台使用标准 tensorflow
     "tensorflow==2.16.2; platform_system != 'Darwin'",
     "tensorflow-macos==2.16.2; platform_system == 'Darwin'",
