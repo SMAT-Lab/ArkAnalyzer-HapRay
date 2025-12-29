@@ -1,16 +1,15 @@
 # 核心依赖
 pyelftools>=0.32          # ELF 文件解析
 capstone>=5.0.0            # ARM64 反汇编（回退方案）
-pandas              # 数据处理和 Excel 操作
-openpyxl>=3.1.0            # Excel 文件读写
+numpy==1.26.4
+pandas==2.3.3              # 数据处理和 Excel 操作
+openpyxl>=3.0.0           # Excel 文件读取
 python-dotenv>=1.0.0       # 环境变量管理（.env 文件）
 openai>=1.0.0              # LLM API 调用（Poe API 兼容）
 
 # 可选依赖（推荐）
 r2pipe>=1.7.0              # Radare2 Python 接口（可选，但强烈推荐，性能提升 10 倍+）
 
-# 可选依赖（用于更好的 Excel 格式）
-# xlsxwriter>=3.0.0       # Excel 写入（可选，用于更好的格式控制，当前使用 openpyxl）
 
 # 开发依赖
 pyinstaller==6.13.0       # 打包工具（开发环境）
