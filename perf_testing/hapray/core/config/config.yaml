@@ -9,6 +9,7 @@ trace:
 memory:
   enable: False  # Memory采集开关（通过命令行参数控制）
   max_stack_depth: 100  # Native Memory采集的最大调用栈深度
+  interval_seconds: 5  # Level1 Memory采集的间隔时间（秒）
 ui:
   capture_enable: True  # UI数据采集开关（截图和组件树）
 
