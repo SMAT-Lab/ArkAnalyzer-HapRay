@@ -221,6 +221,9 @@ class DataCollector:
             collection_count += 1
             Log.info(f'步骤 {step_id} 第 {collection_count} 次内存数据采集')
 
+            # 记录采集开始时间
+            collection_start_time = time.time()
+
             try:
                 # 内联的内存数据采集逻辑
                 # 生成时间戳（yyyymmdd-hhmmss格式）
@@ -295,8 +298,13 @@ class DataCollector:
             except Exception as e:
                 Log.error(f'步骤 {step_id} 第 {collection_count} 次内存数据采集失败: {e}')
 
+            # 计算采集耗时
+            collection_elapsed = time.time() - collection_start_time
+            # 等待时间 = 间隔时间 - 采集耗时，如果采集耗时超过间隔时间，则立即进行下一次采集
+            wait_time = max(0, interval_seconds - collection_elapsed)
+
             # 等待下一次采集或停止事件
-            if stop_event.wait(timeout=interval_seconds):
+            if stop_event.wait(timeout=wait_time):
                 # 被停止事件唤醒，退出循环
                 break
 
