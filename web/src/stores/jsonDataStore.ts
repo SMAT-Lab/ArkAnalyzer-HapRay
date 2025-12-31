@@ -1003,6 +1003,16 @@ export interface CompressedUIAnimateData {
   [stepKey: string]: CompressedUIAnimateStepData | UIAnimateStepData;
 }
 
+// 压缩后的 UI 原始数据类型
+export interface CompressedUIRawStepData {
+  compressed: true;
+  data: string; // base64 编码的压缩数据
+}
+
+export interface CompressedUIRawData {
+  [stepKey: string]: CompressedUIRawStepData | UIRawStepData;
+}
+
 // ==================== Store 定义 ====================
 interface JsonDataState {
   version: string | null;
@@ -1173,6 +1183,61 @@ export const useJsonDataStore = defineStore('config', {
     },
 
     /**
+     * 解压缩 UI 原始数据
+     * 与 UI 动画数据使用相同的压缩格式
+     */
+    decompressUIRawData(uiRawData: CompressedUIRawData): UIRawData {
+      if (!uiRawData || typeof uiRawData !== 'object') {
+        return uiRawData as UIRawData;
+      }
+
+      const decompressed: UIRawData = {};
+
+      for (const [stepKey, stepData] of Object.entries(uiRawData)) {
+        if (typeof stepData === 'object' && stepData !== null && 'compressed' in stepData && stepData.compressed) {
+          // 解压缩步骤数据
+          const compressedStepData = stepData as CompressedUIRawStepData;
+          try {
+            const compressedData = compressedStepData.data;
+
+            // Base64解码
+            const binaryString = atob(compressedData);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // 使用pako解压缩
+            const decompressedBytes = pako.inflate(bytes);
+
+            // 使用 TextDecoder 进行解码
+            const decoder = new TextDecoder('utf-8');
+            const decompressedStr = decoder.decode(decompressedBytes);
+
+            // 解析 JSON
+            const stepDataParsed = JSON.parse(decompressedStr) as UIRawStepData;
+
+            decompressed[stepKey] = stepDataParsed;
+
+            console.log(`解压缩UI原始数据 ${stepKey}: ${compressedData.length} -> ${decompressedBytes.length} 字节`);
+          } catch (error) {
+            console.error(`解压缩UI原始数据失败 ${stepKey}:`, error);
+            // 解压缩失败时，返回空数据
+            decompressed[stepKey] = {
+              screenshots: { start: [], end: [] },
+              trees: { start: [], end: [] },
+            };
+          }
+        } else {
+          // 未压缩的数据直接使用
+          decompressed[stepKey] = stepData as UIRawStepData;
+        }
+      }
+
+      return decompressed;
+    },
+
+    /**
      * Decompress trace data fields (e.g., frames, emptyFrame, etc.)
      * These fields may be compressed in the format { compressed: true, data: "base64..." }
      */
@@ -1288,7 +1353,11 @@ export const useJsonDataStore = defineStore('config', {
 
         // 前端实时对比UI数据（逻辑已与后端完全一致）
         if (jsonData.ui?.raw && compareJsonData.ui?.raw) {
-          this.uiCompareData = this.compareUIData(jsonData.ui.raw, compareJsonData.ui.raw);
+          // 解压缩 UI 原始数据
+          const baseUIRaw = this.decompressUIRawData(jsonData.ui.raw as CompressedUIRawData);
+          const compareUIRaw = this.decompressUIRawData(compareJsonData.ui.raw as CompressedUIRawData);
+
+          this.uiCompareData = this.compareUIData(baseUIRaw, compareUIRaw);
           console.log('[setJsonData] 前端实时对比UI数据:', Object.keys(this.uiCompareData || {}));
         } else {
           this.uiCompareData = null;
