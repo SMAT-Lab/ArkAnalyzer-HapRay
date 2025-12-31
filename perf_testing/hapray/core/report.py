@@ -86,6 +86,9 @@ class ReportData:
         # 特殊处理UI动画数据：按步骤单独压缩
         cleaned_result = self._compress_ui_animate_by_steps(cleaned_result)
 
+        # 特殊处理UI原始数据：按步骤单独压缩
+        cleaned_result = self._compress_ui_raw_by_steps(cleaned_result)
+
         # 特殊处理 trace 数据：压缩大数据字段
         cleaned_result = self._compress_trace_data(cleaned_result)
 
@@ -234,6 +237,65 @@ class ReportData:
 
         # 更新数据结构
         data['ui']['animate'] = compressed_ui_animate
+        return data
+
+    def _compress_ui_raw_by_steps(self, data):
+        """按步骤压缩UI原始数据，避免文件过大
+
+        UI原始数据包含大量base64编码的截图和组件树文本，需要压缩以减小文件大小
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # 检查是否有UI原始数据
+        if 'ui' not in data or 'raw' not in data['ui']:
+            return data
+
+        ui_raw_data = data['ui']['raw']
+        if not isinstance(ui_raw_data, dict):
+            return data
+
+        # 按步骤压缩UI原始数据
+        compressed_ui_raw = {}
+
+        for step_key, step_data in ui_raw_data.items():
+            if isinstance(step_data, dict):
+                try:
+                    # 将整个步骤数据转换为 JSON 字符串
+                    step_json = json.dumps(step_data)
+                    original_size = len(step_json)
+
+                    # 压缩步骤数据
+                    compressed_bytes = zlib.compress(step_json.encode('utf-8'), level=9)
+                    base64_bytes = base64.b64encode(compressed_bytes)
+                    compressed_step = base64_bytes.decode('ascii')
+
+                    # 使用压缩后的数据
+                    compressed_ui_raw[step_key] = {
+                        'compressed': True,  # 标记为已压缩
+                        'data': compressed_step,  # 压缩后的数据
+                    }
+
+                    # 记录压缩效果
+                    compressed_size = len(compressed_step)
+                    compression_ratio = (1 - compressed_size / original_size) * 100
+                    logging.info(
+                        'UI原始数据压缩 %s: %d -> %d 字节 (压缩率: %.1f%%)',
+                        step_key,
+                        original_size,
+                        compressed_size,
+                        compression_ratio,
+                    )
+                except Exception as e:
+                    logging.warning('压缩UI原始数据失败 %s: %s', step_key, str(e))
+                    # 压缩失败时保持原数据
+                    compressed_ui_raw[step_key] = step_data
+            else:
+                # 非预期格式的数据保持不变
+                compressed_ui_raw[step_key] = step_data
+
+        # 更新数据结构
+        data['ui']['raw'] = compressed_ui_raw
         return data
 
     def _compress_trace_data(self, data):
