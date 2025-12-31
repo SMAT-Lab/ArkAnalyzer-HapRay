@@ -190,7 +190,7 @@ class MemoryStatisticRecordGenerator:
         Returns:
             包含 records、peak_value、peak_time 的字典
         """
-        process_map = {p['id']: p for p in processes}
+        process_map = {p['ipid']: p for p in processes}
 
         if sub_type_names is None:
             sub_type_names = {}
@@ -213,10 +213,12 @@ class MemoryStatisticRecordGenerator:
             if not process:
                 continue
 
-            # 获取进程名，如果为空则使用 pid
+            # 获取进程名，如果为空则使用 pid（真实进程ID）
             process_name = process.get('name')
             if not process_name:
-                process_name = str(process.get('pid', stat_event['ipid']))
+                # 优先使用真实的 pid，如果 pid 也为空则使用 ipid
+                pid = process.get('pid')
+                process_name = str(pid) if pid else f'ipid_{stat_event["ipid"]}'
 
             # 获取原始文件和符号信息
             original_lib_id = stat_event.get('last_lib_id')
