@@ -24,6 +24,8 @@ from .memory_core_analyzer import MemoryAnalyzerCore
 from .memory_data_loader import MemoryDataLoader
 from .memory_meminfo_parser import MemoryMeminfoParser
 from .memory_record_generator import MemoryRecordGenerator
+from .memory_statistic_loader import MemoryStatisticLoader
+from .memory_statistic_record_generator import MemoryStatisticRecordGenerator
 
 __all__ = [
     'MemoryAnalyzerCore',
@@ -34,4 +36,6 @@ __all__ = [
     'CallchainRefiner',
     'MemoryComparisonExporter',
     'MemoryMeminfoParser',
+    'MemoryStatisticLoader',
+    'MemoryStatisticRecordGenerator',
 ]
