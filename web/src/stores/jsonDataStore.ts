@@ -365,11 +365,43 @@ interface FaultTreeAudioData {
   AudioRecCb: number;
 }
 
+// IPC Binder 进程统计数据
+interface IpcBinderProcessStat {
+  caller_proc: string;
+  callee_proc: string;
+  count: number;
+  avg_latency: number;
+  max_latency: number;
+  qps: number;
+}
+
+// IPC Binder 接口统计数据
+interface IpcBinderInterfaceStat {
+  code: string;
+  count: number;
+  avg_latency: number;
+  max_latency: number;
+  qps: number;
+  top_caller_proc: string;
+  top_callee_proc: string;
+}
+
+// IPC Binder 故障树数据
+interface FaultTreeIpcBinderData {
+  total_transactions: number;        // 总通信次数
+  high_latency_count: number;        // 高延迟通信次数 (>100ms)
+  avg_latency: number;               // 平均延迟(ms)
+  max_latency: number;               // 最大延迟(ms)
+  top_processes: IpcBinderProcessStat[];  // Top 5 进程对
+  top_interfaces: IpcBinderInterfaceStat[]; // Top 5 接口
+}
+
 interface FaultTreeStepData {
   arkui: FaultTreeArkUIData;
   RS: FaultTreeRSData;
   av_codec: FaultTreeAVCodecData;
   Audio: FaultTreeAudioData;
+  ipc_binder?: FaultTreeIpcBinderData;  // IPC Binder 数据（可选）
 }
 
 export type FaultTreeData = Record<string, FaultTreeStepData>;
