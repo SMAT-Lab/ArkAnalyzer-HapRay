@@ -390,11 +390,18 @@ class MemoryRecordGenerator:
             if sub_type_id is not None and sub_type_id in sub_type_names:
                 sub_event_type = sub_type_names[sub_type_id]
 
+            # 获取进程名，如果为空则使用 pid
+            process_name = process.get('name')
+            if not process_name:
+                # 优先使用真实的 pid，如果 pid 也为空则使用 ipid
+                pid = process.get('pid')
+                process_name = str(pid) if pid else f'ipid_{event["ipid"]}'
+
             # 创建记录
             record = {
                 # 进程维度信息
                 'pid': process['pid'],
-                'process': process['name'],
+                'process': process_name,
                 # 线程维度信息
                 'tid': thread['tid'] if thread else None,
                 'thread': thread['name'] if thread else None,
