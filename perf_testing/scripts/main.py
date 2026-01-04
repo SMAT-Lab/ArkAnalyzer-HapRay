@@ -22,6 +22,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
+from hapray.actions.hilog_action import HilogAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
 from hapray.actions.static_action import StaticAction
@@ -94,6 +95,7 @@ class HapRayCmd:
             'prepare': PrepareAction,
             'ui': UIAction,
             'ui-compare': UICompareAction,
+            'hilog': HilogAction,
         }
 
         parser = argparse.ArgumentParser(
@@ -107,7 +109,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison)',
+            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis)',
         )
         # Parse action
         action_args = []

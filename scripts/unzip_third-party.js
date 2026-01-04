@@ -5,6 +5,7 @@ const copyFile = require('./copy_file');
 
 const DIST_TOOLS_DIR = path.join(__dirname, '../dist/tools');
 const TRACE_STREAMER_BIN = ['trace_streamer_linux', 'trace_streamer_mac', 'trace_streamer_windows.exe'];
+const HILOGTOOL_BIN = ['hilogtool', 'hilogtool.exe'];
 
 function ensureDistToolsDir() {
     if (!fs.existsSync(DIST_TOOLS_DIR)) {
@@ -26,6 +27,9 @@ function unzipFile(zipFile, output) {
 
         if (output === 'trace_streamer_binary') {
             cleanupTraceStreamerBinary(extractPath);
+        }
+        if (output === 'hilogtool') {
+            cleanupHilogtool(extractPath);
         }
     } catch (error) {
         console.log(error);
@@ -78,6 +82,46 @@ function cleanupTraceStreamerBinary(basePath) {
     }
 }
 
+function cleanupHilogtool(basePath) {
+    // 根据操作系统保留对应的 hilogtool 可执行文件
+    const platformKeepMap = {
+        win32: 'hilogtool.exe',
+        darwin: 'hilogtool',  // macOS
+        linux: 'hilogtool'
+    };
+    const keepFile = platformKeepMap[process.platform];
+    if (!keepFile) {
+        return;
+    }
+
+    // 删除不需要的平台文件
+    HILOGTOOL_BIN.forEach(fileName => {
+        if (fileName !== keepFile) {
+            const targetPath = path.join(basePath, fileName);
+            if (fs.existsSync(targetPath)) {
+                fs.rmSync(targetPath, { recursive: true, force: true });
+                console.log(`Removed unnecessary hilogtool file: ${fileName}`);
+            }
+        }
+    });
+
+    // 为 Unix 系统文件添加可执行权限
+    if (process.platform !== 'win32') {
+        const toolPath = path.join(basePath, keepFile);
+        if (fs.existsSync(toolPath)) {
+            try {
+                const stats = fs.statSync(toolPath);
+                const newMode = stats.mode | 0o111;
+                fs.chmodSync(toolPath, newMode);
+                console.log(`Added executable permission to: ${keepFile} (mode: ${newMode.toString(8)})`);
+            } catch (err) {
+                console.warn(`Failed to set executable permission for ${keepFile}:`, err.message);
+            }
+        }
+    }
+}
+
 unzipFile('trace_streamer_binary.zip', 'trace_streamer_binary');
 unzipFile('xvm.zip', 'xvm');
+unzipFile('hilogtool.zip', 'hilogtool');
 copyFile('third-party/report.html', 'dist/tools/web/hiperf_report_template.html');

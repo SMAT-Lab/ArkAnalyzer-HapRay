@@ -1,0 +1,353 @@
+"""
+Copyright (c) 2025 Huawei Device Co., Ltd.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import argparse
+import logging
+import os
+import platform
+import re
+import subprocess
+from pathlib import Path
+from typing import Optional
+
+import pandas as pd
+
+from hapray.core.common.excel_utils import ExcelReportSaver
+from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.config.config import Config
+
+
+class ConditionEvaluator:
+    """条件表达式评估器"""
+
+    @staticmethod
+    def evaluate_condition(value: str, condition: str) -> bool:
+        """
+        评估条件表达式
+        支持的运算符：==, !=, <, >, <=, >=
+        对于数值比较，如果值能转换为数字则进行数值比较，否则进行字符串比较
+        """
+        if not condition:
+            return True
+
+        try:
+            # 尝试转换为数字进行比较
+            try:
+                num_value = float(value)
+                is_numeric = True
+            except (ValueError, TypeError):
+                is_numeric = False
+
+            # 解析条件表达式
+            if condition.startswith('=='):
+                expected = condition[2:].strip()
+                if is_numeric:
+                    try:
+                        return num_value == float(expected)
+                    except (ValueError, TypeError):
+                        return False
+                else:
+                    return value == expected
+            elif condition.startswith('!='):
+                expected = condition[2:].strip()
+                if is_numeric:
+                    try:
+                        return num_value != float(expected)
+                    except (ValueError, TypeError):
+                        return True
+                else:
+                    return value != expected
+            elif condition.startswith('>='):
+                expected_str = condition[2:].strip()
+                if is_numeric:
+                    try:
+                        return num_value >= float(expected_str)
+                    except (ValueError, TypeError):
+                        return False
+                else:
+                    return value >= expected_str
+            elif condition.startswith('<='):
+                expected_str = condition[2:].strip()
+                if is_numeric:
+                    try:
+                        return num_value <= float(expected_str)
+                    except (ValueError, TypeError):
+                        return False
+                else:
+                    return value <= expected_str
+            elif condition.startswith('>'):
+                expected_str = condition[1:].strip()
+                if is_numeric:
+                    try:
+                        return num_value > float(expected_str)
+                    except (ValueError, TypeError):
+                        return False
+                else:
+                    return value > expected_str
+            elif condition.startswith('<'):
+                expected_str = condition[1:].strip()
+                if is_numeric:
+                    try:
+                        return num_value < float(expected_str)
+                    except (ValueError, TypeError):
+                        return False
+                else:
+                    return value < expected_str
+            else:
+                # 不支持的条件，默认为真
+                logging.warning(f'Unsupported condition: {condition}, treating as true')
+                return True
+        except Exception as e:
+            logging.warning(f'Error evaluating condition "{condition}" for value "{value}": {str(e)}')
+            return True
+
+
+class HilogAction:
+    """Handles hilog analysis and statistics generation"""
+
+    @staticmethod
+    def execute(args) -> Optional[str]:
+        """Execute hilog analysis workflow"""
+        parser = argparse.ArgumentParser(
+            description='Analyze hilog files and generate statistics', prog='ArkAnalyzer-HapRay hilog'
+        )
+
+        parser.add_argument(
+            '-d', '--hilog-dir', required=True, help='Directory containing hilog files or single hilog file path'
+        )
+
+        parser.add_argument(
+            '-o',
+            '--output',
+            default='hilog_analysis.xlsx',
+            help='Output Excel file path (default: hilog_analysis.xlsx)',
+        )
+
+        parsed_args = parser.parse_args(args)
+        action = HilogAction()
+        return action.run(parsed_args.hilog_dir, parsed_args.output)
+
+    def run(self, hilog_dir: str, output_file: str) -> Optional[str]:
+        """Run hilog analysis"""
+        try:
+            # Validate input
+            if not os.path.exists(hilog_dir):
+                logging.error(f'Hilog directory/file not found: {hilog_dir}')
+                return None
+
+            # Execute hilogtool to decrypt logs
+            if not self._execute_hilogtool(hilog_dir):
+                logging.error('Failed to execute hilogtool')
+                return None
+
+            # Get hilog patterns from config
+            config = Config()
+            if hasattr(config.data, 'hilog') and hasattr(config.data.hilog, 'patterns'):
+                patterns = config.data.hilog.patterns
+            else:
+                logging.error('No hilog patterns found in config')
+                return None
+
+            # Analyze decrypted logs
+            results = self._analyze_hilog_files(hilog_dir, patterns)
+
+            # Generate Excel report
+            scene_name = Path(hilog_dir).name
+            self._generate_excel_report(scene_name, results, output_file)
+
+            logging.info(f'Hilog analysis completed. Results saved to: {output_file}')
+            return output_file
+
+        except Exception as e:
+            logging.error(f'Hilog analysis failed: {str(e)}')
+            return None
+
+    def _execute_hilogtool(self, hilog_dir: str) -> bool:
+        """Execute hilogtool to decrypt hilog files"""
+        try:
+            # Get hilogtool directory using the standard method
+            tools_dir = ExeUtils.get_tools_dir('hilogtool')
+
+            # Select appropriate executable based on platform
+            if platform.system() == 'Windows':
+                hilogtool_path = os.path.join(tools_dir, 'hilogtool.exe')
+            else:
+                hilogtool_path = os.path.join(tools_dir, 'hilogtool')
+
+            if not os.path.exists(hilogtool_path):
+                logging.error(f'Hilogtool not found at: {hilogtool_path}')
+                return False
+
+            # Prepare command
+            hilog_dir_path = Path(hilog_dir)
+            cmd = [str(hilogtool_path), 'parse', '-i', str(hilog_dir_path), '-d', str(hilog_dir_path)]
+
+            logging.info(f'Executing hilogtool: {" ".join(cmd)}')
+
+            # Execute command
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True, cwd=str(hilog_dir_path.parent))
+
+            # Print hilogtool output
+            if result.stdout:
+                logging.info(f'Hilogtool output:\n{result.stdout}')
+
+            if result.stderr:
+                logging.warning(f'Hilogtool stderr: {result.stderr}')
+
+            # Check execution result
+            if result.returncode != 0:
+                logging.error(f'Hilogtool execution failed with return code: {result.returncode}')
+                return False
+
+            return True
+
+        except Exception as e:
+            logging.error(f'Error executing hilogtool: {str(e)}')
+            return False
+
+    def _analyze_hilog_files(self, hilog_dir: str, patterns: list) -> dict[str, list]:
+        """Analyze decrypted hilog files and extract pattern matches with groups"""
+        results = {}
+
+        try:
+            hilog_path = Path(hilog_dir)
+
+            # Find all decrypted hilog txt files recursively
+            hilog_files = [hilog_path] if hilog_path.is_file() else list(hilog_path.rglob('hilog*.txt'))
+
+            logging.info(f'Found {len(hilog_files)} hilog files to analyze')
+
+            # Initialize pattern results
+            pattern_configs = {}
+            for pattern in patterns:
+                # All patterns should be dict format from config
+                pattern_name = pattern.get('name', str(pattern))
+                regex_pattern = pattern.get('regex', str(pattern))
+                groups = pattern.get('groups', [0])
+                conditions = pattern.get('conditions', [])
+
+                pattern_configs[pattern_name] = {'regex': regex_pattern, 'groups': groups, 'conditions': conditions}
+                results[pattern_name] = []
+
+            for file_path in hilog_files:
+                if not file_path.exists():
+                    continue
+
+                try:
+                    with open(file_path, encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+
+                    # Extract matches for each pattern
+                    for pattern_name, config in pattern_configs.items():
+                        regex_pattern = config['regex']
+                        groups = config['groups']
+                        conditions = config['conditions']
+
+                        try:
+                            # Compile regex and find matches
+                            regex = re.compile(regex_pattern, re.IGNORECASE | re.MULTILINE)
+                            matches = regex.findall(content)
+
+                            # Extract specified groups from matches and apply conditions
+                            for match in matches:
+                                if isinstance(match, tuple):
+                                    # Multiple groups captured
+                                    extracted_values = []
+                                    for group_idx in groups:
+                                        if group_idx == 0:
+                                            extracted_values.append(match)  # Full match (tuple)
+                                        elif 1 <= group_idx <= len(match):
+                                            extracted_values.append(match[group_idx - 1])  # Group index starts from 1
+                                        else:
+                                            extracted_values.append(None)  # Invalid group index
+                                # Single group or no groups
+                                elif 0 in groups:
+                                    extracted_values = [match]  # Full match
+                                elif groups == [1]:
+                                    extracted_values = [match]  # Single captured group
+                                else:
+                                    extracted_values = []
+
+                                # Apply conditions filtering
+                                if extracted_values and conditions:
+                                    # Check if all conditions are satisfied
+                                    conditions_met = True
+                                    for i, (value, condition) in enumerate(zip(extracted_values, conditions)):
+                                        if i < len(conditions) and condition:
+                                            value_str = str(value) if value is not None else ''
+                                            if not ConditionEvaluator.evaluate_condition(value_str, condition):
+                                                conditions_met = False
+                                                break
+
+                                    if not conditions_met:
+                                        continue  # Skip this match if conditions not met
+
+                                # Only add to results if conditions are met (or no conditions)
+                                if extracted_values:
+                                    results[pattern_name].append(extracted_values)
+
+                        except re.error as e:
+                            logging.warning(f'Invalid regex pattern "{regex_pattern}": {str(e)}')
+                            continue
+
+                except Exception as e:
+                    logging.warning(f'Error analyzing file {file_path}: {str(e)}')
+                    continue
+
+            return results
+
+        except Exception as e:
+            logging.error(f'Error analyzing hilog files: {str(e)}')
+            return {}
+
+    def _generate_excel_report(self, scene_name: str, results: dict[str, list], output_file: str):
+        """Generate Excel report from analysis results"""
+        try:
+            # Create summary sheet with counts
+            saver = ExcelReportSaver(output_file)
+
+            # Prepare summary data
+            summary_data = {'场景名称': [scene_name]}
+            for pattern_name, matches in results.items():
+                summary_data[pattern_name] = [len(matches)]
+
+            summary_df = pd.DataFrame(summary_data)
+            saver.add_sheet(summary_df, '汇总统计')
+
+            # Create detailed sheets for patterns with matches
+            for pattern_name, matches in results.items():
+                if not matches:
+                    continue
+
+                # Prepare detailed data for DataFrame
+                data_rows = []
+                for i, match in enumerate(matches):
+                    row = {'场景名称': scene_name, '序号': i + 1}
+                    if isinstance(match, list):
+                        for j, value in enumerate(match):
+                            row[f'分组{j + 1}'] = str(value) if value is not None else ''
+                    else:
+                        row['匹配内容'] = str(match)
+                    data_rows.append(row)
+
+                df = pd.DataFrame(data_rows)
+                saver.add_sheet(df, pattern_name[:31])  # Excel sheet name limit
+
+            saver.save()
+
+        except ImportError:
+            logging.error('pandas or xlsxwriter not installed. Please install required packages.')
+        except Exception as e:
+            logging.error(f'Error generating Excel report: {str(e)}')
