@@ -13,6 +13,19 @@ memory:
 ui:
   capture_enable: True  # UI数据采集开关（截图和组件树）
 
+# hilog日志分析配置
+hilog:
+  # 正则匹配规则，每个规则包含regex、groups和conditions
+  # groups: 要提取的分组索引（从1开始，0表示整个匹配）
+  # conditions: 条件过滤数组，与groups一一对应，支持运算符：==, !=, <, >, <=, >=
+  patterns:
+    # 示例规则：匹配memtype的值，4是DMA_ALLOC
+    - name: "图片解码没有使用DMA(memType!=4)"  # 规则名称
+      regex: "CreatePixelMap success,.*memType\\s*:\\s*(\\d+),\\s*cost\\s+\\d+\\s+us"  # 正则表达式，带分组
+      # regex: "CreatePixelMapExtended success,.*memoryType\\s*:\\s*(\\d+),\\s*cost\\s+\\d+\\s+us"  # 正则表达式，带分组
+      groups: [1]  # 要提取的分组索引（从1开始，0表示整个匹配）
+      conditions: ["!=4"]  # 条件过滤，与groups一一对应，满足条件才计数
+
 # 帧分析配置
 frame_analysis:
   # 进行深度分析的TOP N卡顿帧数量
