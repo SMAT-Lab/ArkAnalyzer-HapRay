@@ -338,6 +338,29 @@
           "help": "输出目录（默认：./ui_compare_output）"
         }
       }
+    },
+    "hilog": {
+      "name": "hilog分析",
+      "description": "hilog日志分析，分析图片解码参数。",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "hilog-dir": {
+          "type": "dir",
+          "label": "基准报告目录",
+          "required": true,
+          "help": "基准报告根目录（如：PerfLoad_meituan_0010）"
+        },
+        "output": {
+          "type": "file",
+          "label": "输出表格文件",
+          "required": false,
+          "default": "hilog_analysis.xlsx",
+          "short": "o",
+          "help": "输出表格文件（默认：hilog_analysis.xlsx）"
+        }
+      }
     }
   }
 }
