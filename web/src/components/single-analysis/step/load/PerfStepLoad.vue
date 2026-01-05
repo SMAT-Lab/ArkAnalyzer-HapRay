@@ -283,7 +283,7 @@ const formatNumber = (num: number) => {
 const processPieDrilldownStack = ref<string[]>([]);
 const processPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);
 const processPieData = ref(processJson2ProcessPieChartData(perfData!, props.stepId));
-const pieChartTitle = perfData?.steps[0].data[0].eventType == 0 ? 'cycles' : 'instructions';
+const pieChartTitle = perfData?.steps[0]?.data[0].eventType == 0 ? 'cycles' : 'instructions';
 
 const stepPieDrilldownStack = ref<string[]>([]);
 const stepPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: string; value: number }> }[]>([]);

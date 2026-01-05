@@ -33,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides six main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
+The tool provides seven main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, and `hilog` for hilog analysis.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -225,6 +225,46 @@ Example:
 ```bash
 # Specify output file
 python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
+```
+
+#### Hilog Analysis (`hilog`)
+```bash
+python -m scripts.main hilog -d <hilog_directory> [-o <output_excel>]
+```
+Options:
+- `--hilog-dir <path>`: Directory containing hilog files or single hilog file path (required)
+- `--output <path>`: Output Excel file path (default: hilog_analysis.xlsx)
+
+Features:
+- **Automatic hilog decryption**: Uses hilogtool to decrypt encrypted hilog files
+- **Configurable pattern matching**: Supports complex regex patterns with grouping
+- **Conditional filtering**: Applies conditions to extracted groups for precise matching
+- **Comprehensive reporting**: Generates Excel reports with summary statistics and detailed matches
+
+**Configuration**:
+Hilog analysis rules are configured in `perf_testing/hapray/core/config/config.yaml` under the `hilog.patterns` section:
+
+```yaml
+hilog:
+  patterns:
+    # Example rule: Match memory type != 4 (DMA_ALLOC)
+    - name: "图片解码没有使用DMA(memType!=4)"
+      regex: "CreatePixelMap success,.*memType\\s*:\\s*(\\d+),\\s*cost\\s+\\d+\\s+us"
+      groups: [1]  # Extract memory type value
+      conditions: ["!=4"]  # Only count when memory type != 4
+```
+
+**Pattern Configuration**:
+- `name`: Rule name for identification and Excel sheet naming
+- `regex`: Regular expression with capture groups
+- `groups`: Array of group indices to extract (1-based, 0 for entire match)
+- `conditions`: Array of conditions corresponding to groups, supporting operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+
+Example:
+```bash
+# Analyze hilog files in a directory
+python -m scripts.main hilog --hilog-dir hilog_files/ --output analysis_report.xlsx
+
 ```
 
 ### Guide: Running Release Program on macOS

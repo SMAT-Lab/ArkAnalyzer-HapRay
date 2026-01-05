@@ -131,7 +131,9 @@ class MemoryMeminfoParser:
 
                 # 解析 smaps 文件内容
                 category_stats = self._parse_smaps_content(content)
-                results[timestamp] = category_stats
+                # 当 key 存在时把内存相加
+                for key, value in category_stats.items():
+                    results[timestamp][key] += value
 
             except Exception as e:
                 logger.warning('Failed to parse smaps file %s: %s', filepath, str(e))
