@@ -152,6 +152,76 @@
       </div>
     </div>
 
+    <!-- IPC Binder 进程间通信故障分析 (独立全宽卡片) -->
+    <div v-if="faultTreeData.ipc_binder" class="ipc-binder-section">
+      <div class="stat-card data-panel ipc-card">
+        <div class="card-title">
+          <i>🔗</i> IPC Binder 进程间通信故障分析
+        </div>
+
+        <div class="metric-grid-compact">
+          <div class="metric-item">
+            <div class="metric-label">总通信次数</div>
+            <div class="metric-value" :class="getStatusClass(faultTreeData.ipc_binder.total_transactions, 10000)">
+              {{ formatNumber(faultTreeData.ipc_binder.total_transactions) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">高延迟通信</div>
+            <div class="metric-value" :class="getStatusClass(faultTreeData.ipc_binder.high_latency_count, 10)">
+              {{ formatNumber(faultTreeData.ipc_binder.high_latency_count) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">平均延迟(ms)</div>
+            <div class="metric-value" :class="getStatusClass(faultTreeData.ipc_binder.avg_latency, 50)">
+              {{ faultTreeData.ipc_binder.avg_latency.toFixed(2) }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">最大延迟(ms)</div>
+            <div class="metric-value" :class="getStatusClass(faultTreeData.ipc_binder.max_latency, 100)">
+              {{ faultTreeData.ipc_binder.max_latency.toFixed(2) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Top 进程对详情 -->
+        <div v-if="faultTreeData.ipc_binder.top_processes.length > 0" class="detail-section">
+          <div class="detail-title">
+            <span>高频通信进程对 (Top 5)</span>
+            <span class="detail-subtitle">展示通信次数最多的进程对及其性能指标</span>
+          </div>
+          <div class="process-grid">
+            <div v-for="(proc, idx) in faultTreeData.ipc_binder.top_processes" :key="idx" class="process-card">
+              <div class="process-rank">#{{ idx + 1 }}</div>
+              <div class="process-content">
+                <div class="process-info">
+                  <span class="process-name">{{ proc.caller_proc }}</span>
+                  <span class="arrow">→</span>
+                  <span class="process-name">{{ proc.callee_proc }}</span>
+                </div>
+                <div class="process-metrics">
+                  <span class="metric-badge count">
+                    <span class="badge-label">通信次数</span>
+                    <span class="badge-value">{{ formatNumber(proc.count) }}</span>
+                  </span>
+                  <span class="metric-badge avg">
+                    <span class="badge-label">平均延迟</span>
+                    <span class="badge-value">{{ proc.avg_latency }}ms</span>
+                  </span>
+                  <span class="metric-badge max" :class="{ critical: proc.max_latency > 100 }">
+                    <span class="badge-label">峰值延迟</span>
+                    <span class="badge-value">{{ proc.max_latency }}ms</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 故障树诊断建议 -->
     <div class="diagnosis-section">
       <div class="section-title">
@@ -328,6 +398,63 @@ const getDiagnosisSuggestions = () => {
     });
   }
 
+  // IPC Binder 诊断
+  if (data.ipc_binder) {
+    // 高延迟通信诊断
+    if (data.ipc_binder.high_latency_count > 10) {
+      suggestions.push({
+        category: 'ipc_high_latency',
+        icon: '⚠️',
+        title: 'IPC Binder 高延迟通信',
+        level: '高风险',
+        severity: 'critical',
+        description: `检测到 ${data.ipc_binder.high_latency_count} 次高延迟(>100ms)的进程间通信，可能严重影响性能。`,
+        suggestions: [
+          '检查高延迟通信的进程对，优化跨进程调用逻辑',
+          '考虑使用异步通信替代同步 Binder 调用',
+          '减少跨进程数据传输量，使用共享内存等机制',
+          '检查是否存在死锁或资源竞争问题'
+        ]
+      });
+    }
+
+    // 通信频率过高诊断
+    if (data.ipc_binder.total_transactions > 10000) {
+      suggestions.push({
+        category: 'ipc_high_frequency',
+        icon: '📡',
+        title: 'IPC Binder 通信频率过高',
+        level: '中风险',
+        severity: 'warning',
+        description: `检测到 ${formatNumber(data.ipc_binder.total_transactions)} 次进程间通信，频率过高可能影响性能。`,
+        suggestions: [
+          '批量处理 IPC 请求，减少通信次数',
+          '使用缓存机制避免重复的跨进程查询',
+          '检查是否存在不必要的进程间调用',
+          '考虑将频繁通信的模块合并到同一进程'
+        ]
+      });
+    }
+
+    // 平均延迟过高诊断
+    if (data.ipc_binder.avg_latency > 50) {
+      suggestions.push({
+        category: 'ipc_avg_latency',
+        icon: '🐌',
+        title: 'IPC Binder 平均延迟过高',
+        level: '中风险',
+        severity: 'warning',
+        description: `IPC 平均延迟为 ${data.ipc_binder.avg_latency.toFixed(2)}ms，超过正常水平。`,
+        suggestions: [
+          '优化 Binder 接口实现，减少处理时间',
+          '检查被调用进程的负载情况',
+          '避免在 Binder 调用中执行耗时操作',
+          '使用性能分析工具定位具体的慢接口'
+        ]
+      });
+    }
+  }
+
   // 如果没有发现问题，添加正常状态
   if (suggestions.length === 0) {
     suggestions.push({
@@ -360,7 +487,7 @@ const getDiagnosisSuggestions = () => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 24px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
@@ -419,6 +546,177 @@ const getDiagnosisSuggestions = () => {
   background: #fee2e2;
 }
 
+/* IPC Binder 独立区域样式 */
+.ipc-binder-section {
+  margin-bottom: 24px;
+}
+
+.ipc-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 2px solid #e2e8f0;
+}
+
+.metric-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+/* 详情区域样式 */
+.detail-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px dashed #e2e8f0;
+}
+
+.detail-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+/* 进程网格布局 */
+.process-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+  gap: 12px;
+}
+
+.process-card {
+  display: flex;
+  gap: 12px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.process-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.process-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.process-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.process-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.process-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  background: white;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.arrow {
+  color: #64748b;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.process-metrics {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metric-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.metric-badge.count {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.metric-badge.avg {
+  background: #e0e7ff;
+  color: #4338ca;
+  border: 1px solid #a5b4fc;
+}
+
+.metric-badge.max {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.metric-badge.max.critical {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.badge-label {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.badge-value {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* 诊断建议区域样式 */
 .diagnosis-section {
   background: white;
   border-radius: 12px;

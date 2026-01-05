@@ -54,7 +54,7 @@
             </template>
 
             <!-- 步骤下的分析类型子菜单 -->
-            <el-menu-item :index="`perf_step_${step.id}`" :title="step.step_name">
+            <el-menu-item v-if="getHasPerfData(step.id)" :index="`perf_step_${step.id}`" :title="step.step_name">
               <el-icon>
                 <Monitor />
               </el-icon>
@@ -279,6 +279,7 @@ const jsonDataStore = useJsonDataStore();
 // 存储每个步骤是否有Memory数据的缓存（使用对象而不是Map以保持响应性）
 const memoryDataCache = ref<Record<number, boolean>>({});
 const uiAnimateDataCache = ref<Record<number, boolean>>({});
+const perfDataCache = ref<Record<number, boolean>>({});
 
 const testSteps = computed(() => {
   if (!jsonDataStore?.steps) return [];
@@ -348,11 +349,35 @@ const getHasUIAnimateData = (stepId: number): boolean => {
   return uiAnimateDataCache.value[stepId] || false;
 };
 
+// 检查步骤是否有Perf数据
+const checkPerfData = (stepId: number) => {
+  const perfData = jsonDataStore.perfData;
+  if (!perfData || !perfData.steps) {
+    perfDataCache.value[stepId] = false;
+    return;
+  }
+  // step_id 从 1 开始，数组索引从 0 开始
+  const stepIndex = stepId - 1;
+  if (stepIndex >= 0 && stepIndex < perfData.steps.length) {
+    const step = perfData.steps[stepIndex];
+    // 检查步骤是否有数据（count > 0 或 data 数组有数据）
+    perfDataCache.value[stepId] = !!(step && (step.count > 0 || (step.data && step.data.length > 0)));
+  } else {
+    perfDataCache.value[stepId] = false;
+  }
+};
+
+// 获取步骤是否有Perf数据
+const getHasPerfData = (stepId: number): boolean => {
+  return perfDataCache.value[stepId] || false;
+};
+
 // 当步骤改变时，检查Memory数据
 watch(() => testSteps.value, (newSteps) => {
   newSteps.forEach(step => {
     void checkMemoryData(step.id);
     checkUIAnimateData(step.id);
+    checkPerfData(step.id);
   });
 }, { immediate: true });
 
