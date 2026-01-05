@@ -1582,29 +1582,20 @@ class EmptyFrameAnalyzer:
                 extended_end = end_ts + 1_000_000
                 extended_merged_ranges.append((extended_start, extended_end))
 
-            # 计算去重后的 empty_frame_load
-            deduplicated_empty_frame_load = self.cache_manager.get_total_load_for_pids(
-                self.cache_manager.app_pids, time_ranges=extended_merged_ranges
+            # 优化：合并4次查询为1次，在应用层分组计算
+            deduplicated_result = self.cache_manager.get_all_thread_loads_with_info_for_pids(
+                self.cache_manager.app_pids,
+                time_ranges=extended_merged_ranges
             )
 
-            # 计算去重后的主线程负载
-            deduplicated_main_thread_load_dict = self.cache_manager.get_thread_loads_for_pids(
-                self.cache_manager.app_pids, time_ranges=extended_merged_ranges, filter_main_thread=True
-            )
-            deduplicated_main_thread_load = sum(deduplicated_main_thread_load_dict.values())
+            deduplicated_empty_frame_load = deduplicated_result['total_load']
+            deduplicated_main_thread_load = deduplicated_result['main_thread_load']
+            deduplicated_background_thread_load = deduplicated_result['background_thread_load']
+            deduplicated_thread_loads = deduplicated_result['thread_loads_dict']
 
-            # 计算去重后的后台线程负载
-            deduplicated_background_thread_load_dict = self.cache_manager.get_thread_loads_for_pids(
-                self.cache_manager.app_pids, time_ranges=extended_merged_ranges, filter_main_thread=False
-            )
-            deduplicated_background_thread_load = sum(deduplicated_background_thread_load_dict.values())
-
-            # 计算去重后的所有线程负载（用于 thread_statistics）
-            deduplicated_thread_loads = self.cache_manager.get_thread_loads_for_pids(
-                self.cache_manager.app_pids, time_ranges=extended_merged_ranges, filter_main_thread=None
-            )
-
-            timing_stats['recalc_deduplicated_loads'] = time.time() - recalc_start
+            recalc_time = time.time() - recalc_start
+            timing_stats['recalc_deduplicated_loads'] = recalc_time
+            logging.info(f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(extended_merged_ranges)}个)')
 
         # 保存原始 empty_frame_load 到 timing_stats（用于日志对比）
         timing_stats['original_empty_frame_load'] = original_empty_frame_load
