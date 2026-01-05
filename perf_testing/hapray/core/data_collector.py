@@ -238,61 +238,39 @@ class DataCollector:
 
                 self._ensure_directories_exist(showmap_dir, gpu_mem_dir, dmabuf_dir)
 
-                # 1. 采集应用进程smaps
-                try:
-                    process_ids, process_names = self.process_manager.get_app_pids()
-                    for pid, process_name in zip(process_ids, process_names):
-                        # 清理进程名，移除路径和特殊字符
-                        clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
-                        filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
-                        filepath = os.path.join(showmap_dir, filename)
+                # 获取所有进程ID和名称
+                process_ids, process_names = self.process_manager.get_app_pids()
 
-                        cmd = f'hidumper --mem-smaps {pid}'
-                        Log.debug(f'采集smaps数据: {cmd}')
-                        result = self.driver.shell(cmd)
+                # 为每个pid创建smaps采集线程
+                smaps_threads = []
+                for pid, process_name in zip(process_ids, process_names):
+                    thread = threading.Thread(
+                        target=self._collect_smaps_data,
+                        args=(pid, process_name, showmap_dir, timestamp),
+                        daemon=True,
+                    )
+                    smaps_threads.append(thread)
 
-                        # 保存到本地文件
-                        with open(filepath, 'w', encoding='utf-8') as f:
-                            f.write(result)
+                # 创建GPU和DMA采集线程
+                gpu_thread = threading.Thread(
+                    target=self._collect_gpu_data,
+                    args=(gpu_mem_dir, timestamp),
+                    daemon=True,
+                )
+                dma_thread = threading.Thread(
+                    target=self._collect_dma_data,
+                    args=(dmabuf_dir, timestamp),
+                    daemon=True,
+                )
 
-                        Log.debug(f'smaps数据已保存: {filepath}')
+                # 启动所有线程（包括所有smaps线程、GPU线程和DMA线程）
+                all_threads = smaps_threads + [gpu_thread, dma_thread]
+                for thread in all_threads:
+                    thread.start()
 
-                except Exception as e:
-                    Log.warning(f'采集smaps数据失败: {e}')
-
-                # 2. 采集GPU数据（需要root权限）
-                try:
-                    filename = f'gpuMen_{timestamp}.txt'
-                    filepath = os.path.join(gpu_mem_dir, filename)
-
-                    cmd = 'cat /proc/gpu_memory'
-                    Log.debug(f'采集GPU数据: {cmd}')
-                    result = self.driver.shell(cmd)
-
-                    # 保存到本地文件
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(result)
-
-                    Log.debug(f'GPU数据已保存: {filepath}')
-                except Exception as e:
-                    Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
-
-                # 3. 采集DMA数据（需要root权限）
-                try:
-                    filename = f'process_dmabuff_info_{timestamp}.txt'
-                    filepath = os.path.join(dmabuf_dir, filename)
-
-                    cmd = 'cat /proc/process_dmabuf_info'
-                    Log.debug(f'采集DMA数据: {cmd}')
-                    result = self.driver.shell(cmd)
-
-                    # 保存到本地文件
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(result)
-
-                    Log.debug(f'DMA数据已保存: {filepath}')
-                except Exception as e:
-                    Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+                # 等待所有线程完成
+                for thread in all_threads:
+                    thread.join()
 
                 Log.debug(f'步骤 {step_id} 第 {collection_count} 次内存数据采集完成')
             except Exception as e:
@@ -309,6 +287,80 @@ class DataCollector:
                 break
 
         Log.info(f'步骤 {step_id} 内存数据采集线程结束，共采集 {collection_count} 次')
+
+    def _collect_smaps_data(self, pid: int, process_name: str, showmap_dir: str, timestamp: str):
+        """采集单个进程的smaps数据
+
+        Args:
+            pid: 进程ID
+            process_name: 进程名称
+            showmap_dir: smaps目录路径
+            timestamp: 时间戳
+        """
+        try:
+            # 清理进程名，移除路径和特殊字符
+            clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
+            filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
+            filepath = os.path.join(showmap_dir, filename)
+
+            cmd = f'hidumper --mem-smaps {pid}'
+            Log.debug(f'采集smaps数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.debug(f'smaps数据已保存: {filepath}')
+
+        except Exception as e:
+            Log.warning(f'采集smaps数据失败 (PID: {pid}): {e}')
+
+    def _collect_gpu_data(self, gpu_mem_dir: str, timestamp: str):
+        """采集GPU数据（需要root权限）
+
+        Args:
+            gpu_mem_dir: GPU内存目录路径
+            timestamp: 时间戳
+        """
+        try:
+            filename = f'gpuMen_{timestamp}.txt'
+            filepath = os.path.join(gpu_mem_dir, filename)
+
+            cmd = 'cat /proc/gpu_memory'
+            Log.debug(f'采集GPU数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.debug(f'GPU数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
+
+    def _collect_dma_data(self, dmabuf_dir: str, timestamp: str):
+        """采集DMA数据（需要root权限）
+
+        Args:
+            dmabuf_dir: DMA目录路径
+            timestamp: 时间戳
+        """
+        try:
+            filename = f'process_dmabuff_info_{timestamp}.txt'
+            filepath = os.path.join(dmabuf_dir, filename)
+
+            cmd = 'cat /proc/process_dmabuff_info'
+            Log.debug(f'采集DMA数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.debug(f'DMA数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
 
     def stop_memory_collection(self, step_id: int):
         """
