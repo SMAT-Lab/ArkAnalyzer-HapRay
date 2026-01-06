@@ -73,6 +73,14 @@ function renderChart() {
     dataMap.set(key, values);
   });
 
+  // 按照value值（数组总和）排序
+  const sortedEntries = Array.from(dataMap.entries()).sort((a, b) => {
+    const sumA = a[1].reduce((acc, val) => acc + val, 0);
+    const sumB = b[1].reduce((acc, val) => acc + val, 0);
+    return sumB - sumA; // 降序排序
+  });
+  const sortedDataMap = new Map(sortedEntries);
+
   // 计算相对时间（秒）
   const parsedTimestamps = timestamps.map(ts => {
     if (typeof ts === 'string') {
@@ -91,7 +99,7 @@ function renderChart() {
   const relativeTime = parsedTimestamps.map(ts => (ts - baseTimestamp) / 1000);
 
   // 构建series
-  const series = Array.from(dataMap.entries()).map(([name, data]) => ({
+  const series = Array.from(sortedDataMap.entries()).map(([name, data]) => ({
     name,
     type: 'line',
     stack: 'Total',
@@ -130,7 +138,7 @@ function renderChart() {
     legend: {
       type: 'scroll',
       top: 30,
-      data: Array.from(dataMap.keys())
+      data: Array.from(sortedDataMap.keys())
     },
     grid: {
       left: '3%',
