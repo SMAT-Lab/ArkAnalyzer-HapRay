@@ -47,6 +47,7 @@ Options:
 - `--no-trace`: Disable trace capturing
 - `--no-perf`: Disable perf capturing (for memory-only mode)
 - `--memory`: Enable Memory profiling using hiprofiler nativehook plugin
+- `--snapshot`: Enable ArkTs heap snapshot collection
 - `--devices <device_serial_numbers...>`: Device serial numbers (e.g., HX1234567890)
 - `--manual`: Enable manual testing mode with interactive 30-second performance data collection
 - `--app`: Target application bundle name for manual testing (performance data will be collected for 30 seconds)

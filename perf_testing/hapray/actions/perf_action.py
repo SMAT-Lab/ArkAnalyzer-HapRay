@@ -271,6 +271,11 @@ class PerfAction:
             action='store_true',
             help='Enable Memory profiling using hiprofiler nativehook plugin',
         )
+        parser.add_argument(
+            '--snapshot',
+            action='store_true',
+            help='Enable heap snapshot collection at step end',
+        )
         parser.add_argument('--devices', nargs='+', default=None, help='Device serial numbers (e.g., HX1234567890)')
         parser.add_argument(
             '--hapflow',
@@ -318,6 +323,7 @@ class PerfAction:
         # Configure collection modes
         Config.set('trace.enable', not parsed_args.no_trace)
         Config.set('memory.enable', parsed_args.memory)
+        Config.set('memory.snapshot_enable', parsed_args.snapshot)
 
         # Validate collection mode combinations
         if parsed_args.no_trace and parsed_args.no_perf and not parsed_args.memory:
