@@ -359,6 +359,13 @@
           "default": "hilog_analysis.xlsx",
           "short": "o",
           "help": "输出表格文件（默认：hilog_analysis.xlsx）"
+        },
+        "detail": {
+          "type": "bool",
+          "label": "详细模式",
+          "required": false,
+          "default": false,
+          "help": "开启详细模式：将匹配到的字符串保存到 hilog_detail.json 文件中"
         }
       }
     }
