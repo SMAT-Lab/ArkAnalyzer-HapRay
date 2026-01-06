@@ -63,6 +63,13 @@
           "default": false,
           "help": "启用内存分析"
         },
+        "snapshot": {
+          "type": "bool",
+          "label": "Snapshot捕获",
+          "required": false,
+          "default": false,
+          "help": "启用Snapshot捕获"
+        },
         "devices": {
           "type": "str",
           "label": "设备序列号",
@@ -120,6 +127,13 @@
           "default": false,
           "help": "启用内存分析"
         },
+        "snapshot": {
+          "type": "bool",
+          "label": "Snapshot捕获",
+          "required": false,
+          "default": false,
+          "help": "启用Snapshot捕获"
+        },
         "round": {
           "type": "int",
           "label": "测试轮数",
@@ -163,6 +177,13 @@
           "required": false,
           "default": false,
           "help": "启用内存分析"
+        },
+        "snapshot": {
+          "type": "bool",
+          "label": "Snapshot捕获",
+          "required": false,
+          "default": false,
+          "help": "启用Snapshot捕获"
         },
         "round": {
           "type": "int",
