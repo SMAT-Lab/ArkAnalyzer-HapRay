@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import argparse
+import json
 import logging
 import os
 import platform
@@ -135,11 +136,18 @@ class HilogAction:
             help='Output Excel file path (default: hilog_analysis.xlsx)',
         )
 
+        parser.add_argument(
+            '--detail',
+            action='store_true',
+            default=False,
+            help='Enable detailed logging: save matched strings to hilog_detail.json',
+        )
+
         parsed_args = parser.parse_args(args)
         action = HilogAction()
-        return action.run(parsed_args.hilog_dir, parsed_args.output)
+        return action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
 
-    def run(self, hilog_dir: str, output_file: str) -> Optional[str]:
+    def run(self, hilog_dir: str, output_file: str, detail: bool = False) -> Optional[str]:
         """Run hilog analysis"""
         try:
             # Validate input
@@ -161,11 +169,18 @@ class HilogAction:
                 return None
 
             # Analyze decrypted logs
-            results = self._analyze_hilog_files(hilog_dir, patterns)
+            results, detail_data = self._analyze_hilog_files(hilog_dir, patterns, detail)
 
             # Generate Excel report
             scene_name = Path(hilog_dir).name
             self._generate_excel_report(scene_name, results, output_file)
+
+            # Generate detail JSON file if detail mode is enabled
+            if detail and detail_data:
+                output_path = Path(output_file)
+                detail_json_path = output_path.parent / 'hilog_detail.json'
+                self._save_detail_json(detail_data, detail_json_path)
+                logging.info(f'Detail data saved to: {detail_json_path}')
 
             logging.info(f'Hilog analysis completed. Results saved to: {output_file}')
             return output_file
@@ -217,9 +232,12 @@ class HilogAction:
             logging.error(f'Error executing hilogtool: {str(e)}')
             return False
 
-    def _analyze_hilog_files(self, hilog_dir: str, patterns: list) -> dict[str, list]:
+    def _analyze_hilog_files(
+        self, hilog_dir: str, patterns: list, detail: bool = False
+    ) -> tuple[dict[str, list], dict]:
         """Analyze decrypted hilog files and extract pattern matches with groups"""
         results = {}
+        detail_data = {} if detail else None
 
         try:
             hilog_path = Path(hilog_dir)
@@ -240,6 +258,8 @@ class HilogAction:
 
                 pattern_configs[pattern_name] = {'regex': regex_pattern, 'groups': groups, 'conditions': conditions}
                 results[pattern_name] = []
+                if detail:
+                    detail_data[pattern_name] = {'matched': [], 'unmatched': []}
 
             for file_path in hilog_files:
                 if not file_path.exists():
@@ -258,10 +278,26 @@ class HilogAction:
                         try:
                             # Compile regex and find matches
                             regex = re.compile(regex_pattern, re.IGNORECASE | re.MULTILINE)
-                            matches = regex.findall(content)
+
+                            if detail:
+                                # Use finditer to get full match strings
+                                matches_with_strings = []
+                                for match_obj in regex.finditer(content):
+                                    full_match_string = match_obj.group(0)  # Full matched string
+                                    match_tuple = match_obj.groups() if match_obj.groups() else full_match_string
+                                    matches_with_strings.append((match_tuple, full_match_string))
+                                matches = [m[0] for m in matches_with_strings]
+                            else:
+                                matches = regex.findall(content)
+                                matches_with_strings = None
 
                             # Extract specified groups from matches and apply conditions
-                            for match in matches:
+                            for idx, match in enumerate(matches):
+                                # Get full match string for detail mode
+                                full_match_string = (
+                                    matches_with_strings[idx][1] if (detail and matches_with_strings) else None
+                                )
+
                                 if isinstance(match, tuple):
                                     # Multiple groups captured
                                     extracted_values = []
@@ -281,9 +317,9 @@ class HilogAction:
                                     extracted_values = []
 
                                 # Apply conditions filtering
+                                conditions_met = True
                                 if extracted_values and conditions:
                                     # Check if all conditions are satisfied
-                                    conditions_met = True
                                     for i, (value, condition) in enumerate(zip(extracted_values, conditions)):
                                         if i < len(conditions) and condition:
                                             value_str = str(value) if value is not None else ''
@@ -291,11 +327,15 @@ class HilogAction:
                                                 conditions_met = False
                                                 break
 
-                                    if not conditions_met:
-                                        continue  # Skip this match if conditions not met
+                                # Handle detail mode: save matched strings
+                                if detail and full_match_string:
+                                    if conditions_met:
+                                        detail_data[pattern_name]['matched'].append(full_match_string)
+                                    else:
+                                        detail_data[pattern_name]['unmatched'].append(full_match_string)
 
                                 # Only add to results if conditions are met (or no conditions)
-                                if extracted_values:
+                                if conditions_met and extracted_values:
                                     results[pattern_name].append(extracted_values)
 
                         except re.error as e:
@@ -306,11 +346,11 @@ class HilogAction:
                     logging.warning(f'Error analyzing file {file_path}: {str(e)}')
                     continue
 
-            return results
+            return results, detail_data
 
         except Exception as e:
             logging.error(f'Error analyzing hilog files: {str(e)}')
-            return {}
+            return {}, {} if detail else {}
 
     def _generate_excel_report(self, scene_name: str, results: dict[str, list], output_file: str):
         """Generate Excel report from analysis results"""
@@ -351,3 +391,11 @@ class HilogAction:
             logging.error('pandas or xlsxwriter not installed. Please install required packages.')
         except Exception as e:
             logging.error(f'Error generating Excel report: {str(e)}')
+
+    def _save_detail_json(self, detail_data: dict, output_path: Path):
+        """Save detailed match data to JSON file"""
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(detail_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f'Error saving detail JSON file: {str(e)}')
