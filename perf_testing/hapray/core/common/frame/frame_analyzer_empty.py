@@ -1584,8 +1584,7 @@ class EmptyFrameAnalyzer:
 
             # 优化：合并4次查询为1次，在应用层分组计算
             deduplicated_result = self.cache_manager.get_all_thread_loads_with_info_for_pids(
-                self.cache_manager.app_pids,
-                time_ranges=extended_merged_ranges
+                self.cache_manager.app_pids, time_ranges=extended_merged_ranges
             )
 
             deduplicated_empty_frame_load = deduplicated_result['total_load']
@@ -1595,7 +1594,9 @@ class EmptyFrameAnalyzer:
 
             recalc_time = time.time() - recalc_start
             timing_stats['recalc_deduplicated_loads'] = recalc_time
-            logging.info(f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(extended_merged_ranges)}个)')
+            logging.info(
+                f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(extended_merged_ranges)}个)'
+            )
 
         # 保存原始 empty_frame_load 到 timing_stats（用于日志对比）
         timing_stats['original_empty_frame_load'] = original_empty_frame_load
