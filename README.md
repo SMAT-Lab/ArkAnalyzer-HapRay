@@ -258,7 +258,38 @@ hilog:
 - `name`: Rule name for identification and Excel sheet naming
 - `regex`: Regular expression with capture groups
 - `groups`: Array of group indices to extract (1-based, 0 for entire match)
-- `conditions`: Array of conditions corresponding to groups, supporting operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- `conditions`: Condition filtering, supports two formats:
+  1. **Array format**: Corresponds to groups one-to-one, supports operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+  2. **Expression string**: Supports mathematical operations and comparisons (automatically detected when contains `$`)
+
+**Expression Syntax** (when using `conditions` as expression string):
+- `$1`, `$2`, `$3`... represent the 1st, 2nd, 3rd... extracted group values (corresponding to positions in `groups` array)
+- Supports mathematical operations: `+`, `-`, `*`, `/`, `%`
+- Supports comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Supports parentheses: `()`
+- Supports multiple expressions (AND logic): Use comma (`,`) or `&&` to separate expressions. All expressions must be satisfied.
+
+**Examples**:
+```yaml
+# Array format (simple conditions)
+- name: "Memory type != 4"
+  regex: "CreatePixelMap success,.*memType\\s*:\\s*(\\d+)"
+  groups: [1]
+  conditions: ["!=4"]  # Group 1 != 4
+
+# Expression format (complex calculations)
+- name: "Compare width*height products"
+  regex: "width\\s*:\\s*(\\d+).*height\\s*:\\s*(\\d+).*width2\\s*:\\s*(\\d+).*height2\\s*:\\s*(\\d+)"
+  groups: [1, 2, 3, 4]  # Extract: width1, height1, width2, height2
+  conditions: "$1 * $2 > $3 * $4"  # Product of first pair > product of second pair
+
+# Multiple expressions (AND logic)
+- name: "Multiple conditions"
+  regex: "value1\\s*:\\s*(\\d+).*value2\\s*:\\s*(\\d+).*value3\\s*:\\s*(\\d+).*value4\\s*:\\s*(\\d+)"
+  groups: [1, 2, 3, 4]
+  conditions: "$1*$2>0,$3*$4>512*512"  # Using comma separator: $1*$2>0 AND $3*$4>512*512
+  # Or use && separator: conditions: "$1*$2>0 && $3*$4>512*512"
+```
 
 Example:
 ```bash
