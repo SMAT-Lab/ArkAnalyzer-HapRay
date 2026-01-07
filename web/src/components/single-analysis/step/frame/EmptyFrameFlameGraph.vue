@@ -211,7 +211,7 @@ function buildTooltipHtml(node) {
         ${file ? `
           <div style="font-size: 13px; margin: 6px 0; display: flex; justify-content: space-between; gap: 16px;">
             <span style="color: #e2e8f0; font-weight: 600;">文件：</span>
-            <span style="color: #ffffff; font-weight: 700; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file}</span>
+            <span style="color: #ffffff; font-weight: 700; max-width: 360px; white-space: normal; word-break: break-all;">${file}</span>
           </div>
         ` : ''}
       `}
