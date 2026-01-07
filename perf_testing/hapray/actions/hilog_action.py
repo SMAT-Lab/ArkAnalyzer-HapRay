@@ -30,6 +30,167 @@ from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.config.config import Config
 
 
+class ExpressionEvaluator:
+    """表达式评估器，支持分组值的数学运算和比较"""
+
+    @staticmethod
+    def evaluate_expression(expression: str, extracted_values: list) -> bool:
+        """
+        评估表达式，支持分组值引用和数学运算
+
+        表达式语法：
+        - $1, $2, $3... 表示第1、2、3...个分组值（从1开始）
+        - 支持数学运算：+, -, *, /, %
+        - 支持比较运算符：==, !=, <, >, <=, >=
+        - 支持括号：()
+        - 支持多个表达式（AND逻辑）：用逗号或 && 分隔，所有表达式都满足才返回True
+
+        示例：
+        - "$1 * $2 > $3 * $4"  # 分组1和2的乘积大于分组3和4的乘积
+        - "($1 + $2) == ($3 + $4)"  # 分组1和2的和等于分组3和4的和
+        - "$1 > 100"  # 分组1大于100
+        - "$1*$2>0,$3*$4>512"  # 多个条件：分组1*2>0 且 分组3*4>512
+        - "$1>10 && $2<100"  # 使用 && 连接多个条件
+        """
+        if not expression or not expression.strip():
+            return True
+
+        try:
+            expr = expression.strip()
+
+            # 检查是否包含多个表达式（用逗号或 && 分隔）
+            # 先检查 &&，因为可能包含在比较运算符中（如 >=）
+            if ' && ' in expr or expr.count('&&') > 0:
+                # 使用 && 分隔（注意处理 >= 和 <= 中的 &）
+                # 简单处理：只分割独立的 &&（前后有空格或括号）
+                parts = re.split(r'\s+&&\s+', expr)
+                if len(parts) > 1:
+                    # 多个表达式，所有都满足才返回True
+                    for part in parts:
+                        if not ExpressionEvaluator._evaluate_single_expression(part.strip(), extracted_values):
+                            return False
+                    return True
+
+            # 检查逗号分隔（注意：逗号可能在括号内，需要处理）
+            if ',' in expr:
+                # 分割表达式，但需要考虑括号内的逗号
+                # 简单方法：按逗号分割，但检查每个部分是否包含未匹配的括号
+                parts = []
+                current_part = ''
+                paren_count = 0
+                for char in expr:
+                    if char == '(':
+                        paren_count += 1
+                        current_part += char
+                    elif char == ')':
+                        paren_count -= 1
+                        current_part += char
+                    elif char == ',' and paren_count == 0:
+                        # 括号外部的逗号，分割点
+                        if current_part.strip():
+                            parts.append(current_part.strip())
+                        current_part = ''
+                    else:
+                        current_part += char
+                # 添加最后一部分
+                if current_part.strip():
+                    parts.append(current_part.strip())
+
+                if len(parts) > 1:
+                    # 多个表达式，所有都满足才返回True
+                    for part in parts:
+                        if not ExpressionEvaluator._evaluate_single_expression(part, extracted_values):
+                            return False
+                    return True
+
+            # 单个表达式
+            return ExpressionEvaluator._evaluate_single_expression(expr, extracted_values)
+
+        except Exception as e:
+            logging.warning(f'Error evaluating expression "{expression}": {str(e)}')
+            return False
+
+    @staticmethod
+    def _evaluate_single_expression(expression: str, extracted_values: list) -> bool:
+        """
+        评估单个表达式
+        """
+        if not expression or not expression.strip():
+            return True
+
+        try:
+            expr = expression.strip()
+
+            # 替换分组引用 $1, $2, $3... 为实际值
+            # 使用正则表达式匹配 $数字
+            def replace_group_ref(match):
+                group_num = int(match.group(1))
+                # 分组索引从1开始，转换为列表索引（从0开始）
+                idx = group_num - 1
+                if 0 <= idx < len(extracted_values):
+                    value = extracted_values[idx]
+                    if value is None:
+                        logging.warning(f'Group reference ${group_num} is None')
+                        return '0'  # None 值转换为 0，避免表达式错误
+                    # 尝试转换为数字（表达式通常用于数值计算）
+                    try:
+                        # 先尝试整数，再尝试浮点数
+                        if isinstance(value, (int, float)):
+                            return str(float(value))
+                        # 尝试字符串转数字
+                        num_value = float(str(value).strip())
+                        return str(num_value)
+                    except (ValueError, TypeError):
+                        # 如果不能转换为数字，记录警告并返回 0
+                        logging.warning(
+                            f'Group reference ${group_num} value "{value}" cannot be converted to number. '
+                            f'Using 0 in expression.'
+                        )
+                        return '0'
+                else:
+                    logging.warning(
+                        f'Group reference ${group_num} is out of range '
+                        f'(available groups: 1-{len(extracted_values)}). Using 0 in expression.'
+                    )
+                    return '0'
+
+            # 替换所有 $数字 引用
+            expr = re.sub(r'\$(\d+)', replace_group_ref, expr)
+
+            # 安全评估表达式
+            # 只允许数字、运算符、括号和比较运算符
+            # 检查表达式是否只包含安全的字符
+            safe_chars = r'[\d\.\+\-\*\/\%\(\)\s<>=!]'
+            if not re.match(r'^' + safe_chars + r'+$', expr.replace('==', '').replace('!=', '').replace('<=', '').replace('>=', '')):
+                logging.warning(f'Expression contains unsafe characters: {expression}')
+                return False
+
+            # 使用 eval 计算表达式（表达式来自配置文件，相对安全）
+            # 限制可用的内置函数和变量
+            safe_dict = {
+                '__builtins__': {},
+                'abs': abs,
+                'min': min,
+                'max': max,
+                'round': round,
+            }
+
+            result = eval(expr, safe_dict)
+
+            # 结果应该是布尔值
+            if isinstance(result, bool):
+                return result
+            if isinstance(result, (int, float)):
+                # 如果结果是数字，非零为True
+                return bool(result)
+            logging.warning(f'Expression result is not boolean: {result}')
+            return False
+
+        except Exception as e:
+            logging.warning(f'Error evaluating expression "{expression}": {str(e)}')
+            return False
+
+
 class ConditionEvaluator:
     """条件表达式评估器"""
 
@@ -256,7 +417,29 @@ class HilogAction:
                 groups = pattern.get('groups', [0])
                 conditions = pattern.get('conditions', [])
 
-                pattern_configs[pattern_name] = {'regex': regex_pattern, 'groups': groups, 'conditions': conditions}
+                # 兼容旧的 expression 配置（已废弃，建议使用 conditions）
+                if 'expression' in pattern:
+                    expression = pattern.get('expression')
+                    if conditions:
+                        logging.warning(
+                            f'Pattern "{pattern_name}": Both "expression" and "conditions" are specified. '
+                            f'Using "expression" and ignoring "conditions". '
+                            f'Note: "expression" is deprecated, please use "conditions" instead.'
+                        )
+                        conditions = []
+                    else:
+                        # 将 expression 转换为 conditions 字符串格式
+                        conditions = expression
+                        logging.warning(
+                            f'Pattern "{pattern_name}": "expression" is deprecated, '
+                            f'please use "conditions" instead.'
+                        )
+
+                pattern_configs[pattern_name] = {
+                    'regex': regex_pattern,
+                    'groups': groups,
+                    'conditions': conditions
+                }
                 results[pattern_name] = []
                 if detail:
                     detail_data[pattern_name] = {'matched': [], 'unmatched': []}
@@ -319,13 +502,26 @@ class HilogAction:
                                 # Apply conditions filtering
                                 conditions_met = True
                                 if extracted_values and conditions:
-                                    # Check if all conditions are satisfied
-                                    for i, (value, condition) in enumerate(zip(extracted_values, conditions)):
-                                        if i < len(conditions) and condition:
-                                            value_str = str(value) if value is not None else ''
-                                            if not ConditionEvaluator.evaluate_condition(value_str, condition):
-                                                conditions_met = False
-                                                break
+                                    # 如果 conditions 是字符串且包含 $，使用表达式评估器
+                                    if isinstance(conditions, str) and '$' in conditions:
+                                        # 使用表达式评估（支持分组值的数学运算和比较）
+                                        conditions_met = ExpressionEvaluator.evaluate_expression(
+                                            conditions, extracted_values
+                                        )
+                                    elif isinstance(conditions, list):
+                                        # 使用传统的条件数组方式（向后兼容）
+                                        # Check if all conditions are satisfied (AND logic)
+                                        for i, (value, condition) in enumerate(zip(extracted_values, conditions)):
+                                            if i < len(conditions) and condition:
+                                                value_str = str(value) if value is not None else ''
+                                                if not ConditionEvaluator.evaluate_condition(value_str, condition):
+                                                    conditions_met = False
+                                                    break
+                                    else:
+                                        logging.warning(
+                                            f'Pattern "{pattern_name}": Invalid conditions type: {type(conditions)}'
+                                        )
+                                        conditions_met = False
 
                                 # Handle detail mode: save matched strings
                                 if detail and full_match_string:
