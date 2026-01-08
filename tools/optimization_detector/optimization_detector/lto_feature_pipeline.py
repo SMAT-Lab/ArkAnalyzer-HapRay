@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
 import joblib
 import numpy as np
@@ -2089,6 +2089,7 @@ def main(args):
 # AllFeatureExtractor - 融合所有特征提取器
 # ======================================================================
 
+
 class AllFeatureExtractor:
     """
     融合所有 feature-mode：
@@ -2102,13 +2103,13 @@ class AllFeatureExtractor:
         self.hier = CompilerProvenanceExtractor(max_bytes=hier_max_bytes)
         self.o3 = O3FocusedFeatureExtractor()
 
-    def extract(self, path: str) -> Tuple[np.ndarray, List[str], str]:
+    def extract(self, path: str) -> tuple[np.ndarray, list[str], str]:
         f_leg, n_leg, k = self.leg.extract(path)
         f_hier, n_hier, _ = self.hier.extract(path)
         f_o3, n_o3, _ = self.o3.extract(path)
-        n_leg = [f"LEG_{n}" for n in n_leg]
-        n_hier = [f"HIER_{n}" for n in n_hier]
-        n_o3 = [f"O3_{n}" for n in n_o3]
+        n_leg = [f'LEG_{n}' for n in n_leg]
+        n_hier = [f'HIER_{n}' for n in n_hier]
+        n_o3 = [f'O3_{n}' for n in n_o3]
         feats = np.concatenate([f_leg, f_hier, f_o3]).astype(np.float32)
         names = n_leg + n_hier + n_o3
         return feats, names, k
