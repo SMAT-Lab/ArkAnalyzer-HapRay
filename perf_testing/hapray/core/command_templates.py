@@ -13,13 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-# Template for basic performance collection command
-PERF_CMD_TEMPLATE = (
-    '{cmd} {pids} --call-stack dwarf --kernel-callchain -f 1000 '
-    '--cpu-limit 100 -e {event} --enable-debuginfo-symbolic '
-    '--clockid boottime -m 1024 -d {duration} {output_path}'
-)
-
 # Plugin configuration templates (defined before templates that use them)
 FTRACE_PLUGIN_CONFIG = """# ftrace plugin configuration
 plugin_configs {
@@ -77,50 +70,17 @@ plugin_configs {
   }
 }"""
 
-# Template for combined trace and performance collection command
-# Note: ftrace_config placeholder will be replaced with indented FTRACE_PLUGIN_CONFIG
-TRACE_PERF_CMD_TEMPLATE = """hiprofiler_cmd \\
-  -c - \\
-  -o {output_path}.htrace \\
-  -t {duration} \\
-  -s \\
-  -k \\
-<<CONFIG
-# Session configuration
- request_id: 1
- session_config {{
-  buffers {{
-   pages: 16384
-  }}
- }}
-
-{ftrace_config}
-
-# hiperf plugin configuration
- plugin_configs {{
+PERF_PLUGIN_CONFIG = """# hiperf plugin configuration
+plugin_configs {{
   plugin_name: "hiperf-plugin"
   config_data {{
    is_root: false
-   outfile_name: "{output_path}"
-   record_args: "{record_args}"
+   outfile_name: "/data/local/tmp/perf.data"
+   record_args: "-f 1000 {pids} --cpu-limit 100 -e {event} --call-stack dwarf --clockid boottime --kernel-callchain -m 1024"
   }}
- }}
-CONFIG"""
+}}"""
 
-# Native Memory 配置模板 - 应用级采集（固定参数，只有 expand_pids 动态替换）
-NATIVE_MEMORY_CONFIG = """hiprofiler_cmd \\
-  -c - \\
-  -o {output_path}.htrace \\
-  -t {duration} \\
-  -s \\
-  -k \\
-<<CONFIG
-request_id: 1
-session_config {{
-  buffers {{
-    pages: 16384
-  }}
-}}
+MEMORY_PLUGIN_CONFIG = """# nativehook plugin configuration
 plugin_configs {{
   plugin_name: "nativehook"
   sample_interval: 5000
@@ -138,7 +98,30 @@ plugin_configs {{
     malloc_free_matching_interval: 10
 {expand_pids}
   }}
-}}
+}}"""
+
+# Template for hiprofiler command
+# Note: ftrace_config, perf_config, memory_config placeholders will be replaced with indented plugin configs
+HIPROFILER_CMD_TEMPLATE = """hiprofiler_cmd \\
+  -c - \\
+  -o {output_path}.htrace \\
+  -t {duration} \\
+  -s \\
+  -k \\
+<<CONFIG
+# Session configuration
+ request_id: 1
+ session_config {{
+  buffers {{
+   pages: 16384
+  }}
+ }}
+
+{ftrace_config}
+
+{perf_config}
+
+{memory_config}
 CONFIG"""
 
 # Collection mode constants

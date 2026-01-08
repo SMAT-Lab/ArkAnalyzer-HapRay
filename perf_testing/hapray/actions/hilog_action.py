@@ -161,7 +161,9 @@ class ExpressionEvaluator:
             # 只允许数字、运算符、括号和比较运算符
             # 检查表达式是否只包含安全的字符
             safe_chars = r'[\d\.\+\-\*\/\%\(\)\s<>=!]'
-            if not re.match(r'^' + safe_chars + r'+$', expr.replace('==', '').replace('!=', '').replace('<=', '').replace('>=', '')):
+            if not re.match(
+                r'^' + safe_chars + r'+$', expr.replace('==', '').replace('!=', '').replace('<=', '').replace('>=', '')
+            ):
                 logging.warning(f'Expression contains unsafe characters: {expression}')
                 return False
 
@@ -431,15 +433,10 @@ class HilogAction:
                         # 将 expression 转换为 conditions 字符串格式
                         conditions = expression
                         logging.warning(
-                            f'Pattern "{pattern_name}": "expression" is deprecated, '
-                            f'please use "conditions" instead.'
+                            f'Pattern "{pattern_name}": "expression" is deprecated, please use "conditions" instead.'
                         )
 
-                pattern_configs[pattern_name] = {
-                    'regex': regex_pattern,
-                    'groups': groups,
-                    'conditions': conditions
-                }
+                pattern_configs[pattern_name] = {'regex': regex_pattern, 'groups': groups, 'conditions': conditions}
                 results[pattern_name] = []
                 if detail:
                     detail_data[pattern_name] = {'matched': [], 'unmatched': []}
