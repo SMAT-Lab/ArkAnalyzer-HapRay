@@ -1,0 +1,17 @@
+{
+    "description": "HapTest automated UI exploration test for JD.com app",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "HapTest_JD.py"
+        ]
+    },
+    "kits": [
+    ]
+}

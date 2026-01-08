@@ -704,19 +704,27 @@ CONFIG"""
             os.makedirs(path, exist_ok=True)
 
     def _transfer_perf_data(self, remote_path: str, local_path: str):
-        """Transfer performance data from device to host"""
-        if not self.driver.has_file(remote_path):
-            Log.error('Not found %s', remote_path)
-            return
-        self.driver.shell(
-            f'hiperf report -i {remote_path} --json -o {remote_path}.json --symbol-dir /data/local/tmp/so_dir'
-        )
-        self.driver.pull_file(remote_path, local_path)
-        self.driver.pull_file(f'{remote_path}.json', os.path.join(os.path.dirname(local_path), 'perf.json'))
-        if os.path.exists(local_path):
-            Log.info(f'Performance data saved: {local_path}')
+        """Transfer performance data from device to host
+        
+        Note: When using trace+perf mode with hiprofiler_cmd, perf data is embedded
+        in the .htrace file and there's no separate perf.data file.
+        """
+        # Check if separate perf.data file exists (standalone perf mode)
+        if self.driver.has_file(remote_path):
+            # Standalone perf mode - generate JSON report and transfer
+            self.driver.shell(
+                f'hiperf report -i {remote_path} --json -o {remote_path}.json --symbol-dir /data/local/tmp/so_dir'
+            )
+            self.driver.pull_file(remote_path, local_path)
+            self.driver.pull_file(f'{remote_path}.json', os.path.join(os.path.dirname(local_path), 'perf.json'))
+            if os.path.exists(local_path):
+                Log.info(f'Performance data saved: {local_path}')
+            else:
+                Log.error(f'Failed to transfer performance data: {local_path}')
         else:
-            Log.error(f'Failed to transfer performance data: {local_path}')
+            # Trace+perf combined mode - perf data is in .htrace file
+            Log.info(f'Skipping separate perf.data transfer (using trace+perf mode): {remote_path}')
+            Log.info(f'Performance data is embedded in trace.htrace file')
 
     def _transfer_trace_data(self, remote_path: str, local_path: str):
         """Transfer trace data from device to host"""

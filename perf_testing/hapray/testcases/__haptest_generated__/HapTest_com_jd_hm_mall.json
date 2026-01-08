@@ -1,0 +1,17 @@
+{
+    "description": "Auto-generated HapTest for 京东 (com.jd.hm.mall)",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "HapTest_com_jd_hm_mall.py"
+        ]
+    },
+    "kits": [
+    ]
+}
