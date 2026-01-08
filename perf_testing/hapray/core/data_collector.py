@@ -354,7 +354,7 @@ class DataCollector:
             filename = f'process_dmabuff_info_{timestamp}.txt'
             filepath = os.path.join(dmabuf_dir, filename)
 
-            cmd = 'cat /proc/process_dmabuff_info'
+            cmd = 'cat /proc/process_dmabuf_info'
             Log.debug(f'采集DMA数据: {cmd}')
             result = self.driver.shell(cmd)
 
