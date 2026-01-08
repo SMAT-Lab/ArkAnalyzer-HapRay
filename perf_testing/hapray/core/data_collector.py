@@ -127,7 +127,7 @@ class DataCollector:
         local_trace_path = os.path.join(trace_step_dir, FILENAME_TRACE_HTRACE)
 
         self.process_manager.save_process_info(perf_step_dir)
-        self.data_transfer.transfer_perf_data(device_file, local_perf_path)
+        self.data_transfer.transfer_perf_data('/data/local/tmp/perf.data', local_perf_path)
         self.data_transfer.transfer_trace_data(device_file, local_trace_path)
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
