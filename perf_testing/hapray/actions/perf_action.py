@@ -322,6 +322,7 @@ class PerfAction:
 
         # Configure collection modes
         Config.set('trace.enable', not parsed_args.no_trace)
+        Config.set('hiperf.enable', not parsed_args.no_perf)
         Config.set('memory.enable', parsed_args.memory)
         Config.set('memory.snapshot_enable', parsed_args.snapshot)
 
