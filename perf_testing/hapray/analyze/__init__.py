@@ -275,13 +275,17 @@ def _process_single_step(step_dir: str, scene_dir: str, analyzers: list[BaseAnal
     # Data conversion phase
     conversion_start_time = time.time()
 
-    logging.info('Converting perf to db for %s...', step_dir)
-    perf_convert_start = time.time()
-    if not ExeUtils.convert_data_to_db(perf_file, perf_db):
-        logging.error('Failed to convert perf to db for %s', step_dir)
-        return
-    perf_convert_time = time.time() - perf_convert_start
-    logging.info('Perf conversion for %s completed in %.2f seconds', step_dir, perf_convert_time)
+    # Try to convert perf.data if it exists (standalone perf mode)
+    if os.path.exists(perf_file):
+        logging.info('Converting perf to db for %s...', step_dir)
+        perf_convert_start = time.time()
+        if not ExeUtils.convert_data_to_db(perf_file, perf_db):
+            logging.error('Failed to convert perf to db for %s', step_dir)
+        else:
+            perf_convert_time = time.time() - perf_convert_start
+            logging.info('Perf conversion for %s completed in %.2f seconds', step_dir, perf_convert_time)
+    else:
+        logging.info('Skipping perf.data conversion for %s (file not found, may be using trace+perf mode)', step_dir)
 
     if not os.path.exists(trace_db) and os.path.exists(htrace_file):
         logging.info('Converting htrace to db for %s...', step_dir)
