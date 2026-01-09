@@ -318,7 +318,7 @@ class FlutterEmptyFrameDetector(FrameworkSpecificDetector):
             raster_itid: 1.raster 线程的内部 ID
 
         Returns:
-            List[Tuple]: [(event_id, ts, dur, name, frame_damage), ...]
+            list[tuple]: [(event_id, ts, dur, name, frame_damage), ...]
         """
         cursor = self.trace_conn.cursor()
         cursor.execute(

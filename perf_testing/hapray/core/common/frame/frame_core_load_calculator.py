@@ -394,7 +394,7 @@ class FrameLoadCalculator:
             step_id: 步骤ID，用于缓存key
 
         Returns:
-            List[Dict]: 调用链信息列表，每个元素包含symbol和path信息
+            list[dict]: 调用链信息列表，每个元素包含symbol和path信息
         """
         callchain_start_time = time.time()
 
@@ -813,7 +813,7 @@ class FrameLoadCalculator:
             perf_df: perf样本DataFrame
 
         Returns:
-            List[Dict]: 帧负载数据列表
+            list[dict[str, Any]]: 帧负载数据列表
         """
         frame_loads = []
 

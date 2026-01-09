@@ -898,7 +898,7 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
         - flag = 3: rs进程与app进程起止异常（|expRsStartTime - expUiEndTime| < 1ms 正常，否则异常）
 
         Returns:
-            Dict[int, List[Dict[str, Any]]]: 按vsync值分组的帧数据
+            dict[int, list[dict[str, Any]]]: 按vsync值分组的帧数据
         """
         if not self.trace_conn:
             logging.error('trace_conn未建立，无法解析帧数据')
