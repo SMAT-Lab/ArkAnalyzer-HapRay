@@ -389,6 +389,108 @@
           "help": "开启详细模式：将匹配到的字符串保存到 hilog_detail.json 文件中"
         }
       }
+    },
+    "gui-agent": {
+      "name": "GUI Agent自动化",
+      "description": "使用LLM驱动的Agent进行手机自动化操作",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "model-base-url": {
+          "type": "str",
+          "label": "LLM API地址",
+          "required": false,
+          "default": "http://localhost:8000/v1",
+          "help": "LLM API基础URL（默认: http://localhost:8000/v1，环境变量: GUI_LLM_BASE_URL）"
+        },
+        "model-name": {
+          "type": "str",
+          "label": "模型名称",
+          "required": false,
+          "default": "autoglm-phone-9b",
+          "help": "模型名称（默认: autoglm-phone-9b，环境变量: GUI_LLM_MODEL）"
+        },
+        "model-api-key": {
+          "type": "str",
+          "label": "API密钥",
+          "required": false,
+          "help": "模型认证API密钥（环境变量: GUI_LLM_API_KEY）"
+        },
+        "max-steps": {
+          "type": "int",
+          "label": "最大步数",
+          "required": false,
+          "default": 50,
+          "help": "每个任务的最大执行步数（默认: 50）"
+        },
+        "device-id": {
+          "type": "str",
+          "label": "设备ID",
+          "required": false,
+          "help": "多设备环境下的设备ID"
+        },
+        "task": {
+          "type": "str",
+          "label": "单个任务",
+          "required": false,
+          "help": "要执行的单个任务（自然语言描述），必须指定 task、tasks 或 tasks-file 之一"
+        },
+        "tasks": {
+          "type": "str",
+          "label": "多个任务",
+          "required": false,
+          "nargs": "+",
+          "help": "要执行的多个任务（自然语言描述），支持多个值"
+        },
+        "tasks-file": {
+          "type": "file",
+          "label": "任务文件",
+          "required": false,
+          "help": "包含任务列表的JSON文件（数组格式）"
+        },
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "short": "o",
+          "help": "保存步骤数据的路径（格式: output / 应用名 / 任务名）"
+        }
+      }
+    }
+  },
+  "config": {
+    "description": "负载测试插件配置项",
+    "items": {
+      "gui_llm_api_key": {
+        "type": "str",
+        "label": "LLM API Key",
+        "default": "",
+        "help": "LLM API Key",
+        "required": false
+      },
+      "gui_llm_base_url": {
+        "type": "str",
+        "label": "LLM Base URL",
+        "default": "http://localhost:8000/v1",
+        "help": "LLM Base URL",
+        "required": false
+      },
+      "gui_llm_model": {
+        "type": "str",
+        "label": "LLM Model",
+        "default": "autoglm-phone-9b",
+        "help": "LLM Model",
+        "required": false
+      },
+      "logger_level": {
+        "type": "choice",
+        "label": "日志级别",
+        "default": "INFO",
+        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
+        "help": "日志输出级别",
+        "required": false
+      }
     }
   }
 }

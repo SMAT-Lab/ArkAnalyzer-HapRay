@@ -33,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides seven main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, and `hilog` for hilog analysis.
+The tool provides eight main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, `hilog` for hilog analysis, and `gui-agent` for AI-powered phone automation.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -226,6 +226,66 @@ Example:
 ```bash
 # Specify output file
 python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
+```
+
+#### GUI Agent Automation (`gui-agent`)
+```bash
+python -m scripts.main gui-agent [options]
+```
+Options:
+- `--gui-llm-base-url <url>`: LLM API base URL (default: http://localhost:8000/v1, env: GUI_LLM_BASE_URL)
+- `--gui-llm-model <name>`: Model name (default: autoglm-phone-9b, env: GUI_LLM_MODEL)
+- `--gui-llm-api-key <key>`: API key for model authentication (env: GUI_LLM_API_KEY)
+- `--max-steps <N>`: Maximum steps per task (default: 50)
+- `--device-id <id>`: Device ID for multi-device setups
+- `--task <description>`: Single task to execute (natural language description)
+- `--tasks <task1> <task2> ...`: Multiple tasks to execute (natural language descriptions)
+- `--tasks-file <path>`: JSON file containing tasks list (array of strings)
+- `-o/--output <path>`: Path to save step data (format: output / app_name / task_name)
+
+Features:
+- **AI-powered automation**: Uses LLM to understand and execute natural language tasks
+- **Single and batch execution**: Support for both single task and multiple tasks
+- **Step data collection**: Automatically collects UI data after each step
+- **Flexible task input**: Support for command-line tasks or JSON file input
+
+Environment Variables:
+- `GUI_LLM_BASE_URL`: Model API base URL (default: http://localhost:8000/v1)
+- `GUI_LLM_API_KEY`: API key for model authentication
+- `GUI_LLM_MODEL`: Model name (default: autoglm-phone-9b)
+
+Example:
+```bash
+# Execute a single task
+python -m scripts.main gui-agent --task "打开微信查看消息" --output ./reports
+
+# Execute multiple tasks
+python -m scripts.main gui-agent --tasks "打开微信查看消息" "打开小红书搜索美食攻略" --output ./reports
+
+# Execute tasks from JSON file
+python -m scripts.main gui-agent --tasks-file tasks.json --output ./reports
+
+# With custom model configuration
+python -m scripts.main gui-agent --task "打开微信查看消息" \
+  --gui-llm-base-url "http://your-server:8000/v1" \
+  --gui-llm-model "your-model" \
+  --gui-llm-api-key "your-api-key" \
+  --output ./reports
+
+# Using environment variables
+export GUI_LLM_BASE_URL="http://localhost:8000/v1"
+export GUI_LLM_API_KEY="your-api-key"
+export GUI_LLM_MODEL="autoglm-phone-9b"
+python -m scripts.main gui-agent --task "打开微信查看消息" --output ./reports
+```
+
+**Task File Format** (JSON):
+```json
+[
+  "打开微信查看消息",
+  "打开小红书搜索美食攻略",
+  "打开高德地图查看实时路况"
+]
 ```
 
 #### Hilog Analysis (`hilog`)
