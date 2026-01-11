@@ -1,0 +1,15 @@
+{
+  "description": "",
+  "environment": [
+    {
+      "type": "device",
+      "label": "phone"
+    }
+  ],
+  "driver": {
+    "type": "DeviceTest",
+    "py_file": [
+      "MemLoad_xhs_0010.py"
+    ]
+  }
+}
