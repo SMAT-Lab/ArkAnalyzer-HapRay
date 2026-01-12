@@ -17,95 +17,14 @@ import argparse
 import base64
 import logging
 import os
-import shutil
-import subprocess
 import time
 from typing import Optional
+
+from hypium import UiDriver
 
 from hapray import VERSION
 from hapray.analyze.ui_analyzer import UIAnalyzer
 from hapray.core.capture_ui import CaptureUI
-
-ENV_ERR_STR = """
-The hdc command is not in PATH.
-Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/),
-then add the following directories to PATH.
-    $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
-"""
-
-
-def check_env() -> bool:
-    """验证hdc命令是否在PATH中"""
-    return bool(shutil.which('hdc'))
-
-
-class HDCCommandAdapter:
-    """HDC命令适配器，将hdc命令包装成driver接口供CaptureUI使用"""
-
-    def __init__(self, execute_command_func, device_sn: Optional[str] = None):
-        """
-        初始化适配器
-
-        Args:
-            execute_command_func: 执行hdc命令的函数
-            device_sn: 设备序列号（可选）
-        """
-        self._execute_command = execute_command_func
-        self.device_sn = device_sn
-        # 设置device属性指向自己，供UiTree使用
-        self.device = self
-
-    def shell(self, command: str) -> str:
-        """
-        执行shell命令（适配driver.shell接口）
-
-        Args:
-            command: shell命令字符串
-
-        Returns:
-            命令输出结果
-        """
-        # 将shell命令包装成hdc shell命令
-        return self._execute_command(f'shell {command}')
-
-    def pull_file(self, remote_path: str, local_path: str):
-        """
-        拉取文件（适配driver.pull_file接口）
-
-        Args:
-            remote_path: 远程文件路径
-            local_path: 本地保存路径
-        """
-        # 使用hdc file recv命令
-        if self.device_sn:
-            full_command = f'hdc -t {self.device_sn} file recv {remote_path} {local_path}'
-        else:
-            full_command = f'hdc file recv {remote_path} {local_path}'
-        os.system(full_command)
-
-    def get_uitest_cmd(self) -> str:
-        """
-        返回设备端uitest命令（适配UiTree接口）
-
-        Returns:
-            uitest命令字符串
-        """
-        return 'uitest'
-
-    def execute_shell_command(self, command: str, timeout: float = 60) -> str:
-        """
-        执行shell命令（适配UiTree接口）
-
-        Args:
-            command: shell命令字符串
-            timeout: 超时时间（秒），默认60秒
-
-        Returns:
-            命令输出结果
-        """
-        # 将shell命令包装成hdc shell命令
-        # timeout参数暂时忽略，因为_execute_command不支持timeout
-        return self._execute_command(f'shell {command}')
 
 
 class UIAction:
@@ -119,49 +38,23 @@ class UIAction:
             device_sn: 设备序列号（可选）
         """
         self.output_dir = output_dir
-        self.device_sn = device_sn or self._detect_device()
+
         self.logger = logging.getLogger(self.__class__.__name__)
         os.makedirs(output_dir, exist_ok=True)
 
-        # 创建HDC命令适配器作为driver（避免UiDriver阻塞问题）
-        self.driver = HDCCommandAdapter(self._execute_hdc_command, self.device_sn)
-
-        # 初始化CaptureUI，传入driver
+        self.driver = UiDriver.connect(device_sn=device_sn)
         self.capture_ui = CaptureUI(self.driver)
 
-    def _detect_device(self) -> Optional[str]:
-        """检测连接的HarmonyOS设备"""
-        try:
-            result = os.popen('hdc list targets').read()
-            devices = [line.split('\t')[0] for line in result.splitlines() if line.strip()]
-            if devices:
-                return devices[0]  # 使用第一个可用设备
-        except Exception:
-            self.logger.warning('⚠️ 设备检测失败，使用默认设备')
-        return None
-
-    def _execute_hdc_command(self, command: str) -> str:
-        """执行hdc命令
-
-        Args:
-            command: hdc命令字符串
-
-        Returns:
-            命令输出结果
+    def __del__(self):
+        """
+        析构函数，关闭driver连接以释放资源
         """
         try:
-            full_command = f'hdc -t {self.device_sn} {command}' if self.device_sn else f'hdc {command}'
-
-            self.logger.debug(f'执行命令: {full_command}')
-            result = subprocess.run(
-                full_command, check=False, shell=True, capture_output=True, text=True, encoding='utf-8', errors='ignore'
-            )
-            if result.returncode != 0:
-                self.logger.warning(f'命令执行返回非零状态码: {result.returncode}, stderr: {result.stderr}')
-            return result.stdout
-        except Exception as e:
-            self.logger.error(f'执行hdc命令失败: {e}')
-            return ''
+            if hasattr(self, 'driver') and self.driver is not None:
+                self.driver.close()
+        except Exception:
+            # 析构函数中不应该抛出异常，静默处理
+            pass
 
     def collect_ui_data(self) -> bool:
         """收集UI数据（截屏、dump组件树和inspector JSON）
@@ -477,7 +370,6 @@ class UIAction:
             self.logger.info('=' * 60)
             self.logger.info('开始UI分析流程')
             self.logger.info(f'输出目录: {self.output_dir}')
-            self.logger.info(f'设备序列号: {self.device_sn or "默认"}')
             self.logger.info('=' * 60)
 
             # 1. 收集UI数据
@@ -515,10 +407,6 @@ class UIAction:
     def execute(args):
         """执行UI分析工作流"""
         if '--multiprocessing-fork' in args:
-            return None
-
-        if not check_env():
-            logging.error(ENV_ERR_STR)
             return None
 
         parser = argparse.ArgumentParser(
