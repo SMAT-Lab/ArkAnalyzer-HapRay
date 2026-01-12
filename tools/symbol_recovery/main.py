@@ -8,12 +8,14 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Optional
 
 from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
+from core.analyzers.memory_flamegraph_analyzer import MemoryFlameGraphAnalyzer
 from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
 from core.utils.config import (
     CALL_COUNT_ANALYSIS_PATTERN,
@@ -44,7 +46,7 @@ logger = get_logger(__name__)
 
 def create_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description='SymRecover - 二进制符号恢复工具：支持 perf.data 和 Excel 偏移量两种模式',
+        description='SymRecover - 二进制符号恢复工具：支持 perf.data、Excel 偏移量和内存模式火焰图三种模式',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -79,10 +81,16 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
   # Excel 分析模式（不使用 LLM）
   python3 main.py --excel-file test.xlsx --so-file /path/to/lib.so --no-llm
+
+  # 内存模式（从火焰图 HTML 文件中提取符号）
+  python3 main.py --memory-mode --html-dir /path/to/flamegraphs --so-dir /path/to/so/directory
+
+  # 内存模式（指定分析数量）
+  python3 main.py --memory-mode --html-dir /path/to/flamegraphs --so-dir /path/to/so/directory --top-n 100
         """,
     )
 
-    # 模式选择：Excel 分析模式或 perf 分析模式
+    # 模式选择：Excel 分析模式、perf 分析模式或内存模式
     parser.add_argument(
         '--excel-file',
         type=str,
@@ -94,6 +102,17 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help='SO 文件路径（Excel 分析模式必需）。如果未指定，将使用 --so-dir 目录下的默认 SO 文件',
+    )
+    parser.add_argument(
+        '--memory-mode',
+        action='store_true',
+        help='启用内存模式：从火焰图 HTML 文件中提取符号地址进行分析',
+    )
+    parser.add_argument(
+        '--html-dir',
+        type=str,
+        default=None,
+        help='火焰图 HTML 文件目录（内存模式必需）。包含需要分析的 HTML 火焰图文件',
     )
 
     # 输入参数（perf 分析模式）
@@ -731,6 +750,108 @@ def summarize_outputs(args, output_dir: Path):
             logger.info(f'  - {html_input} (modified, symbols replaced)')
 
 
+def handle_memory_mode(args, output_dir: Path):
+    """处理内存模式：从火焰图 HTML 文件中提取符号并恢复"""
+    if not args.memory_mode:
+        return False
+
+    logger.info('=' * 80)
+    logger.info('内存模式：从火焰图 HTML 文件中提取符号地址')
+    logger.info('=' * 80)
+
+    # 验证参数
+    if not args.html_dir:
+        logger.error('❌ 错误: 内存模式需要指定 --html-dir 参数')
+        sys.exit(1)
+
+    html_dir = Path(args.html_dir)
+    if not html_dir.exists():
+        logger.error(f'❌ 错误: HTML 目录不存在: {html_dir}')
+        sys.exit(1)
+
+    so_dir = args.so_dir
+    if not so_dir:
+        logger.error('❌ 错误: 内存模式需要指定 --so-dir 参数')
+        sys.exit(1)
+
+    so_dir = Path(so_dir)
+    if not so_dir.exists():
+        logger.error(f'❌ 错误: SO 目录不存在: {so_dir}')
+        sys.exit(1)
+
+    # 创建内存模式分析器
+    memory_analyzer = MemoryFlameGraphAnalyzer(
+        html_dir=str(html_dir),
+        so_dir=str(so_dir),
+        output_dir=str(output_dir),
+    )
+
+    # 处理所有 HTML 文件，提取符号并创建 perf.db
+    perf_db_file, html_symbols = memory_analyzer.process_all_html_files()
+
+    # 运行 LLM 分析（使用创建的 perf.db）
+    logger.info('\n' + '=' * 80)
+    logger.info('开始符号恢复分析')
+    logger.info('=' * 80)
+
+    run_llm_analysis(args, perf_db_file, so_dir, output_dir)
+
+    # 替换所有 HTML 文件中的符号
+    logger.info('\n' + '=' * 80)
+    logger.info('替换火焰图 HTML 文件中的符号')
+    logger.info('=' * 80)
+
+    # 加载函数映射
+    if args.stat_method == 'event_count':
+        excel_file = output_dir / EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
+    else:
+        excel_file = output_dir / CALL_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
+
+    if not excel_file.exists():
+        logger.error(f'❌ 错误: Excel 分析文件不存在: {excel_file}')
+        logger.info('   请先完成符号恢复分析')
+        sys.exit(1)
+
+    from core.utils.symbol_replacer import load_function_mapping, replace_symbols_in_html
+
+    function_mapping = load_function_mapping(excel_file)
+    logger.info(f'✅ 加载了 {len(function_mapping)} 个函数映射')
+    
+    if len(function_mapping) == 0:
+        logger.warning('⚠️  警告: 没有函数映射，可能是未使用 LLM 分析')
+        logger.warning('   建议使用 LLM 分析（移除 --no-llm 参数）以获得符号恢复结果')
+        logger.warning('   将继续处理，但不会替换任何符号')
+
+    # 处理每个 HTML 文件
+    html_files = list(html_dir.glob('*.html'))
+    output_html_dir = output_dir / 'memory_flamegraphs_recovered'
+    output_html_dir.mkdir(parents=True, exist_ok=True)
+
+    for html_file in html_files:
+        logger.info(f'处理: {html_file.name}')
+        try:
+            with open(html_file, 'r', encoding='utf-8', errors='ignore') as f:
+                html_content = f.read()
+
+            # 替换符号
+            # replace_symbols_in_html 返回 (html_content, replacement_info) 元组
+            replaced_html, replacement_info = replace_symbols_in_html(html_content, function_mapping)
+
+            # 保存到输出目录
+            output_file = output_html_dir / html_file.name
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(replaced_html)
+            
+            logger.info(f'    替换了 {len(replacement_info)} 个符号')
+
+            logger.info(f'  ✅ 已保存: {output_file}')
+        except Exception as e:
+            logger.error(f'  ❌ 处理失败: {html_file.name}, 错误: {e}')
+
+    logger.info(f'\n✅ 所有火焰图已处理完成，输出目录: {output_html_dir}')
+    return True
+
+
 def main():
     parser = create_argument_parser()
     args = parser.parse_args()
@@ -739,9 +860,15 @@ def main():
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
     setup_logging(output_dir)
 
+    # 处理内存模式
+    if handle_memory_mode(args, output_dir):
+        return
+
+    # 处理 Excel 模式
     if handle_excel_mode(args, output_dir):
         return
 
+    # 处理 perf 模式（默认）
     perf_data_file, perf_db_file, so_dir = resolve_perf_paths(args, output_dir)
 
     logger.info('=' * 80)
