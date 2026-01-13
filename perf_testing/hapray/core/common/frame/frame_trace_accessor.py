@@ -79,7 +79,7 @@ class FrameTraceAccessor:
             process.name as process_name,      -- 进程名称
             process.pid                        -- 进程ID
         FROM frame_slice
-        LEFT JOIN thread ON frame_slice.itid = thread.itid
+        LEFT JOIN thread ON frame_slice.itid = thread.id
         LEFT JOIN process ON frame_slice.ipid = process.ipid
         WHERE frame_slice.flag IS NOT NULL     -- 排除不完整数据(flag为空)
         ORDER BY frame_slice.ts
@@ -259,10 +259,11 @@ class FrameTraceAccessor:
         ),
         process_filtered AS (
             -- 通过process表过滤出app_pids中的帧，并排除系统进程
+            -- 注意：根据文档，frame_slice.itid 关联 thread.id（不是thread.itid）
             SELECT ff.*, p.pid, p.name as process_name, t.tid, t.name as thread_name, t.is_main_thread
             FROM filtered_frames ff
             JOIN process p ON ff.ipid = p.ipid
-            JOIN thread t ON ff.itid = t.itid
+            JOIN thread t ON ff.itid = t.id
             WHERE p.pid IN ({','.join('?' * len(valid_pids))})
             AND p.name NOT IN ('render_service', 'rmrenderservice', 'ohos.sceneboard')
             AND p.name NOT LIKE 'system_%'
