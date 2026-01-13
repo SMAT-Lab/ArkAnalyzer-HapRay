@@ -1,0 +1,17 @@
+{
+    "description": "Auto-generated HapTest for weixing (com.example.wsywechat)",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "HapTest_com_example_wsywechat.py"
+        ]
+    },
+    "kits": [
+    ]
+}
