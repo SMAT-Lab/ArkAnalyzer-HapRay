@@ -1326,7 +1326,7 @@ class EmptyFrameAnalyzer:
             # 处理pandas NaN值：如果callstack_id是NaN，转换为None
             if pd.isna(callstack_id):
                 callstack_id = None
-            
+
             # 如果thread_name为空，从数据库查询
             if not thread_name and tid and trace_conn:
                 try:
@@ -1338,7 +1338,7 @@ class EmptyFrameAnalyzer:
                 except Exception as e:
                     logging.debug(f'查询thread_name失败: tid={tid}, error={e}')
                     pass
-            
+
             # 如果callstack_id为空，从frame_slice表查询
             # 根据文档：frame_slice.itid 关联 thread.id（不是thread.itid）
             # 优先使用vsync匹配（vsync是唯一标识一组渲染帧的）
@@ -1346,17 +1346,17 @@ class EmptyFrameAnalyzer:
                 try:
                     cursor = trace_conn.cursor()
                     vsync = row.get('vsync')
-                    
+
                     # 优先使用vsync匹配（最准确）
                     if vsync is not None and pd.notna(vsync):
                         if itid is not None and pd.notna(itid):
                             # 如果有itid，直接使用itid和vsync匹配
                             cursor.execute(
                                 """
-                                SELECT callstack_id FROM frame_slice 
+                                SELECT callstack_id FROM frame_slice
                                 WHERE vsync = ? AND itid = ? LIMIT 1
                                 """,
-                                (int(vsync), int(itid))
+                                (int(vsync), int(itid)),
                             )
                             result = cursor.fetchone()
                             if result:
@@ -1366,46 +1366,45 @@ class EmptyFrameAnalyzer:
                             # 注意：frame_slice.itid 关联 thread.id（不是thread.itid）
                             cursor.execute(
                                 """
-                                SELECT callstack_id FROM frame_slice 
+                                SELECT callstack_id FROM frame_slice
                                 WHERE vsync = ? AND itid IN (
                                     SELECT id FROM thread WHERE tid = ?
                                 ) LIMIT 1
                                 """,
-                                (int(vsync), int(tid))
+                                (int(vsync), int(tid)),
                             )
                             result = cursor.fetchone()
                             if result:
                                 callstack_id = result[0]
-                    else:
-                        # 如果没有vsync，使用ts, dur, itid匹配
-                        if itid is not None and pd.notna(itid):
-                            cursor.execute(
-                                """
-                                SELECT callstack_id FROM frame_slice 
+                    # 如果没有vsync，使用ts, dur, itid匹配
+                    elif itid is not None and pd.notna(itid):
+                        cursor.execute(
+                            """
+                                SELECT callstack_id FROM frame_slice
                                 WHERE ts = ? AND dur = ? AND itid = ? LIMIT 1
                                 """,
-                                (row['ts'], row['dur'], int(itid))
-                            )
-                            result = cursor.fetchone()
-                            if result:
-                                callstack_id = result[0]
-                        elif tid and pd.notna(tid):
-                            cursor.execute(
-                                """
-                                SELECT callstack_id FROM frame_slice 
+                            (row['ts'], row['dur'], int(itid)),
+                        )
+                        result = cursor.fetchone()
+                        if result:
+                            callstack_id = result[0]
+                    elif tid and pd.notna(tid):
+                        cursor.execute(
+                            """
+                                SELECT callstack_id FROM frame_slice
                                 WHERE ts = ? AND dur = ? AND itid IN (
                                     SELECT id FROM thread WHERE tid = ?
                                 ) LIMIT 1
                                 """,
-                                (row['ts'], row['dur'], int(tid))
-                            )
-                            result = cursor.fetchone()
-                            if result:
-                                callstack_id = result[0]
+                            (row['ts'], row['dur'], int(tid)),
+                        )
+                        result = cursor.fetchone()
+                        if result:
+                            callstack_id = result[0]
                 except Exception as e:
                     logging.debug(f'查询callstack_id失败: vsync={vsync}, itid={itid}, tid={tid}, error={e}')
                     pass
-            
+
             is_main_thread = (
                 1 if thread_name == process_name else (row.get('is_main_thread', 0) if 'is_main_thread' in row else 0)
             )
@@ -1501,7 +1500,7 @@ class EmptyFrameAnalyzer:
                 frame_ts = app_frame.get('frame_ts') or app_frame.get('ts')
                 frame_dur = app_frame.get('frame_dur') or app_frame.get('dur')
                 frame_vsync = app_frame.get('frame_vsync') or app_frame.get('vsync')
-                
+
                 # 如果thread_name为空，从数据库查询
                 if not thread_name and tid and trace_conn:
                     try:
@@ -1512,7 +1511,7 @@ class EmptyFrameAnalyzer:
                             thread_name = result[0] or ''
                     except Exception:
                         pass
-                
+
                 # 如果callstack_id为空，从frame_slice表查询
                 # 根据文档：frame_slice.itid 关联 thread.id（不是thread.itid）
                 # 优先使用vsync匹配（vsync是唯一标识一组渲染帧的）
@@ -1524,48 +1523,48 @@ class EmptyFrameAnalyzer:
                             if itid is not None and pd.notna(itid):
                                 cursor.execute(
                                     """
-                                    SELECT callstack_id FROM frame_slice 
+                                    SELECT callstack_id FROM frame_slice
                                     WHERE vsync = ? AND itid = ? LIMIT 1
                                     """,
-                                    (int(frame_vsync), int(itid))
+                                    (int(frame_vsync), int(itid)),
                                 )
                             elif tid and pd.notna(tid):
                                 cursor.execute(
                                     """
-                                    SELECT callstack_id FROM frame_slice 
+                                    SELECT callstack_id FROM frame_slice
                                     WHERE vsync = ? AND itid IN (
                                         SELECT id FROM thread WHERE tid = ?
                                     ) LIMIT 1
                                     """,
-                                    (int(frame_vsync), int(tid))
+                                    (int(frame_vsync), int(tid)),
                                 )
                         elif frame_ts and frame_dur:
                             # 如果没有vsync，使用ts, dur, itid匹配
                             if itid is not None and pd.notna(itid):
                                 cursor.execute(
                                     """
-                                    SELECT callstack_id FROM frame_slice 
+                                    SELECT callstack_id FROM frame_slice
                                     WHERE ts = ? AND dur = ? AND itid = ? LIMIT 1
                                     """,
-                                    (frame_ts, frame_dur, int(itid))
+                                    (frame_ts, frame_dur, int(itid)),
                                 )
                             elif tid and pd.notna(tid):
                                 cursor.execute(
                                     """
-                                    SELECT callstack_id FROM frame_slice 
+                                    SELECT callstack_id FROM frame_slice
                                     WHERE ts = ? AND dur = ? AND itid IN (
                                         SELECT id FROM thread WHERE tid = ?
                                     ) LIMIT 1
                                     """,
-                                    (frame_ts, frame_dur, int(tid))
+                                    (frame_ts, frame_dur, int(tid)),
                                 )
-                        
+
                         result = cursor.fetchone()
                         if result:
                             callstack_id = result[0]
                     except Exception:
                         pass
-                
+
                 is_main_thread = 1 if thread_name == process_name else 0
 
                 frame_map[key] = {
@@ -1622,7 +1621,7 @@ class EmptyFrameAnalyzer:
                     if pd.isna(callstack_id):
                         callstack_id = None
                     vsync = row.get('vsync')
-                    
+
                     # 如果thread_name为空，从数据库查询
                     if not thread_name and tid and trace_conn:
                         try:
@@ -1633,7 +1632,7 @@ class EmptyFrameAnalyzer:
                                 thread_name = result[0] or ''
                         except Exception:
                             pass
-                    
+
                     # 如果callstack_id为空，从frame_slice表查询
                     # 根据文档：frame_slice.itid 关联 thread.id（不是thread.itid）
                     # 优先使用vsync匹配（vsync是唯一标识一组渲染帧的）
@@ -1645,48 +1644,47 @@ class EmptyFrameAnalyzer:
                                 if itid is not None and pd.notna(itid):
                                     cursor.execute(
                                         """
-                                        SELECT callstack_id FROM frame_slice 
+                                        SELECT callstack_id FROM frame_slice
                                         WHERE vsync = ? AND itid = ? LIMIT 1
                                         """,
-                                        (int(vsync), int(itid))
+                                        (int(vsync), int(itid)),
                                     )
                                 elif tid and pd.notna(tid):
                                     cursor.execute(
                                         """
-                                        SELECT callstack_id FROM frame_slice 
+                                        SELECT callstack_id FROM frame_slice
                                         WHERE vsync = ? AND itid IN (
                                             SELECT id FROM thread WHERE tid = ?
                                         ) LIMIT 1
                                         """,
-                                        (int(vsync), int(tid))
+                                        (int(vsync), int(tid)),
                                     )
-                            else:
-                                # 如果没有vsync，使用ts, dur, itid匹配
-                                if itid is not None and pd.notna(itid):
-                                    cursor.execute(
-                                        """
-                                        SELECT callstack_id FROM frame_slice 
+                            # 如果没有vsync，使用ts, dur, itid匹配
+                            elif itid is not None and pd.notna(itid):
+                                cursor.execute(
+                                    """
+                                        SELECT callstack_id FROM frame_slice
                                         WHERE ts = ? AND dur = ? AND itid = ? LIMIT 1
                                         """,
-                                        (row['ts'], row['dur'], int(itid))
-                                    )
-                                elif tid and pd.notna(tid):
-                                    cursor.execute(
-                                        """
-                                        SELECT callstack_id FROM frame_slice 
+                                    (row['ts'], row['dur'], int(itid)),
+                                )
+                            elif tid and pd.notna(tid):
+                                cursor.execute(
+                                    """
+                                        SELECT callstack_id FROM frame_slice
                                         WHERE ts = ? AND dur = ? AND itid IN (
                                             SELECT id FROM thread WHERE tid = ?
                                         ) LIMIT 1
                                         """,
-                                        (row['ts'], row['dur'], int(tid))
-                                    )
-                            
+                                    (row['ts'], row['dur'], int(tid)),
+                                )
+
                             result = cursor.fetchone()
                             if result:
                                 callstack_id = result[0]
                         except Exception:
                             pass
-                    
+
                     frame_map[key] = {
                         'ts': row['ts'],
                         'dur': row['dur'],
