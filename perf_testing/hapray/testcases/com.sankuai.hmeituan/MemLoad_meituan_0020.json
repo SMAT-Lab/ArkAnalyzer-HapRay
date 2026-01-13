@@ -1,0 +1,16 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "MemLoad_meituan_0020.py"
+        ]
+    },
+    "kits": []
+} 

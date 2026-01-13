@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
+import os
 import re
 import sqlite3
 from typing import Any, Optional
@@ -96,6 +98,11 @@ class FaultTreeAnalyzer(BaseAnalyzer):
                 result['Audio']['AudioReadCB'] = self._collect_audio_read_cb_instructions(cursor)
                 result['Audio']['AudioPlayCb'] = self._collect_audio_play_cb_instructions(cursor)
                 result['Audio']['AudioRecCb'] = self._collect_audio_rec_cb_instructions(cursor)
+
+                # IPC Binder 分析
+                ipc_binder_data = self._extract_ipc_binder_metrics(step_dir)
+                if ipc_binder_data:
+                    result['ipc_binder'] = ipc_binder_data
 
         except sqlite3.Error as e:
             self.logger.error('FaultTreeAnalyzer _analyze_impl Database error: %s', str(e))
@@ -408,3 +415,98 @@ class FaultTreeAnalyzer(BaseAnalyzer):
 
         self.logger.debug('AudioRecCb - Thread events: %d, Function events: %d', thread_count, function_count)
         return thread_count
+
+    # ==================== IPC Binder 分析方法 ====================
+
+    def _extract_ipc_binder_metrics(self, step_dir: str) -> Optional[dict]:
+        """从 IPC Binder 分析结果中提取故障树指标
+
+        Args:
+            step_dir: 步骤目录名（如 'step1'）
+
+        Returns:
+            IPC Binder 指标字典，如果没有数据则返回 None
+        """
+        ipc_file = os.path.join(self.scene_dir, 'report', 'trace_ipc_binder.json')
+
+        if not os.path.exists(ipc_file):
+            self.logger.debug('IPC Binder report file not found: %s', ipc_file)
+            return None
+
+        try:
+            with open(ipc_file, encoding='utf-8') as f:
+                ipc_data = json.load(f)
+
+            step_data = ipc_data.get(step_dir)
+            if not step_data:
+                self.logger.debug('No IPC Binder data for step: %s', step_dir)
+                return None
+
+            process_stats = step_data.get('process_stats', [])
+            interface_stats = step_data.get('interface_stats', [])
+
+            if not process_stats and not interface_stats:
+                self.logger.debug('Empty IPC Binder stats for step: %s', step_dir)
+                return None
+
+            # 计算总体指标
+            total_transactions = sum(stat['count'] for stat in process_stats)
+            high_latency_count = sum(
+                stat['count']
+                for stat in process_stats
+                if stat.get('max_latency', 0) > 100  # 100ms 阈值
+            )
+
+            latencies = [stat['avg_latency'] for stat in process_stats if stat.get('avg_latency', 0) > 0]
+            avg_latency = sum(latencies) / len(latencies) if latencies else 0
+            max_latency = max((stat.get('max_latency', 0) for stat in process_stats), default=0)
+
+            # Top 5 进程对（按通信次数排序）
+            top_processes = sorted(process_stats, key=lambda x: x['count'], reverse=True)[:5]
+
+            # Top 5 接口（按通信次数排序）
+            top_interfaces = sorted(interface_stats, key=lambda x: x['count'], reverse=True)[:5]
+
+            result = {
+                'total_transactions': total_transactions,
+                'high_latency_count': high_latency_count,
+                'avg_latency': round(avg_latency, 2),
+                'max_latency': round(max_latency, 2),
+                'top_processes': [
+                    {
+                        'caller_proc': p['caller_proc'],
+                        'callee_proc': p['callee_proc'],
+                        'count': p['count'],
+                        'avg_latency': round(p.get('avg_latency', 0), 2),
+                        'max_latency': round(p.get('max_latency', 0), 2),
+                        'qps': round(p.get('qps', 0), 2),
+                    }
+                    for p in top_processes
+                ],
+                'top_interfaces': [
+                    {
+                        'code': i['code'],
+                        'count': i['count'],
+                        'avg_latency': round(i.get('avg_latency', 0), 2),
+                        'max_latency': round(i.get('max_latency', 0), 2),
+                        'qps': round(i.get('qps', 0), 2),
+                        'top_caller_proc': i.get('top_caller_proc', 'unknown'),
+                        'top_callee_proc': i.get('top_callee_proc', 'unknown'),
+                    }
+                    for i in top_interfaces
+                ],
+            }
+
+            self.logger.info(
+                'IPC Binder metrics for %s: %d transactions, avg latency %.2fms, max latency %.2fms',
+                step_dir,
+                total_transactions,
+                avg_latency,
+                max_latency,
+            )
+
+            return result
+
+        except Exception as e:
+            self.logger.error('Failed to extract IPC Binder metrics: %s', str(e))
+            return None

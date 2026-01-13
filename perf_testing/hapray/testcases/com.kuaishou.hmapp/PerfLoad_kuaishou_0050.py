@@ -62,7 +62,7 @@ class PerfLoad_kuaishou_0050(PerfTestCase):
         self.driver.touch(BY.text('作品'))
         time.sleep(2)
         # 进入作品
-        self.driver.touch(self.convert_coordinate(161, 1344))
+        self.driver.touch(self.convert_coordinate(190, 1656))
         time.sleep(15)
         self.driver.touch(BY.text('设置'))
         time.sleep(2)

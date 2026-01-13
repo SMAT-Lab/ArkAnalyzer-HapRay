@@ -86,7 +86,7 @@ class="progress-value"
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">后台线程占比</div>
-                        <div class="metric-value">{{ summaryData.background_thread_percentage.toFixed(2) }}%
+                        <div class="metric-value">{{ (summaryData.background_thread_percentage_in_empty_frame || 0).toFixed(2) }}%
                         </div>
                     </div>
                 </div>
