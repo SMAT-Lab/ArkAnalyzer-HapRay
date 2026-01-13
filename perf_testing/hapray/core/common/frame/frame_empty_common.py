@@ -1112,6 +1112,20 @@ class EmptyFrameResultBuilder:
             # 转换时间戳为相对时间
             frame_dict['ts'] = FrameTimeUtils.convert_to_relative_nanoseconds(frame.get('ts', 0), first_frame_time)
             
+            # 确保thread_id字段存在（如果只有tid，则使用tid作为thread_id）
+            if 'thread_id' not in frame_dict or frame_dict.get('thread_id') is None:
+                if 'tid' in frame_dict and frame_dict.get('tid') is not None:
+                    frame_dict['thread_id'] = frame_dict['tid']
+            
+            # 确保thread_name字段存在（如果为空，尝试从tid_to_info获取）
+            if 'thread_name' not in frame_dict or not frame_dict.get('thread_name'):
+                # 如果thread_name为空，保留空字符串（前端会显示为空）
+                frame_dict['thread_name'] = frame_dict.get('thread_name', '')
+            
+            # 确保callstack_id字段存在（如果为None，保留None）
+            if 'callstack_id' not in frame_dict:
+                frame_dict['callstack_id'] = frame_dict.get('callstack_id')
+            
             # 先插入 sample_callchains_count（默认-1），确保它在 sample_callchains 之前
             sample_callchains = frame_dict.pop('sample_callchains', [])
             frame_dict['sample_callchains_count'] = -1  # 临时值

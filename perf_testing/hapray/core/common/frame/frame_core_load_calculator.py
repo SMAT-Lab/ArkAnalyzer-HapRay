@@ -891,13 +891,23 @@ class FrameLoadCalculator:
             # 确保时间戳字段正确，处理NaN值
             # 注意：一帧是针对整个进程的，不是某个线程，因此不保存thread_id
             # 每个sample_callchain都有自己的thread_id
+            # 处理thread_name和callstack_id的NaN值
+            thread_name = frame.get('thread_name', '')
+            if pd.isna(thread_name):
+                thread_name = ''
+            callstack_id = frame.get('callstack_id')
+            if pd.isna(callstack_id):
+                callstack_id = None
+            
             frame_loads.append(
                 {
                     'ts': int(frame['ts']) if pd.notna(frame['ts']) else 0,  # 确保时间戳是整数
                     'dur': int(frame['dur']) if pd.notna(frame['dur']) else 0,  # 确保持续时间是整数
                     'frame_load': frame_load,
                     'thread_id': int(frame['tid']) if pd.notna(frame['tid']) else 0,  # 添加thread_id字段，用于帧匹配
-                    'empty_frame_thread': frame.get('thread_name', 'unknown'),  # 空刷产生的线程（区分sample_callchains中的thread_name）
+                    'thread_name': thread_name,  # 线程名称（用于JSON输出）
+                    'empty_frame_thread': thread_name,  # 空刷产生的线程（区分sample_callchains中的thread_name，保持向后兼容）
+                    'callstack_id': callstack_id,  # 调用栈ID（用于JSON输出）
                     'process_name': frame.get('process_name', 'unknown'),
                     'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,  # 确保类型是整数
                     'vsync': frame.get('vsync', 'unknown'),
@@ -1023,13 +1033,23 @@ class FrameLoadCalculator:
                     total_load += thread_load
 
             # 构建帧负载数据
+            # 处理thread_name和callstack_id的NaN值
+            thread_name = frame.get('thread_name', '')
+            if pd.isna(thread_name):
+                thread_name = ''
+            callstack_id = frame.get('callstack_id')
+            if pd.isna(callstack_id):
+                callstack_id = None
+            
             frame_loads.append(
                 {
                     'ts': int(frame['ts']) if pd.notna(frame['ts']) else 0,
                     'dur': int(frame['dur']) if pd.notna(frame['dur']) else 0,
                     'frame_load': int(total_load),
                     'thread_id': int(frame['tid']) if pd.notna(frame['tid']) else 0,
-                    'empty_frame_thread': frame.get('thread_name', 'unknown'),  # 空刷产生的线程（区分sample_callchains中的thread_name）
+                    'thread_name': thread_name,  # 线程名称（用于JSON输出）
+                    'empty_frame_thread': thread_name,  # 空刷产生的线程（区分sample_callchains中的thread_name，保持向后兼容）
+                    'callstack_id': callstack_id,  # 调用栈ID（用于JSON输出）
                     'process_name': frame.get('process_name', 'unknown'),
                     'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,
                     'vsync': frame.get('vsync', 'unknown'),
