@@ -1884,6 +1884,12 @@ export const useComponentNameStore = defineStore('componentNameQuery', {
   })
 });
 
+export const useThirdCategoryNameQueryStore = defineStore('thirdCategoryNameQuery', {
+  state: () => ({
+    thirdCategoryNameQuery: '' as string,
+  })
+});
+
 /** 获取默认的GC线程步骤数据 */
 export function getDefaultGcThreadStepData(): GcThreadStepData {
   return {

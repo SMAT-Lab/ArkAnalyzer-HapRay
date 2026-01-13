@@ -188,14 +188,14 @@ class="beautiful-btn primary-btn"
         </div>
       </el-col>
       <el-col :span="12">
-        <!-- 文件负载 -->
+        <!-- 三级分类负载 -->
         <div class="data-panel">
           <h3 class="panel-title">
-            <span class="version-tag">文件负载</span>
+            <span class="version-tag">三级分类负载</span>
           </h3>
-          <PerfFileTable
-:step-id="currentStepIndex" :data="filteredFilePerformanceData1Drill" :hide-column="isHidden"
-            :has-category="true" />
+          <PerfThreadTable
+:step-id="currentStepIndex" :data="filteredThirdCategoryPerformanceDataDrill"
+            :hide-column="isHidden" :has-category="true" :show-third-category="true" />
         </div>
       </el-col>
     </el-row>
@@ -210,6 +210,21 @@ class="beautiful-btn primary-btn"
 :step-id="currentStepIndex" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden"
             :has-category="false" />
         </div>
+      </el-col>
+      <el-col :span="12">
+        <!-- 文件负载 -->
+        <div class="data-panel">
+          <h3 class="panel-title">
+            <span class="version-tag">文件负载</span>
+          </h3>
+          <PerfFileTable
+:step-id="currentStepIndex" :data="filteredFilePerformanceData1Drill" :hide-column="isHidden"
+            :has-category="true" />
+        </div>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20">
+      <el-col :span="12">
       </el-col>
       <el-col :span="12">
         <!-- 函数负载 -->
@@ -257,7 +272,7 @@ import LineChart from '../../../common/charts/LineChart.vue';
 import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
 // import UploadHtml from './common/UploadHtml.vue';
 import FrameAnalysis from '../frame/FrameAnalysis.vue';
-import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, calculateCategorysData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
+import { calculateComponentNameData, calculateFileData, calculateFileData1, calculateSymbolData, calculateSymbolData1, calculateThreadData, processJson2PieChartData, processJson2ProcessPieChartData, calculateCategorysData, calculateThirdCategoryData, type ProcessDataItem, type ThreadDataItem, type FileDataItem, type SymbolDataItem } from '@/utils/jsonUtil.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 const isHidden = true;
 const LeftLineChartSeriesType = 'bar';
@@ -333,6 +348,9 @@ const mergedThreadPerformanceData = computed(() =>
 );
 const mergedComponentNamePerformanceData = computed(() =>
   calculateComponentNameData(perfData!, null, currentStepIndex.value === 0)
+);
+const mergedThirdCategoryPerformanceData = computed(() =>
+  calculateThirdCategoryData(perfData!, null, currentStepIndex.value === 0)
 );
 const mergedFilePerformanceData = computed(() =>
   calculateFileData(perfData!, null, currentStepIndex.value === 0)
@@ -433,7 +451,7 @@ const stepPieDataStack = ref<{ legendData: string[]; seriesData: Array<{ name: s
 const stepPieData = ref(processJson2PieChartData(perfData!, currentStepIndex.value));
 
 function getDrilldownPieData(name: string, stack: string[]) {
-  // 新层级：0-大分类 1-小分类 2-文件 3-符号
+  // 新层级：0-大分类 1-小分类 2-三级分类 3-文件 4-符号
   if (stack.length === 0) {
     // 大分类分布
     const categoryData = calculateCategorysData(perfData!, null, currentStepIndex.value === 0);
@@ -450,20 +468,46 @@ function getDrilldownPieData(name: string, stack: string[]) {
     const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.subCategoryName, value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 2) {
-    // 文件分布
+    // 三级分类分布
     const category = stack[0];
     const subCategoryName = name;
-    const fileData = calculateFileData1(perfData!, null, currentStepIndex.value === 0).filter((d: FileDataItem) => d.category === category && d.subCategoryName === subCategoryName && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
+    const thirdCategoryData = calculateThirdCategoryData(perfData!, null, currentStepIndex.value === 0).filter((d: ThreadDataItem) => 
+      d.category === category && 
+      d.subCategoryName === subCategoryName && 
+      (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value)
+    );
+    const sorted = [...thirdCategoryData].sort((a, b) => b.instructions - a.instructions);
+    const legendData = sorted.map((d: ThreadDataItem) => d.thirdCategoryName || 'Unknown');
+    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.thirdCategoryName || 'Unknown', value: d.instructions }));
+    return { legendData, seriesData };
+  } else if (stack.length === 3) {
+    // 文件分布
+    const category = stack[0];
+    const subCategoryName = stack[1];
+    const thirdCategoryName = name;
+    const fileData = calculateFileData1(perfData!, null, currentStepIndex.value === 0).filter((d: FileDataItem) => 
+      d.category === category && 
+      d.subCategoryName === subCategoryName && 
+      d.thirdCategoryName === thirdCategoryName && 
+      (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value)
+    );
     const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: FileDataItem) => d.file);
     const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
     return { legendData, seriesData };
-  } else if (stack.length === 3) {
+  } else if (stack.length === 4) {
     // 符号分布
     const category = stack[0];
     const subCategoryName = stack[1];
+    const thirdCategoryName = stack[2];
     const file = name;
-    const symbolData = calculateSymbolData1(perfData!, null, currentStepIndex.value === 0).filter((d: SymbolDataItem) => d.category === category && d.subCategoryName === subCategoryName && d.file === file && (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value));
+    const symbolData = calculateSymbolData1(perfData!, null, currentStepIndex.value === 0).filter((d: SymbolDataItem) => 
+      d.category === category && 
+      d.subCategoryName === subCategoryName && 
+      d.thirdCategoryName === thirdCategoryName && 
+      d.file === file && 
+      (currentStepIndex.value === 0 || d.stepId === currentStepIndex.value)
+    );
     const sorted = [...symbolData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: SymbolDataItem) => d.symbol);
     const seriesData = sorted.map((d: SymbolDataItem) => ({ name: d.symbol, value: d.instructions }));
@@ -536,6 +580,14 @@ const filteredComponentNamePerformanceData = computed(() => {
   );
 });
 
+const filteredThirdCategoryPerformanceData = computed(() => {
+  if (currentStepIndex.value === 0) {
+    return sortByInstructions(mergedThirdCategoryPerformanceData.value);
+  }
+  return sortByInstructions(
+    mergedThirdCategoryPerformanceData.value.filter((item) => item.stepId === currentStepIndex.value)
+  );
+});
 
 const filteredFilePerformanceData = computed(() => {
   if (currentStepIndex.value === 0) {
@@ -614,6 +666,16 @@ const filteredComponentNamePerformanceDataDrill = computed(() => {
   }
   return data;
 });
+const filteredThirdCategoryPerformanceDataDrill = computed(() => {
+  const stack = stepPieDrilldownStack.value;
+  let data = filteredThirdCategoryPerformanceData.value;
+  if (stack.length === 1) {
+    data = data.filter((d: ThreadDataItem) => d.category === stack[0]);
+  } else if (stack.length === 2) {
+    data = data.filter((d: ThreadDataItem) => d.category === stack[0] && d.subCategoryName === stack[1]);
+  }
+  return data;
+});
 const filteredFilePerformanceData1Drill = computed(() => {
   const stack = stepPieDrilldownStack.value;
   let data = filteredFilePerformanceData1.value;
@@ -621,6 +683,12 @@ const filteredFilePerformanceData1Drill = computed(() => {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
     data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
+  } else if (stack.length === 3) {
+    data = data.filter(d => 
+      d.category === stack[0] && 
+      d.subCategoryName === stack[1] && 
+      d.thirdCategoryName === stack[2]
+    );
   }
   return data;
 });
@@ -632,7 +700,18 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   } else if (stack.length === 2) {
     data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   } else if (stack.length === 3) {
-    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1] && d.file === stack[2]);
+    data = data.filter(d => 
+      d.category === stack[0] && 
+      d.subCategoryName === stack[1] && 
+      d.thirdCategoryName === stack[2]
+    );
+  } else if (stack.length === 4) {
+    data = data.filter(d => 
+      d.category === stack[0] && 
+      d.subCategoryName === stack[1] && 
+      d.thirdCategoryName === stack[2] && 
+      d.file === stack[3]
+    );
   }
   return data;
 });
@@ -666,7 +745,7 @@ function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: s
     const labels = ['进程', '线程', '文件', '符号'];
     return `${labels[level]}: ${item}`;
   } else {
-    const labels = ['大分类', '小分类', '文件', '符号'];
+    const labels = ['大分类', '小分类', '三级分类', '文件', '符号'];
     return `${labels[level]}: ${item}`;
   }
 }
