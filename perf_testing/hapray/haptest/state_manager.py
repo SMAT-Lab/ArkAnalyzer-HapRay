@@ -24,12 +24,13 @@ Log = logging.getLogger('HapTest.State')
 class UIState:
     """UI状态封装"""
 
-    def __init__(self, step_id: int, screenshot_path: str, element_tree_path: str, inspector_path: str, app_package: str = None):
+    def __init__(self, step_id: int, screenshot_path: str, element_tree_path: str, inspector_path: str, app_package: str = None, current_bundle_name: str = None):
         self.step_id = step_id
         self.screenshot_path = screenshot_path
         self.element_tree_path = element_tree_path
         self.inspector_path = inspector_path
         self.app_package = app_package
+        self.current_bundle_name = current_bundle_name
         self._clickable_elements = None
         self._state_hash = None
 
@@ -46,6 +47,12 @@ class UIState:
         if self._state_hash is None:
             self._state_hash = self._compute_hash()
         return self._state_hash
+
+    def is_in_target_app(self) -> bool:
+        """检查当前是否在目标应用内"""
+        if self.current_bundle_name is None or self.app_package is None:
+            return True  # 无法判断时默认认为在应用内
+        return self.current_bundle_name == self.app_package
 
     def _parse_clickable_elements(self) -> list:
         """从inspector JSON解析可点击元素"""
@@ -209,11 +216,24 @@ class StateManager:
 
         for action in self.action_history:
             if action['type'] == 'click' and action['target']:
-                clicked_elements.add(action['target'].get('path', ''))
+                clicked_elements.add(self._get_element_id(ui_state,action['target']))
 
-        unvisited = [elem for elem in all_clickable if elem['path'] not in clicked_elements]
-        Log.debug(f'总可点击: {len(all_clickable)}, 已点击: {len(clicked_elements)}, 未访问: {len(unvisited)}')
+        unvisited = [elem for elem in all_clickable if self._get_element_id(ui_state,elem) not in clicked_elements]
+        Log.debug(f'总可点击: {len(all_clickable)}, 已点击: {len(all_clickable)-len(unvisited)}, 未访问: {len(unvisited)}')
         return unvisited
+
+    @staticmethod
+    def _get_element_id(ui_state: UIState,elem: dict) -> str:
+        """生成元素的唯一标识符，基于path、text和bounds的组合"""
+        path = elem.get('path', '')
+        text = elem.get('text', '')
+        bounds = elem.get('bounds', {})
+        hash = ui_state.state_hash
+
+        # 使用 hash + path + text + bounds 确保唯一性
+        # 即使path和text相同，bounds（位置）也必然不同
+        bounds_str = f"{bounds.get('left', 0)},{bounds.get('top', 0)},{bounds.get('right', 0)},{bounds.get('bottom', 0)}"
+        return f"{hash}|{path}|{text}|{bounds_str}"
 
     def get_statistics(self) -> dict:
         """获取统计信息"""

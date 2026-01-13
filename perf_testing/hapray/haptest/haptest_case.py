@@ -66,18 +66,9 @@ def setup_haptest_logger(report_path: str, app_name: str):
     haptest_logger = logging.getLogger('HapTest')
     haptest_logger.addHandler(file_handler)
     haptest_logger.setLevel(logging.DEBUG)
-    
-    # 为Strategy和State也添加文件处理器
-    strategy_logger = logging.getLogger('HapTest.Strategy')
-    strategy_logger.addHandler(file_handler)
-    strategy_logger.setLevel(logging.DEBUG)
-    
-    state_logger = logging.getLogger('HapTest.State')
-    state_logger.addHandler(file_handler)
-    state_logger.setLevel(logging.DEBUG)
-    
+
     # 只在控制台显示INFO及以上级别
-    
+
     Log.info(f'HapTest日志已保存至: {haptest_log_file}')
     Log.info(f'应用: {app_name}')
     Log.info('='*60)
@@ -120,7 +111,7 @@ class HapTest(PerfTestCase):
         # 保存原始的UI捕获handler,用于手动捕获
         self._real_capture_ui_handler = self.capture_ui_handler
         # 替换为空操作handler,避免execute_performance_step中的重复捕获
-        self.capture_ui_handler = NoOpCaptureUI(self.driver)
+        # self.capture_ui_handler = NoOpCaptureUI(self.driver)
 
         # 设置独立的日志文件
         setup_haptest_logger(self.report_path, app_name)
@@ -149,18 +140,7 @@ class HapTest(PerfTestCase):
             self.bundle_info = {'entryModuleName': 'entry'}
             self.module_name = 'entry'
         
-        # 获取设备屏幕尺寸，用于坐标转换
-        try:
-            from hapray.core.common.coordinate_adapter import CoordinateAdapter
-            width, height = CoordinateAdapter.get_device_screen_size(self.driver, 1080, 1920)
-            self.source_screen_width = width
-            self.source_screen_height = height
-            Log.info(f'Device screen size: {width}x{height}')
-        except Exception as e:
-            Log.warning(f'Failed to get screen size: {e}')
-            Log.warning('Using default screen size 1080x1920')
-            self.source_screen_width = 1080
-            self.source_screen_height = 1920
+        
         
         # 创建必要的目录
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
@@ -188,10 +168,13 @@ class HapTest(PerfTestCase):
 
             # 先执行一次UI采集,获取当前状态
             ui_state = self._execute_ui_capture()
-            
+
             # 添加状态到管理器
             is_new_state = self.state_mgr.add_state(ui_state)
             Log.info(f'UI状态: {"新状态" if is_new_state else "已访问"}')
+            Log.info(f'当前应用: {ui_state.current_bundle_name or "未知"}')
+            Log.info(f'目标应用: {ui_state.app_package}')
+            Log.info(f'在目标应用内: {"是" if ui_state.is_in_target_app() else "否"}')
             Log.info(f'可点击元素数: {len(ui_state.clickable_elements)}')
             
             # 获取未访问的元素
@@ -229,18 +212,34 @@ class HapTest(PerfTestCase):
         step_id = self.current_step
         ui_dir = os.path.join(self.report_path, 'ui', f'step{step_id}')
         os.makedirs(ui_dir, exist_ok=True)
-        
+
         # 立即采集UI数据(只采集一次作为当前状态,使用真实的handler)
         self._real_capture_ui_handler.capture_ui(step_id, self.report_path, 'current')
-        
+
+        # 从element_tree中提取当前bundleName
+        element_tree_path = os.path.join(ui_dir, 'element_tree_current_1.txt')
+        current_bundle_name = self._extract_bundle_name(element_tree_path)
+
         # 创建UI状态对象
         return UIState(
             step_id=step_id,
             screenshot_path=os.path.join(ui_dir, 'screenshot_current_1.png'),
-            element_tree_path=os.path.join(ui_dir, 'element_tree_current_1.txt'),
+            element_tree_path=element_tree_path,
             inspector_path=os.path.join(ui_dir, 'inspector_current.json'),
             app_package=self.app_package,
+            current_bundle_name=current_bundle_name,
         )
+
+    def _extract_bundle_name(self, element_tree_path: str) -> Optional[str]:
+        """从element_tree文件中提取bundleName"""
+        try:
+            with open(element_tree_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith('bundleName:'):
+                        return line.split(':', 1)[1].strip()
+        except Exception as e:
+            Log.warning(f'Failed to extract bundleName: {e}')
+        return None
 
     def _format_action_info(self, action_type: str, target: Optional[dict]) -> str:
         """格式化操作信息用于日志"""
