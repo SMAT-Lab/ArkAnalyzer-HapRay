@@ -15,6 +15,7 @@ limitations under the License.
 
 import os
 import re
+import zipfile
 from typing import Any
 
 from hypium.uidriver.uitree import UiTree
@@ -183,18 +184,51 @@ class CaptureUI:
             dump_filename = f'element_tree_{label_name}.txt' if label_name else 'element_tree.txt'
             local_dump_path = os.path.join(ui_step_dir, dump_filename)
 
-            # 执行hidumper dump命令
-            dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default'"
+            # 执行hidumper dump命令（增加--zip参数）
+            dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default' --zip"
             Log.info(f'执行hidumper dump命令: {dump_cmd}')
 
-            # 执行命令并保存输出到文件
+            # 执行命令并获取结果
             result = self.driver.shell(dump_cmd)
+            Log.info(f'hidumper命令输出: {result}')
 
-            # 将输出保存到本地文件
-            with open(local_dump_path, 'w', encoding='utf-8') as f:
-                f.write(result)
+            # 从结果中解析zip文件路径
+            # 格式：The result is:/data/log/hidumper/20260112-114308-970.zip
+            match = re.search(r'The result is:(.+\.zip)', result)
+            if match:
+                remote_zip_path = match.group(1).strip()
+                Log.info(f'解析到hidumper zip文件路径: {remote_zip_path}')
 
-            Log.info(f'Element树dump保存成功: {local_dump_path}')
+                # 生成本地保存路径
+                dump_filename = f'element_tree_{label_name}.zip' if label_name else 'element_tree.zip'
+                local_zip_path = os.path.join(ui_step_dir, dump_filename)
+
+                self.driver.pull_file(remote_zip_path, local_zip_path)
+                # 验证文件是否成功保存
+                if os.path.exists(local_zip_path):
+                    Log.info(f'Element树dump zip文件保存成功: {local_zip_path}')
+
+                    # 从zip文件中提取log.txt并保存到local_dump_path
+                    try:
+                        with zipfile.ZipFile(local_zip_path, 'r') as zip_ref:
+                            # 检查zip文件中是否存在log.txt
+                            if 'log.txt' in zip_ref.namelist():
+                                # 读取log.txt内容
+                                log_content = zip_ref.read('log.txt')
+                                # 将内容写入local_dump_path文件
+                                with open(local_dump_path, 'wb') as f:
+                                    f.write(log_content)
+                                Log.info(f'Element树dump log.txt提取成功: {local_dump_path}')
+                            else:
+                                # 列出zip文件中的文件列表以便调试
+                                file_list = zip_ref.namelist()
+                                Log.error(f'zip文件中未找到log.txt文件，文件列表: {file_list}')
+                    except Exception as e:
+                        Log.error(f'从zip文件中提取log.txt失败: {e}')
+                else:
+                    Log.error(f'Element树dump保存失败: {local_zip_path}')
+            else:
+                Log.error('无法从hidumper输出中解析zip文件路径')
 
         except Exception as e:
             Log.error(f'执行hidumper dump时发生错误: {e}')

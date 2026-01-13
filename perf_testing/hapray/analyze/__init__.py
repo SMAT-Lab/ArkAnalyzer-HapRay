@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import importlib
 import logging
 import os
 import re
@@ -161,7 +162,7 @@ def _initialize_analyzers(
     for analyzer_class in ANALYZER_CLASSES:
         try:
             module_name = camel_to_snake(analyzer_class)
-            module = __import__(f'hapray.analyze.{module_name}', fromlist=[analyzer_class])
+            module = importlib.import_module(f'hapray.analyze.{module_name}')
             cls = getattr(module, analyzer_class)
 
             # Check if this analyzer supports time ranges and refined mode (MemoryAnalyzer)

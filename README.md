@@ -33,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides six main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, and `prepare` for simplified test execution.
+The tool provides seven main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, and `hilog` for hilog analysis.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -47,6 +47,7 @@ Options:
 - `--no-trace`: Disable trace capturing
 - `--no-perf`: Disable perf capturing (for memory-only mode)
 - `--memory`: Enable Memory profiling using hiprofiler nativehook plugin
+- `--snapshot`: Enable ArkTs heap snapshot collection
 - `--devices <device_serial_numbers...>`: Device serial numbers (e.g., HX1234567890)
 - `--manual`: Enable manual testing mode with interactive 30-second performance data collection
 - `--app`: Target application bundle name for manual testing (performance data will be collected for 30 seconds)
@@ -225,6 +226,77 @@ Example:
 ```bash
 # Specify output file
 python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
+```
+
+#### Hilog Analysis (`hilog`)
+```bash
+python -m scripts.main hilog -d <hilog_directory> [-o <output_excel>]
+```
+Options:
+- `--hilog-dir <path>`: Directory containing hilog files or single hilog file path (required)
+- `--output <path>`: Output Excel file path (default: hilog_analysis.xlsx)
+
+Features:
+- **Automatic hilog decryption**: Uses hilogtool to decrypt encrypted hilog files
+- **Configurable pattern matching**: Supports complex regex patterns with grouping
+- **Conditional filtering**: Applies conditions to extracted groups for precise matching
+- **Comprehensive reporting**: Generates Excel reports with summary statistics and detailed matches
+
+**Configuration**:
+Hilog analysis rules are configured in `perf_testing/hapray/core/config/config.yaml` under the `hilog.patterns` section:
+
+```yaml
+hilog:
+  patterns:
+    # Example rule: Match memory type != 4 (DMA_ALLOC)
+    - name: "图片解码没有使用DMA(memType!=4)"
+      regex: "CreatePixelMap success,.*memType\\s*:\\s*(\\d+),\\s*cost\\s+\\d+\\s+us"
+      groups: [1]  # Extract memory type value
+      conditions: ["!=4"]  # Only count when memory type != 4
+```
+
+**Pattern Configuration**:
+- `name`: Rule name for identification and Excel sheet naming
+- `regex`: Regular expression with capture groups
+- `groups`: Array of group indices to extract (1-based, 0 for entire match)
+- `conditions`: Condition filtering, supports two formats:
+  1. **Array format**: Corresponds to groups one-to-one, supports operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+  2. **Expression string**: Supports mathematical operations and comparisons (automatically detected when contains `$`)
+
+**Expression Syntax** (when using `conditions` as expression string):
+- `$1`, `$2`, `$3`... represent the 1st, 2nd, 3rd... extracted group values (corresponding to positions in `groups` array)
+- Supports mathematical operations: `+`, `-`, `*`, `/`, `%`
+- Supports comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Supports parentheses: `()`
+- Supports multiple expressions (AND logic): Use comma (`,`) or `&&` to separate expressions. All expressions must be satisfied.
+
+**Examples**:
+```yaml
+# Array format (simple conditions)
+- name: "Memory type != 4"
+  regex: "CreatePixelMap success,.*memType\\s*:\\s*(\\d+)"
+  groups: [1]
+  conditions: ["!=4"]  # Group 1 != 4
+
+# Expression format (complex calculations)
+- name: "Compare width*height products"
+  regex: "width\\s*:\\s*(\\d+).*height\\s*:\\s*(\\d+).*width2\\s*:\\s*(\\d+).*height2\\s*:\\s*(\\d+)"
+  groups: [1, 2, 3, 4]  # Extract: width1, height1, width2, height2
+  conditions: "$1 * $2 > $3 * $4"  # Product of first pair > product of second pair
+
+# Multiple expressions (AND logic)
+- name: "Multiple conditions"
+  regex: "value1\\s*:\\s*(\\d+).*value2\\s*:\\s*(\\d+).*value3\\s*:\\s*(\\d+).*value4\\s*:\\s*(\\d+)"
+  groups: [1, 2, 3, 4]
+  conditions: "$1*$2>0,$3*$4>512*512"  # Using comma separator: $1*$2>0 AND $3*$4>512*512
+  # Or use && separator: conditions: "$1*$2>0 && $3*$4>512*512"
+```
+
+Example:
+```bash
+# Analyze hilog files in a directory
+python -m scripts.main hilog --hilog-dir hilog_files/ --output analysis_report.xlsx
+
 ```
 
 ### Guide: Running Release Program on macOS

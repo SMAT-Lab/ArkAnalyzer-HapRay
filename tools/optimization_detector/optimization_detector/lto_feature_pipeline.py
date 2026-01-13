@@ -2085,6 +2085,36 @@ def main(args):
         print('\n❌ 训练失败')
 
 
+# ======================================================================
+# AllFeatureExtractor - 融合所有特征提取器
+# ======================================================================
+
+
+class AllFeatureExtractor:
+    """
+    融合所有 feature-mode：
+      - LEG_*  : LegacyFeatureExtractor
+      - HIER_* : CompilerProvenanceExtractor
+      - O3_*   : O3FocusedFeatureExtractor
+    """
+
+    def __init__(self, hier_max_bytes: int = 4096):
+        self.leg = LegacyFeatureExtractor()
+        self.hier = CompilerProvenanceExtractor(max_bytes=hier_max_bytes)
+        self.o3 = O3FocusedFeatureExtractor()
+
+    def extract(self, path: str) -> tuple[np.ndarray, list[str], str]:
+        f_leg, n_leg, k = self.leg.extract(path)
+        f_hier, n_hier, _ = self.hier.extract(path)
+        f_o3, n_o3, _ = self.o3.extract(path)
+        n_leg = [f'LEG_{n}' for n in n_leg]
+        n_hier = [f'HIER_{n}' for n in n_hier]
+        n_o3 = [f'O3_{n}' for n in n_o3]
+        feats = np.concatenate([f_leg, f_hier, f_o3]).astype(np.float32)
+        names = n_leg + n_hier + n_o3
+        return feats, names, k
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description='编译器溯源恢复 LTO 检测器（Linear SVM + Variants）')
     ap.add_argument('--level', default='O3', help='优化级别：O2 / O3 / Os')

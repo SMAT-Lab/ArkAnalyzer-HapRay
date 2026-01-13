@@ -161,7 +161,7 @@ export class HapAnalysisService {
             const result = await this.analyzeHap(file, outputDir);
 
             // 优先使用entry HAP的结果作为基础
-            if (entryHap && result.hapPath === entryHap.hapPath) {
+            if (result.hapPath === entryHap?.hapPath) {
                 combinedResult = result;
                 logger.info(`  使用entry HAP的版本信息：${result.versionName} (${result.versionCode})`);
             } else {
@@ -282,7 +282,7 @@ export class HapAnalysisService {
                     const result = await this.analyzeHap(file, outputDir);
 
                     // 优先使用entry HAP的结果作为基础
-                    if (entryHap && result.hapPath === entryHap.hapPath) {
+                    if (result.hapPath === entryHap?.hapPath) {
                         combinedResult = result;
                         logger.info(`    使用entry HAP的版本信息：${result.versionName} (${result.versionCode})`);
                     } else {

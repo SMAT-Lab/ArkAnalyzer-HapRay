@@ -118,6 +118,7 @@ class DataCollector:
             redundant_mode_status: 是否启用冗余模式
         """
         Log.info(f'开始步骤 {step_id} 的数据采集结束处理')
+        self.stop_memory_collection(step_id)
 
         perf_step_dir, trace_step_dir = self._get_step_directories(step_id, report_path)
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
@@ -126,7 +127,7 @@ class DataCollector:
         local_trace_path = os.path.join(trace_step_dir, FILENAME_TRACE_HTRACE)
 
         self.process_manager.save_process_info(perf_step_dir)
-        self.data_transfer.transfer_perf_data(device_file, local_perf_path)
+        self.data_transfer.transfer_perf_data('/data/local/tmp/perf.data', local_perf_path)
         self.data_transfer.transfer_trace_data(device_file, local_trace_path)
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
@@ -135,7 +136,10 @@ class DataCollector:
         if Config.get('ui.capture_enable', False):
             self.capture_ui_handler.capture_ui(step_id, report_path, 'end')
 
-        self.stop_memory_collection(step_id)
+        # 检查是否启用 snapshot 采集，如果启用则采集一次
+        snapshot_enabled = Config.get('memory.snapshot_enable', False)
+        if snapshot_enabled:
+            self._collect_snapshot_once(step_id, report_path)
 
         Log.info(f'步骤 {step_id} 数据采集结束处理完成')
 
@@ -221,6 +225,9 @@ class DataCollector:
             collection_count += 1
             Log.info(f'步骤 {step_id} 第 {collection_count} 次内存数据采集')
 
+            # 记录采集开始时间
+            collection_start_time = time.time()
+
             try:
                 # 内联的内存数据采集逻辑
                 # 生成时间戳（yyyymmdd-hhmmss格式）
@@ -235,72 +242,235 @@ class DataCollector:
 
                 self._ensure_directories_exist(showmap_dir, gpu_mem_dir, dmabuf_dir)
 
-                # 1. 采集应用进程smaps
-                try:
-                    process_ids, process_names = self.process_manager.get_app_pids()
-                    for pid, process_name in zip(process_ids, process_names):
-                        # 清理进程名，移除路径和特殊字符
-                        clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
-                        filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
-                        filepath = os.path.join(showmap_dir, filename)
+                # 获取所有进程ID和名称
+                process_ids, process_names = self.process_manager.get_app_pids()
 
-                        cmd = f'hidumper --mem-smaps {pid}'
-                        Log.debug(f'采集smaps数据: {cmd}')
-                        result = self.driver.shell(cmd)
+                # 为每个pid创建smaps采集线程
+                smaps_threads = []
+                for pid, process_name in zip(process_ids, process_names):
+                    thread = threading.Thread(
+                        target=self._collect_smaps_data,
+                        args=(pid, process_name, showmap_dir, timestamp),
+                        daemon=True,
+                    )
+                    smaps_threads.append(thread)
 
-                        # 保存到本地文件
-                        with open(filepath, 'w', encoding='utf-8') as f:
-                            f.write(result)
+                # 创建GPU和DMA采集线程
+                gpu_thread = threading.Thread(
+                    target=self._collect_gpu_data,
+                    args=(gpu_mem_dir, timestamp),
+                    daemon=True,
+                )
+                dma_thread = threading.Thread(
+                    target=self._collect_dma_data,
+                    args=(dmabuf_dir, timestamp),
+                    daemon=True,
+                )
 
-                        Log.debug(f'smaps数据已保存: {filepath}')
+                # 启动所有线程（包括所有smaps线程、GPU线程和DMA线程）
+                all_threads = smaps_threads + [gpu_thread, dma_thread]
+                for thread in all_threads:
+                    thread.start()
 
-                except Exception as e:
-                    Log.warning(f'采集smaps数据失败: {e}')
-
-                # 2. 采集GPU数据（需要root权限）
-                try:
-                    filename = f'gpuMen_{timestamp}.txt'
-                    filepath = os.path.join(gpu_mem_dir, filename)
-
-                    cmd = 'cat /proc/gpu_memory'
-                    Log.debug(f'采集GPU数据: {cmd}')
-                    result = self.driver.shell(cmd)
-
-                    # 保存到本地文件
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(result)
-
-                    Log.debug(f'GPU数据已保存: {filepath}')
-                except Exception as e:
-                    Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
-
-                # 3. 采集DMA数据（需要root权限）
-                try:
-                    filename = f'process_dmabuff_info_{timestamp}.txt'
-                    filepath = os.path.join(dmabuf_dir, filename)
-
-                    cmd = 'cat /proc/process_dmabuf_info'
-                    Log.debug(f'采集DMA数据: {cmd}')
-                    result = self.driver.shell(cmd)
-
-                    # 保存到本地文件
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(result)
-
-                    Log.debug(f'DMA数据已保存: {filepath}')
-                except Exception as e:
-                    Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+                # 等待所有线程完成
+                for thread in all_threads:
+                    thread.join()
 
                 Log.debug(f'步骤 {step_id} 第 {collection_count} 次内存数据采集完成')
             except Exception as e:
                 Log.error(f'步骤 {step_id} 第 {collection_count} 次内存数据采集失败: {e}')
 
+            # 计算采集耗时
+            collection_elapsed = time.time() - collection_start_time
+            # 等待时间 = 间隔时间 - 采集耗时，如果采集耗时超过间隔时间，则立即进行下一次采集
+            wait_time = max(0, interval_seconds - collection_elapsed)
+
             # 等待下一次采集或停止事件
-            if stop_event.wait(timeout=interval_seconds):
+            if stop_event.wait(timeout=wait_time):
                 # 被停止事件唤醒，退出循环
                 break
 
         Log.info(f'步骤 {step_id} 内存数据采集线程结束，共采集 {collection_count} 次')
+
+    def _collect_smaps_data(self, pid: int, process_name: str, showmap_dir: str, timestamp: str):
+        """采集单个进程的smaps数据
+
+        Args:
+            pid: 进程ID
+            process_name: 进程名称
+            showmap_dir: smaps目录路径
+            timestamp: 时间戳
+        """
+        try:
+            # 清理进程名，移除路径和特殊字符
+            clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
+            filename = f'{clean_process_name}_{pid}_{timestamp}.txt'
+            filepath = os.path.join(showmap_dir, filename)
+
+            cmd = f'hidumper --mem-smaps {pid}'
+            Log.debug(f'采集smaps数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.debug(f'smaps数据已保存: {filepath}')
+
+        except Exception as e:
+            Log.warning(f'采集smaps数据失败 (PID: {pid}): {e}')
+
+    def _collect_gpu_data(self, gpu_mem_dir: str, timestamp: str):
+        """采集GPU数据（需要root权限）
+
+        Args:
+            gpu_mem_dir: GPU内存目录路径
+            timestamp: 时间戳
+        """
+        try:
+            filename = f'gpuMen_{timestamp}.txt'
+            filepath = os.path.join(gpu_mem_dir, filename)
+
+            cmd = 'cat /proc/gpu_memory'
+            Log.debug(f'采集GPU数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.debug(f'GPU数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集GPU数据失败（可能需要root权限）: {e}')
+
+    def _collect_dma_data(self, dmabuf_dir: str, timestamp: str):
+        """采集DMA数据（需要root权限）
+
+        Args:
+            dmabuf_dir: DMA目录路径
+            timestamp: 时间戳
+        """
+        try:
+            filename = f'process_dmabuff_info_{timestamp}.txt'
+            filepath = os.path.join(dmabuf_dir, filename)
+
+            cmd = 'cat /proc/process_dmabuf_info'
+            Log.debug(f'采集DMA数据: {cmd}')
+            result = self.driver.shell(cmd)
+
+            # 保存到本地文件
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            Log.debug(f'DMA数据已保存: {filepath}')
+        except Exception as e:
+            Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+
+    def _collect_snapshot_once(self, step_id: int, report_path: str):
+        """采集一次 snapshot 数据（在步骤开始时执行）
+
+        Args:
+            step_id: 步骤ID
+            report_path: 报告路径
+        """
+        try:
+            # 创建 snapshot 目录
+            meminfo_step_dir = os.path.join(report_path, 'meminfo', f'step{step_id}')
+            snapshot_dir = os.path.join(meminfo_step_dir, 'dynamic_snapshot')
+            self._ensure_directories_exist(snapshot_dir)
+
+            # 只取 UI 主线程的 pid（使用应用进程列表中的第一个作为主线程）
+            process_ids, process_names = self.process_manager.get_app_pids()
+            if not process_ids:
+                Log.warning('snapshot 采集失败：未找到应用进程')
+                return
+
+            ui_pid = process_ids[0]
+            ui_process_name = process_names[0] if process_names else str(ui_pid)
+
+            Log.info(f'步骤 {step_id} snapshot 采集目标进程: pid={ui_pid}, name={ui_process_name}')
+
+            self._collect_snapshot_data(ui_pid, ui_process_name, snapshot_dir)
+
+            Log.info(f'步骤 {step_id} snapshot 采集完成（仅 UI 主线程）')
+        except Exception as e:
+            Log.error(f'步骤 {step_id} snapshot 采集失败: {e}')
+
+    def _collect_snapshot_data(self, pid: int, process_name: str, snapshot_dir: str):
+        """采集单个进程的heap snapshot数据
+
+        Args:
+            pid: 进程ID（同时也是线程ID）
+            process_name: 进程名称
+            snapshot_dir: snapshot目录路径
+        """
+        try:
+            # 设备上的 snapshot 文件目录
+            device_snapshot_dir = '/data/log/reliability/resource_leak/memory_leak'
+
+            # 执行 hidumper --mem-jsheap pid -T pid 命令
+            # 其中 pid 和 tid 相同，均为应用进程 id
+            # 该命令不会直接输出，而是生成文件在设备目录下
+            cmd = f'hidumper --mem-jsheap {pid} -T {pid}'
+            Log.debug(f'采集snapshot数据: {cmd}')
+            self.driver.shell(cmd)
+
+            # 等待文件生成（hidumper 命令可能需要一些时间）
+            time.sleep(30)
+
+            # 查找设备目录中匹配的文件
+            # 文件命名格式：hidumper-jsheap-进程号-JS线程号-时间戳
+            # 由于时间戳是动态的，我们需要列出目录并匹配模式
+            # 如果文件未生成，等待1秒后重试，最多重试5次
+            list_cmd = f'ls {device_snapshot_dir}/hidumper-jsheap-{pid}-{pid}-* 2>/dev/null || true'
+            result = self.driver.shell(list_cmd)
+
+            # 解析文件列表，获取最新的文件
+            # ls 输出可能包含完整路径或相对路径，需要统一处理
+            files = []
+            for _line in result.splitlines():
+                line = _line.strip()
+                if not line or 'hidumper-jsheap' not in line:
+                    continue
+                # 如果是完整路径，直接使用；如果是相对路径，拼接完整路径
+                if line.startswith('/'):
+                    files.append(line)
+                else:
+                    files.append(os.path.join(device_snapshot_dir, line))
+
+            if not files:
+                Log.warning(f'未找到匹配的snapshot文件 (PID: {pid})')
+                return
+
+            # 按文件名排序，获取最新的文件（文件名包含时间戳，排序后最后一个是最新的）
+            files.sort()
+            latest_file = files[-1]
+
+            # 清理进程名，移除路径和特殊字符
+            clean_process_name = os.path.basename(process_name).replace('/', '_').replace(' ', '_')
+            # 从设备文件名中提取时间戳部分
+            device_filename = os.path.basename(latest_file)
+            local_filename = f'{clean_process_name}_{device_filename}.heapsnapshot'
+            local_filepath = os.path.join(snapshot_dir, local_filename)
+
+            # 使用 driver.pull_file 拉取文件
+            Log.debug(f'拉取snapshot文件: {latest_file} -> {local_filepath}')
+            self.driver.pull_file(latest_file, local_filepath)
+
+            # 验证文件是否成功保存
+            if os.path.exists(local_filepath):
+                Log.debug(f'snapshot数据已保存: {local_filepath}')
+                # 删除设备上的原文件
+                try:
+                    self.driver.shell(f'rm {latest_file}')
+                    Log.debug(f'已删除设备上的snapshot文件: {latest_file}')
+                except Exception as e:
+                    Log.warning(f'删除设备上的snapshot文件失败: {latest_file}, 错误: {e}')
+            else:
+                Log.warning(f'snapshot文件拉取失败: {local_filepath}')
+
+        except Exception as e:
+            Log.warning(f'采集snapshot数据失败 (PID: {pid}): {e}')
 
     def stop_memory_collection(self, step_id: int):
         """

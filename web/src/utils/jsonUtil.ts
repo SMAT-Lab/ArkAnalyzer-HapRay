@@ -7,6 +7,7 @@ export interface ProcessDataItem {
   process: string
   category: string
   subCategoryName: string
+  thirdCategoryName?: string
   instructions: number
   compareInstructions: number
   increaseInstructions: number
@@ -18,6 +19,7 @@ export interface ThreadDataItem {
   process: string
   category: string
   subCategoryName: string
+  thirdCategoryName?: string
   thread: string
   instructions: number
   compareInstructions: number
@@ -30,6 +32,7 @@ export interface FileDataItem {
   process: string
   category: string
   subCategoryName: string
+  thirdCategoryName?: string
   thread: string
   file: string
   instructions: number
@@ -43,6 +46,7 @@ export interface SymbolDataItem {
   process: string
   category: string
   subCategoryName: string
+  thirdCategoryName?: string
   thread: string
   file: string
   symbol: string
@@ -356,6 +360,40 @@ export function calculateCategorysData(
             process: ignoreStep ? keyParts[0] : keyParts[1],
             category: ignoreStep ? keyParts[0] : keyParts[1],
             subCategoryName: "",
+            thirdCategoryName: undefined,
+            instructions,
+            compareInstructions,
+            increaseInstructions,
+            increasePercentage,
+        });
+
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
+}
+
+// 三级分类级别比较
+export function calculateThirdCategoryData(
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
+): ThreadDataItem[] {
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        // 使用 categoryName、subCategoryName 和 thirdCategoryName 作为键
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        const thirdCategoryName = item.thirdCategoryName || '';
+        return ignoreStep 
+            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}` 
+            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}`;
+    };
+
+    const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
+        increaseInstructions, increasePercentage) => ({
+            stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+            process: "", // 分类路径中不使用 process 字段
+            category: ignoreStep ? keyParts[0] : keyParts[1],
+            subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
+            thirdCategoryName: ignoreStep ? keyParts[2] : keyParts[3],
+            thread: "", // 分类路径中不使用 thread 字段
             instructions,
             compareInstructions,
             increaseInstructions,
@@ -381,10 +419,11 @@ export function calculateComponentNameData(
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
-            process: ignoreStep ? keyParts[0] : keyParts[1],
+            process: "", // 分类路径中不使用 process 字段
             category: ignoreStep ? keyParts[0] : keyParts[1],
             subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
-            thread: ignoreStep ? keyParts[1] : keyParts[2],
+            thirdCategoryName: undefined,
+            thread: "", // 分类路径中不使用 thread 字段
             instructions,
             compareInstructions,
             increaseInstructions,
@@ -401,20 +440,24 @@ export function calculateFileData1(
     ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName 和 subCategoryName 作为键
+        // 使用 categoryName、subCategoryName、thirdCategoryName 和 file 作为键
         const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
         const subCategoryName = item.subCategoryName || 'Unknown';
-        return ignoreStep ? `${categoryName}|${subCategoryName}|${item.file}` : `${stepId}|${categoryName}|${subCategoryName}|${item.file}`;
+        const thirdCategoryName = item.thirdCategoryName || '';
+        return ignoreStep 
+            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}` 
+            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}`;
     };
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
-            process: ignoreStep ? keyParts[0] : keyParts[1],
+            process: "", // 分类路径中不使用 process 字段
             category: ignoreStep ? keyParts[0] : keyParts[1],
             subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
-            thread: ignoreStep ? keyParts[1] : keyParts[2],
-            file: ignoreStep ? keyParts[2] : keyParts[3],
+            thirdCategoryName: ignoreStep ? keyParts[2] : keyParts[3],
+            thread: "", // 分类路径中不使用 thread 字段
+            file: ignoreStep ? keyParts[3] : keyParts[4],
             instructions,
             compareInstructions,
             increaseInstructions,
@@ -431,21 +474,25 @@ export function calculateSymbolData1(
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName 和 subCategoryName 作为键
+        // 使用 categoryName、subCategoryName、thirdCategoryName、file 和 symbol 作为键
         const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
         const subCategoryName = item.subCategoryName || 'Unknown';
-        return ignoreStep ? `${categoryName}|${subCategoryName}|${item.file}|${item.symbol}` : `${stepId}|${categoryName}|${subCategoryName}|${item.file}|${item.symbol}`;
+        const thirdCategoryName = item.thirdCategoryName || '';
+        return ignoreStep 
+            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}` 
+            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}`;
     };
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
             stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
-            process: ignoreStep ? keyParts[0] : keyParts[1],
+            process: "", // 分类路径中不使用 process 字段
             category: ignoreStep ? keyParts[0] : keyParts[1],
             subCategoryName: ignoreStep ? keyParts[1] : keyParts[2],
-            thread: ignoreStep ? keyParts[1] : keyParts[2],
-            file: ignoreStep ? keyParts[2] : keyParts[3],
-            symbol: ignoreStep ? keyParts[3] : keyParts[4],
+            thirdCategoryName: ignoreStep ? keyParts[2] : keyParts[3],
+            thread: "", // 分类路径中不使用 thread 字段
+            file: ignoreStep ? keyParts[3] : keyParts[4],
+            symbol: ignoreStep ? keyParts[4] : keyParts[5],
             instructions,
             compareInstructions,
             increaseInstructions,
