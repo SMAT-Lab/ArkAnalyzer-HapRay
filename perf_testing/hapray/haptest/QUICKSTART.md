@@ -139,3 +139,18 @@ python -m scripts.main haptest \
   --max-steps 40 \
   --round 3
 ```
+
+# DeepHierarchy
+```bash
+python -m scripts.main haptest --app-package com.example.deephierarchy --app-name "DeepHierarchy" --ability-name EntryAbility --strategy depth_first --max-steps 20 
+```
+
+# Overdraw
+```bash
+python -m scripts.main haptest --app-package com.example.overdraw --app-name "OverDraw" --ability-name EntryAbility --strategy depth_first --max-steps 20 
+```
+
+# MemoryLeak
+```bash
+python -m scripts.main haptest --app-package com.example.memoryleak --app-name "MemoryLeak" --ability-name EntryAbility --strategy depth_first --max-steps 20 
+```

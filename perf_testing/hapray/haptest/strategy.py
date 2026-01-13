@@ -57,6 +57,10 @@ class DepthFirstStrategy(BaseStrategy):
         3. 若无法滑动,返回上一层
         4. 达到最大返回次数则停止
         """
+        if not ui_state.is_in_target_app():
+            Log.info('检测到退出应用,停止探索')
+            return ('stop', None)
+
         unvisited_elements = state_mgr.get_unvisited_elements(ui_state)
         
         Log.debug(f'[DepthFirst] 未访问元素数: {len(unvisited_elements)}, 连续返回次数: {self.back_count}')
@@ -99,6 +103,9 @@ class BreadthFirstStrategy(BaseStrategy):
         2. 随机选择未访问的元素点击
         3. 周期性回退到上层页面
         """
+        if not ui_state.is_in_target_app():
+            Log.info('检测到退出应用,停止探索')
+            return ('stop', None)
         unvisited_elements = state_mgr.get_unvisited_elements(ui_state)
 
         if not unvisited_elements:
@@ -125,6 +132,11 @@ class RandomStrategy(BaseStrategy):
         1. 随机选择操作类型
         2. 达到最大步数后停止
         """
+        
+        if not ui_state.is_in_target_app(): 
+            Log.info('检测到退出应用,停止探索')
+            return ('stop', None)
+
         if len(state_mgr.action_history) >= self.max_steps:
             return ('stop', None)
 
