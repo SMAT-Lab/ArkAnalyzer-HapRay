@@ -509,6 +509,7 @@ class EmptyFrameResultBuilder:
         deduplicated_background_thread_load: Optional[int] = None,
         deduplicated_thread_loads: Optional[dict[int, int]] = None,
         tid_to_info: Optional[dict] = None,
+        system_load_in_empty_frames: int = 0,  # 空刷帧中的系统进程负载（初始化为0）
     ) -> dict:
         """构建统一的分析结果
 
@@ -555,10 +556,22 @@ class EmptyFrameResultBuilder:
         # === 通用统计 ===
         # 如果提供了去重后的 empty_frame_load，使用它（去除重叠区域）
         # 否则使用累加的方式（包含重叠区域）
+        # 注意：system_load_in_empty_frames 已经在 frame_analyzer_empty.py 中计算并传递过来
         if deduplicated_empty_frame_load is not None:
             empty_frame_load = int(deduplicated_empty_frame_load)
+            # 记录去重前后的对比，用于调试
+            original_sum = int(sum(f['frame_load'] for f in frame_loads))
+            if original_sum > 0:
+                overlap_ratio = (original_sum - empty_frame_load) / original_sum * 100
+                logging.info(
+                    f'空刷帧负载去重: 原始累加={original_sum:,}, 去重后={empty_frame_load:,}, 重叠占比={overlap_ratio:.2f}%'
+                )
         else:
             empty_frame_load = int(sum(f['frame_load'] for f in frame_loads))
+            logging.info(f'空刷帧负载（未去重）: {empty_frame_load:,}')
+        
+        # if system_load_in_empty_frames > 0:
+        #     logging.info(f'空刷帧中包含系统进程负载: {system_load_in_empty_frames:,}')
 
         # 计算主线程负载：使用去重后的值（如果提供）
         if deduplicated_main_thread_load is not None:
@@ -683,14 +696,80 @@ class EmptyFrameResultBuilder:
         # === 阶段3：统计整个trace浪费指令数占比 ===
         # empty_frame_percentage = empty_frame_load / total_load * 100
         # 表示空刷帧的CPU浪费占整个trace总CPU的百分比
+        # 注意：
+        # - 分子 empty_frame_load: 所有空刷帧的sample cpu event累加（已去重，去除重叠区域）
+        #   可能包含系统进程的负载（用于发现应用层bug导致系统层负载高的问题，如vsync频繁发送）
+        # - 分母 total_load: 应用进程的所有samples的cpu event总和（整个trace）
+        #   如果分子包含系统进程，分母也会加上这些系统进程在整个trace的负载，确保计算一致性
+        
+        # 如果分子包含系统进程负载，需要在分母中加上系统进程在整个trace的负载
+        system_load_in_total_trace = 0
+        if system_load_in_empty_frames > 0 and self.cache_manager and self.cache_manager.trace_conn:
+            try:
+                # 从frame_loads中收集系统进程名
+                system_process_names = set()
+                for f in frame_loads:
+                    process_name = f.get('process_name', '')
+                    if process_name and is_system_thread(process_name, None):
+                        system_process_names.add(process_name)
+                
+                if system_process_names:
+                    # 查找系统进程的PID
+                    trace_cursor = self.cache_manager.trace_conn.cursor()
+                    placeholders = ','.join('?' * len(system_process_names))
+                    trace_cursor.execute(
+                        f"""
+                        SELECT DISTINCT p.pid
+                        FROM process p
+                        WHERE p.name IN ({placeholders})
+                        """,
+                        list(system_process_names),
+                    )
+                    system_pids = [row[0] for row in trace_cursor.fetchall() if row[0] is not None]
+                    
+                    if system_pids:
+                        # 计算系统进程在整个trace的负载
+                        system_load_in_total_trace = self.cache_manager.get_total_load_for_pids(system_pids)
+                        total_load += system_load_in_total_trace
+                        # logging.info(
+                        #     f'检测到系统进程负载: 空刷帧中系统负载={system_load_in_empty_frames:,}, '
+                        #     f'系统进程={list(system_process_names)}, PIDs={system_pids}, '
+                        #     f'整个trace中系统负载={system_load_in_total_trace:,}, '
+                        #     f'更新后total_load={total_load:,}'
+                        # )
+            except Exception as e:
+                logging.warning(f'计算系统进程负载失败: {e}')
+                import traceback
+                traceback.print_exc()
+        
         if total_load > 0:
             empty_frame_percentage = (empty_frame_load / total_load) * 100
-            main_thread_percentage = (main_thread_load / total_load) * 100
-            background_thread_percentage = (background_thread_load / total_load) * 100
+            
+            # 记录计算详情（使用去重后的值）
+            logging.info(
+                f'空刷帧占比计算: 分子(empty_frame_load去重后)={empty_frame_load:,}, '
+                f'分母(total_load)={total_load:,}, 占比={empty_frame_percentage:.2f}%'
+            )
+            
+            # 检查占比是否异常（超过100%可能表示计算错误）
+            if empty_frame_percentage > 100.0:
+                logging.warning(
+                    f'警告: 空刷帧占比超过100% ({empty_frame_percentage:.2f}%)，可能存在计算问题。'
+                    f'请检查: 1) 分子是否有重复计算 2) 分母是否正确统计了所有应用的samples'
+                )
         else:
             empty_frame_percentage = 0.0
-            main_thread_percentage = 0.0
-            background_thread_percentage = 0.0
+            logging.warning('总负载为0，无法计算占比')
+        
+        # === 阶段4：统计空刷帧内部线程占比 ===
+        # main_thread_load 和 background_thread_load 都是从空刷帧中累加的
+        # 因此计算它们占空刷帧的百分比（而不是占整个trace的百分比）
+        if empty_frame_load > 0:
+            main_thread_percentage_in_empty_frame = (main_thread_load / empty_frame_load) * 100
+            background_thread_percentage_in_empty_frame = (background_thread_load / empty_frame_load) * 100
+        else:
+            main_thread_percentage_in_empty_frame = 0.0
+            background_thread_percentage_in_empty_frame = 0.0
 
         # === 线程级别统计 ===
         # 使用去重后的线程负载（如果提供），否则回退到未去重的方式
@@ -831,9 +910,9 @@ class EmptyFrameResultBuilder:
                 'total_empty_frames': int(len(frame_loads)),
                 'empty_frames_with_load': int(len([f for f in frame_loads if f.get('frame_load', 0) > 0])),
                 'main_thread_load': int(main_thread_load),
-                'main_thread_percentage': float(main_thread_percentage),
+                'main_thread_percentage_in_empty_frame': float(main_thread_percentage_in_empty_frame),  # 主线程占空刷帧的百分比
                 'background_thread_load': int(background_thread_load),
-                'background_thread_percentage': float(background_thread_percentage),
+                'background_thread_percentage_in_empty_frame': float(background_thread_percentage_in_empty_frame),  # 后台线程占空刷帧的百分比
                 'severity_level': severity_level,
                 'severity_description': severity_description,
             },
@@ -938,8 +1017,10 @@ class EmptyFrameResultBuilder:
                 'empty_frame_percentage': 0.0,
                 'total_empty_frames': 0,
                 'empty_frames_with_load': 0,
+                'main_thread_load': 0,
+                'main_thread_percentage_in_empty_frame': 0.0,
                 'background_thread_load': 0,
-                'background_thread_percentage': 0.0,
+                'background_thread_percentage_in_empty_frame': 0.0,
                 'severity_level': 'normal',
                 'severity_description': '正常：未检测到空刷帧。',
             },
@@ -1030,6 +1111,18 @@ class EmptyFrameResultBuilder:
             frame_dict = clean_frame_data(frame.to_dict())
             # 转换时间戳为相对时间
             frame_dict['ts'] = FrameTimeUtils.convert_to_relative_nanoseconds(frame.get('ts', 0), first_frame_time)
+            
+            # 先插入 sample_callchains_count（默认-1），确保它在 sample_callchains 之前
+            sample_callchains = frame_dict.pop('sample_callchains', [])
+            frame_dict['sample_callchains_count'] = -1  # 临时值
+            frame_dict['sample_callchains'] = sample_callchains
+            
+            # 更新 sample_callchains_count 的实际值
+            if isinstance(sample_callchains, list):
+                frame_dict['sample_callchains_count'] = len(sample_callchains)
+            else:
+                frame_dict['sample_callchains_count'] = 0
+            
             processed_frames.append(frame_dict)
 
         return processed_frames
