@@ -22,10 +22,11 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
-from hapray.actions.gui_agent_action import GuiAgentAction
+from hapray.actions.haptest_action import HapTestAction
+
+# from hapray.actions.gui_agent_action import GuiAgentAction
 from hapray.actions.hilog_action import HilogAction
 from hapray.actions.perf_action import PerfAction
-from hapray.actions.haptest_action import HapTestAction
 from hapray.actions.prepare_action import PrepareAction
 from hapray.actions.static_action import StaticAction
 from hapray.actions.ui_action import UIAction
@@ -96,7 +97,7 @@ class HapRayCmd:
             'ui': UIAction,
             'ui-compare': UICompareAction,
             'hilog': HilogAction,
-            'gui-agent': GuiAgentAction,
+            # 'gui-agent': GuiAgentAction,
             'haptest': HapTestAction,
         }
 
