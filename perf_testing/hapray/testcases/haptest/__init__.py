@@ -1,1 +1,0 @@
-"""HapTest test cases directory"""
