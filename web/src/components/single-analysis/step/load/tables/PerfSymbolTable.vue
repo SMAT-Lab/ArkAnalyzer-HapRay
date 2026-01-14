@@ -57,6 +57,15 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
           </el-icon>
         </template>
       </el-input>
+      <el-input
+v-if="hasCategory" v-model="thirdCategoryNameQueryStore.thirdCategoryNameQuery" placeholder="根据三级分类搜索" clearable
+        class="search-input" @input="handleFilterChange">
+        <template #prefix>
+          <el-icon>
+            <search />
+          </el-icon>
+        </template>
+      </el-input>
     </div>
 
     <!-- 过滤后占比 -->
@@ -118,6 +127,11 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
           <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
+      <el-table-column v-if="hasCategory" prop="thirdCategoryName" label="三级分类">
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.thirdCategoryName || '-' }}</div>
+        </template>
+      </el-table-column>
       <el-table-column label="指令数" width="160" prop="instructions" sortable>
         <template #default="{ row }">
           <div class="count-cell">
@@ -169,7 +183,7 @@ v-model:current-page="currentPage" :page-size="pageSize" :total="total" :backgro
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useFileNameQueryStore, useSymbolNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../../../../../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useFileNameQueryStore, useSymbolNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore, useThirdCategoryNameQueryStore } from '../../../../../stores/jsonDataStore.ts';
 import type { SymbolDataItem } from '../../../../../utils/jsonUtil.ts';
 const emit = defineEmits(['custom-event']);
 
@@ -218,6 +232,7 @@ const symbolNameQuery = useSymbolNameQueryStore();
 const fileNameQuery = useFileNameQueryStore();
 const category = useCategoryStore();
 const componentNameQuery = useComponentNameStore();
+const thirdCategoryNameQueryStore = useThirdCategoryNameQueryStore();
 
 // 分页状态
 const currentPage = ref(1);
@@ -279,6 +294,11 @@ const filteredData = computed<SymbolDataItem[]>(() => {
   // 应用小分类过滤
   if (hasCategory) {
     result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
+  }
+
+  // 应用三级分类过滤
+  if (hasCategory) {
+    result = filterQueryCondition('thirdCategoryName', thirdCategoryNameQueryStore.thirdCategoryNameQuery, result);
   }
 
   // 应用分类过滤

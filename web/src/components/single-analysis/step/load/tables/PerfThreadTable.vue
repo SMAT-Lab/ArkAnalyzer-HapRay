@@ -38,6 +38,15 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
           </el-icon>
         </template>
       </el-input>
+      <el-input
+v-if="hasCategory && showThirdCategory" v-model="thirdCategoryNameQueryStore.thirdCategoryNameQuery" placeholder="根据三级分类搜索" clearable
+        class="search-input" @input="handleFilterChange">
+        <template #prefix>
+          <el-icon>
+            <search />
+          </el-icon>
+        </template>
+      </el-input>
     </div>
 
     <!-- 过滤后占比 -->
@@ -87,6 +96,11 @@ v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder
       <el-table-column v-if="hasCategory" prop="category" label="小分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.subCategoryName }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="hasCategory && showThirdCategory" prop="thirdCategoryName" label="三级分类">
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.thirdCategoryName || '-' }}</div>
         </template>
       </el-table-column>
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
@@ -140,7 +154,7 @@ v-model:current-page="currentPage" :page-size="pageSize" :total="total" :backgro
 
 <script lang="ts" setup>
 import { ref, computed, watch, type PropType } from 'vue';
-import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore } from '../../../../../stores/jsonDataStore.ts';
+import { useProcessNameQueryStore, useThreadNameQueryStore, useCategoryStore, useFilterModeStore, useComponentNameStore, useThirdCategoryNameQueryStore } from '../../../../../stores/jsonDataStore.ts';
 import type { ThreadDataItem } from '../../../../../utils/jsonUtil.ts';
 const emit = defineEmits(['custom-event']);
 
@@ -156,6 +170,10 @@ const props = defineProps({
   hasCategory: {
     type: Boolean,
     required: true,
+  },
+  showThirdCategory: {
+    type: Boolean,
+    default: false,
   }
 });
 
@@ -188,6 +206,7 @@ const processNameQuery = useProcessNameQueryStore();
 const threadNameQuery = useThreadNameQueryStore();
 const category = useCategoryStore();
 const componentNameQuery = useComponentNameStore();
+const thirdCategoryNameQueryStore = useThirdCategoryNameQueryStore();
 
 
 // 分页状态
@@ -239,6 +258,11 @@ const filteredData = computed<ThreadDataItem[]>(() => {
   // 应用小分类过滤
   if (hasCategory) {
     result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
+  }
+
+  // 应用三级分类过滤
+  if (hasCategory && props.showThirdCategory) {
+    result = filterQueryCondition('thirdCategoryName', thirdCategoryNameQueryStore.thirdCategoryNameQuery, result);
   }
 
   // 应用分类过滤

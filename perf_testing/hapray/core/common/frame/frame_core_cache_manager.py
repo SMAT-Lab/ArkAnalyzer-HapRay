@@ -908,10 +908,11 @@ class FrameCacheManager(FramePerfAccessor, FrameTraceAccessor):  # pylint: disab
             cursor = self.trace_conn.cursor()
 
             # 修改SQL查询，获取process.name和thread.name字段
+            # 注意：根据文档，frame_slice.itid 关联 thread.id（不是thread.itid）
             cursor.execute("""
                 SELECT fs.*, t.tid, t.name as thread_name, p.name as process_name
                 FROM frame_slice fs
-                LEFT JOIN thread t ON fs.itid = t.itid
+                LEFT JOIN thread t ON fs.itid = t.id
                 LEFT JOIN process p ON fs.ipid = p.ipid
             """)
 
