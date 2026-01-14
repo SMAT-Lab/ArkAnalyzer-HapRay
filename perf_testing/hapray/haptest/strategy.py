@@ -16,7 +16,7 @@ limitations under the License.
 import logging
 import random
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Optional
 
 from hapray.haptest.state_manager import StateManager, UIState
 
@@ -27,7 +27,7 @@ class BaseStrategy(ABC):
     """探索策略基类"""
 
     @abstractmethod
-    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> Tuple[str, Optional[dict]]:
+    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
         决策下一步操作
 
@@ -49,7 +49,7 @@ class DepthFirstStrategy(BaseStrategy):
         self.max_back_count = max_back_count
         self.back_count = 0
 
-    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> Tuple[str, Optional[dict]]:
+    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
         深度优先策略:
         1. 优先点击未访问的可点击元素
@@ -62,13 +62,13 @@ class DepthFirstStrategy(BaseStrategy):
             return ('stop', None)
 
         unvisited_elements = state_mgr.get_unvisited_elements(ui_state)
-        
+
         Log.debug(f'[DepthFirst] 未访问元素数: {len(unvisited_elements)}, 连续返回次数: {self.back_count}')
 
         if unvisited_elements:
             self.back_count = 0
             target = unvisited_elements[0]
-            Log.debug(f'[DepthFirst] 决策: 点击 {target.get("type", "?")} "{target.get("text", "")[:20]}"')
+            Log.debug(f'[DepthFirst] 决策: 点击 "{target.get("type", "?")} {target.get("text", "")[:20]}"')
             return ('click', target)
 
         if self._can_scroll(ui_state):
@@ -96,7 +96,7 @@ class BreadthFirstStrategy(BaseStrategy):
         self.scroll_prob = scroll_prob
         self.pending_states = []
 
-    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> Tuple[str, Optional[dict]]:
+    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
         广度优先策略:
         1. 收集当前页面所有可点击元素
@@ -126,14 +126,14 @@ class RandomStrategy(BaseStrategy):
     def __init__(self, max_steps: int = 100):
         self.max_steps = max_steps
 
-    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> Tuple[str, Optional[dict]]:
+    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
         随机策略:
         1. 随机选择操作类型
         2. 达到最大步数后停止
         """
-        
-        if not ui_state.is_in_target_app(): 
+
+        if not ui_state.is_in_target_app():
             Log.info('检测到退出应用,停止探索')
             return ('stop', None)
 
@@ -195,7 +195,7 @@ class ExplorationStrategy:
 
         return strategies[strategy_type]
 
-    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> Tuple[str, Optional[dict]]:
+    def decide_next_action(self, ui_state: UIState, state_mgr: StateManager) -> tuple[str, Optional[dict]]:
         """
         决策下一步操作
 

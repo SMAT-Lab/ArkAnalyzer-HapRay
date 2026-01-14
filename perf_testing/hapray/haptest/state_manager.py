@@ -16,6 +16,7 @@ limitations under the License.
 import hashlib
 import json
 import logging
+import re
 from typing import Optional
 
 Log = logging.getLogger('HapTest.State')
@@ -57,7 +58,7 @@ class UIState:
     def _parse_clickable_elements(self) -> list:
         """从inspector JSON解析可点击元素"""
         try:
-            with open(self.inspector_path, 'r', encoding='utf-8') as f:
+            with open(self.inspector_path, encoding='utf-8') as f:
                 inspector_data = json.load(f)
 
             clickable = []
@@ -81,7 +82,7 @@ class UIState:
 
         # Inspector JSON结构: {'attributes': {...}, 'children': [...]}
         attrs = node.get('attributes', {})
-        
+
         node_type = attrs.get('type', '')
         node_id = attrs.get('id', '')
         node_text = attrs.get('text', '')
@@ -115,7 +116,7 @@ class UIState:
         # 递归处理子节点（传递bundleName）
         for child in node.get('children', []):
             self._extract_clickable_recursive(child, clickable, current_path, bundle_name)
-    
+
     def _parse_bounds(self, bounds_str: str) -> dict:
         """
         解析bounds字符串
@@ -123,7 +124,6 @@ class UIState:
         输出: {'left': 0, 'top': 0, 'right': 1216, 'bottom': 2688}
         """
         try:
-            import re
             match = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', bounds_str)
             if match:
                 return {
@@ -139,7 +139,7 @@ class UIState:
     def _compute_hash(self) -> str:
         """基于element tree计算状态哈希"""
         try:
-            with open(self.element_tree_path, 'r', encoding='utf-8') as f:
+            with open(self.element_tree_path, encoding='utf-8') as f:
                 tree_content = f.read()
 
             signature = self._extract_tree_signature(tree_content)
