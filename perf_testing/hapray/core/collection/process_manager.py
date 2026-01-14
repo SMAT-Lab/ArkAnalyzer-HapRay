@@ -19,7 +19,7 @@ from typing import Any
 
 from xdevice import platform_logger
 
-from hapray.core.command_templates import FILENAME_PIDS_JSON, PROC_MAPS_PATH_TEMPLATE
+from hapray.core.collection.command_templates import FILENAME_PIDS_JSON, PROC_MAPS_PATH_TEMPLATE
 
 Log = platform_logger('ProcessManager')
 
