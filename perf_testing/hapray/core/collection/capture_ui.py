@@ -16,8 +16,8 @@ limitations under the License.
 import os
 import re
 import zipfile
-from typing import Any
 
+from hypium import UiDriver
 from hypium.uidriver.uitree import UiTree
 from xdevice import platform_logger
 
@@ -27,14 +27,14 @@ Log = platform_logger('CaptureUI')
 class CaptureUI:
     """UI数据抓取类，负责截屏和dump element树"""
 
-    def __init__(self, driver: Any):
+    def __init__(self, driver: UiDriver):
         """
         初始化CaptureUI
 
         Args:
             driver: 设备驱动对象（需要有shell方法和pull_file方法）
         """
-        self.driver = driver
+        self.driver: UiDriver = driver
         self.uitree = UiTree(self.driver)
 
     def capture_ui(self, step_id: int, report_path: str, label_name: str = None):
