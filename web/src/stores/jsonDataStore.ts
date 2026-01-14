@@ -135,9 +135,9 @@ interface EmptyFrameSummary {
   empty_frame_load: number;
   empty_frame_percentage: number;
   background_thread_load: number;
-  background_thread_percentage: number;
+  background_thread_percentage_in_empty_frame: number; // 后台线程占空刷帧的百分比
   main_thread_load?: number; // 主线程负载（可选）
-  main_thread_percentage?: number; // 主线程占比（可选）
+  main_thread_percentage_in_empty_frame?: number; // 主线程占空刷帧的百分比（可选）
   total_empty_frames: number;
   empty_frames_with_load: number;
   severity_level?: string; // 严重程度级别（可选）
@@ -598,9 +598,9 @@ export function getDefaultEmptyFrameStepData(): EmptyFrameStepData {
       empty_frame_load: 0,
       empty_frame_percentage: 0,
       background_thread_load: 0,
-      background_thread_percentage: 0,
+      background_thread_percentage_in_empty_frame: 0,
       main_thread_load: 0,
-      main_thread_percentage: 0,
+      main_thread_percentage_in_empty_frame: 0,
       total_empty_frames: 0,
       empty_frames_with_load: 0,
       severity_level: "normal",
@@ -1881,6 +1881,12 @@ export const useCategoryStore = defineStore('categoryNameQuery', {
 export const useComponentNameStore = defineStore('componentNameQuery', {
   state: () => ({
     subCategoryNameQuery: '' as string,
+  })
+});
+
+export const useThirdCategoryNameQueryStore = defineStore('thirdCategoryNameQuery', {
+  state: () => ({
+    thirdCategoryNameQuery: '' as string,
   })
 });
 

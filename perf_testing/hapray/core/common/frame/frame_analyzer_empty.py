@@ -1313,8 +1313,98 @@ class EmptyFrameAnalyzer:
         for _, row in direct_frames_df.iterrows():
             key = (row['pid'], row['ts'], row['vsync'])
             # 使用"线程名=进程名"规则判断主线程（规则完全成立，无需查询is_main_thread字段）
+            # 处理pandas NaN值：如果thread_name是NaN，转换为空字符串
             thread_name = row.get('thread_name', '')
+            if pd.isna(thread_name):
+                thread_name = ''
             process_name = row.get('process_name', '')
+            if pd.isna(process_name):
+                process_name = ''
+            tid = row.get('tid')
+            itid = row.get('itid')  # direct_frames_df应该包含itid字段
+            callstack_id = row.get('callstack_id')
+            # 处理pandas NaN值：如果callstack_id是NaN，转换为None
+            if pd.isna(callstack_id):
+                callstack_id = None
+
+            # 如果thread_name为空，从数据库查询
+            if not thread_name and tid and trace_conn:
+                try:
+                    cursor = trace_conn.cursor()
+                    cursor.execute('SELECT name FROM thread WHERE tid = ? LIMIT 1', (int(tid),))
+                    result = cursor.fetchone()
+                    if result:
+                        thread_name = result[0] or ''
+                except Exception as e:
+                    logging.debug(f'查询thread_name失败: tid={tid}, error={e}')
+                    pass
+
+            # 如果callstack_id为空，从frame_slice表查询
+            # 根据文档：frame_slice.itid 关联 thread.id（不是thread.itid）
+            # 优先使用vsync匹配（vsync是唯一标识一组渲染帧的）
+            if callstack_id is None and trace_conn:
+                try:
+                    cursor = trace_conn.cursor()
+                    vsync = row.get('vsync')
+
+                    # 优先使用vsync匹配（最准确）
+                    if vsync is not None and pd.notna(vsync):
+                        if itid is not None and pd.notna(itid):
+                            # 如果有itid，直接使用itid和vsync匹配
+                            cursor.execute(
+                                """
+                                SELECT callstack_id FROM frame_slice
+                                WHERE vsync = ? AND itid = ? LIMIT 1
+                                """,
+                                (int(vsync), int(itid)),
+                            )
+                            result = cursor.fetchone()
+                            if result:
+                                callstack_id = result[0]
+                        elif tid and pd.notna(tid):
+                            # 如果没有itid，通过tid查询thread.id，然后用id和vsync匹配
+                            # 注意：frame_slice.itid 关联 thread.id（不是thread.itid）
+                            cursor.execute(
+                                """
+                                SELECT callstack_id FROM frame_slice
+                                WHERE vsync = ? AND itid IN (
+                                    SELECT id FROM thread WHERE tid = ?
+                                ) LIMIT 1
+                                """,
+                                (int(vsync), int(tid)),
+                            )
+                            result = cursor.fetchone()
+                            if result:
+                                callstack_id = result[0]
+                    # 如果没有vsync，使用ts, dur, itid匹配
+                    elif itid is not None and pd.notna(itid):
+                        cursor.execute(
+                            """
+                                SELECT callstack_id FROM frame_slice
+                                WHERE ts = ? AND dur = ? AND itid = ? LIMIT 1
+                                """,
+                            (row['ts'], row['dur'], int(itid)),
+                        )
+                        result = cursor.fetchone()
+                        if result:
+                            callstack_id = result[0]
+                    elif tid and pd.notna(tid):
+                        cursor.execute(
+                            """
+                                SELECT callstack_id FROM frame_slice
+                                WHERE ts = ? AND dur = ? AND itid IN (
+                                    SELECT id FROM thread WHERE tid = ?
+                                ) LIMIT 1
+                                """,
+                            (row['ts'], row['dur'], int(tid)),
+                        )
+                        result = cursor.fetchone()
+                        if result:
+                            callstack_id = result[0]
+                except Exception as e:
+                    logging.debug(f'查询callstack_id失败: vsync={vsync}, itid={itid}, tid={tid}, error={e}')
+                    pass
+
             is_main_thread = (
                 1 if thread_name == process_name else (row.get('is_main_thread', 0) if 'is_main_thread' in row else 0)
             )
@@ -1324,13 +1414,13 @@ class EmptyFrameAnalyzer:
                 'dur': row['dur'],
                 'vsync': row['vsync'],
                 'pid': row['pid'],
-                'tid': row['tid'],
+                'tid': tid,
                 'process_name': process_name,
                 'thread_name': thread_name,
                 'flag': row['flag'],
                 'type': row.get('type', 0),
                 'is_main_thread': is_main_thread,  # 使用规则判断，如果规则不适用则使用原有值
-                'callstack_id': row.get('callstack_id'),
+                'callstack_id': callstack_id,
                 'detection_method': 'direct',
                 'traced_count': 0,
                 'rs_skip_events': [],
@@ -1399,22 +1489,97 @@ class EmptyFrameAnalyzer:
 
                 # 使用"线程名=进程名"规则判断主线程（规则完全成立，无需查询is_main_thread字段）
                 thread_name = app_frame.get('thread_name', '')
+                if pd.isna(thread_name):
+                    thread_name = ''
                 process_name = app_frame.get('process_name', '')
+                if pd.isna(process_name):
+                    process_name = ''
+                callstack_id = app_frame.get('callstack_id')
+                if pd.isna(callstack_id):
+                    callstack_id = None
+                frame_ts = app_frame.get('frame_ts') or app_frame.get('ts')
+                frame_dur = app_frame.get('frame_dur') or app_frame.get('dur')
+                frame_vsync = app_frame.get('frame_vsync') or app_frame.get('vsync')
+
+                # 如果thread_name为空，从数据库查询
+                if not thread_name and tid and trace_conn:
+                    try:
+                        cursor = trace_conn.cursor()
+                        cursor.execute('SELECT name FROM thread WHERE tid = ? LIMIT 1', (int(tid),))
+                        result = cursor.fetchone()
+                        if result:
+                            thread_name = result[0] or ''
+                    except Exception:
+                        pass
+
+                # 如果callstack_id为空，从frame_slice表查询
+                # 根据文档：frame_slice.itid 关联 thread.id（不是thread.itid）
+                # 优先使用vsync匹配（vsync是唯一标识一组渲染帧的）
+                if callstack_id is None and trace_conn:
+                    try:
+                        cursor = trace_conn.cursor()
+                        # 优先使用vsync匹配（最准确）
+                        if frame_vsync is not None and pd.notna(frame_vsync):
+                            if itid is not None and pd.notna(itid):
+                                cursor.execute(
+                                    """
+                                    SELECT callstack_id FROM frame_slice
+                                    WHERE vsync = ? AND itid = ? LIMIT 1
+                                    """,
+                                    (int(frame_vsync), int(itid)),
+                                )
+                            elif tid and pd.notna(tid):
+                                cursor.execute(
+                                    """
+                                    SELECT callstack_id FROM frame_slice
+                                    WHERE vsync = ? AND itid IN (
+                                        SELECT id FROM thread WHERE tid = ?
+                                    ) LIMIT 1
+                                    """,
+                                    (int(frame_vsync), int(tid)),
+                                )
+                        elif frame_ts and frame_dur:
+                            # 如果没有vsync，使用ts, dur, itid匹配
+                            if itid is not None and pd.notna(itid):
+                                cursor.execute(
+                                    """
+                                    SELECT callstack_id FROM frame_slice
+                                    WHERE ts = ? AND dur = ? AND itid = ? LIMIT 1
+                                    """,
+                                    (frame_ts, frame_dur, int(itid)),
+                                )
+                            elif tid and pd.notna(tid):
+                                cursor.execute(
+                                    """
+                                    SELECT callstack_id FROM frame_slice
+                                    WHERE ts = ? AND dur = ? AND itid IN (
+                                        SELECT id FROM thread WHERE tid = ?
+                                    ) LIMIT 1
+                                    """,
+                                    (frame_ts, frame_dur, int(tid)),
+                                )
+
+                        result = cursor.fetchone()
+                        if result:
+                            callstack_id = result[0]
+                    except Exception:
+                        pass
+
                 is_main_thread = 1 if thread_name == process_name else 0
 
                 frame_map[key] = {
-                    'ts': app_frame.get('frame_ts') or app_frame.get('ts'),
-                    'dur': app_frame.get('frame_dur') or app_frame.get('dur'),
+                    'ts': frame_ts,
+                    'dur': frame_dur,
                     'vsync': app_frame.get('frame_vsync') or app_frame.get('vsync'),
                     'pid': app_frame.get('app_pid') or app_frame.get('process_pid') or app_frame.get('pid'),
                     'tid': tid,
                     'itid': itid,  # 添加itid字段（唤醒链分析需要）
-                    'process_name': app_frame.get('process_name', ''),
-                    'thread_name': app_frame.get('thread_name', ''),
+                    'process_name': process_name,
+                    'thread_name': thread_name,
                     'flag': app_frame.get('frame_flag') or app_frame.get('flag', 2),  # 空刷帧标记
                     'type': 0,
                     'is_main_thread': is_main_thread,  # 从thread表查询得到，或使用app_frame中的值
-                    'callstack_id': app_frame.get('callstack_id'),
+                    'callstack_id': callstack_id,
                     'detection_method': 'rs_traced',
                     'traced_count': 1,
                     'rs_skip_events': [rs_frame],
@@ -1447,19 +1612,92 @@ class EmptyFrameAnalyzer:
                     # 如果是 framework_specific，则保持不变（理论上不会发生）
                 else:
                     # 新帧：添加为 framework_specific
+                    tid = row.get('tid')
+                    itid = row.get('itid')
+                    thread_name = row.get('thread_name', '')
+                    if pd.isna(thread_name):
+                        thread_name = ''
+                    callstack_id = row.get('callstack_id')
+                    if pd.isna(callstack_id):
+                        callstack_id = None
+                    vsync = row.get('vsync')
+
+                    # 如果thread_name为空，从数据库查询
+                    if not thread_name and tid and trace_conn:
+                        try:
+                            cursor = trace_conn.cursor()
+                            cursor.execute('SELECT name FROM thread WHERE tid = ? LIMIT 1', (int(tid),))
+                            result = cursor.fetchone()
+                            if result:
+                                thread_name = result[0] or ''
+                        except Exception:
+                            pass
+
+                    # 如果callstack_id为空，从frame_slice表查询
+                    # 根据文档：frame_slice.itid 关联 thread.id（不是thread.itid）
+                    # 优先使用vsync匹配（vsync是唯一标识一组渲染帧的）
+                    if callstack_id is None and trace_conn:
+                        try:
+                            cursor = trace_conn.cursor()
+                            # 优先使用vsync匹配（最准确）
+                            if vsync is not None and pd.notna(vsync):
+                                if itid is not None and pd.notna(itid):
+                                    cursor.execute(
+                                        """
+                                        SELECT callstack_id FROM frame_slice
+                                        WHERE vsync = ? AND itid = ? LIMIT 1
+                                        """,
+                                        (int(vsync), int(itid)),
+                                    )
+                                elif tid and pd.notna(tid):
+                                    cursor.execute(
+                                        """
+                                        SELECT callstack_id FROM frame_slice
+                                        WHERE vsync = ? AND itid IN (
+                                            SELECT id FROM thread WHERE tid = ?
+                                        ) LIMIT 1
+                                        """,
+                                        (int(vsync), int(tid)),
+                                    )
+                            # 如果没有vsync，使用ts, dur, itid匹配
+                            elif itid is not None and pd.notna(itid):
+                                cursor.execute(
+                                    """
+                                        SELECT callstack_id FROM frame_slice
+                                        WHERE ts = ? AND dur = ? AND itid = ? LIMIT 1
+                                        """,
+                                    (row['ts'], row['dur'], int(itid)),
+                                )
+                            elif tid and pd.notna(tid):
+                                cursor.execute(
+                                    """
+                                        SELECT callstack_id FROM frame_slice
+                                        WHERE ts = ? AND dur = ? AND itid IN (
+                                            SELECT id FROM thread WHERE tid = ?
+                                        ) LIMIT 1
+                                        """,
+                                    (row['ts'], row['dur'], int(tid)),
+                                )
+
+                            result = cursor.fetchone()
+                            if result:
+                                callstack_id = result[0]
+                        except Exception:
+                            pass
+
                     frame_map[key] = {
                         'ts': row['ts'],
                         'dur': row['dur'],
                         'vsync': vsync,
                         'pid': row['pid'],
-                        'tid': row.get('tid'),
+                        'tid': tid,
                         'itid': row.get('itid'),
                         'process_name': row.get('process_name', 'unknown'),
-                        'thread_name': row.get('thread_name', 'unknown'),
+                        'thread_name': thread_name if thread_name else 'unknown',
                         'flag': row.get('flag', 2),
                         'type': row.get('type', 0),
                         'is_main_thread': row.get('is_main_thread', 0),
-                        'callstack_id': row.get('callstack_id'),
+                        'callstack_id': callstack_id,
                         'detection_method': 'framework_specific',
                         'framework_type': row.get('framework_type', 'unknown'),
                         'frame_damage': row.get('frame_damage'),  # Flutter 特有
@@ -1472,6 +1710,14 @@ class EmptyFrameAnalyzer:
 
         # 4. 转换为DataFrame
         merged_df = pd.DataFrame(list(frame_map.values())) if frame_map else pd.DataFrame()
+
+        # 确保thread_id字段存在（如果只有tid，则使用tid作为thread_id）
+        if not merged_df.empty and 'thread_id' not in merged_df.columns:
+            if 'tid' in merged_df.columns:
+                merged_df['thread_id'] = merged_df['tid']
+        elif not merged_df.empty and 'tid' in merged_df.columns:
+            # 如果thread_id存在但为None，使用tid填充
+            merged_df['thread_id'] = merged_df['thread_id'].fillna(merged_df['tid'])
 
         # 统计信息
         # logging.info('帧合并统计: 仅正向=%d, 仅反向=%d, 重叠=%d, 总计=%d',

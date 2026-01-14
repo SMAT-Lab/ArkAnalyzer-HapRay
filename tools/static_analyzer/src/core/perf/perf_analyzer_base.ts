@@ -847,6 +847,250 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             sheets: ['ecol_load_hiperf_detail', 'ecol_load_step'],
             filePath: outputFileName,
         });
+
+        // 生成技术栈数据表格
+        await this.saveTechStackXlsx(testInfo, perf, outputFileName);
+    }
+
+    /**
+     * 生成技术栈数据表格
+     * 根据 techStackData 方法的逻辑，生成技术栈数据 Excel 文件
+     */
+    private async saveTechStackXlsx(testInfo: TestSceneInfo, perf: PerfSum, outputFileName: string): Promise<void> {
+        // 需要排除的分类名称（对应 kind = 1, 3, 4, -1）
+        const excludedCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
+
+        // 按步骤分组统计技术栈数据
+        const stepTechStackMap = new Map<number, {
+            categoryMap: Map<string, { instructions: number; subCategories: Map<string, number> }>;
+            totalInstructions: number;
+        }>();
+
+        // 遍历所有详细数据，只统计指令数
+        for (const data of this.details) {
+            // 只统计指令数
+            if (data.eventType !== PerfEvent.INSTRUCTION_EVENT) {
+                continue;
+            }
+
+            const categoryName = data.componentCategory.categoryName || ComponentCategory[data.componentCategory.category] || 'UNKNOWN';
+            
+            // 排除指定的分类
+            if (excludedCategories.includes(categoryName)) {
+                continue;
+            }
+
+            const stepIdx = data.stepIdx;
+            const subCategoryName = data.componentCategory.subCategoryName ?? '';
+
+            // 初始化步骤数据
+            if (!stepTechStackMap.has(stepIdx)) {
+                stepTechStackMap.set(stepIdx, {
+                    categoryMap: new Map(),
+                    totalInstructions: 0,
+                });
+            }
+
+            const stepData = stepTechStackMap.get(stepIdx)!;
+
+            // 统计大分类
+            if (!stepData.categoryMap.has(categoryName)) {
+                stepData.categoryMap.set(categoryName, {
+                    instructions: 0,
+                    subCategories: new Map(),
+                });
+            }
+
+            const categoryData = stepData.categoryMap.get(categoryName)!;
+            categoryData.instructions += data.symbolEvents;
+
+            // 统计小分类
+            if (subCategoryName) {
+                const subKey = subCategoryName;
+                categoryData.subCategories.set(subKey, (categoryData.subCategories.get(subKey) ?? 0) + data.symbolEvents);
+            }
+
+            stepData.totalInstructions += data.symbolEvents;
+        }
+
+        // 如果没有技术栈数据，不生成文件
+        if (stepTechStackMap.size === 0) {
+            return;
+        }
+
+        // 从路径解析测试场景、步骤和轮次信息
+        const pathInfo = this.parsePathInfo(outputFileName);
+        
+        // 优先使用 perf.scene，如果为空则使用从路径解析的测试场景
+        const scene = perf.scene || (pathInfo.scene ?? '');
+        
+        // 获取输出目录
+        const outputDir = path.dirname(outputFileName);
+        
+        // 优先使用从路径解析的轮次，如果无法解析则使用原有逻辑
+        let roundNumber = pathInfo.round;
+        if (roundNumber === null) {
+            // 从Excel文件目录的父目录名称中提取最后一个数字作为轮次（兼容原有逻辑）
+            const parentDirName = path.basename(outputDir);
+            const lastNumberMatch = parentDirName.match(/(\d+)(?!.*\d)/);
+            roundNumber = lastNumberMatch ? parseInt(lastNumberMatch[1], 10) : 0;
+        }
+
+        // 从测试场景中提取应用名（用下划线分割，取第二部分）
+        const sceneParts = scene.split('_');
+        const appName = sceneParts.length >= 2 ? sceneParts[1] : '';
+        
+        // 如果路径中解析出了步骤信息，使用路径中的步骤ID
+        // 因为路径明确标识了这是哪个步骤的数据
+        const pathStepId = pathInfo.step;
+
+        // 生成技术栈数据表格
+        const techStackData: SheetData = [];
+        
+        // 表头
+        techStackData.push([
+            { value: '轮次' },
+            { value: '应用名' },
+            { value: '测试场景' },
+            { value: '步骤名称' },
+            { value: '技术栈分类' },
+            { value: '技术栈子分类' },
+            { value: '指令数' },
+            { value: '占比(%)' },
+        ]);
+
+        // 按步骤ID排序
+        const sortedSteps = Array.from(stepTechStackMap.entries()).sort((a, b) => a[0] - b[0]);
+
+        for (const [stepIdx, stepData] of sortedSteps) {
+            // 如果路径中有步骤信息，且只有一个步骤的数据，使用路径中的步骤ID
+            // 因为路径明确标识了这是哪个步骤的数据（如 _step2）
+            // 如果有多个步骤，使用数据中的步骤ID，因为路径中的步骤ID可能只适用于第一个步骤
+            const actualStepIdx = (pathStepId !== null && stepTechStackMap.size === 1) 
+                ? pathStepId 
+                : stepIdx;
+            
+            // 先尝试用实际步骤ID查找步骤，如果找不到再用数据中的步骤ID
+            let step = this.testSteps.find(s => s.id === actualStepIdx);
+            step ??= this.testSteps.find(s => s.id === stepIdx);
+            const stepName = step?.name ?? `Step ${actualStepIdx}`;
+
+            // 按指令数排序大分类
+            const sortedCategories = Array.from(stepData.categoryMap.entries())
+                .sort((a, b) => b[1].instructions - a[1].instructions);
+
+            for (const [categoryName, categoryData] of sortedCategories) {
+                // 添加小分类行（按指令数排序）
+                const sortedSubCategories = Array.from(categoryData.subCategories.entries())
+                    .sort((a, b) => b[1] - a[1]);
+
+                // 只有当有小分类时才添加数据行
+                for (const [subCategoryName, subInstructions] of sortedSubCategories) {
+                    const subPercentage = stepData.totalInstructions > 0
+                        ? ((subInstructions / stepData.totalInstructions) * 100).toFixed(1)
+                        : '0.0';
+
+                    techStackData.push([
+                        { value: roundNumber, type: Number },
+                        { value: appName, type: String },
+                        { value: scene, type: String },
+                        { value: stepName, type: String },
+                        { value: categoryName, type: String },
+                        { value: subCategoryName, type: String },
+                        { value: subInstructions, type: Number },
+                        { value: subPercentage, type: String },
+                    ]);
+                }
+            }
+        }
+
+        // 生成技术栈数据 Excel 文件（与原文件同目录，文件名添加 _techstack 后缀）
+        const outputBaseName = path.basename(outputFileName, path.extname(outputFileName));
+        const techStackFileName = path.join(outputDir, `${outputBaseName}_techstack.xlsx`);
+
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        await writeXlsxFile([techStackData], {
+            sheets: ['技术栈数据'],
+            filePath: techStackFileName,
+        });
+
+        logger.info(`技术栈数据表格已生成: ${techStackFileName}`);
+    }
+
+    /**
+     * 从文件路径中解析轮次、测试场景和步骤信息
+     * 
+     * 支持的路径格式：
+     * - _round2/PerfLoad_Douyin_0090_step3
+     * - _r2/MemLoad_kuaishou+0020_step2
+     * - 任何包含 _roundN 或 _rN 和 _stepN 的路径
+     * 
+     * @param filePath 文件路径
+     * @returns 解析结果，包含轮次、测试场景和步骤ID
+     */
+    private parsePathInfo(filePath: string): { round: number | null; scene: string | null; step: number | null } {
+        const pathStr = filePath;
+        
+        // 解析轮次：匹配 _roundN 或 _rN
+        const roundMatch = pathStr.match(/_r(?:ound)?(\d+)/i);
+        const roundNumber = roundMatch ? parseInt(roundMatch[1], 10) : null;
+        
+        // 解析步骤：匹配 _stepN
+        const stepMatch = pathStr.match(/_step(\d+)/i);
+        const stepNumber = stepMatch ? parseInt(stepMatch[1], 10) : null;
+        
+        // 解析测试场景：在轮次和步骤之间的部分
+        // 例如：_round2/PerfLoad_Douyin_0090_step3 -> PerfLoad_Douyin_0090
+        // 或者：_r2/MemLoad_kuaishou+0020_step2 -> MemLoad_kuaishou+0020
+        let scene: string | null = null;
+        
+        // 尝试找到轮次和步骤之间的部分
+        if (roundMatch && stepMatch) {
+            // 找到轮次匹配后的位置
+            const roundEnd = roundMatch.index! + roundMatch[0].length;
+            // 找到步骤匹配前的位置
+            const stepStart = stepMatch.index!;
+            
+            // 提取中间部分
+            let middlePart = pathStr.substring(roundEnd, stepStart);
+            // 去掉路径分隔符和多余的下划线
+            middlePart = middlePart.replace(/^[/\\_]+|[/\\_]+$/g, '');
+            
+            // 如果中间部分不为空，且看起来像测试场景名称
+            if (middlePart) {
+                // 去掉目录分隔符，只保留场景名称部分
+                // 如果包含路径分隔符，取最后一部分
+                const parts = middlePart.replace(/\\/g, '/').split('/');
+                const lastPart = parts[parts.length - 1];
+                if (lastPart) {
+                    scene = lastPart;
+                }
+            }
+        }
+        
+        // 如果通过轮次和步骤无法解析，尝试直接匹配常见的测试场景模式
+        if (!scene) {
+            // 匹配类似 PerfLoad_Douyin_0090 或 MemLoad_kuaishou+0020 的模式
+            // 模式：大写字母开头的单词，可能包含下划线、加号、数字
+            const sceneMatch = pathStr.match(/([A-Z][A-Za-z0-9_+]+(?:_[A-Za-z0-9+]+)*)/);
+            if (sceneMatch) {
+                const potentialScene = sceneMatch[1];
+                // 确保不是 step 或 round 相关的词
+                if (!potentialScene.toLowerCase().includes('step') && 
+                    !potentialScene.toLowerCase().includes('round')) {
+                    scene = potentialScene;
+                }
+            }
+        }
+        
+        return {
+            round: roundNumber,
+            scene: scene,
+            step: stepNumber
+        };
     }
 
     private excelSpecialTranscode(content: string): string {

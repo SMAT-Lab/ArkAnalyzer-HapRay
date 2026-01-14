@@ -19,6 +19,7 @@ import logging
 import sqlite3
 import time
 import traceback
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Optional
 
 import pandas as pd
@@ -654,6 +655,9 @@ class FrameLoadCalculator:
 
         sample_analysis_time = time.time() - sample_analysis_start
 
+        # 对sample_callchains按event_count降序排序（与stuttered frame保持一致）
+        sample_callchains = sorted(sample_callchains, key=lambda x: x['event_count'], reverse=True)
+
         # 保存帧负载数据到缓存
         # 注意：一帧是针对整个进程的，不是某个线程，因此不保存thread_id
         # 每个sample_callchain都有自己的thread_id
@@ -662,7 +666,9 @@ class FrameLoadCalculator:
             'ts': frame.get('ts', frame.get('start_time', 0)),
             'dur': frame.get('dur', frame.get('end_time', 0) - frame.get('start_time', 0)),
             'frame_load': frame_load,
-            'thread_name': frame.get('thread_name', 'unknown'),
+            'empty_frame_thread': frame.get(
+                'thread_name', 'unknown'
+            ),  # 空刷产生的线程（区分sample_callchains中的thread_name）
             'process_name': frame.get('process_name', 'unknown'),
             'type': frame.get('type', 0),
             'vsync': frame.get('vsync', 'unknown'),
@@ -807,6 +813,7 @@ class FrameLoadCalculator:
         """快速计算所有帧的负载值，不分析调用链
 
         注意：如果启用了进程级CPU计算，将使用数据库查询而不是perf_df
+        优化：使用批量查询，一次性获取所有帧的perf_sample数据，在内存中按帧分组计算
 
         Args:
             frames: 帧数据DataFrame
@@ -829,10 +836,20 @@ class FrameLoadCalculator:
         if use_process_level:
             app_pids = self.cache_manager.app_pids
             logging.info(f'使用进程级CPU计算（PIDs={app_pids}），共{len(frames)}帧')
+
+            # 优化：使用批量查询方法
+            try:
+                frame_loads = self._calculate_all_frame_loads_batch(frames, app_pids)
+                logging.info(f'批量查询完成，共计算{len(frame_loads)}帧的负载')
+                return frame_loads
+            except Exception as e:
+                logging.warning(f'批量查询失败，回退到逐帧查询: {e}')
+                # 回退到原有的逐帧查询方法
+                pass
         else:
             logging.info(f'使用单线程CPU计算，共{len(frames)}帧')
 
-        # 批量计算开始
+        # 批量计算开始（原有方法或回退方法）
         for i, (_, frame) in enumerate(frames.iterrows()):
             # 根据配置选择计算方法
             if use_process_level:
@@ -876,13 +893,23 @@ class FrameLoadCalculator:
             # 确保时间戳字段正确，处理NaN值
             # 注意：一帧是针对整个进程的，不是某个线程，因此不保存thread_id
             # 每个sample_callchain都有自己的thread_id
+            # 处理thread_name和callstack_id的NaN值
+            thread_name = frame.get('thread_name', '')
+            if pd.isna(thread_name):
+                thread_name = ''
+            callstack_id = frame.get('callstack_id')
+            if pd.isna(callstack_id):
+                callstack_id = None
+
             frame_loads.append(
                 {
                     'ts': int(frame['ts']) if pd.notna(frame['ts']) else 0,  # 确保时间戳是整数
                     'dur': int(frame['dur']) if pd.notna(frame['dur']) else 0,  # 确保持续时间是整数
                     'frame_load': frame_load,
                     'thread_id': int(frame['tid']) if pd.notna(frame['tid']) else 0,  # 添加thread_id字段，用于帧匹配
-                    'thread_name': frame.get('thread_name', 'unknown'),
+                    'thread_name': thread_name,  # 线程名称（用于JSON输出）
+                    'empty_frame_thread': thread_name,  # 空刷产生的线程（区分sample_callchains中的thread_name，保持向后兼容）
+                    'callstack_id': callstack_id,  # 调用栈ID（用于JSON输出）
                     'process_name': frame.get('process_name', 'unknown'),
                     'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,  # 确保类型是整数
                     'vsync': frame.get('vsync', 'unknown'),
@@ -891,6 +918,146 @@ class FrameLoadCalculator:
                     if pd.notna(frame.get('is_main_thread'))
                     else 0,  # 确保主线程标志是整数
                     'sample_callchains': [],  # 空列表，不保存调用链
+                }
+            )
+
+        return frame_loads
+
+    def _calculate_all_frame_loads_batch(self, frames: pd.DataFrame, app_pids: list[int]) -> list[dict[str, Any]]:
+        """批量计算所有帧的负载（优化方法：一次性查询所有perf_sample数据）
+
+        Args:
+            frames: 帧数据DataFrame
+            app_pids: 应用进程ID列表
+
+        Returns:
+            List[Dict]: 帧负载数据列表
+        """
+        if frames.empty:
+            return []
+
+        trace_conn = self.cache_manager.trace_conn
+        perf_conn = self.cache_manager.perf_conn
+
+        # 步骤1：计算所有帧的时间范围（扩展±1ms）
+        min_ts = int(frames['ts'].min()) - 1_000_000  # 1ms before
+        max_ts = int((frames['ts'] + frames['dur']).max()) + 1_000_000  # 1ms after
+
+        # 步骤2：一次性获取所有进程的线程ID，并建立PID到线程ID的映射
+        trace_cursor = trace_conn.cursor()
+        placeholders = ','.join('?' * len(app_pids))
+        trace_cursor.execute(
+            f"""
+            SELECT DISTINCT p.pid, t.tid
+            FROM thread t
+            INNER JOIN process p ON t.ipid = p.ipid
+            WHERE p.pid IN ({placeholders})
+        """,
+            app_pids,
+        )
+
+        # 建立PID到线程ID列表的映射
+        pid_to_threads = defaultdict(list)
+        all_thread_tids = set()
+        for pid, tid in trace_cursor.fetchall():
+            pid_to_threads[pid].append(tid)
+            all_thread_tids.add(tid)
+
+        if not all_thread_tids:
+            logging.warning('未找到进程的线程，返回空结果')
+            return []
+
+        # 步骤3：获取线程信息（用于区分系统线程）
+        self.cache_manager.get_tid_to_info() if self.cache_manager else {}
+
+        # 步骤4：一次性查询所有线程在时间范围内的perf_sample数据
+        perf_cursor = perf_conn.cursor()
+
+        # 检查perf_sample表的时间戳字段名
+        perf_cursor.execute('PRAGMA table_info(perf_sample)')
+        columns = [row[1] for row in perf_cursor.fetchall()]
+        timestamp_field = 'timestamp_trace' if 'timestamp_trace' in columns else 'timeStamp'
+
+        thread_placeholders = ','.join('?' * len(all_thread_tids))
+        batch_query = f"""
+            SELECT
+                ps.thread_id,
+                ps.{timestamp_field} as ts,
+                ps.event_count
+            FROM perf_sample ps
+            WHERE ps.thread_id IN ({thread_placeholders})
+            AND ps.{timestamp_field} >= ? AND ps.{timestamp_field} <= ?
+        """
+        params = list(all_thread_tids) + [min_ts, max_ts]
+        perf_cursor.execute(batch_query, params)
+
+        # 步骤5：在内存中构建perf_sample索引（按thread_id和时间戳）
+        # 使用字典存储：{thread_id: [(ts, event_count), ...]}
+        perf_samples_by_thread = defaultdict(list)
+        for thread_id, ts, event_count in perf_cursor.fetchall():
+            perf_samples_by_thread[thread_id].append((ts, event_count))
+
+        # 对每个线程的样本按时间戳排序（用于后续二分查找）
+        for thread_id in perf_samples_by_thread:
+            perf_samples_by_thread[thread_id].sort(key=lambda x: x[0])
+
+        # 步骤6：对每个帧计算负载（在内存中分组计算）
+        frame_loads = []
+        for _i, (_, frame) in enumerate(frames.iterrows()):
+            frame_start = int(frame['ts'])
+            frame_end = int(frame['ts']) + int(frame['dur'])
+            # 注意：不使用时间扩展，直接使用原始时间范围，避免负载偏高
+
+            total_load = 0
+
+            # 对每个进程分别计算（使用预加载的PID到线程映射）
+            for pid in app_pids:
+                pid_thread_tids = pid_to_threads.get(pid, [])
+
+                # 计算该进程所有线程的负载
+                for thread_id in pid_thread_tids:
+                    if thread_id not in perf_samples_by_thread:
+                        continue
+
+                    # 使用二分查找找到时间范围内的样本
+                    samples = perf_samples_by_thread[thread_id]
+                    if not samples:
+                        continue
+
+                    timestamps = [s[0] for s in samples]
+                    start_idx = bisect.bisect_left(timestamps, frame_start)
+                    end_idx = bisect.bisect_right(timestamps, frame_end)
+
+                    # 累加该线程在时间范围内的event_count
+                    thread_load = sum(samples[j][1] for j in range(start_idx, end_idx))
+                    total_load += thread_load
+
+            # 构建帧负载数据
+            # 处理thread_name和callstack_id的NaN值
+            thread_name = frame.get('thread_name', '')
+            if pd.isna(thread_name):
+                thread_name = ''
+            callstack_id = frame.get('callstack_id')
+            if pd.isna(callstack_id):
+                callstack_id = None
+
+            frame_loads.append(
+                {
+                    'ts': int(frame['ts']) if pd.notna(frame['ts']) else 0,
+                    'dur': int(frame['dur']) if pd.notna(frame['dur']) else 0,
+                    'frame_load': int(total_load),
+                    'thread_id': int(frame['tid']) if pd.notna(frame['tid']) else 0,
+                    'thread_name': thread_name,  # 线程名称（用于JSON输出）
+                    'empty_frame_thread': thread_name,  # 空刷产生的线程（区分sample_callchains中的thread_name，保持向后兼容）
+                    'callstack_id': callstack_id,  # 调用栈ID（用于JSON输出）
+                    'process_name': frame.get('process_name', 'unknown'),
+                    'type': int(frame.get('type', 0)) if pd.notna(frame.get('type')) else 0,
+                    'vsync': frame.get('vsync', 'unknown'),
+                    'flag': int(frame.get('flag', 0)) if pd.notna(frame.get('flag')) else 0,
+                    'is_main_thread': int(frame.get('is_main_thread', 0))
+                    if pd.notna(frame.get('is_main_thread'))
+                    else 0,
+                    'sample_callchains': [],
                 }
             )
 
