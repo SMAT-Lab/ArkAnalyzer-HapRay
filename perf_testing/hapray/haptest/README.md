@@ -69,6 +69,8 @@ python -m scripts.main haptest \
 
 python -m scripts.main haptest --app-package com.example.deephierarchy --app-name "DH" --ability-name EntryAbility --strategy depth_first --max-steps 20 
 
+python -m scripts.main haptest --app-package com.example.areudead --app-name "AUD" --ability-name EntryAbility --strategy depth_first --max-steps 20 
+
 # 完整参数示例
 python -m scripts.main haptest \
   --app-package com.jd.hm.mall \
