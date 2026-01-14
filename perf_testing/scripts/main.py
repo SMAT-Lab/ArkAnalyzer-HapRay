@@ -25,6 +25,7 @@ from hapray.actions.compare_action import CompareAction
 from hapray.actions.gui_agent_action import GuiAgentAction
 from hapray.actions.hilog_action import HilogAction
 from hapray.actions.perf_action import PerfAction
+from hapray.actions.haptest_action import HapTestAction
 from hapray.actions.prepare_action import PrepareAction
 from hapray.actions.static_action import StaticAction
 from hapray.actions.ui_action import UIAction
@@ -96,6 +97,7 @@ class HapRayCmd:
             'ui-compare': UICompareAction,
             'hilog': HilogAction,
             'gui-agent': GuiAgentAction,
+            'haptest': HapTestAction,
         }
 
         parser = argparse.ArgumentParser(
@@ -109,7 +111,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis)',
+            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis, haptest: strategy-driven UI automation with perf collection)',
         )
         # Parse action
         action_args = []
