@@ -72,6 +72,8 @@ class Config:
         if not self._initialized:
             with self._lock:
                 if not self._initialized:  # 双重检查锁定
+                    if user_config_path is None:
+                        user_config_path = os.path.join(os.getcwd(), 'config.yaml')
                     self._user_config_path = user_config_path
                     self.reload()
                     self._initialized = True
