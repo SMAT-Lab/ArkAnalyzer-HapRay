@@ -18,6 +18,7 @@ import logging
 import os
 import shutil
 import time
+import traceback
 from typing import Optional
 
 from xdevice.__main__ import main_process
@@ -151,9 +152,8 @@ class HapTestAction:
             logging.info('Reports: %s', reports_path)
             logging.info('=' * 60)
             return reports_path
-        else:
-            logging.error('HapTest Automation Failed')
-            return None
+        logging.error('HapTest Automation Failed')
+        return None
 
 
 class HapTestRunner:
@@ -285,9 +285,8 @@ class {case_name}(HapTest):
             if scene_round_dirs:
                 self._generate_reports(scene_round_dirs)
                 return True
-            else:
-                logging.error('All test rounds failed')
-                return False
+            logging.error('All test rounds failed')
+            return False
 
         except Exception as e:
             logging.error('HapTest execution failed: %s', str(e))
@@ -296,7 +295,7 @@ class {case_name}(HapTest):
     def _wait_for_completion(self, output_dir: str):
         """Wait for test case to complete"""
         max_wait = 30
-        for i in range(max_wait):
+        for _i in range(max_wait):
             if os.path.exists(os.path.join(output_dir, 'testInfo.json')):
                 logging.info('Test case completed')
                 return
@@ -313,13 +312,13 @@ class {case_name}(HapTest):
         try:
             merge_folder_path = os.path.join(self.reports_path, self.case_name)
             report_generator = ReportGenerator()
-            
+
             logging.info('Generating report for: %s', self.case_name)
             logging.info('Scene directories: %s', scene_round_dirs)
             logging.info('Output path: %s', merge_folder_path)
-            
+
             success = report_generator.generate_report(scene_round_dirs, merge_folder_path)
-            
+
             if success:
                 logging.info('Reports generated successfully')
                 logging.info('Report location: %s/report/hapray_report.html', merge_folder_path)
@@ -327,7 +326,6 @@ class {case_name}(HapTest):
                 logging.error('Report generation failed')
         except Exception as e:
             logging.error('Report generation failed: %s', str(e))
-            import traceback
             logging.error(traceback.format_exc())
 
 

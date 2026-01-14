@@ -16,8 +16,12 @@ limitations under the License.
 import json
 import logging
 import os
+import time
 from typing import Optional
 
+from hypium.uidriver.ohos.app_manager import get_bundle_info
+
+from hapray.core.collection.capture_ui import CaptureUI
 from hapray.core.perf_testcase import PerfTestCase
 from hapray.haptest.state_manager import StateManager, UIState
 from hapray.haptest.strategy import ExplorationStrategy
@@ -25,21 +29,10 @@ from hapray.haptest.strategy import ExplorationStrategy
 Log = logging.getLogger('HapTest')
 
 
-class NoOpCaptureUI:
-    """空操作的UI捕获类,用于避免execute_performance_step中的重复UI捕获"""
-    
-    def __init__(self, driver):
-        self.driver = driver
-    
-    def capture_ui(self, step_id, report_path, stage):
-        """空操作,不执行任何UI捕获"""
-        pass
-
-
 def setup_haptest_logger(report_path: str, app_name: str):
     """
     为HapTest设置独立的日志文件
-    
+
     Args:
         report_path: 报告路径
         app_name: 应用名称
@@ -47,21 +40,21 @@ def setup_haptest_logger(report_path: str, app_name: str):
     # 创建日志目录
     log_dir = os.path.join(report_path, 'logs')
     os.makedirs(log_dir, exist_ok=True)
-    
+
     # HapTest日志文件
     haptest_log_file = os.path.join(log_dir, 'haptest.log')
-    
+
     # 创建文件处理器
     file_handler = logging.FileHandler(haptest_log_file, mode='w', encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
-    
+
     # 创建格式化器
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%H:%M:%S'
     )
     file_handler.setFormatter(formatter)
-    
+
     # 为HapTest相关的logger添加文件处理器
     haptest_logger = logging.getLogger('HapTest')
     haptest_logger.addHandler(file_handler)
@@ -108,10 +101,8 @@ class HapTest(PerfTestCase):
         self.strategy = ExplorationStrategy(strategy_type)
         self.current_step = 0
 
-        # 保存原始的UI捕获handler,用于手动捕获
-        self._real_capture_ui_handler = self.capture_ui_handler
-        # 替换为空操作handler,避免execute_performance_step中的重复捕获
-        # self.capture_ui_handler = NoOpCaptureUI(self.driver)
+        # 创建UI捕获实例
+        self._capture_ui = CaptureUI(self.driver)
 
         # 设置独立的日志文件
         setup_haptest_logger(self.report_path, app_name)
@@ -127,10 +118,9 @@ class HapTest(PerfTestCase):
     def setup(self):
         """HapTest setup - 增强错误处理"""
         Log.info('HapTest setup')
-        
+
         # 尝试获取bundle信息,如果失败则使用默认值
         try:
-            from hypium.uidriver.ohos.app_manager import get_bundle_info
             self.bundle_info = get_bundle_info(self.driver, self.app_package)
             self.module_name = self.bundle_info.get('entryModuleName')
             Log.info(f'Bundle info loaded: module_name={self.module_name}')
@@ -139,13 +129,13 @@ class HapTest(PerfTestCase):
             Log.debug('Using default values for bundle_info and module_name')
             self.bundle_info = {'entryModuleName': 'entry'}
             self.module_name = 'entry'
-        
-        
-        
+
+
+
         # 创建必要的目录
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
-        
+
         # 准备测试环境
         self.stop_app()
         self.driver.wake_up_display()
@@ -176,7 +166,7 @@ class HapTest(PerfTestCase):
             Log.info(f'目标应用: {ui_state.app_package}')
             Log.info(f'在目标应用内: {"是" if ui_state.is_in_target_app() else "否"}')
             Log.info(f'可点击元素数: {len(ui_state.clickable_elements)}')
-            
+
             # 获取未访问的元素
             unvisited = self.state_mgr.get_unvisited_elements(ui_state)
             Log.info(f'未访问元素数: {len(unvisited)}')
@@ -187,11 +177,11 @@ class HapTest(PerfTestCase):
 
             # 决策下一步操作
             action_type, target = self.strategy.decide_next_action(ui_state, self.state_mgr)
-            
+
             if action_type == 'stop':
                 Log.info('探索完成,停止测试')
                 break
-                
+
             # 格式化操作信息
             action_info = self._format_action_info(action_type, target)
             Log.info(f'决策: {action_info}')
@@ -213,8 +203,8 @@ class HapTest(PerfTestCase):
         ui_dir = os.path.join(self.report_path, 'ui', f'step{step_id}')
         os.makedirs(ui_dir, exist_ok=True)
 
-        # 立即采集UI数据(只采集一次作为当前状态,使用真实的handler)
-        self._real_capture_ui_handler.capture_ui(step_id, self.report_path, 'current')
+        # 立即采集UI数据(只采集一次作为当前状态)
+        self._capture_ui.capture_ui(step_id, self.report_path, 'current')
 
         # 从element_tree中提取当前bundleName
         element_tree_path = os.path.join(ui_dir, 'element_tree_current_1.txt')
@@ -233,7 +223,7 @@ class HapTest(PerfTestCase):
     def _extract_bundle_name(self, element_tree_path: str) -> Optional[str]:
         """从element_tree文件中提取bundleName"""
         try:
-            with open(element_tree_path, 'r', encoding='utf-8') as f:
+            with open(element_tree_path, encoding='utf-8') as f:
                 for line in f:
                     if line.startswith('bundleName:'):
                         return line.split(':', 1)[1].strip()
@@ -251,14 +241,13 @@ class HapTest(PerfTestCase):
 
             text = target.get('text', '')
             elem_type = target.get('type', '')
-            return f'点击 {elem_type} "{text[:20]}"' if text else f'点击 {elem_type}'
-        elif action_type == 'scroll':
+            return f'点击 "{elem_type} {text[:20]}"' if text else f'点击 {elem_type}'
+        if action_type == 'scroll':
             direction = target.get('direction', 'up') if target else 'up'
             return f'滑动 {direction}'
-        elif action_type == 'back':
+        if action_type == 'back':
             return '返回'
-        else:
-            return action_type
+        return action_type
 
     def _execute_action_with_perf(self, action_type: str, target: Optional[dict]):
         """
@@ -315,23 +304,25 @@ class HapTest(PerfTestCase):
         if not bounds:
             Log.warning('元素bounds为空，无法点击')
             return
-        
+
         left = bounds.get('left')
         top = bounds.get('top')
         right = bounds.get('right')
         bottom = bounds.get('bottom')
-        
+
         if None in (left, top, right, bottom):
             Log.warning(f'元素bounds包含None值: {bounds}')
             return
-        
+
         if left >= right or top >= bottom:
             Log.warning(f'元素bounds无效: {bounds}')
             return
-        
+
         x = (left + right) // 2
         y = (top + bottom) // 2
-        self.touch_by_coordinates(x, y, wait_seconds=1)
+        # self.touch_by_coordinates(x, y, wait_seconds=1)
+        self.driver.touch((x,y))
+        time.sleep(0.5)
 
     def _do_scroll(self, target: Optional[dict]):
         """执行滑动操作"""
@@ -356,13 +347,12 @@ class HapTest(PerfTestCase):
             text = target.get('text', '')
             elem_type = target.get('type', '')
             return f'点击_{elem_type}_{text}' if text else f'点击_{elem_type}'
-        elif action_type == 'scroll':
+        if action_type == 'scroll':
             direction = target.get('direction', 'up') if target else 'up'
             return f'滑动_{direction}'
-        elif action_type == 'back':
+        if action_type == 'back':
             return '返回'
-        else:
-            return action_type
+        return action_type
 
     def _print_summary(self):
         """打印测试摘要"""
