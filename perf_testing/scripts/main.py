@@ -22,6 +22,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
+from hapray.actions.gui_agent_action import GuiAgentAction
 from hapray.actions.hilog_action import HilogAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
@@ -29,7 +30,6 @@ from hapray.actions.static_action import StaticAction
 from hapray.actions.ui_action import UIAction
 from hapray.actions.ui_compare_action import UICompareAction
 from hapray.actions.update_action import UpdateAction
-from hapray.core.config.config import Config
 
 
 def configure_logging(log_file='HapRay.log'):
@@ -84,7 +84,6 @@ def configure_logging(log_file='HapRay.log'):
 
 class HapRayCmd:
     def __init__(self):
-        self._load_config()
         configure_logging('HapRay.log')
 
         actions = {
@@ -96,6 +95,7 @@ class HapRayCmd:
             'ui': UIAction,
             'ui-compare': UICompareAction,
             'hilog': HilogAction,
+            'gui-agent': GuiAgentAction,
         }
 
         parser = argparse.ArgumentParser(
@@ -123,11 +123,6 @@ class HapRayCmd:
 
         # Dispatch to action handler
         actions[args.action].execute(sub_args)
-
-    def _load_config(self):
-        """Loads application configuration from YAML file."""
-        config_path = os.path.join(os.getcwd(), 'config.yaml')
-        Config(config_path)
 
 
 if __name__ == '__main__':
