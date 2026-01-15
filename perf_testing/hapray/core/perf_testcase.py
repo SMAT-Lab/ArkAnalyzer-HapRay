@@ -49,6 +49,8 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self.module_name = None
         self.xvm = XVM(self)
         self._data_collector = None  # 延迟初始化，在setup中创建
+        # 当前正在执行的性能步骤ID，用于页面组件树采集
+        self.current_step_id: int | None = None
 
     @property
     def steps(self) -> list:
@@ -110,6 +112,8 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """
         step_id = len(self._steps) + 1
         self._steps.append({'name': f'step{step_id}', 'description': step_name})
+        # 记录当前步骤ID，供 dump_page 等异步页面采集使用
+        self.current_step_id = step_id
         output_file = self._prepare_output_path(step_id)
         self._clean_previous_output(output_file)
 
@@ -139,6 +143,59 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         # 步骤结束时的数据采集（包括UI数据采集）
         self.data_collector.collect_step_end(output_file, step_id, self.report_path, self._redundant_mode_status)
         self.xvm.stop_trace(perf_step_dir)
+
+        # 步骤结束后清理 current_step_id，避免误用
+        self.current_step_id = None
+
+    def dump_page(self, page_idx: int, page_description: str):
+        """
+        异步导出当前步骤的页面组件树（包含 CanvasNode 统计），供测试用例在任意 UI 事件后调用。
+
+        注意：
+            - dump 组件树耗时约 2~3s，因此通过后台线程调用 CaptureUI.dump_page_element_tree
+              不阻塞用例主流程。
+            - 依赖 DataCollector 中的 CaptureUI 实例和当前步骤 ID。
+        """
+        from xdevice import platform_logger  # 避免循环导入
+
+        log = platform_logger('PerfTestCase')
+
+        if self.current_step_id is None:
+            log.warning(
+                f'dump_page(page_idx={page_idx}, desc={page_description}) 在非性能步骤上下文中调用，已忽略'
+            )
+            return
+
+        step_id = self.current_step_id
+        report_path = self.report_path
+
+        # UI 步骤目录：{report_path}/ui/step{step_id}
+        ui_step_dir = os.path.join(report_path, 'ui', f'step{step_id}')
+
+        def _worker():
+            try:
+                log.info(
+                    f'后台线程开始导出页面组件树: step_id={step_id}, page_idx={page_idx}, desc={page_description}'
+                )
+                # 通过 DataCollector 中的 CaptureUI 实例执行页面组件树导出
+                self.data_collector.capture_ui_handler.dump_page_element_tree(
+                    ui_step_dir, page_idx, page_description
+                )
+                log.info(
+                    f'后台线程完成页面组件树导出: step_id={step_id}, page_idx={page_idx}, desc={page_description}'
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                log.error(
+                    f'后台线程导出页面组件树失败: step_id={step_id}, page_idx={page_idx}, '
+                    f'desc={page_description}, err={e}'
+                )
+
+        thread = threading.Thread(
+            target=_worker,
+            name=f'dump_page_step{step_id}_page{page_idx}',
+            daemon=True,
+        )
+        thread.start()
 
     def set_device_redundant_mode(self):
         # 设置hdc参数

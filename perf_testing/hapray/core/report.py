@@ -447,7 +447,7 @@ class ReportData:
         elif required:
             logging.warning('Flame graph data not found at %s', flame_graph_path)
 
-        # 加载 UI 动画数据
+        # 加载 UI 动画及相关 UI 数据
         if 'ui' not in self.result:
             self.result['ui'] = {}
 
@@ -463,6 +463,17 @@ class ReportData:
         if ui_raw_data:
             self.result['ui']['raw'] = ui_raw_data
             logging.info(f'Loaded UI Raw data: {len(ui_raw_data)} steps')
+
+        # 加载页面级组件树统计数据（每个页面 CanvasNode 数量变化）
+        ui_page_tree_stats_path = os.path.join(report_dir, 'ui_page_tree_stats.json')
+        ui_page_tree_stats = self._load_json_safe(ui_page_tree_stats_path, default={})
+        if ui_page_tree_stats:
+            # 统一挂载到 ui.pageTrees 字段，便于前端展示
+            self.result['ui']['pageTrees'] = ui_page_tree_stats
+            logging.info(
+                'Loaded UI Page Tree stats: %d steps',
+                len(ui_page_tree_stats),
+            )
 
     def _load_json_safe(self, path, default):
         """安全加载JSON文件，处理异常情况"""

@@ -13,19 +13,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import os
 import re
+import threading
 import zipfile
-from typing import Any
+from typing import Any, Optional
 
 from hypium.uidriver.uitree import UiTree
 from xdevice import platform_logger
+
+from hapray.ui_detector.arkui_tree_parser import ArkUITreeParser
 
 Log = platform_logger('CaptureUI')
 
 
 class CaptureUI:
     """UI数据抓取类，负责截屏和dump element树"""
+
+    # 页面组件树统计文件写入锁，避免多线程同时写入
+    _page_tree_lock = threading.Lock()
 
     def __init__(self, driver: Any):
         """
@@ -68,6 +75,69 @@ class CaptureUI:
         self._dump_element_tree(ui_step_dir, f'{label_name}_2')
 
         Log.info(f'UI数据抓取完成 - Step {step_id}')
+
+    def dump_page_element_tree(
+        self,
+        ui_step_dir: str,
+        page_idx: int,
+        page_description: Optional[str] = None,
+    ):
+        """
+        导出单个页面的组件树，并统计 CanvasNode 数量，写入 report 目录下的 JSON
+
+        Args:
+            ui_step_dir: UI 数据保存目录，形如 {report_path}/ui/step{step_id}
+            page_idx: 页面索引（从1开始）
+            page_description: 页面描述（可选）
+        """
+        try:
+            Log.info(f'开始导出页面组件树: ui_step_dir={ui_step_dir}, page_idx={page_idx}')
+            os.makedirs(ui_step_dir, exist_ok=True)
+
+            # 1. 获取 Focus window id
+            focus_window_id = self._get_focus_window_id()
+            if not focus_window_id:
+                Log.error('无法获取Focus window id，跳过页面组件树导出')
+                return
+
+            label_name = f'page{page_idx}'
+
+            # 2. 执行 hidumper 导出组件树（包含 -all）
+            self._execute_hidumper_dump(ui_step_dir, label_name, focus_window_id)
+
+            # 3. 读取本地组件树文本，统计 CanvasNode 数量
+            dump_filename = f'element_tree_{label_name}.txt'
+            local_dump_path = os.path.join(ui_step_dir, dump_filename)
+            if not os.path.exists(local_dump_path):
+                Log.error(f'页面组件树文件不存在: {local_dump_path}')
+                return
+
+            with open(local_dump_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            canvas_count = ArkUITreeParser.count_canvas_nodes_from_text(content)
+            Log.info(f'页面组件树 CanvasNode 数量统计完成: {canvas_count}')
+
+            # 4. 解析出 step_id 和 report_path，并写入 report/ui_page_tree_stats.json
+            # ui_step_dir 形如 {report_path}/ui/step{step_id}
+            step_name = os.path.basename(ui_step_dir)  # step1
+            report_path = os.path.dirname(os.path.dirname(ui_step_dir))
+
+            # 从 step 名称中解析数字 ID
+            step_id = 0
+            match = re.match(r'step(\d+)', step_name)
+            if match:
+                step_id = int(match.group(1))
+
+            self._update_page_tree_stats(
+                report_path=report_path,
+                step_id=step_id,
+                page_idx=page_idx,
+                canvas_node_count=canvas_count,
+                page_description=page_description or '',
+            )
+        except Exception as e:
+            Log.error(f'导出页面组件树过程中发生错误: {e}')
 
     def _capture_screenshot(self, ui_step_dir: str, label_name: str = None):
         """
@@ -184,8 +254,8 @@ class CaptureUI:
             dump_filename = f'element_tree_{label_name}.txt' if label_name else 'element_tree.txt'
             local_dump_path = os.path.join(ui_step_dir, dump_filename)
 
-            # 执行hidumper dump命令（增加--zip参数）
-            dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default' --zip"
+            # 执行hidumper dump命令（增加--zip参数和 -all 获取完整组件树）
+            dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default -all' --zip"
             Log.info(f'执行hidumper dump命令: {dump_cmd}')
 
             # 执行命令并获取结果
@@ -232,3 +302,77 @@ class CaptureUI:
 
         except Exception as e:
             Log.error(f'执行hidumper dump时发生错误: {e}')
+
+    @classmethod
+    def _update_page_tree_stats(
+        cls,
+        report_path: str,
+        step_id: int,
+        page_idx: int,
+        canvas_node_count: int,
+        page_description: str,
+    ):
+        """
+        将页面级别的组件树统计信息追加写入 report/ui_page_tree_stats.json
+
+        JSON结构示例:
+        {
+            "step1": {
+                "pages": [
+                    {"pageIdx": 1, "description": "首页", "canvasNodeCount": 12}
+                ]
+            }
+        }
+        """
+        try:
+            if step_id <= 0:
+                Log.warning(
+                    'step_id 非法（<=0），跳过写入页面组件树统计: '
+                    f'report_path={report_path}, step_id={step_id}, page_idx={page_idx}'
+                )
+                return
+
+            report_dir = os.path.join(report_path, 'report')
+            os.makedirs(report_dir, exist_ok=True)
+            stats_path = os.path.join(report_dir, 'ui_page_tree_stats.json')
+
+            with cls._page_tree_lock:
+                data = {}
+                if os.path.exists(stats_path):
+                    try:
+                        with open(stats_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        if not isinstance(data, dict):
+                            Log.warning('ui_page_tree_stats.json 格式异常，将重置为字典结构')
+                            data = {}
+                    except Exception as e:
+                        Log.warning(f'读取 ui_page_tree_stats.json 失败，将重置文件: {e}')
+                        data = {}
+
+                step_key = f'step{step_id}'
+                step_entry = data.get(step_key) or {}
+                pages = step_entry.get('pages') or []
+
+                pages.append(
+                    {
+                        'pageIdx': page_idx,
+                        'description': page_description,
+                        'canvasNodeCount': canvas_node_count,
+                    }
+                )
+
+                step_entry['pages'] = pages
+                data[step_key] = step_entry
+
+                with open(stats_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+
+                Log.info(
+                    '页面组件树统计信息已写入: %s (step=%s, page_idx=%s, canvas=%s)',
+                    stats_path,
+                    step_key,
+                    page_idx,
+                    canvas_node_count,
+                )
+        except Exception as e:
+            Log.error(f'写入页面组件树统计信息失败: {e}')

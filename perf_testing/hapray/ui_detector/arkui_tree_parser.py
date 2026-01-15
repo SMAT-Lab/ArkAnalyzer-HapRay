@@ -42,6 +42,23 @@ class ArkUITreeParser:
         self.current_component = None
         self.component_stack = []
 
+    @staticmethod
+    def count_canvas_nodes_from_text(content: str) -> int:
+        """
+        直接从原始组件树文本中统计 CanvasNode 节点数量
+
+        设备回显示例: "CanvasNode [202345678521457] child"
+        该格式不一定符合 |-> Component childSize: 的通用组件行格式，
+        因此单独通过正则进行统计，避免影响现有树解析逻辑。
+        """
+        if not content:
+            return 0
+        # 匹配以 CanvasNode 开头、后跟可选空格和 '[' 的行
+        # 使用 MULTILINE 模式逐行匹配
+        pattern = re.compile(r'^\s*CanvasNode\s*\[', re.MULTILINE)
+        matches = pattern.findall(content)
+        return len(matches)
+
     def parse_component_tree(self, content: str) -> ArkUIComponent:
         lines = content.split('\n')
 

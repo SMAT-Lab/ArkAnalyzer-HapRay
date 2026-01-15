@@ -442,6 +442,7 @@ export interface JSONData {
   ui?: {
     animate?: UIAnimateData; // UI 动画数据
     raw?: UIRawData; // UI 原始数据（用于前端实时对比）
+    pageTrees?: UIPageTreeStatsData; // 每个步骤、每个页面的组件树统计（主要是 CanvasNode 数量）
   };
   dataType?: DataType; // 数据类型标记，用于前台判断显示哪些页面
 }
@@ -977,6 +978,21 @@ export interface UIRawData {
   [stepKey: string]: UIRawStepData; // step1, step2, etc.
 }
 
+// 页面级组件树统计 —— 用于展示每个步骤中各页面 CanvasNode 数量的变化
+export interface UIPageTreePageStat {
+  pageIdx: number;
+  description?: string;
+  canvasNodeCount: number;
+}
+
+export interface UIPageTreeStepData {
+  pages: UIPageTreePageStat[];
+}
+
+export interface UIPageTreeStatsData {
+  [stepKey: string]: UIPageTreeStepData; // step1, step2, etc.
+}
+
 // ArkUI 组件树节点类型
 export interface ArkUITreeNode {
   name: string;
@@ -1067,6 +1083,7 @@ interface JsonDataState {
   flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
   uiAnimateData: UIAnimateData | null; // UI 动画数据
   uiCompareData: Record<string, UICompareResult> | null; // UI 对比数据
+  uiPageTreeStats: UIPageTreeStatsData | null; // 页面级组件树统计（CanvasNode 数量等）
 }
 
 /**
@@ -1157,6 +1174,7 @@ export const useJsonDataStore = defineStore('config', {
     flameGraph: null,
     uiAnimateData: null,
     uiCompareData: null,
+    uiPageTreeStats: null,
   }),
 
   actions: {
@@ -1366,6 +1384,18 @@ export const useJsonDataStore = defineStore('config', {
       } else {
         this.uiAnimateData = null;
         console.log('[setJsonData] 基准报告无UI动画数据');
+      }
+
+      // Load UI page tree stats (per-step, per-page CanvasNode counts)
+      if (jsonData.ui && jsonData.ui.pageTrees) {
+        this.uiPageTreeStats = jsonData.ui.pageTrees as UIPageTreeStatsData;
+        console.log(
+          '[setJsonData] 基准报告页面组件树统计已加载:',
+          Object.keys(this.uiPageTreeStats || {}),
+        );
+      } else {
+        this.uiPageTreeStats = null;
+        console.log('[setJsonData] 基准报告无页面组件树统计数据');
       }
 
       if (JSON.stringify(compareJsonData) === "\"/tempCompareJsonData/\"") {

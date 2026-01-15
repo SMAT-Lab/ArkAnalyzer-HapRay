@@ -50,6 +50,27 @@
           </el-row>
         </el-card>
 
+        <!-- 页面级组件树分析：按 pageIdx 展示 CanvasNode 数量变化 -->
+        <el-card
+          v-if="currentStepPageStats && currentStepPageStats.length > 0"
+          shadow="never"
+          style="margin-bottom: 16px;"
+        >
+          <template #header>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-weight: 600; font-size: 16px;">
+                <i class="el-icon-data-line" style="margin-right: 8px;"></i>
+                页面组件树分析（CanvasNode 数量）
+              </span>
+              <el-tag type="info" size="small">
+                共 {{ currentStepPageStats.length }} 个页面采样点
+              </el-tag>
+            </div>
+          </template>
+
+          <PageCanvasTrend :stats="currentStepPageStats" />
+        </el-card>
+
         <!-- 阶段选择 -->
         <el-tabs v-model="activePhase" type="border-card">
           <!-- 开始阶段 -->
@@ -88,8 +109,13 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useJsonDataStore, type UIAnimateStepData } from '../../../../stores/jsonDataStore';
+import {
+  useJsonDataStore,
+  type UIAnimateStepData,
+  type UIPageTreePageStat,
+} from '../../../../stores/jsonDataStore';
 import PhaseAnalysis from './UIAnimatePhaseAnalysis.vue';
+import PageCanvasTrend from './PageCanvasTrend.vue';
 
 interface Props {
   stepId?: number;
@@ -101,6 +127,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const jsonDataStore = useJsonDataStore();
 const uiAnimateData = computed(() => jsonDataStore.uiAnimateData);
+const uiPageTreeStats = computed(() => jsonDataStore.uiPageTreeStats);
 
 // 检查是否有数据
 const hasData = computed(() => {
@@ -116,6 +143,14 @@ const currentStepKey = computed(() => {
 const currentStepData = computed((): UIAnimateStepData | null => {
   if (!uiAnimateData.value) return null;
   return uiAnimateData.value[currentStepKey.value] || null;
+});
+
+// 当前步骤的页面组件树统计（CanvasNode 数量等）
+const currentStepPageStats = computed((): UIPageTreePageStat[] => {
+  if (!uiPageTreeStats.value) return [];
+  const stepData = uiPageTreeStats.value[currentStepKey.value];
+  if (!stepData || !Array.isArray(stepData.pages)) return [];
+  return stepData.pages;
 });
 
 // 摘要信息
