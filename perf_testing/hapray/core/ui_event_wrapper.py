@@ -25,7 +25,7 @@ from hapray.core.common.exe_utils import ExeUtils
 
 class UIEventWrapper(ABC):
     def __init__(self, device):
-        self.driver = UiDriver(device)
+        self.driver: UiDriver = UiDriver(device)
         self.source_screen_width = None
         self.source_screen_height = None
 

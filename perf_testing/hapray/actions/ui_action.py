@@ -24,7 +24,7 @@ from hypium import UiDriver
 
 from hapray import VERSION
 from hapray.analyze.ui_analyzer import UIAnalyzer
-from hapray.core.capture_ui import CaptureUI
+from hapray.core.collection.capture_ui import CaptureUI
 
 
 class UIAction:

@@ -47,3 +47,9 @@ hapray-sa
 .cache/
 .npm-cache/
 
+# HapTest generated test cases
+perf_testing/hapray/testcases/__haptest_generated__/
+
+# HapTest documentation (personal notes)
+perf_testing/hapray/haptest/GIT_GUIDE.md
+

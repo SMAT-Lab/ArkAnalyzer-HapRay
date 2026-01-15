@@ -18,7 +18,7 @@ from typing import Any
 
 from xdevice import platform_logger
 
-from hapray.core.command_templates import (
+from hapray.core.collection.command_templates import (
     COVERAGE_FILE_PATH_TEMPLATE,
     FILENAME_BJC_COV,
     FILENAME_PERF_JSON,

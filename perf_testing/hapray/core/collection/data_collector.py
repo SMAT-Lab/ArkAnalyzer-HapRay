@@ -21,12 +21,13 @@ from typing import Any
 
 from xdevice import platform_logger
 
-from hapray.core.capture_ui import CaptureUI
-from hapray.core.command_builder import CommandBuilder
-from hapray.core.command_templates import DIR_HIPERF, DIR_HTRACE, FILENAME_PERF_DATA, FILENAME_TRACE_HTRACE
+from hapray.core.collection.capture_ui import CaptureUI
+from hapray.core.collection.command_builder import CommandBuilder
+from hapray.core.collection.command_templates import DIR_HIPERF, DIR_HTRACE, FILENAME_PERF_DATA, FILENAME_TRACE_HTRACE
+from hapray.core.collection.data_transfer import DataTransfer
+from hapray.core.collection.process_manager import ProcessManager
+from hapray.core.collection.xvm import XVM
 from hapray.core.config.config import Config
-from hapray.core.data_transfer import DataTransfer
-from hapray.core.process_manager import ProcessManager
 
 Log = platform_logger('DataCollector')
 
@@ -52,45 +53,32 @@ class DataCollector:
         self.command_builder = CommandBuilder(self.process_manager)
         self.data_transfer = DataTransfer(driver, app_package, module_name)
         self.capture_ui_handler = CaptureUI(driver)
+        self.xvm = XVM(driver, app_package)
 
         # 内存采集线程管理
         self.memory_collection_threads: dict[int, dict] = {}  # step_id -> {'thread': thread, 'stop_event': event}
+        # 性能采集线程管理
+        self.perf_collection_threads: dict[int, threading.Thread] = {}  # step_id -> thread
 
-    def build_collection_command(self, output_path: str, duration: int, sample_all: bool) -> str:
+    # ==================== 公共接口 ====================
+
+    def collect_step_data_start(self, step_id: int, report_path: str, duration: int, sample_all_processes: bool) -> str:
         """
-        根据采集参数构建采集命令
-
-        Args:
-            output_path: 设备上的输出文件路径
-            duration: 采集时长（秒）
-            sample_all: 是否采样所有进程
-
-        Returns:
-            格式化的采集命令字符串
-        """
-        return self.command_builder.build_collection_command(output_path, duration, sample_all)
-
-    def run_perf_command(self, command: str, duration: int):
-        """
-        在设备上执行性能采集命令
-
-        Args:
-            command: 要执行的命令
-            duration: 预期时长（秒）
-        """
-        Log.info(f'Starting performance collection for {duration}s')
-        Log.info(f'Command: {command}')
-        result = self.driver.shell(command, timeout=duration + 30)
-        Log.info('Performance collection completed %s', result)
-
-    def collect_step_start(self, step_id: int, report_path: str):
-        """
-        步骤开始时的数据采集
+        步骤开始时的数据采集（统一接口）
 
         Args:
             step_id: 步骤ID
             report_path: 报告路径
+            duration: 采集时长（秒）
+            sample_all_processes: 是否采样所有进程
+
+        Returns:
+            设备上的输出文件路径
         """
+        # 生成并准备输出文件路径
+        hiprofiler_output = self._prepare_hiprofiler_output_path(step_id)
+        self._clean_previous_output(hiprofiler_output)
+
         Log.info(f'开始步骤 {step_id} 的数据采集准备')
 
         perf_step_dir, trace_step_dir = self._get_step_directories(step_id, report_path)
@@ -101,24 +89,44 @@ class DataCollector:
         if Config.get('ui.capture_enable', False):
             self.capture_ui_handler.capture_ui(step_id, report_path, 'start')
 
-        self.start_collect_memory_data(step_id, report_path)  # 持续到步骤结束
+        self._start_collect_memory_data(step_id, report_path)  # 持续到步骤结束
 
         Log.info(f'步骤 {step_id} 开始采集准备完成')
 
-    def collect_step_end(self, device_file: str, step_id: int, report_path: str, redundant_mode_status: bool):
+        # 启动XVM追踪
+        self.xvm.start_trace(duration)
+
+        # 启动性能采集线程
+        collection_thread = threading.Thread(
+            target=self._run_perf_command, args=(hiprofiler_output, duration, sample_all_processes)
+        )
+        self.perf_collection_threads[step_id] = collection_thread
+        collection_thread.start()
+
+        return hiprofiler_output
+
+    def collect_step_data_end(
+        self, hiprofiler_device_file: str, step_id: int, report_path: str, redundant_mode_status: bool
+    ):
         """
-        步骤结束时的数据采集和保存
+        步骤结束时的数据采集（统一接口）
 
         注意：memory 数据已包含在 trace.htrace 中，不再单独保存
 
         Args:
-            device_file: 设备上的文件路径
+            hiprofiler_device_file: 设备上的文件路径
             step_id: 步骤ID
             report_path: 报告路径
             redundant_mode_status: 是否启用冗余模式
         """
+        # 等待性能采集线程完成
+        if step_id in self.perf_collection_threads:
+            collection_thread = self.perf_collection_threads[step_id]
+            collection_thread.join()
+            del self.perf_collection_threads[step_id]
+
         Log.info(f'开始步骤 {step_id} 的数据采集结束处理')
-        self.stop_memory_collection(step_id)
+        self._stop_memory_collection(step_id)
 
         perf_step_dir, trace_step_dir = self._get_step_directories(step_id, report_path)
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
@@ -128,7 +136,7 @@ class DataCollector:
 
         self.process_manager.save_process_info(perf_step_dir)
         self.data_transfer.transfer_perf_data('/data/local/tmp/perf.data', local_perf_path)
-        self.data_transfer.transfer_trace_data(device_file, local_trace_path)
+        self.data_transfer.transfer_trace_data(hiprofiler_device_file, local_trace_path)
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
 
@@ -142,6 +150,66 @@ class DataCollector:
             self._collect_snapshot_once(step_id, report_path)
 
         Log.info(f'步骤 {step_id} 数据采集结束处理完成')
+
+        # 停止XVM追踪
+        self.xvm.stop_trace(perf_step_dir)
+
+    # ==================== 私有方法：步骤采集 ====================
+
+    def _build_collection_command(self, output_path: str, duration: int, sample_all: bool) -> str:
+        """
+        根据采集参数构建采集命令（私有方法）
+
+        Args:
+            output_path: 设备上的输出文件路径
+            duration: 采集时长（秒）
+            sample_all: 是否采样所有进程
+
+        Returns:
+            格式化的采集命令字符串
+        """
+        return self.command_builder.build_collection_command(output_path, duration, sample_all)
+
+    def _run_perf_command(self, output_path: str, duration: int, sample_all: bool):
+        """
+        在设备上执行性能采集命令（私有方法）
+
+        Args:
+            output_path: 设备上的输出文件路径
+            duration: 预期时长（秒）
+            sample_all: 是否采样所有进程
+        """
+        command = self._build_collection_command(output_path, duration, sample_all)
+        Log.info(f'Starting performance collection for {duration}s')
+        Log.info(f'Command: {command}')
+        result = self.driver.shell(command, timeout=duration + 30)
+        Log.info('Performance collection completed %s', result)
+
+    # ==================== 私有方法：工具函数 ====================
+
+    def _prepare_hiprofiler_output_path(self, step_id: int) -> str:
+        """
+        生成设备上的输出文件路径（私有方法）
+
+        Args:
+            step_id: 步骤ID
+
+        Returns:
+            设备上的输出文件路径
+        """
+        return f'/data/local/tmp/hiperf_step{step_id}.data'
+
+    def _clean_previous_output(self, output_path: str):
+        """
+        清理设备上的旧输出文件（私有方法）
+
+        Args:
+            output_path: 输出文件路径
+        """
+        output_dir = os.path.dirname(output_path)
+        self.driver.shell(f'mkdir -p {output_dir}')
+        self.driver.shell(f'rm -f {output_path}')
+        self.driver.shell(f'rm -f {output_path}.htrace')
 
     def _get_step_directories(self, step_id: int, report_path: str) -> tuple[str, str]:
         """
@@ -168,11 +236,13 @@ class DataCollector:
         for path in paths:
             os.makedirs(path, exist_ok=True)
 
-    def start_collect_memory_data(
+    # ==================== 私有方法：内存采集 ====================
+
+    def _start_collect_memory_data(
         self, step_id: int, report_path: str, interval_seconds: int = Config.get('memory.interval_seconds', 5)
     ):
         """
-        启动内存采集后台线程
+        启动内存采集后台线程（私有方法）
 
         Args:
             step_id: 步骤ID
@@ -181,7 +251,7 @@ class DataCollector:
         """
         # 如果该步骤已有活跃的采集线程，先停止它
         if step_id in self.memory_collection_threads:
-            self.stop_memory_collection(step_id)
+            self._stop_memory_collection(step_id)
 
         # 创建停止事件
         stop_event = threading.Event()
@@ -292,6 +362,26 @@ class DataCollector:
 
         Log.info(f'步骤 {step_id} 内存数据采集线程结束，共采集 {collection_count} 次')
 
+    def _stop_memory_collection(self, step_id: int):
+        """
+        停止指定步骤的内存采集线程（私有方法）
+
+        Args:
+            step_id: 步骤ID
+        """
+        if step_id in self.memory_collection_threads:
+            thread_info = self.memory_collection_threads[step_id]
+            thread_info['stop_event'].set()  # 设置停止事件
+            thread_info['thread'].join(timeout=5)  # 等待线程结束，最多5秒
+
+            if thread_info['thread'].is_alive():
+                Log.warning(f'步骤 {step_id} 的内存采集线程未能及时停止')
+
+            del self.memory_collection_threads[step_id]
+            Log.info(f'步骤 {step_id} 的内存采集线程已停止')
+        else:
+            Log.warning(f'步骤 {step_id} 没有活跃的内存采集线程')
+
     def _collect_smaps_data(self, pid: int, process_name: str, showmap_dir: str, timestamp: str):
         """采集单个进程的smaps数据
 
@@ -365,6 +455,8 @@ class DataCollector:
             Log.debug(f'DMA数据已保存: {filepath}')
         except Exception as e:
             Log.warning(f'采集DMA数据失败（可能需要root权限）: {e}')
+
+    # ==================== 私有方法：Snapshot采集 ====================
 
     def _collect_snapshot_once(self, step_id: int, report_path: str):
         """采集一次 snapshot 数据（在步骤开始时执行）
@@ -471,32 +563,3 @@ class DataCollector:
 
         except Exception as e:
             Log.warning(f'采集snapshot数据失败 (PID: {pid}): {e}')
-
-    def stop_memory_collection(self, step_id: int):
-        """
-        停止指定步骤的内存采集线程
-
-        Args:
-            step_id: 步骤ID
-        """
-        if step_id in self.memory_collection_threads:
-            thread_info = self.memory_collection_threads[step_id]
-            thread_info['stop_event'].set()  # 设置停止事件
-            thread_info['thread'].join(timeout=5)  # 等待线程结束，最多5秒
-
-            if thread_info['thread'].is_alive():
-                Log.warning(f'步骤 {step_id} 的内存采集线程未能及时停止')
-
-            del self.memory_collection_threads[step_id]
-            Log.info(f'步骤 {step_id} 的内存采集线程已停止')
-        else:
-            Log.warning(f'步骤 {step_id} 没有活跃的内存采集线程')
-
-    def get_active_memory_collections(self) -> list[int]:
-        """
-        获取当前活跃的内存采集步骤ID列表
-
-        Returns:
-            活跃的步骤ID列表
-        """
-        return list(self.memory_collection_threads.keys())

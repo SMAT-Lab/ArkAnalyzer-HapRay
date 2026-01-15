@@ -16,7 +16,6 @@ limitations under the License.
 import json
 import os
 import re
-import threading
 import time
 from abc import ABC, abstractmethod
 
@@ -24,10 +23,9 @@ from devicetest.core.test_case import TestCase
 from hypium.uidriver.ohos.app_manager import get_bundle_info
 from xdevice import platform_logger
 
+from hapray.core.collection.data_collector import DataCollector
 from hapray.core.config.config import Config
-from hapray.core.data_collector import DataCollector
 from hapray.core.ui_event_wrapper import UIEventWrapper
-from hapray.core.xvm import XVM
 
 Log = platform_logger('PerfTestCase')
 
@@ -47,7 +45,6 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self._steps = []
         self.bundle_info = None
         self.module_name = None
-        self.xvm = XVM(self)
         self._data_collector = None  # 延迟初始化，在setup中创建
 
     @property
@@ -110,35 +107,24 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """
         step_id = len(self._steps) + 1
         self._steps.append({'name': f'step{step_id}', 'description': step_name})
-        output_file = self._prepare_output_path(step_id)
-        self._clean_previous_output(output_file)
-
-        # dump view tree when start test step
-        perf_step_dir = os.path.join(self.report_path, 'hiperf', f'step{step_id}')
-
-        # 步骤开始时的数据采集（包括UI数据采集）
-        self.data_collector.collect_step_start(step_id, self.report_path)
 
         # Use config default if not explicitly specified
         if sample_all_processes is None:
             sample_all_processes = Config.get('sample_all', False)
 
-        cmd = self.data_collector.build_collection_command(output_file, duration, sample_all_processes)
+        # 步骤开始时的数据采集（包括UI数据采集、XVM追踪和性能采集线程启动）
+        output_file = self.data_collector.collect_step_data_start(
+            step_id, self.report_path, duration, sample_all_processes
+        )
 
-        self.xvm.start_trace(duration)
-        collection_thread = threading.Thread(target=self.data_collector.run_perf_command, args=(cmd, duration))
-        collection_thread.start()
         try:
             # Execute the test action while data collection runs
             action(*args)
         except Exception as e:
             Log.error(f'execute performance action err {e}')
 
-        collection_thread.join()
-
-        # 步骤结束时的数据采集（包括UI数据采集）
-        self.data_collector.collect_step_end(output_file, step_id, self.report_path, self._redundant_mode_status)
-        self.xvm.stop_trace(perf_step_dir)
+        # 步骤结束时的数据采集（包括UI数据采集和XVM追踪，以及性能采集线程等待）
+        self.data_collector.collect_step_data_end(output_file, step_id, self.report_path, self._redundant_mode_status)
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
@@ -187,17 +173,6 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         steps_info = self._collect_step_information()
         self._save_steps_info(steps_info)
         self._save_test_metadata()
-
-    def _prepare_output_path(self, step_id: int) -> str:
-        """Generate output file path on device"""
-        return f'/data/local/tmp/hiperf_step{step_id}.data'
-
-    def _clean_previous_output(self, output_path: str):
-        """Remove previous output files from device"""
-        output_dir = os.path.dirname(output_path)
-        self.driver.shell(f'mkdir -p {output_dir}')
-        self.driver.shell(f'rm -f {output_path}')
-        self.driver.shell(f'rm -f {output_path}.htrace')
 
     def _collect_step_information(self) -> list:
         """Collect metadata about test steps"""

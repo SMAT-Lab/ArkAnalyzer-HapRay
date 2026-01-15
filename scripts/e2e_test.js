@@ -498,8 +498,8 @@ function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
                 if (val1 !== val2) {
                     if (showDetails) {
                         console.log(`    ✗ 第${row + 1}行第${col + 1}列不同:`);
-                        console.log(`      期望: "${val1.substring(0, 100)}${val1.length > 100 ? '...' : ''}"`);
-                        console.log(`      实际: "${val2.substring(0, 100)}${val2.length > 100 ? '...' : ''}"`);
+                        console.log(`      期望: "${val2.substring(0, 100)}${val2.length > 100 ? '...' : ''}"`);
+                        console.log(`      实际: "${val1.substring(0, 100)}${val1.length > 100 ? '...' : ''}"`);
                     }
                     return false;
                 }
