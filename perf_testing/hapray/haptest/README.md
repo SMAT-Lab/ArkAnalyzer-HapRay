@@ -149,8 +149,7 @@ report_path/
 │   │   ├── perf.data         # CPU性能数据
 │   │   ├── perf.json         # 解析后的性能指标
 │   │   └── pids.json         # 进程信息
-│   ├── step2/
-│   └── steps.json            # 所有步骤描述
+│   └── step2/
 ├── htrace/
 │   ├── step1/
 │   │   └── trace.htrace      # trace数据(含内存)
@@ -163,6 +162,7 @@ report_path/
 │   │   ├── screenshot_end_1.png      # 操作后截图
 │   │   └── element_tree_end_1.txt    # 操作后viewTree
 │   └── step2/
+├── steps.json            # 所有步骤描述
 └── testInfo.json             # 测试元数据
 ```
 

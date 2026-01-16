@@ -113,7 +113,7 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         logging.info('testInfo.json create success: %s', os.path.join(report_dir, 'testInfo.json'))
 
         # 处理steps.json文件
-        target_steps_file = os.path.join(hiperf_base_dir, 'steps.json')
+        target_steps_file = os.path.join(report_report_dir, 'steps.json')
         if steps_file_path and os.path.exists(steps_file_path):
             # 如果提供了steps.json文件路径，则复制该文件
             shutil.copy2(steps_file_path, target_steps_file)
