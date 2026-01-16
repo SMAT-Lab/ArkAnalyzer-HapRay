@@ -1,6 +1,7 @@
 import time
 
 from hypium import BY
+from hypium.model.basic_data_type import MatchPattern
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -50,8 +51,10 @@ class PerfLoad_meituan_0030(PerfTestCase):
         self.execute_performance_step('美团-蜜雪冰城滑动浏览场景-step1蜜雪冰城页上下滑动', 35, step1)
 
         # 点击第一家蜜雪冰城奶茶店
-        self.driver.touch(self.convert_coordinate(521, 465))
-        time.sleep(2)
+        # self.driver.touch(self.convert_coordinate(521, 465))
+        # time.sleep(2)
+        com = self.driver.find_all_components(BY.text('蜜雪冰城', MatchPattern.STARTS_WITH), 1)
+        self.driver.touch(com, wait_time=2)
 
         def step2():
             # Step('蜜雪冰城店内页上滑操作')
@@ -63,8 +66,8 @@ class PerfLoad_meituan_0030(PerfTestCase):
 
         self.driver.touch(BY.text('评价'))
         time.sleep(2)
-        self.driver.touch(BY.text('更多评价'))
-        time.sleep(2)
+        # self.driver.touch(BY.text('更多评价'))
+        # time.sleep(2)
 
         def step3():
             # Step('蜜雪冰城评价页上滑操作')
