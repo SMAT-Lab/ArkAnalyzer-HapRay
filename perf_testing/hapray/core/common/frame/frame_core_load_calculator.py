@@ -56,7 +56,7 @@ def calculate_thread_instructions(
     """计算线程在帧时间范围内的 CPU 指令数（区分应用线程和系统线程）
 
     参考RN实现：只计算应用线程的指令数，排除系统线程
-    注意：扩展时间范围（前后各扩展1ms）以包含时间戳对齐问题导致的perf_sample
+    注意：不使用时间扩展（±1ms），直接使用原始时间范围，避免负载偏高
 
     Args:
         perf_conn: perf 数据库连接
@@ -83,9 +83,8 @@ def calculate_thread_instructions(
         if not thread_ids:
             return {}, {}
 
-        # 性能优化：使用预加载的缓存，避免数据库查询
-        extended_start = frame_start - 1_000_000  # 1ms before
-        extended_end = frame_end + 1_000_000  # 1ms after
+        # 注意：不使用时间扩展（±1ms），直接使用原始时间范围，避免负载偏高
+        # 与去重计算保持一致，确保空刷率计算准确
 
         # 如果提供了缓存，从缓存中查询
         if perf_sample_cache is not None and perf_timestamp_field:
@@ -101,8 +100,8 @@ def calculate_thread_instructions(
                     # 使用二分查找找到起始位置
                     # samples是(timestamp, event_count)的列表，已按timestamp排序
                     timestamps = [s[0] for s in samples]
-                    start_idx = bisect.bisect_left(timestamps, extended_start)
-                    end_idx = bisect.bisect_right(timestamps, extended_end)
+                    start_idx = bisect.bisect_left(timestamps, frame_start)
+                    end_idx = bisect.bisect_right(timestamps, frame_end)
 
                     # 聚合范围内的event_count
                     total_instructions = sum(samples[i][1] for i in range(start_idx, end_idx))
@@ -191,7 +190,7 @@ def calculate_thread_instructions(
             GROUP BY ps.thread_id
             """
 
-        params = thread_ids_list + [extended_start, extended_end]
+        params = thread_ids_list + [frame_start, frame_end]
         perf_cursor.execute(instructions_query, params)
 
         results = perf_cursor.fetchall()
@@ -294,9 +293,8 @@ def calculate_process_instructions(
         return 0, 0
 
     try:
-        # 扩展时间范围（前后各扩展1ms）以包含时间戳对齐问题导致的perf_sample
-        frame_start - 1_000_000  # 1ms before
-        frame_end + 1_000_000  # 1ms after
+        # 注意：不使用时间扩展（±1ms），直接使用原始时间范围，避免负载偏高
+        # calculate_thread_instructions 内部也不再使用时间扩展，确保一致性
 
         # 步骤1: 查找应用进程的所有线程ID（tid）
         trace_cursor = trace_conn.cursor()
@@ -939,9 +937,9 @@ class FrameLoadCalculator:
         trace_conn = self.cache_manager.trace_conn
         perf_conn = self.cache_manager.perf_conn
 
-        # 步骤1：计算所有帧的时间范围（扩展±1ms）
-        min_ts = int(frames['ts'].min()) - 1_000_000  # 1ms before
-        max_ts = int((frames['ts'] + frames['dur']).max()) + 1_000_000  # 1ms after
+        # 步骤1：计算所有帧的时间范围（不使用时间扩展，避免负载偏高）
+        min_ts = int(frames['ts'].min())
+        max_ts = int((frames['ts'] + frames['dur']).max())
 
         # 步骤2：一次性获取所有进程的线程ID，并建立PID到线程ID的映射
         trace_cursor = trace_conn.cursor()
