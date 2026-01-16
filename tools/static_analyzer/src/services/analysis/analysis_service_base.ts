@@ -76,7 +76,7 @@ export abstract class AnalysisServiceBase {
      * 加载步骤信息
      */
     async loadSteps(basePath: string): Promise<Steps> {
-        const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
+        const stepsJsonPath = path.join(basePath, 'steps.json');
         return await this.loadJsonFile<Steps>(stepsJsonPath);
     }
 
