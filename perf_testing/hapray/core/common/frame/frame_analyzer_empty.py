@@ -355,7 +355,7 @@ class EmptyFrameAnalyzer:
     def _calculate_frame_loads(self, trace_df: pd.DataFrame, perf_df: pd.DataFrame, timing_stats: dict) -> list:
         """阶段2.1：计算帧的浪费的进程级别的CPU指令数
 
-        对于每个空刷帧，计算其在[ts, ts+dur]时间范围内（扩展±1ms）的进程级别CPU浪费。
+        对于每个空刷帧，计算其在[ts, ts+dur]时间范围内的进程级别CPU浪费（不使用时间扩展）。
         进程级别意味着统计该进程所有线程的CPU指令数，不区分具体线程。
 
         注意：调用链分析（阶段2.2）会在此基础上对Top N帧进行详细分析。
@@ -1821,16 +1821,14 @@ class EmptyFrameAnalyzer:
         if merged_time_ranges:
             recalc_start = time.time()
 
-            # 扩展合并后的时间范围（±1ms），与 frame_load 计算保持一致
-            extended_merged_ranges = []
-            for start_ts, end_ts in merged_time_ranges:
-                extended_start = start_ts - 1_000_000
-                extended_end = end_ts + 1_000_000
-                extended_merged_ranges.append((extended_start, extended_end))
+            # 注意：不使用时间扩展（±1ms），与 frame_load 计算保持一致
+            # 在 _calculate_all_frame_loads_batch 中已经移除了时间扩展，避免负载偏高
+            # 因此去重计算也应该使用原始时间范围，确保一致性
 
             # 优化：合并4次查询为1次，在应用层分组计算
             deduplicated_result = self.cache_manager.get_all_thread_loads_with_info_for_pids(
-                self.cache_manager.app_pids, time_ranges=extended_merged_ranges
+                self.cache_manager.app_pids,
+                time_ranges=merged_time_ranges  # 使用原始时间范围，不扩展
             )
 
             deduplicated_empty_frame_load = deduplicated_result['total_load']
@@ -1840,9 +1838,7 @@ class EmptyFrameAnalyzer:
 
             recalc_time = time.time() - recalc_start
             timing_stats['recalc_deduplicated_loads'] = recalc_time
-            logging.info(
-                f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(extended_merged_ranges)}个)'
-            )
+            logging.info(f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(merged_time_ranges)}个)')
 
         # 保存原始 empty_frame_load 到 timing_stats（用于日志对比）
         timing_stats['original_empty_frame_load'] = original_empty_frame_load
@@ -1874,16 +1870,89 @@ class EmptyFrameAnalyzer:
             except Exception:
                 pass
 
+        # === 统计空刷帧中的系统进程负载（用于结果JSON分析，不用于空刷率计算） ===
+        # 统计真实的系统进程负载，用于分析空刷帧中系统进程的CPU消耗情况
+        # 注意：此值不用于空刷率计算（不影响分母total_load），仅用于结果展示和分析
+        from .frame_utils import is_system_thread
+        
+        system_load_in_empty_frames = 0  # 空刷帧中的系统进程负载（初始化为0）
+        
+        # 统计frame_loads中系统进程的负载
+        if deduplicated_empty_frame_load is not None:
+            # 使用去重后的值，需要从原始frame_loads中统计系统进程负载
+            original_sum = int(sum(f['frame_load'] for f in frame_loads)) if frame_loads else 0
+            if original_sum > 0:
+                deduplication_ratio = deduplicated_empty_frame_load / original_sum
+                for f in frame_loads:
+                    process_name = f.get('process_name', '')
+                    if process_name and is_system_thread(process_name, None):
+                        system_frame_load = f.get('frame_load', 0)
+                        # 按去重比例缩放系统进程负载
+                        system_load_in_empty_frames += int(system_frame_load * deduplication_ratio)
+        else:
+            # 未去重，直接累加
+            for f in frame_loads:
+                process_name = f.get('process_name', '')
+                if process_name and is_system_thread(process_name, None):
+                    system_load_in_empty_frames += f.get('frame_load', 0)
+        
+        if system_load_in_empty_frames > 0:
+            logging.info(f'检测到空刷帧中包含系统进程负载: {system_load_in_empty_frames:,}')
+
+        # === 如果空刷帧中包含系统进程负载，需要将系统进程在整个trace的负载累加到分母 ===
+        # 否则会导致空刷率偏大（分母偏小）
+        system_load_in_total_trace = 0
+        if system_load_in_empty_frames > 0 and self.cache_manager and self.cache_manager.trace_conn:
+            try:
+                import traceback
+                # 从frame_loads中收集系统进程名
+                system_process_names = set()
+                for f in frame_loads:
+                    process_name = f.get('process_name', '')
+                    if process_name and is_system_thread(process_name, None):
+                        system_process_names.add(process_name)
+
+                if system_process_names:
+                    # 查找系统进程的PID
+                    trace_cursor = self.cache_manager.trace_conn.cursor()
+                    placeholders = ','.join('?' * len(system_process_names))
+                    trace_cursor.execute(
+                        f"""
+                        SELECT DISTINCT p.pid
+                        FROM process p
+                        WHERE p.name IN ({placeholders})
+                        """,
+                        list(system_process_names),
+                    )
+                    system_pids = [row[0] for row in trace_cursor.fetchall() if row[0] is not None]
+
+                    if system_pids:
+                        # 计算系统进程在整个trace的负载
+                        system_load_in_total_trace = self.cache_manager.get_total_load_for_pids(system_pids)
+                        total_load += system_load_in_total_trace
+                        logging.info(
+                            f'检测到系统进程负载: 空刷帧中系统负载={system_load_in_empty_frames:,}, '
+                            f'系统进程={list(system_process_names)}, PIDs={system_pids}, '
+                            f'整个trace中系统负载={system_load_in_total_trace:,}, '
+                            f'更新后total_load={total_load:,}'
+                        )
+            except Exception as e:
+                logging.warning(f'计算系统进程负载失败: {e}')
+                import traceback
+                traceback.print_exc()
+
         # === 使用公共模块构建基础结果 ===
         base_result = self.result_builder.build_result(
             frame_loads=frame_loads,
-            total_load=total_load,  # total_load 保持不变（整个trace的CPU）
+            total_load=total_load,
             detection_stats=detection_stats,  # 传递检测统计信息
             deduplicated_empty_frame_load=deduplicated_empty_frame_load,  # 传递去重后的 empty_frame_load
             deduplicated_main_thread_load=deduplicated_main_thread_load,  # 传递去重后的主线程负载
             deduplicated_background_thread_load=deduplicated_background_thread_load,  # 传递去重后的后台线程负载
             deduplicated_thread_loads=deduplicated_thread_loads,  # 传递去重后的所有线程负载
             tid_to_info=tid_to_info,  # 传递线程信息映射
+            system_load_in_empty_frames=system_load_in_empty_frames,  # 传递空刷帧中的系统进程负载（用于结果JSON分析）
+            system_load_in_total_trace=system_load_in_total_trace,  # 传递系统进程在整个trace的负载（已累加到total_load中）
         )
 
         # 注意：timing_stats 仅用于调试日志，不添加到最终结果中

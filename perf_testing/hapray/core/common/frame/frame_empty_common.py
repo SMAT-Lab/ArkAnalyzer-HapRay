@@ -509,7 +509,8 @@ class EmptyFrameResultBuilder:
         deduplicated_background_thread_load: Optional[int] = None,
         deduplicated_thread_loads: Optional[dict[int, int]] = None,
         tid_to_info: Optional[dict] = None,
-        system_load_in_empty_frames: int = 0,  # 空刷帧中的系统进程负载（初始化为0）
+        system_load_in_empty_frames: int = 0,  # 空刷帧中的系统进程负载（用于结果JSON分析）
+        system_load_in_total_trace: int = 0,  # 系统进程在整个trace的负载（已累加到total_load中）
     ) -> dict:
         """构建统一的分析结果
 
@@ -702,44 +703,6 @@ class EmptyFrameResultBuilder:
         # - 分母 total_load: 应用进程的所有samples的cpu event总和（整个trace）
         #   如果分子包含系统进程，分母也会加上这些系统进程在整个trace的负载，确保计算一致性
 
-        # 如果分子包含系统进程负载，需要在分母中加上系统进程在整个trace的负载
-        system_load_in_total_trace = 0
-        if system_load_in_empty_frames > 0 and self.cache_manager and self.cache_manager.trace_conn:
-            try:
-                # 从frame_loads中收集系统进程名
-                system_process_names = set()
-                for f in frame_loads:
-                    process_name = f.get('process_name', '')
-                    if process_name and is_system_thread(process_name, None):
-                        system_process_names.add(process_name)
-
-                if system_process_names:
-                    # 查找系统进程的PID
-                    trace_cursor = self.cache_manager.trace_conn.cursor()
-                    placeholders = ','.join('?' * len(system_process_names))
-                    trace_cursor.execute(
-                        f"""
-                        SELECT DISTINCT p.pid
-                        FROM process p
-                        WHERE p.name IN ({placeholders})
-                        """,
-                        list(system_process_names),
-                    )
-                    system_pids = [row[0] for row in trace_cursor.fetchall() if row[0] is not None]
-
-                    if system_pids:
-                        # 计算系统进程在整个trace的负载
-                        system_load_in_total_trace = self.cache_manager.get_total_load_for_pids(system_pids)
-                        total_load += system_load_in_total_trace
-                        # logging.info(
-                        #     f'检测到系统进程负载: 空刷帧中系统负载={system_load_in_empty_frames:,}, '
-                        #     f'系统进程={list(system_process_names)}, PIDs={system_pids}, '
-                        #     f'整个trace中系统负载={system_load_in_total_trace:,}, '
-                        #     f'更新后total_load={total_load:,}'
-                        # )
-            except Exception as e:
-                logging.warning(f'计算系统进程负载失败: {e}')
-                traceback.print_exc()
 
         if total_load > 0:
             empty_frame_percentage = (empty_frame_load / total_load) * 100
@@ -906,6 +869,8 @@ class EmptyFrameResultBuilder:
                 'total_load': int(total_load),
                 'empty_frame_load': int(empty_frame_load),
                 'empty_frame_percentage': float(empty_frame_percentage),
+                'system_load_in_total_trace': int(system_load_in_total_trace),  # 系统进程在整个trace的负载（已累加到total_load中）
+                'system_load_in_empty_frames': int(system_load_in_empty_frames),  # 空刷帧中的系统进程负载（用于结果JSON分析）
                 'total_empty_frames': int(len(frame_loads)),
                 'empty_frames_with_load': int(len([f for f in frame_loads if f.get('frame_load', 0) > 0])),
                 'main_thread_load': int(main_thread_load),
