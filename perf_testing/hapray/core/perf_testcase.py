@@ -113,9 +113,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             sample_all_processes = Config.get('sample_all', False)
 
         # 步骤开始时的数据采集（包括UI数据采集、XVM追踪和性能采集线程启动）
-        output_file = self.data_collector.collect_step_data_start(
-            step_id, self.report_path, duration, sample_all_processes
-        )
+        self.data_collector.collect_step_data_start(step_id, self.report_path, duration, sample_all_processes)
 
         try:
             # Execute the test action while data collection runs
@@ -124,7 +122,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
             Log.error(f'execute performance action err {e}')
 
         # 步骤结束时的数据采集（包括UI数据采集和XVM追踪，以及性能采集线程等待）
-        self.data_collector.collect_step_data_end(output_file, step_id, self.report_path, self._redundant_mode_status)
+        self.data_collector.collect_step_data_end(step_id, self.report_path, self._redundant_mode_status)
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
