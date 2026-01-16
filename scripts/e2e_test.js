@@ -530,7 +530,7 @@ function getUpdateXlsxFile() {
     const reportDir = path.join(TEST_PRODUCTS_DIR, 'perf-testing', 'PerfLoad_meituan_0010', 'report');
     if (!fs.existsSync(reportDir)) return null;
     const files = fs.readdirSync(reportDir)
-        .filter(f => f.startsWith('ecol_load_perf') && f.endsWith('.xlsx'))
+        .filter(f => f.startsWith('ecol_load_perf') && f.endsWith('.xlsx') && !f.endsWith('_techstack.xlsx'))
         .map(f => ({ name: f, path: path.join(reportDir, f), time: fs.statSync(path.join(reportDir, f)).mtime }))
         .sort((a, b) => b.time - a.time);
     return files.length > 0 ? files[0].path : null;
