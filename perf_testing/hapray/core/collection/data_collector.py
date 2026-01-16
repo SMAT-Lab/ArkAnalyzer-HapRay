@@ -62,7 +62,9 @@ class DataCollector:
 
     # ==================== 公共接口 ====================
 
-    def collect_step_data_start(self, step_id: int, report_path: str, duration: int, sample_all_processes: bool = False) -> str:
+    def collect_step_data_start(
+        self, step_id: int, report_path: str, duration: int, sample_all_processes: bool = False
+    ) -> str:
         """
         步骤开始时的数据采集（统一接口）
 
