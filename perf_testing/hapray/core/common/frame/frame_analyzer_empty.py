@@ -1899,6 +1899,48 @@ class EmptyFrameAnalyzer:
         if system_load_in_empty_frames > 0:
             logging.info(f'检测到空刷帧中包含系统进程负载: {system_load_in_empty_frames:,}')
 
+        # === 如果空刷帧中包含系统进程负载，需要将系统进程在整个trace的负载累加到分母 ===
+        # 否则会导致空刷率偏大（分母偏小）
+        system_load_in_total_trace = 0
+        if system_load_in_empty_frames > 0 and self.cache_manager and self.cache_manager.trace_conn:
+            try:
+                import traceback
+                # 从frame_loads中收集系统进程名
+                system_process_names = set()
+                for f in frame_loads:
+                    process_name = f.get('process_name', '')
+                    if process_name and is_system_thread(process_name, None):
+                        system_process_names.add(process_name)
+
+                if system_process_names:
+                    # 查找系统进程的PID
+                    trace_cursor = self.cache_manager.trace_conn.cursor()
+                    placeholders = ','.join('?' * len(system_process_names))
+                    trace_cursor.execute(
+                        f"""
+                        SELECT DISTINCT p.pid
+                        FROM process p
+                        WHERE p.name IN ({placeholders})
+                        """,
+                        list(system_process_names),
+                    )
+                    system_pids = [row[0] for row in trace_cursor.fetchall() if row[0] is not None]
+
+                    if system_pids:
+                        # 计算系统进程在整个trace的负载
+                        system_load_in_total_trace = self.cache_manager.get_total_load_for_pids(system_pids)
+                        total_load += system_load_in_total_trace
+                        logging.info(
+                            f'检测到系统进程负载: 空刷帧中系统负载={system_load_in_empty_frames:,}, '
+                            f'系统进程={list(system_process_names)}, PIDs={system_pids}, '
+                            f'整个trace中系统负载={system_load_in_total_trace:,}, '
+                            f'更新后total_load={total_load:,}'
+                        )
+            except Exception as e:
+                logging.warning(f'计算系统进程负载失败: {e}')
+                import traceback
+                traceback.print_exc()
+
         # === 使用公共模块构建基础结果 ===
         base_result = self.result_builder.build_result(
             frame_loads=frame_loads,
@@ -1910,6 +1952,7 @@ class EmptyFrameAnalyzer:
             deduplicated_thread_loads=deduplicated_thread_loads,  # 传递去重后的所有线程负载
             tid_to_info=tid_to_info,  # 传递线程信息映射
             system_load_in_empty_frames=system_load_in_empty_frames,  # 传递空刷帧中的系统进程负载（用于结果JSON分析）
+            system_load_in_total_trace=system_load_in_total_trace,  # 传递系统进程在整个trace的负载（已累加到total_load中）
         )
 
         # 注意：timing_stats 仅用于调试日志，不添加到最终结果中
