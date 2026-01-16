@@ -10,3 +10,8 @@ run_testcases:
 cov:
   # HAP project path
   hapProjectPath: 'D:/code/master/agent'
+
+xvm:
+  symbols:
+    - /data/storage/el1/bundle/libs/arm64/libtest_suite.so:Add
+    - /data/storage/el1/bundle/libs/arm64/libtest_suite.so:RegisterTest_suiteModule
