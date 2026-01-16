@@ -853,6 +853,38 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
     }
 
     /**
+     * 判断是否应该归类到ArkUI技术栈
+     * ArkUI技术栈包含：
+     * - kind=1的：APP_ABC, APP_LIB
+     * - kind=2的：ArkUI
+     * - kind=3的：Ability, ArkTS Runtime, ArkTS System LIB
+     */
+    private shouldClassifyAsArkUI(category: ComponentCategory, categoryName: string, subCategoryName: string | undefined): boolean {
+        // kind=2的ArkUI
+        if (category === ComponentCategory.ArkUI || categoryName === 'ArkUI') {
+            return true;
+        }
+        
+        // kind=1的APP_ABC, APP_LIB
+        if (category === ComponentCategory.APP && subCategoryName) {
+            if (subCategoryName === 'APP_ABC' || subCategoryName === 'APP_LIB') {
+                return true;
+            }
+        }
+        
+        // kind=3的Ability, ArkTS Runtime, ArkTS System LIB
+        if (category === ComponentCategory.OS_Runtime && subCategoryName) {
+            if (subCategoryName === 'Ability' || 
+                subCategoryName === 'ArkTS Runtime' || 
+                subCategoryName === 'ArkTS System LIB') {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
      * 生成技术栈数据表格
      * 根据 techStackData 方法的逻辑，生成技术栈数据 Excel 文件
      */
@@ -860,9 +892,12 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
         // 需要排除的分类名称（对应 kind = 1, 3, 4, -1）
         const excludedCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
 
+        // 统计所有主应用数据的总负载（包括被排除的分类），用于计算应用占比
+        const stepTotalAppInstructionsMap = new Map<number, number>();
+
         // 按步骤分组统计技术栈数据
         const stepTechStackMap = new Map<number, {
-            categoryMap: Map<string, { instructions: number; subCategories: Map<string, number> }>;
+            categoryMap: Map<string, { instructions: number }>;
             totalInstructions: number;
         }>();
 
@@ -873,15 +908,41 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 continue;
             }
 
-            const categoryName = data.componentCategory.categoryName || ComponentCategory[data.componentCategory.category] || 'UNKNOWN';
-            
-            // 排除指定的分类
-            if (excludedCategories.includes(categoryName)) {
+            // 只保留主应用的数据
+            if (!data.isMainApp) {
                 continue;
             }
 
             const stepIdx = data.stepIdx;
-            const subCategoryName = data.componentCategory.subCategoryName ?? '';
+
+            const category = data.componentCategory.category;
+            // 获取 categoryName，如果无法获取有效的分类名称，直接跳过
+            const categoryName = data.componentCategory.categoryName || ComponentCategory[category];
+            if (!categoryName || categoryName.toLowerCase() === UNKNOWN_STR.toLowerCase()) {
+                continue;
+            }
+            const subCategoryName = data.componentCategory.subCategoryName;
+
+            // 统计所有主应用数据的总负载（包括被排除的分类，但不包括UNKNOWN）
+            stepTotalAppInstructionsMap.set(
+                stepIdx,
+                (stepTotalAppInstructionsMap.get(stepIdx) ?? 0) + data.symbolEvents
+            );
+            
+            // 判断是否应该归类到ArkUI
+            const isArkUI = this.shouldClassifyAsArkUI(category, categoryName, subCategoryName);
+            
+            // 确定最终的技术栈分类名称
+            let finalCategoryName: string;
+            if (isArkUI) {
+                finalCategoryName = 'ArkUI';
+            } else {
+                // 排除指定的分类
+                if (excludedCategories.includes(categoryName)) {
+                    continue;
+                }
+                finalCategoryName = categoryName;
+            }
 
             // 初始化步骤数据
             if (!stepTechStackMap.has(stepIdx)) {
@@ -894,21 +955,14 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             const stepData = stepTechStackMap.get(stepIdx)!;
 
             // 统计大分类
-            if (!stepData.categoryMap.has(categoryName)) {
-                stepData.categoryMap.set(categoryName, {
+            if (!stepData.categoryMap.has(finalCategoryName)) {
+                stepData.categoryMap.set(finalCategoryName, {
                     instructions: 0,
-                    subCategories: new Map(),
                 });
             }
 
-            const categoryData = stepData.categoryMap.get(categoryName)!;
+            const categoryData = stepData.categoryMap.get(finalCategoryName)!;
             categoryData.instructions += data.symbolEvents;
-
-            // 统计小分类
-            if (subCategoryName) {
-                const subKey = subCategoryName;
-                categoryData.subCategories.set(subKey, (categoryData.subCategories.get(subKey) ?? 0) + data.symbolEvents);
-            }
 
             stepData.totalInstructions += data.symbolEvents;
         }
@@ -954,9 +1008,9 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
             { value: '测试场景' },
             { value: '步骤名称' },
             { value: '技术栈分类' },
-            { value: '技术栈子分类' },
             { value: '指令数' },
-            { value: '占比(%)' },
+            { value: '相对占比(%)' },
+            { value: '应用占比(%)' },
         ]);
 
         // 按步骤ID排序
@@ -980,27 +1034,27 @@ export class PerfAnalyzerBase extends AnalyzerProjectBase {
                 .sort((a, b) => b[1].instructions - a[1].instructions);
 
             for (const [categoryName, categoryData] of sortedCategories) {
-                // 添加小分类行（按指令数排序）
-                const sortedSubCategories = Array.from(categoryData.subCategories.entries())
-                    .sort((a, b) => b[1] - a[1]);
+                // 相对占比：技术栈分类在所有技术栈中的占比（相对于所有技术栈数据的总和）
+                const relativePercentage = stepData.totalInstructions > 0
+                    ? Number(((categoryData.instructions / stepData.totalInstructions) * 100).toFixed(1))
+                    : 0.0;
+                
+                // 应用占比：技术栈分类在所有主应用数据中的占比（包括被排除的分类）
+                const totalAppInstructions = stepTotalAppInstructionsMap.get(stepIdx) ?? 0;
+                const appPercentage = totalAppInstructions > 0
+                    ? Number(((categoryData.instructions / totalAppInstructions) * 100).toFixed(1))
+                    : 0.0;
 
-                // 只有当有小分类时才添加数据行
-                for (const [subCategoryName, subInstructions] of sortedSubCategories) {
-                    const subPercentage = stepData.totalInstructions > 0
-                        ? ((subInstructions / stepData.totalInstructions) * 100).toFixed(1)
-                        : '0.0';
-
-                    techStackData.push([
-                        { value: roundNumber, type: Number },
-                        { value: appName, type: String },
-                        { value: scene, type: String },
-                        { value: stepName, type: String },
-                        { value: categoryName, type: String },
-                        { value: subCategoryName, type: String },
-                        { value: subInstructions, type: Number },
-                        { value: subPercentage, type: String },
-                    ]);
-                }
+                techStackData.push([
+                    { value: roundNumber, type: Number },
+                    { value: appName, type: String },
+                    { value: scene, type: String },
+                    { value: stepName, type: String },
+                    { value: categoryName, type: String },
+                    { value: categoryData.instructions, type: Number },
+                    { value: relativePercentage, type: Number },
+                    { value: appPercentage, type: Number },
+                ]);
             }
         }
 
