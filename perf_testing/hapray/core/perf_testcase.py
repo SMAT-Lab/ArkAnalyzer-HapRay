@@ -181,7 +181,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
     def _save_steps_info(self, steps_info: list):
         """Save step metadata to JSON file"""
-        steps_path = os.path.join(self.report_path, 'hiperf', 'steps.json')
+        steps_path = os.path.join(self.report_path, 'steps.json')
         with open(steps_path, 'w', encoding='utf-8') as file:
             json.dump(steps_info, file, ensure_ascii=False, indent=4)
 

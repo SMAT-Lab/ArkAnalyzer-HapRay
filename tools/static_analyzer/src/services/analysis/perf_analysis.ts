@@ -169,8 +169,8 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         const testInfoPath = path.join(sourceRound, 'testInfo.json');
         await copyFile(testInfoPath, path.join(inputPath, 'testInfo.json'));
     
-        const stepsJsonPath = path.join(sourceRound, 'hiperf', 'steps.json');
-        await copyFile(stepsJsonPath, path.join(inputPath, 'hiperf', 'steps.json'));
+        const stepsJsonPath = path.join(sourceRound, 'steps.json');
+        await copyFile(stepsJsonPath, path.join(inputPath, 'steps.json'));
     }
     
     /**
