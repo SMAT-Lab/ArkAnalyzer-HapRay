@@ -150,9 +150,7 @@ class RandomStrategy(BaseStrategy):
             # 随着步数增加，逐渐增加back的概率
             back_weight = min(0.2, current_step * 0.02)  # 最多20%
             action_type = random.choices(
-                ['click', 'scroll', 'back'],
-                weights=[0.7 - back_weight/2, 0.3 - back_weight/2, back_weight],
-                k=1
+                ['click', 'scroll', 'back'], weights=[0.7 - back_weight / 2, 0.3 - back_weight / 2, back_weight], k=1
             )[0]
 
         if action_type == 'click':
@@ -160,7 +158,7 @@ class RandomStrategy(BaseStrategy):
             if clickable:
                 return ('click', random.choice(clickable))
             # return ('scroll', {'direction': 'up'})
-            return ('stop',None)
+            return ('stop', None)
 
         if action_type == 'scroll':
             return ('scroll', {'direction': random.choice(['up', 'down'])})
