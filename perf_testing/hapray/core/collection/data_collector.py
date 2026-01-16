@@ -62,7 +62,9 @@ class DataCollector:
 
     # ==================== 公共接口 ====================
 
-    def collect_step_data_start(self, step_id: int, report_path: str, duration: int, sample_all_processes: bool) -> str:
+    def collect_step_data_start(
+        self, step_id: int, report_path: str, duration: int, sample_all_processes: bool = False
+    ) -> str:
         """
         步骤开始时的数据采集（统一接口）
 
@@ -105,9 +107,7 @@ class DataCollector:
 
         return hiprofiler_output
 
-    def collect_step_data_end(
-        self, hiprofiler_device_file: str, step_id: int, report_path: str, redundant_mode_status: bool
-    ):
+    def collect_step_data_end(self, step_id: int, report_path: str, redundant_mode_status: bool = False):
         """
         步骤结束时的数据采集（统一接口）
 
@@ -136,6 +136,7 @@ class DataCollector:
 
         self.process_manager.save_process_info(perf_step_dir)
         self.data_transfer.transfer_perf_data('/data/local/tmp/perf.data', local_perf_path)
+        hiprofiler_device_file = self._prepare_hiprofiler_output_path(step_id)
         self.data_transfer.transfer_trace_data(hiprofiler_device_file, local_trace_path)
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)

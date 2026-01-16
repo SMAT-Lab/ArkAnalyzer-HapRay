@@ -80,7 +80,9 @@ class HapTestAction:
 
         parser.add_argument('--app-name', type=str, required=True, help='Readable application name (e.g., "示例应用")')
 
-        parser.add_argument('--ability-name', type=str, default=None, help='Main ability name (optional, auto-detect if not specified)')
+        parser.add_argument(
+            '--ability-name', type=str, default=None, help='Main ability name (optional, auto-detect if not specified)'
+        )
 
         parser.add_argument(
             '--strategy',
