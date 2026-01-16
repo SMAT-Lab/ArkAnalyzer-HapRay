@@ -509,7 +509,8 @@ class EmptyFrameResultBuilder:
         deduplicated_background_thread_load: Optional[int] = None,
         deduplicated_thread_loads: Optional[dict[int, int]] = None,
         tid_to_info: Optional[dict] = None,
-        system_load_in_empty_frames: int = 0,  # 空刷帧中的系统进程负载（用于结果JSON分析，不用于空刷率计算）
+        system_load_in_empty_frames: int = 0,  # 空刷帧中的系统进程负载（用于结果JSON分析）
+        system_load_in_total_trace: int = 0,  # 系统进程在整个trace的负载（已累加到total_load中）
     ) -> dict:
         """构建统一的分析结果
 
@@ -868,7 +869,7 @@ class EmptyFrameResultBuilder:
                 'total_load': int(total_load),
                 'empty_frame_load': int(empty_frame_load),
                 'empty_frame_percentage': float(empty_frame_percentage),
-                'system_load_in_total_trace': 0,  # 系统进程负载统计已移除，保留字段以兼容
+                'system_load_in_total_trace': int(system_load_in_total_trace),  # 系统进程在整个trace的负载（已累加到total_load中）
                 'system_load_in_empty_frames': int(system_load_in_empty_frames),  # 空刷帧中的系统进程负载（用于结果JSON分析）
                 'total_empty_frames': int(len(frame_loads)),
                 'empty_frames_with_load': int(len([f for f in frame_loads if f.get('frame_load', 0) > 0])),
