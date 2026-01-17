@@ -17,6 +17,11 @@
     "perf": {
       "name": "自动化性能测试",
       "description": "执行性能测试，收集性能数据和trace信息",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 2,
+        "icon": "📊"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -88,6 +93,11 @@
     "manual": {
       "name": "手动性能测试",
       "description": "手动性能测试模式，交互式收集性能数据",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 4,
+        "icon": "🎯"
+      },
       "action_mapping": {
         "type": "map",
         "command": ["perf", "--manual"]
@@ -146,6 +156,11 @@
     "ui-tech-stack": {
       "name": "页面技术栈动态识别",
       "description": "页面技术栈动态识别模式，自动分析UI技术栈",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 5,
+        "icon": "🔍"
+      },
       "action_mapping": {
         "type": "map",
         "command": ["perf", "--ui-tech-stack"]
@@ -197,6 +212,11 @@
     "prepare": {
       "name": "用例前置条件配置",
       "description": "简化的测试执行，不生成复杂报告",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 1,
+        "icon": "🔧"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -227,6 +247,11 @@
     "update": {
       "name": "更新测试报告",
       "description": "更新现有测试性能报告",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 6,
+        "icon": "🔄"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -306,6 +331,11 @@
     "compare": {
       "name": "对比报告",
       "description": "对比两个报告目录",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 7,
+        "icon": "⚖️"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -334,6 +364,11 @@
     "ui-compare": {
       "name": "UI组件树对比",
       "description": "对比两个报告的UI组件树",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 8,
+        "icon": "📌"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -363,6 +398,11 @@
     "hilog": {
       "name": "hilog分析",
       "description": "hilog日志分析，分析图片解码参数。",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 9,
+        "icon": "📝"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -391,8 +431,13 @@
       }
     },
     "gui-agent": {
-      "name": "GUI Agent自动化",
+      "name": "LLM GUI-Agent性能测试",
       "description": "使用LLM驱动的Agent进行手机自动化操作",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 3,
+        "icon": "🤖"
+      },
       "action_mapping": {
         "type": "position"
       },

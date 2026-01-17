@@ -147,7 +147,6 @@ class SearchableMultiSelectComboBox(QComboBox):
                 background-color: #ffffff;
                 color: #1f2937;
                 min-width: 120px;
-                transition: all 0.3s ease;
                 selection-background-color: rgba(102, 126, 234, 0.2);
             }
             QComboBox:hover {
@@ -155,7 +154,6 @@ class SearchableMultiSelectComboBox(QComboBox):
             }
             QComboBox:focus {
                 border-color: #667eea;
-                box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
             }
             QComboBox::drop-down {
                 border: none;
@@ -356,7 +354,6 @@ class SearchPopupWidget(QWidget):
                 border: 1px solid #e5e7eb;
                 border-radius: 8px;
                 background-color: #ffffff;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             }
         """)
 
@@ -372,11 +369,9 @@ class SearchPopupWidget(QWidget):
                 border: 1px solid #e5e7eb;
                 border-radius: 6px;
                 background-color: #f8f9fa;
-                transition: all 0.3s ease;
             }
             QWidget:focus-within {
                 border-color: #667eea;
-                box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
             }
         """)
         search_layout = QHBoxLayout(search_container)
@@ -429,7 +424,6 @@ class SearchPopupWidget(QWidget):
                 padding: 8px 12px;
                 border-radius: 4px;
                 margin: 2px 6px;
-                transition: all 0.2s ease;
             }
             QListView::item:hover {
                 background-color: rgba(102, 126, 234, 0.08);
@@ -450,7 +444,6 @@ class SearchPopupWidget(QWidget):
                 background-color: #d1d5db;
                 border-radius: 6px;
                 min-height: 30px;
-                transition: background-color 0.3s ease;
             }
             QListView QScrollBar::handle:vertical:hover {
                 background-color: #9ca3af;
