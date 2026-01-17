@@ -18,9 +18,8 @@ import os
 import time
 from typing import Optional
 
-from hapray.core.config.config import Config
-
 from hapray import VERSION
+from hapray.core.config.config import Config
 from hapray.core.gui_agent import GuiAgentConfig, execute_scenes
 
 
@@ -88,7 +87,8 @@ class GuiAgentAction:
             help='Device ID for multi-device setups',
         )
         parser.add_argument(
-            '--app',
+            '--package-name',
+            '--apps',
             type=str,
             nargs='+',
             dest='app_packages',

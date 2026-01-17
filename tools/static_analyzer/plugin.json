@@ -18,6 +18,11 @@
     "static": {
       "name": "静态分析",
       "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+      "menu": {
+        "menu1": "应用分析",
+        "order": 2,
+        "icon": "📱"
+      },
       "action_mapping": {
         "type": "map",
         "command": ["hapray", "hap"]
