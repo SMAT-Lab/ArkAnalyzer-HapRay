@@ -389,6 +389,111 @@
           "help": "开启详细模式：将匹配到的字符串保存到 hilog_detail.json 文件中"
         }
       }
+    },
+    "gui-agent": {
+      "name": "GUI Agent自动化",
+      "description": "使用LLM驱动的Agent进行手机自动化操作",
+      "action_mapping": {
+        "type": "position"
+      },
+      "parameters": {
+        "max-steps": {
+          "type": "int",
+          "label": "最大步数",
+          "required": false,
+          "default": 20,
+          "help": "每个任务的最大执行步数（默认: 20）"
+        },
+        "device-id": {
+          "type": "str",
+          "label": "设备ID",
+          "required": false,
+          "help": "多设备环境下的设备ID"
+        },
+        "apps": {
+          "type": "str",
+          "label": "应用包名",
+          "required": true,
+          "help": "要执行测试的多个应用包名，支持多个值"
+        },
+        "scenes": {
+          "type": "str",
+          "label": "多个场景",
+          "required": false,
+          "nargs": "+",
+          "help": "要执行的多个场景（自然语言描述），支持多个值"
+        },
+        
+        "output": {
+          "type": "dir",
+          "label": "输出目录",
+          "required": false,
+          "short": "o",
+          "help": "保存步骤数据的路径（格式: output / 应用名 / 任务名）"
+        },
+        "trace": {
+          "type": "bool",
+          "label": "Trace捕获",
+          "required": false,
+          "default": true,
+          "help": "启用trace捕获"
+        },
+        "perf": {
+          "type": "bool",
+          "label": "Perf捕获",
+          "required": false,
+          "default": true,
+          "help": "启用perf捕获"
+        },
+        "memory": {
+          "type": "bool",
+          "label": "内存捕获",
+          "required": false,
+          "default": false,
+          "help": "启用内存分析"
+        },
+        "snapshot": {
+          "type": "bool",
+          "label": "Snapshot捕获",
+          "required": false,
+          "default": false,
+          "help": "启用Snapshot捕获"
+        }
+      }
+    }
+  },
+  "config": {
+    "description": "负载测试插件配置项",
+    "items": {
+      "glm_api_key": {
+        "type": "str",
+        "label": "GUI LLM API Key",
+        "default": "",
+        "help": "GUI LLM API Key",
+        "required": false
+      },
+      "glm_base_url": {
+        "type": "str",
+        "label": "GUI LLM Base URL",
+        "default": "http://localhost:8000/v1",
+        "help": "GUI LLM Base URL",
+        "required": false
+      },
+      "glm_model": {
+        "type": "str",
+        "label": "GUI LLM Model",
+        "default": "autoglm-phone-9b",
+        "help": "GUI LLM Model",
+        "required": false
+      },
+      "logger_level": {
+        "type": "choice",
+        "label": "日志级别",
+        "default": "INFO",
+        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
+        "help": "日志输出级别",
+        "required": false
+      }
     }
   }
 }
