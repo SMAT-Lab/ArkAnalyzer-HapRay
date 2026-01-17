@@ -1,0 +1,17 @@
+{
+    "description": "",
+    "environment": [
+        {
+            "type": "device",
+            "label": "phone"
+        }
+    ],
+    "driver": {
+        "type": "DeviceTest",
+        "py_file": [
+            "gui_agent_runner.py"
+        ]
+    },
+    "kits": [
+    ]
+}

@@ -176,7 +176,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """Collect metadata about test steps"""
         step_info = []
         for idx, step in enumerate(self.steps, start=1):
-            step_info.append({'name': step['name'], 'description': step['description'], 'stepIdx': idx})
+            step_info.append({**step, 'stepIdx': idx})
         return step_info
 
     def _save_steps_info(self, steps_info: list):
