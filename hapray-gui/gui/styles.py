@@ -38,7 +38,7 @@ MAIN_STYLE = f"""
 QWidget {{
     background-color: {COLORS['background']};
     color: {COLORS['text_primary']};
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
 }}
 
@@ -208,7 +208,6 @@ QPushButton {{
     padding: 8px 16px;
     font-weight: 500;
     color: {COLORS['text_primary']};
-    transition: all 0.3s ease;
 }}
 
 QPushButton:hover {{
@@ -258,12 +257,10 @@ QLineEdit {{
     background-color: {COLORS['background_light']};
     color: {COLORS['text_primary']};
     selection-background-color: rgba(102, 126, 234, 0.2);
-    transition: all 0.3s ease;
 }}
 
 QLineEdit:focus {{
     border-color: {COLORS['primary']};
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
 }}
 
 QLineEdit:hover {{
@@ -278,7 +275,6 @@ QComboBox {{
     background-color: {COLORS['background_light']};
     color: {COLORS['text_primary']};
     min-width: 120px;
-    transition: all 0.3s ease;
     selection-background-color: rgba(102, 126, 234, 0.2);
 }}
 
@@ -288,7 +284,6 @@ QComboBox:hover {{
 
 QComboBox:focus {{
     border-color: {COLORS['primary']};
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
 }}
 
 QComboBox::drop-down {{
@@ -321,14 +316,12 @@ QComboBox QAbstractItemView {{
     background-color: {COLORS['background_light']};
     selection-background-color: rgba(102, 126, 234, 0.1);
     outline: none;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }}
 
 QComboBox QAbstractItemView::item {{
     padding: 10px 16px;
     border-radius: 6px;
     margin: 3px 6px;
-    transition: all 0.2s ease;
 }}
 
 QComboBox QAbstractItemView::item:selected {{
@@ -353,7 +346,6 @@ QCheckBox::indicator {{
     border: 2px solid {COLORS['border_light']};
     border-radius: 4px;
     background-color: {COLORS['background_light']};
-    transition: all 0.3s ease;
 }}
 
 QCheckBox::indicator:checked {{
@@ -380,7 +372,6 @@ QTextEdit {{
 
 QTextEdit:focus {{
     border-color: {COLORS['primary']};
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
 }}
 
 /* 进度条 */
@@ -411,7 +402,6 @@ QScrollBar::handle:vertical {{
     background-color: {COLORS['border_medium']};
     border-radius: 6px;
     min-height: 30px;
-    transition: background-color 0.3s ease;
 }}
 
 QScrollBar::handle:vertical:hover {{

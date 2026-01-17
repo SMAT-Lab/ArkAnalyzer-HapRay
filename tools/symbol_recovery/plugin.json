@@ -17,6 +17,11 @@
     "symbol-recovery": {
       "name": "符号恢复",
       "description": "二进制符号恢复工具，支持perf.data和Excel偏移量两种模式",
+      "menu": {
+        "menu1": "应用分析",
+        "order": 3,
+        "icon": "🔧"
+      },
       "action_mapping": {
         "type": "remove"
       },
