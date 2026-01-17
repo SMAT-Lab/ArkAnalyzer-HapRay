@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from hapray.core.gui_agent.batch_runner import execute_scenes
 from hapray.core.gui_agent.gui_agent import GuiAgent, GuiAgentConfig
-from hapray.core.gui_agent.scene_executor import execute_scenes
 
 __all__ = ['GuiAgent', 'GuiAgentConfig', 'execute_scenes']

@@ -58,6 +58,9 @@ class GuiAgentConfig:
     report_path: Optional[str] = None
     step_duration: int = 5  # 每个步骤的数据采集时长（秒）
 
+    # UiDriver
+    driver: Optional[UiDriver] = None
+
     # Real-time analysis configuration
     analysis_workers: int = 4  # 分析进程线程池大小
 
@@ -125,7 +128,7 @@ class GuiAgent:
         self.msgs = get_messages(self.config.lang)
         self.logger.info('GuiAgent initialized with config: %s', self.config)
 
-        self.driver = UiDriver.connect(device_sn=self.config.device_id)
+        self.driver = self.config.driver
 
         # DataCollector instance (延迟初始化，需要app_package)
         self.data_collector: Optional[DataCollector] = None
@@ -134,7 +137,7 @@ class GuiAgent:
         # 每个 step 包含 pages 数组，每个 page 包含 action, thinking, message, pageIdx
         self._scene_steps: dict[int, list] = {}
 
-        self.report_path: Optional[str] = None
+        self.report_path: str = self.config.report_path
         self.app_package: Optional[str] = None
         self.current_scene_idx: Optional[int] = None
 
@@ -161,7 +164,7 @@ class GuiAgent:
 
         try:
             # 执行 setup
-            self._setup(app_package, scene_idx)
+            self._setup(app_package)
 
             # 重置当前场景的步骤信息
             self._scene_steps[scene_idx] = [{'name': 'step1', 'description': scene, 'stepIdx': 1, 'pages': []}]
@@ -236,7 +239,7 @@ class GuiAgent:
                 error=error_msg,
             )
 
-    def _setup(self, app_package: str, scene_idx: int) -> None:
+    def _setup(self, app_package: str) -> None:
         """
         Setup before processing scenes.
 
@@ -244,34 +247,10 @@ class GuiAgent:
             app_package: Application package name. If provided, will prepare the app for testing.
         """
         self.logger.info('GuiAgent setup')
-
-        # 唤醒屏幕
-        try:
-            self.driver.wake_up_display()
-        except Exception as e:
-            self.logger.warning(f'唤醒屏幕失败: {e}')
-
-        # 回到主页
-        try:
-            self.driver.swipe_to_home()
-        except Exception as e:
-            self.logger.warning(f'回到主页失败: {e}')
-
-        # 如果提供了应用包名，停止应用以确保干净的状态
-        self._stop_app(app_package)
-        self._start_app(app_package)
-
         # Reset agent state before executing new task
         self.agent.reset()
-
         # 创建数据采集器，使用指定的 app_package
         self._create_data_collector_with_package(app_package)
-
-        self.report_path = os.path.join(self.config.report_path, app_package, f'scene{scene_idx}')
-        self.app_package = app_package
-        self.current_scene_idx = scene_idx
-        os.makedirs(self.report_path, exist_ok=True)
-
         self.logger.info('GuiAgent setup completed')
 
     def _teardown(self) -> None:
@@ -297,8 +276,6 @@ class GuiAgent:
             except Exception as e:
                 self.logger.warning(f'提交实时分析任务失败: {e}')
 
-        self._stop_app(self.app_package)
-
         # 清理资源
         if self.data_collector:
             self.data_collector = None
@@ -309,17 +286,6 @@ class GuiAgent:
         self.current_scene_idx = None
 
         self.logger.info('GuiAgent teardown completed')
-
-    def _start_app(self, package_name: str = None, page_name: str = None, params: str = '', wait_time: float = 5):
-        """通用应用启动方法"""
-        self.driver.start_app(package_name, page_name, params, wait_time)
-
-    def _stop_app(self, package_name: str = None, wait_time: float = 0.5):
-        """通用应用退出方法"""
-        # 桌面应用不能退出
-        if package_name == 'com.ohos.sceneboard':
-            return
-        self.driver.stop_app(package_name, wait_time)
 
     def _create_data_collector_with_package(self, app_package: str) -> Optional[DataCollector]:
         """

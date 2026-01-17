@@ -13,11 +13,120 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import json
 import logging
+import os
+import tempfile
 from typing import Optional
 
+import yaml
+
 from hapray.core.config.config import Config
-from hapray.core.gui_agent import GuiAgent, GuiAgentConfig
+from hapray.core.gui_agent import GuiAgentConfig
+from hapray.core.gui_agent.gui_agent import SceneResult
+from hapray.core.gui_agent.gui_agent_runner import GUIAgentRunner
+
+
+def _run_scene_with_runner(
+    app_package: str,
+    scene: str,
+    scene_idx: int,
+    config: GuiAgentConfig,
+    output_base_path: Optional[str] = None,
+) -> Optional['SceneResult']:
+    """
+    使用 GUIAgentRunner.run_testcase 执行单个场景
+
+    Args:
+        app_package: 应用包名
+        scene: 场景描述
+        scene_idx: 场景索引
+        config: GuiAgentConfig 配置对象
+        output_base_path: 输出基础路径
+
+    Returns:
+        SceneResult 对象，如果执行失败则返回 None
+    """
+    # 确定输出路径
+    if output_base_path:
+        output_path = os.path.join(output_base_path, app_package, f'scene{scene_idx}')
+    else:
+        output_path = os.path.join(tempfile.gettempdir(), 'gui_agent_test', app_package, f'scene{scene_idx}')
+
+    # 创建临时配置文件
+    config_data = {
+        'app_package': app_package,
+        'scene': scene,
+        'scene_idx': scene_idx,
+        'scene_name': f'{app_package}_scene{scene_idx}',
+        'gui_agent_config': {
+            'model_base_url': config.model_base_url,
+            'model_name': config.model_name,
+            'model_temperature': config.model_temperature,
+            'model_api_key': config.model_api_key,
+            'max_steps': config.max_steps,
+            'lang': config.lang,
+            'verbose': config.verbose,
+            'step_duration': config.step_duration,
+            'analysis_workers': config.analysis_workers,
+        },
+    }
+
+    # 创建临时配置文件
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+        yaml.dump(config_data, f, allow_unicode=True, default_flow_style=False)
+        temp_config_file = f.name
+
+    try:
+        # 调用 GUIAgentRunner.run_testcase
+        device_id = config.device_id
+        GUIAgentRunner.run_testcase(
+            config_file=temp_config_file,
+            output=output_path,
+            device_id=device_id,
+        )
+
+        # 检查执行结果（通过检查输出目录是否存在和包含报告文件）
+        # 由于 run_testcase 是阻塞调用，执行完成后应该已经生成报告
+        test_info_path = os.path.join(output_path, 'testInfo.json')
+        if os.path.exists(test_info_path):
+            # 读取测试信息以获取更多详情
+            with open(test_info_path, encoding='utf-8') as f:
+                test_info = json.load(f)
+
+            # 检查是否有错误（通过检查 steps.json 或其他方式）
+            steps_path = os.path.join(output_path, 'steps.json')
+            success = os.path.exists(steps_path)
+
+            return SceneResult(
+                scene=scene,
+                success=success,
+                result=test_info.get('scene', scene) if success else '执行完成但未找到步骤信息',
+                error=None if success else '未找到步骤信息文件',
+            )
+        # 如果连 testInfo.json 都不存在，说明执行可能失败了
+        return SceneResult(
+            scene=scene,
+            success=False,
+            result='',
+            error='测试执行失败：未生成测试信息文件',
+        )
+
+    except Exception as e:
+        logging.error(f'执行场景失败: {e}', exc_info=True)
+        return SceneResult(
+            scene=scene,
+            success=False,
+            result='',
+            error=str(e),
+        )
+    finally:
+        # 清理临时配置文件
+        try:
+            if os.path.exists(temp_config_file):
+                os.unlink(temp_config_file)
+        except Exception as e:
+            logging.warning(f'清理临时配置文件失败: {e}')
 
 
 def categorize_bundle(app_package: str) -> str:
@@ -167,12 +276,8 @@ def execute_scenes(app_packages: list[str], scenes: Optional[list[str]], config:
         logging.error('未提供应用包名')
         return 1
 
-    # 创建 GuiAgent 实例
-    try:
-        agent = GuiAgent(config)
-    except Exception as e:
-        logging.error(f'Failed to initialize GUI Agent: {e}')
-        return 1
+    # 注意：不再需要创建 GuiAgent 实例，因为每个场景都通过 GUIAgentRunner.run_testcase
+    # 在独立的测试进程中执行，实时分析进程会在各自的 GUIAgentRunner 实例中管理
 
     try:
         all_results = []
@@ -203,14 +308,23 @@ def execute_scenes(app_packages: list[str], scenes: Optional[list[str]], config:
                 logging.info('-' * 50)
                 logging.info(f'应用 {app_package} - 场景 {scene_idx}/{len(app_scenes)}: {scene}')
                 logging.info('-' * 50)
-                result = agent.process(app_package=app_package, scene_idx=task_id, scene=scene)
+
+                # 使用 GUIAgentRunner.run_testcase 执行场景
+                result = _run_scene_with_runner(
+                    app_package=app_package,
+                    scene=scene,
+                    scene_idx=task_id,
+                    config=config,
+                    output_base_path=config.report_path,
+                )
+
                 if result:
                     all_results.append(result)
                 task_id += 1
 
-                if result.success:
+                if result and result.success:
                     logging.info(f'场景执行成功: {result.result}')
-                else:
+                elif result:
                     logging.error(f'场景执行失败: {result.error}')
 
         # 汇总所有结果
@@ -238,38 +352,15 @@ def execute_scenes(app_packages: list[str], scenes: Optional[list[str]], config:
             else:
                 logging.info(f'  Error: {result.error}')
 
-        # 等待所有实时分析任务完成
-        try:
-            logging.info('等待所有实时分析任务完成...')
-            agent.realtime_analyzer.wait_completion()
-            logging.info('所有实时分析任务已完成')
-        except Exception as e:
-            logging.warning(f'等待实时分析任务完成时出错: {e}')
+        # 注意：实时分析任务会在每个 GUIAgentRunner 实例的 teardown 中处理
+        # 由于 run_testcase 是阻塞调用，每个场景执行完成后，实时分析应该已经完成或正在后台执行
+        logging.info('所有场景执行完成，实时分析任务由各自的 GUIAgentRunner 实例管理')
 
         return 0 if failed_count == 0 else 1
 
     except KeyboardInterrupt:
         logging.warning('Execution interrupted by user')
-        # 即使被中断，也等待分析任务完成
-        try:
-            logging.info('等待所有实时分析任务完成...')
-            agent.realtime_analyzer.wait_completion()
-        except Exception as e:
-            logging.warning(f'等待实时分析任务完成时出错: {e}')
         return 130
     except Exception as e:
         logging.error(f'Execution failed: {e}', exc_info=True)
-        # 即使出错，也等待分析任务完成
-        try:
-            logging.info('等待所有实时分析任务完成...')
-            agent.realtime_analyzer.wait_completion()
-        except Exception as e2:
-            logging.warning(f'等待实时分析任务完成时出错: {e2}')
         return 1
-    finally:
-        # 关闭实时分析进程
-        try:
-            agent.realtime_analyzer.shutdown()
-            logging.info('实时分析进程已关闭')
-        except Exception as e:
-            logging.warning(f'关闭实时分析进程时出错: {e}')
