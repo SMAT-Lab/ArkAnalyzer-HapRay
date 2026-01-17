@@ -233,7 +233,7 @@ python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/co
 python -m scripts.main gui-agent [options]
 ```
 Options:
-- `--app <package1> [package2] ...`: Application package names (required, supports multiple packages)
+- `--apps <package1> [package2] ...`: Application package names (required, supports multiple packages)
 - `--scenes <scene1> [scene2] ...`: Multiple scenes to execute (optional, natural language descriptions). If not specified, scenes will be automatically loaded from config.yaml based on app category
 - `--glm-base-url <url>`: LLM API base URL (default: http://localhost:8000/v1, env: GLM_BASE_URL)
 - `--glm-model <name>`: Model name (default: autoglm-phone-9b, env: GLM_MODEL)
