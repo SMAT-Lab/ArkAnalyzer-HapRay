@@ -703,7 +703,6 @@ class EmptyFrameResultBuilder:
         # - 分母 total_load: 应用进程的所有samples的cpu event总和（整个trace）
         #   如果分子包含系统进程，分母也会加上这些系统进程在整个trace的负载，确保计算一致性
 
-
         if total_load > 0:
             empty_frame_percentage = (empty_frame_load / total_load) * 100
 
@@ -869,8 +868,12 @@ class EmptyFrameResultBuilder:
                 'total_load': int(total_load),
                 'empty_frame_load': int(empty_frame_load),
                 'empty_frame_percentage': float(empty_frame_percentage),
-                'system_load_in_total_trace': int(system_load_in_total_trace),  # 系统进程在整个trace的负载（已累加到total_load中）
-                'system_load_in_empty_frames': int(system_load_in_empty_frames),  # 空刷帧中的系统进程负载（用于结果JSON分析）
+                'system_load_in_total_trace': int(
+                    system_load_in_total_trace
+                ),  # 系统进程在整个trace的负载（已累加到total_load中）
+                'system_load_in_empty_frames': int(
+                    system_load_in_empty_frames
+                ),  # 空刷帧中的系统进程负载（用于结果JSON分析）
                 'total_empty_frames': int(len(frame_loads)),
                 'empty_frames_with_load': int(len([f for f in frame_loads if f.get('frame_load', 0) > 0])),
                 'main_thread_load': int(main_thread_load),
