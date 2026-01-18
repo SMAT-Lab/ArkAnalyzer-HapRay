@@ -93,9 +93,11 @@ class PerfAnalyzer(BaseAnalyzer):
             logging.warning('Not found file %s', perf_json_file)
             return None
 
+        with open(perf_json_file, encoding='utf-8') as perf_json_file:
+            all_json = perf_json_file.read()
+
         script_start = '<script id="record_data" type="application/gzip+json;base64">'
         script_end = '</script></body></html>'
-        all_json = PerfAnalyzer.apply_symbol_split_rules(perf_json_file)
 
         # 为HTML报告压缩数据
         compressed_bytes = zlib.compress(all_json.encode('utf-8'), level=9)
