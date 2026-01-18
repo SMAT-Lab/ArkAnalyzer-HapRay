@@ -15,6 +15,7 @@ limitations under the License.
 
 import logging
 import time
+import traceback
 from bisect import bisect_left
 from collections import defaultdict
 from typing import Optional
@@ -1828,7 +1829,7 @@ class EmptyFrameAnalyzer:
             # 优化：合并4次查询为1次，在应用层分组计算
             deduplicated_result = self.cache_manager.get_all_thread_loads_with_info_for_pids(
                 self.cache_manager.app_pids,
-                time_ranges=merged_time_ranges  # 使用原始时间范围，不扩展
+                time_ranges=merged_time_ranges,  # 使用原始时间范围，不扩展
             )
 
             deduplicated_empty_frame_load = deduplicated_result['total_load']
@@ -1838,7 +1839,9 @@ class EmptyFrameAnalyzer:
 
             recalc_time = time.time() - recalc_start
             timing_stats['recalc_deduplicated_loads'] = recalc_time
-            logging.info(f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(merged_time_ranges)}个)')
+            logging.info(
+                f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(merged_time_ranges)}个)'
+            )
 
         # 保存原始 empty_frame_load 到 timing_stats（用于日志对比）
         timing_stats['original_empty_frame_load'] = original_empty_frame_load
@@ -1873,10 +1876,8 @@ class EmptyFrameAnalyzer:
         # === 统计空刷帧中的系统进程负载（用于结果JSON分析，不用于空刷率计算） ===
         # 统计真实的系统进程负载，用于分析空刷帧中系统进程的CPU消耗情况
         # 注意：此值不用于空刷率计算（不影响分母total_load），仅用于结果展示和分析
-        from .frame_utils import is_system_thread
-        
         system_load_in_empty_frames = 0  # 空刷帧中的系统进程负载（初始化为0）
-        
+
         # 统计frame_loads中系统进程的负载
         if deduplicated_empty_frame_load is not None:
             # 使用去重后的值，需要从原始frame_loads中统计系统进程负载
@@ -1895,7 +1896,7 @@ class EmptyFrameAnalyzer:
                 process_name = f.get('process_name', '')
                 if process_name and is_system_thread(process_name, None):
                     system_load_in_empty_frames += f.get('frame_load', 0)
-        
+
         if system_load_in_empty_frames > 0:
             logging.info(f'检测到空刷帧中包含系统进程负载: {system_load_in_empty_frames:,}')
 
@@ -1904,7 +1905,6 @@ class EmptyFrameAnalyzer:
         system_load_in_total_trace = 0
         if system_load_in_empty_frames > 0 and self.cache_manager and self.cache_manager.trace_conn:
             try:
-                import traceback
                 # 从frame_loads中收集系统进程名
                 system_process_names = set()
                 for f in frame_loads:
@@ -1938,7 +1938,6 @@ class EmptyFrameAnalyzer:
                         )
             except Exception as e:
                 logging.warning(f'计算系统进程负载失败: {e}')
-                import traceback
                 traceback.print_exc()
 
         # === 使用公共模块构建基础结果 ===
