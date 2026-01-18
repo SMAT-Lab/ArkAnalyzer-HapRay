@@ -33,11 +33,16 @@ class MemLoad_meituan_0010(PerfTestCase):
 
         def step2():
             # 2.首页页面上滑动5次，等待2s
-            self.swipes_up(swip_num=5, sleep=2)
+            for _ in range(5):
+                self.swipes_up(swip_num=1, sleep=2)
+                self.dump_page(f'首页上滑{_ + 1}')
+            time.sleep(2)
 
         def step3():
             # 3.首页页面下滑动5次，等待2s
-            self.swipes_down(swip_num=5, sleep=2)
+            for _ in range(5):
+                self.swipes_down(swip_num=1, sleep=2)
+                self.dump_page(f'首页下滑{_ + 1}')
 
         self.execute_performance_step('美团-首页滑动浏览场景-step1打开美团，等待5s', 10, step1)
         self.execute_performance_step('美团-首页滑动浏览场景-step2首页页面上滑动5次，等待2s', 20, step2)

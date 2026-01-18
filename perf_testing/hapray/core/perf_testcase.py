@@ -16,6 +16,7 @@ limitations under the License.
 import json
 import os
 import re
+import threading
 import time
 from abc import ABC, abstractmethod
 
@@ -46,6 +47,10 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self.bundle_info = None
         self.module_name = None
         self._data_collector = None  # 延迟初始化，在setup中创建
+        self.current_step_id = None  # 当前步骤ID
+        self.current_page_idx = 0  # 当前页面索引，从0开始自增
+        self.pageMap: dict[int, list] = {}  # pageMap: step_id -> list of pages
+        self._dump_page_threads: list[threading.Thread] = []  # 跟踪所有dump_page线程
 
     @property
     def steps(self) -> list:
@@ -91,6 +96,16 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """common teardown"""
         Log.info('PerfTestCase teardown')
         self.stop_app()
+
+        # 等待所有dump_page线程完成
+        if self._dump_page_threads:
+            Log.info(f'等待{len(self._dump_page_threads)}个dump_page线程完成...')
+            for thread in self._dump_page_threads:
+                thread.join(timeout=30)  # 每个线程最多等待30秒
+                if thread.is_alive():
+                    Log.warning('dump_page线程未在30秒内完成，继续执行teardown')
+            Log.info('所有dump_page线程已完成')
+
         self._generate_reports()
 
     def execute_performance_step(
@@ -108,12 +123,19 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         step_id = len(self._steps) + 1
         self._steps.append({'name': f'step{step_id}', 'description': step_name})
 
+        # 设置当前步骤ID和重置页面索引
+        self.current_step_id = step_id
+        self.current_page_idx = 0
+
         # Use config default if not explicitly specified
         if sample_all_processes is None:
             sample_all_processes = Config.get('sample_all', False)
 
         # 步骤开始时的数据采集（包括UI数据采集、XVM追踪和性能采集线程启动）
         self.data_collector.collect_step_data_start(step_id, self.report_path, duration, sample_all_processes)
+        # 检查UI采集开关
+        if Config.get('ui.capture_enable', False):
+            self.dump_page(f'step{step_id}_start', animate=True)
 
         try:
             # Execute the test action while data collection runs
@@ -123,6 +145,54 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
         # 步骤结束时的数据采集（包括UI数据采集和XVM追踪，以及性能采集线程等待）
         self.data_collector.collect_step_data_end(step_id, self.report_path, self._redundant_mode_status)
+        if Config.get('ui.capture_enable', False):
+            self.dump_page(f'step{step_id}_end', animate=True)
+
+    def dump_page(self, page_description: str, animate: bool = False):
+        """
+        导出页面组件树（异步执行，不阻塞用例执行）
+
+        Args:
+            page_description: 页面描述信息
+            animate: 是否进行动画采集（采集两次截图和组件树）
+        """
+        if self.current_step_id is None:
+            Log.warning('dump_page调用时current_step_id为None，跳过组件树导出')
+            return
+
+        # 页面索引自增
+        self.current_page_idx += 1
+        page_idx = self.current_page_idx
+        step_id = self.current_step_id
+
+        # 使用多线程异步执行dump_page_element_tree，避免阻塞用例执行
+        def dump_thread():
+            try:
+                Log.info(f'开始异步导出页面组件树 - Step {step_id}, Page {page_idx}, Description: {page_description}')
+                files = self.data_collector.capture_ui_handler.capture_page(
+                    step_id, self.report_path, page_idx, animate
+                )
+                page_info = {
+                    **files,
+                    'page_idx': page_idx,
+                    'description': page_description,
+                }
+
+                # 同时添加到pageMap中
+                if step_id not in self.pageMap:
+                    self.pageMap[step_id] = []
+                self.pageMap[step_id].append(page_info)
+
+                Log.info(f'页面信息已添加到Step {step_id}的pages列表和pageMap - Page {page_idx}')
+
+                Log.info(f'页面组件树导出完成 - Step {step_id}, Page {page_idx}')
+            except Exception as e:
+                Log.error(f'导出页面组件树失败 - Step {step_id}, Page {page_idx}: {e}')
+
+        thread = threading.Thread(target=dump_thread, daemon=True)
+        self._dump_page_threads.append(thread)  # 添加到线程列表
+        thread.start()
+        Log.info(f'已启动页面组件树导出线程 - Step {step_id}, Page {page_idx}, Description: {page_description}')
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
@@ -170,6 +240,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """Generate test reports and metadata files"""
         steps_info = self._collect_step_information()
         self._save_steps_info(steps_info)
+        self._save_page_info()
         self._save_test_metadata()
 
     def _collect_step_information(self) -> list:
@@ -199,6 +270,25 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         metadata_path = os.path.join(self.report_path, 'testInfo.json')
         with open(metadata_path, 'w', encoding='utf-8') as file:
             json.dump(metadata, file, indent=4, ensure_ascii=False)
+
+    def _save_page_info(self):
+        """保存page信息到ui/step_id目录下"""
+        if not self.pageMap:
+            return
+
+        for step_id, pages in self.pageMap.items():
+            # 创建ui/step_id目录
+            ui_step_dir = os.path.join(self.report_path, 'ui', f'step{step_id}')
+            os.makedirs(ui_step_dir, exist_ok=True)
+
+            # 保存page信息为JSON文件
+            pages_info_path = os.path.join(ui_step_dir, 'pages.json')
+            try:
+                with open(pages_info_path, 'w', encoding='utf-8') as f:
+                    json.dump(pages, f, ensure_ascii=False, indent=4)
+                Log.info(f'Page信息已保存到: {pages_info_path} (Step {step_id}, 共{len(pages)}个页面)')
+            except Exception as e:
+                Log.error(f'保存Page信息失败 - Step {step_id}: {e}')
 
     def _get_app_version(self) -> str:
         """Retrieve application version from device"""

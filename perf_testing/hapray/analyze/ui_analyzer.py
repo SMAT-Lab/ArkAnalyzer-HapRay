@@ -71,6 +71,13 @@ class UIAnalyzer(BaseAnalyzer):
                 self.logger.warning(f'UI目录不存在: {ui_dir}')
                 return None
 
+            # 解析pages.json文件开始UI分析
+            pages_json_path = os.path.join(ui_dir, 'pages.json')
+            if os.path.exists(pages_json_path):
+                # 基于pages.json进行分析
+                return self._analyze_from_pages_json(ui_dir, pages_json_path)
+            # 兼容旧的start/end阶段分析逻辑
+            self.logger.info(f'pages.json不存在，使用旧的start/end阶段分析: {ui_dir}')
             # 分析start阶段的动画
             start_animation_result = self._analyze_animation_phase(ui_dir, 'start')
 
@@ -145,6 +152,382 @@ class UIAnalyzer(BaseAnalyzer):
         except Exception as e:
             self.logger.error(f'分析{phase}阶段动画失败: {str(e)}')
             return {'error': str(e)}
+
+    def _analyze_from_pages_json(self, ui_dir: str, pages_json_path: str) -> list[dict[str, Any]]:
+        """基于pages.json文件进行UI分析
+
+        Args:
+            ui_dir: UI数据目录
+            pages_json_path: pages.json文件路径
+
+        Returns:
+            页面分析结果列表: [page_results]
+        """
+        try:
+            # 读取pages.json文件
+            with open(pages_json_path, encoding='utf-8') as f:
+                pages = json.load(f)
+
+            if not pages:
+                self.logger.warning(f'pages.json中没有页面数据: {pages_json_path}')
+                return []
+
+            self.logger.info(f'从pages.json解析到{len(pages)}个页面，开始UI分析')
+
+            # 分析每个页面的动画
+            page_results = []
+            for page_idx, page_info in enumerate(pages):
+                page_result = self._analyze_page(ui_dir, page_info, page_idx)
+                if page_result:
+                    page_results.append(page_result)
+
+            # 直接返回page_results列表
+            return page_results
+
+        except Exception as e:
+            self.logger.error(f'基于pages.json分析失败: {str(e)}')
+            return []
+
+    def _analyze_page(self, ui_dir: str, page_info: dict[str, Any], page_idx: int) -> Optional[dict[str, Any]]:
+        """分析单个页面
+
+        Args:
+            ui_dir: UI数据目录
+            page_info: 页面信息字典（包含element_tree, screenshot等路径）
+            page_idx: 页面索引
+
+        Returns:
+            页面分析结果，格式: {
+                'page_idx': int,
+                'description': str,
+                'canvasNodeCnt': int,
+                'image_size_analysis': {...},
+                'animations': {...}  # 可选
+            }
+        """
+        try:
+            page_description = page_info.get('description', f'page{page_idx}')
+            actual_page_idx = page_info.get('page_idx', page_idx)
+            self.logger.info(f'开始分析页面: {page_description} (索引: {actual_page_idx})')
+
+            result = {
+                'page_idx': actual_page_idx,
+                'description': page_description,
+            }
+
+            # 如果存在element_tree文件，进行组件树分析
+            element_tree_path = page_info.get('element_tree')
+            canvas_node_count = 0
+
+            if element_tree_path:
+                if not os.path.isabs(element_tree_path):
+                    element_tree_path = os.path.join(ui_dir, os.path.basename(element_tree_path))
+
+                if os.path.exists(element_tree_path):
+                    # 分析组件树（包括CanvasNode统计等）
+                    tree_analysis = self._analyze_tree_from_file(element_tree_path)
+                    if tree_analysis:
+                        canvas_node_count = tree_analysis.get('canvas_node_count', 0)
+                        result['canvasNodeCnt'] = canvas_node_count
+
+                    # 进行图片尺寸分析
+                    image_size_analysis = self._analyze_image_size_from_file(element_tree_path, ui_dir)
+                    if image_size_analysis:
+                        result['image_size_analysis'] = image_size_analysis
+
+            # 如果存在多个截图或组件树（animate=True的情况），进行动画分析
+            screenshot = page_info.get('screenshot')
+            screenshot_2 = page_info.get('screenshot_2')
+            element_tree_2 = page_info.get('element_tree_2')
+
+            animations = {}
+            has_animations = False
+
+            # 图像动画分析
+            if screenshot and screenshot_2:
+                screenshot_full = (
+                    os.path.join(ui_dir, os.path.basename(screenshot)) if not os.path.isabs(screenshot) else screenshot
+                )
+                screenshot_2_full = (
+                    os.path.join(ui_dir, os.path.basename(screenshot_2))
+                    if not os.path.isabs(screenshot_2)
+                    else screenshot_2
+                )
+
+                if os.path.exists(screenshot_full) and os.path.exists(screenshot_2_full):
+                    image_animation = self._analyze_image_animation_from_files(
+                        screenshot_full, screenshot_2_full, ui_dir
+                    )
+                    if image_animation:
+                        animations['image_animations'] = image_animation.get('image_animations', {})
+                        if 'marked_images' in image_animation:
+                            animations['marked_images'] = image_animation['marked_images']
+                        has_animations = True
+
+            # 组件树动画分析
+            if element_tree_path and element_tree_2:
+                element_tree_2_full = (
+                    os.path.join(ui_dir, os.path.basename(element_tree_2))
+                    if not os.path.isabs(element_tree_2)
+                    else element_tree_2
+                )
+                if os.path.exists(element_tree_path) and os.path.exists(element_tree_2_full):
+                    tree_animation = self._analyze_tree_animation_from_files(element_tree_path, element_tree_2_full)
+                    if tree_animation:
+                        animations['tree_animations'] = tree_animation
+                        has_animations = True
+
+            # 如果有动画分析结果，添加到结果中
+            if has_animations:
+                result['animations'] = animations
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f'分析页面失败 (索引: {page_idx}): {str(e)}')
+            return None
+
+    def _analyze_tree_from_file(self, element_tree_path: str) -> Optional[dict[str, Any]]:
+        """从element_tree文件分析组件树
+
+        Args:
+            element_tree_path: 组件树文件路径
+
+        Returns:
+            组件树分析结果（包括CanvasNode统计等）
+        """
+        try:
+            with open(element_tree_path, encoding='utf-8') as f:
+                content = f.read()
+
+            # 解析组件树
+            tree_dict = parse_arkui_tree(content)
+
+            # 提取分析结果
+            return {
+                'canvas_node_count': tree_dict.get('canvas_node_count', 0),
+            }
+
+        except Exception as e:
+            self.logger.error(f'解析组件树文件失败: {element_tree_path}, 错误: {str(e)}')
+            return None
+
+    def _analyze_image_differences_from_files(
+        self, screenshot_path_1: str, screenshot_path_2: str
+    ) -> Optional[dict[str, Any]]:
+        """从两个截图文件进行图像差异分析
+
+        Args:
+            screenshot_path_1: 第一个截图路径
+            screenshot_path_2: 第二个截图路径
+
+        Returns:
+            图像差异分析结果
+        """
+        # TODO: 实现基于文件的图像差异分析
+        # 这里可以调用现有的图像差异分析逻辑
+        return None
+
+    def _analyze_image_size_from_file(self, element_tree_path: str, ui_dir: str) -> Optional[dict[str, Any]]:
+        """从element_tree文件分析图片尺寸
+
+        Args:
+            element_tree_path: 组件树文件路径
+            ui_dir: UI数据目录
+
+        Returns:
+            图片尺寸分析结果，包含 marked_image (base64)
+        """
+        try:
+            with open(element_tree_path, encoding='utf-8') as f:
+                content = f.read()
+
+            # 解析组件树
+            tree_dict = parse_arkui_tree(content)
+
+            if not tree_dict:
+                return None
+
+            # 分析Image尺寸
+            image_size_result = analyze_image_sizes(tree_dict)
+
+            # 如果有超出尺寸的Image，生成标记图片
+            marked_image_base64 = None
+            if image_size_result.get('images_exceeding_framerect'):
+                # 尝试找到对应的截图文件
+                screenshot_files = glob.glob(os.path.join(ui_dir, 'screenshot*.png'))
+                if screenshot_files:
+                    screenshot_path = screenshot_files[0]  # 使用第一个找到的截图
+
+                    # 生成标记图片
+                    exceeding_regions = []
+                    for img_info in image_size_result.get('images_exceeding_framerect', []):
+                        bounds_rect = img_info.get('bounds_rect')
+                        if bounds_rect:
+                            excess_memory_mb = img_info.get('memory', {}).get('excess_memory_mb', 0.0)
+                            exceeding_regions.append({'bounds_rect': bounds_rect, 'excess_memory_mb': excess_memory_mb})
+
+                    if exceeding_regions and os.path.exists(screenshot_path):
+                        marked_image_path = self._generate_marked_image_for_size_analysis(
+                            screenshot_path, exceeding_regions, ui_dir
+                        )
+                        if marked_image_path and os.path.exists(marked_image_path):
+                            marked_image_base64 = self._image_to_base64(marked_image_path)
+
+            result = {
+                **image_size_result,
+            }
+            if marked_image_base64:
+                result['marked_image'] = marked_image_base64
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f'分析图片尺寸失败: {element_tree_path}, 错误: {str(e)}')
+            return None
+
+    def _analyze_image_animation_from_files(
+        self, screenshot_path_1: str, screenshot_path_2: str, ui_dir: str
+    ) -> Optional[dict[str, Any]]:
+        """从两个截图文件进行图像动画分析
+
+        Args:
+            screenshot_path_1: 第一个截图路径
+            screenshot_path_2: 第二个截图路径
+            ui_dir: UI数据目录
+
+        Returns:
+            图像动画分析结果，包含 marked_images (base64)
+        """
+        # TODO: 实现基于文件的图像动画分析
+        # 这里可以调用现有的图像差异分析逻辑
+        # 返回格式: {'image_animations': {...}, 'marked_images': base64_string}
+        return None
+
+    def _analyze_tree_animation_from_files(self, tree_path_1: str, tree_path_2: str) -> Optional[dict[str, Any]]:
+        """从两个组件树文件进行树动画分析
+
+        Args:
+            tree_path_1: 第一个组件树文件路径
+            tree_path_2: 第二个组件树文件路径
+
+        Returns:
+            组件树动画分析结果
+        """
+        try:
+            # 读取并解析两个组件树文件
+            with open(tree_path_1, encoding='utf-8') as f:
+                content_1 = f.read()
+            with open(tree_path_2, encoding='utf-8') as f:
+                content_2 = f.read()
+
+            tree_1 = parse_arkui_tree(content_1)
+            tree_2 = parse_arkui_tree(content_2)
+
+            # 比较两个组件树
+            differences = compare_arkui_trees(tree_1, tree_2)
+
+            return {
+                'differences': differences,
+                'difference_count': len(differences),
+            }
+
+        except Exception as e:
+            self.logger.error(f'分析组件树动画失败: {str(e)}')
+            return None
+
+    def _generate_marked_image_for_size_analysis(
+        self, screenshot_path: str, exceeding_regions: list[dict[str, Any]], ui_dir: str
+    ) -> Optional[str]:
+        """为图片尺寸分析生成标记图片
+
+        Args:
+            screenshot_path: 截图路径
+            exceeding_regions: 超出尺寸的区域列表
+            ui_dir: UI数据目录
+
+        Returns:
+            标记图片路径
+        """
+        try:
+            img = Image.open(screenshot_path)
+            img = img.convert('RGB')
+            draw = ImageDraw.Draw(img)
+
+            # 尝试加载字体
+            try:
+                font = ImageFont.truetype('arial.ttf', 40)
+            except OSError:
+                try:
+                    font = ImageFont.truetype('/System/Library/Fonts/Arial.ttf', 40)
+                except OSError:
+                    font = ImageFont.load_default()
+
+            # 标记超出尺寸Image区域（蓝色）
+            for i, region_info in enumerate(exceeding_regions, 1):
+                bounds_rect = region_info.get('bounds_rect')
+                if not bounds_rect:
+                    continue
+                x1, y1, x2, y2 = bounds_rect
+                # 绘制蓝色矩形框
+                draw.rectangle([x1, y1, x2, y2], outline='blue', width=3)
+                # 在区域左上角绘制编号
+                text = f'I{i}'
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                text_x = x1 + 5
+                text_y = y1 + 5
+                draw.rectangle(
+                    [text_x - 2, text_y - 2, text_x + text_width + 2, text_y + text_height + 2],
+                    fill='blue',
+                )
+                draw.text((text_x, text_y), text, fill='white', font=font)
+
+            # 保存标记图片
+            output_dir = os.path.join(ui_dir, 'marked_images')
+            os.makedirs(output_dir, exist_ok=True)
+            marked_image_path = os.path.join(output_dir, f'marked_size_{os.path.basename(screenshot_path)}')
+            img.save(marked_image_path)
+
+            return marked_image_path
+
+        except Exception as e:
+            self.logger.error(f'生成标记图片失败: {str(e)}')
+            return None
+
+    def _image_to_base64(self, image_path: str) -> Optional[str]:
+        """将图片转换为base64编码
+
+        Args:
+            image_path: 图片路径
+
+        Returns:
+            base64编码的图片字符串
+        """
+        try:
+            if not os.path.exists(image_path):
+                return None
+
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
+                return base64.b64encode(image_data).decode('ascii')
+
+        except Exception as e:
+            self.logger.error(f'转换图片为base64失败: {image_path}, 错误: {str(e)}')
+            return None
+
+    def _analyze_tree_differences_from_files(self, tree_path_1: str, tree_path_2: str) -> Optional[dict[str, Any]]:
+        """从两个组件树文件进行差异分析（保留用于兼容性）
+
+        Args:
+            tree_path_1: 第一个组件树文件路径
+            tree_path_2: 第二个组件树文件路径
+
+        Returns:
+            组件树差异分析结果
+        """
+        return self._analyze_tree_animation_from_files(tree_path_1, tree_path_2)
 
     def _parse_animation_components(self, ui_dir: str, phase: str) -> list[dict[str, Any]]:
         """解析inspector文件中的可能的动画组件

@@ -87,10 +87,6 @@ class DataCollector:
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
         self.process_manager.save_process_info(perf_step_dir)
 
-        # 检查UI采集开关
-        if Config.get('ui.capture_enable', False):
-            self.capture_ui_handler.capture_ui(step_id, report_path, 'start')
-
         self._start_collect_memory_data(step_id, report_path)  # 持续到步骤结束
 
         Log.info(f'步骤 {step_id} 开始采集准备完成')
@@ -141,10 +137,6 @@ class DataCollector:
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
 
-        # 检查UI采集开关
-        if Config.get('ui.capture_enable', False):
-            self.capture_ui_handler.capture_ui(step_id, report_path, 'end')
-
         # 检查是否启用 snapshot 采集，如果启用则采集一次
         snapshot_enabled = Config.get('memory.snapshot_enable', False)
         if snapshot_enabled:
@@ -154,6 +146,18 @@ class DataCollector:
 
         # 停止XVM追踪
         self.xvm.stop_trace(perf_step_dir)
+
+    def capture_page(self, step_id: int, report_path: str, page_idx: int, animate: bool = False) -> dict[str, str]:
+        """
+        采集页面数据
+
+        Args:
+            step_id: 步骤ID
+            report_path: 报告路径
+            page_idx: 页面索引
+            animate: 是否采集动画数据
+        """
+        return self.capture_ui_handler.capture_page(step_id, report_path, page_idx, animate)
 
     # ==================== 私有方法：步骤采集 ====================
 
