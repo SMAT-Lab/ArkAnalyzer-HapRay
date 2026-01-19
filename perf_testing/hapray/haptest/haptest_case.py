@@ -208,18 +208,17 @@ class HapTest(PerfTestCase):
         os.makedirs(ui_dir, exist_ok=True)
 
         # 立即采集UI数据(只采集一次作为当前状态)
-        self._capture_ui.capture_ui(step_id, self.report_path, 'current')
+        page_info = self._capture_ui.capture_page(step_id, self.report_path, 0)
 
         # 从element_tree中提取当前bundleName
-        element_tree_path = os.path.join(ui_dir, 'element_tree_current_1.txt')
-        current_bundle_name = self._extract_bundle_name(element_tree_path)
+        current_bundle_name = self._extract_bundle_name(page_info['element_tree'])
 
         # 创建UI状态对象
         return UIState(
             step_id=step_id,
-            screenshot_path=os.path.join(ui_dir, 'screenshot_current_1.png'),
-            element_tree_path=element_tree_path,
-            inspector_path=os.path.join(ui_dir, 'inspector_current.json'),
+            screenshot_path=page_info['screenshot'],
+            element_tree_path=page_info['element_tree'],
+            inspector_path=page_info['inspector'],
             app_package=self.app_package,
             current_bundle_name=current_bundle_name,
         )
