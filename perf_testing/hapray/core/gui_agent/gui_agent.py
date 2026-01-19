@@ -64,17 +64,8 @@ class GuiAgentConfig:
     confirmation_callback: Optional[Callable[[str], bool]] = None
     takeover_callback: Optional[Callable[[str], None]] = None
 
-
-@dataclass
-class SceneResult:
-    """Result of a task execution."""
-
-    scene: str
-    success: bool
-    result: str
-    error: Optional[str] = None
-    page_count: Optional[int] = None
-    pages: Optional[list[dict]] = None
+    # App package
+    app_package: Optional[str] = None
 
 
 class GuiAgent:
@@ -135,180 +126,33 @@ class GuiAgent:
         self._scene_pages: list[dict] = []
 
         self.report_path: Optional[str] = self.config.report_path
-        self.app_package: Optional[str] = None
+        self.app_package: Optional[str] = self.config.app_package
 
-    def process(self, app_package: str, scene: str) -> SceneResult:
+    def step(self, task: str | None = None) -> StepResult:
         """
-        Process a single scene for a specific app.
+        Execute a single step of the agent.
 
         Args:
-            app_package: Application package name.
-            scene: Scene description in natural language.
+            task: Task description (only needed for first step).
 
         Returns:
-            TaskResult object containing scene execution result.
+            StepResult with step details.
         """
-        self.logger.info('Processing scene for app %s: %s', app_package, scene)
-
-        try:
-            # Execute setup
-            self._setup(app_package)
-
-            # Reset page information for current scene
-            self._scene_pages = []
-
-            self.data_collector.collect_step_data_start(self.stepId, self.report_path, 30)
-            # Execute first step with scene description
+        if task is not None:
             prompt = (
-                f'你正在测试鸿蒙应用（bundleName: {app_package}），应用已通过 bundle 启动。'
+                f'你正在测试鸿蒙应用（bundleName: {self.app_package}），应用已通过 bundle 启动。'
                 '请尽量探索不同页面/功能，但避免登录、支付、下单、转账、发帖/评论发布等不可逆操作。'
                 '如遇到登录/授权/定位/通知权限弹窗，优先选择取消/暂不/稍后/返回。'
-                f'不要打开其他应用。任务：{scene}'
+                f'不要打开其他应用。任务：{task}'
             )
-            step_result = self.agent.step(prompt)
-            step_count = self.agent.step_count
+        else:
+            prompt = task
+            
+        return self.agent.step(prompt)
 
-            # Collect page data after first step
-            self.collect_page_data(step_count, step_result)
-
-            # Continue steps until finished or max steps reached
-            task_result = None
-            while not step_result.finished and step_count < self.config.max_steps:
-                step_result = self.agent.step()
-                step_count = self.agent.step_count
-
-                # Collect page data after each step
-                self.collect_page_data(step_count, step_result)
-
-                # Check if task completed successfully
-                if step_result.finished:
-                    result_message = step_result.message or 'Scene completed'
-                    self.logger.info('Scene completed successfully: %s (steps: %d)', scene, step_count)
-                    task_result = SceneResult(
-                        scene=scene,
-                        success=True,
-                        result=result_message,
-                        page_count=step_count,
-                        pages=self._scene_pages.copy(),
-                    )
-                    break
-
-            # If max steps reached without finishing
-            if task_result is None:
-                error_msg = f'Max steps ({self.config.max_steps}) reached'
-                self.logger.warning('Scene reached max steps: %s', scene)
-                task_result = SceneResult(
-                    scene=scene,
-                    success=False,
-                    result=step_result.message or '',
-                    error=error_msg,
-                    page_count=step_count,
-                    pages=self._scene_pages.copy(),
-                )
-
-            self.data_collector.collect_step_data_end(self.stepId, self.report_path)
-            # Execute teardown
-            self._teardown()
-
-            return task_result
-
-        except Exception as e:
-            error_msg = str(e)
-            self.logger.error('Scene failed: %s, Error: %s', scene, error_msg)
-
-            # Execute teardown even on failure
-            try:
-                self._teardown()
-            except Exception as teardown_error:
-                self.logger.warning('Teardown failed: %s', teardown_error)
-
-            return SceneResult(
-                scene=scene,
-                success=False,
-                result='',
-                error=error_msg,
-                pages=self._scene_pages.copy(),
-            )
-
-    def _setup(self, app_package: str) -> None:
+    def reset(self) -> None:
         """
-        Setup before processing scenes.
-
-        Args:
-            app_package: Application package name. If provided, will prepare the app for testing.
+        Reset the agent state for a new task.
         """
-        self.logger.info('GuiAgent setup')
-        # Reset agent state before executing new task
         self.agent.reset()
-        # Create data collector with specified app_package
-        self._create_data_collector_with_package(app_package)
-        self.logger.info('GuiAgent setup completed')
 
-    def _teardown(self) -> None:
-        """
-        Teardown after processing scenes.
-        """
-        self.logger.info('GuiAgent teardown')
-
-        # Clean up resources
-        if self.data_collector:
-            self.data_collector = None
-            self.logger.info('DataCollector cleaned up')
-
-        self.logger.info('GuiAgent teardown completed')
-
-    def _create_data_collector_with_package(self, app_package: str) -> Optional[DataCollector]:
-        """
-        Create DataCollector instance with specified app_package.
-
-        Args:
-            app_package: Application package name
-
-        Returns:
-            DataCollector instance, or None if creation fails
-        """
-        if not app_package:
-            self.logger.warning('App package name is empty, skipping data collection')
-            return None
-
-        bundle_info = get_bundle_info(self.driver, app_package)
-        module_name = bundle_info.get('entryModuleName')
-
-        # Create DataCollector instance
-        try:
-            self.data_collector = DataCollector(self.driver, app_package, module_name=module_name)
-            self.logger.info('DataCollector instance created, app_package: %s', app_package)
-            return self.data_collector
-        except Exception as e:
-            self.logger.warning('Failed to create DataCollector: %s', e)
-            return None
-
-    def collect_page_data(self, step_count: int, step_result: StepResult) -> None:
-        """
-        Collect data after each step completion.
-
-        This function can be overridden in subclasses to implement custom data collection logic.
-
-        Args:
-            step_count: Current step count
-            step_result: StepResult object containing step execution result
-        """
-        self.logger.debug(
-            'Step %d data - success: %s, finished: %s, action: %s, thinking: %s, message: %s',
-            step_count,
-            step_result.success,
-            step_result.finished,
-            step_result.action,
-            step_result.thinking[:100] if step_result.thinking else None,
-            step_result.message,
-        )
-
-        # Create page information
-        page_info = {
-            'action': step_result.action or '',
-            'thinking': step_result.thinking or '',
-            'message': step_result.message or '',
-            'pageIdx': step_count,
-        }
-
-        self._scene_pages.append(page_info)
