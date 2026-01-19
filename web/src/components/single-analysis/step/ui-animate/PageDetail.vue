@@ -1,5 +1,5 @@
 <template>
-  <div class="page-detail" v-if="page">
+  <div v-if="page" class="page-detail">
     <div v-if="page.error" style="padding: 16px;">
       <el-alert
         title="分析失败"
