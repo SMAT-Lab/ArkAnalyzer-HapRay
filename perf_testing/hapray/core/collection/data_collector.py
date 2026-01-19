@@ -14,8 +14,6 @@ limitations under the License.
 """
 
 import os
-import re
-import glob
 import threading
 import time
 from datetime import datetime
@@ -37,7 +35,7 @@ Log = platform_logger('DataCollector')
 class DataCollector:
     """性能数据采集类，负责协调数据采集流程"""
 
-    def __init__(self, driver: Any, app_package: str, module_name: str = None, testcase: Any = None):
+    def __init__(self, driver: Any, app_package: str, module_name: str = None):
         """
         初始化DataCollector
 
@@ -45,12 +43,10 @@ class DataCollector:
             driver: 设备驱动对象（需要有shell、pull_file、has_file方法）
             app_package: 应用包名
             module_name: 模块名称（用于覆盖率数据采集）
-            testcase: 测试用例实例（用于访问页面计数器）
         """
         self.driver = driver
         self.app_package = app_package
         self.module_name = module_name
-        self.testcase = testcase  # 保存testcase引用
 
         # 初始化各个组件
         self.process_manager = ProcessManager(driver, app_package)
@@ -90,15 +86,6 @@ class DataCollector:
         perf_step_dir, trace_step_dir = self._get_step_directories(step_id, report_path)
         self._ensure_directories_exist(perf_step_dir, trace_step_dir)
         self.process_manager.save_process_info(perf_step_dir)
-
-        # 检查UI采集开关
-        if Config.get('ui.capture_enable', False):
-            # 步骤开始使用 page_1 作为标签（第一个页面），命名为"开始页面"
-            try:
-                self.capture_ui_handler.capture_ui(step_id, report_path, 'page_1', page_description='开始页面')
-                Log.info(f'步骤 {step_id} 开始页面UI采集完成')
-            except Exception as e:
-                Log.error(f'步骤 {step_id} 开始页面UI采集失败: {e}', exc_info=True)
 
         self._start_collect_memory_data(step_id, report_path)  # 持续到步骤结束
 
@@ -150,32 +137,6 @@ class DataCollector:
         self.data_transfer.transfer_redundant_data(trace_step_dir, redundant_mode_status)
         self.data_transfer.collect_coverage_data(perf_step_dir)
 
-        # 检查UI采集开关
-        if Config.get('ui.capture_enable', False):
-            # 步骤结束使用实际的 page 编号
-            # 优先从testcase的_page_idx_counter获取（更准确，不依赖文件系统）
-            # 如果无法获取，则从文件系统查找
-            end_page_idx = None
-            if hasattr(self, 'testcase') and hasattr(self.testcase, '_page_idx_counter'):
-                if step_id in self.testcase._page_idx_counter:
-                    # 使用testcase的计数器（已经包含了所有dump_page调用）
-                    end_page_idx = self.testcase._page_idx_counter[step_id] + 1
-                    Log.info(f'从testcase计数器获取最大page_idx: {self.testcase._page_idx_counter[step_id]}, 结束page_idx: {end_page_idx}')
-            
-            if end_page_idx is None:
-                # Fallback: 从文件系统查找
-                ui_step_dir = os.path.join(report_path, 'ui', f'step{step_id}')
-                max_page_idx = self._get_max_page_idx(ui_step_dir)
-                end_page_idx = max(max_page_idx, 1) + 1
-                Log.info(f'从文件系统获取最大page_idx: {max_page_idx}, 结束page_idx: {end_page_idx}')
-            
-            # 步骤结束的页面命名为"结束页面"
-            try:
-                self.capture_ui_handler.capture_ui(step_id, report_path, f'page_{end_page_idx}', page_description='结束页面')
-                Log.info(f'步骤 {step_id} 结束页面UI采集完成 - page_{end_page_idx}')
-            except Exception as e:
-                Log.error(f'步骤 {step_id} 结束页面UI采集失败: {e}', exc_info=True)
-
         # 检查是否启用 snapshot 采集，如果启用则采集一次
         snapshot_enabled = Config.get('memory.snapshot_enable', False)
         if snapshot_enabled:
@@ -186,30 +147,17 @@ class DataCollector:
         # 停止XVM追踪
         self.xvm.stop_trace(perf_step_dir)
 
-    def _get_max_page_idx(self, ui_step_dir: str) -> int:
+    def capture_page(self, step_id: int, report_path: str, page_idx: int, animate: bool = False) -> dict[str, str]:
         """
-        获取UI目录中最大的page_idx
+        采集页面数据
 
         Args:
-            ui_step_dir: UI步骤目录
-
-        Returns:
-            最大的page_idx，如果不存在则返回0
+            step_id: 步骤ID
+            report_path: 报告路径
+            page_idx: 页面索引
+            animate: 是否采集动画数据
         """
-        if not os.path.exists(ui_step_dir):
-            return 0
-        
-        # 查找所有 element_tree_page_*.txt 文件
-        page_files = glob.glob(os.path.join(ui_step_dir, 'element_tree_page_*.txt'))
-        max_idx = 0
-        
-        for page_file in page_files:
-            match = re.search(r'element_tree_page_(\d+)\.txt', os.path.basename(page_file))
-            if match:
-                page_idx = int(match.group(1))
-                max_idx = max(max_idx, page_idx)
-        
-        return max_idx
+        return self.capture_ui_handler.capture_page(step_id, report_path, page_idx, animate)
 
     # ==================== 私有方法：步骤采集 ====================
 
