@@ -13,29 +13,6 @@
             UI总览
           </span>
         </template>
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-statistic title="页面总数" :value="currentPageList.length">
-              <template #suffix>
-                <span style="font-size: 14px;">个</span>
-              </template>
-            </el-statistic>
-          </el-col>
-          <el-col :span="8">
-            <el-statistic title="页面Canvas总数" :value="totalCanvasNodes">
-              <template #suffix>
-                <span style="font-size: 14px;">个</span>
-              </template>
-            </el-statistic>
-          </el-col>
-          <el-col :span="8">
-            <el-statistic title="页面内存超尺寸" :value="totalExcessMemory">
-              <template #suffix>
-                <span style="font-size: 14px;">MB</span>
-              </template>
-            </el-statistic>
-          </el-col>
-        </el-row>
       </el-card>
 
       <!-- 页面Canvas和内存超尺寸统计行 -->
@@ -255,18 +232,6 @@ const selectedPage = ref<number | null>(null);
 const getPageByIdx = (pageIdx: number): UIAnimatePageData | undefined => {
   return currentPageList.value.find(page => page.page_idx === pageIdx);
 };
-
-// UI总览统计
-const totalCanvasNodes = computed(() => {
-  return currentPageList.value.reduce((sum, page) => sum + (page.canvasNodeCnt || 0), 0);
-});
-
-const totalExcessMemory = computed(() => {
-  return currentPageList.value.reduce((sum, page) => {
-    const excess = page.image_size_analysis?.total_excess_memory_mb || 0;
-    return sum + excess;
-  }, 0).toFixed(2);
-});
 
 // CanvasNode折线图
 const canvasNodeChartRef = ref<HTMLElement | null>(null);
