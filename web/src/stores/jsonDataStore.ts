@@ -943,7 +943,31 @@ export interface UIAnimatePhaseData {
   error?: string;
 }
 
+// 页面数据（新格式）
+export interface UIAnimatePageData {
+  page_name?: string;  // 页面描述名称
+  page_idx: number; // 页面索引（从1开始）
+  canvasNodeCnt: number; // CanvasNode节点数量
+  image_size_analysis?: ImageSizeAnalysis & {
+    marked_image?: string; // base64编码的截图
+  };
+  animations?: {
+    image_animations?: {
+      animation_regions: ImageAnimationRegion[];
+      animation_count: number;
+    };
+    tree_animations?: {
+      animation_regions: TreeAnimationRegion[];
+      animation_count: number;
+    };
+    marked_images?: string[]; // base64编码的图片
+    marked_image?: string; // 第一张标记截图（用于显示）
+  };
+  error?: string;
+}
+
 export interface UIAnimateStepData {
+  // 旧格式：start_phase和end_phase
   start_phase?: UIAnimatePhaseData;
   end_phase?: UIAnimatePhaseData;
   summary?: {
@@ -954,22 +978,22 @@ export interface UIAnimateStepData {
     end_phase_tree_changes: number;
     has_animations: boolean;
   };
+  // 新格式：page列表（如果存在，优先使用此格式）
+  pages?: UIAnimatePageData[];
   error?: string;
 }
 
 export interface UIAnimateData {
-  [stepKey: string]: UIAnimateStepData; // step1, step2, etc.
+  [stepKey: string]: UIAnimateStepData | UIAnimatePageData[]; // step1, step2, etc. 支持旧格式或新格式（直接是数组）
 }
 
 // UI原始数据类型（用于对比）
 export interface UIRawStepData {
   screenshots: {
-    start: string[]; // base64编码的截图数组
-    end: string[];
+    [pageIdx: string]: string[]; // base64编码的截图数组，按page编号索引
   };
   trees: {
-    start: string[]; // 组件树文本数组
-    end: string[];
+    [pageIdx: string]: string[]; // 组件树文本数组，按page编号索引
   };
 }
 
@@ -1010,7 +1034,7 @@ export interface UIComponentDifference {
 
 // UI 对比数据类型
 export interface UIComparePairResult {
-  phase: 'start' | 'end';
+  phase: string; // page 编号（如 '0', '1', '2' 等）
   index: number;
   base_screenshot: string;
   compare_screenshot: string;
@@ -1256,8 +1280,8 @@ export const useJsonDataStore = defineStore('config', {
             console.error(`解压缩UI原始数据失败 ${stepKey}:`, error);
             // 解压缩失败时，返回空数据
             decompressed[stepKey] = {
-              screenshots: { start: [], end: [] },
-              trees: { start: [], end: [] },
+              screenshots: {},
+              trees: {},
             };
           }
         } else {
@@ -1415,21 +1439,35 @@ export const useJsonDataStore = defineStore('config', {
           const compareStep = compareUIRaw[stepKey];
 
           // 检查是否有截图和组件树
-          if (!baseStep.screenshots?.end?.length || !baseStep.trees?.end?.length ||
-              !compareStep.screenshots?.end?.length || !compareStep.trees?.end?.length) {
-            console.log(`[compareUIData] ${stepKey}: 缺少截图或组件树数据`);
+          // 获取所有 page 编号（从 screenshots 和 trees 中提取）
+          const basePageIndices = new Set([
+            ...Object.keys(baseStep.screenshots || {}),
+            ...Object.keys(baseStep.trees || {}),
+          ]);
+          const comparePageIndices = new Set([
+            ...Object.keys(compareStep.screenshots || {}),
+            ...Object.keys(compareStep.trees || {}),
+          ]);
+          
+          // 找到共同的 page 编号
+          const commonPageIndices = Array.from(basePageIndices).filter(idx => comparePageIndices.has(idx));
+          
+          if (commonPageIndices.length === 0) {
+            console.log(`[compareUIData] ${stepKey}: 没有共同的 page 数据`);
             continue;
           }
 
-          // 对比start和end两个阶段的组件树（按截图对分组）
+          // 对比所有共同的 page
           const pairResults: UIComparePairResult[] = [];
 
-          // 对比start阶段和end阶段
-          for (const phase of ['start', 'end'] as const) {
-            const baseTrees = baseStep.trees[phase] || [];
-            const compareTrees = compareStep.trees[phase] || [];
-            const baseScreenshots = baseStep.screenshots[phase] || [];
-            const compareScreenshots = compareStep.screenshots[phase] || [];
+          // 按 page 编号排序
+          const sortedPageIndices = commonPageIndices.sort((a, b) => parseInt(a) - parseInt(b));
+
+          for (const pageIdx of sortedPageIndices) {
+            const baseTrees = baseStep.trees[pageIdx] || [];
+            const compareTrees = compareStep.trees[pageIdx] || [];
+            const baseScreenshots = baseStep.screenshots[pageIdx] || [];
+            const compareScreenshots = compareStep.screenshots[pageIdx] || [];
             const maxPairs = Math.min(baseTrees.length, compareTrees.length);
 
             for (let i = 0; i < maxPairs; i++) {
@@ -1448,7 +1486,7 @@ export const useJsonDataStore = defineStore('config', {
 
               pairResults.push({
                 index: i + 1,
-                phase: phase,
+                phase: pageIdx, // 使用 page 编号作为 phase
                 base_screenshot: baseScreenshots[i] || '',
                 compare_screenshot: compareScreenshots[i] || '',
                 diff_count: filteredDifferences.length,
