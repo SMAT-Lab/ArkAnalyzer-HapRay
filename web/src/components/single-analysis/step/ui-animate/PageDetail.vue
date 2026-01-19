@@ -25,9 +25,9 @@
         </el-statistic>
       </el-card>
 
-      <!-- Image尺寸分析 -->
+      <!-- Image尺寸分析（仅在存在超出尺寸Image时显示） -->
       <el-card
-        v-if="page.image_size_analysis"
+        v-if="page.image_size_analysis && page.image_size_analysis.images_exceeding_framerect && page.image_size_analysis.images_exceeding_framerect.length > 0"
         shadow="never"
         style="margin-bottom: 16px;"
       >
@@ -37,7 +37,7 @@
             超出尺寸Image分析
           </span>
         </template>
-        <div v-if="page.image_size_analysis.images_exceeding_framerect && page.image_size_analysis.images_exceeding_framerect.length > 0">
+        <div>
           <el-alert
             :title="`检测到 ${page.image_size_analysis.images_exceeding_framerect.length} 个超出尺寸的Image节点`"
             type="warning"
@@ -85,7 +85,6 @@
             </el-table-column>
           </el-table>
         </div>
-        <el-empty v-else description="未检测到超出尺寸的Image节点" :image-size="80" />
       </el-card>
 
       <!-- 动画信息 -->
