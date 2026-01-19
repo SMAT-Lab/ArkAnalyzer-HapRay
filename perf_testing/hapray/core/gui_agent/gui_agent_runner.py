@@ -15,12 +15,12 @@ limitations under the License.
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import yaml
-from xdevice.__main__ import main_process
-
 from phone_agent.agent import StepResult
+from xdevice.__main__ import main_process
 
 from hapray.core.gui_agent.gui_agent import GuiAgent, GuiAgentConfig
 from hapray.core.gui_agent.realtime_analysis import RealTimeAnalysisProcess
@@ -38,7 +38,6 @@ class SceneResult:
     result: str
     error: Optional[str] = None
     page_count: Optional[int] = None
-    pages: Optional[list[dict]] = None
 
 
 class GUIAgentRunner(PerfTestCase):
@@ -76,7 +75,7 @@ class GUIAgentRunner(PerfTestCase):
         super().__init__(self.TAG, controllers)
 
         self._steps.append({'name': 'step1', 'description': self._scene})
-        self.current_step_id = len(self._steps) + 1
+        self.current_step_id = len(self._steps)
         # Create GuiAgentConfig
         self.gui_agent_config = self._create_gui_agent_config()
 
@@ -110,12 +109,11 @@ class GUIAgentRunner(PerfTestCase):
         """Execute test scene"""
         # Execute scene
         logger.info('Starting GUI Agent scene: %s (app: %s)', self._scene, self._app_package)
-  
+
         try:
- 
             self.data_collector.collect_step_data_start(self.current_step_id, self.report_path, 30)
             # Execute first step with scene description
-            
+
             step_result = self.agent.step(self._scene)
             step_count = self.agent.step_count
 
@@ -124,7 +122,7 @@ class GUIAgentRunner(PerfTestCase):
 
             # Continue steps until finished or max steps reached
             task_result = None
-            while not step_result.finished and step_count < self.config.max_steps:
+            while not step_result.finished and step_count < self.agent.max_steps:
                 step_result = self.agent.step()
                 step_count = self.agent.step_count
 
@@ -134,46 +132,41 @@ class GUIAgentRunner(PerfTestCase):
                 # Check if task completed successfully
                 if step_result.finished:
                     result_message = step_result.message or 'Scene completed'
-                    self.logger.info('Scene completed successfully: %s (steps: %d)', self._scene, step_count)
+                    logger.info('Scene completed successfully: %s (steps: %d)', self._scene, step_count)
                     task_result = SceneResult(
                         scene=self._scene,
                         success=True,
                         result=result_message,
                         page_count=step_count,
-                        pages=self._scene_pages.copy(),
                     )
                     break
 
             # If max steps reached without finishing
             if task_result is None:
-                error_msg = f'Max steps ({self.config.max_steps}) reached'
-                self.logger.warning('Scene reached max steps: %s', self._scene)
+                error_msg = f'Max steps ({self.agent.max_steps}) reached'
+                logger.warning('Scene reached max steps: %s', self._scene)
                 task_result = SceneResult(
                     scene=self._scene,
                     success=False,
                     result=step_result.message or '',
                     error=error_msg,
                     page_count=step_count,
-                    pages=self._scene_pages.copy(),
                 )
 
             self.data_collector.collect_step_data_end(self.stepId, self.report_path)
-     
 
             return task_result
 
         except Exception as e:
             error_msg = str(e)
-            self.logger.error('Scene failed: %s, Error: %s', self._scene, error_msg)
+            logger.error('Scene failed: %s, Error: %s', self._scene, error_msg)
 
             return SceneResult(
                 scene=self._scene,
                 success=False,
                 result='',
                 error=error_msg,
-                pages=self._scene_pages.copy(),
             )
-
 
     def setup(self):
         """Setup resources"""
@@ -197,7 +190,7 @@ class GUIAgentRunner(PerfTestCase):
             step_count: Current step count
             step_result: StepResult object containing step execution result
         """
-        self.logger.debug(
+        logger.debug(
             'Step %d data - success: %s, finished: %s, action: %s, thinking: %s, message: %s',
             step_count,
             step_result.success,
@@ -209,13 +202,13 @@ class GUIAgentRunner(PerfTestCase):
 
         # Create page information
         page_info = {
-            'action': step_result.action or '',
-            'thinking': step_result.thinking or '',
-            'message': step_result.message or '',
-            'pageIdx': step_count,
+            'gui-agent': {
+                'action': step_result.action or '',
+                'thinking': step_result.thinking or '',
+                'message': step_result.message or '',
+            }
         }
-
-        self._scene_pages.append(page_info)
+        self.dump_page(f'step{step_count}', ext_info=page_info)
 
     def _load_config(self, testargs: dict) -> dict[str, Any]:
         """Load configuration file.
@@ -299,7 +292,7 @@ class GUIAgentRunner(PerfTestCase):
             step_duration=agent_config.get('step_duration', 5),
             analysis_workers=agent_config.get('analysis_workers', 4),
             driver=self.driver,
-            app_package=self.app_package
+            app_package=self.app_package,
         )
 
 

@@ -19,13 +19,10 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from hypium import UiDriver
-from hypium.uidriver.ohos.app_manager import get_bundle_info
 from phone_agent import PhoneAgent
 from phone_agent.agent import AgentConfig, StepResult
 from phone_agent.device_factory import DeviceType, set_device_type
 from phone_agent.model import ModelConfig
-
-from hapray.core.collection.data_collector import DataCollector
 
 
 @dataclass
@@ -85,7 +82,6 @@ class GuiAgent:
         """
         self.config = config or GuiAgentConfig()
         self.logger = logging.getLogger(__name__)
-        self.stepId = 1
 
         # Create model configuration
         model_config = ModelConfig(
@@ -115,19 +111,6 @@ class GuiAgent:
 
         self.logger.info('GuiAgent initialized with config: %s', self.config)
 
-        self.driver = self.config.driver
-
-        # DataCollector instance (lazy initialization, requires app_package)
-        self.data_collector: Optional[DataCollector] = None
-
-        # Store page information for current scene
-        # Format: [page1, page2, ...]
-        # Each page contains action, thinking, message, pageIdx
-        self._scene_pages: list[dict] = []
-
-        self.report_path: Optional[str] = self.config.report_path
-        self.app_package: Optional[str] = self.config.app_package
-
     def step(self, task: str | None = None) -> StepResult:
         """
         Execute a single step of the agent.
@@ -140,14 +123,14 @@ class GuiAgent:
         """
         if task is not None:
             prompt = (
-                f'你正在测试鸿蒙应用（bundleName: {self.app_package}），应用已通过 bundle 启动。'
+                f'你正在测试鸿蒙应用（bundleName: {self.config.app_package}），应用已通过 bundle 启动。'
                 '请尽量探索不同页面/功能，但避免登录、支付、下单、转账、发帖/评论发布等不可逆操作。'
                 '如遇到登录/授权/定位/通知权限弹窗，优先选择取消/暂不/稍后/返回。'
                 f'不要打开其他应用。任务：{task}'
             )
         else:
             prompt = task
-            
+
         return self.agent.step(prompt)
 
     def reset(self) -> None:
@@ -156,3 +139,12 @@ class GuiAgent:
         """
         self.agent.reset()
 
+    @property
+    def step_count(self) -> int:
+        """Get the current step count."""
+        return self.agent.step_count
+
+    @property
+    def max_steps(self) -> int:
+        """Get the maximum number of steps."""
+        return self.config.max_steps
