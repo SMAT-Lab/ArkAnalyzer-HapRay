@@ -141,6 +141,7 @@ class UIAnalyzer(BaseAnalyzer):
             result = {
                 'page_idx': actual_page_idx,
                 'description': page_description,
+                'gui-agent': page_info.get('gui-agent', {}),
             }
 
             # 如果存在element_tree文件，进行组件树分析

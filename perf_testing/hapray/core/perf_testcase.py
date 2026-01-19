@@ -136,14 +136,17 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         if Config.get('ui.capture_enable', False):
             self.dump_page(f'step{step_id}_end', animate=True)
 
-    def dump_page(self, page_description: str, animate: bool = False):
+    def dump_page(self, page_description: str, animate: bool = False, ext_info: dict = None):
         """
         导出页面组件树（异步执行，不阻塞用例执行）
 
         Args:
             page_description: 页面描述信息
             animate: 是否进行动画采集（采集两次截图和组件树）
+            ext_info: 额外的扩展信息字典，会写入page_info
         """
+        if ext_info is None:
+            ext_info = {}
         if self.current_step_id is None:
             Log.warning('dump_page调用时current_step_id为None，跳过组件树导出')
             return
@@ -160,6 +163,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
                 **files,
                 'page_idx': page_idx,
                 'description': page_description,
+                **ext_info,
             }
 
             # 同时添加到pageMap中

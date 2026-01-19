@@ -22,8 +22,8 @@ from typing import Optional
 import yaml
 
 from hapray.core.config.config import Config
-from hapray.core.gui_agent.gui_agent import GuiAgentConfig, SceneResult
-from hapray.core.gui_agent.gui_agent_runner import GUIAgentRunner
+from hapray.core.gui_agent.gui_agent import GuiAgentConfig
+from hapray.core.gui_agent.gui_agent_runner import GUIAgentRunner, SceneResult
 from hapray.core.gui_agent.realtime_analysis import RealTimeAnalysisProcess
 
 
@@ -288,7 +288,6 @@ def execute_scenes(app_packages: list[str], scenes: Optional[list[str]], config:
 
     try:
         all_results = []
-        task_id = 1
 
         # Iterate through all apps
         for app_idx, app_package in enumerate(app_packages, 1):
@@ -320,14 +319,13 @@ def execute_scenes(app_packages: list[str], scenes: Optional[list[str]], config:
                 result = _run_scene_with_runner(
                     app_package=app_package,
                     scene=scene,
-                    scene_idx=task_id,
+                    scene_idx=scene_idx,
                     config=config,
                     output_base_path=config.report_path,
                 )
 
                 if result:
                     all_results.append(result)
-                task_id += 1
 
                 if result and result.success:
                     logging.info('Scene executed successfully: %s', result.result)
