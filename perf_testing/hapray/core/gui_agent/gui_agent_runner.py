@@ -15,9 +15,11 @@ limitations under the License.
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import yaml
+from phone_agent.agent import StepResult
 from xdevice.__main__ import main_process
 
 from hapray.core.gui_agent.gui_agent import GuiAgent, GuiAgentConfig
@@ -25,6 +27,17 @@ from hapray.core.gui_agent.realtime_analysis import RealTimeAnalysisProcess
 from hapray.core.perf_testcase import PerfTestCase
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SceneResult:
+    """Result of a task execution."""
+
+    scene: str
+    success: bool
+    result: str
+    error: Optional[str] = None
+    page_count: Optional[int] = None
 
 
 class GUIAgentRunner(PerfTestCase):
@@ -62,11 +75,12 @@ class GUIAgentRunner(PerfTestCase):
         super().__init__(self.TAG, controllers)
 
         self._steps.append({'name': 'step1', 'description': self._scene})
+        self.current_step_id = len(self._steps)
         # Create GuiAgentConfig
         self.gui_agent_config = self._create_gui_agent_config()
 
         # GuiAgent instance (lazy initialization)
-        self.gui_agent: Optional[GuiAgent] = None
+        self.agent: Optional[GuiAgent] = None
 
     @staticmethod
     def run_testcase(config_file: str, output: str, device_id: str):
@@ -93,28 +107,108 @@ class GUIAgentRunner(PerfTestCase):
 
     def process(self):
         """Execute test scene"""
-        # Lazy initialize GuiAgent (requires report_path)
-        if self.gui_agent is None:
-            self.gui_agent = GuiAgent(self.gui_agent_config)
-
-        self.start_app()
-
         # Execute scene
         logger.info('Starting GUI Agent scene: %s (app: %s)', self._scene, self._app_package)
-        result = self.gui_agent.process(
-            app_package=self._app_package,
-            scene=self._scene,
-        )
-        self._steps[0]['pages'] = result.pages
-        if result.success:
-            logger.info('Scene executed successfully: %s', result.result)
-        else:
-            logger.error('Scene execution failed: %s', result.error)
+
+        try:
+            self.data_collector.collect_step_data_start(self.current_step_id, self.report_path, 30)
+            # Execute first step with scene description
+
+            step_result = self.agent.step(self._scene)
+            step_count = self.agent.step_count
+
+            # Collect page data after first step
+            self.collect_page_data(step_count, step_result)
+
+            # Continue steps until finished or max steps reached
+            task_result = None
+            while not step_result.finished and step_count < self.agent.max_steps:
+                step_result = self.agent.step()
+                step_count = self.agent.step_count
+
+                # Collect page data after each step
+                self.collect_page_data(step_count, step_result)
+
+                # Check if task completed successfully
+                if step_result.finished:
+                    result_message = step_result.message or 'Scene completed'
+                    logger.info('Scene completed successfully: %s (steps: %d)', self._scene, step_count)
+                    task_result = SceneResult(
+                        scene=self._scene,
+                        success=True,
+                        result=result_message,
+                        page_count=step_count,
+                    )
+                    break
+
+            # If max steps reached without finishing
+            if task_result is None:
+                error_msg = f'Max steps ({self.agent.max_steps}) reached'
+                logger.warning('Scene reached max steps: %s', self._scene)
+                task_result = SceneResult(
+                    scene=self._scene,
+                    success=False,
+                    result=step_result.message or '',
+                    error=error_msg,
+                    page_count=step_count,
+                )
+
+            self.data_collector.collect_step_data_end(self.stepId, self.report_path)
+
+            return task_result
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error('Scene failed: %s, Error: %s', self._scene, error_msg)
+
+            return SceneResult(
+                scene=self._scene,
+                success=False,
+                result='',
+                error=error_msg,
+            )
+
+    def setup(self):
+        """Setup resources"""
+        super().setup()
+        self.agent = GuiAgent(self.gui_agent_config)
+        self.agent.reset()
+        self.start_app()
 
     def teardown(self):
         """Clean up resources"""
         super().teardown()
         RealTimeAnalysisProcess.get_instance().notify_data_collected(self.report_path)
+
+    def collect_page_data(self, step_count: int, step_result: StepResult) -> None:
+        """
+        Collect data after each step completion.
+
+        This function can be overridden in subclasses to implement custom data collection logic.
+
+        Args:
+            step_count: Current step count
+            step_result: StepResult object containing step execution result
+        """
+        logger.debug(
+            'Step %d data - success: %s, finished: %s, action: %s, thinking: %s, message: %s',
+            step_count,
+            step_result.success,
+            step_result.finished,
+            step_result.action,
+            step_result.thinking[:100] if step_result.thinking else None,
+            step_result.message,
+        )
+
+        # Create page information
+        page_info = {
+            'gui-agent': {
+                'action': step_result.action or '',
+                'thinking': step_result.thinking or '',
+                'message': step_result.message or '',
+            }
+        }
+        self.dump_page(f'step{step_count}', ext_info=page_info)
 
     def _load_config(self, testargs: dict) -> dict[str, Any]:
         """Load configuration file.
@@ -198,6 +292,7 @@ class GUIAgentRunner(PerfTestCase):
             step_duration=agent_config.get('step_duration', 5),
             analysis_workers=agent_config.get('analysis_workers', 4),
             driver=self.driver,
+            app_package=self.app_package,
         )
 
 

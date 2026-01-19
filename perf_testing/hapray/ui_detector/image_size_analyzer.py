@@ -64,8 +64,15 @@ def analyze_image_sizes(tree_dict: dict[str, Any]) -> dict[str, Any]:
                 frame_area = frame_width * frame_height
                 image_area = image_width * image_height
 
-                # 检查图像尺寸是否大于FrameRect
-                if image_width > frame_width or image_height > frame_height:
+                # 估算内存占用（假设RGBA格式，每像素4字节）
+                # 实际内存 = 图像尺寸面积 * 4字节
+                image_memory_bytes = image_area * 4
+                frame_memory_bytes = frame_area * 4
+                excess_memory_bytes = image_memory_bytes - frame_memory_bytes
+
+                # 检查图像尺寸是否大于FrameRect，且超出内存大于200KB
+                threshold_bytes = 200 * 1024  # 200KB
+                if (image_width > frame_width or image_height > frame_height) and excess_memory_bytes > threshold_bytes:
                     # 计算超出部分
                     excess_width = max(0, image_width - frame_width)
                     excess_height = max(0, image_height - frame_height)
@@ -73,13 +80,6 @@ def analyze_image_sizes(tree_dict: dict[str, Any]) -> dict[str, Any]:
                     # 计算超出面积（简化计算：超出部分的矩形面积）
                     # 实际超出可能是部分重叠，这里用简化方法
                     excess_area = image_area - frame_area
-
-                    # 估算内存占用（假设RGBA格式，每像素4字节）
-                    # 实际内存 = 图像尺寸面积 * 4字节
-                    image_memory_bytes = image_area * 4
-                    frame_memory_bytes = frame_area * 4
-                    excess_memory_bytes = excess_area * 4
-
                     # 计算超出比例（百分数，保留1位小数）
                     excess_ratio = round(((image_area / frame_area) * 100) if frame_area > 0 else 0, 1)
 
@@ -127,15 +127,7 @@ def analyze_image_sizes(tree_dict: dict[str, Any]) -> dict[str, Any]:
     # 按超出内存大小降序排序
     results['images_exceeding_framerect'].sort(key=lambda x: x['memory']['excess_memory_bytes'], reverse=True)
 
-    # 过滤：仅保留超出内存大于0.1MB的Image节点
-    threshold_bytes = 0.1 * 1024 * 1024  # 0.1MB = 104857.6 字节
-    filtered_images = [
-        img for img in results['images_exceeding_framerect'] if img['memory']['excess_memory_bytes'] > threshold_bytes
-    ]
-
-    # 重新计算总超出内存（仅统计过滤后的）
-    results['images_exceeding_framerect'] = filtered_images
-    results['total_excess_memory_bytes'] = sum(img['memory']['excess_memory_bytes'] for img in filtered_images)
+    # 重新计算总超出内存
     results['total_excess_memory_mb'] = round(results['total_excess_memory_bytes'] / (1024 * 1024), 2)
 
     return results
