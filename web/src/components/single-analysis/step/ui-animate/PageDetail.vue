@@ -10,6 +10,77 @@
       />
     </div>
     <div v-else>
+      <!-- GUI Agent信息 -->
+      <el-card
+        v-if="hasGuiAgentInfo"
+        shadow="never"
+        style="margin-bottom: 16px;"
+      >
+        <template #header>
+          <span style="font-weight: 600; font-size: 15px;">
+            <i class="el-icon-robot" style="margin-right: 8px;"></i>
+            GUI Agent 信息
+          </span>
+        </template>
+        <div>
+          <!-- Action -->
+          <div v-if="page.gui_agent?.action" style="margin-bottom: 16px;">
+            <div style="font-weight: 600; color: #606266; margin-bottom: 8px; font-size: 14px;">
+              <i class="el-icon-cpu" style="margin-right: 6px;"></i>
+              执行动作
+            </div>
+            <el-tag type="primary" size="medium" style="font-size: 13px;">
+              {{ page.gui_agent?.action }}
+            </el-tag>
+          </div>
+
+          <!-- Thinking -->
+          <div v-if="page.gui_agent?.thinking" style="margin-bottom: 16px;">
+            <div style="font-weight: 600; color: #606266; margin-bottom: 8px; font-size: 14px;">
+              <i class="el-icon-light-rain" style="margin-right: 6px;"></i>
+              思考过程
+            </div>
+            <div
+              style="
+                background: #f5f7fa;
+                border-left: 3px solid #409eff;
+                padding: 12px;
+                border-radius: 4px;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-size: 13px;
+                line-height: 1.6;
+                color: #606266;
+              "
+            >
+              {{ page.gui_agent?.thinking }}
+            </div>
+          </div>
+
+          <!-- Message -->
+          <div v-if="page.gui_agent?.message">
+            <div style="font-weight: 600; color: #606266; margin-bottom: 8px; font-size: 14px;">
+              <i class="el-icon-chat-line-round" style="margin-right: 6px;"></i>
+              消息
+            </div>
+            <div
+              style="
+                background: #ecf5ff;
+                border-left: 3px solid #409eff;
+                padding: 12px;
+                border-radius: 4px;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-size: 13px;
+                line-height: 1.6;
+                color: #606266;
+              "
+            >
+              {{ page.gui_agent?.message }}
+            </div>
+          </div>
+        </div>
+      </el-card>
       <!-- CanvasNode数量 -->
       <el-card shadow="never" style="margin-bottom: 16px;">
         <template #header>
@@ -248,6 +319,15 @@ const hasTreeAnimations = computed(() => {
 // 是否有任何动画信息（必须要有实际的动画区域数据）
 const hasAnyAnimations = computed(() => {
   return imageAnimationRegions.value.length > 0 || treeAnimationRegions.value.length > 0;
+});
+
+// 是否有GUI Agent信息
+const hasGuiAgentInfo = computed(() => {
+  return !!(
+    props.page?.gui_agent?.action ||
+    props.page?.gui_agent?.thinking ||
+    props.page?.gui_agent?.message
+  );
 });
 
 // 动画总数
