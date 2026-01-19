@@ -62,17 +62,7 @@
         <el-col :span="4">
           <el-card shadow="never" style="height: 100%;">
             <template #header>
-              <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-weight: 600; font-size: 15px;">页面列表</span>
-                <el-button
-                  v-if="selectedPages.length > 0"
-                  type="text"
-                  size="small"
-                  @click="clearSelection"
-                >
-                  清空
-                </el-button>
-              </div>
+              <span style="font-weight: 600; font-size: 15px;">页面列表</span>
             </template>
             <el-input
               v-model="pageFilterText"
@@ -85,28 +75,25 @@
                 <i class="el-icon-search"></i>
               </template>
             </el-input>
-            <el-checkbox-group v-model="selectedPages" :max="2">
+            <div class="page-menu-list">
               <div
                 v-for="page in filteredPageList"
                 :key="page.page_idx"
-                style="margin-bottom: 8px;"
+                class="page-menu-item"
+                :class="{ 'is-active': selectedPage === page.page_idx }"
+                @click="selectedPage = page.page_idx"
               >
-                <el-checkbox
-                  :label="page.page_idx"
-                  :disabled="selectedPages.length >= 2 && !selectedPages.includes(page.page_idx)"
+                <el-tooltip
+                  :content="`Page${page.page_idx}:${page.description || ''}`"
+                  placement="right"
+                  effect="dark"
                 >
-                  <div style="display: flex; flex-direction: column; margin-left: 8px;">
-                    <span style="font-weight: 500;">Page {{ page.page_idx }}</span>
-                    <span v-if="page.page_name" style="font-size: 12px; color: #409eff; font-weight: 500;">
-                      {{ page.page_name }}
-                    </span>
-                    <span style="font-size: 12px; color: #909399;">
-                      Canvas: {{ page.canvasNodeCnt || 0 }}
-                    </span>
-                  </div>
-                </el-checkbox>
+                  <span class="page-name-text">
+                    Page{{ page.page_idx }}:{{ page.description || '' }}
+                  </span>
+                </el-tooltip>
               </div>
-            </el-checkbox-group>
+            </div>
             <el-empty
               v-if="filteredPageList.length === 0"
               description="无匹配页面"
@@ -124,57 +111,25 @@
                 手机截图
               </span>
             </template>
-            <div v-if="selectedPages.length === 0" class="screenshot-placeholder">
+            <div v-if="!selectedPage" class="screenshot-placeholder">
               <el-empty description="请从左侧选择页面查看截图" :image-size="100" />
             </div>
-            <div v-else-if="selectedPages.length === 1" class="screenshot-container">
-              <div
-                v-for="pageIdx in selectedPages"
-                :key="pageIdx"
-                class="screenshot-item"
-              >
-                <div class="screenshot-header">
-                  <span style="font-weight: 600;">Page {{ pageIdx }}</span>
-                </div>
-                <el-image
-                  v-if="getPageByIdx(pageIdx)?.image_size_analysis?.marked_image"
-                  :src="`data:image/png;base64,${getPageByIdx(pageIdx)?.image_size_analysis?.marked_image}`"
-                  fit="contain"
-                  class="screenshot-image"
-                  :preview-src-list="[
-                    `data:image/png;base64,${getPageByIdx(pageIdx)?.image_size_analysis?.marked_image}`
-                  ]"
-                >
-                  <template #error>
-                    <div class="image-error">
-                      <i class="el-icon-picture-outline"></i>
-                      <span>图片加载失败</span>
-                    </div>
-                  </template>
-                </el-image>
-                <el-empty v-else description="暂无截图" :image-size="80" />
-              </div>
-            </div>
             <div v-else class="screenshot-container">
-              <!-- 对比模式：显示两个截图 -->
               <el-row :gutter="16">
-                <el-col
-                  v-for="(pageIdx, index) in selectedPages"
-                  :key="pageIdx"
-                  :span="12"
-                >
+                <!-- 内存超尺寸截图 -->
+                <el-col :span="currentPageHasAnimation ? 12 : 24">
                   <div class="screenshot-item">
                     <div class="screenshot-header">
-                      <span style="font-weight: 600;">Page {{ pageIdx }}</span>
+                      <span style="font-weight: 600;">Page {{ selectedPage }} - 内存超尺寸截图</span>
                     </div>
                     <el-image
-                      v-if="getPageByIdx(pageIdx)?.image_size_analysis?.marked_image"
-                      :src="`data:image/png;base64,${getPageByIdx(pageIdx)?.image_size_analysis?.marked_image}`"
+                      v-if="getPageByIdx(selectedPage)?.image_size_analysis?.marked_image"
+                      :src="`data:image/png;base64,${getPageByIdx(selectedPage)?.image_size_analysis?.marked_image}`"
                       fit="contain"
                       class="screenshot-image"
-                      :preview-src-list="selectedPages.map(idx => 
-                        `data:image/png;base64,${getPageByIdx(idx)?.image_size_analysis?.marked_image || ''}`
-                      )"
+                      :preview-src-list="[
+                        `data:image/png;base64,${getPageByIdx(selectedPage)?.image_size_analysis?.marked_image}`
+                      ]"
                     >
                       <template #error>
                         <div class="image-error">
@@ -183,7 +138,30 @@
                         </div>
                       </template>
                     </el-image>
-                    <el-empty v-else description="暂无截图" :image-size="80" />
+                    <el-empty v-else description="暂无内存超尺寸截图" :image-size="80" />
+                  </div>
+                </el-col>
+                <!-- 动画截图 -->
+                <el-col v-if="currentPageHasAnimation" :span="12">
+                  <div class="screenshot-item">
+                    <div class="screenshot-header">
+                      <span style="font-weight: 600;">Page {{ selectedPage }} - 动画截图</span>
+                    </div>
+                    <el-image
+                      v-if="selectedPage && getPageByIdx(selectedPage)?.animations?.marked_image"
+                      :src="`data:image/png;base64,${getPageByIdx(selectedPage)?.animations?.marked_image}`"
+                      fit="contain"
+                      class="screenshot-image"
+                      :preview-src-list="selectedPage ? getAnimationPreviewList(selectedPage) : []"
+                    >
+                      <template #error>
+                        <div class="image-error">
+                          <i class="el-icon-picture-outline"></i>
+                          <span>图片加载失败</span>
+                        </div>
+                      </template>
+                    </el-image>
+                    <el-empty v-else description="暂无动画截图" :image-size="80" />
                   </div>
                 </el-col>
               </el-row>
@@ -200,46 +178,16 @@
                 页面详细信息
               </span>
             </template>
-            <div v-if="selectedPages.length === 0" class="info-placeholder">
+            <div v-if="!selectedPage" class="info-placeholder">
               <el-empty description="请从左侧选择页面查看详细信息" :image-size="100" />
             </div>
-            <div v-else-if="selectedPages.length === 1" class="page-detail">
-              <PageDetail :page="getPageByIdx(selectedPages[0])" />
-            </div>
             <div v-else class="page-detail">
-              <!-- 对比模式：显示两个页面的详细信息 -->
-              <el-tabs v-model="detailActiveTab" type="border-card">
-                <el-tab-pane
-                  v-for="pageIdx in selectedPages"
-                  :key="pageIdx"
-                  :label="`Page ${pageIdx}`"
-                  :name="`page_${pageIdx}`"
-                >
-                  <PageDetail :page="getPageByIdx(pageIdx)" />
-                </el-tab-pane>
-              </el-tabs>
+              <PageDetail :page="getPageByIdx(selectedPage)" />
             </div>
           </el-card>
         </el-col>
       </el-row>
 
-      <!-- 底部：两个页面对比信息（当选择2个page时显示） -->
-      <el-card
-        v-if="selectedPages.length === 2"
-        shadow="never"
-        style="margin-top: 16px;"
-      >
-        <template #header>
-          <span style="font-weight: 600; font-size: 16px;">
-            <i class="el-icon-compare" style="margin-right: 8px;"></i>
-            页面对比分析
-          </span>
-        </template>
-        <PageComparison
-          :page1="getPageByIdx(selectedPages[0])"
-          :page2="getPageByIdx(selectedPages[1])"
-        />
-      </el-card>
     </template>
   </div>
 </template>
@@ -249,7 +197,6 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useJsonDataStore, type UIAnimatePageData } from '../../../../stores/jsonDataStore';
 import * as echarts from 'echarts';
 import PageDetail from './PageDetail.vue';
-import PageComparison from './PageComparison.vue';
 
 interface Props {
   stepId?: number;
@@ -292,19 +239,17 @@ const filteredPageList = computed(() => {
     return currentPageList.value;
   }
   const filter = pageFilterText.value.toLowerCase();
-  return currentPageList.value.filter(page => 
-    `page ${page.page_idx}`.includes(filter) ||
-    String(page.page_idx).includes(filter)
-  );
+  return currentPageList.value.filter(page => {
+    const pageIdxStr = String(page.page_idx);
+    const pageNameStr = ((page.description) || '').toLowerCase();
+    return pageIdxStr.includes(filter) || 
+           pageNameStr.includes(filter) ||
+           `page${pageIdxStr}`.includes(filter);
+  });
 });
 
-// 选中的页面（最多2个）
-const selectedPages = ref<number[]>([]);
-
-// 清空选择
-const clearSelection = () => {
-  selectedPages.value = [];
-};
+// 选中的页面（单选）
+const selectedPage = ref<number | null>(null);
 
 // 根据page_idx获取page数据
 const getPageByIdx = (pageIdx: number): UIAnimatePageData | undefined => {
@@ -331,8 +276,39 @@ let canvasNodeChart: echarts.ECharts | null = null;
 const memoryChartRef = ref<HTMLElement | null>(null);
 let memoryChart: echarts.ECharts | null = null;
 
-// 详情页激活的tab
-const detailActiveTab = ref('');
+// 检查是否有动画图片
+const hasAnimationImage = (pageIdx: number | null): boolean => {
+  if (!pageIdx) return false;
+  const page = getPageByIdx(pageIdx);
+  if (!page?.animations) return false;
+  const animations = page.animations;
+  return !!(animations.marked_image || 
+           (animations.marked_images && Array.isArray(animations.marked_images) && animations.marked_images.length > 0));
+};
+
+// 当前选中页面是否有动画图片
+const currentPageHasAnimation = computed(() => {
+  return selectedPage.value ? hasAnimationImage(selectedPage.value) : false;
+});
+
+// 获取动画预览图片列表
+const getAnimationPreviewList = (pageIdx: number): string[] => {
+  const page = getPageByIdx(pageIdx);
+  if (!page?.animations) return [];
+  
+  const images: string[] = [];
+  if (page.animations.marked_image) {
+    images.push(`data:image/png;base64,${page.animations.marked_image}`);
+  }
+  if (page.animations.marked_images && Array.isArray(page.animations.marked_images)) {
+    page.animations.marked_images.forEach(img => {
+      if (img && !images.includes(`data:image/png;base64,${img}`)) {
+        images.push(`data:image/png;base64,${img}`);
+      }
+    });
+  }
+  return images;
+};
 
 // 初始化图表
 const initCharts = () => {
@@ -349,8 +325,9 @@ const initCharts = () => {
     canvasNodeChart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
-          const param = Array.isArray(params) ? params[0] : params;
+        formatter: (params: unknown) => {
+          const paramArray = Array.isArray(params) ? params : [params];
+          const param = paramArray[0] as { name?: string; value?: number };
           return `${param.name}<br/>CanvasNode数量: <strong>${param.value}</strong>`;
         },
       },
@@ -406,9 +383,10 @@ const initCharts = () => {
     memoryChart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
-          const param = Array.isArray(params) ? params[0] : params;
-          return `${param.name}<br/>超尺寸内存: <strong>${param.value.toFixed(2)} MB</strong>`;
+        formatter: (params: unknown) => {
+          const paramArray = Array.isArray(params) ? params : [params];
+          const param = paramArray[0] as { name?: string; value?: number };
+          return `${param.name}<br/>超尺寸内存: <strong>${param.value?.toFixed(2)} MB</strong>`;
         },
       },
       grid: {
@@ -484,13 +462,10 @@ const updateCharts = () => {
 };
 
 // 监听数据变化
-watch([currentPageList, selectedPages], () => {
+watch([currentPageList, selectedPage], () => {
   if (currentPageList.value.length > 0) {
     setTimeout(() => {
       updateCharts();
-      if (selectedPages.value.length > 0 && !detailActiveTab.value) {
-        detailActiveTab.value = `page_${selectedPages.value[0]}`;
-      }
     }, 100);
   }
 }, { deep: true });
@@ -501,8 +476,7 @@ onMounted(() => {
       initCharts();
       // 默认选择第一个页面
       if (currentPageList.value.length > 0) {
-        selectedPages.value = [currentPageList.value[0].page_idx];
-        detailActiveTab.value = `page_${currentPageList.value[0].page_idx}`;
+        selectedPage.value = currentPageList.value[0].page_idx;
       }
     }, 100);
   }
@@ -595,5 +569,61 @@ onBeforeUnmount(() => {
   font-size: 24px;
   font-weight: 600;
   color: #303133;
+}
+
+/* 页面列表样式 - 类似左侧菜单样式 */
+.page-menu-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.page-menu-item {
+  color: #606266;
+  background: transparent;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.page-menu-item:hover {
+  background: #f8f9fa;
+  color: #303133;
+  transform: translateX(2px);
+  border-color: #e4e7ed;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.page-menu-item.is-active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.page-menu-item.is-active:hover {
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+  transform: translateX(2px);
+}
+
+.page-name-text {
+  font-weight: inherit;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
 }
 </style>

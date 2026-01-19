@@ -43,7 +43,9 @@ class PerfLoad_Douyin_0010(PerfTestCase):
 
         def step1():
             # 点开置顶的第一个视频（内容为画篮球，排球，足球，棒球);
+            self.dump_page('观看视频前', animate=True)  # 启用动画采集
             self.touch_by_coordinates(200, 2080, 3)
+            self.dump_page('观看视频后', animate=True)  # 启用动画采集
 
         def step2():
             # 点击评论图标，弹出评论界面

@@ -945,7 +945,7 @@ export interface UIAnimatePhaseData {
 
 // 页面数据（新格式）
 export interface UIAnimatePageData {
-  page_name?: string;  // 页面描述名称
+  description?: string;  // 页面描述名称（后端返回的字段名）
   page_idx: number; // 页面索引（从1开始）
   canvasNodeCnt: number; // CanvasNode节点数量
   image_size_analysis?: ImageSizeAnalysis & {
