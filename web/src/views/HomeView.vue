@@ -357,16 +357,16 @@ const getMemoryStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / Memory分析`;
 };
 
-// 动态获取UI动画步骤页面标题
+// 动态获取UI分析步骤页面标题
 const getUIAnimateStepPageTitle = (pageId: string): string => {
   const stepId = getUIAnimateStepId(pageId);
-  return `步骤${stepId} UI 动画分析`;
+  return `步骤${stepId} UI 分析`;
 };
 
-// 动态获取UI动画步骤页面面包屑
+// 动态获取UI分析步骤页面面包屑
 const getUIAnimateStepPageBreadcrumb = (pageId: string): string => {
   const stepId = getUIAnimateStepId(pageId);
-  return `单版本分析 / 步骤选择 / 步骤${stepId} / UI 动画分析`;
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / UI 分析`;
 };
 
 const getPageTitle = () => {

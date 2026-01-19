@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 from PIL import Image, ImageDraw, ImageFont
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
-from hapray.ui_detector.arkui_tree_parser import compare_arkui_trees, parse_arkui_tree
+from hapray.ui_detector.arkui_tree_parser import compare_arkui_trees, count_canvas_nodes, parse_arkui_tree
 from hapray.ui_detector.image_comparator import RegionImageComparator
 from hapray.ui_detector.image_size_analyzer import analyze_image_sizes
 
@@ -34,10 +34,12 @@ class UIAnalyzer(BaseAnalyzer):
     UI分析器
 
     分析步骤：
-    1. 解析inspector_start.json中 type 为XCompose组件，获取组件bounds
-    2. 比较screenshot_start_1.png，screenshot_start_2.png 和步骤1获取的组件位置图像差异，存在差异识别为动画
-    3. 基于2次element树属性差异识别动画，输入element_tree_start_1.txt、element_tree_start_2.txt
-    end采用同样的算法识别
+    1. 解析每个页面的inspector JSON，获取XCompose和Image组件
+    2. 统计每个页面的CanvasNode数量
+    3. 分析每个页面的Image尺寸（内存超尺寸检测）
+    4. 通过对比相邻两个页面来检测动画：
+       - 图像差异分析：对比两个页面的截图
+       - 组件树差异分析：对比两个页面的组件树属性
     """
 
     def __init__(self, scene_dir: str):
@@ -61,7 +63,7 @@ class UIAnalyzer(BaseAnalyzer):
             app_pids: 应用进程ID列表
 
         Returns:
-            分析结果字典
+            分析结果字典（page列表格式）
         """
         try:
             # 构建UI数据目录路径
@@ -71,18 +73,16 @@ class UIAnalyzer(BaseAnalyzer):
                 self.logger.warning(f'UI目录不存在: {ui_dir}')
                 return None
 
-            # 分析start阶段的动画
-            start_animation_result = self._analyze_animation_phase(ui_dir, 'start')
-
-            # 分析end阶段的动画
-            end_animation_result = self._analyze_animation_phase(ui_dir, 'end')
-
-            # 合并结果
-            return {
-                'start_phase': start_animation_result,
-                'end_phase': end_animation_result,
-                'summary': self._generate_summary(start_animation_result, end_animation_result),
-            }
+            # 检查是否有page格式（element_tree_page_*.txt）
+            page_files = sorted(glob.glob(os.path.join(ui_dir, 'element_tree_page_*.txt')))
+            
+            if page_files:
+                # 使用新的page列表格式
+                return self._analyze_pages_format(ui_dir, page_files)
+            else:
+                # 如果没有page文件，返回空列表
+                self.logger.warning(f'未找到page格式的组件树文件: {ui_dir}')
+                return []
 
         except Exception as e:
             self.logger.error(f'UI动画分析失败: {str(e)}')
@@ -675,6 +675,339 @@ class UIAnalyzer(BaseAnalyzer):
             self.logger.error(f'生成标记图像失败: {str(e)}')
             return []
 
+    def _analyze_pages_format(self, ui_dir: str, page_files: list[str]) -> list[dict[str, Any]]:
+        """
+        分析新的page列表格式
+
+        返回格式：
+        [
+            {
+                'page_idx': 1,  # 页面索引（从1开始，自动生成）
+                'canvasNodeCnt': 1000,  # CanvasNode节点数量
+                'image_size_analysis': {
+                    'marked_image': base64(image),  # base64编码的截图
+                    ...
+                },
+                'animations': {  # 可选，如果有动画数据
+                    'image_animations': image_animation_result,
+                    'tree_animations': tree_animation_result,
+                    'marked_images': base64(image),
+                }
+            },
+            ...
+        ]
+
+        注意：此方法返回列表，BaseAnalyzer会自动将其存储为 {step_dir: [...]} 格式
+        最终结果格式：{'step1': [...], 'step2': [...]}
+        支持需求5：每个Step按照page_idx展示CanvasNode数量的变化（折线图）
+
+        Args:
+            ui_dir: UI数据目录
+            page_files: 页面组件树文件列表（按文件名排序）
+
+        Returns:
+            分析结果列表，每个元素代表一个页面的分析结果
+        """
+        pages = []
+        
+        # 分析每个page文件（每个页面只有一个文件）
+        for page_file in page_files:
+            try:
+                # 从文件名提取page_idx: element_tree_page_1.txt -> 1
+                page_idx_match = re.search(r'element_tree_page_(\d+)\.txt', os.path.basename(page_file))
+                if not page_idx_match:
+                    continue
+                page_idx = int(page_idx_match.group(1))
+
+                self.logger.info(f'分析页面 {page_idx}: {page_file}')
+
+                # 1. 统计CanvasNode数量
+                with open(page_file, encoding='utf-8') as f:
+                    tree_content = f.read()
+                canvas_node_cnt = count_canvas_nodes(tree_content)
+
+                # 2. 分析Image尺寸（包含截图base64）
+                image_size_result = self._analyze_image_sizes_for_page(ui_dir, page_idx, tree_content)
+
+                # 3. 分析动画（对比当前page和上一个page）
+                animations = self._analyze_animations_for_page(ui_dir, page_idx, page_files)
+
+                # 从inspector JSON中读取页面描述
+                page_description = None
+                inspector_file = os.path.join(ui_dir, f'inspector_page_{page_idx}.json')
+                if os.path.exists(inspector_file):
+                    try:
+                        with open(inspector_file, 'r', encoding='utf-8') as f:
+                            inspector_data = json.load(f)
+                            page_description = inspector_data.get('metadata', {}).get('page_description')
+                    except Exception as e:
+                        self.logger.warning(f'读取inspector文件失败: {e}')
+                
+                # 构建页面数据
+                page_data = {
+                    'page_idx': page_idx,  # 页面索引（从1开始）
+                    'page_name': page_description,  # 页面描述名称
+                    'canvasNodeCnt': canvas_node_cnt,  # CanvasNode节点数量，用于折线图展示
+                    'image_size_analysis': image_size_result,
+                }
+
+                # 如果有动画数据，添加到animations字段
+                if animations:
+                    page_data['animations'] = animations
+
+                pages.append(page_data)
+
+            except Exception as e:
+                self.logger.error(f'分析页面 {page_file} 失败: {str(e)}')
+                pages.append({'error': str(e), 'page_idx': page_idx if 'page_idx' in locals() else None})
+
+        # 按page_idx排序，确保顺序正确
+        pages.sort(key=lambda x: x.get('page_idx', 0) if isinstance(x, dict) and 'page_idx' in x else 0)
+
+        return pages
+
+    def _analyze_image_sizes_for_page(self, ui_dir: str, page_idx: int, tree_content: str) -> dict[str, Any]:
+        """
+        分析单个页面的Image尺寸
+
+        Args:
+            ui_dir: UI数据目录
+            page_idx: 页面索引
+            tree_content: 组件树内容
+
+        Returns:
+            Image尺寸分析结果
+        """
+        try:
+            # 解析组件树
+            tree_dict = parse_arkui_tree(tree_content)
+
+            if tree_dict:
+                # 分析Image尺寸
+                result = analyze_image_sizes(tree_dict)
+                
+                # 生成标记了超出尺寸Image的截图（蓝色框标记）
+                screenshot_path = os.path.join(ui_dir, f'screenshot_page_{page_idx}.png')
+                if os.path.exists(screenshot_path):
+                    try:
+                        # 提取超出尺寸Image的区域信息
+                        exceeding_image_regions = []
+                        for img_info in result.get('images_exceeding_framerect', []):
+                            bounds_rect = img_info.get('bounds_rect')
+                            excess_memory_mb = img_info.get('memory', {}).get('excess_memory_mb', 0.0)
+                            if bounds_rect:
+                                exceeding_image_regions.append({
+                                    'bounds_rect': bounds_rect,
+                                    'excess_memory_mb': excess_memory_mb,
+                                })
+                        
+                        # 生成标记后的图片
+                        if exceeding_image_regions:
+                            marked_images = self._generate_marked_images_with_types(
+                                screenshot_path,
+                                screenshot_path,  # 同一张图片用于标记
+                                [],  # 无动画区域
+                                exceeding_image_regions,  # 超出尺寸Image区域
+                                ui_dir,
+                                f'page_{page_idx}_marked',
+                            )
+                            # 使用标记后的图片作为marked_image
+                            if marked_images and len(marked_images) > 1:
+                                # marked_images[1] 是标记了超出尺寸Image的图片
+                                marked_image_path = marked_images[1] if len(marked_images) > 1 else marked_images[0]
+                            elif marked_images:
+                                marked_image_path = marked_images[0]
+                            else:
+                                marked_image_path = screenshot_path
+                        else:
+                            marked_image_path = screenshot_path
+                        
+                        # 将标记后的截图转换为base64
+                        with open(marked_image_path, 'rb') as f:
+                            img_data = f.read()
+                            base64_str = base64.b64encode(img_data).decode('ascii')
+                            result['marked_image'] = base64_str
+                    except Exception as e:
+                        self.logger.warning(f'生成标记图片失败: {e}，使用原始截图')
+                        # 如果标记失败，使用原始截图
+                        try:
+                            with open(screenshot_path, 'rb') as f:
+                                img_data = f.read()
+                                base64_str = base64.b64encode(img_data).decode('ascii')
+                                result['marked_image'] = base64_str
+                        except Exception as e2:
+                            self.logger.warning(f'转换截图为base64失败: {e2}')
+
+                return result
+            return {'error': '无法解析组件树'}
+
+        except Exception as e:
+            self.logger.error(f'分析Image尺寸失败: {str(e)}')
+            return {'error': str(e)}
+
+    def _analyze_animations_for_page(self, ui_dir: str, page_idx: int, page_files: list[str]) -> Optional[dict[str, Any]]:
+        """
+        分析单个页面的动画（对比当前page和上一个page）
+
+        Args:
+            ui_dir: UI数据目录
+            page_idx: 当前页面索引
+            page_files: 所有page文件列表
+
+        Returns:
+            动画分析结果（可选）
+        """
+        # 当前page的截图和组件树
+        current_screenshot = os.path.join(ui_dir, f'screenshot_page_{page_idx}.png')
+        current_tree = os.path.join(ui_dir, f'element_tree_page_{page_idx}.txt')
+
+        # 查找上一个page（用于对比）- 找到最近的上一个page
+        prev_page_idx = None
+        max_prev_idx = -1
+        for page_file in page_files:
+            match = re.search(r'element_tree_page_(\d+)\.txt', os.path.basename(page_file))
+            if match:
+                file_page_idx = int(match.group(1))
+                if file_page_idx < page_idx and file_page_idx > max_prev_idx:
+                    max_prev_idx = file_page_idx
+                    prev_page_idx = file_page_idx
+
+        # 如果存在上一个page，进行动画分析
+        if prev_page_idx is not None:
+            prev_screenshot = os.path.join(ui_dir, f'screenshot_page_{prev_page_idx}.png')
+            prev_tree = os.path.join(ui_dir, f'element_tree_page_{prev_page_idx}.txt')
+
+            if (os.path.exists(current_screenshot) and os.path.exists(prev_screenshot) and
+                os.path.exists(current_tree) and os.path.exists(prev_tree)):
+                try:
+                    # 解析inspector文件（使用当前page的inspector）
+                    inspector_file = os.path.join(ui_dir, f'inspector_page_{page_idx}.json')
+                    animation_components = []
+                    if os.path.exists(inspector_file):
+                        animation_components = self._parse_animation_components(ui_dir, f'page_{page_idx}')
+
+                    # 图像差异分析（对比上一个page和当前page）
+                    image_animation_result = self._analyze_image_differences_for_page(
+                        prev_screenshot, current_screenshot, animation_components
+                    )
+
+                    # Element树差异分析（对比上一个page和当前page）
+                    tree_animation_result = self._analyze_tree_differences_for_page(prev_tree, current_tree)
+
+                    # 生成标记的截图
+                    regions = []
+                    for animation_info in image_animation_result.get('animation_regions', []):
+                        bounds_rect = animation_info['component']['bounds_rect']
+                        if bounds_rect:
+                            regions.append({'type': 'animation', 'bounds_rect': bounds_rect})
+
+                    for animation_info in tree_animation_result.get('animation_regions', []):
+                        bounds_rect = animation_info['component']['bounds_rect']
+                        if bounds_rect:
+                            regions.append({'type': 'animation', 'bounds_rect': bounds_rect})
+
+                    marked_images = []
+                    if regions:
+                        marked_images = self._generate_marked_images_for_page(
+                            prev_screenshot, current_screenshot, regions, ui_dir, f'page_{page_idx}'
+                        )
+
+                    # 转换为base64
+                    marked_images_base64 = []
+                    for img_path in marked_images:
+                        if os.path.exists(img_path):
+                            try:
+                                with open(img_path, 'rb') as f:
+                                    img_data = f.read()
+                                    base64_str = base64.b64encode(img_data).decode('ascii')
+                                    marked_images_base64.append(base64_str)
+                            except Exception as e:
+                                self.logger.warning(f'转换图片 {img_path} 为 base64 失败: {e}')
+
+                    return {
+                        'image_animations': image_animation_result,
+                        'tree_animations': tree_animation_result,
+                        'marked_images': marked_images_base64,
+                        'marked_image': marked_images_base64[0] if marked_images_base64 else None,  # 第一张标记截图用于显示
+                    }
+
+                except Exception as e:
+                    self.logger.error(f'分析页面动画失败: {str(e)}')
+                    return None
+
+        # 如果没有上一个page（第一个page），返回None
+        return None
+
+    def _analyze_image_differences_for_page(
+        self, screenshot1_path: str, screenshot2_path: str, xcompose_components: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """分析图像差异（用于page格式）"""
+        animation_regions = []
+
+        for component in xcompose_components:
+            bounds_rect = component['bounds_rect']
+            comparison_result = self.image_comparator.compare_regions(screenshot1_path, screenshot2_path, bounds_rect)
+
+            if comparison_result:
+                similarity_threshold = 85.0
+                if comparison_result['similarity_percentage'] < similarity_threshold:
+                    animation_info = {
+                        'component': component,
+                        'comparison_result': comparison_result,
+                        'is_animation': True,
+                        'animation_type': self._classify_animation_type(comparison_result),
+                        'region': bounds_rect,
+                        'similarity': comparison_result['similarity_percentage'],
+                    }
+                    animation_regions.append(animation_info)
+
+        return {
+            'animation_regions': animation_regions,
+            'animation_count': len(animation_regions),
+        }
+
+    def _analyze_tree_differences_for_page(self, tree1_path: str, tree2_path: str) -> dict[str, Any]:
+        """分析Element树差异（用于page格式）"""
+        try:
+            with open(tree1_path, encoding='utf-8') as f:
+                tree1_content = f.read()
+            with open(tree2_path, encoding='utf-8') as f:
+                tree2_content = f.read()
+
+            tree1 = parse_arkui_tree(tree1_content)
+            tree2 = parse_arkui_tree(tree2_content)
+
+            if tree1 and tree2:
+                differences = compare_arkui_trees(tree1, tree2)
+                animation_differences = self._filter_animation_differences(differences)
+
+                return {
+                    'animation_regions': animation_differences,
+                    'animation_count': len(animation_differences),
+                }
+            return {'error': '无法解析Element树'}
+
+        except Exception as e:
+            self.logger.error(f'分析Element树差异失败: {str(e)}')
+            return {'error': str(e)}
+
+    def _generate_marked_images_for_page(
+        self,
+        image1_path: str,
+        image2_path: str,
+        regions: list[dict[str, Any]],
+        output_dir: str,
+        file_name: str,
+    ) -> list[str]:
+        """生成标记图像（用于page格式）"""
+        return self._generate_marked_images_with_types(
+            image1_path, image2_path,
+            [r['bounds_rect'] for r in regions if r.get('type') == 'animation'],
+            [],
+            output_dir,
+            file_name,
+        )
+
     def _generate_summary(self, start_result: dict[str, Any], end_result: dict[str, Any]) -> dict[str, Any]:
         """生成分析摘要
 
@@ -707,20 +1040,31 @@ class UIAnalyzer(BaseAnalyzer):
         }
 
     def _convert_images_to_base64(self):
-        """将 self.results 中的图片路径转换为 base64 编码"""
+        """将 self.results 中的图片路径转换为 base64 编码（新格式：页面列表）"""
         # 遍历所有步骤的结果
         for _step_key, step_data in self.results.items():
-            if not isinstance(step_data, dict) or step_data.get('error'):
+            if not isinstance(step_data, list):
                 continue
 
-            # 处理 start_phase 和 end_phase
-            for phase in ['start_phase', 'end_phase']:
-                if phase in step_data and isinstance(step_data[phase], dict):
-                    phase_data = step_data[phase]
-                    if 'marked_images' in phase_data and isinstance(phase_data['marked_images'], list):
+            # 处理页面列表格式
+            for page_data in step_data:
+                if not isinstance(page_data, dict) or page_data.get('error'):
+                    continue
+
+                # 处理animations中的marked_images（如果存在路径格式）
+                if 'animations' in page_data and isinstance(page_data['animations'], dict):
+                    animations = page_data['animations']
+                    if 'marked_images' in animations and isinstance(animations['marked_images'], list):
+                        # 检查是否已经是base64格式（字符串且以data:开头）
+                        marked_images = animations['marked_images']
+                        if marked_images and isinstance(marked_images[0], str) and marked_images[0].startswith('data:'):
+                            # 已经是base64格式，跳过
+                            continue
+                        
+                        # 如果是文件路径，转换为base64
                         base64_images = []
-                        for img_path in phase_data['marked_images']:
-                            if os.path.exists(img_path):
+                        for img_path in marked_images:
+                            if isinstance(img_path, str) and os.path.exists(img_path):
                                 try:
                                     with open(img_path, 'rb') as f:
                                         img_data = f.read()
@@ -728,13 +1072,12 @@ class UIAnalyzer(BaseAnalyzer):
                                         base64_images.append(base64_str)
                                 except Exception as e:
                                     self.logger.warning(f'转换图片 {img_path} 为 base64 失败: {e}')
-                            else:
-                                self.logger.warning(f'图片文件不存在: {img_path}')
-
+                            elif isinstance(img_path, str) and img_path.startswith('data:'):
+                                # 已经是base64格式
+                                base64_images.append(img_path)
+                        
                         # 替换为 base64 数据
-                        phase_data['marked_images_base64'] = base64_images
-                        # 保留原始路径用于调试
-                        phase_data['marked_images_paths'] = phase_data.pop('marked_images')
+                        animations['marked_images'] = base64_images
 
     def write_report(self, result: dict):
         """重写 write_report 方法，在写入前转换图片为 base64
@@ -769,31 +1112,36 @@ class UIAnalyzer(BaseAnalyzer):
             step_name = os.path.basename(step_dir)
 
             step_data = {
-                'screenshots': {'start': [], 'end': []},
-                'trees': {'start': [], 'end': []},
+                'screenshots': {},
+                'trees': {},
             }
 
-            # 保存所有截图
-            for phase in ['start', 'end']:
-                screenshots = sorted(glob.glob(os.path.join(step_dir, f'screenshot_{phase}_*.png')))
-                for screenshot in screenshots:
+            # 保存所有截图（按 page 编号）
+            screenshots = sorted(glob.glob(os.path.join(step_dir, 'screenshot_page_*.png')))
+            for screenshot in screenshots:
+                # 从文件名提取 page_idx: screenshot_page_0.png -> 0
+                match = re.search(r'screenshot_page_(\d+)\.png', os.path.basename(screenshot))
+                if match:
+                    page_idx = match.group(1)
+                    if page_idx not in step_data['screenshots']:
+                        step_data['screenshots'][page_idx] = []
                     with open(screenshot, 'rb') as f:
                         img_data = f.read()
-                        step_data['screenshots'][phase].append(base64.b64encode(img_data).decode('ascii'))
+                        step_data['screenshots'][page_idx].append(base64.b64encode(img_data).decode('ascii'))
 
-            # 保存所有组件树（只保存文本，前端不需要解析）
-            for phase in ['start', 'end']:
-                trees = sorted(glob.glob(os.path.join(step_dir, f'element_tree_{phase}_*.txt')))
-                for tree in trees:
+            # 保存所有组件树（按 page 编号）
+            trees = sorted(glob.glob(os.path.join(step_dir, 'element_tree_page_*.txt')))
+            for tree in trees:
+                # 从文件名提取 page_idx: element_tree_page_0.txt -> 0
+                match = re.search(r'element_tree_page_(\d+)\.txt', os.path.basename(tree))
+                if match:
+                    page_idx = match.group(1)
+                    if page_idx not in step_data['trees']:
+                        step_data['trees'][page_idx] = []
                     with open(tree, encoding='utf-8') as f:
-                        step_data['trees'][phase].append(f.read())
+                        step_data['trees'][page_idx].append(f.read())
 
-            if (
-                step_data['screenshots']['start']
-                or step_data['screenshots']['end']
-                or step_data['trees']['start']
-                or step_data['trees']['end']
-            ):
+            if step_data['screenshots'] or step_data['trees']:
                 raw_data[step_name] = step_data
 
         if raw_data:
