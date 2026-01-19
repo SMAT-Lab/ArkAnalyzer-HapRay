@@ -37,66 +37,67 @@ class CaptureUI:
         self.driver: UiDriver = driver
         self.uitree = UiTree(self.driver)
 
-    def capture_ui(self, step_id: int, report_path: str, label_name: str = None, page_description: str = None):
+    def capture_page(self, step_id: int, report_path: str, page_idx: int, animate: bool = False) -> dict[str, str]:
         """
-        抓取UI相关数据，包括截屏和dump element树（每个页面只采集一次）
+        抓取UI相关数据，包括截屏和dump element树
 
         Args:
             step_id: 测试步骤ID
             report_path: 报告保存路径
-            label_name: 标记UI（如 'page_1', 'page_2' 等）
-            page_description: 页面描述信息
+            page_idx: 页面索引
+            animate: 是否进行动画采集（采集两次截图和组件树）
+
+        Returns:
+            包含生成文件路径的字典，键包括：inspector, screenshot, element_tree
+            如果animate=True，还会包含screenshot_2和element_tree_2
         """
-        try:
-            Log.info(f'开始抓取UI数据 - Step {step_id}, Label: {label_name}')
+        Log.info(f'开始抓取UI数据 - Step {step_id}, Page {page_idx}')
 
-            # 创建UI数据保存目录
-            ui_step_dir = os.path.join(report_path, 'ui', f'step{step_id}')
-            os.makedirs(ui_step_dir, exist_ok=True)
+        # 创建UI数据保存目录
+        ui_step_dir = os.path.join(report_path, 'ui', f'step{step_id}')
+        os.makedirs(ui_step_dir, exist_ok=True)
 
-            # 1. dump inspector JSON（如果提供了页面描述，保存到inspector的metadata中）
-            inspector_file = os.path.join(ui_step_dir, f'inspector_{label_name}.json')
-            try:
-                self.uitree.dump_to_file(inspector_file)
-                Log.info(f'Inspector JSON保存成功: {inspector_file}')
-            except Exception as e:
-                Log.error(f'保存Inspector JSON失败: {e}', exc_info=True)
-                raise
-            
-            # 如果提供了页面描述，将其添加到inspector JSON中
-            if page_description:
-                try:
-                    import json
-                    if os.path.exists(inspector_file):
-                        with open(inspector_file, 'r', encoding='utf-8') as f:
-                            inspector_data = json.load(f)
-                        if 'metadata' not in inspector_data:
-                            inspector_data['metadata'] = {}
-                        inspector_data['metadata']['page_description'] = page_description
-                        with open(inspector_file, 'w', encoding='utf-8') as f:
-                            json.dump(inspector_data, f, indent=2, ensure_ascii=False)
-                        Log.info(f'页面描述保存成功: {page_description}')
-                except Exception as e:
-                    Log.warning(f'保存页面描述到inspector失败: {e}')
+        result_files = {}
 
-            # 2. 截屏（只采集一次）
-            self._capture_screenshot(ui_step_dir, label_name)
+        # 如果提供了uitree，则dump inspector JSON
+        inspector_path = os.path.join(ui_step_dir, f'inspector_page_{page_idx}.json')
+        self.uitree.dump_to_file(inspector_path)
+        result_files['inspector'] = inspector_path
 
-            # 3. dump element树（只采集一次）
-            self._dump_element_tree(ui_step_dir, label_name)
+        # 1. 截屏
+        screenshot_path = self._capture_screenshot(ui_step_dir, f'page_{page_idx}')
+        if screenshot_path:
+            result_files['screenshot'] = screenshot_path
 
-            Log.info(f'UI数据抓取完成 - Step {step_id}, Label: {label_name}')
-        except Exception as e:
-            Log.error(f'UI数据抓取失败 - Step {step_id}, Label: {label_name}, 错误: {e}', exc_info=True)
-            raise
+        # 2. dump element树
+        element_tree_path = self._dump_page_element_tree(ui_step_dir, f'page_{page_idx}')
+        if element_tree_path:
+            result_files['element_tree'] = element_tree_path
 
-    def _capture_screenshot(self, ui_step_dir: str, label_name: str = None):
+        if animate:
+            # 3. 第2次截屏
+            screenshot_path_2 = self._capture_screenshot(ui_step_dir, f'page_{page_idx}_2')
+            if screenshot_path_2:
+                result_files['screenshot_2'] = screenshot_path_2
+
+            # 4. 第2次dump element树
+            element_tree_path_2 = self._dump_page_element_tree(ui_step_dir, f'page_{page_idx}_2')
+            if element_tree_path_2:
+                result_files['element_tree_2'] = element_tree_path_2
+
+        Log.info(f'UI数据抓取完成 - Step {step_id}, Page {page_idx}')
+        return result_files
+
+    def _capture_screenshot(self, ui_step_dir: str, label_name: str = None) -> str:
         """
         执行截屏并保存到本地
 
         Args:
             ui_step_dir: UI数据保存目录
             label_name: 测试步骤名称
+
+        Returns:
+            本地截图文件路径，失败时返回None
         """
         try:
             Log.info('开始执行截屏...')
@@ -130,40 +131,46 @@ class CaptureUI:
                     # 验证文件是否成功保存
                     if os.path.exists(local_screenshot_path):
                         Log.info(f'截屏保存成功: {local_screenshot_path}')
-                    else:
-                        Log.error(f'截屏保存失败: {local_screenshot_path}')
-                else:
-                    Log.error('无法从截屏命令输出中解析文件路径')
-            else:
-                Log.error('截屏命令执行失败或输出格式不正确')
+                        return local_screenshot_path
+                    Log.error(f'截屏保存失败: {local_screenshot_path}')
+                    return None
+                Log.error('无法从截屏命令输出中解析文件路径')
+                return None
+            Log.error('截屏命令执行失败或输出格式不正确')
+            return None
 
         except Exception as e:
             Log.error(f'截屏过程中发生错误: {e}')
+            return None
 
-    def _dump_element_tree(self, ui_step_dir: str, label_name: str = None):
+    def _dump_page_element_tree(self, ui_step_dir: str, label_name: str = None) -> str:
         """
-        执行dump element树操作
+        导出页面组件树（完整组件树，包含-all参数）
 
         Args:
             ui_step_dir: UI数据保存目录
-            label_name: 测试步骤名称
+            label_name: 标签名称
+
+        Returns:
+            本地组件树文件路径，失败时返回None
         """
         try:
-            Log.info('开始dump element树...')
+            Log.info(f'开始导出页面组件树 - Page {label_name}')
 
             # 1. 获取Focus window id
             focus_window_id = self._get_focus_window_id()
             if not focus_window_id:
                 Log.error('无法获取Focus window id')
-                return
+                return None
 
             Log.info(f'获取到Focus window id: {focus_window_id}')
 
-            # 2. 执行hidumper命令获取element树
-            self._execute_hidumper_dump(ui_step_dir, label_name, focus_window_id)
+            # 2. 执行hidumper命令获取完整组件树（使用-all参数）
+            return self._execute_hidumper_dump(ui_step_dir, label_name, focus_window_id)
 
         except Exception as e:
-            Log.error(f'dump element树过程中发生错误: {e}')
+            Log.error(f'导出页面组件树过程中发生错误: {e}')
+            return None
 
     def _get_focus_window_id(self) -> str:
         """
@@ -191,57 +198,7 @@ class CaptureUI:
             Log.error(f'获取Focus window id时发生错误: {e}')
             return None
 
-    def dump_page_element_tree(self, ui_step_dir: str, page_idx: int, page_description: str = None):
-        """
-        导出页面组件树（包含完整组件信息，使用-all参数）
-
-        Args:
-            ui_step_dir: UI数据保存目录
-            page_idx: 页面索引（从1开始）
-            page_description: 页面描述信息
-        """
-        try:
-            Log.info(f'开始dump页面组件树 - page_idx: {page_idx}')
-
-            # 1. 获取Focus window id
-            focus_window_id = self._get_focus_window_id()
-            if not focus_window_id:
-                Log.error('无法获取Focus window id')
-                return
-
-            Log.info(f'获取到Focus window id: {focus_window_id}')
-
-            # 2. dump inspector JSON（如果提供了页面描述，保存到inspector的metadata中）
-            inspector_file = os.path.join(ui_step_dir, f'inspector_page_{page_idx}.json')
-            self.uitree.dump_to_file(inspector_file)
-            
-            # 如果提供了页面描述，将其添加到inspector JSON中
-            if page_description:
-                try:
-                    import json
-                    if os.path.exists(inspector_file):
-                        with open(inspector_file, 'r', encoding='utf-8') as f:
-                            inspector_data = json.load(f)
-                        if 'metadata' not in inspector_data:
-                            inspector_data['metadata'] = {}
-                        inspector_data['metadata']['page_description'] = page_description
-                        with open(inspector_file, 'w', encoding='utf-8') as f:
-                            json.dump(inspector_data, f, indent=2, ensure_ascii=False)
-                except Exception as e:
-                    Log.warning(f'保存页面描述到inspector失败: {e}')
-
-            # 3. 截屏
-            self._capture_screenshot(ui_step_dir, f'page_{page_idx}')
-
-            # 4. 执行hidumper命令获取完整组件树（使用-all参数）
-            self._execute_hidumper_dump(ui_step_dir, f'page_{page_idx}', focus_window_id, use_all=True)
-
-            Log.info(f'页面组件树dump完成 - page_idx: {page_idx}')
-
-        except Exception as e:
-            Log.error(f'dump页面组件树过程中发生错误: {e}')
-
-    def _execute_hidumper_dump(self, ui_step_dir: str, label_name: str, window_id: str, use_all: bool = False):
+    def _execute_hidumper_dump(self, ui_step_dir: str, label_name: str, window_id: str) -> str:
         """
         执行hidumper dump命令并保存输出到文件
 
@@ -249,18 +206,16 @@ class CaptureUI:
             ui_step_dir: UI数据保存目录
             label_name: 测试步骤名称
             window_id: Focus window id
-            use_all: 是否使用-all参数获取完整组件树
+
+        Returns:
+            local_dump_path: 本地保存的组件树文件路径，失败时返回None
         """
         try:
             # 生成输出文件名
             dump_filename = f'element_tree_{label_name}.txt' if label_name else 'element_tree.txt'
             local_dump_path = os.path.join(ui_step_dir, dump_filename)
 
-            # 执行hidumper dump命令（根据use_all参数决定是否添加-all）
-            if use_all:
-                dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default -all' --zip"
-            else:
-                dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default' --zip"
+            dump_cmd = f"hidumper -s WindowManagerService -a '-w {window_id} -default -all' --zip"
             Log.info(f'执行hidumper dump命令: {dump_cmd}')
 
             # 执行命令并获取结果
@@ -294,16 +249,21 @@ class CaptureUI:
                                 with open(local_dump_path, 'wb') as f:
                                     f.write(log_content)
                                 Log.info(f'Element树dump log.txt提取成功: {local_dump_path}')
-                            else:
-                                # 列出zip文件中的文件列表以便调试
-                                file_list = zip_ref.namelist()
-                                Log.error(f'zip文件中未找到log.txt文件，文件列表: {file_list}')
+                                return local_dump_path
+                            # 列出zip文件中的文件列表以便调试
+                            file_list = zip_ref.namelist()
+                            Log.error(f'zip文件中未找到log.txt文件，文件列表: {file_list}')
+                            return None
                     except Exception as e:
                         Log.error(f'从zip文件中提取log.txt失败: {e}')
+                        return None
                 else:
                     Log.error(f'Element树dump保存失败: {local_zip_path}')
+                    return None
             else:
                 Log.error('无法从hidumper输出中解析zip文件路径')
+                return None
 
         except Exception as e:
             Log.error(f'执行hidumper dump时发生错误: {e}')
+            return None
