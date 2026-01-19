@@ -41,8 +41,12 @@ class ArkUITreeParser:
         self.root = None
         self.current_component = None
         self.component_stack = []
+        self.canvas_node_count = 0  # CanvasNode节点数量统计
 
     def parse_component_tree(self, content: str) -> ArkUIComponent:
+        # 重置CanvasNode计数
+        self.canvas_node_count = 0
+        
         lines = content.split('\n')
 
         i = 0
@@ -64,9 +68,22 @@ class ArkUITreeParser:
                 else:
                     i += 1
             else:
+                # 统计CanvasNode数量（在rsNode打印块中，格式：| CanvasNode[数字] 或 CanvasNode[数字]）
+                # 使用正则表达式匹配 CanvasNode[数字] 格式（CanvasNode和[之间没有空格）
+                if re.search(r'CanvasNode\[\d+\]', line, re.IGNORECASE):
+                    self.canvas_node_count += 1
                 i += 1
 
         return self.root
+    
+    def get_canvas_node_count(self) -> int:
+        """
+        获取解析到的CanvasNode节点数量
+        
+        Returns:
+            CanvasNode节点数量
+        """
+        return self.canvas_node_count
 
     def _parse_component_line(self, line: str) -> Optional[ArkUIComponent]:
         # 提取缩进级别和组件信息
@@ -80,6 +97,7 @@ class ArkUITreeParser:
 
         indent = match.group(1)
         component_name = match.group(2)
+
 
         # 计算深度级别 (每2个空格为一级)
         # 根节点深度为1，子节点每缩进2个空格深度增加1
@@ -208,6 +226,10 @@ class ArkUITreeParser:
 
             # 将整行内容作为rsNode的值
             component.attributes['rsNode'] = clean_line
+            
+            # 统计CanvasNode数量（CanvasNode行在rsNode块中）
+            if re.search(r'CanvasNode\[\d+\]', line, re.IGNORECASE):
+                self.canvas_node_count += 1
 
         return i + 1
 
@@ -665,3 +687,18 @@ def parse_arkui_tree(file_content: str) -> dict[str, Any]:
     if root_component:
         return root_component.to_dict()
     return {}
+
+
+def count_canvas_nodes(file_content: str) -> int:
+    """
+    统计组件树中的CanvasNode节点数量
+
+    Args:
+        file_content: hidumper导出的组件树文本内容
+
+    Returns:
+        CanvasNode节点数量
+    """
+    parser = ArkUITreeParser()
+    parser.parse_component_tree(file_content)
+    return parser.get_canvas_node_count()
