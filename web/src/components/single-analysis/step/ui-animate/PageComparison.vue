@@ -1,5 +1,5 @@
 <template>
-  <div class="page-comparison" v-if="page1 && page2">
+  <div v-if="page1 && page2" class="page-comparison">
     <el-tabs v-model="activeTab" type="border-card">
       <!-- 动画对比 -->
       <el-tab-pane label="动画对比" name="animation">
