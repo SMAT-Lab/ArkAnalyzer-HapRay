@@ -39,10 +39,10 @@ class PerfLoad_meituan_0020(PerfTestCase):
         def step1():
             # Step('美团美食页上滑操作')
             self.swipes_up(swip_num=5, sleep=2)
-            self.dump_page('美食页上滑后')
+            self.dump_page('美食页上滑后', animate=True)  # 启用动画采集
             # Step('美团美食页下滑操作')
             self.swipes_down(swip_num=5, sleep=2)
-            self.dump_page('美食页下滑后')
+            self.dump_page('美食页下滑后', animate=True)  # 启用动画采集
 
         self.execute_performance_step('美团-美食、酒店民宿页面滑动浏览场景-step1美食页上下滑动', 30, step1)
 
@@ -55,9 +55,9 @@ class PerfLoad_meituan_0020(PerfTestCase):
         def step2():
             # Step('美团酒店民宿页上滑操作')
             self.swipes_up(swip_num=5, sleep=2)
-            self.dump_page('酒店民宿页上滑后')
+            self.dump_page('酒店民宿页上滑后', animate=True)  # 启用动画采集
             # Step('美团酒店民宿页下滑操作')
             self.swipes_down(swip_num=5, sleep=2)
-            self.dump_page('酒店民宿页下滑后')
+            self.dump_page('酒店民宿页下滑后', animate=True)  # 启用动画采集
 
         self.execute_performance_step('美团-美食、酒店民宿页面滑动浏览场景-step2酒店民宿页上下滑动', 30, step2)

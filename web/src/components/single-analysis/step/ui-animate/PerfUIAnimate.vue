@@ -84,12 +84,12 @@
                 @click="selectedPage = page.page_idx"
               >
                 <el-tooltip
-                  :content="`Page${page.page_idx}:${page.page_name || ''}`"
+                  :content="`Page${page.page_idx}:${page.description || ''}`"
                   placement="right"
                   effect="dark"
                 >
                   <span class="page-name-text">
-                    Page{{ page.page_idx }}:{{ page.page_name || '' }}
+                    Page{{ page.page_idx }}:{{ page.description || '' }}
                   </span>
                 </el-tooltip>
               </div>
@@ -241,7 +241,7 @@ const filteredPageList = computed(() => {
   const filter = pageFilterText.value.toLowerCase();
   return currentPageList.value.filter(page => {
     const pageIdxStr = String(page.page_idx);
-    const pageNameStr = (page.page_name || '').toLowerCase();
+    const pageNameStr = ((page.description) || '').toLowerCase();
     return pageIdxStr.includes(filter) || 
            pageNameStr.includes(filter) ||
            `page${pageIdxStr}`.includes(filter);
@@ -325,8 +325,9 @@ const initCharts = () => {
     canvasNodeChart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
-          const param = Array.isArray(params) ? params[0] : params;
+        formatter: (params: unknown) => {
+          const paramArray = Array.isArray(params) ? params : [params];
+          const param = paramArray[0] as { name?: string; value?: number };
           return `${param.name}<br/>CanvasNode数量: <strong>${param.value}</strong>`;
         },
       },
@@ -382,9 +383,10 @@ const initCharts = () => {
     memoryChart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
-          const param = Array.isArray(params) ? params[0] : params;
-          return `${param.name}<br/>超尺寸内存: <strong>${param.value.toFixed(2)} MB</strong>`;
+        formatter: (params: unknown) => {
+          const paramArray = Array.isArray(params) ? params : [params];
+          const param = paramArray[0] as { name?: string; value?: number };
+          return `${param.name}<br/>超尺寸内存: <strong>${param.value?.toFixed(2)} MB</strong>`;
         },
       },
       grid: {
