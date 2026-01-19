@@ -5,16 +5,6 @@
     </el-card>
 
     <template v-else>
-      <!-- UI总览 -->
-      <el-card shadow="never" style="margin-bottom: 16px;">
-        <template #header>
-          <span style="font-weight: 600; font-size: 16px;">
-            <i class="el-icon-data-analysis" style="margin-right: 8px;"></i>
-            UI总览
-          </span>
-        </template>
-      </el-card>
-
       <!-- 页面Canvas和内存超尺寸统计行 -->
       <el-card shadow="never" style="margin-bottom: 16px;">
         <el-row :gutter="16">

@@ -177,6 +177,43 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         except Exception as e:
             Log.error(f'导出页面组件树失败 - Step {step_id}, Page {page_idx}: {e}')
 
+    def update_current_page_ext_info(self, ext_info: dict):
+        """
+        更新当前页面的扩展信息
+
+        Args:
+            ext_info: 要更新的扩展信息字典，会合并到现有page_info中
+        """
+        if self.current_step_id is None:
+            Log.warning('update_current_page_ext_info调用时current_step_id为None，跳过更新')
+            return
+
+        if self.current_page_idx == 0:
+            Log.warning('update_current_page_ext_info调用时current_page_idx为0，没有可更新的页面')
+            return
+
+        step_id = self.current_step_id
+        page_idx = self.current_page_idx
+
+        # 在pageMap中查找对应的页面
+        if step_id not in self.pageMap:
+            Log.warning(f'Step {step_id} 在pageMap中不存在，无法更新页面信息')
+            return
+
+        # 查找匹配的页面（通过page_idx）
+        pages = self.pageMap[step_id]
+        page_found = False
+        for page_info in pages:
+            if page_info.get('page_idx') == page_idx:
+                # 合并扩展信息
+                page_info.update(ext_info)
+                page_found = True
+                Log.info(f'已更新Step {step_id} Page {page_idx}的扩展信息: {ext_info}')
+                break
+
+        if not page_found:
+            Log.warning(f'未找到Step {step_id} Page {page_idx}的页面信息，无法更新')
+
     def set_device_redundant_mode(self):
         # 设置hdc参数
         Log.info('设置hdc参数: persist.ark.properties 0x200105c')
