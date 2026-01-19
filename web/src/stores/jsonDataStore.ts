@@ -963,6 +963,11 @@ export interface UIAnimatePageData {
     marked_images?: string[]; // base64编码的图片
     marked_image?: string; // 第一张标记截图（用于显示）
   };
+  gui_agent?: {
+    action?: string;
+    thinking?: string;
+    message?: string;
+  };
   error?: string;
 }
 
