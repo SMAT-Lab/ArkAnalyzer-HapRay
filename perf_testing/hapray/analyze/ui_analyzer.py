@@ -141,7 +141,7 @@ class UIAnalyzer(BaseAnalyzer):
             result = {
                 'page_idx': actual_page_idx,
                 'description': page_description,
-                'gui-agent': page_info.get('gui-agent', {}),
+                'gui_agent': page_info.get('gui_agent', {}),
             }
 
             # 如果存在element_tree文件，进行组件树分析
@@ -543,7 +543,7 @@ class UIAnalyzer(BaseAnalyzer):
             base64编码的标记图像字符串
         """
         try:
-            if not regions or not image_path or not os.path.exists(image_path):
+            if not image_path or not os.path.exists(image_path):
                 return None
 
             output_dir = os.path.join(ui_dir, 'marked_images')
@@ -614,6 +614,8 @@ class UIAnalyzer(BaseAnalyzer):
                         )
                         draw.text((text_x, text_y), text, fill='blue', font=font)
             else:
+                if region_type == 'animation':
+                    return None
                 # 未发现区域，在图片中央绘制提示
                 text = f'No {region_type.replace("_", " ").title()} Found'
                 bbox = draw.textbbox((0, 0), text, font=font)

@@ -114,20 +114,18 @@ class GUIAgentRunner(PerfTestCase):
             self.data_collector.collect_step_data_start(self.current_step_id, self.report_path, 30)
             # Execute first step with scene description
 
+            self.dump_page(f'step{self.agent.step_count}')
             step_result = self.agent.step(self._scene)
             step_count = self.agent.step_count
-
-            # Collect page data after first step
-            self.collect_page_data(step_count, step_result)
+            self.update_page_data(step_result)
 
             # Continue steps until finished or max steps reached
             task_result = None
             while not step_result.finished and step_count < self.agent.max_steps:
+                self.dump_page(f'step{self.agent.step_count}')
                 step_result = self.agent.step()
                 step_count = self.agent.step_count
-
-                # Collect page data after each step
-                self.collect_page_data(step_count, step_result)
+                self.update_page_data(step_result)
 
                 # Check if task completed successfully
                 if step_result.finished:
@@ -153,7 +151,7 @@ class GUIAgentRunner(PerfTestCase):
                     page_count=step_count,
                 )
 
-            self.data_collector.collect_step_data_end(self.stepId, self.report_path)
+            self.data_collector.collect_step_data_end(self.current_step_id, self.report_path)
 
             return task_result
 
@@ -180,7 +178,7 @@ class GUIAgentRunner(PerfTestCase):
         super().teardown()
         RealTimeAnalysisProcess.get_instance().notify_data_collected(self.report_path)
 
-    def collect_page_data(self, step_count: int, step_result: StepResult) -> None:
+    def update_page_data(self, step_result: StepResult) -> None:
         """
         Collect data after each step completion.
 
@@ -191,8 +189,7 @@ class GUIAgentRunner(PerfTestCase):
             step_result: StepResult object containing step execution result
         """
         logger.debug(
-            'Step %d data - success: %s, finished: %s, action: %s, thinking: %s, message: %s',
-            step_count,
+            'Step data - success: %s, finished: %s, action: %s, thinking: %s, message: %s',
             step_result.success,
             step_result.finished,
             step_result.action,
@@ -202,13 +199,14 @@ class GUIAgentRunner(PerfTestCase):
 
         # Create page information
         page_info = {
-            'gui-agent': {
+            'gui_agent': {
                 'action': step_result.action or '',
                 'thinking': step_result.thinking or '',
                 'message': step_result.message or '',
             }
         }
-        self.dump_page(f'step{step_count}', ext_info=page_info)
+
+        self.update_current_page_ext_info(page_info)
 
     def _load_config(self, testargs: dict) -> dict[str, Any]:
         """Load configuration file.
