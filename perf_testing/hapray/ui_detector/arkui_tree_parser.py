@@ -46,7 +46,7 @@ class ArkUITreeParser:
     def parse_component_tree(self, content: str) -> ArkUIComponent:
         # 重置CanvasNode计数
         self.canvas_node_count = 0
-        
+
         lines = content.split('\n')
 
         i = 0
@@ -68,18 +68,14 @@ class ArkUITreeParser:
                 else:
                     i += 1
             else:
-                # 统计CanvasNode数量（在rsNode打印块中，格式：| CanvasNode[数字] 或 CanvasNode[数字]）
-                # 使用正则表达式匹配 CanvasNode[数字] 格式（CanvasNode和[之间没有空格）
-                if re.search(r'CanvasNode\[\d+\]', line, re.IGNORECASE):
-                    self.canvas_node_count += 1
                 i += 1
 
         return self.root
-    
+
     def get_canvas_node_count(self) -> int:
         """
-        获取解析到的CanvasNode节点数量
-        
+        获取CanvasNode节点数量
+
         Returns:
             CanvasNode节点数量
         """
@@ -98,7 +94,6 @@ class ArkUITreeParser:
         indent = match.group(1)
         component_name = match.group(2)
 
-
         # 计算深度级别 (每2个空格为一级)
         # 根节点深度为1，子节点每缩进2个空格深度增加1
         depth_level = len(indent) // 2 + 1
@@ -108,6 +103,10 @@ class ArkUITreeParser:
         component.name = component_name
         component.depth = depth_level
         component.attributes['type'] = component_name
+
+        # 统计CanvasNode节点数量
+        if component_name == 'CanvasNode':
+            self.canvas_node_count += 1
 
         return component
 
@@ -216,7 +215,7 @@ class ArkUITreeParser:
         return i
 
     def _parse_rs_node_block(self, lines: list[str], start_index: int, component: ArkUIComponent) -> int:
-        """解析rsNode信息块"""
+        """解析rsNode信息块，特别处理CanvasNode"""
         i = start_index + 1  # 跳过开始行
 
         if i < len(lines):
@@ -224,14 +223,77 @@ class ArkUITreeParser:
             # 清理行格式 - 去除可能的竖线和多余空格
             clean_line = line.strip().lstrip('|').strip()
 
-            # 将整行内容作为rsNode的值
+            # 将整行内容作为rsNode的值（保留原始值）
             component.attributes['rsNode'] = clean_line
-            
-            # 统计CanvasNode数量（CanvasNode行在rsNode块中）
-            if re.search(r'CanvasNode\[\d+\]', line, re.IGNORECASE):
-                self.canvas_node_count += 1
+
+            # 如果包含CanvasNode，解析详细信息
+            if 'CanvasNode[' in clean_line:
+                self._parse_canvas_node_info(clean_line, component)
 
         return i + 1
+
+    def _parse_canvas_node_info(self, line: str, component: ArkUIComponent):
+        """
+        解析CanvasNode的详细信息
+
+        格式示例：
+        CanvasNode[271338853892101] child[271338853892102 ] token:271338853892097 modifierExtractor rsUIContext token is 271338853892097node Is 1 Bounds[0.0 0.0 1084.0 2412.0] Frame[0.0 0.0 1084.0 2412.0], BackgroundColor[#FFFFFFFF]
+
+        Args:
+            line: CanvasNode信息行
+            component: 组件对象
+        """
+        try:
+            # 解析CanvasNode ID
+            canvas_node_match = re.search(r'CanvasNode\[(\d+)\]', line)
+            if canvas_node_match:
+                component.attributes['canvasNodeId'] = canvas_node_match.group(1)
+
+            # 解析Bounds [left top right bottom]
+            bounds_match = re.search(r'Bounds\[([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\]', line)
+            if bounds_match:
+                left = float(bounds_match.group(1))
+                top = float(bounds_match.group(2))
+                right = float(bounds_match.group(3))
+                bottom = float(bounds_match.group(4))
+                component.attributes['canvasBounds'] = {
+                    'left': left,
+                    'top': top,
+                    'right': right,
+                    'bottom': bottom,
+                    'width': right - left,
+                    'height': bottom - top,
+                }
+                # 同时设置bounds_rect格式（与组件树其他部分保持一致）
+                component.attributes['canvasBoundsRect'] = (int(left), int(top), int(right), int(bottom))
+
+            # 解析Frame [left top right bottom]
+            frame_match = re.search(r'Frame\[([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\]', line)
+            if frame_match:
+                left = float(frame_match.group(1))
+                top = float(frame_match.group(2))
+                right = float(frame_match.group(3))
+                bottom = float(frame_match.group(4))
+                component.attributes['canvasFrame'] = {
+                    'left': left,
+                    'top': top,
+                    'right': right,
+                    'bottom': bottom,
+                    'width': right - left,
+                    'height': bottom - top,
+                }
+                component.attributes['canvasFrameRect'] = (int(left), int(top), int(right), int(bottom))
+
+            # 标记这是一个CanvasNode
+            component.attributes['isCanvasNode'] = True
+
+            # 统计CanvasNode节点数量（如果组件名不是CanvasNode，说明CanvasNode只在rsNode中）
+            if component.name != 'CanvasNode':
+                self.canvas_node_count += 1
+
+        except Exception:
+            # 解析失败时记录但不抛出异常，保留原始rsNode值
+            pass
 
     def _handle_component_hierarchy(self, component: ArkUIComponent):
         # 如果是根组件
@@ -679,26 +741,14 @@ def parse_arkui_tree(file_content: str) -> dict[str, Any]:
         file_content: hidumper导出的组件树文本内容
 
     Returns:
-        解析后的组件树字典
+        解析后的组件树字典，包含canvas_node_count字段
     """
     parser = ArkUITreeParser()
     root_component = parser.parse_component_tree(file_content)
 
     if root_component:
-        return root_component.to_dict()
-    return {}
-
-
-def count_canvas_nodes(file_content: str) -> int:
-    """
-    统计组件树中的CanvasNode节点数量
-
-    Args:
-        file_content: hidumper导出的组件树文本内容
-
-    Returns:
-        CanvasNode节点数量
-    """
-    parser = ArkUITreeParser()
-    parser.parse_component_tree(file_content)
-    return parser.get_canvas_node_count()
+        tree_dict = root_component.to_dict()
+        # 添加CanvasNode数量统计
+        tree_dict['canvas_node_count'] = parser.get_canvas_node_count()
+        return tree_dict
+    return {'canvas_node_count': 0}
