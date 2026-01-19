@@ -614,6 +614,8 @@ class UIAnalyzer(BaseAnalyzer):
                         )
                         draw.text((text_x, text_y), text, fill='blue', font=font)
             else:
+                if region_type == 'animation':
+                    return None
                 # 未发现区域，在图片中央绘制提示
                 text = f'No {region_type.replace("_", " ").title()} Found'
                 bbox = draw.textbbox((0, 0), text, font=font)

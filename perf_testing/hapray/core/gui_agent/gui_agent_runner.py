@@ -151,7 +151,7 @@ class GUIAgentRunner(PerfTestCase):
                     page_count=step_count,
                 )
 
-            self.data_collector.collect_step_data_end(self.stepId, self.report_path)
+            self.data_collector.collect_step_data_end(self.current_step_id, self.report_path)
 
             return task_result
 
