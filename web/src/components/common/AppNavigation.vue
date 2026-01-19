@@ -93,7 +93,7 @@
               <el-icon>
                 <VideoPlay />
               </el-icon>
-              <span>UI 动画分析</span>
+              <span>UI 分析</span>
             </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>

@@ -16,6 +16,7 @@ limitations under the License.
 import json
 import os
 import re
+import threading
 import time
 from abc import ABC, abstractmethod
 
@@ -46,6 +47,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self.bundle_info = None
         self.module_name = None
         self._data_collector = None  # 延迟初始化，在setup中创建
+        self.current_step_id = None  # 当前步骤ID
+        self._page_idx_counter = {}  # step_id -> page_idx 计数器
+        self._page_descriptions = {}  # step_id -> {page_idx: description} 页面描述映射
 
     @property
     def steps(self) -> list:
@@ -66,7 +70,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def data_collector(self) -> DataCollector:
         """获取 DataCollector 实例（延迟初始化）"""
         if self._data_collector is None:
-            self._data_collector = DataCollector(self.driver, self.app_package, self.module_name)
+            self._data_collector = DataCollector(self.driver, self.app_package, self.module_name, testcase=self)
         return self._data_collector
 
     def setup(self):
@@ -79,7 +83,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         self.module_name = self.bundle_info.get('entryModuleName')
         # 初始化 DataCollector（延迟到setup中，此时app_package已确定）
         if self._data_collector is None:
-            self._data_collector = DataCollector(self.driver, self.app_package, self.module_name)
+            self._data_collector = DataCollector(self.driver, self.app_package, self.module_name, testcase=self)
 
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
@@ -107,6 +111,11 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
         """
         step_id = len(self._steps) + 1
         self._steps.append({'name': f'step{step_id}', 'description': step_name})
+        
+        # 设置当前步骤ID
+        self.current_step_id = step_id
+        # 初始化该步骤的page_idx计数器
+        self._page_idx_counter[step_id] = 0
 
         # Use config default if not explicitly specified
         if sample_all_processes is None:
@@ -123,6 +132,9 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
         # 步骤结束时的数据采集（包括UI数据采集和XVM追踪，以及性能采集线程等待）
         self.data_collector.collect_step_data_end(step_id, self.report_path, self._redundant_mode_status)
+        
+        # 步骤结束后清除当前步骤ID
+        self.current_step_id = None
 
     def set_device_redundant_mode(self):
         # 设置hdc参数
@@ -216,3 +228,48 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
     def get_app_process_id(self) -> int:
         result = self.driver.shell(f'pidof {self.app_package}')
         return int(result.strip())
+
+    def dump_page(self, page_description: str):
+        """
+        导出当前页面的组件树（异步执行，不阻塞用例）
+
+        Args:
+            page_description: 页面描述信息
+        """
+        if self.current_step_id is None:
+            Log.warning('当前不在执行步骤中，无法dump页面组件树')
+            return
+
+        step_id = self.current_step_id
+        
+        # 自动增长page_idx（从2开始，因为步骤开始时已经使用了page_1）
+        # 注意：execute_performance_step中已经初始化为0，所以这里不需要再初始化
+        # 第一次调用：0 + 1 = 1，但page_1已被步骤开始使用，所以应该是2
+        # 因此需要先检查，如果计数器是0，说明是第一次调用，应该从1开始（+1后变成2）
+        if self._page_idx_counter[step_id] == 0:
+            # 第一次调用dump_page，应该生成page_2（因为page_1已被步骤开始使用）
+            self._page_idx_counter[step_id] = 1
+        self._page_idx_counter[step_id] += 1
+        page_idx = self._page_idx_counter[step_id]
+
+        # 保存页面描述（用于后续分析）
+        if step_id not in self._page_descriptions:
+            self._page_descriptions[step_id] = {}
+        self._page_descriptions[step_id][page_idx] = page_description
+
+        Log.info(f'开始dump页面组件树 - step_id: {step_id}, page_idx: {page_idx}, description: {page_description}')
+
+        # 创建UI数据保存目录
+        ui_step_dir = os.path.join(self.report_path, 'ui', f'step{step_id}')
+        os.makedirs(ui_step_dir, exist_ok=True)
+
+        # 使用多线程异步执行，不阻塞用例
+        def dump_thread():
+            try:
+                self.data_collector.capture_ui_handler.dump_page_element_tree(ui_step_dir, page_idx, page_description)
+                Log.info(f'页面组件树dump完成 - step_id: {step_id}, page_idx: {page_idx}')
+            except Exception as e:
+                Log.error(f'dump页面组件树失败 - step_id: {step_id}, page_idx: {page_idx}, error: {e}')
+
+        thread = threading.Thread(target=dump_thread, daemon=True)
+        thread.start()
