@@ -1,6 +1,6 @@
 {
   "name": "symbol-recovery",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "二进制符号恢复工具：支持 perf.data 和 Excel 偏移量两种模式",
   "files": [
     "dist",
