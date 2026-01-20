@@ -204,7 +204,7 @@ import PerfThreadTable from './tables/PerfThreadTable.vue';
 import PerfFileTable from './tables/PerfFileTable.vue';
 import PerfSymbolTable from './tables/PerfSymbolTable.vue';
 import PieChart from '../../../common/charts/PieChart.vue';
-import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
+import { useJsonDataStore, ComponentCategory } from '../../../../stores/jsonDataStore.ts';
 import {
   calculateComponentNameData,
   calculateFileData,
@@ -639,46 +639,164 @@ function toggleCategory(categoryName: string) {
   }
 }
 
-// 计算技术栈数据（所有kind的分类，动态从数据中获取）
+/**
+ * 判断是否应该归类到ArkUI技术栈
+ * ArkUI技术栈包含：
+ * - kind=1的：APP_ABC, APP_LIB
+ * - kind=2的：ArkUI
+ * - kind=3的：Ability, ArkTS Runtime, ArkTS System LIB
+ */
+function shouldClassifyAsArkUI(category: ComponentCategory, categoryName: string, subCategoryName?: string): boolean {
+  // kind=2的ArkUI
+  if (category === ComponentCategory.ArkUI || categoryName === 'ArkUI') {
+    return true;
+  }
+  
+  // kind=1的APP_ABC, APP_LIB
+  if (category === ComponentCategory.APP && subCategoryName) {
+    if (subCategoryName === 'APP_ABC' || subCategoryName === 'APP_LIB') {
+      return true;
+    }
+  }
+  
+  // kind=3的Ability, ArkTS Runtime, ArkTS System LIB
+  if (category === ComponentCategory.OS_Runtime && subCategoryName) {
+    if (subCategoryName === 'Ability' || 
+        subCategoryName === 'ArkTS Runtime' || 
+        subCategoryName === 'ArkTS System LIB') {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// 计算技术栈数据（与后端 saveTechStackXlsx 逻辑一致）
 const techStackData = computed(() => {
+  if (!perfData) {
+    return [];
+  }
+
   // 需要排除的分类名称（对应 kind = 1, 3, 4, -1）
   const excludedCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
 
-  // 获取大分类数据并排除
-  const categoryData = calculateCategorysData(perfData!, null, false)
-    .filter(item => item.stepId === props.stepId && !excludedCategories.includes(item.category));
+  // 按技术栈分类和子分类统计指令数
+  // Map<技术栈分类, Map<子分类, 指令数>>
+  const categoryMap = new Map<string, Map<string, number>>();
+  // 统计所有主应用数据的总负载（用于计算应用占比）
+  let totalAppInstructions = 0;
+  // 统计所有技术栈数据的总负载（用于计算相对占比）
+  let totalTechStackInstructions = 0;
 
-  // 获取小分类数据并排除
-  const subCategoryData = calculateComponentNameData(perfData!, null, false)
-    .filter(item => item.stepId === props.stepId && !excludedCategories.includes(item.category));
+  // 遍历所有详细数据，只统计指令数
+  for (const step of perfData.steps) {
+    for (const item of step.data) {
+      // 只统计当前步骤的数据
+      if (item.stepIdx !== props.stepId) {
+        continue;
+      }
 
-  // 计算总指令数（仅基于未排除的数据）
-  const totalInstructions = categoryData.reduce((sum, item) => sum + item.instructions, 0);
+      // 只保留主应用的数据（如果数据中有 isMainApp 字段）
+      // 注意：前端数据可能没有 isMainApp 字段，这里先不过滤
+      // 如果需要过滤，需要确保数据中包含 isMainApp 字段
+      // if ((item as any).isMainApp !== true) {
+      //   continue;
+      // }
 
-  // 生成所有分类数据
-  const techStackItems = categoryData
-    .map(item => {
-      const percentage = totalInstructions > 0 ? ((item.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+      const category = item.componentCategory;
+      const categoryName = item.categoryName || ComponentCategory[category] || 'UNKNOWN';
+      const subCategoryName = item.subCategoryName || 'Unknown';
+      
+      // 统计所有主应用数据的总负载（包括被排除的分类）
+      // 这个统计应该在判断是否排除之前进行，以包含所有主应用数据
+      totalAppInstructions += item.symbolEvents;
+      
+      // 判断是否应该归类到ArkUI
+      const isArkUI = shouldClassifyAsArkUI(category, categoryName, subCategoryName);
+      
+      // 确定最终的技术栈分类名称和子分类名称
+      let finalCategoryName: string;
+      let finalSubCategoryName: string;
+      
+      if (isArkUI) {
+        finalCategoryName = 'ArkUI';
+        // 对于ArkUI，子分类保持原样（APP_ABC, APP_LIB, Ability等）
+        finalSubCategoryName = subCategoryName;
+      } else {
+        // 排除指定的分类
+        if (excludedCategories.includes(categoryName)) {
+          continue;
+        }
+        finalCategoryName = categoryName;
+        finalSubCategoryName = subCategoryName;
+      }
 
-      // 获取该大分类下的所有小分类
-      const subCategories = subCategoryData
-        .filter(sub => sub.category === item.category)
-        .map(sub => {
-          const subPercentage = totalInstructions > 0 ? ((sub.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+      // 初始化技术栈分类
+      if (!categoryMap.has(finalCategoryName)) {
+        categoryMap.set(finalCategoryName, new Map());
+      }
+      
+      // 统计技术栈分类和子分类
+      const subCategoryMap = categoryMap.get(finalCategoryName)!;
+      const current = subCategoryMap.get(finalSubCategoryName) || 0;
+      subCategoryMap.set(finalSubCategoryName, current + item.symbolEvents);
+      totalTechStackInstructions += item.symbolEvents;
+    }
+  }
+
+  // 如果没有技术栈数据，返回空数组
+  if (categoryMap.size === 0) {
+    return [];
+  }
+
+  // 生成技术栈数据
+  const techStackItems = Array.from(categoryMap.entries())
+    .map(([categoryName, subCategoryMap]) => {
+      // 计算技术栈分类的总指令数
+      const categoryInstructions = Array.from(subCategoryMap.values())
+        .reduce((sum, instructions) => sum + instructions, 0);
+      
+      // 相对占比：技术栈分类在所有技术栈中的占比
+      const relativePercentage = totalTechStackInstructions > 0
+        ? ((categoryInstructions / totalTechStackInstructions) * 100).toFixed(1)
+        : '0.0';
+      
+      // 应用占比：技术栈分类在所有主应用数据中的占比（包括被排除的分类）
+      const appPercentage = totalAppInstructions > 0
+        ? ((categoryInstructions / totalAppInstructions) * 100).toFixed(1)
+        : '0.0';
+
+      // 生成子分类数据
+      const subCategories = Array.from(subCategoryMap.entries())
+        .map(([subCategoryName, instructions]) => {
+          // 子分类的相对占比（相对于所有技术栈数据）
+          const subRelativePercentage = totalTechStackInstructions > 0
+            ? ((instructions / totalTechStackInstructions) * 100).toFixed(1)
+            : '0.0';
+          
+          // 子分类的应用占比（相对于所有主应用数据）
+          const subAppPercentage = totalAppInstructions > 0
+            ? ((instructions / totalAppInstructions) * 100).toFixed(1)
+            : '0.0';
+
           return {
-            name: sub.subCategoryName,
-            instructions: sub.instructions,
-            percentage: subPercentage
+            name: subCategoryName,
+            instructions: instructions,
+            percentage: subRelativePercentage, // 使用相对占比
+            relativePercentage: subRelativePercentage,
+            appPercentage: subAppPercentage
           };
         })
         .sort((a, b) => b.instructions - a.instructions);
 
-      const isExpanded = expandedCategories.value === null ? true : expandedCategories.value.has(item.category);
+      const isExpanded = expandedCategories.value === null ? true : expandedCategories.value.has(categoryName);
 
       return {
-        name: item.category,
-        instructions: item.instructions,
-        percentage: percentage,
+        name: categoryName,
+        instructions: categoryInstructions,
+        relativePercentage: relativePercentage,
+        appPercentage: appPercentage,
+        percentage: relativePercentage, // 保持兼容性，使用相对占比
         subCategories: subCategories,
         expanded: isExpanded
       };

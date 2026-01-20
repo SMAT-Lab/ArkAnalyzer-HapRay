@@ -160,16 +160,17 @@ class ToolPage(QWidget):
 
     execution_finished = Signal(str, str)  # tool_name, result_path
 
-    def __init__(self, tool: BaseTool, action_name: str = None, menu_category: str = None):
+    def __init__(self, tool: BaseTool, action: str, action_name: str = None, menu_category: str = None):
         super().__init__()
         self.tool = tool
         self.action_name = action_name
         self.menu_category = menu_category
         self.param_widgets: dict[str, Any] = {}
         self.execution_thread: ExecutionThread = None
-        self.current_action: str = None  # 当前选中的action
+        self.current_action: str = action  # 当前选中的action
         self.params_group: QGroupBox = None  # 参数组控件引用
         self.dynamic_loaders: dict[str, DynamicChoicesLoader] = {}  # param_name -> loader
+        self.desc_label: QLabel = None  # 描述标签引用
         self.init_ui()
 
     def init_ui(self):
@@ -177,17 +178,11 @@ class ToolPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # 工具描述
-        desc_label = QLabel(self.tool.get_description())
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
-
-        # 初始化current_action（从外部设置，如main_window中的show_tool_config）
-        actions = self.tool.get_all_actions() if hasattr(self.tool, 'get_all_actions') else []
-        if actions:
-            self.current_action = actions[0]  # 默认使用第一个action
-        else:
-            self.current_action = None
+        # 工具描述 - 显示当前 action 的描述，如果没有 action 则显示插件描述
+        description = self._get_current_description()
+        self.desc_label = QLabel(description)
+        self.desc_label.setWordWrap(True)
+        layout.addWidget(self.desc_label)
 
         # 参数表单
         self.params_group = QGroupBox('⚙️ 参数配置')
@@ -269,10 +264,21 @@ class ToolPage(QWidget):
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
+    def _get_current_description(self) -> str:
+        """获取当前 action 的描述，如果没有 action 则返回插件描述"""
+        if self.current_action and hasattr(self.tool, 'get_action_info'):
+            action_info = self.tool.get_action_info(self.current_action)
+            if action_info and action_info.get('description'):
+                return action_info.get('description')
+        return self.tool.get_description()
+
     def on_action_changed(self, index: int):
         """Action选择改变时的回调"""
         if hasattr(self, 'action_selector'):
             self.current_action = self.action_selector.currentData()
+            # 更新描述为当前 action 的描述
+            if self.desc_label:
+                self.desc_label.setText(self._get_current_description())
             self.rebuild_param_form()
 
     def rebuild_param_form(self):
@@ -878,6 +884,9 @@ class ToolPages(QWidget):
             # 检查插件是否启用（优先使用插件ID，然后使用工具名称）
             enabled = self.config.is_plugin_enabled(plugin_id) or self.config.is_tool_enabled(tool.get_name())
             if enabled:
-                tool_page = ToolPage(tool)
+                # 获取第一个可用的 action，如果没有则使用空字符串
+                actions = tool.get_all_actions() if hasattr(tool, 'get_all_actions') else []
+                action = actions[0] if actions else ''
+                tool_page = ToolPage(tool, action=action)
                 tool_page.execution_finished.connect(self.execution_finished.emit)
                 self.tool_tabs.addTab(tool_page, tool.get_name())

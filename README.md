@@ -33,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides seven main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, and `hilog` for hilog analysis.
+The tool provides eight main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, `hilog` for hilog analysis, and `gui-agent` for AI-powered phone automation.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -226,6 +226,137 @@ Example:
 ```bash
 # Specify output file
 python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
+```
+
+#### GUI Agent Automation (`gui-agent`)
+```bash
+python -m scripts.main gui-agent [options]
+```
+Options:
+- `--apps <package1> [package2] ...`: Application package names (required, supports multiple packages)
+- `--scenes <scene1> [scene2] ...`: Multiple scenes to execute (optional, natural language descriptions). If not specified, scenes will be automatically loaded from config.yaml based on app category
+- `--glm-base-url <url>`: LLM API base URL (default: http://localhost:8000/v1, env: GLM_BASE_URL)
+- `--glm-model <name>`: Model name (default: autoglm-phone-9b, env: GLM_MODEL)
+- `--glm-api-key <key>`: API key for model authentication (env: GLM_API_KEY)
+- `--max-steps <N>`: Maximum steps per task (default: 20)
+- `--device-id <id>`: Device ID for multi-device setups
+- `-o/--output <path>`: Base path to save step data (default: current directory, creates timestamped reports subdirectory)
+
+Features:
+- **AI-powered automation**: Uses LLM to understand and execute natural language scenes
+- **Multi-app and multi-scene execution**: Support for testing multiple applications, each with multiple scenes
+- **Automatic scene categorization**: Automatically categorizes apps (ecommerce, finance, travel, video, etc.) and loads predefined scenes from config.yaml
+- **Step data collection**: Automatically collects UI data after each step (screenshots, element trees, perf/trace, hilog)
+- **Real-time analysis**: Parallel analysis process for performance analysis and report generation
+- **Automatic report organization**: Data is saved in `output/reports/TIMESTAMP/<app_package>/scene<ID>/` structure
+
+Environment Variables:
+- `GLM_BASE_URL`: Model API base URL (default: http://localhost:8000/v1)
+- `GLM_API_KEY`: API key for model authentication
+- `GLM_MODEL`: Model name (default: autoglm-phone-9b)
+
+**Using Third-Party Model Services**:
+
+If you don't want to deploy the model yourself, you can use the following third-party services that have our model deployed:
+
+**1. 智谱 BigModel (ZhipuAI BigModel)**
+
+- Documentation: https://docs.bigmodel.cn/cn/api/introduction
+- `--glm-base-url`: `https://open.bigmodel.cn/api/paas/v4`
+- `--glm-model`: `autoglm-phone`
+- `--glm-api-key`: Apply for your API Key on the 智谱 platform
+
+```bash
+python -m scripts.main gui-agent --app com.tencent.mm \
+  --glm-base-url "https://open.bigmodel.cn/api/paas/v4" \
+  --glm-model "autoglm-phone" \
+  --glm-api-key "your-zhipu-api-key" \
+  --output ./
+```
+
+**2. ModelScope (魔搭社区)**
+
+- Documentation: https://modelscope.cn/models/ZhipuAI/AutoGLM-Phone-9B
+- `--glm-base-url`: `https://api-inference.modelscope.cn/v1`
+- `--glm-model`: `ZhipuAI/AutoGLM-Phone-9B`
+- `--glm-api-key`: Apply for your API Key on the ModelScope platform
+
+```bash
+python -m scripts.main gui-agent --app com.tencent.mm \
+  --glm-base-url "https://api-inference.modelscope.cn/v1" \
+  --glm-model "ZhipuAI/AutoGLM-Phone-9B" \
+  --glm-api-key "your-modelscope-api-key" \
+  --output ./
+```
+
+**Basic Usage Examples**:
+```bash
+# Test single app with auto-loaded scenes (from config.yaml based on app category)
+python -m scripts.main gui-agent --app com.example.shopping --output ./
+
+# Test multiple apps
+python -m scripts.main gui-agent --app com.example.app1 com.example.app2 --output ./
+
+# Test with custom scenes
+python -m scripts.main gui-agent --app com.example.app \
+  --scenes "浏览首页，切换至少 3 个 Tab" "使用搜索功能搜索商品" --output ./
+
+# With custom model configuration
+python -m scripts.main gui-agent --app com.example.app \
+  --glm-base-url "http://your-server:8000/v1" \
+  --glm-model "your-model" \
+  --glm-api-key "your-api-key" \
+  --output ./
+
+# Using environment variables
+export GLM_BASE_URL="http://localhost:8000/v1"
+export GLM_API_KEY="your-api-key"
+export GLM_MODEL="autoglm-phone-9b"
+python -m scripts.main gui-agent --app com.example.app --output ./
+
+# Execute on specific device
+python -m scripts.main gui-agent --app com.example.app --device-id HX1234567890 --output ./
+
+# Limit execution steps
+python -m scripts.main gui-agent --app com.example.app --max-steps 10 --output ./
+```
+
+**Scene Configuration**:
+
+If you don't specify `--scenes`, the tool automatically categorizes apps based on package names and loads predefined scenes from `config.yaml`. Supported categories include:
+- `ecommerce`: E-commerce apps (taobao, tmall, jd, etc.)
+- `finance`: Finance apps (alipay, bank apps, etc.)
+- `travel`: Travel apps (amap, ctrip, etc.)
+- `video`: Video apps (douyin, kuaishou, bilibili, etc.)
+- `audio_reading`: Audio/reading apps (qqmusic, ximalaya, etc.)
+- `social`: Social apps (weibo, wechat, xiaohongshu, etc.)
+- `productivity`: Productivity tools (dingtalk, wps, etc.)
+- `news`: News apps
+- `photo_video_edit`: Photo/video editing apps
+- `education`: Education apps
+- `default`: Default scenes for other apps
+
+Scene configuration location: `perf_testing/hapray/core/config/config.yaml`
+Configuration node: `gui-agent.scenes.<category>`
+
+**Output Structure**:
+```
+output/
+└── reports/
+    └── YYYYMMDDHHMMSS/          # Timestamp directory
+        ├── <app_package_1>/
+        │   ├── scene1/
+        │   │   ├── steps.json          # Step information
+        │   │   ├── testInfo.json       # Test metadata
+        │   │   ├── hiperf/             # Performance data
+        │   │   ├── htrace/             # Trace data
+        │   │   └── report/              # Analysis reports
+        │   │       ├── hapray_report.html
+        │   │       ├── hapray_report.json
+        │   │       └── hapray_report.db
+        │   └── scene2/
+        └── <app_package_2>/
+            └── scene1/
 ```
 
 #### Hilog Analysis (`hilog`)

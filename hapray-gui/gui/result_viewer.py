@@ -126,7 +126,6 @@ class ResultViewer(QWidget):
             }
             QTextEdit:focus {
                 border-color: #667eea;
-                box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
             }
         """)
         right_layout.addWidget(self.result_detail)

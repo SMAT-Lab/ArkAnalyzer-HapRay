@@ -1,8 +1,7 @@
 import time
 
-from devicetest.utils.file_util import get_resource_path
 from hypium import BY
-from hypium.model.basic_data_type import UiParam
+from hypium.model.basic_data_type import MatchPattern, UiParam
 
 from hapray.core.perf_testcase import PerfTestCase
 
@@ -14,9 +13,9 @@ class MemLoad_jingdong_0050(PerfTestCase):
 
         self._app_package = 'com.jd.hm.mall'
         self._app_name = '京东'
-        # 原始采集设备的屏幕尺寸（Mate 60 Pro）
-        self.source_screen_width = 1260
-        self.source_screen_height = 2720
+        # 原始采集设备的屏幕尺寸（Nova 14）
+        self.source_screen_width = 1084
+        self.source_screen_height = 2412
 
     @property
     def app_package(self) -> str:
@@ -83,15 +82,17 @@ class MemLoad_jingdong_0050(PerfTestCase):
 
         def step5():
             # 5.将第一个商品加入购物车，返回京东购物首页：点击加号（等待2s），返回（等待2s）
-            if self.driver.find_image(
-                image_path_pc=get_resource_path('com_jd_hm_mall/add.png'), mode='template', similarity=0.6
-            ):
-                self.driver.touch_image(
-                    image_path_pc=get_resource_path('com_jd_hm_mall/add.png'), similarity=0.6, wait_time=2
-                )
-            else:
-                x, y = self.driver.get_component_pos(BY.text('￥'))
-                self.driver.touch((x + 563, y), wait_time=2)
+            # if self.driver.find_image(
+            #     image_path_pc=get_resource_path('com_jd_hm_mall/add.png'), mode='template', similarity=0.6
+            # ):
+            #     self.driver.touch_image(
+            #         image_path_pc=get_resource_path('com_jd_hm_mall/add.png'), similarity=0.6, wait_time=2
+            #     )
+            # else:
+            #     x, y = self.driver.get_component_pos(BY.text('￥'))
+            #     self.driver.touch((x + 563, y), wait_time=2)
+
+            self.driver.touch(self.convert_coordinate(1016, 957), wait_time=2)
 
             for _i in range(5):
                 if self.driver.find_component(BY.text('购物车')):
@@ -102,7 +103,7 @@ class MemLoad_jingdong_0050(PerfTestCase):
         def step6():
             # 6.进入结算界面：点击购物车（等待2s），点击去结算（等待2s）
             self.driver.touch(BY.text('购物车'), wait_time=2)
-            self.driver.touch(BY.text('去结算'), wait_time=2)
+            self.driver.touch(BY.text('去结算', MatchPattern.STARTS_WITH), wait_time=2)
 
         def step7():
             # 7.删除购物车：返回（等待1s），对商品左滑（等待1s），点击删除（等待1s）

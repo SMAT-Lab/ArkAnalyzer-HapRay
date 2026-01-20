@@ -15,7 +15,7 @@ limitations under the License.
 
 from xdevice import platform_logger
 
-from hapray.core.command_templates import (
+from hapray.core.collection.command_templates import (
     FTRACE_PLUGIN_CONFIG,
     HIPROFILER_CMD_TEMPLATE,
     MEMORY_PLUGIN_CONFIG,
