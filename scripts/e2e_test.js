@@ -498,8 +498,8 @@ function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
                 if (val1 !== val2) {
                     if (showDetails) {
                         console.log(`    ✗ 第${row + 1}行第${col + 1}列不同:`);
-                        console.log(`      期望: "${val1.substring(0, 100)}${val1.length > 100 ? '...' : ''}"`);
-                        console.log(`      实际: "${val2.substring(0, 100)}${val2.length > 100 ? '...' : ''}"`);
+                        console.log(`      期望: "${val2.substring(0, 100)}${val2.length > 100 ? '...' : ''}"`);
+                        console.log(`      实际: "${val1.substring(0, 100)}${val1.length > 100 ? '...' : ''}"`);
                     }
                     return false;
                 }
@@ -530,7 +530,7 @@ function getUpdateXlsxFile() {
     const reportDir = path.join(TEST_PRODUCTS_DIR, 'perf-testing', 'PerfLoad_meituan_0010', 'report');
     if (!fs.existsSync(reportDir)) return null;
     const files = fs.readdirSync(reportDir)
-        .filter(f => f.startsWith('ecol_load_perf') && f.endsWith('.xlsx'))
+        .filter(f => f.startsWith('ecol_load_perf') && f.endsWith('.xlsx') && !f.endsWith('_techstack.xlsx'))
         .map(f => ({ name: f, path: path.join(reportDir, f), time: fs.statSync(path.join(reportDir, f)).mtime }))
         .sort((a, b) => b.time - a.time);
     return files.length > 0 ? files[0].path : null;

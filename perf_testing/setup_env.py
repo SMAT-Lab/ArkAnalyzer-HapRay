@@ -36,6 +36,10 @@ HYPIUM_ZIP_PATH = CURRENT_DIR.parent / 'third-party' / f'hypium-{VERSION}.zip'
 HYPIUM_DIR = f'hypium-{VERSION}'
 REQUIREMENTS_FILE = 'requirements.txt'
 
+# Phone-agent Configuration
+PHONE_AGENT_REPO_URL = 'https://gitcode.com/zai-org/Open-AutoGLM.git'
+PHONE_AGENT_DIR = 'Open-AutoGLM'
+
 # Package Installation Order
 PACKAGE_INSTALL_ORDER = {'xdevice': 0, 'xdevice-devicetest': 1, 'xdevice-ohos': 2, 'hypium': 3}
 
@@ -94,7 +98,7 @@ def extract_package_prefix(file_name: str) -> str:
 
 def setup_virtual_environment() -> None:
     """Create Python virtual environment if it doesn't exist."""
-    print(f'\n[1/3] Creating virtual environment: {VENV_NAME}...')
+    print(f'\n[1/4] Creating virtual environment: {VENV_NAME}...')
     venv_path = Path(VENV_NAME)
 
     if venv_path.exists():
@@ -126,7 +130,7 @@ def extract_package(zip_path: Path, extractall_dir: Path) -> None:
     Args:
         zip_path: Path to the zip file
     """
-    print(f'\n[2/3] Extract package: {zip_path.name}...')
+    print(f'\n[2/4] Extract package: {zip_path.name}...')
 
     if not zip_path.exists():
         sys.exit(f'Error: package not found: {zip_path}')
@@ -143,10 +147,10 @@ def install_project_dependencies(pip_executable: Path) -> None:
     # Install requirements.txt
     requirements_path = Path(REQUIREMENTS_FILE)
     if not requirements_path.exists():
-        print(f'\n[3/3] Warning: Requirements file not found: {requirements_path}')
+        print(f'\n[3/4] Warning: Requirements file not found: {requirements_path}')
         return
 
-    print(f'\n[3/3] Installing dependencies from {REQUIREMENTS_FILE}...')
+    print(f'\n[3/4] Installing dependencies from {REQUIREMENTS_FILE}...')
     print(f'Using pip executable: {pip_executable}')
     print(f'Requirements file path: {requirements_path}')
 
@@ -179,6 +183,74 @@ def install_project_dependencies(pip_executable: Path) -> None:
             raise
 
 
+def install_phone_agent(pip_executable: Path) -> None:
+    """Install phone-agent library from git repository."""
+    print('\n[4/4] Installing phone-agent library...')
+
+    phone_agent_path = CURRENT_DIR / '..' / 'third-party' / PHONE_AGENT_DIR
+
+    # Clone repository if it doesn't exist
+    if not phone_agent_path.exists():
+        print(f'Cloning repository: {PHONE_AGENT_REPO_URL}...')
+        try:
+            execute_command(
+                ['git', 'clone', PHONE_AGENT_REPO_URL, str(phone_agent_path)],
+                working_dir=CURRENT_DIR,
+                error_message='Failed to clone phone-agent repository',
+            )
+            print(f'Successfully cloned repository to: {phone_agent_path}')
+
+            # Apply diff file after clone
+            diff_file_path = CURRENT_DIR.parent / 'third-party' / 'Open-AutoGLM-swipe.diff'
+            if diff_file_path.exists():
+                print(f'Applying diff file: {diff_file_path.name}...')
+                try:
+                    execute_command(
+                        ['git', 'apply', str(diff_file_path)],
+                        working_dir=phone_agent_path,
+                        error_message='Failed to apply diff file',
+                    )
+                    print(f'Successfully applied diff file: {diff_file_path.name}')
+                except Exception as e:
+                    print(f'Error applying diff file: {str(e)}')
+                    raise
+            else:
+                print(f'Warning: Diff file not found: {diff_file_path}')
+        except Exception as e:
+            print(f'Error cloning repository: {str(e)}')
+            raise
+    else:
+        print(f'Repository already exists at: {phone_agent_path}')
+        print('Skipping clone step')
+
+    # Install requirements.txt from the cloned repository
+    requirements_path = phone_agent_path / 'requirements.txt'
+    if requirements_path.exists():
+        print(f'Installing requirements from: {requirements_path}')
+        try:
+            execute_command(
+                [str(pip_executable), 'install', '-r', str(requirements_path)],
+                error_message='Failed to install phone-agent requirements',
+            )
+            print('Successfully installed phone-agent requirements')
+        except Exception as e:
+            print(f'Error installing phone-agent requirements: {str(e)}')
+            raise
+    else:
+        print(f'Warning: requirements.txt not found in {phone_agent_path}')
+
+    print('Installing phone-agent...')
+    try:
+        execute_command(
+            [str(pip_executable), 'install', str(phone_agent_path)],
+            error_message='Failed to install phone-agent',
+        )
+        print('Successfully installed phone-agent')
+    except Exception as e:
+        print(f'Error installing phone-agent: {str(e)}')
+        raise
+
+
 def display_activation_instructions() -> None:
     """Display virtual environment activation instructions."""
     print('\nSetup complete! Next steps:')
@@ -199,6 +271,7 @@ def main() -> None:
     extract_package(HYPIUM_ZIP_PATH, HYPIUM_DIR)
 
     install_project_dependencies(pip_executable)
+    install_phone_agent(pip_executable)
     display_activation_instructions()
 
 

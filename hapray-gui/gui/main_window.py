@@ -208,90 +208,88 @@ class MainWindow(QMainWindow):
 
         plugins = self.plugin_loader.get_all_plugins()
 
-        # 定义action图标映射
-        action_icons = {
-            'prepare': '🔧',  # 用例前置条件配置
-            'perf': '📊',  # 自动化性能测试
-            'manual': '🎯',  # 手动性能测试
-            'ui-tech-stack': '🔍',  # 页面技术栈动态识别
-            'update': '🔄',  # 更新测试报告
-            'compare': '⚖️',  # 对比报告
-            'opt': '⚡',  # SO编译优化
-            'static': '📱',  # 应用技术栈分析
-            'symbol-recovery': '🔧',  # 符号恢复
-            'ui-compare': '📌',  # UI组件树对比
+        # 一级菜单配置（保留固定的两个一级菜单）
+        top_level_menus = {
+            '负载测试': {'icon': '📊', 'order': 1},
+            '应用分析': {'icon': '🔍', 'order': 2},
         }
 
-        # 定义菜单结构映射：plugin_id -> {action_key -> display_name}
-        menu_structure = {
-            '负载测试': {
-                'plugin_actions': {
-                    'perf_testing': {
-                        'prepare': '用例前置条件配置',
-                        'perf': '自动化性能测试',
-                        'manual': '手动性能测试',
-                        'ui-tech-stack': '页面技术栈动态识别',
-                        'update': '更新测试报告',
-                        'compare': '对比报告',
-                        'ui-compare': 'UI组件树对比',
+        # 收集所有 actions 及其菜单信息
+        # 格式: {menu1: {action_key: {plugin_id, action_info, order, icon}}}
+        menu_actions: dict[str, list[dict]] = {}
+
+        for plugin_id, tool in plugins.items():
+            # 检查插件是否启用
+            enabled = self.config.is_plugin_enabled(plugin_id)
+            if not enabled:
+                continue
+
+            # 获取所有 actions
+            actions = tool.get_all_actions() if hasattr(tool, 'get_all_actions') else []
+
+            for action_key in actions:
+                action_info = tool.get_action_info(action_key) if hasattr(tool, 'get_action_info') else {}
+                if not action_info:
+                    continue
+
+                # 获取 menu 配置
+                menu_config = action_info.get('menu', {})
+                menu1 = menu_config.get('menu1')
+
+                # 如果 action 没有配置 menu1，跳过（不显示在菜单中）
+                if not menu1 or menu1 not in top_level_menus:
+                    continue
+
+                # 获取菜单信息
+                menu2 = menu_config.get('menu2')  # 二级菜单名称（可选）
+                order = menu_config.get('order', 999)  # 排序，默认999（最后）
+                icon = menu_config.get('icon', '⚙️')  # 图标，默认⚙️
+                display_name = menu2 if menu2 else action_info.get('name', action_key)
+
+                # 添加到对应的一级菜单
+                if menu1 not in menu_actions:
+                    menu_actions[menu1] = []
+
+                menu_actions[menu1].append(
+                    {
+                        'plugin_id': plugin_id,
+                        'action_key': action_key,
+                        'action_info': action_info,
+                        'display_name': display_name,
+                        'order': order,
+                        'icon': icon,
                     }
-                }
-            },
-            '应用分析': {
-                'plugin_actions': {
-                    'optimization_detector': {'opt': 'SO编译优化'},
-                    'static_analyzer': {'static': '应用技术栈分析'},
-                    'symbol_recovery': {'symbol-recovery': '符号恢复'},
-                }
-            },
-        }
+                )
 
         # 构建菜单结构
-        for menu_name, menu_config in menu_structure.items():
+        # 按 order 排序一级菜单
+        sorted_top_menus = sorted(top_level_menus.items(), key=lambda x: x[1]['order'])
+
+        for menu_name, menu_config in sorted_top_menus:
             menu_item = QTreeWidgetItem(self.function_tree)
+            menu_item.setText(0, f'{menu_config["icon"]} {menu_name}')
 
-            # 为一级菜单添加图标
-            if menu_name == '负载测试':
-                menu_item.setText(0, f'📊 {menu_name}')
-            elif menu_name == '应用分析':
-                menu_item.setText(0, f'🔍 {menu_name}')
-            elif menu_name == '符号恢复':
-                menu_item.setText(0, f'🔧 {menu_name}')
-            else:
-                menu_item.setText(0, menu_name)
+            # 获取该一级菜单下的所有 actions
+            actions_list = menu_actions.get(menu_name, [])
 
-            plugin_actions = menu_config.get('plugin_actions', {})
+            # 按 order 排序 actions
+            actions_list.sort(key=lambda x: x['order'])
 
-            for plugin_id, action_mapping in plugin_actions.items():
-                # 检查插件是否存在且启用
-                tool = plugins.get(plugin_id)
-                if not tool:
-                    continue
-
-                enabled = self.config.is_plugin_enabled(plugin_id)
-                if not enabled:
-                    continue
-
-                for action_key, display_name in action_mapping.items():
-                    # 检查action是否存在
-                    action_info = tool.get_action_info(action_key) if hasattr(tool, 'get_action_info') else {}
-                    if action_info:
-                        # 创建二级菜单项
-                        action_item = QTreeWidgetItem(menu_item)
-                        # 使用对应的图标，如果没有找到则使用默认图标
-                        icon = action_icons.get(action_key, '⚙️')
-                        action_item.setText(0, f'{icon} {display_name}')
-                        action_item.setData(
-                            0,
-                            Qt.UserRole,
-                            {
-                                'type': 'action',
-                                'plugin_id': plugin_id,
-                                'action': action_key,
-                                'action_name': display_name,
-                                'menu_category': menu_name,
-                            },
-                        )
+            # 创建二级菜单项
+            for action_data in actions_list:
+                action_item = QTreeWidgetItem(menu_item)
+                action_item.setText(0, f'{action_data["icon"]} {action_data["display_name"]}')
+                action_item.setData(
+                    0,
+                    Qt.UserRole,
+                    {
+                        'type': 'action',
+                        'plugin_id': action_data['plugin_id'],
+                        'action': action_data['action_key'],
+                        'action_name': action_data['display_name'],
+                        'menu_category': menu_name,
+                    },
+                )
 
             # 如果一级菜单下没有子项，隐藏该菜单
             if menu_item.childCount() == 0:
@@ -328,11 +326,13 @@ class MainWindow(QMainWindow):
         if not tool:
             return
 
+        # 如果没有指定 action，使用第一个可用的 action
+        if not action:
+            actions = tool.get_all_actions() if hasattr(tool, 'get_all_actions') else []
+            action = actions[0] if actions else ''
+
         # 创建工具页面
-        tool_page = ToolPage(tool, action_name=action_name, menu_category=menu_category)
-        if action and hasattr(tool_page, 'current_action') and hasattr(tool_page, 'rebuild_param_form'):
-            tool_page.current_action = action
-            tool_page.rebuild_param_form()
+        tool_page = ToolPage(tool, action=action, action_name=action_name, menu_category=menu_category)
 
         tool_page.execution_finished.connect(self.on_execution_finished)
 
@@ -424,7 +424,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             '关于 HapRay GUI',
-            'HapRay GUI v1.4.5\n\n'
+            'HapRay GUI v1.4.6\n\n'
             '工具集成平台\n'
             '整合了以下工具：\n'
             '- 动态测试 (perf_testing)\n'

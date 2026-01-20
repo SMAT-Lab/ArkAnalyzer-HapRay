@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import zlib
 from pathlib import Path
 from typing import Any
@@ -68,7 +69,7 @@ class ReportData:
         """
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         data = cls(scene_dir, result)
-        steps_path = os.path.join(scene_dir, 'hiperf', 'steps.json')
+        steps_path = os.path.join(scene_dir, 'steps.json')
         data._load_steps_data(steps_path)
         # 当perf.data不存在时，hiperf_info.json可能不存在，设为非必需
         data.load_perf_data(perf_data_path, required=False)
@@ -561,6 +562,18 @@ class ReportGenerator:
             use_refined_lib_symbol: Enable refined mode for memory analysis
             export_comparison: Export comparison Excel for memory analysis
         """
+
+        steps_path = os.path.join(scene_dir, 'steps.json')
+        # 兼容性设计：如果 scene_dir 下没有 steps.json，从 scene_dir/hiperf/ 目录下拷贝
+        if not os.path.exists(steps_path):
+            hiperf_steps_path = os.path.join(scene_dir, 'hiperf', 'steps.json')
+            if os.path.exists(hiperf_steps_path):
+                try:
+                    shutil.copy2(hiperf_steps_path, steps_path)
+                    logging.info(f'Copied steps.json from {hiperf_steps_path} to {steps_path}')
+                except Exception as e:
+                    logging.warning(f'Failed to copy steps.json from hipef directory: {e}')
+
         # Step 1: Select round (only for new reports)
         if not skip_round_selection and not self._select_round(scene_dirs, scene_dir):
             logging.error('Round selection failed, aborting report generation')

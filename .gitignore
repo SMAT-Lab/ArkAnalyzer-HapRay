@@ -20,6 +20,7 @@ temp_release_test/
 third-party/HapRayDep/
 third-party/trace_streamer_binary/
 third-party/xvm/
+third-party/Open-AutoGLM/
 perf_testing/hapray-toolbox/
 perf_testing/sa-cmd/
 perf_testing/.tox
@@ -46,4 +47,10 @@ hapray-sa
 # Cache directories
 .cache/
 .npm-cache/
+
+# HapTest generated test cases
+perf_testing/hapray/testcases/__haptest_generated__/
+
+# HapTest documentation (personal notes)
+perf_testing/hapray/haptest/GIT_GUIDE.md
 

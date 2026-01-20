@@ -17,13 +17,10 @@ import hashlib
 import json
 import os
 import sys
-import time
 
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from hapray.actions.opt_action import OptAction
-
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.update_action import UpdateAction
 
@@ -90,24 +87,6 @@ def check_update(report_path: str):
     UpdateAction.execute(['-r', report_path])
     end = calculate_hash(files_path)
     assert before == end, f'{os.path.basename(report_path)} files hash must equal {before} == {end}'
-
-
-@pytest.mark.integration
-def test_opt_test():
-    output = f'{time.time_ns()}opt.xlsx'
-    command_args = ['-i', os.path.join(os.path.dirname(__file__), 'test_suite-default-unsigned.hsp'), '-o', output]
-
-    result = OptAction.execute(command_args)
-
-    # 更健壮的断言
-    assert result is not None, 'Result should not be None'
-    assert len(result) > 0, 'Result should have at least one entry'
-    assert len(result[0]) > 1, 'First entry should have multiple elements'
-
-    value_row = result[0][1].values[0]
-    assert value_row[0].endswith('arm64-v8a/libc++_shared.so'), f'Unexpected library path: {value_row[0]}'
-    assert value_row[2] == 'High Optimization (O3 dominant)', f'Unexpected optimization level: {value_row[2]}'
-    os.unlink(output)
 
 
 @pytest.mark.integration

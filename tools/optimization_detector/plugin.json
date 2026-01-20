@@ -17,6 +17,11 @@
     "opt": {
       "name": "优化检测",
       "description": "检测二进制文件的优化级别和LTO（链接时优化）",
+      "menu": {
+        "menu1": "应用分析",
+        "order": 1,
+        "icon": "⚡"
+      },
       "action_mapping": {
         "type": "remove"
       },

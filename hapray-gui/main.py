@@ -35,10 +35,8 @@ logger = get_logger(__name__)
 
 def main():
     """主函数"""
-    # 启用高DPI支持
+    # 启用高DPI支持（新版本 PySide6 默认启用，无需手动设置）
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
     app = QApplication(sys.argv)
     app.setApplicationName('HapRay GUI')
