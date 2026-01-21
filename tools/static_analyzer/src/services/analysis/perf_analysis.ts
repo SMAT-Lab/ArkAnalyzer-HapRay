@@ -168,9 +168,32 @@ export class PerfAnalysisService extends AnalysisServiceBase {
     async copyStandardFiles(sourceRound: string, inputPath: string): Promise<void> {
         const testInfoPath = path.join(sourceRound, 'testInfo.json');
         await copyFile(testInfoPath, path.join(inputPath, 'testInfo.json'));
-    
-        const stepsJsonPath = path.join(sourceRound, 'steps.json');
-        await copyFile(stepsJsonPath, path.join(inputPath, 'steps.json'));
+
+        // 统一规则：steps.json 只在 report 目录下使用
+        const outputReportDir = path.join(inputPath, 'report');
+        if (!fs.existsSync(outputReportDir)) {
+            fs.mkdirSync(outputReportDir, { recursive: true });
+        }
+
+        // 兼容读取：优先从 sourceRound/report/steps.json 读取，其次 sourceRound/steps.json
+        const candidateStepsPaths = [
+            path.join(sourceRound, 'report', 'steps.json'),
+            path.join(sourceRound, 'steps.json'),
+        ];
+        let sourceStepsPath: string | null = null;
+        for (const candidate of candidateStepsPaths) {
+            if (fs.existsSync(candidate)) {
+                sourceStepsPath = candidate;
+                break;
+            }
+        }
+
+        if (sourceStepsPath) {
+            const targetStepsPath = path.join(outputReportDir, 'steps.json');
+            await copyFile(sourceStepsPath, targetStepsPath);
+        } else {
+            logger.warn(`copyStandardFiles: steps.json not found in ${candidateStepsPaths.join(' or ')}`);
+        }
     }
     
     /**
