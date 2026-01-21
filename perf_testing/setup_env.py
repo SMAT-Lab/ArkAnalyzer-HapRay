@@ -199,6 +199,23 @@ def install_phone_agent(pip_executable: Path) -> None:
                 error_message='Failed to clone phone-agent repository',
             )
             print(f'Successfully cloned repository to: {phone_agent_path}')
+
+            # Apply diff file after clone
+            diff_file_path = CURRENT_DIR.parent / 'third-party' / 'Open-AutoGLM-swipe.diff'
+            if diff_file_path.exists():
+                print(f'Applying diff file: {diff_file_path.name}...')
+                try:
+                    execute_command(
+                        ['git', 'apply', str(diff_file_path)],
+                        working_dir=phone_agent_path,
+                        error_message='Failed to apply diff file',
+                    )
+                    print(f'Successfully applied diff file: {diff_file_path.name}')
+                except Exception as e:
+                    print(f'Error applying diff file: {str(e)}')
+                    raise
+            else:
+                print(f'Warning: Diff file not found: {diff_file_path}')
         except Exception as e:
             print(f'Error cloning repository: {str(e)}')
             raise
