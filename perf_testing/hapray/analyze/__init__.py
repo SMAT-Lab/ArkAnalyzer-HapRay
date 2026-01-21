@@ -197,8 +197,10 @@ def _process_steps_parallel(scene_dir: str, analyzers: list[BaseAnalyzer]):
         analyzers: List of analyzer instances
     """
     # Collect step directories from steps.json
+    # 统一规则：只在 scene_dir/report/steps.json 中查找步骤定义
     step_dirs = []
-    steps_json_path = os.path.join(scene_dir, 'steps.json')
+    report_dir = os.path.join(scene_dir, 'report')
+    steps_json_path = os.path.join(report_dir, 'steps.json')
     if os.path.exists(steps_json_path):
         try:
             with open(steps_json_path, encoding='utf-8') as f:
@@ -206,9 +208,9 @@ def _process_steps_parallel(scene_dir: str, analyzers: list[BaseAnalyzer]):
                 for step in steps_data:
                     if 'name' in step:
                         step_dirs.append(step['name'])
-            logging.info('Loaded %d steps from steps.json', len(step_dirs))
+            logging.info('Loaded %d steps from %s', len(step_dirs), steps_json_path)
         except (OSError, json.JSONDecodeError) as e:
-            logging.error('Failed to load steps.json: %s', e)
+            logging.error('Failed to load steps.json from %s: %s', steps_json_path, e)
             step_dirs = ['step1']
     else:
         logging.warning('steps.json not found, falling back to default step1')
