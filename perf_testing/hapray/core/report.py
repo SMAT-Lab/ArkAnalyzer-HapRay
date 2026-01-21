@@ -69,7 +69,10 @@ class ReportData:
         """
         perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
         data = cls(scene_dir, result)
-        steps_path = os.path.join(scene_dir, 'steps.json')
+
+        # 统一规则：只在 scene_dir/report/steps.json 中查找步骤信息
+        report_dir = os.path.join(scene_dir, 'report')
+        steps_path = os.path.join(report_dir, 'steps.json')
         data._load_steps_data(steps_path)
         # 当perf.data不存在时，hiperf_info.json可能不存在，设为非必需
         data.load_perf_data(perf_data_path, required=False)
@@ -563,16 +566,27 @@ class ReportGenerator:
             export_comparison: Export comparison Excel for memory analysis
         """
 
-        steps_path = os.path.join(scene_dir, 'steps.json')
-        # 兼容性设计：如果 scene_dir 下没有 steps.json，从 scene_dir/hiperf/ 目录下拷贝
+        # 统一规则：steps.json 只在 scene_dir/report 目录下使用
+        report_dir = os.path.join(scene_dir, 'report')
+        os.makedirs(report_dir, exist_ok=True)
+        steps_path = os.path.join(report_dir, 'steps.json')
+
+        # 兼容性设计（仅用于迁移老数据），如果 report/steps.json 不存在：
+        # 1. 优先从 scene_dir/steps.json 迁移
+        # 2. 再尝试从 scene_dir/hiperf/steps.json 迁移
         if not os.path.exists(steps_path):
-            hiperf_steps_path = os.path.join(scene_dir, 'hiperf', 'steps.json')
-            if os.path.exists(hiperf_steps_path):
-                try:
-                    shutil.copy2(hiperf_steps_path, steps_path)
-                    logging.info(f'Copied steps.json from {hiperf_steps_path} to {steps_path}')
-                except Exception as e:
-                    logging.warning(f'Failed to copy steps.json from hipef directory: {e}')
+            legacy_paths = [
+                os.path.join(scene_dir, 'steps.json'),
+                os.path.join(scene_dir, 'hiperf', 'steps.json'),
+            ]
+            for legacy in legacy_paths:
+                if os.path.exists(legacy):
+                    try:
+                        shutil.copy2(legacy, steps_path)
+                        logging.info('Migrated legacy steps.json from %s to %s', legacy, steps_path)
+                    except Exception as e:
+                        logging.warning('Failed to migrate legacy steps.json from %s to %s: %s', legacy, steps_path, e)
+                    break
 
         # Step 1: Select round (only for new reports)
         if not skip_round_selection and not self._select_round(scene_dirs, scene_dir):
