@@ -14,6 +14,8 @@
  */
 
 import { Command } from 'commander';
+import fs from 'fs';
+import path from 'path';
 import type { GlobalConfig } from '../../config/types';
 import { initConfig, updateKindConfig } from '../../config';
 import type { TimeRange } from '../../core/perf/perf_analyzer';
@@ -71,11 +73,11 @@ interface HapAnalyzerOptions {
     compatibility: boolean;
     ut: boolean;
     timeRanges?: Array<string>;
-    analysisMode?: 'all' | 'perf' | 'memory'; // 分析模式：all(默认)、perf(仅负载)、memory(仅内存)
+    packageName?: string;
 }
 
 export const PerfCli = new Command('perf')
-    .requiredOption('-i, --input <string>', 'scene test report path')
+    .requiredOption('-i, --input <string>', 'scene test report path or sqlite db file path (perf.db or trace.db)')
     .option('--choose', 'choose one from rounds', false)
     .option('--disable-dbtools', 'disable dbtools', false)
     .option('-s, --soDir <string>', '--So_dir soDir', '')
@@ -83,6 +85,7 @@ export const PerfCli = new Command('perf')
     .option('--compatibility', 'start compatibility mode', false)
     .option('--ut', 'ut mode', false)
     .option('--time-ranges <ranges...>', 'optional time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges')
+    .option('--package-name <string>', 'application package name (required for single db file analysis)')
     .action(async (options: HapAnalyzerOptions) => {
         let cliArgs: Partial<GlobalConfig> = { ...options };
         initConfig(cliArgs, (config) => {
@@ -106,7 +109,41 @@ export const PerfCli = new Command('perf')
 
         const perfAnalysisService = new PerfAnalysisService();
 
-        if (options.choose) {
+        // 检查 input 是否是 .db 文件
+        const isDbFile = options.input.toLowerCase().endsWith('.db');
+        
+        if (isDbFile) {
+            // 单步分析模式：直接使用 db 文件
+            if (!fs.existsSync(options.input)) {
+                logger.error(`DB file not found: ${options.input}`);
+                return;
+            }
+            
+            // 从 db 文件路径推断场景目录和步骤索引
+            const dbFilePath = path.resolve(options.input);
+            const dbDir = path.dirname(dbFilePath);
+            const dbFileName = path.basename(dbFilePath).toLowerCase();
+            
+            // 检查路径格式：hiperf/step<idx>/perf.db 或 htrace/step<idx>/trace.db
+            const stepMatch = dbDir.match(/step(\d+)$/);
+            if (!stepMatch) {
+                logger.error('Invalid db file path format. Expected: .../hiperf/step<idx>/perf.db or .../htrace/step<idx>/trace.db');
+                return;
+            }
+            
+            const stepIdx = parseInt(stepMatch[1], 10);
+            
+            // 场景目录通常是 db 目录的上两级（scene/hiperf/step<idx>/perf.db 或 scene/htrace/step<idx>/trace.db）
+            const sceneDir = path.dirname(path.dirname(dbDir));
+            
+            // 检查是否是 perf.db 还是 trace.db
+            const isPerfDb = dbFileName === 'perf.db';
+            
+            logger.info(`单步分析模式: DB文件=${dbFilePath}, 场景目录=${sceneDir}, 步骤索引=${stepIdx}, 类型=${isPerfDb ? 'perf' : 'trace'}`);
+            
+            // 使用场景目录和 db 文件进行单步分析
+            await perfAnalysisService.generatePerfReportFromDbFile(dbFilePath, sceneDir, stepIdx, options.packageName, timeRanges);
+        } else if (options.choose) {
             await perfAnalysisService.chooseRound(options.input);
         } else {
             await perfAnalysisService.generatePerfReport(options.input, timeRanges);
