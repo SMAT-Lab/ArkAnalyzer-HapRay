@@ -1,6 +1,6 @@
 {
   "name": "optimization-detector",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "二进制文件优化级别和LTO检测工具",
   "files": [
     "dist",
