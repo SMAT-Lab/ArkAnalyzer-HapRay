@@ -28,6 +28,7 @@ import type {
     PerfSum,
     PerfSymbolDetailData,
     ProcessClassifyCategory,
+    StepJsonData,
     SummaryInfo,
     TestReportInfo,
     TestSceneInfo,
@@ -216,6 +217,91 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         logger.info(`calcTotalInstruction ${dbfile} done`);
 
         return total;
+    }
+
+    /**
+     * 拆解单个 db 文件
+     * @param dbFilePath db 文件路径
+     * @param packageName 应用包名
+     * @param timeRange 可选的时间范围过滤，格式为 {startTime: number, endTime: number}
+     * @param outputJsonPath 可选的输出 JSON 文件路径，如果指定则保存结果到文件
+     * @returns 返回 StepJsonData 对象，包含分析结果
+     */
+    async analyzeSingleDbFile(
+        dbFilePath: string,
+        packageName: string,
+        timeRange?: TimeRange
+    ): Promise<StepJsonData> {
+        if (!fs.existsSync(dbFilePath)) {
+            throw new Error(`DB file not found: ${dbFilePath}`);
+        }
+
+        // 读取 db 文件并计算 hash
+        const fileBuffer = fs.readFileSync(dbFilePath);
+        
+        // 加载 db 文件
+        const SQL = await initSqlJs();
+        const db = new SQL.Database(fileBuffer);
+
+        try {
+            // 清空之前的统计数据（包括基类中的 map）
+            this.threadsMap.clear();
+            this.callchainsMap.clear();
+            this.callchainIds.clear();
+            this.testSteps = [];
+            this.samples = [];
+            this.stepSumMap.clear();
+            this.details = [];
+            this.filesClassifyMap.clear();
+            this.symbolsMap.clear();
+            this.symbolsClassifyMap.clear();
+
+            // 获取场景名称（从路径推断或使用默认值）
+            const sceneName = path.basename(path.dirname(path.dirname(dbFilePath))) || 'unknown';
+
+            // 执行统计加载（假设 groupId 为 1）
+            const groupId = 1;
+            const sampleCount = this.loadStatistics(db, packageName, sceneName, groupId, timeRange);
+
+            if (sampleCount === 0) {
+                logger.warn(`No samples found in db file: ${dbFilePath}`);
+            }
+
+            let stepJsonData: StepJsonData = {
+                step_name: '',
+                step_id: 0,
+                count: this.stepSumMap.get(1)?.count ?? 0,
+                round: 0,
+                perf_data_path: dbFilePath.replace(/\.db$/, '.data'),
+                data: this.details,
+                har: new Map<string, { name: string; count: number }>(),
+            };
+    
+            // 遍历详细数据，收集 HAR 信息和详细数据
+            for (const data of this.details) {
+                // 只有进程名包含包名时才是应用负载
+                if (!data.processName.includes(packageName)) {
+                    continue;
+                }
+    
+                // 统计 HAR 组件数据
+                if (
+                    (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_ABC') ||
+                    (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_LIB')
+                ) {
+                    if (stepJsonData.har!.has(data.componentCategory.thirdCategoryName!)) {
+                        let value = stepJsonData.har!.get(data.componentCategory.thirdCategoryName!)!;
+                        value.count += data.symbolEvents;
+                    } else {
+                        stepJsonData.har!.set(data.componentCategory.thirdCategoryName!, { name: data.componentCategory.thirdCategoryName!, count: data.symbolEvents });
+                    }
+                }
+            }
+
+            return stepJsonData;
+        } finally {
+            db.close();
+        }
     }
 
     /**

@@ -77,6 +77,66 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         await this.generatePerfJson(input, testReportInfo, steps, timeRanges);
     }
 
+    /**
+     * 从单个 db 文件生成性能报告（单步分析模式）
+     * @param dbFilePath db 文件路径（perf.db 或 trace.db）
+     * @param sceneDir 场景目录
+     * @param stepIdx 步骤索引
+     * @param packageName 应用包名
+     * @param timeRanges 可选的时间范围过滤
+     */
+    async generatePerfReportFromDbFile(
+        dbFilePath: string,
+        sceneDir: string,
+        stepIdx: number,
+        packageName?: string,
+        timeRanges?: Array<TimeRange>
+    ): Promise<void> {
+        // 生成输出目录
+        const outputDir = path.join(sceneDir, 'report');
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+        
+        // 生成 JSON 文件路径
+        const hiperfDir = path.join(sceneDir, 'hiperf');
+        if (!fs.existsSync(hiperfDir)) {
+            fs.mkdirSync(hiperfDir, { recursive: true });
+        }
+        const outputJsonPath = path.join(hiperfDir, `step${stepIdx}`, 'hiperf_info.json');
+        
+        // 执行分析（使用 analyzeSingleDbFile 生成 JSON 文件）
+        const perfAnalyzer = new PerfAnalyzer('');
+        const timeRange = timeRanges && timeRanges.length > 0 ? timeRanges[0] : undefined;
+        if (timeRange) {
+            logger.info(`Using time range filter: ${timeRange.startTime} - ${timeRange.endTime} nanoseconds`);
+        }
+        
+        const finalPackageName: string = packageName ?? '';
+        
+        // 调用 analyzeSingleDbFile 进行分析并生成 JSON 文件
+        let stepJsonData = await perfAnalyzer.analyzeSingleDbFile(dbFilePath, finalPackageName, timeRange);
+        stepJsonData.step_id = stepIdx;
+        
+        // 确保输出目录存在
+        const outputJsonDir = path.dirname(outputJsonPath);
+        if (!fs.existsSync(outputJsonDir)) {
+            fs.mkdirSync(outputJsonDir, { recursive: true });
+        }
+        
+        // 将 har Map 转换为数组以便 JSON 序列化
+        const jsonData = {
+            ...stepJsonData,
+            har: stepJsonData.har ? Array.from(stepJsonData.har.values()) : [],
+        };
+        
+        // 保存 JSON 文件
+        const jsonString = JSON.stringify(jsonData, null, 2);
+        fs.writeFileSync(outputJsonPath, jsonString, 'utf-8');
+        
+        logger.info(`单步分析完成: 步骤 ${stepIdx}, 输出目录: ${outputDir}, JSON文件: ${outputJsonPath}`);
+    }
+    
     // ===================== 数据加载函数 =====================
     // 注：loadSteps, loadTestReportInfo, loadStandardTestReportInfo 已在基类中实现
     

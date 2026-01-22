@@ -39,6 +39,7 @@ export interface StepJsonData {
     round: number;
     perf_data_path: string;
     data: Array<PerfSymbolDetailData>;
+    har?: Map<string, { name: string; count: number }>;
 }
 
 export interface TestStepGroup {
