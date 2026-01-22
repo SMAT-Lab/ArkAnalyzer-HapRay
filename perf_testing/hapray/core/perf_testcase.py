@@ -272,10 +272,7 @@ class PerfTestCase(TestCase, UIEventWrapper, ABC):
 
     def _save_steps_info(self, steps_info: list):
         """Save step metadata to JSON file"""
-        # 统一规则：所有步骤信息只在 report 目录下使用 steps.json
-        report_dir = os.path.join(self.report_path, 'report')
-        os.makedirs(report_dir, exist_ok=True)
-        steps_path = os.path.join(report_dir, 'steps.json')
+        steps_path = os.path.join(self.report_path, 'steps.json')
         with open(steps_path, 'w', encoding='utf-8') as file:
             json.dump(steps_info, file, ensure_ascii=False, indent=4)
 

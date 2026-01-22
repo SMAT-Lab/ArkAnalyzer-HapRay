@@ -76,8 +76,7 @@ export abstract class AnalysisServiceBase {
      * 加载步骤信息
      */
     async loadSteps(basePath: string): Promise<Steps> {
-        // 统一规则：只在 basePath/report/steps.json 中查找步骤定义
-        const stepsJsonPath = path.join(basePath, 'report', 'steps.json');
+        const stepsJsonPath = path.join(basePath, 'steps.json');
         return await this.loadJsonFile<Steps>(stepsJsonPath);
     }
 
