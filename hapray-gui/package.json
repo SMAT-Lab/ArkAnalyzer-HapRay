@@ -1,6 +1,6 @@
 {
   "name": "hapray-gui",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "HapRay GUI - 工具集成平台",
   "files": [
     "dist"
