@@ -131,6 +131,9 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
                 json.dump(steps_json, f)
             logging.info('Auto-generated steps.json create success: %s', target_steps_file)
 
+    # 检查并移动log文件夹：如果当前输出目录的父目录的父目录存在log文件夹，将其移动到输出目录下
+    _move_log_folder_if_exists(report_dir)
+
 
 def parse_processes(target_db_file: str, file_path: str, scene_dir: str, step_name: str, package_name: str, pids: list):
     """
@@ -388,3 +391,41 @@ def _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids):
     if not pids_json.get('pids'):
         logging.error('❌ 警告：pids.json 中的 pids 为空！')
         logging.error('   这将导致内存分析无法获取数据！')
+
+
+def _move_log_folder_if_exists(report_dir: str):
+    """
+    检查并移动log文件夹：如果当前输出目录的父目录的父目录存在log文件夹，将其移动到输出目录下
+
+    Args:
+        report_dir: 输出目录路径
+    """
+    try:
+        # 获取输出目录的父目录的父目录
+        grandparent_dir = os.path.dirname(os.path.dirname(report_dir))
+
+        # 检查祖父目录是否存在
+        if not os.path.exists(grandparent_dir):
+            logging.debug('祖父目录不存在，跳过log文件夹检查: %s', grandparent_dir)
+            return
+
+        # 检查祖父目录下是否存在log文件夹
+        log_source_path = os.path.join(grandparent_dir, 'log')
+        if not os.path.exists(log_source_path):
+            logging.debug('源log文件夹不存在，跳过移动: %s', log_source_path)
+            return
+
+        # 目标路径
+        log_target_path = os.path.join(report_dir, 'log')
+
+        # 如果目标路径已存在，先移除
+        if os.path.exists(log_target_path):
+            logging.warning('目标log文件夹已存在，将被覆盖: %s', log_target_path)
+            shutil.rmtree(log_target_path)
+
+        # 移动log文件夹
+        shutil.move(log_source_path, log_target_path)
+        logging.info('✓ 已将log文件夹从 %s 移动到 %s', log_source_path, log_target_path)
+
+    except Exception as e:
+        logging.error('移动log文件夹失败: %s', str(e))
