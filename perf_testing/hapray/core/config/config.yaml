@@ -33,32 +33,40 @@ hilog:
   #     - conditions: "$1 * $2 > $3 * $4"  # 表达式格式：分组1和2的乘积大于分组3和4的乘积
   #     - conditions: "$1*$2>0,$3*$4>512*512"  # 多个表达式：分组1*2>0 且 分组3*4>512*512
   patterns:
-    # 示例规则1：使用conditions数组格式（简单条件）
-    - name: "图片解码没有使用DMA(memType!=4)"  # 规则名称
+    - name: "no_dmp"  # 规则名称
       regex: "CreatePixelMap success,.*memType\\s*:\\s*(\\d+),\\s*cost\\s+\\d+\\s+us"  # 正则表达式，带分组
       # regex: "CreatePixelMapExtended success,.*memoryType\\s*:\\s*(\\d+),\\s*cost\\s+\\d+\\s+us"  # 正则表达式，带分组
       groups: [1]  # 要提取的分组索引（从1开始，0表示整个匹配）
       conditions: "$1!=4"  # 条件过滤，与groups一一对应，满足条件才计数
-    
     # 示例规则2：使用conditions表达式格式（复杂计算）
     # - name: "图片解码宽高乘积比较"
     #   regex: "CreatePixelMap.*width\\s*:\\s*(\\d+).*height\\s*:\\s*(\\d+).*width2\\s*:\\s*(\\d+).*height2\\s*:\\s*(\\d+)"
     #   groups: [1, 2, 3, 4]  # 提取4个分组：width1, height1, width2, height2
     #   conditions: "$1 * $2 > $3 * $4"  # 第一个宽高乘积大于第二个宽高乘积
-    
+
     # 示例规则3：使用多个表达式（AND逻辑）
     # - name: "多条件匹配示例"
     #   regex: "value1\\s*:\\s*(\\d+).*value2\\s*:\\s*(\\d+).*value3\\s*:\\s*(\\d+).*value4\\s*:\\s*(\\d+)"
     #   groups: [1, 2, 3, 4]  # 提取4个分组
     #   conditions: "$1*$2>0,$3*$4>512"  # 分组1*2>0 且 分组3*4>512（使用逗号分隔）
     #   # 或者使用 && 分隔：conditions: "$1*$2>0 && $3*$4>512"
-    
+
     # 规则：CreatePixelMapExtended 图片解码尺寸检查
-    - name: "CreatePixelMapExtended尺寸检查"
+    - name: "big_image_with_target_size"
       regex: "CreatePixelMap success.*dSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\).*srcSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\)"
       # regex: "CreatePixelMapExtended success.*desiredSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\).*imageSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\)"
       groups: [1, 2, 3, 4]  # 提取4个分组：desiredSize的宽高，imageSize的宽高
       conditions: "$1*$2>0,$3*$4>512*512"  # desiredSize面积>0 且 imageSize面积>512*512
+    - name: "big_image_without_target_size"
+      regex: "CreatePixelMap success.*dSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\).*srcSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\)"
+      # regex: "CreatePixelMapExtended success.*desiredSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\).*imageSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\)"
+      groups: [1, 2, 3, 4]  # 提取4个分组：desiredSize的宽高，imageSize的宽高
+      conditions: "$1*$2==0,$3*$4>512*512"  # desiredSize面积>0 且 imageSize面积>512*512
+    - name: "image_same_size"
+      regex: "CreatePixelMap success.*dSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\).*srcSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\)"
+      # regex: "CreatePixelMapExtended success.*desiredSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\).*imageSize\\s*:\\s*\\((\\d+),\\s*(\\d+)\\)"
+      groups: [1, 2, 3, 4]  # 提取4个分组：desiredSize的宽高，imageSize的宽高
+      conditions: "$1*$2==$3*$4"  # desiredSize面积>0 且 imageSize面积>512*512
 
 # 帧分析配置
 frame_analysis:
