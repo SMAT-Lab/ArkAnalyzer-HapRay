@@ -345,6 +345,12 @@ class HilogAction:
                 self._save_detail_json(detail_data, detail_json_path)
                 logging.info(f'Detail data saved to: {detail_json_path}')
 
+            # Save summary JSON file for summary.json generation
+            output_path = Path(output_file)
+            summary_json_path = output_path.parent / 'hilog_analysis.json'
+            self._save_summary_json(results, summary_json_path)
+            logging.info(f'Summary JSON saved to: {summary_json_path}')
+
             logging.info(f'Hilog analysis completed. Results saved to: {output_file}')
             return output_file
 
@@ -592,3 +598,18 @@ class HilogAction:
                 json.dump(detail_data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logging.error(f'Error saving detail JSON file: {str(e)}')
+
+    def _save_summary_json(self, results: dict[str, list], output_path: Path):
+        """Save summary JSON file with pattern counts for summary.json generation
+
+        Args:
+            results: Dictionary mapping pattern names to lists of matches
+            output_path: Path to save the JSON file
+        """
+        try:
+            # Convert results to summary format: pattern_name -> count
+            summary_data = {pattern_name: len(matches) for pattern_name, matches in results.items()}
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(summary_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f'Error saving summary JSON file: {str(e)}')
