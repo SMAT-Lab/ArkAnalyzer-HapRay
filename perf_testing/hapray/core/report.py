@@ -23,11 +23,12 @@ import re
 import shutil
 import zlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 
 from hapray import VERSION
+from hapray.actions.hilog_action import HilogAction
 from hapray.analyze import analyze_data
 from hapray.analyze.symbol_statistic_analyzer import SymbolStatisticAnalyzer
 from hapray.core.common.excel_utils import ExcelReportSaver
@@ -594,6 +595,9 @@ class ReportGenerator:
         if self.symbol_statistic:
             self._process_symbol_statistics(scene_dir)
 
+        # Step 5: Generate summary.json
+        self._generate_summary_json(scene_dir)
+
         logging.info('Report successfully %s for %s', 'updated' if skip_round_selection else 'generated', scene_dir)
         return True
 
@@ -821,6 +825,323 @@ class ReportGenerator:
             f.write(html_content)
 
         logging.debug('Injected %d placeholders into %s', len(placeholders), output_path)
+
+    @staticmethod
+    def _load_json_safe(path: str, default):
+        """安全加载JSON文件，处理异常情况"""
+        if not os.path.exists(path):
+            logging.info('File not found: %s', path)
+            return default
+
+        try:
+            with open(path, encoding='utf-8') as f:
+                data = json.load(f)
+
+            # 验证数据类型
+            if isinstance(default, list) and not isinstance(data, list):
+                logging.warning('Invalid format in %s, expected list but got %s', path, type(data).__name__)
+                return default
+            if isinstance(default, dict) and not isinstance(data, dict):
+                logging.warning('Invalid format in %s, expected dict but got %s', path, type(data).__name__)
+                return default
+
+            return data
+        except json.JSONDecodeError as e:
+            logging.error('JSON decoding error in %s: %s', path, str(e))
+            return default
+        except Exception as e:
+            logging.error('Error loading %s: %s', path, str(e))
+            return default
+
+    def _generate_summary_json(self, scene_dir: str) -> None:
+        """Generate summary.json for each test step
+
+        Args:
+            scene_dir: Scene directory path
+        """
+        try:
+            report_dir = os.path.join(scene_dir, 'report')
+            # Ensure report directory exists
+            os.makedirs(report_dir, exist_ok=True)
+            report_html_path = os.path.join(report_dir, 'hapray_report.html')
+
+            # Load steps data from scene_dir root directory only
+            steps_path = os.path.join(scene_dir, 'steps.json')
+            steps_data = ReportGenerator._load_json_safe(steps_path, default=[])
+            if not steps_data:
+                logging.warning('No steps data found in scene_dir: %s, skipping summary.json generation', steps_path)
+                return
+
+            # Load empty frame data
+            empty_frame_path = os.path.join(report_dir, 'trace_emptyFrame.json')
+            empty_frame_data = ReportGenerator._load_json_safe(empty_frame_path, default={})
+
+            # Load perf data for tech_stack statistics
+            perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
+            perf_data = ReportGenerator._load_json_safe(perf_data_path, default=[])
+
+            # Run hilog analysis if log or hilog directory exists
+            # Prioritize 'log' directory as it's the current standard
+            hilog_dir = None
+            if os.path.exists(os.path.join(scene_dir, 'log')):
+                hilog_dir = os.path.join(scene_dir, 'log')
+            elif os.path.exists(os.path.join(scene_dir, 'hilog')):
+                hilog_dir = os.path.join(scene_dir, 'hilog')
+
+            hilog_data = {}
+            if hilog_dir:
+                try:
+                    hilog_data = self._run_hilog_analysis(hilog_dir, report_dir)
+                except Exception as e:
+                    logging.warning('Failed to run hilog analysis: %s', str(e))
+
+            # Get scene name from scene_dir
+            scene_name = os.path.basename(scene_dir)
+
+            # Generate summary for each step
+            summary_list = []
+            for step in steps_data:
+                step_idx = step.get('stepIdx')
+                step.get('name', f'step{step_idx}')
+                step_id = f'{scene_name}_step{step_idx}'
+
+                # Get empty_frame data for this step
+                step_empty_frame = self._get_empty_frame_for_step(empty_frame_data, step_idx)
+
+                # Get tech_stack data for this step
+                step_tech_stack = self._get_tech_stack_for_step(perf_data, step_idx)
+
+                # Get hilog data for this step
+                step_hilog = self._get_hilog_for_step(hilog_data, step_idx)
+
+                summary_item = {
+                    'step_id': step_id,
+                    'report_html_path': report_html_path,
+                    'empty_frame': step_empty_frame,
+                    'tech_stack': step_tech_stack,
+                    'log': step_hilog,
+                }
+                summary_list.append(summary_item)
+
+            # Save summary.json
+            summary_path = os.path.join(report_dir, 'summary.json')
+            # Ensure report directory exists before writing
+            os.makedirs(os.path.dirname(summary_path), exist_ok=True)
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                json.dump(summary_list, f, ensure_ascii=False, indent=4)
+
+            logging.info('Summary JSON generated at %s', summary_path)
+
+        except Exception as e:
+            logging.error('Failed to generate summary.json: %s', str(e))
+
+    @staticmethod
+    def _get_empty_frame_for_step(empty_frame_data: dict, step_idx: int) -> dict:
+        """Get empty_frame statistics for a specific step
+
+        Args:
+            empty_frame_data: Empty frame data dictionary
+            step_idx: Step index
+
+        Returns:
+            Dictionary with count and percentage
+        """
+        step_key = f'step{step_idx}'
+        step_data = empty_frame_data.get(step_key, {})
+
+        if step_data.get('status') == 'success':
+            summary = step_data.get('summary', {})
+            count = summary.get('total_empty_frames', 0)
+            percentage = summary.get('empty_frame_percentage', 0.0)
+            return {
+                'count': int(count),
+                'percentage': f'{percentage:.2f}%',
+            }
+        return {'count': 0, 'percentage': '0.00%'}
+
+    @staticmethod
+    def _get_tech_stack_for_step(perf_data: list, step_idx: int) -> dict:
+        """Get tech_stack statistics for a specific step
+
+        Args:
+            perf_data: Performance data list
+            step_idx: Step index
+
+        Returns:
+            Dictionary with tech stack statistics
+        """
+        tech_stack = {
+            'ArkUI': 0,
+            'Web': 0,
+            'RN': 0,
+            'Flutter': 0,
+            'KMP': 0,
+            'APP_Processes': 0,
+        }
+
+        if not perf_data:
+            return tech_stack
+
+        # Get first entry's steps data
+        first_entry = perf_data[0]
+        steps = first_entry.get('steps', [])
+
+        # Find the step data
+        step_data = None
+        for step in steps:
+            if step.get('step_id') == step_idx:
+                step_data = step
+                break
+
+        if not step_data:
+            return tech_stack
+
+        # Get data items for this step
+        data_items = step_data.get('data', [])
+
+        # Excluded component names (system components we don't want to classify)
+        excluded_components = ['[shmm]']  # Shared memory components
+
+        # Statistics
+        for item in data_items:
+            # Only count instruction events
+            if item.get('eventType') != 1:  # 1 = INSTRUCTION_EVENT
+                continue
+
+            # Only count main app data
+            # Check if this is main app data by processName or isMainApp flag
+            process_name = item.get('processName', '')
+            is_main_app = item.get('isMainApp', None)  # Use None as default to distinguish from False
+            app_id = first_entry.get('app_id', '')
+
+            # Count if: isMainApp is explicitly True, or isMainApp is None/missing and processName matches app_id
+            if not (is_main_app is True or (is_main_app is None and process_name == app_id)):
+                continue
+
+            component_name = item.get('componentName', '')
+            sub_category_name = item.get('subCategoryName', '')
+            symbol_events = item.get('symbolEvents', 0)
+
+            # Count total APP_Processes
+            tech_stack['APP_Processes'] += symbol_events
+
+            # Check if should classify as ArkUI
+            is_arkui = ReportGenerator._should_classify_as_arkui(
+                item.get('componentCategory', 0), component_name, sub_category_name
+            )
+
+            if is_arkui:
+                tech_stack['ArkUI'] += symbol_events
+            elif component_name not in excluded_components:
+                # For non-ArkUI components, try to map to tech stack if possible
+                tech_stack_name = ReportGenerator._map_category_to_tech_stack(component_name)
+                if tech_stack_name:
+                    tech_stack[tech_stack_name] += symbol_events
+                # Note: Most components will fall into APP_Processes total, specific tech stack mapping may need updates
+
+        return tech_stack
+
+    @staticmethod
+    def _should_classify_as_arkui(component_category: int, component_name: str, sub_category_name: str) -> bool:
+        """Check if should classify as ArkUI
+
+        Args:
+            component_category: Component category number
+            component_name: Component name (previously category_name)
+            sub_category_name: Sub category name
+
+        Returns:
+            True if should classify as ArkUI
+        """
+        # kind=3: ArkTS related components (Ability, ArkTS Runtime, ArkTS System LIB)
+        if component_category == 3 and component_name in ['Ability', 'ArkTS Runtime', 'ArkTS System LIB']:
+            return True
+
+        # Check component name for ArkUI classification
+        return bool('ArkTS' in component_name or 'ArkUI' in component_name)
+
+    @staticmethod
+    def _map_category_to_tech_stack(category_name: str) -> Optional[str]:
+        """Map category name to tech stack name
+
+        Args:
+            category_name: Category name
+
+        Returns:
+            Tech stack name or None
+        """
+        category_to_tech_stack = {
+            'Web': 'Web',
+            'RN': 'RN',
+            'ReactNative': 'RN',
+            'Flutter': 'Flutter',
+            'KMP': 'KMP',
+            'KotlinMultiplatform': 'KMP',
+        }
+
+        # Try direct match
+        if category_name in category_to_tech_stack:
+            return category_to_tech_stack[category_name]
+
+        # Try case-insensitive match
+        for key, value in category_to_tech_stack.items():
+            if category_name.lower() == key.lower():
+                return value
+
+        return None
+
+    @staticmethod
+    def _run_hilog_analysis(hilog_dir: str, report_dir: str) -> dict:
+        """Run hilog analysis and return results
+
+        Args:
+            hilog_dir: Directory containing hilog files
+            report_dir: Report directory to save analysis results
+
+        Returns:
+            Dictionary with hilog analysis results by step
+        """
+        try:
+            # Run hilog analysis
+            hilog_action = HilogAction()
+            output_file = os.path.join(report_dir, 'hilog_analysis.xlsx')
+            hilog_action.run(hilog_dir, output_file, detail=False)
+
+            # Load hilog analysis results from JSON file
+            hilog_json_path = os.path.join(report_dir, 'hilog_analysis.json')
+            if os.path.exists(hilog_json_path):
+                return ReportGenerator._load_json_safe(hilog_json_path, default={})
+
+            return {}
+
+        except Exception as e:
+            logging.warning('Hilog analysis failed: %s', str(e))
+            return {}
+
+    @staticmethod
+    def _get_hilog_for_step(hilog_data: dict, step_idx: int) -> dict:
+        """Get hilog analysis results for a specific step
+
+        Args:
+            hilog_data: Hilog analysis data dictionary
+            step_idx: Step index
+
+        Returns:
+            Dictionary with hilog pattern statistics
+        """
+        # Try step-specific key first
+        step_key = f'step{step_idx}'
+        step_hilog = hilog_data.get(step_key, {})
+
+        # If no step-specific data, try to get from root level
+        # (hilog analysis might not be step-specific)
+        if not step_hilog and hilog_data:
+            # Return all hilog data if no step-specific data
+            # Format: pattern_name -> count
+            return hilog_data
+
+        # Return the hilog statistics (pattern name -> count)
+        return step_hilog
 
 
 def merge_summary_info(directory: str) -> list[dict[str, Any]]:
