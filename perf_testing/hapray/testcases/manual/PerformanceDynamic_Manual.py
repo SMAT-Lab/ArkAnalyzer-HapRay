@@ -1,7 +1,11 @@
 import time
 
+from xdevice import platform_logger
+
 from hapray.core.config.config import Config
 from hapray.core.perf_testcase import PerfTestCase
+
+Log = platform_logger('PerformanceDynamic_Manual')
 
 
 class PerformanceDynamic_Manual(PerfTestCase):
@@ -32,7 +36,8 @@ class PerformanceDynamic_Manual(PerfTestCase):
         self.driver.wait(5)
 
         def step1():
-            print('正在负载采集...请操作测试UI')
+            Log.info('正在负载采集...请操作测试UI')
             time.sleep(30)
-
+        Log.info('开始负载采集！')
         self.execute_performance_step('手动测试', 30, step1)
+        Log.info('结束负载采集！')
