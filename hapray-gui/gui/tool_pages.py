@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QTabWidget,
@@ -178,11 +179,24 @@ class ToolPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        # 创建滚动区域的内容 widget
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setSpacing(10)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+
         # 工具描述 - 显示当前 action 的描述，如果没有 action 则显示插件描述
         description = self._get_current_description()
         self.desc_label = QLabel(description)
         self.desc_label.setWordWrap(True)
-        layout.addWidget(self.desc_label)
+        scroll_layout.addWidget(self.desc_label)
 
         # 参数表单
         self.params_group = QGroupBox('⚙️ 参数配置')
@@ -207,7 +221,7 @@ class ToolPage(QWidget):
         """)
         self.params_layout = QFormLayout()
         self.params_group.setLayout(self.params_layout)
-        layout.addWidget(self.params_group)
+        scroll_layout.addWidget(self.params_group)
 
         # 初始化参数表单
         self.rebuild_param_form()
@@ -246,9 +260,16 @@ class ToolPage(QWidget):
         output_layout.addWidget(self.progress_bar)
 
         output_group.setLayout(output_layout)
-        layout.addWidget(output_group)
+        scroll_layout.addWidget(output_group)
 
-        # 按钮
+        # 添加弹性空间，使内容顶部对齐
+        scroll_layout.addStretch()
+
+        # 设置滚动区域的内容
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area)
+
+        # 按钮（保持在滚动区域外，始终可见）
         button_layout = QHBoxLayout()
 
         self.execute_button = QPushButton('执行')
