@@ -14,6 +14,7 @@ from typing import Any, Optional
 import joblib
 import numpy as np
 from elftools.elf.elffile import ELFFile
+from elftools.elf.sections import SymbolTableSection
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_selection import f_classif
 from sklearn.linear_model import LogisticRegression
@@ -302,16 +303,15 @@ def _safe_float(x) -> float:
 
 
 class LegacyFeatureExtractor:
-    """仅提取 Legacy 特征组（readelf/objdump/strings 等）"""
+    """仅提取 Legacy 特征组（使用 elftools 替代 readelf/objdump/strings）"""
 
     def __init__(self):
-        self.BIN_READELF = which_any(['readelf', 'llvm-readelf'])
-        self.BIN_OBJDUMP = which_any(['objdump', 'llvm-objdump'])
-        self.BIN_STRINGS = which_any(['strings'])
+        # 不再需要外部工具，使用 elftools
+        pass
 
     def _run_legacy(self, cmd: list[str], timeout=10) -> str:
-        rc, out, _ = run_cmd(cmd, timeout=timeout)
-        return out if rc == 0 else ''
+        # 保留此方法以兼容旧代码，但不再使用
+        return ''
 
     def _legacy_basic(self, p: str) -> dict[str, Any]:
         try:
@@ -327,8 +327,19 @@ class LegacyFeatureExtractor:
             return {'file_size': 0.0, 'is_elf': 0.0, 'header_hex': 0.0}
 
     def _legacy_elf_header(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_READELF or 'readelf', '-h', p])
-        if not out:
+        try:
+            with open(p, 'rb') as f:
+                elf = ELFFile(f)
+                header = elf.header
+                d = {
+                    'elf_type': float(len(header['e_type'].name)) if hasattr(header['e_type'], 'name') else 0.0,
+                    'machine_type': float(len(header['e_machine'].name)) if hasattr(header['e_machine'], 'name') else 0.0,
+                    'entry_point': 1.0 if header['e_entry'] != 0 else 0.0,
+                    'section_header_count': float(elf.num_sections()),
+                    'program_header_count': float(elf.num_segments()),
+                }
+                return d
+        except Exception:
             return {
                 'elf_type': 0.0,
                 'machine_type': 0.0,
@@ -336,45 +347,8 @@ class LegacyFeatureExtractor:
                 'section_header_count': 0.0,
                 'program_header_count': 0.0,
             }
-        d = {}
-        m = re.search(r'Type:\s+(\w+)', out)
-        d['elf_type'] = float(len(m.group(1))) if m else 0.0
-        m = re.search(r'Machine:\s+([^\n]+)', out)
-        d['machine_type'] = float(len(m.group(1).strip())) if m else 0.0
-        m = re.search(r'Entry point address:\s+(0x[0-9a-fA-F]+)', out)
-        d['entry_point'] = 1.0 if m else 0.0
-        m = re.search(r'Number of section headers:\s+(\d+)', out)
-        d['section_header_count'] = float(int(m.group(1))) if m else 0.0
-        m = re.search(r'Number of program headers:\s+(\d+)', out)
-        d['program_header_count'] = float(int(m.group(1))) if m else 0.0
-        return d
 
     def _legacy_symbol_table(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_OBJDUMP or 'objdump', '-t', p])
-        if not out:
-            return {
-                k: 0.0
-                for k in [
-                    'total_symbols',
-                    'function_symbols',
-                    'data_symbols',
-                    'local_symbols',
-                    'global_symbols',
-                    'weak_symbols',
-                    'artificial_symbols',
-                    'lto_symbols',
-                    'undefined_symbols',
-                    'common_symbols',
-                    'absolute_symbols',
-                    'debug_symbols',
-                    'function_ratio',
-                    'data_ratio',
-                    'local_ratio',
-                    'global_ratio',
-                    'artificial_ratio',
-                    'lto_ratio',
-                ]
-            }
         f = {
             k: 0
             for k in [
@@ -392,38 +366,68 @@ class LegacyFeatureExtractor:
                 'debug_symbols',
             ]
         }
-        for line in out.splitlines():
-            if not line or 'SYMBOL TABLE' in line:
-                continue
-            parts = line.split()
-            if len(parts) < 6:
-                continue
-            f['total_symbols'] += 1
-            st = parts[4] if len(parts) > 4 else ''
-            sb = parts[5] if len(parts) > 5 else ''
-            sn = parts[-1] if parts else ''
-            if 'F' in st:
-                f['function_symbols'] += 1
-            if any(c in st for c in ('O', 'D', 'B')):
-                f['data_symbols'] += 1
-            if 'l' in sb:
-                f['local_symbols'] += 1
-            elif 'g' in sb:
-                f['global_symbols'] += 1
-            elif 'w' in sb:
-                f['weak_symbols'] += 1
-            if 'a' in st:
-                f['absolute_symbols'] += 1
-            elif 'C' in st:
-                f['common_symbols'] += 1
-            elif 'U' in st:
-                f['undefined_symbols'] += 1
-            elif 'N' in st:
-                f['debug_symbols'] += 1
-            if '<artificial>' in sn:
-                f['artificial_symbols'] += 1
-            if ('LTO' in sn) or ('lto' in sn):
-                f['lto_symbols'] += 1
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                # 遍历所有符号表
+                for section in elf.iter_sections():
+                    if not isinstance(section, SymbolTableSection):
+                        continue
+                    for symbol in section.iter_symbols():
+                        f['total_symbols'] += 1
+                        name = symbol.name
+                        st_info = symbol.entry['st_info']
+                        st_bind = st_info['bind']
+                        st_type = st_info['type']
+                        st_shndx = symbol.entry['st_shndx']
+                        
+                        # 函数符号
+                        if st_type == 'STT_FUNC':
+                            f['function_symbols'] += 1
+                        # 数据符号
+                        if st_type in ('STT_OBJECT', 'STT_COMMON', 'STT_TLS'):
+                            f['data_symbols'] += 1
+                        
+                        # 绑定类型
+                        if st_bind == 'STB_LOCAL':
+                            f['local_symbols'] += 1
+                        elif st_bind == 'STB_GLOBAL':
+                            f['global_symbols'] += 1
+                        elif st_bind == 'STB_WEAK':
+                            f['weak_symbols'] += 1
+                        
+                        # 特殊符号类型（st_shndx 是数字）
+                        # SHN_UNDEF = 0, SHN_ABS = 0xfff1, SHN_COMMON = 0xfff2 (通常值)
+                        if isinstance(st_shndx, int):
+                            if st_shndx == 0:  # SHN_UNDEF
+                                f['undefined_symbols'] += 1
+                            elif st_shndx == 0xfff1:  # SHN_ABS
+                                f['absolute_symbols'] += 1
+                            elif st_shndx == 0xfff2:  # SHN_COMMON
+                                f['common_symbols'] += 1
+                        # 也检查字符串形式（某些 elftools 版本可能返回字符串）
+                        elif isinstance(st_shndx, str):
+                            if 'UNDEF' in st_shndx:
+                                f['undefined_symbols'] += 1
+                            elif 'ABS' in st_shndx:
+                                f['absolute_symbols'] += 1
+                            elif 'COMMON' in st_shndx:
+                                f['common_symbols'] += 1
+                        
+                        # 调试符号（通常在 .debug 段）
+                        if name.startswith('.debug') or st_type == 'STT_NOTYPE':
+                            f['debug_symbols'] += 1
+                        
+                        # LTO 相关符号
+                        if name and (('LTO' in name) or ('lto' in name)):
+                            f['lto_symbols'] += 1
+                        
+                        # 人工符号（通常包含特殊标记）
+                        if name and ('<artificial>' in name or name.startswith('$')):
+                            f['artificial_symbols'] += 1
+        except Exception:
+            pass
+        
         t = f['total_symbols'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -440,22 +444,6 @@ class LegacyFeatureExtractor:
         return f
 
     def _legacy_sections(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_OBJDUMP or 'objdump', '-h', p])
-        if not out:
-            return {
-                'total_sections': 0.0,
-                'text_sections': 0.0,
-                'data_sections': 0.0,
-                'bss_sections': 0.0,
-                'debug_sections': 0.0,
-                'total_text_size': 0.0,
-                'total_data_size': 0.0,
-                'total_bss_size': 0.0,
-                'total_debug_size': 0.0,
-                'text_size_ratio': 0.0,
-                'data_size_ratio': 0.0,
-                'bss_size_ratio': 0.0,
-            }
         f = {
             'total_sections': 0,
             'text_sections': 0,
@@ -467,30 +455,29 @@ class LegacyFeatureExtractor:
             'total_bss_size': 0,
             'total_debug_size': 0,
         }
-        for line in out.splitlines():
-            if not line or 'Sections:' in line or 'Idx' in line:
-                continue
-            parts = line.split()
-            if len(parts) < 4:
-                continue
-            name = parts[1]
-            try:
-                size = int(parts[2], 16) if parts[2] != '00000000' else 0
-            except Exception:
-                size = 0
-            f['total_sections'] += 1
-            if '.text' in name:
-                f['text_sections'] += 1
-                f['total_text_size'] += size
-            elif ('.data' in name) or ('.rodata' in name):
-                f['data_sections'] += 1
-                f['total_data_size'] += size
-            elif '.bss' in name:
-                f['bss_sections'] += 1
-                f['total_bss_size'] += size
-            elif '.debug' in name or '.comment' in name:
-                f['debug_sections'] += 1
-                f['total_debug_size'] += size
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                for section in elf.iter_sections():
+                    f['total_sections'] += 1
+                    name = section.name
+                    size = section['sh_size']
+                    
+                    if '.text' in name:
+                        f['text_sections'] += 1
+                        f['total_text_size'] += size
+                    elif ('.data' in name) or ('.rodata' in name):
+                        f['data_sections'] += 1
+                        f['total_data_size'] += size
+                    elif '.bss' in name:
+                        f['bss_sections'] += 1
+                        f['total_bss_size'] += size
+                    elif '.debug' in name or '.comment' in name:
+                        f['debug_sections'] += 1
+                        f['total_debug_size'] += size
+        except Exception:
+            pass
+        
         total = f['total_text_size'] + f['total_data_size'] + f['total_bss_size'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -504,19 +491,6 @@ class LegacyFeatureExtractor:
         return f
 
     def _legacy_relocs(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_OBJDUMP or 'objdump', '-R', p])
-        if not out:
-            return {
-                'total_relocations': 0.0,
-                'text_relocations': 0.0,
-                'data_relocations': 0.0,
-                'plt_relocations': 0.0,
-                'got_relocations': 0.0,
-                'dynamic_relocations': 0.0,
-                'plt_ratio': 0.0,
-                'got_ratio': 0.0,
-                'dynamic_ratio': 0.0,
-            }
         f = {
             'total_relocations': 0,
             'text_relocations': 0,
@@ -525,20 +499,34 @@ class LegacyFeatureExtractor:
             'got_relocations': 0,
             'dynamic_relocations': 0,
         }
-        for line in out.splitlines():
-            if not line or 'RELOCATION' in line:
-                continue
-            f['total_relocations'] += 1
-            if 'PLT' in line:
-                f['plt_relocations'] += 1
-            elif 'GOT' in line:
-                f['got_relocations'] += 1
-            elif 'DYNAMIC' in line:
-                f['dynamic_relocations'] += 1
-            elif '.text' in line:
-                f['text_relocations'] += 1
-            elif '.data' in line or '.rodata' in line:
-                f['data_relocations'] += 1
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                for section in elf.iter_sections():
+                    if not hasattr(section, 'iter_relocations'):
+                        continue
+                    section_name = section.name
+                    for reloc in section.iter_relocations():
+                        f['total_relocations'] += 1
+                        reloc_type = reloc['r_info_type']
+                        reloc_type_name = str(reloc_type) if hasattr(reloc_type, '__str__') else ''
+                        
+                        # 根据重定位类型判断
+                        if 'PLT' in reloc_type_name or 'JUMP_SLOT' in reloc_type_name:
+                            f['plt_relocations'] += 1
+                        elif 'GOT' in reloc_type_name or 'GLOB_DAT' in reloc_type_name:
+                            f['got_relocations'] += 1
+                        elif 'DYNAMIC' in reloc_type_name:
+                            f['dynamic_relocations'] += 1
+                        
+                        # 根据节名称判断
+                        if '.text' in section_name:
+                            f['text_relocations'] += 1
+                        elif '.data' in section_name or '.rodata' in section_name:
+                            f['data_relocations'] += 1
+        except Exception:
+            pass
+        
         t = f['total_relocations'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -552,17 +540,6 @@ class LegacyFeatureExtractor:
         return f
 
     def _legacy_dynamic(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_READELF or 'readelf', '-d', p])
-        if not out:
-            return {
-                'total_dynamic_entries': 0.0,
-                'needed_libraries': 0.0,
-                'rpath_entries': 0.0,
-                'runpath_entries': 0.0,
-                'symbol_versions': 0.0,
-                'init_functions': 0.0,
-                'fini_functions': 0.0,
-            }
         f = {
             'total_dynamic_entries': 0,
             'needed_libraries': 0,
@@ -572,45 +549,37 @@ class LegacyFeatureExtractor:
             'init_functions': 0,
             'fini_functions': 0,
         }
-        for line in out.splitlines():
-            if not line or 'DYNAMIC' in line:
-                continue
-            f['total_dynamic_entries'] += 1
-            u = line.upper()
-            if 'NEEDED' in u:
-                f['needed_libraries'] += 1
-            elif 'RPATH' in u:
-                f['rpath_entries'] += 1
-            elif 'RUNPATH' in u:
-                f['runpath_entries'] += 1
-            elif 'VERSYM' in u or 'VERNEED' in u:
-                f['symbol_versions'] += 1
-            elif 'INIT' in u:
-                f['init_functions'] += 1
-            elif 'FINI' in u:
-                f['fini_functions'] += 1
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                dynamic_section = elf.get_section_by_name('.dynamic')
+                if dynamic_section:
+                    for tag in dynamic_section.iter_tags():
+                        f['total_dynamic_entries'] += 1
+                        tag_name = tag.entry.d_tag
+                        if tag_name == 'DT_NEEDED':
+                            f['needed_libraries'] += 1
+                        elif tag_name == 'DT_RPATH':
+                            f['rpath_entries'] += 1
+                        elif tag_name == 'DT_RUNPATH':
+                            f['runpath_entries'] += 1
+                        elif tag_name in ('DT_VERSYM', 'DT_VERNEED', 'DT_VERNEEDNUM'):
+                            f['symbol_versions'] += 1
+                        elif tag_name == 'DT_INIT':
+                            f['init_functions'] += 1
+                        elif tag_name == 'DT_FINI':
+                            f['fini_functions'] += 1
+        except Exception:
+            pass
+        
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
         return f
 
     def _legacy_strings(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_STRINGS or 'strings', p])
-        if not out:
-            return {
-                'total_strings': 0.0,
-                'lto_strings': 0.0,
-                'compiler_strings': 0.0,
-                'optimization_strings': 0.0,
-                'linker_strings': 0.0,
-                'gcc_strings': 0.0,
-                'gnu_strings': 0.0,
-                'lto_string_ratio': 0.0,
-                'compiler_string_ratio': 0.0,
-                'optimization_string_ratio': 0.0,
-            }
-        arr = out.splitlines()
+        """使用 Python 实现字符串提取（替代 strings 命令）"""
         f = {
-            'total_strings': len(arr),
+            'total_strings': 0,
             'lto_strings': 0,
             'compiler_strings': 0,
             'optimization_strings': 0,
@@ -618,20 +587,40 @@ class LegacyFeatureExtractor:
             'gcc_strings': 0,
             'gnu_strings': 0,
         }
-        for s in arr:
-            sl = s.lower()
-            if ('lto' in sl) or ('link-time' in sl):
-                f['lto_strings'] += 1
-            if ('gcc' in sl) or ('clang' in sl):
-                f['compiler_strings'] += 1
-            if ('optimization' in sl) or ('optimize' in sl):
-                f['optimization_strings'] += 1
-            if ('linker' in sl) or (sl == 'ld'):
-                f['linker_strings'] += 1
-            if 'gcc:' in sl:
-                f['gcc_strings'] += 1
-            if 'gnu' in sl:
-                f['gnu_strings'] += 1
+        try:
+            with open(p, 'rb') as file:
+                data = file.read()
+                # 提取可打印字符串（长度 >= 4）
+                strings = []
+                current_string = []
+                for byte in data:
+                    if 32 <= byte <= 126:  # 可打印 ASCII
+                        current_string.append(byte)
+                    else:
+                        if len(current_string) >= 4:
+                            strings.append(bytes(current_string).decode('ascii', errors='ignore'))
+                        current_string = []
+                if len(current_string) >= 4:
+                    strings.append(bytes(current_string).decode('ascii', errors='ignore'))
+                
+                f['total_strings'] = len(strings)
+                for s in strings:
+                    sl = s.lower()
+                    if ('lto' in sl) or ('link-time' in sl):
+                        f['lto_strings'] += 1
+                    if ('gcc' in sl) or ('clang' in sl):
+                        f['compiler_strings'] += 1
+                    if ('optimization' in sl) or ('optimize' in sl):
+                        f['optimization_strings'] += 1
+                    if ('linker' in sl) or (sl == 'ld'):
+                        f['linker_strings'] += 1
+                    if 'gcc:' in sl:
+                        f['gcc_strings'] += 1
+                    if 'gnu' in sl:
+                        f['gnu_strings'] += 1
+        except Exception:
+            pass
+        
         t = f['total_strings'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -685,15 +674,6 @@ class LegacyFeatureExtractor:
         }
 
     def _legacy_compiler(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_READELF or 'readelf', '-S', p])
-        if not out:
-            return {
-                'has_comment_section': 0.0,
-                'has_note_section': 0.0,
-                'has_debug_sections': 0.0,
-                'compiler_info': 0.0,
-                'build_id_present': 0.0,
-            }
         f = {
             'has_comment_section': 0.0,
             'has_note_section': 0.0,
@@ -701,42 +681,105 @@ class LegacyFeatureExtractor:
             'compiler_info': 0.0,
             'build_id_present': 0.0,
         }
-        if '.comment' in out:
-            f['has_comment_section'] = 1.0
-        if '.note' in out:
-            f['has_note_section'] = 1.0
-        if '.debug' in out:
-            f['has_debug_sections'] = 1.0
-        if 'GNU_BUILD_ID' in out:
-            f['build_id_present'] = 1.0
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                for section in elf.iter_sections():
+                    name = section.name
+                    if '.comment' in name:
+                        f['has_comment_section'] = 1.0
+                    if '.note' in name:
+                        f['has_note_section'] = 1.0
+                        # 检查 BUILD_ID
+                        if hasattr(section, 'data'):
+                            try:
+                                data = section.data()
+                                if b'GNU_BUILD_ID' in data or b'GNU\0' in data:
+                                    f['build_id_present'] = 1.0
+                            except Exception:
+                                pass
+                    if '.debug' in name:
+                        f['has_debug_sections'] = 1.0
+        except Exception:
+            pass
         return f
 
     def _legacy_optim(self, p: str) -> dict[str, Any]:
-        out = self._run_legacy([self.BIN_OBJDUMP or 'objdump', '-d', p], timeout=15)
-        if not out:
-            return {
-                'optimization_level': 0.0,
-                'has_inline_functions': 0.0,
-                'has_unrolled_loops': 0.0,
-                'has_vectorized_code': 0.0,
-                'has_tail_calls': 0.0,
-            }
-        f = {
+        """优化特征检测（使用 capstone 进行反汇编分析，如果可用）"""
+        result = {
             'optimization_level': 0.0,
             'has_inline_functions': 0.0,
             'has_unrolled_loops': 0.0,
             'has_vectorized_code': 0.0,
             'has_tail_calls': 0.0,
         }
-        if 'callq' in out and 'nop' in out:
-            f['has_inline_functions'] = 1.0
-        if 'rep ' in out and 'mov' in out:
-            f['has_unrolled_loops'] = 1.0
-        if ('xmm' in out) or ('ymm' in out):
-            f['has_vectorized_code'] = 1.0
-        if 'jmp' in out and 'ret' in out:
-            f['has_tail_calls'] = 1.0
-        return f
+        
+        try:
+            import capstone
+            from capstone import CS_ARCH_ARM64, CS_MODE_ARM
+            
+            # 读取 .text 段
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                text_section = elf.get_section_by_name('.text')
+                if not text_section:
+                    return result
+                
+                code = text_section.data()
+                if len(code) == 0:
+                    return result
+                
+                # 创建 capstone 反汇编器
+                md = capstone.Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+                md.detail = True
+                
+                # 反汇编并分析优化模式
+                instructions = []
+                for insn in md.disasm(code, text_section['sh_addr']):
+                    instructions.append(insn)
+                    mnemonic = insn.mnemonic.lower()
+                    
+                    # 检测内联函数（call + nop 模式）
+                    if mnemonic in ('bl', 'blr') and len(instructions) > 1:
+                        # 检查后续是否有 nop
+                        if any(i.mnemonic.lower() == 'nop' for i in instructions[-3:]):
+                            result['has_inline_functions'] = 1.0
+                    
+                    # 检测向量化代码
+                    if any(v in mnemonic for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins']):
+                        if 'v' in insn.op_str or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip()):
+                            result['has_vectorized_code'] = 1.0
+                    
+                    # 检测尾调用（jmp + ret 模式）
+                    if mnemonic == 'b' and len(instructions) > 1:
+                        # 检查是否有 ret 指令
+                        if any(i.mnemonic.lower() == 'ret' for i in instructions[-5:]):
+                            result['has_tail_calls'] = 1.0
+                
+                # 检测循环展开（重复的 mov 模式，在 ARM64 中表现为重复的指令序列）
+                if len(instructions) > 10:
+                    # 检查是否有重复的指令模式（简单的循环展开检测）
+                    for i in range(len(instructions) - 3):
+                        pattern = [instructions[i].mnemonic.lower(), 
+                                  instructions[i+1].mnemonic.lower(),
+                                  instructions[i+2].mnemonic.lower()]
+                        # 检查是否在后续位置重复出现
+                        for j in range(i+3, min(i+20, len(instructions)-2)):
+                            if ([instructions[j].mnemonic.lower(),
+                                instructions[j+1].mnemonic.lower(),
+                                instructions[j+2].mnemonic.lower()] == pattern):
+                                result['has_unrolled_loops'] = 1.0
+                                break
+                        if result['has_unrolled_loops'] > 0:
+                            break
+        except ImportError:
+            # capstone 不可用，返回默认值
+            logging.debug('capstone not available, using default values for optimization features')
+        except Exception as e:
+            # 反汇编失败，返回默认值
+            logging.debug('Optimization analysis failed for %s: %s', p, e)
+        
+        return result
 
     def extract(self, path: str) -> tuple[np.ndarray, list[str], str]:
         feats = {}
@@ -776,11 +819,10 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
 
     def __init__(self):
         super().__init__()
-        self.BIN_OBJDUMP = which_any(['aarch64-linux-gnu-objdump', 'llvm-objdump', 'objdump']) or 'objdump'
-        self.BIN_READELF = which_any(['readelf', 'llvm-readelf']) or 'readelf'
+        # 不再需要外部工具，使用 elftools
+        pass
 
     def _sec_sizes_map(self, p: str) -> dict[str, int]:
-        out = self._run_legacy([self.BIN_READELF, '-S', p], timeout=20)
         names = [
             '.text',
             '.rodata',
@@ -802,42 +844,44 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
             '.gnu.version_r',
         ]
         sizes = {n: 0 for n in names}
-        if not out:
-            return sizes
-        for line in out.splitlines():
-            # 解析：] <name> ... <size_hex>
-            m = re.search(r'\]\s+(\S+)\s+\S+\s+[0-9a-fA-Fx]+\s+[0-9a-fA-F]+\s+([0-9a-fA-F]+)', line)
-            if not m:
-                continue
-            name, size_hex = m.group(1), m.group(2)
-            try:
-                size = int(size_hex, 16)
-            except Exception:
-                size = 0
-            if name in sizes:
-                sizes[name] = size
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                for section in elf.iter_sections():
+                    name = section.name
+                    if name in sizes:
+                        sizes[name] = section['sh_size']
+        except Exception:
+            pass
         return sizes
 
     def _dyn_relocs(self, p: str) -> dict[str, int]:
-        out = self._run_legacy([self.BIN_READELF, '-r', p], timeout=20)
         rel = {'TOTAL': 0, 'JUMP_SLOT': 0, 'GLOB_DAT': 0, 'RELATIVE': 0, 'IRELATIVE': 0}
-        if not out:
-            return rel
-        for line in out.splitlines():
-            if 'R_AARCH64_' in line or 'JUMP_SLOT' in line:
-                rel['TOTAL'] += 1
-                if 'JUMP_SLOT' in line:
-                    rel['JUMP_SLOT'] += 1
-                elif 'GLOB_DAT' in line:
-                    rel['GLOB_DAT'] += 1
-                elif 'IRELATIVE' in line:
-                    rel['IRELATIVE'] += 1
-                elif 'RELATIVE' in line:
-                    rel['RELATIVE'] += 1
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                # 查找动态重定位节
+                for section in elf.iter_sections():
+                    if not hasattr(section, 'iter_relocations'):
+                        continue
+                    for reloc in section.iter_relocations():
+                        rel['TOTAL'] += 1
+                        reloc_type = reloc['r_info_type']
+                        reloc_type_name = str(reloc_type) if hasattr(reloc_type, '__str__') else ''
+                        
+                        if 'JUMP_SLOT' in reloc_type_name or 'R_AARCH64_JUMP_SLOT' in reloc_type_name:
+                            rel['JUMP_SLOT'] += 1
+                        elif 'GLOB_DAT' in reloc_type_name or 'R_AARCH64_GLOB_DAT' in reloc_type_name:
+                            rel['GLOB_DAT'] += 1
+                        elif 'IRELATIVE' in reloc_type_name or 'R_AARCH64_IRELATIVE' in reloc_type_name:
+                            rel['IRELATIVE'] += 1
+                        elif 'RELATIVE' in reloc_type_name or 'R_AARCH64_RELATIVE' in reloc_type_name:
+                            rel['RELATIVE'] += 1
+        except Exception:
+            pass
         return rel
 
     def _sym_table(self, p: str) -> dict[str, int]:
-        out = self._run_legacy([self.BIN_READELF, '-sW', p], timeout=20)
         d = {
             'SYM_TOTAL': 0,
             'FUNC_TOTAL': 0,
@@ -847,28 +891,46 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
             'VIS_DEFAULT': 0,
             'VIS_HIDDEN': 0,
         }
-        if not out:
-            return d
-        for line in out.splitlines():
-            if not line or ('FUNC' not in line and 'OBJECT' not in line):
-                continue
-            d['SYM_TOTAL'] += 1
-            if 'FUNC' in line:
-                d['FUNC_TOTAL'] += 1
-                if ' GLOBAL ' in line:
-                    d['FUNC_GLOBAL'] += 1
-                elif ' LOCAL ' in line:
-                    d['FUNC_LOCAL'] += 1
-                if ' WEAK ' in line:
-                    d['FUNC_WEAK'] += 1
-                if ' DEFAULT ' in line:
-                    d['VIS_DEFAULT'] += 1
-                if ' HIDDEN ' in line:
-                    d['VIS_HIDDEN'] += 1
+        try:
+            with open(p, 'rb') as file:
+                elf = ELFFile(file)
+                for section in elf.iter_sections():
+                    if not isinstance(section, SymbolTableSection):
+                        continue
+                    for symbol in section.iter_symbols():
+                        d['SYM_TOTAL'] += 1
+                        st_info = symbol.entry['st_info']
+                        st_bind = st_info['bind']
+                        st_type = st_info['type']
+                        # 获取可见性（st_other 的低 3 位）
+                        st_other = symbol.entry.get('st_other', 0)
+                        if isinstance(st_other, int):
+                            st_vis_value = st_other & 0x3
+                        else:
+                            st_vis_value = 0
+                        
+                        if st_type == 'STT_FUNC':
+                            d['FUNC_TOTAL'] += 1
+                            if st_bind == 'STB_GLOBAL':
+                                d['FUNC_GLOBAL'] += 1
+                            elif st_bind == 'STB_LOCAL':
+                                d['FUNC_LOCAL'] += 1
+                            elif st_bind == 'STB_WEAK':
+                                d['FUNC_WEAK'] += 1
+                            
+                            if st_vis_value == 0:  # STV_DEFAULT
+                                d['VIS_DEFAULT'] += 1
+                            elif st_vis_value == 2:  # STV_HIDDEN
+                                d['VIS_HIDDEN'] += 1
+        except Exception:
+            pass
         return d
 
     def _disasm_stats_aarch64(self, p: str) -> dict[str, int]:
-        out = self._run_legacy([self.BIN_OBJDUMP, '-d', p], timeout=40)
+        """反汇编统计（AArch64指令分析）
+        
+        使用 capstone Python 库进行反汇编（如果可用），否则返回默认值
+        """
         c = {
             'INSN_TOTAL': 0,
             'BL': 0,
@@ -886,42 +948,71 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
             'ADD': 0,
             'VEC': 0,
         }
-        if not out:
-            return c
-        for line in out.splitlines():
-            if ':' not in line:
-                continue
-            low = line.lower()
-            c['INSN_TOTAL'] += 1
-            # 匹配注意单词边界
-            if re.search(r'\bbl\b', low):
-                c['BL'] += 1
-            if re.search(r'\bblr\b', low):
-                c['BLR'] += 1
-            if re.search(r'\bbr\b', low):
-                c['BR'] += 1
-            if re.search(r'\bb\b(?!\w)', low):
-                c['B'] += 1
-            if re.search(r'\bb\.[a-z]{2,3}\b', low):
-                c['BCOND'] += 1
-            if re.search(r'\bret\b', low):
-                c['RET'] += 1
-            if re.search(r'\bcbz\b', low):
-                c['CBZ'] += 1
-            if re.search(r'\bcbnz\b', low):
-                c['CBNZ'] += 1
-            if re.search(r'\btbz\b', low):
-                c['TBZ'] += 1
-            if re.search(r'\btbnz\b', low):
-                c['TBNZ'] += 1
-            if re.search(r'\badrp\b', low):
-                c['ADRP'] += 1
-            if re.search(r'\bldr\b', low):
-                c['LDR'] += 1
-            if re.search(r'\badd\b', low):
-                c['ADD'] += 1
-            if re.search(r'\b(ld1|st1|fmla|fadd|fmul|zip1|uzp1|trn1|dup|ins|eor\s+v)\b', low):
-                c['VEC'] += 1
+        
+        try:
+            import capstone
+            from capstone import CS_ARCH_ARM64, CS_MODE_ARM
+            
+            # 读取 .text 段
+            with open(p, 'rb') as f:
+                elf = ELFFile(f)
+                text_section = elf.get_section_by_name('.text')
+                if not text_section:
+                    return c
+                
+                code = text_section.data()
+                if len(code) == 0:
+                    return c
+                
+                # 创建 capstone 反汇编器
+                md = capstone.Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+                md.detail = True
+                
+                # 反汇编并统计指令
+                for insn in md.disasm(code, text_section['sh_addr']):
+                    c['INSN_TOTAL'] += 1
+                    mnemonic = insn.mnemonic.lower()
+                    
+                    # 统计各种指令
+                    if mnemonic == 'bl':
+                        c['BL'] += 1
+                    elif mnemonic == 'blr':
+                        c['BLR'] += 1
+                    elif mnemonic == 'br':
+                        c['BR'] += 1
+                    elif mnemonic == 'b':
+                        # 检查是否是条件分支
+                        if insn.op_str and '.' in insn.op_str:
+                            c['BCOND'] += 1
+                        else:
+                            c['B'] += 1
+                    elif mnemonic == 'ret':
+                        c['RET'] += 1
+                    elif mnemonic == 'cbz':
+                        c['CBZ'] += 1
+                    elif mnemonic == 'cbnz':
+                        c['CBNZ'] += 1
+                    elif mnemonic == 'tbz':
+                        c['TBZ'] += 1
+                    elif mnemonic == 'tbnz':
+                        c['TBNZ'] += 1
+                    elif mnemonic == 'adrp':
+                        c['ADRP'] += 1
+                    elif mnemonic.startswith('ldr'):
+                        c['LDR'] += 1
+                    elif mnemonic == 'add':
+                        c['ADD'] += 1
+                    # 向量指令
+                    elif any(v in mnemonic for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins', 'eor']):
+                        if insn.op_str and ('v' in insn.op_str or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip())):
+                            c['VEC'] += 1
+        except ImportError:
+            # capstone 不可用，返回默认值
+            logging.debug('capstone not available, using default values for disassembly stats')
+        except Exception as e:
+            # 反汇编失败，返回默认值
+            logging.debug('Disassembly failed for %s: %s', p, e)
+        
         return c
 
     @staticmethod
@@ -987,17 +1078,18 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
         r_funcs_total = rdiv(sy['FUNC_TOTAL'], max(1, sy['SYM_TOTAL']))
 
         plt_entries = 0
-        out_d = self._run_legacy([self.BIN_OBJDUMP, '-d', path], timeout=40)
-        if out_d:
-            in_plt = False
-            for line in out_d.splitlines():
-                if '<.plt>' in line or '<.plt.sec>' in line:
-                    in_plt = True
-                    continue
-                if in_plt and line.strip().endswith('>:'):  # 下一段开头，退出
-                    in_plt = False
-                if in_plt and ':' in line:
-                    plt_entries += 1
+        # 使用 elftools 统计 PLT 条目
+        try:
+            with open(path, 'rb') as file:
+                elf = ELFFile(file)
+                plt_section = elf.get_section_by_name('.plt')
+                if plt_section:
+                    # PLT 条目通常是固定大小（例如 16 字节），可以根据节大小估算
+                    plt_size = plt_section['sh_size']
+                    # AArch64 PLT 条目通常是 16 字节
+                    plt_entries = plt_size // 16 if plt_size > 0 else 0
+        except Exception:
+            pass
 
         features: dict[str, float] = {
             # 1) 段尺寸 & 比例 & 对数
@@ -1010,7 +1102,7 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
             'sz_got': float(ss['.got']),
             'sz_gotplt': float(ss['.got.plt']),
             'sz_eh_frame': float(ss['.eh_frame']),
-            'sz_gcc_except': float(ss['.gcc_except_table']),
+            'sz_gcc_except_table': float(ss['.gcc_except_table']),
             'sz_text_hot': float(ss['.text.hot']),
             'sz_text_unlikely': float(ss['.text.unlikely']),
             'r_text_total': r_text_total,
