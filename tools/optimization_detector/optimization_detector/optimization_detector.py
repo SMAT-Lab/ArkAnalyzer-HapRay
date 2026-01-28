@@ -145,6 +145,7 @@ class OptimizationDetector:
         try:
             data = file_info.extract_dot_text()
             if not data or len(data) == 0:
+                logging.info('_extract_features: No data extracted from %s', file_info.absolute_path)
                 return None
 
             sequences = []
@@ -153,9 +154,11 @@ class OptimizationDetector:
                 if len(seq) < features:
                     seq = np.pad(seq, (0, features - len(seq)), 'constant')
                 sequences.append(seq)
+            logging.info('_extract_features: Extracted %d chunks from %d bytes for %s', len(sequences), len(data), file_info.absolute_path)
             return sequences
-        except Exception:
+        except Exception as e:
             # 如果提取失败，返回 None（会在 _run_analysis 中捕获异常）
+            logging.error('_extract_features: Exception for %s: %s', file_info.absolute_path, e)
             return None
 
     def apply_model(self, data, model):
@@ -191,7 +194,7 @@ class OptimizationDetector:
         return results
 
     def _detect_lto(self, file_infos: list[FileInfo], flags_results: dict) -> dict:
-        """对SO文件进行LTO检测"""
+        """对SO文件进行LTO检测（基于chunk）"""
         lto_results = {}
 
         for file_info in tqdm(file_infos, desc='Detecting LTO'):
@@ -204,8 +207,20 @@ class OptimizationDetector:
                     opt_level_map = {0: 'O0', 1: 'O1', 2: 'O2', 3: 'O3', 4: 'Os'}
                     opt_level = opt_level_map.get(prediction, 'O2')
 
-                # 调用LTO检测器（传递file_info以支持缓存）
-                lto_result = self.lto_detector.detect(file_info, opt_level)
+                # 提取 chunks（与优化级别检测使用相同的 chunks）
+                chunks = self._extract_features(file_info, features=2048)
+                if chunks is None:
+                    chunks = []
+                
+                # 使用基于 chunk 的 LTO 检测
+                if chunks and len(chunks) > 0:
+                    # 将 chunks 转换为 bytes 列表
+                    chunk_bytes = [bytes(chunk) for chunk in chunks]
+                    lto_result = self.lto_detector.detect_chunk_based(file_info, chunk_bytes, opt_level)
+                else:
+                    # 如果没有 chunks，回退到文件级别检测
+                    lto_result = self.lto_detector.detect(file_info, opt_level)
+                
                 lto_results[file_info.file_id] = lto_result
 
             except Exception as e:
@@ -221,8 +236,8 @@ class OptimizationDetector:
         - error_reason: None means no error, str means failure reason
         """
         try:
-            # 检查chunk数量，如果小于10个chunk，跳过预测
-            MIN_CHUNKS = 10
+            # 检查chunk数量，如果小于1个chunk，跳过预测
+            MIN_CHUNKS = 1
             # 先尝试直接打开 ELF 文件，以便捕获更详细的错误信息
             try:
                 with open(file_info.absolute_path, 'rb') as f:
@@ -245,14 +260,18 @@ class OptimizationDetector:
                     error_msg = 'File type not supported (not .so or .a)'
                 else:
                     error_msg = 'No .text section data extracted (section exists but data is empty)'
+                logging.info('No text data for %s: %s', file_info.absolute_path, error_msg)
                 return file_info, [], error_msg
 
             # 提取特征
+            logging.info('Extracted %d bytes from .text section for %s', len(text_data), file_info.absolute_path)
             features_array = self._extract_features(file_info, features=2048)
+            if features_array is not None:
+                logging.info('Extracted %d chunks from %s', len(features_array), file_info.absolute_path)
             # 只有当有数据但chunk数量不足时才跳过预测
             # 如果没有数据（features_array is None），继续执行让_run_inference返回[]，最终标记为failed
             if features_array is not None and len(features_array) < MIN_CHUNKS:
-                logging.debug(
+                logging.info(
                     'Skipping file with too few chunks (%d < %d): %s',
                     len(features_array),
                     MIN_CHUNKS,
@@ -503,14 +522,31 @@ class OptimizationDetector:
                 'Failure Reason': error_reason if error_reason else 'N/A',
             }
 
-            # 添加LTO检测列
+            # 添加LTO检测列（学习 optimization_detector 的累加分数方式）
             if lto_results and file_info.file_id in lto_results:
                 lto_result = lto_results[file_info.file_id]
                 row['LTO Score'] = f'{lto_result["score"]:.4f}' if lto_result['score'] is not None else 'N/A'
                 row['LTO Prediction'] = lto_result['prediction']
+                # 如果是基于 chunk 的检测，添加额外信息
+                if 'distribution' in lto_result and lto_result['distribution']:
+                    dist = lto_result['distribution']
+                    total_chunks = lto_result.get('total_chunks', dist.get('LTO', 0) + dist.get('No LTO', 0))
+                    if total_chunks > 0:
+                        row['LTO Chunks'] = f"{dist.get('LTO', 0)}/{total_chunks}"
+                        # 显示累加分数（类似 optimization_score）
+                        total_score = lto_result.get('total_score', 0)
+                        row['LTO Total Score'] = f'{total_score:.2f}'
+                    else:
+                        row['LTO Chunks'] = 'N/A'
+                        row['LTO Total Score'] = 'N/A'
+                else:
+                    row['LTO Chunks'] = 'N/A'
+                    row['LTO Total Score'] = 'N/A'
             elif self.enable_lto:
                 row['LTO Score'] = 'N/A'
                 row['LTO Prediction'] = 'N/A'
+                row['LTO Chunks'] = 'N/A'
+                row['LTO Total Score'] = 'N/A'
 
             report_data.append(row)
         return pd.DataFrame(report_data)
