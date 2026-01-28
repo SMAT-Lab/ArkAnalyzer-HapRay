@@ -459,6 +459,7 @@
           "type": "str",
           "label": "应用包名",
           "required": true,
+          "nargs": "+",
           "help": "要执行测试的多个应用包名，支持多个值"
         },
         "scenes": {
