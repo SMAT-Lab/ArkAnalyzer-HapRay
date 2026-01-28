@@ -32,9 +32,10 @@ function unzipFile(zipFile, output) {
             cleanupHilogtool(extractPath);
         }
     } catch (error) {
-        console.log(error);
+        console.error(`Error extracting ${zipFile}:`, error.message);
     }
 }
+
 
 function cleanupTraceStreamerBinary(basePath) {
     // 首先为 trace_streamer_mac 和 trace_streamer_linux 添加可执行权限
@@ -82,6 +83,8 @@ function cleanupTraceStreamerBinary(basePath) {
     }
 }
 
+// 注意：cleanupHilogtool函数已废弃，因为现在hilogtool通过copyHilogtool函数处理，
+// 只复制当前平台的二进制文件，不需要清理其他平台的文件
 function cleanupHilogtool(basePath) {
     // 根据操作系统保留对应的 hilogtool 可执行文件
     const platformKeepMap = {
@@ -94,25 +97,51 @@ function cleanupHilogtool(basePath) {
         return;
     }
 
-    // 删除不需要的平台文件
-    HILOGTOOL_BIN.forEach(fileName => {
-        if (fileName !== keepFile) {
-            const targetPath = path.join(basePath, fileName);
+    // 新的目录结构：hilogtool.zip 解压后包含 linux/、mac/、windows/ 子目录
+    const platformDirMap = {
+        win32: 'windows',
+        darwin: 'mac',
+        linux: 'linux'
+    };
+    const keepPlatformDir = platformDirMap[process.platform];
+
+    // 删除不需要的平台目录
+    const platforms = ['linux', 'mac', 'windows'];
+    platforms.forEach(platformDir => {
+        if (platformDir !== keepPlatformDir) {
+            const targetPath = path.join(basePath, platformDir);
             if (fs.existsSync(targetPath)) {
                 fs.rmSync(targetPath, { recursive: true, force: true });
-                console.log(`Removed unnecessary hilogtool file: ${fileName}`);
+                console.log(`Removed unnecessary hilogtool platform directory: ${platformDir}`);
             }
         }
     });
 
+    // 将保留的平台文件移动到上级目录
+    const keepDir = path.join(basePath, keepPlatformDir);
+    const keepFilePath = path.join(keepDir, keepFile);
+    const finalPath = path.join(basePath, keepFile);
+
+    if (fs.existsSync(keepFilePath)) {
+        fs.renameSync(keepFilePath, finalPath);
+        console.log(`Moved hilogtool: ${keepFilePath} -> ${finalPath}`);
+    }
+
+    // 删除空的平台目录
+    if (fs.existsSync(keepDir)) {
+        const remainingItems = fs.readdirSync(keepDir);
+        if (remainingItems.length === 0) {
+            fs.rmdirSync(keepDir);
+        }
+    }
+
     // 为 Unix 系统文件添加可执行权限
     if (process.platform !== 'win32') {
-        const toolPath = path.join(basePath, keepFile);
-        if (fs.existsSync(toolPath)) {
+        if (fs.existsSync(finalPath)) {
             try {
-                const stats = fs.statSync(toolPath);
+                const stats = fs.statSync(finalPath);
                 const newMode = stats.mode | 0o111;
-                fs.chmodSync(toolPath, newMode);
+                fs.chmodSync(finalPath, newMode);
                 console.log(`Added executable permission to: ${keepFile} (mode: ${newMode.toString(8)})`);
             } catch (err) {
                 console.warn(`Failed to set executable permission for ${keepFile}:`, err.message);
