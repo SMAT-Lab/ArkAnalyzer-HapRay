@@ -555,6 +555,7 @@ class OptimizationDetector:
                 row['version_code'] = file_info.hap_metadata.version_code
                 row['version_name'] = file_info.hap_metadata.version_name
                 row['app_name'] = file_info.hap_metadata.app_name
+                row['build_time'] = file_info.hap_metadata.build_time
                 # File 列使用相对于 HAP 路径的内部相对路径，便于阅读
                 try:
                     hap_path = Path(file_info.hap_metadata.hap_path)
