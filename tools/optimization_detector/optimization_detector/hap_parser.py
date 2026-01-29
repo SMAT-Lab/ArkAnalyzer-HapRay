@@ -26,6 +26,7 @@ import json
 import logging
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -43,6 +44,8 @@ class HapMetadata:
     version_code: int = 0
     version_name: str = ""
     app_name: str = ""
+    # 基于 zip 内文件修改时间推算的应用编译时间，格式 YYYY-MM-DD
+    build_time: str = ""
 
 
 class HapParser:
@@ -88,12 +91,27 @@ class HapParser:
                 label = str(app_info.get("label", "") or "")
                 meta.app_name = cls._resolve_app_name(label, zf)
 
+                # 3. 基于 zip 内文件时间生成应用编译时间（取包内最新修改时间），格式 YYYY-MM-DD
+                meta.build_time = cls._get_build_time(zf, hap_path)
+
         except zipfile.BadZipFile:
             logger.error("Invalid HAP (zip) file: %s", hap_path)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Failed to parse HAP %s: %s", hap_path, exc)
 
         return meta
+
+    @staticmethod
+    def _get_build_time(zf: zipfile.ZipFile, hap_path: Path) -> str:
+        """基于 zip 内 .pages.info 文件的修改时间推算编译时间，返回 YYYY-MM-DD；若无该文件或时间无效则用 HAP 文件 mtime。"""
+        # 优先读取 .pages.info 条目的修改时间（根目录或任意路径下）
+        pages_info_name = '.pages.info'
+        if pages_info_name in zf.namelist():
+            info = zf.getinfo(pages_info_name)
+            y, mo, d, h, mi, s = info.date_time
+            t = datetime(y, mo, d, h, mi, s)
+            return t.strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(hap_path.stat().st_mtime).strftime("%Y-%m-%d")
 
     @staticmethod
     def _read_module_json(zf: zipfile.ZipFile) -> Optional[dict]:
