@@ -130,6 +130,7 @@ class FileInfo:
                     'hap_version_code': self.hap_metadata.version_code,
                     'hap_version_name': self.hap_metadata.version_name,
                     'hap_app_name': self.hap_metadata.app_name,
+                    'hap_build_time': self.hap_metadata.build_time,
                 }
             )
 
