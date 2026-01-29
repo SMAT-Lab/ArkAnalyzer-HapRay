@@ -4,6 +4,7 @@ import os
 from collections import Counter
 from functools import partial
 from importlib.resources import files
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -211,7 +212,7 @@ class OptimizationDetector:
                 chunks = self._extract_features(file_info, features=2048)
                 if chunks is None:
                     chunks = []
-                
+
                 # 使用基于 chunk 的 LTO 检测
                 if chunks and len(chunks) > 0:
                     # 将 chunks 转换为 bytes 列表
@@ -220,7 +221,7 @@ class OptimizationDetector:
                 else:
                     # 如果没有 chunks，回退到文件级别检测
                     lto_result = self.lto_detector.detect(file_info, opt_level)
-                
+
                 lto_results[file_info.file_id] = lto_result
 
             except Exception as e:
@@ -517,7 +518,6 @@ class OptimizationDetector:
                 'O3 Chunks': distribution.get(3, 0),
                 'Os Chunks': distribution.get(4, 0),
                 'Total Chunks': total_chunks,
-                'File Size (bytes)': file_info.file_size,
                 'Size Optimized': size_optimized,
                 'Failure Reason': error_reason if error_reason else 'N/A',
             }
@@ -547,6 +547,23 @@ class OptimizationDetector:
                 row['LTO Prediction'] = 'N/A'
                 row['LTO Chunks'] = 'N/A'
                 row['LTO Total Score'] = 'N/A'
+            row['File hash'] = file_info.file_hash
+            row['File Size (bytes)'] = file_info.file_size
+            if file_info.hap_metadata:
+                row['hap_path'] = str(file_info.hap_metadata.hap_path)
+                row['bundle_name'] = file_info.hap_metadata.bundle_name
+                row['version_code'] = file_info.hap_metadata.version_code
+                row['version_name'] = file_info.hap_metadata.version_name
+                row['app_name'] = file_info.hap_metadata.app_name
+                # File 列使用相对于 HAP 路径的内部相对路径，便于阅读
+                try:
+                    hap_path = Path(file_info.hap_metadata.hap_path)
+                    file_path = Path(file_info.logical_path)
+                    # logical_path 形如 "<hap_path>/<internal_path>"，取两者之间的相对路径
+                    relative = os.path.relpath(file_path, start=hap_path)
+                    row['File'] = relative
+                except Exception:  # 回退到原始逻辑路径
+                    row['File'] = file_info.logical_path
 
             report_data.append(row)
         return pd.DataFrame(report_data)
