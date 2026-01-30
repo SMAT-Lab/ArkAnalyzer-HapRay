@@ -10,7 +10,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <div style="display: flex; align-items: center;">
-              <span style="font-weight: 600; margin-right: 12px;">页面RN渲染CanvasNode组件数量:</span>
+              <span style="font-weight: 600; margin-right: 12px;">页面RS渲染CanvasNode组件数量:</span>
               <div ref="canvasNodeChartRef" style="width: 100%; height: 200px;"></div>
             </div>
           </el-col>
