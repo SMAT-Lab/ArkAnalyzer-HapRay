@@ -26,6 +26,8 @@ from typing import Optional
 import arpy
 from elftools.elf.elffile import ELFFile
 
+from optimization_detector.hap_parser import HapMetadata, HapParser
+
 # File analysis status mapping
 FILE_STATUS_MAPPING = {
     'analyzed': 'Successfully Analyzed',
@@ -79,12 +81,19 @@ class FileInfo:
         filename = os.path.basename(file_path)
         return file_path.endswith('.so') or '.so.' in filename
 
-    def __init__(self, absolute_path: str, logical_path: Optional[str] = None):
+    def __init__(
+        self,
+        absolute_path: str,
+        logical_path: Optional[str] = None,
+        hap_metadata: Optional[HapMetadata] = None,
+    ):
         self.absolute_path = absolute_path
         self.logical_path = logical_path or absolute_path
         self.file_size = self._get_file_size()
         self.file_hash = self._calculate_file_hash()
         self.file_id = self._generate_file_id()
+        # 如果文件来自 HAP/HSP/APK/HAR，则附带其 HAP 元信息
+        self.hap_metadata = hap_metadata
 
         # 优先通过ELF magic number检测，更准确
         if absolute_path.endswith('.a'):
@@ -104,13 +113,28 @@ class FileInfo:
         return f'FileInfo({self.logical_path}, size={self.file_size}, hash={self.file_hash[:8]}...)'
 
     def to_dict(self) -> dict:
-        return {
+        data: dict[str, object] = {
             'absolute_path': self.absolute_path,
             'logical_path': self.logical_path,
             'file_size': self.file_size,
             'file_hash': self.file_hash,
             'file_id': self.file_id,
         }
+
+        # 如果有 HAP 元数据，展开为扁平字段，避免下游类型告警
+        if self.hap_metadata is not None:
+            data.update(
+                {
+                    'hap_path': str(self.hap_metadata.hap_path),
+                    'hap_bundle_name': self.hap_metadata.bundle_name,
+                    'hap_version_code': self.hap_metadata.version_code,
+                    'hap_version_name': self.hap_metadata.version_name,
+                    'hap_app_name': self.hap_metadata.app_name,
+                    'hap_build_time': self.hap_metadata.build_time,
+                }
+            )
+
+        return data
 
     def extract_dot_text(self) -> list[int]:
         """Extract .text segment data"""
@@ -149,7 +173,7 @@ class FileInfo:
 
     def _calculate_file_hash(self) -> str:
         with open(self.absolute_path, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()
+            return hashlib.sha256(f.read()).hexdigest()
 
     def _generate_file_id(self) -> str:
         base_name = os.path.basename(self.absolute_path).replace(' ', '_')
@@ -263,8 +287,9 @@ class FileCollector:
             except Exception as e:
                 logging.error('Failed to extract tar.gz file %s: %s', hap_path, e)
         else:
-            # Try zip format
+            # Try zip format（标准 HAP/HSP/APK/HAR）
             try:
+                hap_info = HapParser.load_from_hap(hap_path)
                 with zipfile.ZipFile(hap_path, 'r') as zip_ref:
                     for file in zip_ref.namelist():
                         if (file.startswith('libs/arm64') or file.startswith('lib/arm64')) and (
@@ -277,7 +302,11 @@ class FileCollector:
 
                             # 提取后再次检查是否是有效的ELF文件，过滤掉无效文件
                             if FileInfo._is_elf_file(output_path):
-                                file_info = FileInfo(absolute_path=output_path, logical_path=f'{hap_path}/{file}')
+                                file_info = FileInfo(
+                                    absolute_path=output_path,
+                                    logical_path=f'{hap_path}/{file}',
+                                    hap_metadata=hap_info,
+                                )
                                 extracted_files.append(file_info)
                             else:
                                 logging.debug('Skipping non-ELF file from archive: %s', file)
