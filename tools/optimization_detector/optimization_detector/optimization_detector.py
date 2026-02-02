@@ -238,7 +238,7 @@ class OptimizationDetector:
         """
         try:
             # 检查chunk数量，如果小于1个chunk，跳过预测
-            MIN_CHUNKS = 1
+            MIN_CHUNKS = 5
             # 先尝试直接打开 ELF 文件，以便捕获更详细的错误信息
             try:
                 with open(file_info.absolute_path, 'rb') as f:
