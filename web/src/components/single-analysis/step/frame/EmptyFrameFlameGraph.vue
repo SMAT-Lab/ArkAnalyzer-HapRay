@@ -297,6 +297,27 @@ function renderFlameGraph() {
 
   console.log('传给d3-flame-graph的根节点:', rootData.name, 'children:', rootData.children.length);
   containerSelection.datum(rootData).call(flameGraphInstance);
+
+  console.log('传给d3-flame-graph的根节点:', rootData.name, 'children:', rootData.children.length);
+  containerSelection.datum(rootData).call(flameGraphInstance);
+
+  // 渲染完成后，手动为满足条件的节点设置颜色
+  nextTick(() => {
+    if (containerSelection) {
+      containerSelection.selectAll('rect').each(function(d) {
+        const rect = select(this);
+        const file = d.data?.file || '';
+
+        // 只对/proc/开头的真实路径设置蓝色，排除unknown等
+        if (file.startsWith('/proc/') && file !== '/proc/' && !file.includes('unknown')) {
+          rect.style('fill', '#3b82f6');
+        } else if (file.endsWith('.ets') && file !== '.ets') {
+          rect.style('fill', '#10b981');
+        }
+        // 其他节点保持d3-flame-graph的默认颜色
+      });
+    }
+  });
 }
 
 watch(() => props.data, () => {
