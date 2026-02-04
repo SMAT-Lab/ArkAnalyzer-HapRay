@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="performance-comparison">
     <!-- 无数据提示 -->
     <div v-if="!hasPerfData" class="no-data-tip">
@@ -103,11 +103,11 @@
         <!-- 步骤饼图（左，进程-线程-文件-符号） -->
         <div class="data-panel">
           <!-- 面包屑导航 -->
-          <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
+          <div class="breadcrumb-nav">
+            <span v-for="(item, index) in processBreadcrumbItems" :key="index" class="breadcrumb-item">
               <i v-if="index > 0" class="breadcrumb-separator">></i>
               <span @click="handleProcessBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('process', index, item) }}
+                {{ item }}
               </span>
             </span>
           </div>
@@ -122,11 +122,11 @@
         <!-- 步骤饼图（右，分类-小分类-文件-符号） -->
         <div class="data-panel">
           <!-- 面包屑导航 -->
-          <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
-            <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
+          <div class="breadcrumb-nav">
+            <span v-for="(item, index) in stepBreadcrumbItems" :key="index" class="breadcrumb-item">
               <i v-if="index > 0" class="breadcrumb-separator">></i>
               <span @click="handleStepBreadcrumbClick(index)">
-                {{ getBreadcrumbLabel('category', index, item) }}
+                {{ item }}
               </span>
             </span>
           </div>
@@ -139,11 +139,12 @@
       </el-col>
     </el-row>
 
-    <!-- 负载表格区域 -->
-    <el-row :gutter="20">
+    <!-- 负载表格区域：根据面包屑下钻层级隐藏上层表格 -->
+    <!-- 左侧（进程）：0首页 1进程 2线程 3文件 4符号 | 右侧（分类）：0首页 1大分类 2小分类 3文件 4符号 -->
+    <el-row v-if="processPieDrilldownStack.length < 2 || stepPieDrilldownStack.length < 2" :gutter="20">
       <el-col :span="12">
         <!-- 线程负载 -->
-        <div class="data-panel">
+        <div v-if="processPieDrilldownStack.length < 2" class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">线程负载</span>
           </h3>
@@ -154,7 +155,7 @@
       </el-col>
       <el-col :span="12">
         <!-- 小分类负载 -->
-        <div class="data-panel">
+        <div v-if="stepPieDrilldownStack.length < 2" class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">小分类负载</span>
           </h3>
@@ -165,10 +166,10 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20">
+    <el-row v-if="processPieDrilldownStack.length < 3 || stepPieDrilldownStack.length < 3" :gutter="20">
       <el-col :span="12">
         <!-- 文件负载 -->
-        <div class="data-panel">
+        <div v-if="processPieDrilldownStack.length < 3" class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
@@ -178,8 +179,8 @@
         </div>
       </el-col>
       <el-col :span="12">
-        <!-- 文件负载 -->
-        <div class="data-panel">
+        <!-- 文件负载（分类） -->
+        <div v-if="stepPieDrilldownStack.length < 3" class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">文件负载</span>
           </h3>
@@ -190,10 +191,10 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20">
+    <el-row v-if="processPieDrilldownStack.length < 4 || stepPieDrilldownStack.length < 4" :gutter="20">
       <el-col :span="12">
         <!-- 函数负载 -->
-        <div class="data-panel">
+        <div v-if="processPieDrilldownStack.length < 4" class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
@@ -203,8 +204,8 @@
         </div>
       </el-col>
       <el-col :span="12">
-        <!-- 函数负载 -->
-        <div class="data-panel">
+        <!-- 函数负载（分类） -->
+        <div v-if="stepPieDrilldownStack.length < 4" class="data-panel">
           <h3 class="panel-title">
             <span class="version-tag">函数负载</span>
           </h3>
@@ -511,10 +512,33 @@ function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: s
   }
 }
 
+// 进程饼图面包屑项（首页 + 下钻层级）
+const processBreadcrumbItems = computed(() => {
+  const items = ['首页'];
+  processPieDrilldownStack.value.forEach((name, index) => {
+    items.push(getBreadcrumbLabel('process', index, name));
+  });
+  return items;
+});
+
+// 分类饼图面包屑项（首页 + 下钻层级）
+const stepBreadcrumbItems = computed(() => {
+  const items = ['首页'];
+  stepPieDrilldownStack.value.forEach((name, index) => {
+    items.push(getBreadcrumbLabel('category', index, name));
+  });
+  return items;
+});
+
 // 处理进程饼图面包屑点击
 function handleProcessBreadcrumbClick(targetIndex: number) {
-  // 回退到指定层级
-  const targetLevel = targetIndex + 1;
+  if (targetIndex === 0) {
+    processPieDrilldownStack.value = [];
+    processPieDataStack.value = [];
+    processPieData.value = getProcessPieDrilldownData('', []);
+    return;
+  }
+  const targetLevel = targetIndex;
   while (processPieDrilldownStack.value.length > targetLevel) {
     processPieDrilldownStack.value.pop();
     processPieData.value = processPieDataStack.value.pop() || processPieData.value;
@@ -523,8 +547,13 @@ function handleProcessBreadcrumbClick(targetIndex: number) {
 
 // 处理步骤饼图面包屑点击
 function handleStepBreadcrumbClick(targetIndex: number) {
-  // 回退到指定层级
-  const targetLevel = targetIndex + 1;
+  if (targetIndex === 0) {
+    stepPieDrilldownStack.value = [];
+    stepPieDataStack.value = [];
+    stepPieData.value = getDrilldownPieData('', []);
+    return;
+  }
+  const targetLevel = targetIndex;
   while (stepPieDrilldownStack.value.length > targetLevel) {
     stepPieDrilldownStack.value.pop();
     stepPieData.value = stepPieDataStack.value.pop() || stepPieData.value;

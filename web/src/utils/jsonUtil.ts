@@ -263,14 +263,21 @@ export function calculateProcessData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 线程级别比较
+// 线程显示格式：线程名[线程id]
+function formatThreadKey(threadName: string, tid: number): string {
+    return `${threadName}[${tid}]`;
+}
+
+// 线程级别比较（按进程拆解时使用 线程名[线程id] 格式）
 export function calculateThreadData(
     baseData: PerfData,
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${item.processName}|${item.threadName}` : `${stepId}|${item.processName}|${item.threadName}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        return ignoreStep ? `${item.processName}|${threadKey}` : `${stepId}|${item.processName}|${threadKey}`;
+    };
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -288,14 +295,16 @@ export function calculateThreadData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 文件级别比较
+// 文件级别比较（thread 使用 线程名[线程id] 格式以匹配进程拆解下钻）
 export function calculateFileData(
     baseData: PerfData,
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): FileDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${item.processName}|${item.threadName}|${item.file}` : `${stepId}|${item.processName}|${item.threadName}|${item.file}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        return ignoreStep ? `${item.processName}|${threadKey}|${item.file}` : `${stepId}|${item.processName}|${threadKey}|${item.file}`;
+    };
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -314,14 +323,16 @@ export function calculateFileData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 符号级别比较
+// 符号级别比较（thread 使用 线程名[线程id] 格式以匹配进程拆解下钻）
 export function calculateSymbolData(
     baseData: PerfData,
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${item.processName}|${item.threadName}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${item.threadName}|${item.file}|${item.symbol}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        return ignoreStep ? `${item.processName}|${threadKey}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${threadKey}|${item.file}|${item.symbol}`;
+    };
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
