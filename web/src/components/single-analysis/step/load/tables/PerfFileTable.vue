@@ -1,61 +1,51 @@
 <template>
   <div id="perfsTable" class="instructions-table">
-    <!-- 搜索和过滤容器 -->
+    <!-- 搜索和过滤容器：按进程拆解时仅显示实际列对应的搜索框（反序），指令数列不搜索 -->
     <div class="filter-container">
       <el-radio-group v-model="filterModel.filterMode">
         <el-radio-button value="string">字符串模式</el-radio-button>
         <el-radio-button value="regex">正则模式</el-radio-button>
       </el-radio-group>
-      <el-input
-v-model="fileNameQuery.fileNameQuery" placeholder="根据文件名搜索" clearable class="search-input"
-        @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
-      <el-input
-v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable
-        class="search-input" @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
-      <el-input
-v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable
-        class="search-input" @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
-      <el-select
-v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类"
-        clearable class="category-select" @change="handleFilterChange">
-        <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
-      </el-select>
-      <el-input
-v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder="根据小分类搜索" clearable
-        class="search-input" @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
-      <el-input
-v-if="hasCategory" v-model="thirdCategoryNameQueryStore.thirdCategoryNameQuery" placeholder="根据三级分类搜索" clearable
-        class="search-input" @input="handleFilterChange">
-        <template #prefix>
-          <el-icon>
-            <search />
-          </el-icon>
-        </template>
-      </el-input>
+      <template v-if="processDrillPathLevel !== undefined">
+        <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-input v-if="processDrillPathLevel >= 3" v-model="thirdCategoryNameQueryStore.thirdCategoryNameQuery" placeholder="根据三级分类搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-input v-if="processDrillPathLevel >= 2" v-model="componentNameQuery.subCategoryNameQuery" placeholder="根据小类搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-select v-if="processDrillPathLevel >= 1" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择大类" clearable class="category-select" @change="handleFilterChange">
+          <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
+        </el-select>
+        <el-input v-model="threadNameQuery.threadNameQuery" placeholder="根据线程搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-input v-model="processNameQuery.processNameQuery" placeholder="根据进程搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+      </template>
+      <template v-else>
+        <el-input v-model="fileNameQuery.fileNameQuery" placeholder="根据文件名搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-input v-if="!hasCategory" v-model="threadNameQuery.threadNameQuery" placeholder="根据线程名搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-input v-if="!hasCategory" v-model="processNameQuery.processNameQuery" placeholder="根据进程名搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-select v-if="hasCategory" v-model="category.categoriesQuery" multiple collapse-tags placeholder="选择分类" clearable class="category-select" @change="handleFilterChange">
+          <el-option v-for="filter in categoryFilters" :key="filter.value" :label="filter.text" :value="filter.value" />
+        </el-select>
+        <el-input v-if="hasCategory" v-model="componentNameQuery.subCategoryNameQuery" placeholder="根据小分类搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+        <el-input v-if="hasCategory" v-model="thirdCategoryNameQueryStore.thirdCategoryNameQuery" placeholder="根据三级分类搜索" clearable class="search-input" @input="handleFilterChange">
+          <template #prefix><el-icon><search /></el-icon></template>
+        </el-input>
+      </template>
     </div>
 
     <!-- 过滤后占比 -->
@@ -87,34 +77,54 @@ v-if="hasCategory" v-model="thirdCategoryNameQueryStore.thirdCategoryNameQuery" 
 :data="paginatedData" style="width: 100%" :default-sort="{ prop: 'instructions', order: 'descending' }"
       stripe highlight-current-row @row-click="handleRowClick"
       @sort-change="handleSortChange">
-      <el-table-column prop="name" label="文件" sortable>
+      <!-- 按进程拆解：列顺序反序 文件|三级分类|小类|大类|线程|进程 -->
+      <el-table-column v-if="processDrillPathLevel !== undefined" prop="file" label="文件">
+        <template #default="{ row }"><div class="name-cell">{{ row.file }}</div></template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel !== undefined && processDrillPathLevel >= 3" prop="thirdCategoryName" label="三级分类">
+        <template #default="{ row }"><div class="category-cell">{{ row.thirdCategoryName || '-' }}</div></template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel !== undefined && processDrillPathLevel >= 2" prop="subCategoryName" label="小类">
+        <template #default="{ row }"><div class="category-cell">{{ row.subCategoryName || '-' }}</div></template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel !== undefined && processDrillPathLevel >= 1" prop="category" label="大类">
+        <template #default="{ row }"><div class="category-cell">{{ row.category || '-' }}</div></template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel !== undefined" prop="thread" label="线程">
+        <template #default="{ row }"><div class="category-cell">{{ row.thread || '-' }}</div></template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel !== undefined" prop="process" label="进程">
+        <template #default="{ row }"><div class="category-cell">{{ row.process || '-' }}</div></template>
+      </el-table-column>
+      <!-- 按分类拆解：列顺序 函数|文件|三级分类|小分类|大分类，文件表为 文件|三级分类|小分类|大分类 -->
+      <el-table-column v-if="processDrillPathLevel === undefined" prop="name" label="文件" sortable>
         <template #default="{ row }">
           <div class="name-cell">{{ row.file }}</div>
         </template>
       </el-table-column>
-      <el-table-column v-if="!hasCategory" prop="category" label="所属线程">
+      <el-table-column v-if="processDrillPathLevel === undefined && hasCategory" prop="thirdCategoryName" label="三级分类">
         <template #default="{ row }">
-          <div class="category-cell">{{ row.thread }}</div>
+          <div class="category-cell">{{ row.thirdCategoryName || '-' }}</div>
         </template>
       </el-table-column>
-      <el-table-column v-if="!hasCategory" prop="category" label="所属进程">
-        <template #default="{ row }">
-          <div class="category-cell">{{ row.process }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="hasCategory" prop="category" label="大分类">
-        <template #default="{ row }">
-          <div class="category-cell">{{ row.category }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column v-if="hasCategory" prop="subCategoryName" label="小分类">
+      <el-table-column v-if="processDrillPathLevel === undefined && hasCategory" prop="subCategoryName" label="小分类">
         <template #default="{ row }">
           <div class="category-cell">{{ row.subCategoryName }}</div>
         </template>
       </el-table-column>
-      <el-table-column v-if="hasCategory" prop="thirdCategoryName" label="三级分类">
+      <el-table-column v-if="processDrillPathLevel === undefined && hasCategory" prop="category" label="大分类">
         <template #default="{ row }">
-          <div class="category-cell">{{ row.thirdCategoryName || '-' }}</div>
+          <div class="category-cell">{{ row.category }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel === undefined && !hasCategory" prop="category" label="所属进程">
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.process }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="processDrillPathLevel === undefined && !hasCategory" prop="category" label="所属线程">
+        <template #default="{ row }">
+          <div class="category-cell">{{ row.thread }}</div>
         </template>
       </el-table-column>
       <el-table-column label="基线指令数" width="160" prop="instructions" sortable>
@@ -184,7 +194,8 @@ const props = defineProps({
   hasCategory: {
     type: Boolean,
     required: true,
-  }
+  },
+  processDrillPathLevel: { type: Number as PropType<number | undefined>, default: undefined },
 });
 const isHidden = !props.hideColumn;
 
@@ -252,35 +263,34 @@ watch(() => props.data, (newVal) => {
 // 数据处理（添加完整类型注解）
 const filteredData = computed(() => {
   let result = [...props.data]
+  const level = props.processDrillPathLevel
 
-  // 应用进程过滤
-  if (!hasCategory) {
+  if (level !== undefined) {
     result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
-  }
-
-  // 应用线程过滤
-  if (!hasCategory) {
     result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
-  }
-
-  // 应用小分类过滤
-  if (hasCategory) {
-    result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
-  }
-
-  // 应用三级分类过滤
-  if (hasCategory) {
-    result = filterQueryCondition('thirdCategoryName', thirdCategoryNameQueryStore.thirdCategoryNameQuery, result);
-  }
-
-  // 文件搜索过滤
-  result = filterQueryCondition('file', fileNameQuery.fileNameQuery, result);
-
-  // 应用分类过滤
-  if (category.categoriesQuery && hasCategory) {
-    if (category.categoriesQuery.length > 0) {
-      result = result.filter((item: FileDataItem) =>
-        category.categoriesQuery.includes(item.category))
+    if (level >= 1 && category.categoriesQuery && category.categoriesQuery.length > 0) {
+      result = result.filter((item: FileDataItem) => category.categoriesQuery.includes(item.category));
+    }
+    if (level >= 2) result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
+    if (level >= 3) result = filterQueryCondition('thirdCategoryName', thirdCategoryNameQueryStore.thirdCategoryNameQuery, result);
+    result = filterQueryCondition('file', fileNameQuery.fileNameQuery, result);
+  } else {
+    if (!hasCategory) {
+      result = filterQueryCondition('process', processNameQuery.processNameQuery, result);
+      result = filterQueryCondition('thread', threadNameQuery.threadNameQuery, result);
+    }
+    if (hasCategory) {
+      result = filterQueryCondition('subCategoryName', componentNameQuery.subCategoryNameQuery, result);
+    }
+    if (hasCategory) {
+      result = filterQueryCondition('thirdCategoryName', thirdCategoryNameQueryStore.thirdCategoryNameQuery, result);
+    }
+    result = filterQueryCondition('file', fileNameQuery.fileNameQuery, result);
+    if (category.categoriesQuery && hasCategory) {
+      if (category.categoriesQuery.length > 0) {
+        result = result.filter((item: FileDataItem) =>
+          category.categoriesQuery.includes(item.category))
+      }
     }
   }
 
@@ -346,17 +356,13 @@ function filterQueryCondition(queryName: string, queryCondition: string, result:
 }
 
 function getDataItemProperty(queryName: string, dataItem: FileDataItem): string {
-  if (queryName === 'process') {
-    return dataItem.process;
-  } else if (queryName === 'thread') {
-    return dataItem.thread;
-  } else if (queryName === 'subCategoryName') {
-    return dataItem.subCategoryName;
-  } else if (queryName === 'file') {
-    return dataItem.file;
-  } else {
-    return ''
-  }
+  if (queryName === 'process') return dataItem.process ?? '';
+  if (queryName === 'thread') return dataItem.thread ?? '';
+  if (queryName === 'category') return dataItem.category ?? '';
+  if (queryName === 'subCategoryName') return dataItem.subCategoryName ?? '';
+  if (queryName === 'thirdCategoryName') return dataItem.thirdCategoryName ?? '';
+  if (queryName === 'file') return dataItem.file ?? '';
+  return '';
 }
 
 // 分页数据
