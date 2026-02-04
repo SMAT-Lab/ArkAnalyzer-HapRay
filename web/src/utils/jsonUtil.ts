@@ -263,14 +263,21 @@ export function calculateProcessData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 线程级别比较
+// 线程显示格式：线程名[线程id]
+function formatThreadKey(threadName: string, tid: number): string {
+    return `${threadName}[${tid}]`;
+}
+
+// 线程级别比较（按进程拆解时使用 线程名[线程id] 格式）
 export function calculateThreadData(
     baseData: PerfData,
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${item.processName}|${item.threadName}` : `${stepId}|${item.processName}|${item.threadName}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        return ignoreStep ? `${item.processName}|${threadKey}` : `${stepId}|${item.processName}|${threadKey}`;
+    };
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -288,14 +295,16 @@ export function calculateThreadData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 文件级别比较
+// 文件级别比较（thread 使用 线程名[线程id] 格式以匹配进程拆解下钻）
 export function calculateFileData(
     baseData: PerfData,
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): FileDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${item.processName}|${item.threadName}|${item.file}` : `${stepId}|${item.processName}|${item.threadName}|${item.file}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        return ignoreStep ? `${item.processName}|${threadKey}|${item.file}` : `${stepId}|${item.processName}|${threadKey}|${item.file}`;
+    };
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -314,14 +323,16 @@ export function calculateFileData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 符号级别比较
+// 符号级别比较（thread 使用 线程名[线程id] 格式以匹配进程拆解下钻）
 export function calculateSymbolData(
     baseData: PerfData,
     compareData: PerfData | null,
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
-    const keyGenerator: KeyGenerator = (item, stepId) =>
-        ignoreStep ? `${item.processName}|${item.threadName}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${item.threadName}|${item.file}|${item.symbol}`;
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        return ignoreStep ? `${item.processName}|${threadKey}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${threadKey}|${item.file}|${item.symbol}`;
+    };
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -338,6 +349,132 @@ export function calculateSymbolData(
             increasePercentage,
         });
 
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
+}
+
+// 按进程拆解扩展层级：进程-线程-大类-小类-三级分类-文件-函数
+// 进程+线程+大类
+export function calculateProcessThreadCategoryData(
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
+): ThreadDataItem[] {
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}`;
+    };
+    const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
+        stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+        process: ignoreStep ? keyParts[0] : keyParts[1],
+        category: ignoreStep ? keyParts[2] : keyParts[3],
+        subCategoryName: "",
+        thirdCategoryName: undefined,
+        thread: ignoreStep ? keyParts[1] : keyParts[2],
+        instructions, compareInstructions, increaseInstructions, increasePercentage,
+    });
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
+}
+
+// 进程+线程+大类+小类
+export function calculateProcessThreadSubCategoryData(
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
+): ThreadDataItem[] {
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}`;
+    };
+    const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
+        stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+        process: ignoreStep ? keyParts[0] : keyParts[1],
+        category: ignoreStep ? keyParts[2] : keyParts[3],
+        subCategoryName: ignoreStep ? keyParts[3] : keyParts[4],
+        thirdCategoryName: undefined,
+        thread: ignoreStep ? keyParts[1] : keyParts[2],
+        instructions, compareInstructions, increaseInstructions, increasePercentage,
+    });
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
+}
+
+// 进程+线程+大类+小类+三级分类
+export function calculateProcessThreadThirdCategoryData(
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
+): ThreadDataItem[] {
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        const thirdCategoryName = item.thirdCategoryName || '';
+        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}`;
+    };
+    const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
+        stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+        process: ignoreStep ? keyParts[0] : keyParts[1],
+        category: ignoreStep ? keyParts[2] : keyParts[3],
+        subCategoryName: ignoreStep ? keyParts[3] : keyParts[4],
+        thirdCategoryName: ignoreStep ? keyParts[4] : keyParts[5],
+        thread: ignoreStep ? keyParts[1] : keyParts[2],
+        instructions, compareInstructions, increaseInstructions, increasePercentage,
+    });
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
+}
+
+// 进程+线程+大类+小类+三级分类+文件
+export function calculateProcessThreadFileData(
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
+): FileDataItem[] {
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        const thirdCategoryName = item.thirdCategoryName || '';
+        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}`;
+    };
+    const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
+        stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+        process: ignoreStep ? keyParts[0] : keyParts[1],
+        category: ignoreStep ? keyParts[2] : keyParts[3],
+        subCategoryName: ignoreStep ? keyParts[3] : keyParts[4],
+        thirdCategoryName: ignoreStep ? keyParts[4] : keyParts[5],
+        thread: ignoreStep ? keyParts[1] : keyParts[2],
+        file: ignoreStep ? keyParts[5] : keyParts[6],
+        instructions, compareInstructions, increaseInstructions, increasePercentage,
+    });
+    return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
+}
+
+// 进程+线程+大类+小类+三级分类+文件+符号
+export function calculateProcessThreadSymbolData(
+    baseData: PerfData,
+    compareData: PerfData | null,
+    ignoreStep: boolean = false
+): SymbolDataItem[] {
+    const keyGenerator: KeyGenerator = (item, stepId) => {
+        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
+        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const subCategoryName = item.subCategoryName || 'Unknown';
+        const thirdCategoryName = item.thirdCategoryName || '';
+        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}`;
+    };
+    const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
+        stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
+        process: ignoreStep ? keyParts[0] : keyParts[1],
+        category: ignoreStep ? keyParts[2] : keyParts[3],
+        subCategoryName: ignoreStep ? keyParts[3] : keyParts[4],
+        thirdCategoryName: ignoreStep ? keyParts[4] : keyParts[5],
+        thread: ignoreStep ? keyParts[1] : keyParts[2],
+        file: ignoreStep ? keyParts[5] : keyParts[6],
+        symbol: ignoreStep ? keyParts[6] : keyParts[7],
+        instructions, compareInstructions, increaseInstructions, increasePercentage,
+    });
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
