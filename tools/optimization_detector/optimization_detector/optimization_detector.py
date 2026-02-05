@@ -120,21 +120,20 @@ class OptimizationDetector:
         return results
 
     def detect_optimization(self, file_infos: list[FileInfo]) -> list[tuple[str, pd.DataFrame]]:
-        # 优化级别检测（与 LTO 共用同一套 chunk，技术栈一致，不重复切分）
+        # 优化级别检测
         flags = {}
         success = 0
         failures = 0
-        chunks_by_file_id = {}
         if self.enable_opt:
-            success, failures, flags, chunks_by_file_id = self._analyze_files(file_infos)
+            success, failures, flags = self._analyze_files(file_infos)
         else:
             logging.info('Optimization level detection disabled (--no-opt)')
 
-        # LTO 检测：复用 opt 阶段已切分的 chunks，避免重复 _extract_features
+        # LTO检测
         lto_results = {}
         if self.enable_lto and self.lto_detector:
             logging.info('Running LTO detection on %d files', len(file_infos))
-            lto_results = self._detect_lto(file_infos, flags, chunks_by_file_id)
+            lto_results = self._detect_lto(file_infos, flags)
             logging.info('LTO detection complete')
 
         if self.enable_opt:
@@ -170,12 +169,8 @@ class OptimizationDetector:
         batch_size = 512 if self.use_gpu else 256  # GPU 可以使用更大的批处理大小
         return model.predict(data, batch_size=batch_size, verbose=0)
 
-    def _run_inference(
-        self, file_info: FileInfo, features: int = 2048, features_array: Optional[list] = None
-    ) -> list[tuple[int, float]]:
-        """Run opt model on chunks. features_array 由 _run_analysis 传入时可复用，避免重复提取。"""
-        if features_array is None:
-            features_array = self._extract_features(file_info, features)
+    def _run_inference(self, file_info: FileInfo, features: int = 2048) -> list[tuple[int, float]]:
+        features_array = self._extract_features(file_info, features)
         if features_array is None or not len(features_array):
             return []
 
@@ -199,15 +194,13 @@ class OptimizationDetector:
                 results.append((prediction, confidence))
         return results
 
-    def _detect_lto(
-        self, file_infos: list[FileInfo], flags_results: dict, chunks_by_file_id: Optional[dict] = None
-    ) -> dict:
-        """对 SO 进行 LTO 检测（基于 chunk）。与 opt 技术栈一致：复用 opt 阶段已切分的 chunks，不重复 _extract_features。"""
+    def _detect_lto(self, file_infos: list[FileInfo], flags_results: dict) -> dict:
+        """对SO文件进行LTO检测（基于chunk）"""
         lto_results = {}
-        chunks_by_file_id = chunks_by_file_id or {}
 
         for file_info in tqdm(file_infos, desc='Detecting LTO'):
             try:
+                # 获取优化级别（如果已检测）
                 opt_level = None
                 result = flags_results.get(file_info.file_id)
                 if result:
@@ -215,17 +208,18 @@ class OptimizationDetector:
                     opt_level_map = {0: 'O0', 1: 'O1', 2: 'O2', 3: 'O3', 4: 'Os'}
                     opt_level = opt_level_map.get(prediction, 'O2')
 
-                # 复用 opt 阶段已切分的 chunks（与 opt 同一套 chunk），无则再按需提取
-                raw_chunks = chunks_by_file_id.get(file_info.file_id)
-                if raw_chunks is None:
-                    raw_chunks = self._extract_features(file_info, features=2048)
-                if raw_chunks is None:
-                    raw_chunks = []
+                # 提取 chunks（与优化级别检测使用相同的 chunks）
+                chunks = self._extract_features(file_info, features=2048)
+                if chunks is None:
+                    chunks = []
 
-                if raw_chunks and len(raw_chunks) > 0:
-                    chunk_bytes = [bytes(chunk) for chunk in raw_chunks]
+                # 使用基于 chunk 的 LTO 检测
+                if chunks and len(chunks) > 0:
+                    # 将 chunks 转换为 bytes 列表
+                    chunk_bytes = [bytes(chunk) for chunk in chunks]
                     lto_result = self.lto_detector.detect_chunk_based(file_info, chunk_bytes, opt_level)
                 else:
+                    # 如果没有 chunks，回退到文件级别检测
                     lto_result = self.lto_detector.detect(file_info, opt_level)
 
                 lto_results[file_info.file_id] = lto_result
@@ -236,12 +230,11 @@ class OptimizationDetector:
 
         return lto_results
 
-    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]], Optional[str], Optional[list]]:
-        """Run optimization flag detection on a single file with optional timeout.
-        Returns: (file_info, flags, error_reason, chunks)
+    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]], Optional[str]]:
+        """Run optimization flag detection on a single file with optional timeout
+        Returns: (file_info, flags, error_reason)
         - flags: None means skip (too few chunks), [] means no data, list means success
         - error_reason: None means no error, str means failure reason
-        - chunks: .text 段按 2048 字节切分的列表（与 opt 一致），供 LTO 复用，避免重复切分
         """
         try:
             # 检查chunk数量，如果小于1个chunk，跳过预测
@@ -253,14 +246,14 @@ class OptimizationDetector:
                     section = elf.get_section_by_name('.text')
                     if not section:
                         error_msg = 'No .text section found in ELF file'
-                        return file_info, [], error_msg, None
+                        return file_info, [], error_msg
             except Exception as e:
                 # 捕获 ELF 文件读取异常（如 Magic number does not match）
                 error_msg = f'Failed to read ELF file: {str(e)}'
                 logging.error('Error reading ELF file %s: %s', file_info.absolute_path, e)
-                return file_info, [], error_msg, None
+                return file_info, [], error_msg
 
-            # 如果 ELF 文件读取成功，再尝试提取 .text 段数据（只提取一次，与 LTO 共用）
+            # 如果 ELF 文件读取成功，再尝试提取 .text 段数据
             text_data = file_info.extract_dot_text()
             if not text_data:
                 # 检查文件类型
@@ -269,14 +262,15 @@ class OptimizationDetector:
                 else:
                     error_msg = 'No .text section data extracted (section exists but data is empty)'
                 logging.info('No text data for %s: %s', file_info.absolute_path, error_msg)
-                return file_info, [], error_msg, None
+                return file_info, [], error_msg
 
-            # 提取特征（只做一次，与 LTO 技术栈一致：同一套 chunk）
+            # 提取特征
             logging.info('Extracted %d bytes from .text section for %s', len(text_data), file_info.absolute_path)
             features_array = self._extract_features(file_info, features=2048)
             if features_array is not None:
                 logging.info('Extracted %d chunks from %s', len(features_array), file_info.absolute_path)
             # 只有当有数据但chunk数量不足时才跳过预测
+            # 如果没有数据（features_array is None），继续执行让_run_inference返回[]，最终标记为failed
             if features_array is not None and len(features_array) < MIN_CHUNKS:
                 logging.info(
                     'Skipping file with too few chunks (%d < %d): %s',
@@ -284,13 +278,12 @@ class OptimizationDetector:
                     MIN_CHUNKS,
                     file_info.absolute_path,
                 )
-                return file_info, None, None, None
-            if features_array is None:
-                return file_info, [], None, None
+                # 返回特殊标记，表示跳过（使用None表示skip，与"没有数据"区分）
+                return file_info, None, None
         except Exception as e:
             error_msg = f'Failed to extract features: {str(e)}'
             logging.error('Error extracting features from %s: %s', file_info.absolute_path, e)
-            return file_info, [], error_msg, None
+            return file_info, [], error_msg
 
         # Lazy load model
         if self.model is None:
@@ -316,31 +309,30 @@ class OptimizationDetector:
 
         try:
             if self.timeout is None:
-                result = self._run_inference(file_info, features_array=features_array)
-                return file_info, result, None, features_array
+                # No timeout, run normally
+                result = self._run_inference(file_info)
+                return file_info, result, None
+            # Use ThreadPoolExecutor with timeout for cross-platform compatibility
             from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
             from concurrent.futures import TimeoutError as FutureTimeoutError  # noqa: PLC0415
 
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self._run_inference, file_info, features_array=features_array)
+                future = executor.submit(self._run_inference, file_info)
                 try:
                     result = future.result(timeout=self.timeout)
-                    return file_info, result, None, features_array
+                    return file_info, result, None
                 except FutureTimeoutError:
                     error_msg = f'Analysis timeout after {self.timeout} seconds'
                     logging.warning('File analysis timeout after %d seconds: %s', self.timeout, file_info.absolute_path)
+                    # Cancel the future if possible
                     future.cancel()
-                    return file_info, [], error_msg, None
+                    return file_info, [], error_msg
         except Exception as e:
             error_msg = f'Analysis error: {str(e)}'
             logging.error('Error analyzing file %s: %s', file_info.absolute_path, e)
-            return file_info, [], error_msg, None
+            return file_info, [], error_msg
 
-    def _analyze_files(self, file_infos: list[FileInfo]) -> tuple[int, int, dict, dict]:
-        """Returns (files_with_results, failures, flags_results, chunks_by_file_id).
-        chunks_by_file_id 供 LTO 复用，与 opt 使用同一套 chunk，避免重复切分。
-        """
-        chunks_by_file_id = {}
+    def _analyze_files(self, file_infos: list[FileInfo]) -> tuple[int, int, dict]:
         # Filter out analyzed files
         remaining_files = []
         for file_info in file_infos:
@@ -369,13 +361,10 @@ class OptimizationDetector:
             else:
                 results = [process_func(fi) for fi in tqdm(remaining_files, desc='Analyzing binaries optimization')]
 
-            # Save intermediate results，并收集 chunks 供 LTO 复用（与 opt 技术栈一致，不重复切分）
-            chunks_by_file_id = {}
-            for file_info, flags, error_reason, chunks in results:
+            # Save intermediate results
+            for file_info, flags, error_reason in results:
                 flags_path = os.path.join(FileInfo.CACHE_DIR, f'flags_{file_info.file_id}.csv')
                 error_path = os.path.join(FileInfo.CACHE_DIR, f'error_{file_info.file_id}.txt')
-                if chunks is not None and len(chunks) > 0:
-                    chunks_by_file_id[file_info.file_id] = chunks
 
                 if flags is None:
                     # 跳过预测（chunk数量太少），创建skip标记文件
@@ -415,7 +404,6 @@ class OptimizationDetector:
 
         flags_results = {}
         files_with_results = 0
-        # 若本次未做分析（全部走缓存），chunks_by_file_id 为空，LTO 会回退到按需 _extract_features
         for file_info in file_infos:
             flags_path = os.path.join(FileInfo.CACHE_DIR, f'flags_{file_info.file_id}.csv')
             error_path = os.path.join(FileInfo.CACHE_DIR, f'error_{file_info.file_id}.txt')
@@ -470,7 +458,7 @@ class OptimizationDetector:
                     'error_reason': error_reason,
                 }
 
-        return files_with_results, len(file_infos) - files_with_results, flags_results, chunks_by_file_id
+        return files_with_results, len(file_infos) - files_with_results, flags_results
 
     def _collect_results(
         self, flags_results: dict, file_infos: list[FileInfo], lto_results: Optional[dict] = None
@@ -545,21 +533,20 @@ class OptimizationDetector:
                     total_chunks = lto_result.get('total_chunks', dist.get('LTO', 0) + dist.get('No LTO', 0))
                     if total_chunks > 0:
                         row['LTO Chunks'] = f"{dist.get('LTO', 0)}/{total_chunks}"
-                        # total_score = 各 chunk 的 sigmoid 概率之和（chunk 数 × 平均 ≈ 该值，可 >1）
-                        # 判定用 LTO Score（平均），此列仅作参考
+                        # 显示累加分数（类似 optimization_score）
                         total_score = lto_result.get('total_score', 0)
-                        row['LTO Sum (chunks)'] = f'{total_score:.2f}'
+                        row['LTO Total Score'] = f'{total_score:.2f}'
                     else:
                         row['LTO Chunks'] = 'N/A'
-                        row['LTO Sum (chunks)'] = 'N/A'
+                        row['LTO Total Score'] = 'N/A'
                 else:
                     row['LTO Chunks'] = 'N/A'
-                    row['LTO Sum (chunks)'] = 'N/A'
+                    row['LTO Total Score'] = 'N/A'
             elif self.enable_lto:
                 row['LTO Score'] = 'N/A'
                 row['LTO Prediction'] = 'N/A'
                 row['LTO Chunks'] = 'N/A'
-                row['LTO Sum (chunks)'] = 'N/A'
+                row['LTO Total Score'] = 'N/A'
             row['File hash'] = file_info.file_hash
             row['File Size (bytes)'] = file_info.file_size
             if file_info.hap_metadata:
