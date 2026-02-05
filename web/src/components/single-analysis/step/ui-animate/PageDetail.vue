@@ -81,7 +81,7 @@
           </div>
         </div>
       </el-card>
-      <!-- CanvasNode数量 -->
+      <!-- CanvasNode数量及上树/未上树统计 -->
       <el-card shadow="never" style="margin-bottom: 16px;">
         <template #header>
           <span style="font-weight: 600; font-size: 15px;">
@@ -89,11 +89,58 @@
             组件树信息
           </span>
         </template>
-        <el-statistic title="CanvasNode数量" :value="page.canvasNodeCnt || 0">
-          <template #suffix>
-            <span style="font-size: 14px;">个</span>
-          </template>
-        </el-statistic>
+        <div style="display: flex; flex-wrap: wrap; gap: 24px;">
+          <el-statistic title="CanvasNode数量" :value="page.canvasNodeCnt || 0">
+            <template #suffix>
+              <span style="font-size: 14px;">个</span>
+            </template>
+          </el-statistic>
+          <el-statistic
+            v-if="page.canvas_node_on_tree !== undefined"
+            title="上树节点"
+            :value="page.canvas_node_on_tree"
+          >
+            <template #suffix>
+              <span style="font-size: 14px;">个</span>
+            </template>
+          </el-statistic>
+          <el-statistic
+            v-if="page.canvas_node_off_tree !== undefined"
+            title="未上树节点"
+            :value="page.canvas_node_off_tree"
+          >
+            <template #suffix>
+              <span style="font-size: 14px;">个</span>
+            </template>
+          </el-statistic>
+        </div>
+        <!-- 上树/未上树ID详情（可展开） -->
+        <el-collapse v-if="hasOnTreeOffTreeDetail" style="margin-top: 16px;">
+          <el-collapse-item title="上树/未上树节点ID详情" name="detail">
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <div style="font-weight: 600; margin-bottom: 8px; color: #67c23a;">上树节点ID ({{ page.on_tree_off_tree_detail?.on_tree_ids?.length || 0 }})</div>
+                <div
+                  v-if="page.on_tree_off_tree_detail?.on_tree_ids?.length"
+                  style="max-height: 120px; overflow-y: auto; font-size: 12px; font-family: monospace; color: #606266;"
+                >
+                  {{ page.on_tree_off_tree_detail.on_tree_ids.join(', ') }}
+                </div>
+                <el-empty v-else description="无" :image-size="40" />
+              </el-col>
+              <el-col :span="12">
+                <div style="font-weight: 600; margin-bottom: 8px; color: #f56c6c;">未上树节点ID ({{ page.on_tree_off_tree_detail?.off_tree_ids?.length || 0 }})</div>
+                <div
+                  v-if="page.on_tree_off_tree_detail?.off_tree_ids?.length"
+                  style="max-height: 120px; overflow-y: auto; font-size: 12px; font-family: monospace; color: #606266;"
+                >
+                  {{ page.on_tree_off_tree_detail.off_tree_ids.join(', ') }}
+                </div>
+                <el-empty v-else description="无" :image-size="40" />
+              </el-col>
+            </el-row>
+          </el-collapse-item>
+        </el-collapse>
       </el-card>
 
       <!-- Image尺寸分析（仅在存在超出尺寸Image时显示） -->
@@ -132,7 +179,13 @@
             max-height="300"
           >
             <el-table-column type="index" label="#" width="50" align="center" />
-            <el-table-column prop="path" label="路径" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="path" label="路径" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="url" label="URL" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.url" style="font-size: 12px; font-family: monospace;">{{ row.url }}</span>
+                <span v-else style="color: #909399;">-</span>
+              </template>
+            </el-table-column>
             <el-table-column label="FrameRect" width="120" align="center">
               <template #default="{ row }">
                 <div style="font-size: 12px;">
@@ -193,6 +246,12 @@
             max-height="300"
           >
             <el-table-column type="index" label="#" width="50" align="center" />
+            <el-table-column prop="component.url" label="URL" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.component?.url" style="font-size: 12px; font-family: monospace;">{{ row.component.url }}</span>
+                <span v-else style="color: #909399;">-</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="region" label="区域坐标" min-width="150">
               <template #default="{ row }">
                 <el-tag size="small">{{ formatRegion(row.region) }}</el-tag>
@@ -255,6 +314,9 @@
                   </el-descriptions-item>
                   <el-descriptions-item label="ID">
                     {{ region.component.id }}
+                  </el-descriptions-item>
+                  <el-descriptions-item v-if="region.component.url" label="URL" :span="2">
+                    <span style="font-size: 12px; font-family: monospace; word-break: break-all;">{{ region.component.url }}</span>
                   </el-descriptions-item>
                   <el-descriptions-item label="位置" :span="2">
                     {{ formatBounds(region.component.bounds_rect) }}
@@ -319,6 +381,11 @@ const hasTreeAnimations = computed(() => {
 // 是否有任何动画信息（必须要有实际的动画区域数据）
 const hasAnyAnimations = computed(() => {
   return imageAnimationRegions.value.length > 0 || treeAnimationRegions.value.length > 0;
+});
+
+// 是否有上树/未上树详情（有RS树分析结果时显示）
+const hasOnTreeOffTreeDetail = computed(() => {
+  return !!props.page?.on_tree_off_tree_detail;
 });
 
 // 是否有GUI Agent信息

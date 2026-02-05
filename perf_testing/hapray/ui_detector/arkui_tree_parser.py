@@ -625,15 +625,20 @@ class ArkUITreeComparator:
         # 比较当前组件的attributes
         attrs_diff = self._compare_attributes(comp1, comp2)
         if attrs_diff:
+            attrs1 = comp1.get('attributes', {})
+            component_info = {
+                'type': comp_name,
+                'bounds_rect': attrs1.get('bounds_rect', ''),
+                'path': current_path,
+                'attributes': attrs1,
+                'id': attrs1.get('id', ''),
+            }
+            # Image节点添加url便于展示（支持resource://、pixmapID等格式）
+            if comp_name == 'Image':
+                component_info['url'] = attrs1.get('url') or attrs1.get('src') or attrs1.get('Url') or ''
             self.differences.append(
                 {
-                    'component': {
-                        'type': comp_name,
-                        'bounds_rect': comp1.get('attributes', {}).get('bounds_rect', ''),
-                        'path': current_path,
-                        'attributes': comp1.get('attributes', {}),
-                        'id': comp1.get('attributes', {}).get('id', ''),
-                    },
+                    'component': component_info,
                     'is_animation': True,
                     'comparison_result': attrs_diff,
                     'animate_type': 'attribute_animate',
@@ -650,19 +655,26 @@ class ArkUITreeComparator:
             self._compare_components(children1[i], children2[i], current_path)
 
         # 处理多余的子组件（如果结构不同）
+        def _make_component_info(comp: dict, path_suffix: str) -> dict:
+            attrs = comp.get('attributes', {})
+            info = {
+                'type': comp.get('name', comp.get('type', 'Unknown')),
+                'bounds_rect': attrs.get('bounds_rect', ''),
+                'path': path_suffix,
+                'attributes': attrs,
+                'id': attrs.get('id', ''),
+            }
+            if info['type'] == 'Image':
+                info['url'] = attrs.get('url') or attrs.get('src') or attrs.get('Url') or ''
+            return info
+
         if len(children1) > len(children2):
             for i in range(len(children2), len(children1)):
                 comp = children1[i]
                 comp_name = comp.get('name', comp.get('type', 'Unknown'))
                 self.differences.append(
                     {
-                        'component': {
-                            'type': comp_name,
-                            'bounds_rect': comp.get('attributes', {}).get('bounds_rect', ''),
-                            'path': f'{current_path}/{comp_name}',
-                            'attributes': comp.get('attributes', {}),
-                            'id': comp.get('attributes', {}).get('id', ''),
-                        },
+                        'component': _make_component_info(comp, f'{current_path}/{comp_name}'),
                         'is_animation': True,
                         'comparison_result': attrs_diff,
                         'animate_type': 'attribute_animate',
@@ -675,13 +687,7 @@ class ArkUITreeComparator:
                 comp_name = comp.get('name', comp.get('type', 'Unknown'))
                 self.differences.append(
                     {
-                        'component': {
-                            'type': comp_name,
-                            'bounds_rect': comp.get('attributes', {}).get('bounds_rect', ''),
-                            'path': f'{current_path}/{comp_name}',
-                            'attributes': comp.get('attributes', {}),
-                            'id': comp.get('attributes', {}).get('id', ''),
-                        },
+                        'component': _make_component_info(comp, f'{current_path}/{comp_name}'),
                         'is_animation': True,
                         'comparison_result': attrs_diff,
                         'animate_type': 'attribute_animate',
@@ -752,3 +758,106 @@ def parse_arkui_tree(file_content: str) -> dict[str, Any]:
         tree_dict['canvas_node_count'] = parser.get_canvas_node_count()
         return tree_dict
     return {'canvas_node_count': 0}
+
+
+def parse_rs_tree_canvas_node_ids(rs_tree_content: str) -> set[str]:
+    """
+    从RS树（RenderServiceTree）输出中解析所有CANVAS_NODE的ID
+
+    格式示例: CANVAS_NODE[11720965750795] 或 CanvasNode[271338853892101]
+
+    Args:
+        rs_tree_content: hidumper -s 10 -a 'RSTree' 命令的输出内容
+
+    Returns:
+        CANVAS_NODE ID集合（字符串形式）
+    """
+    # 匹配 CANVAS_NODE[数字] 或 CanvasNode[数字]
+    pattern = re.compile(r'CANVAS_NODE\[(\d+)\]|CanvasNode\[(\d+)\]', re.IGNORECASE)
+    ids = set()
+    for match in pattern.finditer(rs_tree_content):
+        # group(1) 为 CANVAS_NODE 匹配，group(2) 为 CanvasNode 匹配
+        node_id = match.group(1) or match.group(2)
+        if node_id:
+            ids.add(node_id)
+    return ids
+
+
+def extract_canvas_node_ids_from_tree(tree_dict: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    从组件树中提取所有包含canvasNodeId的节点信息
+
+    Args:
+        tree_dict: 解析后的组件树字典
+
+    Returns:
+        节点信息列表，每项包含 canvasNodeId, name, path, attributes 等
+    """
+
+    def _traverse(component: dict[str, Any], path: str, result: list) -> None:
+        if not component:
+            return
+        comp_name = component.get('name', 'Unknown')
+        current_path = f'{path}/{comp_name}' if path else comp_name
+        attrs = component.get('attributes', {})
+
+        canvas_node_id = attrs.get('canvasNodeId') or attrs.get('canvas_node_id')
+        if canvas_node_id:
+            result.append({
+                'canvasNodeId': str(canvas_node_id),
+                'name': comp_name,
+                'path': current_path,
+                'attributes': attrs,
+            })
+
+        for child in component.get('children', []):
+            _traverse(child, current_path, result)
+
+    nodes = []
+    _traverse(tree_dict, '', nodes)
+    return nodes
+
+
+def classify_on_tree_off_tree(
+    tree_dict: dict[str, Any], rs_tree_content: str
+) -> dict[str, Any]:
+    """
+    统计组件树中CanvasNode的上树/未上树情况
+
+    遍历组件树的CanvasNode id，如果CanvasNode id在RS树上则判定为上树，否则为未上树
+
+    Args:
+        tree_dict: 解析后的组件树字典
+        rs_tree_content: RS树文件内容
+
+    Returns:
+        {
+            'on_tree_count': int,
+            'off_tree_count': int,
+            'on_tree_ids': list[str],
+            'off_tree_ids': list[str],
+            'on_tree_nodes': list[dict],
+            'off_tree_nodes': list[dict],
+        }
+    """
+    rs_tree_ids = parse_rs_tree_canvas_node_ids(rs_tree_content)
+    tree_nodes = extract_canvas_node_ids_from_tree(tree_dict)
+
+    on_tree_nodes = []
+    off_tree_nodes = []
+
+    for node in tree_nodes:
+        node_id = node['canvasNodeId']
+        if node_id in rs_tree_ids:
+            on_tree_nodes.append(node)
+        else:
+            off_tree_nodes.append(node)
+
+    return {
+        'on_tree_count': len(on_tree_nodes),
+        'off_tree_count': len(off_tree_nodes),
+        'on_tree_ids': [n['canvasNodeId'] for n in on_tree_nodes],
+        'off_tree_ids': [n['canvasNodeId'] for n in off_tree_nodes],
+        'on_tree_nodes': on_tree_nodes,
+        'off_tree_nodes': off_tree_nodes,
+    }
