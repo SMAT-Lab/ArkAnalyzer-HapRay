@@ -64,7 +64,7 @@ class ExcelReportSaver:
         engine_name = 'xlsxwriter'
         with pd.ExcelWriter(self.output_path, engine=engine_name) as writer:
             for sheet_name, df in self.sheets.items():
-                df.to_excel(writer, sheet_name=sheet_name)
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
                 ExcelReportSaver._auto_adjust_columns(writer, sheet_name, df)
 
         logging.info('Excel report saved to: %s', self.output_path)
