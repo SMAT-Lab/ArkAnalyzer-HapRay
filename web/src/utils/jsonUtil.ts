@@ -1,6 +1,15 @@
 import { ComponentCategory, type PerfData } from "@/stores/jsonDataStore";
 import pako from 'pako';
 
+/** 空/未知值的统一占位符，各层级空值会汇总到此类目下，不影响其他分类或下钻逻辑 */
+export const UNKNOWN_PLACEHOLDER = 'unknown';
+
+/** 将空、undefined、null、UNKNOWN 等值归一化为未知占位符，便于各层级空值汇总 */
+function normalizeUnknown(value: string | undefined | null): string {
+    const v = value != null ? String(value).trim() : '';
+    return (v === '' || v === 'UNKNOWN') ? UNKNOWN_PLACEHOLDER : v;
+}
+
 // 定义数据类型接口
 export interface ProcessDataItem {
   stepId: number
@@ -93,8 +102,9 @@ export function processJson2PieChartData(jsonData: PerfData, currentStepIndex: n
         const stepId = index + 1;
         if (currentStepIndex === 0 || stepId === currentStepIndex) {
             step.data.forEach(item => {
-                // 优先使用 categoryName，如果没有则使用枚举转换
-                const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || "UNKNOWN";
+                // 优先使用 categoryName，如果没有则使用枚举转换，空/未知归一化为统一占位符
+                const rawCategory = item.categoryName || ComponentCategory[item.componentCategory] || '';
+                const categoryName = normalizeUnknown(rawCategory);
                 const events = item.symbolEvents;
                 categoryMap.set(categoryName, (categoryMap.get(categoryName) || 0) + events);
             });
@@ -133,7 +143,7 @@ export function processJson2ProcessPieChartData(jsonData: PerfData, currentStepI
         const stepId = index + 1;
         if (currentStepIndex === 0 || stepId === currentStepIndex) {
             step.data.forEach(item => {
-                const processName = item.processName || "Unknown Process";
+                const processName = normalizeUnknown(item.processName);
                 const currentTotal = processMap.get(processName) || 0;
                 // 累加该进程下所有线程的 symbolEvents
                 processMap.set(processName, currentTotal + item.symbolEvents);
@@ -245,8 +255,7 @@ export function calculateProcessData(
     ignoreStep: boolean = false
 ): ProcessDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) =>
-        
-        ignoreStep ? `${item.processName}` : `${stepId}|${item.processName}`;
+        ignoreStep ? `${normalizeUnknown(item.processName)}` : `${stepId}|${normalizeUnknown(item.processName)}`;
 
     const resultCreator: ResultCreator<ProcessDataItem> = (keyParts, instructions, compareInstructions,
         increaseInstructions, increasePercentage) => ({
@@ -263,9 +272,9 @@ export function calculateProcessData(
     return compareJsonDataByLevel(baseData, compareData, keyGenerator, resultCreator, ignoreStep);
 }
 
-// 线程显示格式：线程名[线程id]
+// 线程显示格式：线程名[线程id]，空值使用未知占位符
 function formatThreadKey(threadName: string, tid: number): string {
-    return `${threadName}[${tid}]`;
+    return `${normalizeUnknown(threadName)}[${tid}]`;
 }
 
 // 线程级别比较（按进程拆解时使用 线程名[线程id] 格式）
@@ -275,8 +284,8 @@ export function calculateThreadData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        return ignoreStep ? `${item.processName}|${threadKey}` : `${stepId}|${item.processName}|${threadKey}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}`;
     };
 
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions,
@@ -302,8 +311,8 @@ export function calculateFileData(
     ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        return ignoreStep ? `${item.processName}|${threadKey}|${item.file}` : `${stepId}|${item.processName}|${threadKey}|${item.file}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${normalizeUnknown(item.file)}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${normalizeUnknown(item.file)}`;
     };
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
@@ -330,8 +339,8 @@ export function calculateSymbolData(
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        return ignoreStep ? `${item.processName}|${threadKey}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${threadKey}|${item.file}|${item.symbol}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${normalizeUnknown(item.file)}|${normalizeUnknown(item.symbol)}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${normalizeUnknown(item.file)}|${normalizeUnknown(item.symbol)}`;
     };
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
@@ -360,9 +369,9 @@ export function calculateProcessThreadCategoryData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}`;
     };
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
         stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
@@ -383,10 +392,10 @@ export function calculateProcessThreadSubCategoryData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}`;
     };
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
         stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
@@ -407,11 +416,11 @@ export function calculateProcessThreadThirdCategoryData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        const thirdCategoryName = item.thirdCategoryName || '';
-        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        const thirdCategoryName = normalizeUnknown(item.thirdCategoryName);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}`;
     };
     const resultCreator: ResultCreator<ThreadDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
         stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
@@ -432,11 +441,11 @@ export function calculateProcessThreadFileData(
     ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        const thirdCategoryName = item.thirdCategoryName || '';
-        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        const thirdCategoryName = normalizeUnknown(item.thirdCategoryName);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}`;
     };
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
         stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
@@ -458,11 +467,11 @@ export function calculateProcessThreadSymbolData(
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        const threadKey = formatThreadKey(item.threadName || 'Unknown', item.tid ?? 0);
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        const thirdCategoryName = item.thirdCategoryName || '';
-        return ignoreStep ? `${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}` : `${stepId}|${item.processName}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}`;
+        const threadKey = formatThreadKey(item.threadName, item.tid ?? 0);
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        const thirdCategoryName = normalizeUnknown(item.thirdCategoryName);
+        return ignoreStep ? `${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}|${normalizeUnknown(item.symbol)}` : `${stepId}|${normalizeUnknown(item.processName)}|${threadKey}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}|${normalizeUnknown(item.symbol)}`;
     };
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions, increaseInstructions, increasePercentage) => ({
         stepId: ignoreStep ? 0 : parseInt(keyParts[0], 10),
@@ -486,8 +495,7 @@ export function calculateCategorysData(
     ignoreStep: boolean = false
 ): ProcessDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName 作为键
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
         return ignoreStep ? `${categoryName}` : `${stepId}|${categoryName}`;
     };
 
@@ -514,10 +522,9 @@ export function calculateThirdCategoryData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName、subCategoryName 和 thirdCategoryName 作为键
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        const thirdCategoryName = item.thirdCategoryName || '';
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        const thirdCategoryName = normalizeUnknown(item.thirdCategoryName);
         return ignoreStep 
             ? `${categoryName}|${subCategoryName}|${thirdCategoryName}` 
             : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}`;
@@ -547,9 +554,8 @@ export function calculateComponentNameData(
     ignoreStep: boolean = false
 ): ThreadDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName 和 subCategoryName 作为键
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
         return ignoreStep ? `${categoryName}|${subCategoryName}` : `${stepId}|${categoryName}|${subCategoryName}`;
     };
 
@@ -577,13 +583,12 @@ export function calculateFileData1(
     ignoreStep: boolean = false
 ): FileDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName、subCategoryName、thirdCategoryName 和 file 作为键
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        const thirdCategoryName = item.thirdCategoryName || '';
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        const thirdCategoryName = normalizeUnknown(item.thirdCategoryName);
         return ignoreStep 
-            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}` 
-            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}`;
+            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}` 
+            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}`;
     };
 
     const resultCreator: ResultCreator<FileDataItem> = (keyParts, instructions, compareInstructions,
@@ -611,13 +616,12 @@ export function calculateSymbolData1(
     ignoreStep: boolean = false
 ): SymbolDataItem[] {
     const keyGenerator: KeyGenerator = (item, stepId) => {
-        // 使用 categoryName、subCategoryName、thirdCategoryName、file 和 symbol 作为键
-        const categoryName = item.categoryName || ComponentCategory[item.componentCategory] || 'UNKNOWN';
-        const subCategoryName = item.subCategoryName || 'Unknown';
-        const thirdCategoryName = item.thirdCategoryName || '';
+        const categoryName = normalizeUnknown(item.categoryName || ComponentCategory[item.componentCategory] || '');
+        const subCategoryName = normalizeUnknown(item.subCategoryName);
+        const thirdCategoryName = normalizeUnknown(item.thirdCategoryName);
         return ignoreStep 
-            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}` 
-            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${item.file}|${item.symbol}`;
+            ? `${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}|${normalizeUnknown(item.symbol)}` 
+            : `${stepId}|${categoryName}|${subCategoryName}|${thirdCategoryName}|${normalizeUnknown(item.file)}|${normalizeUnknown(item.symbol)}`;
     };
 
     const resultCreator: ResultCreator<SymbolDataItem> = (keyParts, instructions, compareInstructions,
