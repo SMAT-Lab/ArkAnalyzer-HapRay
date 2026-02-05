@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="container">
     <!-- 标签页导航 -->
     <div class="tab-nav">
@@ -485,11 +485,13 @@ function getProcessPieDrilldownData(name: string, stack: string[]) {
   }
 }
 
+// 进程饼图最大下钻深度：进程-线程-大类-小类-三级分类-文件-符号（共7层）
+const PROCESS_PIE_MAX_STACK = 7;
 function handleProcessPieDrilldown(name: string) {
   const newStack = [...processPieDrilldownStack.value, name];
   const newData = getProcessPieDrilldownData(name, newStack);
-  // 只有新数据有内容且与当前数据不同才推进
-  if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(processPieData.value)) {
+  // 无下层数据或已达最大深度时禁止下钻
+  if (!newData.seriesData || newData.seriesData.length === 0 || newStack.length === PROCESS_PIE_MAX_STACK) {
     return;
   }
   processPieDrilldownStack.value = newStack;
@@ -575,11 +577,13 @@ function getDrilldownPieData(name: string, stack: string[]) {
   }
 }
 
+// 步骤饼图最大下钻深度：大类-小类-三级分类-文件-符号（共5层）
+const STEP_PIE_MAX_STACK = 5;
 function handleStepPieDrilldown(name: string) {
   const newStack = [...stepPieDrilldownStack.value, name];
   const newData = getDrilldownPieData(name, newStack);
-  // 只有新数据有内容且与当前数据不同才推进
-  if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(stepPieData.value)) {
+  // 无下层数据或已达最大深度时禁止下钻
+  if (!newData.seriesData || newData.seriesData.length === 0 || newStack.length === STEP_PIE_MAX_STACK) {
     return;
   }
   stepPieDrilldownStack.value = newStack;
