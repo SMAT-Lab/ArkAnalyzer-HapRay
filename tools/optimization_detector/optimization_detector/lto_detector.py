@@ -194,7 +194,20 @@ class LtoDetector:
             }
         """
         so_path = file_info.absolute_path
-        
+
+        # 与 opt 一致：先查缓存，命中则直接返回（避免重复计算）
+        cache_result = self._load_from_cache(file_info)
+        if cache_result is not None:
+            logging.debug('LTO cache hit for %s', so_path)
+            # 兼容旧缓存（仅 score/prediction/model_used）与 chunk_based 完整结果
+            if 'total_chunks' not in cache_result:
+                cache_result.setdefault('chunk_scores', [])
+                cache_result.setdefault('chunk_predictions', [])
+                cache_result.setdefault('distribution', {})
+                cache_result.setdefault('total_chunks', 0)
+                cache_result.setdefault('total_score', cache_result.get('score'))
+            return cache_result
+
         # 延迟加载模型
         if not self._load_model():
             return {'score': None, 'prediction': 'N/A', 'model_used': 'N/A', 
@@ -284,7 +297,7 @@ class LtoDetector:
             lto_count = chunk_predictions.count('LTO')
             no_lto_count = chunk_predictions.count('No LTO')
             
-            return {
+            result = {
                 'score': avg_score,
                 'prediction': final_prediction,
                 'model_used': 'Unified SVM (Chunk-based)',
@@ -294,7 +307,10 @@ class LtoDetector:
                 'total_chunks': total_chunks,
                 'total_score': total_score,  # 累加的总概率值
             }
-            
+            # 与 opt 一致：写入缓存，下次可直接命中
+            self._save_to_cache(file_info, result)
+            return result
+
         except Exception as e:
             logging.debug('Chunk-based LTO prediction failed for %s: %s', so_path, e)
             return {'score': None, 'prediction': 'Error', 'model_used': 'Unified SVM',
@@ -501,7 +517,8 @@ class LtoDetector:
         """
         cache_dir = Path(FileInfo.CACHE_DIR)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_filename = f'lto_{file_info.file_id}_{file_info.file_hash}.json'
+        # 与 opt 一致：只用 file_id 作为键（opt 为 flags_{file_id}.csv）
+        cache_filename = f'lto_{file_info.file_id}.json'
         return cache_dir / cache_filename
 
     def _load_from_cache(self, file_info: FileInfo) -> Optional[dict]:

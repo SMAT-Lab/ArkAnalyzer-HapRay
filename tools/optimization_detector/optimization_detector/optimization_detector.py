@@ -208,6 +208,12 @@ class OptimizationDetector:
 
         for file_info in tqdm(file_infos, desc='Detecting LTO'):
             try:
+                # 与 opt 一致：先查 LTO 缓存，命中则直接使用，不再取 chunks 或跑模型
+                cache_result = self.lto_detector._load_from_cache(file_info)
+                if cache_result is not None:
+                    lto_results[file_info.file_id] = cache_result
+                    continue
+
                 opt_level = None
                 result = flags_results.get(file_info.file_id)
                 if result:
@@ -548,18 +554,18 @@ class OptimizationDetector:
                         # total_score = 各 chunk 的 sigmoid 概率之和（chunk 数 × 平均 ≈ 该值，可 >1）
                         # 判定用 LTO Score（平均），此列仅作参考
                         total_score = lto_result.get('total_score', 0)
-                        row['LTO Sum (chunks)'] = f'{total_score:.2f}'
+                        row['LTO Total Score'] = f'{total_score:.2f}'
                     else:
                         row['LTO Chunks'] = 'N/A'
-                        row['LTO Sum (chunks)'] = 'N/A'
+                        row['LTO Total Score'] = 'N/A'
                 else:
                     row['LTO Chunks'] = 'N/A'
-                    row['LTO Sum (chunks)'] = 'N/A'
+                    row['LTO Total Score'] = 'N/A'
             elif self.enable_lto:
                 row['LTO Score'] = 'N/A'
                 row['LTO Prediction'] = 'N/A'
                 row['LTO Chunks'] = 'N/A'
-                row['LTO Sum (chunks)'] = 'N/A'
+                row['LTO Total Score'] = 'N/A'
             row['File hash'] = file_info.file_hash
             row['File Size (bytes)'] = file_info.file_size
             if file_info.hap_metadata:
