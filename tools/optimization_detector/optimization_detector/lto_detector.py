@@ -1,6 +1,10 @@
 """
 LTO (Link-Time Optimization) Detector
 基于统一SVM模型的LTO检测器，模型文件位于 package 内的 models/lto/ 目录
+
+说明：LTO 使用 scikit-learn 的 Pipeline(StandardScaler + SVC)，sklearn 的 SVC 仅在 CPU 上运行，
+无内置 GPU 支持；optimization_detector 的 opt 级别检测使用 TensorFlow/Keras LSTM，故可使用 GPU。
+若需 LTO 使用 GPU，需将模型改为 GPU 框架（如 TensorFlow 重训或 cuML/ThunderSVM 等）。
 """
 
 import json
@@ -28,6 +32,9 @@ class LtoDetector:
     - 检测SO文件是否使用了LTO优化
     - 使用统一的SVM模型（不区分优化级别）
     - 返回LTO分数和判定结果
+
+    运行设备：当前使用 scikit-learn (joblib 加载的 model.pkl)，仅在 CPU 上推理；
+    opt 级别检测使用 TensorFlow，可自动使用 GPU。
     """
 
     def __init__(self, model_dir: Optional[Path] = None):
@@ -167,13 +174,15 @@ class LtoDetector:
 
     def detect_chunk_based(self, file_info: FileInfo, chunks: list[bytes], opt_level: Optional[str] = None) -> dict:
         """
-        基于 chunk 的 LTO 检测（每个 chunk 单独预测，然后统计）
-        
+        基于 chunk 的 LTO 检测（每个 chunk 单独预测，然后统计）。
+        与 opt_level 技术栈一致：chunks 应由调用方从 .text 按 2048 字节切分并传入，
+        避免在 LTO 内重复切分（optimization_detector 在 opt 阶段已切分并复用）。
+
         Args:
             file_info: FileInfo对象
-            chunks: 从 .text 段提取的 chunks 列表
+            chunks: 从 .text 段按 2048 字节切分的二进制列表（与 opt 同一套）
             opt_level: 优化级别（已废弃，保留以兼容）
-        
+
         Returns:
             {
                 'score': float,           # 平均 LTO 分数 [0-1]
