@@ -69,10 +69,15 @@ class CaptureUI:
         if screenshot_path:
             result_files['screenshot'] = screenshot_path
 
-        # 2. dump element树
+        # 2. dump element树（同时dump rs树）
         element_tree_path = self._dump_page_element_tree(ui_step_dir, f'page_{page_idx}')
         if element_tree_path:
             result_files['element_tree'] = element_tree_path
+
+        # 2.1 dump RS树（用于上树/未上树统计）
+        rs_tree_path = self._dump_rs_tree(ui_step_dir, f'page_{page_idx}')
+        if rs_tree_path:
+            result_files['rs_tree'] = rs_tree_path
 
         if animate:
             # 3. 第2次截屏
@@ -84,6 +89,11 @@ class CaptureUI:
             element_tree_path_2 = self._dump_page_element_tree(ui_step_dir, f'page_{page_idx}_2')
             if element_tree_path_2:
                 result_files['element_tree_2'] = element_tree_path_2
+
+            # 4.1 第2次dump RS树
+            rs_tree_path_2 = self._dump_rs_tree(ui_step_dir, f'page_{page_idx}_2')
+            if rs_tree_path_2:
+                result_files['rs_tree_2'] = rs_tree_path_2
 
         Log.info(f'UI数据抓取完成 - Step {step_id}, Page {page_idx}')
         return result_files
@@ -266,4 +276,46 @@ class CaptureUI:
 
         except Exception as e:
             Log.error(f'执行hidumper dump时发生错误: {e}')
+            return None
+
+    def _dump_rs_tree(self, ui_step_dir: str, label_name: str = None) -> str:
+        """
+        Dump RenderServiceTree（RS树），用于上树/未上树节点统计
+
+        执行命令: hidumper -s 10 -a 'RSTree'
+        输出直接到stdout，保存到本地文件
+
+        Args:
+            ui_step_dir: UI数据保存目录
+            label_name: 标签名称
+
+        Returns:
+            本地RS树文件路径，失败时返回None
+        """
+        try:
+            Log.info(f'开始dump RS树 - Page {label_name}')
+
+            rs_tree_filename = f'rs_tree_{label_name}.txt' if label_name else 'rs_tree.txt'
+            local_rs_tree_path = os.path.join(ui_step_dir, rs_tree_filename)
+
+            # 执行hidumper RSTree命令（输出到stdout）
+            rs_tree_cmd = "hidumper -s 10 -a 'RSTree'"
+            Log.info(f'执行RS树dump命令: {rs_tree_cmd}')
+
+            result = self.driver.shell(rs_tree_cmd)
+            Log.info(f'RS树dump命令输出长度: {len(result)} 字符')
+
+            # 将输出保存到本地文件
+            with open(local_rs_tree_path, 'w', encoding='utf-8') as f:
+                f.write(result)
+
+            if os.path.exists(local_rs_tree_path):
+                Log.info(f'RS树保存成功: {local_rs_tree_path}')
+                return local_rs_tree_path
+
+            Log.error(f'RS树保存失败: {local_rs_tree_path}')
+            return None
+
+        except Exception as e:
+            Log.error(f'Dump RS树过程中发生错误: {e}')
             return None
