@@ -32,6 +32,12 @@
             >
               <el-table-column type="index" label="#" width="50" align="center" />
               <el-table-column prop="component.type" label="组件类型" width="120" />
+              <el-table-column prop="component.url" label="URL" min-width="150" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.component?.url" style="font-size: 12px; font-family: monospace;">{{ row.component.url }}</span>
+                  <span v-else style="color: #909399;">-</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="region" label="区域坐标" min-width="150">
                 <template #default="{ row }">
                   <el-tag size="small">{{ formatRegion(row.region) }}</el-tag>
@@ -68,8 +74,15 @@
                     <span style="flex: 1; font-weight: 500;">
                       {{ region.component?.type || '未知组件' }}
                     </span>
+                    <span v-if="region.component?.url" style="font-size: 12px; color: #909399; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="region.component.url">
+                      {{ region.component.url }}
+                    </span>
                   </div>
                 </template>
+                <div v-if="region.component?.url" style="margin-bottom: 12px;">
+                  <strong>URL:</strong>
+                  <span style="font-size: 12px; font-family: monospace; word-break: break-all;">{{ region.component.url }}</span>
+                </div>
                 <div v-if="region.comparison_result && region.comparison_result.length > 0">
                   <el-table
                     :data="region.comparison_result"
@@ -121,8 +134,12 @@
         >
           <template #default>
             <div>
-              <p><strong>Page {{ page1.page_idx }}:</strong> CanvasNode数量 {{ page1.canvasNodeCnt || 0 }}</p>
-              <p><strong>Page {{ page2.page_idx }}:</strong> CanvasNode数量 {{ page2.canvasNodeCnt || 0 }}</p>
+              <p><strong>Page {{ page1.page_idx }}:</strong> CanvasNode数量 {{ page1.canvasNodeCnt || 0 }}
+                <span v-if="page1.canvas_node_on_tree !== undefined">，上树 {{ page1.canvas_node_on_tree }}，未上树 {{ page1.canvas_node_off_tree ?? 0 }}</span>
+              </p>
+              <p><strong>Page {{ page2.page_idx }}:</strong> CanvasNode数量 {{ page2.canvasNodeCnt || 0 }}
+                <span v-if="page2.canvas_node_on_tree !== undefined">，上树 {{ page2.canvas_node_on_tree }}，未上树 {{ page2.canvas_node_off_tree ?? 0 }}</span>
+              </p>
               <p style="margin-top: 8px;">
                 <strong>差异:</strong> 
                 <span :style="{ color: canvasDiff >= 0 ? '#67c23a' : '#f56c6c' }">
