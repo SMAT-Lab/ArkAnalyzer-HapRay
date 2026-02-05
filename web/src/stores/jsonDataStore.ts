@@ -859,6 +859,7 @@ export interface ImageAnimationRegion {
     path: string;
     attributes: Record<string, unknown>;
     id: string;
+    url?: string; // Image节点URL（resource://、pixmapID等）
   };
   comparison_result?: {
     similarity_percentage: number;
@@ -878,6 +879,7 @@ export interface TreeAnimationRegion {
     path: string;
     attributes: Record<string, unknown>;
     id: string;
+    url?: string; // Image节点URL（resource://、pixmapID等）
   };
   is_animation: boolean;
   comparison_result?: Array<{
@@ -892,6 +894,7 @@ export interface TreeAnimationRegion {
 export interface ExceedingImageInfo {
   path: string;
   id: string;
+  url?: string; // Image节点URL（resource://、pixmapID等）
   bounds_rect: [number, number, number, number];
   frameRect: {
     width: number;
@@ -948,6 +951,12 @@ export interface UIAnimatePageData {
   description?: string;  // 页面描述名称（后端返回的字段名）
   page_idx: number; // 页面索引（从1开始）
   canvasNodeCnt: number; // CanvasNode节点数量
+  canvas_node_on_tree?: number; // 上树CanvasNode数量
+  canvas_node_off_tree?: number; // 未上树CanvasNode数量
+  on_tree_off_tree_detail?: {
+    on_tree_ids: string[];
+    off_tree_ids: string[];
+  };
   image_size_analysis?: ImageSizeAnalysis & {
     marked_image?: string; // base64编码的截图
   };
