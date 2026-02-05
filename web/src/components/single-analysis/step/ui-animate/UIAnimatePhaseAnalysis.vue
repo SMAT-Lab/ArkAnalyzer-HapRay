@@ -80,6 +80,12 @@
               size="small"
             >
               <el-table-column type="index" label="#" width="50" align="center" />
+              <el-table-column prop="component.url" label="URL" min-width="150" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.component?.url" style="font-size: 12px; font-family: monospace;">{{ row.component.url }}</span>
+                  <span v-else style="color: #909399;">-</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="region" label="区域坐标" min-width="150">
                 <template #default="{ row }">
                   <el-tag size="small">{{ formatRegion(row.region) }}</el-tag>
@@ -142,6 +148,9 @@
                     </el-descriptions-item>
                     <el-descriptions-item label="ID">
                       {{ region.component.id }}
+                    </el-descriptions-item>
+                    <el-descriptions-item v-if="region.component.url" label="URL" :span="2">
+                      <span style="font-size: 12px; font-family: monospace; word-break: break-all;">{{ region.component.url }}</span>
                     </el-descriptions-item>
                     <el-descriptions-item label="位置" :span="2">
                       {{ formatBounds(region.component.bounds_rect) }}
@@ -210,7 +219,13 @@
           max-height="400"
         >
           <el-table-column type="index" label="#" width="50" align="center" />
-          <el-table-column prop="path" label="路径" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="path" label="路径" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="url" label="URL" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.url" style="font-size: 12px; font-family: monospace;">{{ row.url }}</span>
+              <span v-else style="color: #909399;">-</span>
+            </template>
+          </el-table-column>
           <el-table-column label="FrameRect" width="150" align="center">
             <template #default="{ row }">
               <div style="font-size: 12px;">

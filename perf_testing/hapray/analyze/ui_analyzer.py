@@ -23,7 +23,11 @@ from urllib.parse import urlparse
 from PIL import Image, ImageDraw, ImageFont
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
-from hapray.ui_detector.arkui_tree_parser import compare_arkui_trees, parse_arkui_tree
+from hapray.ui_detector.arkui_tree_parser import (
+    classify_on_tree_off_tree,
+    compare_arkui_trees,
+    parse_arkui_tree,
+)
 from hapray.ui_detector.image_comparator import RegionImageComparator
 from hapray.ui_detector.image_size_analyzer import analyze_image_sizes
 
@@ -153,11 +157,22 @@ class UIAnalyzer(BaseAnalyzer):
                 if not os.path.exists(element_tree_path):
                     return None
 
-            # 分析组件树（包括CanvasNode统计等）
-            tree_analysis = self._analyze_tree_from_file(element_tree_path)
+            # 分析组件树（包括CanvasNode统计、上树/未上树统计等）
+            rs_tree_path = page_info.get('rs_tree')
+            if rs_tree_path and not os.path.isabs(rs_tree_path):
+                rs_tree_path = os.path.join(ui_dir, os.path.basename(rs_tree_path))
+            tree_analysis = self._analyze_tree_from_file(element_tree_path, rs_tree_path)
             if tree_analysis:
                 canvas_node_count = tree_analysis.get('canvas_node_count', 0)
                 result['canvasNodeCnt'] = canvas_node_count
+                # 上树/未上树统计
+                if 'on_tree_count' in tree_analysis:
+                    result['canvas_node_on_tree'] = tree_analysis['on_tree_count']
+                    result['canvas_node_off_tree'] = tree_analysis['off_tree_count']
+                    result['on_tree_off_tree_detail'] = {
+                        'on_tree_ids': tree_analysis.get('on_tree_ids', []),
+                        'off_tree_ids': tree_analysis.get('off_tree_ids', []),
+                    }
 
             # 进行图片尺寸分析
             image_size_result = self._analyze_image_sizes(ui_dir, element_tree_path, page_info.get('screenshot'))
@@ -253,13 +268,17 @@ class UIAnalyzer(BaseAnalyzer):
             bounds_rect = self._parse_bounds(bounds)
 
             if bounds_rect:
+                attrs = data.get('attributes', {})
                 component_info = {
                     'type': component_type,
                     'bounds_rect': bounds_rect,
                     'path': path,
-                    'attributes': data.get('attributes', {}),
-                    'id': data.get('attributes', {}).get('id', ''),
+                    'attributes': attrs,
+                    'id': attrs.get('id', ''),
                 }
+                # Image节点添加url（支持resource://、pixmapID等格式）
+                if component_type == 'Image':
+                    component_info['url'] = attrs.get('url') or attrs.get('src') or attrs.get('Url') or ''
                 components.append(component_info)
 
         # 递归处理子组件
@@ -648,14 +667,17 @@ class UIAnalyzer(BaseAnalyzer):
             self.logger.error(f'生成标记图像失败: {str(e)}')
             return None
 
-    def _analyze_tree_from_file(self, element_tree_path: str) -> Optional[dict[str, Any]]:
+    def _analyze_tree_from_file(
+        self, element_tree_path: str, rs_tree_path: Optional[str] = None
+    ) -> Optional[dict[str, Any]]:
         """从element_tree文件分析组件树
 
         Args:
             element_tree_path: 组件树文件路径
+            rs_tree_path: RS树文件路径（可选，用于上树/未上树统计）
 
         Returns:
-            组件树分析结果（包括CanvasNode统计等）
+            组件树分析结果（包括CanvasNode统计、上树/未上树统计等）
         """
         try:
             with open(element_tree_path, encoding='utf-8') as f:
@@ -664,10 +686,25 @@ class UIAnalyzer(BaseAnalyzer):
             # 解析组件树
             tree_dict = parse_arkui_tree(content)
 
-            # 提取分析结果
-            return {
+            result = {
                 'canvas_node_count': tree_dict.get('canvas_node_count', 0),
             }
+
+            # 上树/未上树统计（当RS树存在时）
+            if rs_tree_path and os.path.exists(rs_tree_path):
+                try:
+                    with open(rs_tree_path, encoding='utf-8') as f:
+                        rs_tree_content = f.read()
+                    on_off_stats = classify_on_tree_off_tree(tree_dict, rs_tree_content)
+                    result.update(on_off_stats)
+                    self.logger.info(
+                        f'CanvasNode上树统计: 上树={on_off_stats["on_tree_count"]}, '
+                        f'未上树={on_off_stats["off_tree_count"]}'
+                    )
+                except Exception as e:
+                    self.logger.warning(f'解析RS树失败: {rs_tree_path}, 错误: {str(e)}')
+
+            return result
 
         except Exception as e:
             self.logger.error(f'解析组件树文件失败: {element_tree_path}, 错误: {str(e)}')

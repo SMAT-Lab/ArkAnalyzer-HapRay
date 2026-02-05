@@ -9,15 +9,15 @@
       <el-card shadow="never" style="margin-bottom: 16px;">
         <el-row :gutter="16">
           <el-col :span="12">
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: 600; margin-right: 12px;">页面RS渲染CanvasNode组件数量:</span>
-              <div ref="canvasNodeChartRef" style="width: 100%; height: 200px;"></div>
+            <div class="chart-container">
+              <div class="chart-title">页面RS渲染CanvasNode组件数量</div>
+              <div ref="canvasNodeChartRef" class="chart-area"></div>
             </div>
           </el-col>
           <el-col :span="12">
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: 600; margin-right: 12px;">页面内存超尺寸:</span>
-              <div ref="memoryChartRef" style="width: 100%; height: 200px;"></div>
+            <div class="chart-container">
+              <div class="chart-title">页面内存超尺寸</div>
+              <div ref="memoryChartRef" class="chart-area"></div>
             </div>
           </el-col>
         </el-row>
@@ -272,25 +272,114 @@ const initCharts = () => {
   const sortedPages = [...currentPageList.value].sort((a, b) => (a.page_idx || 0) - (b.page_idx || 0));
   const xData = sortedPages.map(page => `Page ${page.page_idx}`);
   const canvasData = sortedPages.map(page => page.canvasNodeCnt || 0);
+  const onTreeData = sortedPages.map(page => page.canvas_node_on_tree ?? 0);
+  const offTreeData = sortedPages.map(page => page.canvas_node_off_tree ?? 0);
+  const hasOnOffTreeData = sortedPages.some(p => p.canvas_node_on_tree !== undefined);
   const memoryData = sortedPages.map(page => page.image_size_analysis?.total_excess_memory_mb || 0);
 
-  // CanvasNode折线图
+  // CanvasNode折线图（含上树/未上树）
   if (canvasNodeChartRef.value) {
     canvasNodeChart = echarts.init(canvasNodeChartRef.value);
+    const series: echarts.SeriesOption[] = hasOnOffTreeData
+      ? [
+          {
+            name: '上树',
+            type: 'line',
+            stack: 'canvas',
+            data: onTreeData,
+            smooth: true,
+            itemStyle: { color: '#67c23a' },
+            lineStyle: { width: 2 },
+            emphasis: { focus: 'series' },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
+                  { offset: 1, color: 'rgba(103, 194, 58, 0.1)' },
+                ],
+              },
+            },
+          },
+          {
+            name: '未上树',
+            type: 'line',
+            stack: 'canvas',
+            data: offTreeData,
+            smooth: true,
+            itemStyle: { color: '#f56c6c' },
+            lineStyle: { width: 2 },
+            emphasis: { focus: 'series' },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(245, 108, 108, 0.3)' },
+                  { offset: 1, color: 'rgba(245, 108, 108, 0.1)' },
+                ],
+              },
+            },
+          },
+        ]
+      : [
+          {
+            name: 'CanvasNode数量',
+            type: 'line',
+            data: canvasData,
+            smooth: true,
+            itemStyle: { color: '#409EFF' },
+            label: {
+              show: true,
+              position: 'top',
+              formatter: (params: unknown) => String((params as { value?: number }).value ?? ''),
+              fontSize: 11,
+              color: '#606266',
+            },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
+                  { offset: 1, color: 'rgba(64, 158, 255, 0.1)' },
+                ],
+              },
+            },
+          },
+        ];
     canvasNodeChart.setOption({
       tooltip: {
         trigger: 'axis',
+        confine: true,
         formatter: (params: unknown) => {
           const paramArray = Array.isArray(params) ? params : [params];
-          const param = paramArray[0] as { name?: string; value?: number };
-          return `${param.name}<br/>CanvasNode数量: <strong>${param.value}</strong>`;
+          const idx = (paramArray[0] as { dataIndex?: number })?.dataIndex ?? 0;
+          const page = sortedPages[idx];
+          let html = `<div style="min-width: 140px;">${xData[idx]}<br/>CanvasNode数量: <strong style="color:#409EFF">${page?.canvasNodeCnt ?? 0}</strong>`;
+          if (page?.canvas_node_on_tree !== undefined) {
+            html += `<br/>上树: <strong style="color:#67c23a">${page.canvas_node_on_tree}</strong>`;
+            html += `<br/>未上树: <strong style="color:#f56c6c">${page.canvas_node_off_tree ?? 0}</strong>`;
+          }
+          html += '</div>';
+          return html;
         },
       },
       grid: {
-        left: '12%',
-        right: '3%',
-        bottom: '10%',
-        top: '10%',
+        left: '10%',
+        right: '5%',
+        bottom: hasOnOffTreeData ? '15%' : '15%',
+        top: '8%',
         containLabel: true,
       },
       xAxis: {
@@ -298,42 +387,30 @@ const initCharts = () => {
         data: xData,
         axisLabel: {
           interval: 0,
-          rotate: 45,
-          fontSize: 10,
+          rotate: xData.length > 6 ? 45 : 0,
+          fontSize: 11,
         },
+        axisTick: { show: true },
+        axisLine: { show: true },
         boundaryGap: false,
       },
       yAxis: {
         type: 'value',
         name: '数量',
         nameLocation: 'middle',
-        nameGap: 50,
-        nameTextStyle: {
-          fontSize: 12,
-        },
+        nameGap: 45,
+        nameTextStyle: { fontSize: 12 },
+        splitLine: { lineStyle: { type: 'dashed', opacity: 0.4 } },
       },
-      series: [
-        {
-          name: 'CanvasNode数量',
-          type: 'line',
-          data: canvasData,
-          smooth: true,
-          itemStyle: { color: '#409EFF' },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-                { offset: 1, color: 'rgba(64, 158, 255, 0.1)' },
-              ],
-            },
-          },
-        },
-      ],
+      legend: hasOnOffTreeData
+        ? {
+            data: ['上树', '未上树'],
+            bottom: '2%',
+            itemGap: 20,
+            textStyle: { fontSize: 12 },
+          }
+        : undefined,
+      series,
     });
   }
 
@@ -407,10 +484,79 @@ const updateCharts = () => {
     const sortedPages = [...currentPageList.value].sort((a, b) => (a.page_idx || 0) - (b.page_idx || 0));
     const xData = sortedPages.map(page => `Page ${page.page_idx}`);
     const canvasData = sortedPages.map(page => page.canvasNodeCnt || 0);
-    
+    const onTreeData = sortedPages.map(page => page.canvas_node_on_tree ?? 0);
+    const offTreeData = sortedPages.map(page => page.canvas_node_off_tree ?? 0);
+    const hasOnOffTreeData = sortedPages.some(p => p.canvas_node_on_tree !== undefined);
+    const series = hasOnOffTreeData
+      ? [
+          {
+            name: '上树',
+            type: 'line',
+            stack: 'canvas',
+            data: onTreeData,
+            smooth: true,
+            itemStyle: { color: '#67c23a' },
+            lineStyle: { width: 2 },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(103, 194, 58, 0.3)' },
+                  { offset: 1, color: 'rgba(103, 194, 58, 0.1)' },
+                ],
+              },
+            },
+          },
+          {
+            name: '未上树',
+            type: 'line',
+            stack: 'canvas',
+            data: offTreeData,
+            smooth: true,
+            itemStyle: { color: '#f56c6c' },
+            lineStyle: { width: 2 },
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(245, 108, 108, 0.3)' },
+                  { offset: 1, color: 'rgba(245, 108, 108, 0.1)' },
+                ],
+              },
+            },
+          },
+        ]
+      : [
+          {
+            name: 'CanvasNode数量',
+            type: 'line',
+            data: canvasData,
+            label: {
+              show: true,
+              position: 'top',
+              formatter: (params: unknown) => String((params as { value?: number }).value ?? ''),
+              fontSize: 11,
+              color: '#606266',
+            },
+          },
+        ];
+
     canvasNodeChart.setOption({
-      xAxis: { data: xData },
-      series: [{ data: canvasData }],
+      xAxis: {
+        data: xData,
+        boundaryGap: false,
+        axisLabel: { rotate: xData.length > 6 ? 45 : 0 },
+      },
+      grid: { bottom: hasOnOffTreeData ? '15%' : '15%' },
+      series,
     });
   }
 
@@ -462,6 +608,25 @@ onBeforeUnmount(() => {
 <style scoped>
 .ui-analysis {
   padding: 16px;
+}
+
+.chart-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.chart-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.chart-area {
+  width: 100%;
+  height: 220px;
+  min-height: 180px;
 }
 
 .screenshot-placeholder,
