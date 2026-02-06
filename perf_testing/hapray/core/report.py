@@ -1276,17 +1276,22 @@ class ReportGenerator:
             Dictionary with hilog analysis results by step
         """
         try:
-            # Run hilog analysis
+            # Run hilog analysis (detail=True 以生成 hilog_detail.json，供前端展示详细匹配信息)
             hilog_action = HilogAction()
             output_file = os.path.join(report_dir, 'hilog_analysis.xlsx')
-            hilog_action.run(hilog_dir, output_file, detail=False)
+            hilog_action.run(hilog_dir, output_file, detail=True)
 
             # Load hilog analysis results from JSON file
             hilog_json_path = os.path.join(report_dir, 'hilog_analysis.json')
-            if os.path.exists(hilog_json_path):
-                return ReportGenerator._load_json_safe(hilog_json_path, default={})
+            hilog_data = ReportGenerator._load_json_safe(hilog_json_path, default={})
 
-            return {}
+            # Load hilog_detail.json（规则匹配详情：各规则 matched、其他 未匹配任何规则）
+            hilog_detail_path = os.path.join(report_dir, 'hilog_detail.json')
+            if os.path.exists(hilog_detail_path):
+                hilog_detail = ReportGenerator._load_json_safe(hilog_detail_path, default={})
+                hilog_data['_detail'] = hilog_detail
+
+            return hilog_data
 
         except Exception as e:
             logging.warning('Hilog analysis failed: %s', str(e))

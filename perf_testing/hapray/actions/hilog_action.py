@@ -445,7 +445,11 @@ class HilogAction:
                 pattern_configs[pattern_name] = {'regex': regex_pattern, 'groups': groups, 'conditions': conditions}
                 results[pattern_name] = []
                 if detail:
-                    detail_data[pattern_name] = {'matched': [], 'unmatched': []}
+                    detail_data[pattern_name] = {'matched': []}  # 仅保留 matched，unmatched 统一放入「其他」
+
+            # 用于计算「其他」：所有正则匹配到的字符串 - 至少被一个规则条件通过的字符串
+            all_regex_match_strings = set()
+            all_matched_strings = set()
 
             for file_path in hilog_files:
                 if not file_path.exists():
@@ -527,11 +531,13 @@ class HilogAction:
                                         conditions_met = False
 
                                 # Handle detail mode: save matched strings
+                                # 规则：匹配且条件通过 -> 加入该规则 matched；若匹配多个规则，每个规则都包含
+                                # 「其他」= 所有正则匹配中，未被任一规则条件通过的（统一去重，避免重复）
                                 if detail and full_match_string:
+                                    all_regex_match_strings.add(full_match_string)
                                     if conditions_met:
                                         detail_data[pattern_name]['matched'].append(full_match_string)
-                                    else:
-                                        detail_data[pattern_name]['unmatched'].append(full_match_string)
+                                        all_matched_strings.add(full_match_string)
 
                                 # Only add to results if conditions are met (or no conditions)
                                 if conditions_met and extracted_values:
@@ -544,6 +550,10 @@ class HilogAction:
                 except Exception as e:
                     logging.warning(f'Error analyzing file {file_path}: {str(e)}')
                     continue
+
+            # 「其他」：所有正则匹配到但任一规则条件均未通过的（去重）
+            if detail and detail_data is not None:
+                detail_data['其他'] = sorted(all_regex_match_strings - all_matched_strings)
 
             return results, detail_data
 
