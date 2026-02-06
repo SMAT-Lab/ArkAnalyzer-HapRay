@@ -248,7 +248,7 @@
               </h3>
               <el-descriptions :column="1" size="small">
                 <el-descriptions-item
-                  v-for="(value, key) in item.log || {}"
+                  v-for="(value, key) in getLogSummary(item.log)"
                   :key="key"
                   :label="String(key)"
                 >
@@ -260,9 +260,9 @@
                   type="primary"
                   link
                   size="small"
-                  @click="gotoPage('perf_step', getStepIndex(item.step_id) as number)"
+                  @click="gotoPage('hilog_step', getStepIndex(item.step_id) as number)"
                 >
-                  查看负载分析详情
+                  查看日志分析详情
                 </el-button>
               </div>
             </div>
@@ -360,6 +360,12 @@ const scrollToStep = (stepIndex: number) => {
 const gotoPage = (pagePrefix: string, stepIndex: number) => {
   const pageId = `${pagePrefix}_${stepIndex}`;
   emit('pageChange', pageId);
+};
+
+// 获取日志统计（排除 _detail 内部数据）
+const getLogSummary = (log?: Record<string, unknown>) => {
+  if (!log || typeof log !== 'object') return {};
+  return Object.fromEntries(Object.entries(log).filter(([k]) => k !== '_detail'));
 };
 
 // 故障树阈值（与 FaultTreeAnalysis.vue 保持一致）
