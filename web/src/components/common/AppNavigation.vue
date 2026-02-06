@@ -35,6 +35,15 @@
           </el-menu-item>
         </el-tooltip>
 
+        <el-tooltip effect="dark" content="分析总结" placement="right" :disabled="!isCollapsed">
+          <el-menu-item index="summary_overview">
+            <el-icon>
+              <DataBoard />
+            </el-icon>
+            <span>分析总结</span>
+          </el-menu-item>
+        </el-tooltip>
+
         <!-- 步骤选择子菜单 -->
         <el-sub-menu index="step-selection">
           <template #title>

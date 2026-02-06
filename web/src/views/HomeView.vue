@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="app-layout">
     <!-- 左侧导航 -->
     <AppNavigation :current-page="showPage" @page-change="changeContent" @collapse-change="handleCollapseChange" />
@@ -53,6 +53,7 @@
       <div class="content-body">
         <keep-alive>
           <CompareOverview v-if="showPage === 'perf_compare'" @navigate="changeContent" />
+          <SummaryOverview v-else-if="showPage === 'summary_overview'" @page-change="changeContent" />
           <PerfLoadOverview v-else-if="showPage === 'perf_load_overview'" @page-change="changeContent" />
           <PerfStepLoad v-else-if="showPage.startsWith('perf_step_')" :step-id="getStepId(showPage)" />
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
@@ -133,6 +134,7 @@
 import { ref, computed } from 'vue';
 import AppNavigation from '@/components/common/AppNavigation.vue';
 import PerfLoadOverview from '@/components/single-analysis/overview/PerfLoadOverview.vue';
+import SummaryOverview from '@/components/single-analysis/overview/SummaryOverview.vue';
 import PerfStepLoad from '@/components/single-analysis/step/load/PerfStepLoad.vue';
 import PerfLoadAnalysis from '@/components/single-analysis/step/load/PerfLoadAnalysis.vue';
 import PerfFrameAnalysis from '@/components/single-analysis/step/frame/PerfFrameAnalysis.vue';
@@ -193,6 +195,7 @@ const pageTitles: Record<string, string> = {
   'perf': '单版本负载分析',
   'perf_load': '负载分析',
   'perf_load_overview': '负载总览',
+  'summary_overview': '分析总结',
   'perf_frame': '帧分析',
   'compare_overview': '版本对比总览',
   'compare_ui': 'UI对比',
@@ -210,6 +213,7 @@ const pageTitles: Record<string, string> = {
 const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
   'perf_load_overview': '单版本分析 / 负载总览',
+  'summary_overview': '单版本分析 / 分析总结',
   'compare_overview': '版本对比 / 总览对比',
   'compare_ui': '版本对比 / UI对比',
   'compare_scene_load': '版本对比 / 场景负载对比',
@@ -429,6 +433,7 @@ const shouldShowSteps = () => {
   // 在负载总览、负载分析、帧分析、火焰图分析等页面显示步骤
   const pagesWithSteps = [
     'perf_load_overview',
+    'summary_overview',
     'perf_load',
     'perf_frame',
     'perf_flame',
