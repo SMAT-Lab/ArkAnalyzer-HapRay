@@ -1,275 +1,158 @@
 <template>
   <div class="summary-overview-container">
-      <div class="summary-header">
-        <h2>分析总结</h2>
-        <p class="summary-desc">
-          汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、Image 超尺寸统计以及组件树上/未上树节点情况。
-        </p>
+    <div class="summary-header">
+      <h2>分析总结</h2>
+      <p class="summary-desc">
+        汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、Image 超尺寸统计以及组件树上/未上树节点情况。
+      </p>
+    </div>
+
+    <!-- 判断规则说明 -->
+    <el-card class="rules-card" shadow="never">
+      <template #header>
+        <div class="rules-header">
+          <span>📋 问题判断规则说明</span>
+          <el-button text type="primary" size="small" @click="showRules = !showRules">
+            {{ showRules ? '收起' : '展开' }}
+          </el-button>
+        </div>
+      </template>
+      <div v-show="showRules" class="rules-content">
+        <div class="rule-item">
+          <strong>空刷帧占比：</strong>
+          <span>占比 > 10% 时显示，> 50% 为严重，10-50% 为中等</span>
+        </div>
+
+        <div class="rule-section">
+          <strong class="rule-section-title">故障树指标：</strong>
+          <div class="rule-subsection">
+            <div class="rule-subtitle">判断规则：超过预设阈值时显示，超过阈值 2 倍为严重，否则为中等</div>
+            
+            <div class="rule-category">
+              <strong>🎨 ArkUI 故障分析：</strong>
+              <ul class="rule-list">
+                <li>帧动画数量：阈值 50 个</li>
+                <li>区域变化监听：阈值 1000 次</li>
+                <li>可见区域变化监听：阈值 1000 次</li>
+                <li>屏幕宽高获取：阈值 100 次</li>
+                <li>事务数据序列化：阈值 3000 次</li>
+                <li>软解码：检测到使用软解码器时显示（中等）</li>
+              </ul>
+            </div>
+
+            <div class="rule-category">
+              <strong>🖼️ RS 渲染服务故障分析：</strong>
+              <ul class="rule-list">
+                <li>处理节点数：阈值 200 个</li>
+                <li>处理时间：阈值 5 秒</li>
+                <li>节点跳过次数：阈值 10 次</li>
+                <li>反序列化数量：阈值 60 次</li>
+                <li>动画节点总大小：阈值 1000（单位：渲染服务内部单位）</li>
+                <li>动画总大小：阈值 2000（单位：渲染服务内部单位）</li>
+              </ul>
+            </div>
+
+            <div class="rule-category">
+              <strong>🎬 音视频编解码故障分析：</strong>
+              <ul class="rule-list">
+                <li>播控指令数：阈值 1,000,000 次</li>
+                <li>视频解码输入帧：阈值 300 帧</li>
+                <li>视频解码消费帧：阈值 250 帧</li>
+              </ul>
+            </div>
+
+            <div class="rule-category">
+              <strong>🔊 音频故障分析：</strong>
+              <ul class="rule-list">
+                <li>音频写回调：阈值 5,000,000 次</li>
+                <li>音频读回调：阈值 1,000,000 次</li>
+                <li>音频播放回调：阈值 1,000,000 次</li>
+                <li>音频录制回调：阈值 1,000,000 次</li>
+              </ul>
+            </div>
+
+            <div class="rule-category">
+              <strong>🔗 IPC Binder 进程间通信故障分析：</strong>
+              <ul class="rule-list">
+                <li>总通信次数：阈值 10,000 次</li>
+                <li>高延迟通信次数：阈值 10 次</li>
+                <li>平均延迟：阈值 50 ms</li>
+                <li>最大延迟：阈值 100 ms</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="rule-item">
+          <strong>Image 超尺寸：</strong>
+          <span>超尺寸数量 > 0 或额外内存 > 10MB 时显示，额外内存 > 50MB 为严重，否则为中等</span>
+        </div>
+        <div class="rule-item">
+          <strong>组件未上树：</strong>
+          <span>未上树占比 > 20% 时显示，> 50% 为严重，20-50% 为中等</span>
+        </div>
+        <div class="rule-item">
+          <strong>组件复用率：</strong>
+          <span>复用率 < 30% 且总构建 > 0 时显示，< 10% 为严重，10-30% 为中等</span>
+        </div>
+        <div class="rule-item">
+          <strong>技术栈与日志：</strong>
+          <span>不在此页面显示</span>
+        </div>
       </div>
+    </el-card>
 
-      <!-- 步骤导航 -->
-      <div v-if="summaryItems.length" class="step-nav">
-        <span class="step-nav-label">步骤导航：</span>
-        <el-button
-          v-for="item in summaryItems"
-          :key="item.step_id"
-          size="small"
-          round
-          @click="scrollToStep(getStepIndex(item.step_id) as number)"
-        >
-          步骤 {{ getStepIndex(item.step_id) }}
-        </el-button>
-      </div>
-
-      <!-- 无数据提示 -->
-      <el-empty
-        v-if="!summaryItems.length"
-        description="当前报告未包含分析总结数据，请确认使用最新版本的 hapray 生成报告。"
-        class="summary-empty"
-      />
-
-      <!-- 每个步骤的详细总结 -->
-      <div
+    <!-- 步骤导航 -->
+    <div v-if="summaryItems.length" class="step-nav">
+      <span class="step-nav-label">步骤导航：</span>
+      <el-button
         v-for="item in summaryItems"
         :key="item.step_id"
-        class="step-card"
-        :id="'summary-step-' + getStepIndex(item.step_id)"
+        size="small"
+        round
+        @click="scrollToStep(getStepIndex(item.step_id) as number)"
       >
-        <div class="step-card-header">
-          <div class="step-title">
-            <span class="step-tag">步骤 {{ getStepIndex(item.step_id) }}</span>
-            <span class="step-name">{{ getStepName(item.step_id) }}</span>
-          </div>
-          <div class="step-actions">
-            <el-button
-              text
-              type="primary"
-              size="small"
-              @click="toggleCollapsed(item.step_id)"
-            >
-              {{ isCollapsed(item.step_id) ? '展开' : '折叠' }}
-            </el-button>
-          </div>
-        </div>
+        步骤 {{ getStepIndex(item.step_id) }}
+      </el-button>
+    </div>
 
-        <div v-show="!isCollapsed(item.step_id)">
-        <el-row :gutter="20">
-          <!-- 组件复用 -->
-          <el-col :span="6" v-if="item.component_reuse">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag">组件复用</span>
-              </h3>
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item label="总构建次数">
-                  {{ formatNumber(item.component_reuse.total_builds ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="复用构建次数">
-                  {{ formatNumber(item.component_reuse.recycled_builds ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="复用率">
-                  {{ formatPercentage(item.component_reuse.reusability_ratio) }}
-                </el-descriptions-item>
-                <el-descriptions-item v-if="item.component_reuse.max_component" label="复用热点组件">
-                  {{ item.component_reuse.max_component }}
-                </el-descriptions-item>
-              </el-descriptions>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('frame_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看帧分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
+    <!-- 无数据提示 -->
+    <el-empty
+      v-if="!summaryItems.length"
+      description="当前报告未包含分析总结数据，请确认使用最新版本的 hapray 生成报告。"
+      class="summary-empty"
+    />
 
-          <!-- 空刷帧概要 -->
-          <el-col :span="6" v-if="item.empty_frame">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag subtle">空刷帧</span>
-              </h3>
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item label="空刷帧数">
-                  {{ formatNumber(item.empty_frame.count ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="空刷帧占比">
-                  {{ item.empty_frame.percentage ?? '0.00%' }}
-                </el-descriptions-item>
-              </el-descriptions>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('frame_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看帧分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
-
-          <!-- 技术栈占比 -->
-          <el-col :span="6" v-if="item.tech_stack">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag info">技术栈负载</span>
-              </h3>
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item
-                  v-for="(value, key) in item.tech_stack || {}"
-                  :key="key"
-                  :label="key"
-                >
-                  {{ formatNumber(value as number) }}
-                </el-descriptions-item>
-              </el-descriptions>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('perf_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看负载分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
-
-          <!-- Image 超尺寸 -->
-          <el-col :span="6" v-if="item.image_oversize">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag warning">Image 超尺寸</span>
-              </h3>
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item label="总 Image 数量">
-                  {{ formatNumber(item.image_oversize.total_images ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="超尺寸数量">
-                  {{ formatNumber(item.image_oversize.exceed_count ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="额外内存 (MB)">
-                  {{ (item.image_oversize.total_excess_memory_mb ?? 0).toFixed(2) }}
-                </el-descriptions-item>
-              </el-descriptions>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('ui_animate_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看 UI 分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20" style="margin-top: 12px">
-          <!-- 组件树上/未上树 -->
-          <el-col :span="8" v-if="item.component_tree">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag info">组件树上/未上树</span>
-              </h3>
-              <el-descriptions :column="2" size="small">
-                <el-descriptions-item label="总节点数">
-                  {{ formatNumber(item.component_tree.total_nodes ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="上树节点数">
-                  {{ formatNumber(item.component_tree.on_tree_nodes ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="未上树节点数">
-                  {{ formatNumber(item.component_tree.off_tree_nodes ?? 0) }}
-                </el-descriptions-item>
-                <el-descriptions-item label="未上树占比">
-                  {{ formatPercentage(item.component_tree.off_tree_ratio) }}
-                </el-descriptions-item>
-              </el-descriptions>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('ui_animate_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看 UI 分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
-
-          <!-- 故障树 -->
-          <el-col :span="8" v-if="item.fault_tree">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag danger">故障树</span>
-              </h3>
-              <div class="fault-items">
-                <div
-                  v-for="fault in getFaultItems(item.fault_tree)"
-                  :key="fault.label"
-                  class="fault-item"
-                  :class="'fault-' + fault.severity"
-                >
-                  <span class="fault-label">{{ fault.label }}</span>
-                  <span class="fault-value">{{ fault.value }}</span>
-                </div>
-              </div>
-              <p v-if="!getFaultItems(item.fault_tree).length" class="panel-empty">
-                当前步骤未检测到明显故障。
-              </p>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('fault_tree_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看故障树分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
-
-          <!-- Hilog / 日志模式统计 -->
-          <el-col :span="8" v-if="item.log && Object.keys(item.log).length">
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag subtle">日志模式汇总</span>
-              </h3>
-              <el-descriptions :column="1" size="small">
-                <el-descriptions-item
-                  v-for="(value, key) in getLogSummary(item.log)"
-                  :key="key"
-                  :label="String(key)"
-                >
-                  {{ String(value) }}
-                </el-descriptions-item>
-              </el-descriptions>
-              <div class="panel-actions">
-                <el-button
-                  type="primary"
-                  link
-                  size="small"
-                  @click="gotoPage('hilog_step', getStepIndex(item.step_id) as number)"
-                >
-                  查看日志分析详情
-                </el-button>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
-        </div>
+    <!-- 每个步骤的表格 -->
+    <div
+      v-for="item in summaryItems"
+      :key="item.step_id"
+      class="step-section"
+      :id="'summary-step-' + getStepIndex(item.step_id)"
+    >
+      <div class="step-header">
+        <span class="step-tag">步骤 {{ getStepIndex(item.step_id) }}</span>
+        <span class="step-name">{{ getStepName(item.step_id) }}</span>
       </div>
+
+      <el-table
+        :data="getIssuesForStep(item)"
+        stripe
+        border
+        style="width: 100%"
+        :empty-text="'当前步骤未检测到需要关注的问题'"
+      >
+        <el-table-column prop="issue" label="Issue名称" width="200" />
+        <el-table-column prop="detail" label="详情" min-width="300" />
+        <el-table-column prop="severity" label="严重程度" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getSeverityType(row.severity)" size="small">
+              {{ row.severity }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
 
@@ -306,11 +189,17 @@ interface SummaryItem {
   };
 }
 
+interface IssueRow {
+  issue: string;
+  detail: string;
+  severity: '严重' | '中等' | '轻微';
+}
+
 const jsonDataStore = useJsonDataStore();
 
 const summaryItems = computed<SummaryItem[]>(() => (jsonDataStore.summary ?? []) as SummaryItem[]);
 
-const collapsedSteps = ref<Record<string, boolean>>({});
+const showRules = ref(true);
 
 const emit = defineEmits<{
   pageChange: [page: string];
@@ -326,15 +215,6 @@ const stepNameMap = computed(() => {
   return map;
 });
 
-const formatNumber = (num: number) => num.toLocaleString();
-
-const formatPercentage = (value?: number) => {
-  if (value == null || Number.isNaN(value)) {
-    return '0.00%';
-  }
-  return `${(value * 100).toFixed(2)}%`;
-};
-
 const getStepIndex = (stepId: string) => {
   const match = stepId.match(/step(\d+)/);
   return match ? Number(match[1]) : stepId;
@@ -344,12 +224,6 @@ const getStepName = (stepId: string) => {
   return stepNameMap.value[stepId] ?? stepId;
 };
 
-const isCollapsed = (stepId: string) => !!collapsedSteps.value[stepId];
-
-const toggleCollapsed = (stepId: string) => {
-  collapsedSteps.value[stepId] = !collapsedSteps.value[stepId];
-};
-
 const scrollToStep = (stepIndex: number) => {
   const el = document.getElementById(`summary-step-${stepIndex}`);
   if (el) {
@@ -357,46 +231,156 @@ const scrollToStep = (stepIndex: number) => {
   }
 };
 
-const gotoPage = (pagePrefix: string, stepIndex: number) => {
-  const pageId = `${pagePrefix}_${stepIndex}`;
-  emit('pageChange', pageId);
-};
-
-// 获取日志统计（排除 _detail 内部数据）
-const getLogSummary = (log?: Record<string, unknown>) => {
-  if (!log || typeof log !== 'object') return {};
-  return Object.fromEntries(Object.entries(log).filter(([k]) => k !== '_detail'));
+// 解析百分比字符串为数字
+const parsePercentage = (percentageStr?: string): number => {
+  if (!percentageStr) return 0;
+  const match = percentageStr.match(/(\d+\.?\d*)/);
+  return match ? parseFloat(match[1]) : 0;
 };
 
 // 故障树阈值（与 FaultTreeAnalysis.vue 保持一致）
 const FAULT_THRESHOLDS: Array<{
   path: string[];
-  label: string;
+  issueName: string; // 清晰的issue名称
+  description: string; // 详细说明
   threshold: number;
   format?: (v: number) => string;
 }> = [
-  { path: ['arkui', 'animator'], label: '帧动画数量', threshold: 50 },
-  { path: ['arkui', 'HandleOnAreaChangeEvent'], label: '区域变化监听', threshold: 1000 },
-  { path: ['arkui', 'HandleVisibleAreaChangeEvent'], label: '可见区域变化', threshold: 1000 },
-  { path: ['arkui', 'GetDefaultDisplay'], label: '屏幕宽高获取', threshold: 100 },
-  { path: ['arkui', 'MarshRSTransactionData'], label: '事务数据序列化', threshold: 3000 },
-  { path: ['RS', 'ProcessedNodes', 'count'], label: '处理节点数', threshold: 200 },
-  { path: ['RS', 'ProcessedNodes', 'ts'], label: '处理时间(s)', threshold: 5, format: (v) => v.toFixed(3) },
-  { path: ['RS', 'DisplayNodeSkipTimes'], label: '跳过次数', threshold: 10 },
-  { path: ['RS', 'UnMarshRSTransactionData'], label: '反序列化数量', threshold: 60 },
-  { path: ['RS', 'AnimateSize', 'nodeSizeSum'], label: '动画节点总大小', threshold: 1000 },
-  { path: ['RS', 'AnimateSize', 'totalAnimationSizeSum'], label: '动画总大小', threshold: 2000 },
-  { path: ['av_codec', 'BroadcastControlInstructions'], label: '播控指令数', threshold: 1000000 },
-  { path: ['av_codec', 'VideoDecodingInputFrameCount'], label: '视频解码输入帧', threshold: 300 },
-  { path: ['av_codec', 'VideoDecodingConsumptionFrame'], label: '视频解码消费帧', threshold: 250 },
-  { path: ['Audio', 'AudioWriteCB'], label: '音频写回调', threshold: 5000000 },
-  { path: ['Audio', 'AudioReadCB'], label: '音频读回调', threshold: 1000000 },
-  { path: ['Audio', 'AudioPlayCb'], label: '音频播放回调', threshold: 1000000 },
-  { path: ['Audio', 'AudioRecCb'], label: '音频录制回调', threshold: 1000000 },
-  { path: ['ipc_binder', 'total_transactions'], label: 'IPC 总通信次数', threshold: 10000 },
-  { path: ['ipc_binder', 'high_latency_count'], label: 'IPC 高延迟次数', threshold: 10 },
-  { path: ['ipc_binder', 'avg_latency'], label: 'IPC 平均延迟(ms)', threshold: 50, format: (v) => v.toFixed(2) },
-  { path: ['ipc_binder', 'max_latency'], label: 'IPC 最大延迟(ms)', threshold: 100, format: (v) => v.toFixed(2) },
+  {
+    path: ['arkui', 'animator'],
+    issueName: 'ArkUI 帧动画数量过多',
+    description: 'ArkUI 框架中创建的帧动画数量超过阈值，可能导致性能问题',
+    threshold: 50,
+  },
+  {
+    path: ['arkui', 'HandleOnAreaChangeEvent'],
+    issueName: 'ArkUI 区域变化监听过多',
+    description: '区域变化事件监听次数过多，可能影响渲染性能',
+    threshold: 1000,
+  },
+  {
+    path: ['arkui', 'HandleVisibleAreaChangeEvent'],
+    issueName: 'ArkUI 可见区域变化监听过多',
+    description: '可见区域变化事件监听次数过多，可能影响渲染性能',
+    threshold: 1000,
+  },
+  {
+    path: ['arkui', 'GetDefaultDisplay'],
+    issueName: 'ArkUI 屏幕宽高获取次数过多',
+    description: '频繁获取屏幕宽高信息，可能影响性能',
+    threshold: 100,
+  },
+  {
+    path: ['arkui', 'MarshRSTransactionData'],
+    issueName: 'ArkUI 事务数据序列化次数过多',
+    description: 'RS 事务数据序列化次数过多，可能影响渲染性能',
+    threshold: 3000,
+  },
+  {
+    path: ['RS', 'ProcessedNodes', 'count'],
+    issueName: 'RS 渲染服务处理节点数过多',
+    description: 'RS 渲染服务处理的节点数量超过阈值，可能导致渲染性能问题',
+    threshold: 200,
+  },
+  {
+    path: ['RS', 'ProcessedNodes', 'ts'],
+    issueName: 'RS 渲染服务处理时间过长',
+    description: 'RS 渲染服务处理节点的时间超过阈值，可能导致帧率下降',
+    threshold: 5,
+    format: (v) => v.toFixed(3),
+  },
+  {
+    path: ['RS', 'DisplayNodeSkipTimes'],
+    issueName: 'RS 渲染服务节点跳过次数过多',
+    description: 'RS 渲染服务跳过节点渲染的次数过多，可能影响显示效果',
+    threshold: 10,
+  },
+  {
+    path: ['RS', 'UnMarshRSTransactionData'],
+    issueName: 'RS 渲染服务反序列化次数过多',
+    description: 'RS 事务数据反序列化次数过多，可能影响渲染性能',
+    threshold: 60,
+  },
+  {
+    path: ['RS', 'AnimateSize', 'nodeSizeSum'],
+    issueName: 'RS 渲染服务动画节点总大小过大',
+    description: 'RS 渲染服务中动画节点的总大小超过阈值，可能影响性能',
+    threshold: 1000,
+  },
+  {
+    path: ['RS', 'AnimateSize', 'totalAnimationSizeSum'],
+    issueName: 'RS 渲染服务动画总大小过大',
+    description: 'RS 渲染服务中所有动画的总大小超过阈值，可能影响性能',
+    threshold: 2000,
+  },
+  {
+    path: ['av_codec', 'BroadcastControlInstructions'],
+    issueName: '音视频播控指令数过多',
+    description: '音视频编解码的播控指令数量过多，可能影响播放性能',
+    threshold: 1000000,
+  },
+  {
+    path: ['av_codec', 'VideoDecodingInputFrameCount'],
+    issueName: '视频解码输入帧数过多',
+    description: '视频解码器接收的输入帧数量过多，可能导致解码性能问题',
+    threshold: 300,
+  },
+  {
+    path: ['av_codec', 'VideoDecodingConsumptionFrame'],
+    issueName: '视频解码消费帧数过多',
+    description: '视频解码器消费的帧数量过多，可能导致解码性能问题',
+    threshold: 250,
+  },
+  {
+    path: ['Audio', 'AudioWriteCB'],
+    issueName: '音频写回调次数过多',
+    description: '音频写回调函数调用次数过多，可能影响音频播放性能',
+    threshold: 5000000,
+  },
+  {
+    path: ['Audio', 'AudioReadCB'],
+    issueName: '音频读回调次数过多',
+    description: '音频读回调函数调用次数过多，可能影响音频录制性能',
+    threshold: 1000000,
+  },
+  {
+    path: ['Audio', 'AudioPlayCb'],
+    issueName: '音频播放回调次数过多',
+    description: '音频播放回调函数调用次数过多，可能影响音频播放性能',
+    threshold: 1000000,
+  },
+  {
+    path: ['Audio', 'AudioRecCb'],
+    issueName: '音频录制回调次数过多',
+    description: '音频录制回调函数调用次数过多，可能影响音频录制性能',
+    threshold: 1000000,
+  },
+  {
+    path: ['ipc_binder', 'total_transactions'],
+    issueName: 'IPC Binder 进程间通信次数过多',
+    description: 'IPC Binder 进程间通信的总次数超过阈值，可能影响应用响应性能',
+    threshold: 10000,
+  },
+  {
+    path: ['ipc_binder', 'high_latency_count'],
+    issueName: 'IPC Binder 高延迟通信次数过多',
+    description: 'IPC Binder 高延迟通信次数过多，可能导致应用卡顿',
+    threshold: 10,
+  },
+  {
+    path: ['ipc_binder', 'avg_latency'],
+    issueName: 'IPC Binder 平均延迟过高',
+    description: 'IPC Binder 进程间通信的平均延迟超过阈值，可能影响应用响应速度',
+    threshold: 50,
+    format: (v) => v.toFixed(2),
+  },
+  {
+    path: ['ipc_binder', 'max_latency'],
+    issueName: 'IPC Binder 最大延迟过高',
+    description: 'IPC Binder 进程间通信的最大延迟超过阈值，可能导致应用出现明显卡顿',
+    threshold: 100,
+    format: (v) => v.toFixed(2),
+  },
 ];
 
 const formatFaultValue = (v: number): string => {
@@ -414,30 +398,103 @@ const getNested = (obj: any, path: string[]): unknown => {
   return cur;
 };
 
-// 提取有明显问题的关键数据（超过阈值的指标，并展示数值）
-const getFaultItems = (faultTree?: Record<string, unknown>) => {
-  if (!faultTree) return [] as { label: string; value: string; severity: 'critical' | 'warning' }[];
+// 获取步骤的所有问题列表
+const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
+  const issues: IssueRow[] = [];
 
-  const items: { label: string; value: string; severity: 'critical' | 'warning' }[] = [];
-  const ft = faultTree as any;
-
-  // 软解码：布尔值单独处理
-  const avCodec = ft.av_codec;
-  if (avCodec && avCodec.soft_decoder === true) {
-    items.push({ label: '使用软解码', value: '是', severity: 'warning' });
+  // 1. 空刷帧：占比 > 10% 显示，> 50% 严重，10-50% 中等
+  if (item.empty_frame) {
+    const percentage = parsePercentage(item.empty_frame.percentage);
+    if (percentage > 10) {
+      const severity: '严重' | '中等' = percentage > 50 ? '严重' : '中等';
+      issues.push({
+        issue: `空刷帧占比过高 (${item.empty_frame.percentage ?? '0.00%'})`,
+        detail: `空刷帧数: ${item.empty_frame.count ?? 0}, 占比: ${item.empty_frame.percentage ?? '0.00%'}`,
+        severity,
+      });
+    }
   }
 
-  for (const { path, label, threshold, format } of FAULT_THRESHOLDS) {
-    const raw = getNested(ft, path);
-    if (typeof raw !== 'number') continue;
-    if (raw <= threshold) continue;
+  // 2. 故障树：超过阈值的显示
+  if (item.fault_tree) {
+    const ft = item.fault_tree as any;
 
-    const valueStr = format ? format(raw) : formatFaultValue(raw);
-    const severity = raw > threshold * 2 ? 'critical' : 'warning';
-    items.push({ label, value: valueStr, severity });
+    // 软解码：布尔值单独处理
+    const avCodec = ft.av_codec;
+    if (avCodec && avCodec.soft_decoder === true) {
+      issues.push({
+        issue: '音视频使用软解码',
+        detail: '检测到使用软解码器进行视频解码，软解码性能较差，建议使用硬解码以提升性能',
+        severity: '中等',
+      });
+    }
+
+    for (const { path, issueName, description, threshold, format } of FAULT_THRESHOLDS) {
+      const raw = getNested(ft, path);
+      if (typeof raw !== 'number') continue;
+      if (raw <= threshold) continue;
+
+      const valueStr = format ? format(raw) : formatFaultValue(raw);
+      const thresholdStr = format ? format(threshold) : formatFaultValue(threshold);
+      const severity: '严重' | '中等' = raw > threshold * 2 ? '严重' : '中等';
+      issues.push({
+        issue: `${issueName} (当前值: ${valueStr})`,
+        detail: `${description}。当前值: ${valueStr}, 阈值: ${thresholdStr}`,
+        severity,
+      });
+    }
   }
 
-  return items;
+  // 3. Image 超尺寸：超尺寸数量 > 0 或额外内存 > 10MB 显示
+  if (item.image_oversize) {
+    const exceedCount = item.image_oversize.exceed_count ?? 0;
+    const excessMemory = item.image_oversize.total_excess_memory_mb ?? 0;
+    if (exceedCount > 0 || excessMemory > 10) {
+      const severity: '严重' | '中等' = excessMemory > 50 ? '严重' : '中等';
+      issues.push({
+        issue: `Image 超尺寸问题 (${exceedCount} 个, ${excessMemory.toFixed(2)} MB)`,
+        detail: `超尺寸数量: ${exceedCount}, 额外内存: ${excessMemory.toFixed(2)} MB`,
+        severity,
+      });
+    }
+  }
+
+  // 4. 组件树：未上树占比 > 20% 显示
+  if (item.component_tree) {
+    const offTreeRatio = (item.component_tree.off_tree_ratio ?? 0) * 100;
+    if (offTreeRatio > 20) {
+      const severity: '严重' | '中等' = offTreeRatio > 50 ? '严重' : '中等';
+      issues.push({
+        issue: `组件未上树占比过高 (${offTreeRatio.toFixed(2)}%)`,
+        detail: `未上树节点: ${item.component_tree.off_tree_nodes ?? 0}, 占比: ${offTreeRatio.toFixed(2)}%`,
+        severity,
+      });
+    }
+  }
+
+  // 5. 组件复用：复用率 < 30% 显示
+  if (item.component_reuse) {
+    const reusabilityRatio = (item.component_reuse.reusability_ratio ?? 0) * 100;
+    if (reusabilityRatio < 30 && (item.component_reuse.total_builds ?? 0) > 0) {
+      const severity: '严重' | '中等' = reusabilityRatio < 10 ? '严重' : '中等';
+      issues.push({
+        issue: `组件复用率过低 (${reusabilityRatio.toFixed(2)}%)`,
+        detail: `复用率: ${reusabilityRatio.toFixed(2)}%, 总构建: ${item.component_reuse.total_builds ?? 0}, 复用构建: ${item.component_reuse.recycled_builds ?? 0}`,
+        severity,
+      });
+    }
+  }
+
+  // 技术栈和日志不显示（已排除）
+
+  return issues;
+};
+
+// 获取严重程度的标签类型
+const getSeverityType = (severity: string): 'danger' | 'warning' | 'info' => {
+  if (severity === '严重') return 'danger';
+  if (severity === '中等') return 'warning';
+  return 'info';
 };
 </script>
 
@@ -469,7 +526,7 @@ const getFaultItems = (faultTree?: Record<string, unknown>) => {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .step-nav-label {
@@ -477,25 +534,19 @@ const getFaultItems = (faultTree?: Record<string, unknown>) => {
   color: #606266;
 }
 
-.step-card {
+.step-section {
   background: white;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
-.step-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.step-title {
+.step-header {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-bottom: 16px;
 }
 
 .step-tag {
@@ -513,115 +564,98 @@ const getFaultItems = (faultTree?: Record<string, unknown>) => {
   color: #303133;
 }
 
-.data-panel {
-  background: #fafafa;
-  border-radius: 10px;
-  padding: 16px;
-  border: 1px solid #ebeef5;
-  height: 100%;
-}
-
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.version-tag {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-weight: 500;
-}
-
-.version-tag.danger {
-  background: linear-gradient(135deg, #f56c6c 0%, #f78989 100%);
-}
-
-.version-tag.warning {
-  background: linear-gradient(135deg, #e6a23c 0%, #f3d19e 100%);
-}
-
-.version-tag.info {
-  background: linear-gradient(135deg, #409eff 0%, #79bbff 100%);
-}
-
-.version-tag.subtle {
-  background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
-}
-
-.fault-items {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.fault-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-.fault-item.fault-warning {
-  background: rgba(230, 162, 60, 0.12);
-  border-left: 3px solid #e6a23c;
-}
-
-.fault-item.fault-critical {
-  background: rgba(245, 108, 108, 0.12);
-  border-left: 3px solid #f56c6c;
-}
-
-.fault-label {
-  color: #606266;
-}
-
-.fault-value {
-  font-weight: 600;
-  color: #303133;
-}
-
-.fault-critical .fault-value {
-  color: #f56c6c;
-}
-
-.fault-warning .fault-value {
-  color: #e6a23c;
-}
-
-.panel-empty {
-  margin: 0;
-  font-size: 13px;
-  color: #909399;
-}
-
-.panel-actions {
-  margin-top: 8px;
-  text-align: right;
-}
-
 .summary-empty {
   margin-top: 40px;
 }
 
-@media (max-width: 768px) {
-  .summary-overview-container {
-    padding: 16px;
-  }
+.rules-card {
+  margin-bottom: 20px;
+  border: 1px solid #e4e7ed;
+}
 
-  .step-card {
-    padding: 16px;
-  }
+.rules-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: #303133;
+}
+
+.rules-content {
+  padding-top: 8px;
+}
+
+.rule-item {
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #606266;
+}
+
+.rule-item strong {
+  color: #303133;
+  margin-right: 8px;
+}
+
+.rule-section {
+  margin-bottom: 16px;
+}
+
+.rule-section-title {
+  display: block;
+  color: #303133;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.rule-subsection {
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.rule-subtitle {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 12px;
+  font-style: italic;
+}
+
+.rule-category {
+  margin-bottom: 16px;
+  padding-left: 16px;
+  border-left: 3px solid #e4e7ed;
+}
+
+.rule-category strong {
+  display: block;
+  color: #303133;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.rule-list {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: disc;
+}
+
+.rule-list li {
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
+}
+
+:deep(.el-table) {
+  font-size: 14px;
+}
+
+:deep(.el-table th) {
+  background-color: #f5f7fa;
+  font-weight: 600;
+}
+
+:deep(.el-table .el-table__row:hover) {
+  background-color: #f5f7fa;
 }
 </style>
-
