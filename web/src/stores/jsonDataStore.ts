@@ -430,6 +430,35 @@ interface MoreData {
  */
 export type DataType = 'perf' | 'memory' | 'both';
 
+export interface SummaryItem {
+  step_id: string;
+  report_html_path?: string;
+  empty_frame?: {
+    count?: number;
+    percentage?: string;
+  };
+  tech_stack?: Record<string, number>;
+  log?: Record<string, unknown>;
+  component_reuse?: {
+    total_builds?: number;
+    recycled_builds?: number;
+    reusability_ratio?: number;
+    max_component?: string;
+  };
+  fault_tree?: Record<string, unknown>;
+  image_oversize?: {
+    total_images?: number;
+    exceed_count?: number;
+    total_excess_memory_mb?: number;
+  };
+  component_tree?: {
+    total_nodes?: number;
+    on_tree_nodes?: number;
+    off_tree_nodes?: number;
+    off_tree_ratio?: number;
+  };
+}
+
 export interface JSONData {
   version: string;
   type: number;
@@ -444,6 +473,7 @@ export interface JSONData {
     raw?: UIRawData; // UI 原始数据（用于前端实时对比）
   };
   dataType?: DataType; // 数据类型标记，用于前台判断显示哪些页面
+  summary?: SummaryItem[]; // 步骤级分析总结信息（由后端注入）
 }
 
 // ==================== 默认值生成函数 ====================
@@ -1088,6 +1118,7 @@ interface JsonDataState {
   version: string | null;
   basicInfo: BasicInfo | null;
   steps: Step[] | null;
+  summary: SummaryItem[] | null;
   compareBasicInfo: BasicInfo | null;
   perfData: PerfData | null;
   frameData: FrameData | null;
@@ -1178,6 +1209,7 @@ export const useJsonDataStore = defineStore('config', {
     version: null,
     basicInfo: null,
     steps: null,
+    summary: null,
     compareBasicInfo: null,
     perfData: null,
     frameData: null,
@@ -1352,6 +1384,7 @@ export const useJsonDataStore = defineStore('config', {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
       this.steps = jsonData.steps;
+      this.summary = jsonData.summary || null;
       this.perfData = jsonData.perf || null;
       this.baseMark = window.baseMark;
       this.compareMark = window.compareMark;

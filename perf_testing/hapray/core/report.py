@@ -588,15 +588,18 @@ class ReportGenerator:
             export_comparison=export_comparison,
         )
 
-        # Step 3: Generate HTML report
+        # Step 3: Generate step summary (summary.json & embed into main json)
+        summary_list = self._generate_summary_json(scene_dir) or []
+        if isinstance(summary_list, list):
+            # 将 summary 直接注入到主 JSON 结构中，前端通过 window.jsonData 访问
+            result['summary'] = summary_list
+
+        # Step 4: Generate HTML report
         self._create_html_report(scene_dir, result)
 
-        # Step 4: Process symbol statistics (if enabled)
+        # Step 5: Process symbol statistics (if enabled)
         if self.symbol_statistic:
             self._process_symbol_statistics(scene_dir)
-
-        # Step 5: Generate summary.json
-        self._generate_summary_json(scene_dir)
 
         logging.info('Report successfully %s for %s', 'updated' if skip_round_selection else 'generated', scene_dir)
         return True
@@ -853,8 +856,8 @@ class ReportGenerator:
             logging.error('Error loading %s: %s', path, str(e))
             return default
 
-    def _generate_summary_json(self, scene_dir: str) -> None:
-        """Generate summary.json for each test step
+    def _generate_summary_json(self, scene_dir: str) -> list[dict[str, Any]] | None:
+        """Generate summary.json for each test step and return summary list
 
         Args:
             scene_dir: Scene directory path
@@ -870,7 +873,7 @@ class ReportGenerator:
             steps_data = ReportGenerator._load_json_safe(steps_path, default=[])
             if not steps_data:
                 logging.warning('No steps data found in scene_dir: %s, skipping summary.json generation', steps_path)
-                return
+                return None
 
             # Load empty frame data
             empty_frame_path = os.path.join(report_dir, 'trace_emptyFrame.json')
@@ -879,6 +882,18 @@ class ReportGenerator:
             # Load perf data for tech_stack statistics
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
             perf_data = ReportGenerator._load_json_safe(perf_data_path, default=[])
+
+            # Load component reuse data
+            component_reuse_path = os.path.join(report_dir, 'trace_componentReuse.json')
+            component_reuse_data = ReportGenerator._load_json_safe(component_reuse_path, default={})
+
+            # Load fault tree data
+            fault_tree_path = os.path.join(report_dir, 'trace_fault_tree.json')
+            fault_tree_data = ReportGenerator._load_json_safe(fault_tree_path, default={})
+
+            # Load UI animate data (for image oversize & component tree stats)
+            ui_animate_path = os.path.join(report_dir, 'ui_animate.json')
+            ui_animate_data = ReportGenerator._load_json_safe(ui_animate_path, default={})
 
             # Run hilog analysis if log or hilog directory exists
             # Prioritize 'log' directory as it's the current standard
@@ -911,6 +926,15 @@ class ReportGenerator:
                 # Get tech_stack data for this step
                 step_tech_stack = self._get_tech_stack_for_step(perf_data, step_idx)
 
+                # Get component reuse data for this step
+                step_component_reuse = self._get_component_reuse_for_step(component_reuse_data, step_idx)
+
+                # Get fault tree data for this step (raw fault tree node, front-end再做可视化与标签)
+                step_fault_tree = self._get_fault_tree_for_step(fault_tree_data, step_idx)
+
+                # Get UI related summaries (image oversize & component tree on/off tree stats)
+                step_image_oversize, step_component_tree = self._get_ui_summary_for_step(ui_animate_data, step_idx)
+
                 # Get hilog data for this step
                 step_hilog = self._get_hilog_for_step(hilog_data, step_idx)
 
@@ -920,6 +944,11 @@ class ReportGenerator:
                     'empty_frame': step_empty_frame,
                     'tech_stack': step_tech_stack,
                     'log': step_hilog,
+                    # 新增：组件复用、故障树、Image 超尺寸、组件树上/未上树统计
+                    'component_reuse': step_component_reuse,
+                    'fault_tree': step_fault_tree,
+                    'image_oversize': step_image_oversize,
+                    'component_tree': step_component_tree,
                 }
                 summary_list.append(summary_item)
 
@@ -932,8 +961,11 @@ class ReportGenerator:
 
             logging.info('Summary JSON generated at %s', summary_path)
 
+            return summary_list
+
         except Exception as e:
             logging.error('Failed to generate summary.json: %s', str(e))
+            return None
 
     @staticmethod
     def _get_empty_frame_for_step(empty_frame_data: dict, step_idx: int) -> dict:
@@ -1040,6 +1072,148 @@ class ReportGenerator:
                 # Note: Most components will fall into APP_Processes total, specific tech stack mapping may need updates
 
         return tech_stack
+
+    @staticmethod
+    def _get_component_reuse_for_step(component_reuse_data: dict, step_idx: int) -> dict | None:
+        """Get component reuse statistics for a specific step.
+
+        The structure is aligned with front-end ComponentResuStepData:
+        {
+            "total_builds": int,
+            "recycled_builds": int,
+            "reusability_ratio": float,
+            "max_component": str
+        }
+        """
+        if not isinstance(component_reuse_data, dict):
+            return None
+
+        step_key = f'step{step_idx}'
+        step_data = component_reuse_data.get(step_key)
+        if not isinstance(step_data, dict):
+            return None
+
+        # 字段可能缺失，这里统一做容错处理
+        return {
+            'total_builds': int(step_data.get('total_builds', 0)),
+            'recycled_builds': int(step_data.get('recycled_builds', 0)),
+            'reusability_ratio': float(step_data.get('reusability_ratio', 0.0)),
+            'max_component': step_data.get('max_component') or '',
+        }
+
+    @staticmethod
+    def _get_fault_tree_for_step(fault_tree_data: dict, step_idx: int) -> dict | None:
+        """Get fault tree data for a specific step.
+
+        We keep the raw fault tree node for this step so that the web
+        can interpret and render detailed fault information.
+        """
+        if not isinstance(fault_tree_data, dict):
+            return None
+
+        step_key = f'step{step_idx}'
+        step_data = fault_tree_data.get(step_key)
+        if not isinstance(step_data, dict):
+            return None
+
+        return step_data
+
+    @staticmethod
+    def _get_ui_summary_for_step(ui_animate_data: dict, step_idx: int) -> tuple[dict | None, dict | None]:
+        """Get UI-related summary (image oversize & component tree stats) for a specific step.
+
+        The ui_animate.json structure is compatible with UIAnimateData on the web side.
+        We aggregate per-page statistics into step-level summaries:
+
+        image_oversize:
+          {
+            "total_images": int,
+            "exceed_count": int,
+            "total_excess_memory_mb": float
+          }
+
+        component_tree:
+          {
+            "total_nodes": int,
+            "on_tree_nodes": int,
+            "off_tree_nodes": int,
+            "off_tree_ratio": float
+          }
+        """
+        if not isinstance(ui_animate_data, dict):
+            return None, None
+
+        step_key = f'step{step_idx}'
+        step_data = ui_animate_data.get(step_key)
+        if not step_data:
+            return None, None
+
+        # 兼容两种格式：直接数组或包含 pages 字段的对象
+        pages = None
+        if isinstance(step_data, dict):
+            pages = step_data.get('pages')
+        if pages is None:
+            # 可能是直接的页面数组
+            pages = step_data
+
+        if not isinstance(pages, list) or len(pages) == 0:
+            return None, None
+
+        total_images = 0
+        exceed_count = 0
+        total_excess_memory_mb = 0.0
+
+        total_nodes = 0
+        on_tree_nodes = 0
+        off_tree_nodes = 0
+
+        for page in pages:
+            if not isinstance(page, dict):
+                continue
+
+            # Image 超尺寸统计
+            image_analysis = page.get('image_size_analysis') or {}
+            if isinstance(image_analysis, dict):
+                total_images += int(image_analysis.get('total_images', 0))
+
+                images_exceeding = image_analysis.get('images_exceeding_framerect') or []
+                if isinstance(images_exceeding, list):
+                    exceed_count += len(images_exceeding)
+
+                total_excess_memory_mb += float(image_analysis.get('total_excess_memory_mb', 0.0))
+
+            # 组件树上/未上树统计（使用 canvas 节点计数）
+            canvas_node_cnt = page.get('canvasNodeCnt')
+            if isinstance(canvas_node_cnt, (int, float)):
+                total_nodes += int(canvas_node_cnt)
+
+            on_tree = page.get('canvas_node_on_tree')
+            if isinstance(on_tree, (int, float)):
+                on_tree_nodes += int(on_tree)
+
+            off_tree = page.get('canvas_node_off_tree')
+            if isinstance(off_tree, (int, float)):
+                off_tree_nodes += int(off_tree)
+
+        image_oversize_summary = None
+        if total_images > 0 or exceed_count > 0 or total_excess_memory_mb > 0:
+            image_oversize_summary = {
+                'total_images': total_images,
+                'exceed_count': exceed_count,
+                'total_excess_memory_mb': total_excess_memory_mb,
+            }
+
+        component_tree_summary = None
+        if total_nodes > 0 or on_tree_nodes > 0 or off_tree_nodes > 0:
+            off_tree_ratio = float(off_tree_nodes) / float(total_nodes) if total_nodes > 0 else 0.0
+            component_tree_summary = {
+                'total_nodes': total_nodes,
+                'on_tree_nodes': on_tree_nodes,
+                'off_tree_nodes': off_tree_nodes,
+                'off_tree_ratio': off_tree_ratio,
+            }
+
+        return image_oversize_summary, component_tree_summary
 
     @staticmethod
     def _should_classify_as_arkui(component_category: int, component_name: str, sub_category_name: str) -> bool:
