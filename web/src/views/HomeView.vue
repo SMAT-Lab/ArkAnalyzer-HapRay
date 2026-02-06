@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="app-layout">
     <!-- 左侧导航 -->
     <AppNavigation :current-page="showPage" @page-change="changeContent" @collapse-change="handleCollapseChange" />
@@ -53,6 +53,7 @@
       <div class="content-body">
         <keep-alive>
           <CompareOverview v-if="showPage === 'perf_compare'" @navigate="changeContent" />
+          <SummaryOverview v-else-if="showPage === 'summary_overview'" @page-change="changeContent" />
           <PerfLoadOverview v-else-if="showPage === 'perf_load_overview'" @page-change="changeContent" />
           <PerfStepLoad v-else-if="showPage.startsWith('perf_step_')" :step-id="getStepId(showPage)" />
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
@@ -60,6 +61,7 @@
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
           <NativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
           <PerfUIAnimate v-else-if="showPage.startsWith('ui_animate_step_')" :step-id="getUIAnimateStepId(showPage)" />
+          <HilogAnalysis v-else-if="showPage.startsWith('hilog_step_')" :step-id="getHilogStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
           <CompareOverview v-else-if="showPage === 'compare_overview'" @navigate="changeContent" />
@@ -133,6 +135,7 @@
 import { ref, computed } from 'vue';
 import AppNavigation from '@/components/common/AppNavigation.vue';
 import PerfLoadOverview from '@/components/single-analysis/overview/PerfLoadOverview.vue';
+import SummaryOverview from '@/components/single-analysis/overview/SummaryOverview.vue';
 import PerfStepLoad from '@/components/single-analysis/step/load/PerfStepLoad.vue';
 import PerfLoadAnalysis from '@/components/single-analysis/step/load/PerfLoadAnalysis.vue';
 import PerfFrameAnalysis from '@/components/single-analysis/step/frame/PerfFrameAnalysis.vue';
@@ -151,6 +154,7 @@ import PerfMulti from '@/components/multi-version/PerfMulti.vue';
 import FlameGraph from '@/components/single-analysis/step/flame/FlameGraph.vue';
 import NativeMemory from '@/components/single-analysis/step/memory/NativeMemory.vue';
 import PerfUIAnimate from '@/components/single-analysis/step/ui-animate/PerfUIAnimate.vue';
+import HilogAnalysis from '@/components/single-analysis/step/hilog/HilogAnalysis.vue';
 import ComponentsDeps from '@/components/single-analysis/deps/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
@@ -193,6 +197,7 @@ const pageTitles: Record<string, string> = {
   'perf': '单版本负载分析',
   'perf_load': '负载分析',
   'perf_load_overview': '负载总览',
+  'summary_overview': '分析总结',
   'perf_frame': '帧分析',
   'compare_overview': '版本对比总览',
   'compare_ui': 'UI对比',
@@ -210,6 +215,7 @@ const pageTitles: Record<string, string> = {
 const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
   'perf_load_overview': '单版本分析 / 负载总览',
+  'summary_overview': '单版本分析 / 分析总结',
   'compare_overview': '版本对比 / 总览对比',
   'compare_ui': '版本对比 / UI对比',
   'compare_scene_load': '版本对比 / 场景负载对比',
@@ -260,6 +266,12 @@ const getMemoryStepId = (pageId: string): number => {
 // 从UI动画页面ID中提取步骤ID
 const getUIAnimateStepId = (pageId: string): number => {
   const match = pageId.match(/ui_animate_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
+// 从日志分析页面ID中提取步骤ID
+const getHilogStepId = (pageId: string): number => {
+  const match = pageId.match(/hilog_step_(\d+)/);
   return match ? parseInt(match[1]) : 1;
 };
 
@@ -369,6 +381,18 @@ const getUIAnimateStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / UI 分析`;
 };
 
+// 动态获取日志分析步骤页面标题
+const getHilogStepPageTitle = (pageId: string): string => {
+  const stepId = getHilogStepId(pageId);
+  return `步骤${stepId} 日志分析`;
+};
+
+// 动态获取日志分析步骤页面面包屑
+const getHilogStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getHilogStepId(pageId);
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 日志分析`;
+};
+
 const getPageTitle = () => {
   if (showPage.value.startsWith('perf_step_')) {
     return getStepPageTitle(showPage.value);
@@ -390,6 +414,9 @@ const getPageTitle = () => {
   }
   if (showPage.value.startsWith('ui_animate_step_')) {
     return getUIAnimateStepPageTitle(showPage.value);
+  }
+  if (showPage.value.startsWith('hilog_step_')) {
+    return getHilogStepPageTitle(showPage.value);
   }
   return pageTitles[showPage.value] || '未知页面';
 };
@@ -416,6 +443,9 @@ const getBreadcrumb = () => {
   if (showPage.value.startsWith('ui_animate_step_')) {
     return getUIAnimateStepPageBreadcrumb(showPage.value);
   }
+  if (showPage.value.startsWith('hilog_step_')) {
+    return getHilogStepPageBreadcrumb(showPage.value);
+  }
   return breadcrumbMap[showPage.value] || '首页';
 };
 
@@ -429,6 +459,7 @@ const shouldShowSteps = () => {
   // 在负载总览、负载分析、帧分析、火焰图分析等页面显示步骤
   const pagesWithSteps = [
     'perf_load_overview',
+    'summary_overview',
     'perf_load',
     'perf_frame',
     'perf_flame',
@@ -442,7 +473,8 @@ const shouldShowSteps = () => {
          showPage.value.startsWith('compare_step_') ||
          showPage.value.startsWith('flame_step_') ||
          showPage.value.startsWith('memory_step_') ||
-         showPage.value.startsWith('ui_animate_step_');
+         showPage.value.startsWith('ui_animate_step_') ||
+         showPage.value.startsWith('hilog_step_');
 };
 
 // 获取当前步骤信息（计算属性）
@@ -461,6 +493,10 @@ const currentStepInfo = computed(() => {
     currentStepId = getFlameStepId(showPage.value);
   } else if (showPage.value.startsWith('memory_step_')) {
     currentStepId = getMemoryStepId(showPage.value);
+  } else if (showPage.value.startsWith('ui_animate_step_')) {
+    currentStepId = getUIAnimateStepId(showPage.value);
+  } else if (showPage.value.startsWith('hilog_step_')) {
+    currentStepId = getHilogStepId(showPage.value);
   }
 
   if (currentStepId) {
