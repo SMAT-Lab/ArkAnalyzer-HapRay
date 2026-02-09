@@ -727,6 +727,31 @@ class ReportGenerator:
         return testcase_dirs
 
     @staticmethod
+    def _find_dbtools_excel(report_dir: str) -> Optional[str]:
+        """查找 report 目录下最新的 dbtools 导入 Excel 文件（ecol_load_perf_*.xlsx）
+
+        Args:
+            report_dir: report 目录路径
+
+        Returns:
+            文件名（非完整路径），与 HTML 同目录便于前端相对路径下载；若未找到则返回 None
+        """
+        if not os.path.isdir(report_dir):
+            return None
+        candidates = [
+            f for f in os.listdir(report_dir)
+            if f.startswith('ecol_load_perf_') and f.endswith('.xlsx')
+        ]
+        if not candidates:
+            return None
+        # 按修改时间取最新
+        candidates.sort(
+            key=lambda f: os.path.getmtime(os.path.join(report_dir, f)),
+            reverse=True,
+        )
+        return candidates[0]
+
+    @staticmethod
     def _build_json_data(scene_dir: str, result: dict) -> str:
         """构建JSON数据，支持三种分析模式
 
@@ -743,6 +768,11 @@ class ReportGenerator:
         # 根据分析模式决定是否加载性能数据
         load_perf = analysis_mode in ['all', 'perf']
 
+        # 将 dbtools Excel 压缩后注入 result（gzip+base64，供前端解压下载）
+        dbtools_data, dbtools_filename = ReportGenerator._build_dbtools_excel_data(scene_dir)
+        if dbtools_data and dbtools_filename:
+            result['dbtoolsExcel'] = {'data': dbtools_data, 'filename': dbtools_filename}
+
         # 创建 ReportData 实例
         report_data = ReportData.from_paths(scene_dir, result)
 
@@ -752,6 +782,35 @@ class ReportGenerator:
             report_data.result['perf']['steps'] = []
 
         return str(report_data)
+
+    @staticmethod
+    def _build_dbtools_excel_data(scene_dir: str) -> tuple[str, str]:
+        """读取 dbtools Excel 文件，gzip 压缩后 base64 编码，供前端嵌入 HTML 下载
+
+        Args:
+            scene_dir: 场景目录路径
+
+        Returns:
+            (base64_encoded_data, filename)，无文件时返回 ('', '')
+        """
+        report_dir = os.path.join(scene_dir, 'report')
+        filename = ReportGenerator._find_dbtools_excel(report_dir)
+        if not filename:
+            return '', ''
+
+        file_path = os.path.join(report_dir, filename)
+        if not os.path.isfile(file_path):
+            return '', ''
+
+        try:
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+            compressed = gzip.compress(raw_data, compresslevel=9)
+            data_b64 = base64.b64encode(compressed).decode('ascii')
+            return data_b64, filename
+        except Exception as e:
+            logging.error('Failed to build dbtools Excel data: %s', str(e))
+            return '', ''
 
     @staticmethod
     def _build_db_data(scene_dir: str) -> str:
