@@ -803,12 +803,14 @@ def extract_canvas_node_ids_from_tree(tree_dict: dict[str, Any]) -> list[dict[st
 
         canvas_node_id = attrs.get('canvasNodeId') or attrs.get('canvas_node_id')
         if canvas_node_id:
-            result.append({
-                'canvasNodeId': str(canvas_node_id),
-                'name': comp_name,
-                'path': current_path,
-                'attributes': attrs,
-            })
+            result.append(
+                {
+                    'canvasNodeId': str(canvas_node_id),
+                    'name': comp_name,
+                    'path': current_path,
+                    'attributes': attrs,
+                }
+            )
 
         for child in component.get('children', []):
             _traverse(child, current_path, result)
@@ -818,9 +820,7 @@ def extract_canvas_node_ids_from_tree(tree_dict: dict[str, Any]) -> list[dict[st
     return nodes
 
 
-def classify_on_tree_off_tree(
-    tree_dict: dict[str, Any], rs_tree_content: str
-) -> dict[str, Any]:
+def classify_on_tree_off_tree(tree_dict: dict[str, Any], rs_tree_content: str) -> dict[str, Any]:
     """
     统计组件树中CanvasNode的上树/未上树情况
 

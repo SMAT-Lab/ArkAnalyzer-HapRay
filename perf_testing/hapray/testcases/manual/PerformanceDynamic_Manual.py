@@ -38,6 +38,7 @@ class PerformanceDynamic_Manual(PerfTestCase):
         def step1():
             Log.info('正在负载采集...请操作测试UI')
             time.sleep(30)
+
         Log.info('开始负载采集！')
         self.execute_performance_step('手动测试', 30, step1)
         Log.info('结束负载采集！')
