@@ -92,6 +92,13 @@ callchain_filter:
     '.*/system/lib64/chipset-pub-sdk/libutils\.z\.so':
       - 'OHOS::Parcel::Parcel()'
 
+# 重点函数分析配置
+key_functions:
+  # 重点要总结的函数列表，只收集函数负载和函数总负载
+  functions:
+    - "OHOS::Ace::NG::PipelineContext::HandleOnAreaChangeEvent"
+    - "OHOS::Ace::NG::PipelineContext::HandleVisibleAreaChangeEvent"
+
 gui-agent:
   scenes:
     ecommerce:
