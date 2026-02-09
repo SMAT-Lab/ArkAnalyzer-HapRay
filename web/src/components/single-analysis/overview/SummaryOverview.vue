@@ -1,7 +1,18 @@
 <template>
   <div class="summary-overview-container">
     <div class="summary-header">
-      <h2>分析总结</h2>
+      <div class="summary-title-row">
+        <h2>分析总结</h2>
+        <el-button
+          v-if="hasDbtoolsExcel"
+          type="primary"
+          size="small"
+          :icon="Download"
+          @click="downloadDbtoolsExcel"
+        >
+          下载 instructions/cycles Excel
+        </el-button>
+      </div>
       <p class="summary-desc">
         汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、Image 超尺寸统计以及组件树上/未上树节点情况。
       </p>
@@ -20,7 +31,7 @@
       <div v-show="showRules" class="rules-content">
         <div class="rule-item">
           <strong>空刷帧占比：</strong>
-          <span>占比 > 10% 时显示，> 50% 为严重，10-50% 为中等</span>
+          <span>占比 &gt; 10% 时显示，&gt; 50% 为严重，10-50% 为中等</span>
         </div>
 
         <div class="rule-section">
@@ -85,15 +96,15 @@
 
         <div class="rule-item">
           <strong>Image 超尺寸：</strong>
-          <span>超尺寸数量 > 0 或额外内存 > 10MB 时显示，额外内存 > 50MB 为严重，否则为中等</span>
+          <span>超尺寸数量 &gt; 0 或额外内存 &gt; 10MB 时显示，额外内存 &gt; 50MB 为严重，否则为中等</span>
         </div>
         <div class="rule-item">
           <strong>组件未上树：</strong>
-          <span>未上树占比 > 20% 时显示，> 50% 为严重，20-50% 为中等</span>
+          <span>未上树占比 &gt; 20% 时显示，&gt; 50% 为严重，20-50% 为中等</span>
         </div>
         <div class="rule-item">
           <strong>组件复用率：</strong>
-          <span>复用率 < 30% 且总构建 > 0 时显示，< 10% 为严重，10-30% 为中等</span>
+          <span>复用率 &lt; 30% 且总构建 &gt; 0 时显示，&lt; 10% 为严重，10-30% 为中等</span>
         </div>
         <div class="rule-item">
           <strong>技术栈与日志：</strong>
@@ -126,9 +137,9 @@
     <!-- 每个步骤的表格 -->
     <div
       v-for="item in summaryItems"
+      :id="'summary-step-' + getStepIndex(item.step_id)"
       :key="item.step_id"
       class="step-section"
-      :id="'summary-step-' + getStepIndex(item.step_id)"
     >
       <div class="step-header">
         <span class="step-tag">步骤 {{ getStepIndex(item.step_id) }}</span>
@@ -158,6 +169,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { Download } from '@element-plus/icons-vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 
 interface SummaryItem {
@@ -199,11 +211,42 @@ const jsonDataStore = useJsonDataStore();
 
 const summaryItems = computed<SummaryItem[]>(() => (jsonDataStore.summary ?? []) as SummaryItem[]);
 
+/** 是否有嵌入的 dbtools Excel 数据 */
+const hasDbtoolsExcel = computed(() => !!jsonDataStore.dbtoolsExcel);
+
 const showRules = ref(true);
 
-const emit = defineEmits<{
-  pageChange: [page: string];
-}>();
+/** 从 JSON 中的 gzip+base64 数据解压并下载 dbtools Excel */
+const downloadDbtoolsExcel = async () => {
+  const excel = jsonDataStore.dbtoolsExcel;
+  if (!excel?.data || !excel?.filename) return;
+
+  try {
+    const binaryStr = atob(excel.data);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'application/gzip' });
+    const ds = new DecompressionStream('gzip');
+    const stream = blob.stream().pipeThrough(ds);
+    const decompressed = await new Response(stream).arrayBuffer();
+    const outBlob = new Blob([decompressed], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(outBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = excel.filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('Failed to download dbtools Excel:', e);
+  }
+};
 
 const stepNameMap = computed(() => {
   const map: Record<string, string> = {};
@@ -389,11 +432,11 @@ const formatFaultValue = (v: number): string => {
   return v.toLocaleString();
 };
 
-const getNested = (obj: any, path: string[]): unknown => {
-  let cur = obj;
+const getNested = (obj: Record<string, unknown>, path: string[]): unknown => {
+  let cur: unknown = obj;
   for (const p of path) {
-    if (cur == null) return undefined;
-    cur = cur[p];
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[p];
   }
   return cur;
 };
@@ -417,11 +460,17 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
 
   // 2. 故障树：超过阈值的显示
   if (item.fault_tree) {
-    const ft = item.fault_tree as any;
+    const ft = item.fault_tree as Record<string, unknown>;
 
     // 软解码：布尔值单独处理
     const avCodec = ft.av_codec;
-    if (avCodec && avCodec.soft_decoder === true) {
+    if (
+      avCodec &&
+      typeof avCodec === 'object' &&
+      avCodec !== null &&
+      'soft_decoder' in avCodec &&
+      (avCodec as Record<string, unknown>).soft_decoder === true
+    ) {
       issues.push({
         issue: '音视频使用软解码',
         detail: '检测到使用软解码器进行视频解码，软解码性能较差，建议使用硬解码以提升性能',
@@ -508,8 +557,16 @@ const getSeverityType = (severity: string): 'danger' | 'warning' | 'info' => {
   margin-bottom: 20px;
 }
 
+.summary-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
 .summary-header h2 {
-  margin: 0 0 8px 0;
+  margin: 0;
   font-size: 24px;
   font-weight: 600;
   color: #303133;
