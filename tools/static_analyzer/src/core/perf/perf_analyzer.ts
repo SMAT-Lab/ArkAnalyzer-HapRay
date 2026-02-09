@@ -880,6 +880,11 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 thirdCategoryName: sourceClassification.thirdCategoryName,
             };
 
+            // Total指令数 = 当前符号调用栈上调用的其他符号的指令数的和，不包含符号本身的指令数
+            // 栈顶(index 0)是叶子，selfEvent 是叶子位置。当 selfEvent > 0 时，callees 为 stack[0]..stack[selfEvent-1]，
+            // 本次 sample 的 event_count 归属于叶子(stack[0])，因此 callees 的指令数和 = event_count
+            const symbolTotalEvents = callchain.selfEvent > 0 ? sample.event_count : 0;
+
             let data: PerfSymbolDetailData = {
                 stepIdx: groupId,
                 eventType: event,
@@ -893,7 +898,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 fileEvents: 0,
                 symbol: this.symbolsMap.get(call.symbolId) ?? '',
                 symbolEvents: sample.event_count,
-                symbolTotalEvents: 0,
+                symbolTotalEvents,
                 componentCategory: finalClassification,
                 isMainApp: process.systemClassifyCategory.isMainApp,
                 sysDomain: process.systemClassifyCategory.domain,
