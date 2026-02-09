@@ -727,6 +727,28 @@ class ReportGenerator:
         return testcase_dirs
 
     @staticmethod
+    def _find_dbtools_excel(report_dir: str) -> Optional[str]:
+        """查找 report 目录下最新的 dbtools 导入 Excel 文件（ecol_load_perf_*.xlsx）
+
+        Args:
+            report_dir: report 目录路径
+
+        Returns:
+            文件名（非完整路径），与 HTML 同目录便于前端相对路径下载；若未找到则返回 None
+        """
+        if not os.path.isdir(report_dir):
+            return None
+        candidates = [f for f in os.listdir(report_dir) if f.startswith('ecol_load_perf_') and f.endswith('.xlsx')]
+        if not candidates:
+            return None
+        # 按修改时间取最新
+        candidates.sort(
+            key=lambda f: os.path.getmtime(os.path.join(report_dir, f)),
+            reverse=True,
+        )
+        return candidates[0]
+
+    @staticmethod
     def _build_json_data(scene_dir: str, result: dict) -> str:
         """构建JSON数据，支持三种分析模式
 
@@ -743,6 +765,11 @@ class ReportGenerator:
         # 根据分析模式决定是否加载性能数据
         load_perf = analysis_mode in ['all', 'perf']
 
+        # 将 dbtools Excel 压缩后注入 result（gzip+base64，供前端解压下载）
+        dbtools_data, dbtools_filename = ReportGenerator._build_dbtools_excel_data(scene_dir)
+        if dbtools_data and dbtools_filename:
+            result['dbtoolsExcel'] = {'data': dbtools_data, 'filename': dbtools_filename}
+
         # 创建 ReportData 实例
         report_data = ReportData.from_paths(scene_dir, result)
 
@@ -752,6 +779,35 @@ class ReportGenerator:
             report_data.result['perf']['steps'] = []
 
         return str(report_data)
+
+    @staticmethod
+    def _build_dbtools_excel_data(scene_dir: str) -> tuple[str, str]:
+        """读取 dbtools Excel 文件，gzip 压缩后 base64 编码，供前端嵌入 HTML 下载
+
+        Args:
+            scene_dir: 场景目录路径
+
+        Returns:
+            (base64_encoded_data, filename)，无文件时返回 ('', '')
+        """
+        report_dir = os.path.join(scene_dir, 'report')
+        filename = ReportGenerator._find_dbtools_excel(report_dir)
+        if not filename:
+            return '', ''
+
+        file_path = os.path.join(report_dir, filename)
+        if not os.path.isfile(file_path):
+            return '', ''
+
+        try:
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+            compressed = gzip.compress(raw_data, compresslevel=9)
+            data_b64 = base64.b64encode(compressed).decode('ascii')
+            return data_b64, filename
+        except Exception as e:
+            logging.error('Failed to build dbtools Excel data: %s', str(e))
+            return '', ''
 
     @staticmethod
     def _build_db_data(scene_dir: str) -> str:
@@ -938,6 +994,9 @@ class ReportGenerator:
                 # Get hilog data for this step
                 step_hilog = self._get_hilog_for_step(hilog_data, step_idx)
 
+                # Get key functions analysis data for this step
+                step_key_functions = self._get_key_functions_for_step(perf_data, step_idx)
+
                 summary_item = {
                     'step_id': step_id,
                     'report_html_path': report_html_path,
@@ -949,6 +1008,8 @@ class ReportGenerator:
                     'fault_tree': step_fault_tree,
                     'image_oversize': step_image_oversize,
                     'component_tree': step_component_tree,
+                    # 新增：重点函数分析
+                    'key_functions': step_key_functions,
                 }
                 summary_list.append(summary_item)
 
@@ -1321,6 +1382,87 @@ class ReportGenerator:
 
         # Return the hilog statistics (pattern name -> count)
         return step_hilog
+
+    @staticmethod
+    def _get_key_functions_for_step(perf_data: list, step_idx: int) -> Optional[dict]:
+        """Get key functions analysis data for a specific step from perf_data
+
+        Args:
+            perf_data: Performance data list (from hiperf_info.json)
+            step_idx: Step index
+
+        Returns:
+            Dictionary with key functions load data, or None if not available
+        """
+        try:
+            # Get key functions list from config
+            key_functions_config = Config.get('key_functions.functions', [])
+            if not key_functions_config:
+                return None
+
+            if not perf_data:
+                return None
+
+            # Get first entry's steps data
+            first_entry = perf_data[0]
+            steps = first_entry.get('steps', [])
+
+            # Find the step data
+            step_data = None
+            for step in steps:
+                if step.get('step_id') == step_idx:
+                    step_data = step
+                    break
+
+            if not step_data:
+                return None
+
+            # Get data items for this step
+            data_items = step_data.get('data', [])
+
+            # Extract key functions data
+            key_functions_data = {}
+            for item in data_items:
+                # Only count instruction events
+                if item.get('eventType') != 1:  # 1 = INSTRUCTION_EVENT
+                    continue
+
+                symbol = item.get('symbol', '')
+                if not symbol:
+                    continue
+
+                # Check if this symbol matches any key function
+                matched_function = None
+                for key_func in key_functions_config:
+                    # Match if key function name is contained in symbol
+                    if key_func in symbol:
+                        matched_function = key_func
+                        break
+
+                if matched_function:
+                    # Get symbolEvents (函数负载) and symbolTotalEvents (函数总负载)
+                    symbol_events = item.get('symbolEvents', 0)
+                    symbol_total_events = item.get('symbolTotalEvents', 0)
+
+                    # Initialize if not exists
+                    if matched_function not in key_functions_data:
+                        key_functions_data[matched_function] = {
+                            'symbolEvents': 0,
+                            'symbolTotalEvents': 0,
+                        }
+
+                    # Accumulate data for this function
+                    key_functions_data[matched_function]['symbolEvents'] += symbol_events
+                    key_functions_data[matched_function]['symbolTotalEvents'] += symbol_total_events
+
+            if not key_functions_data:
+                return None
+
+            return key_functions_data
+
+        except Exception as e:
+            logging.warning('Failed to get key functions data: %s', str(e))
+            return None
 
 
 def merge_summary_info(directory: str) -> list[dict[str, Any]]:

@@ -474,6 +474,7 @@ export interface JSONData {
   };
   dataType?: DataType; // 数据类型标记，用于前台判断显示哪些页面
   summary?: SummaryItem[]; // 步骤级分析总结信息（由后端注入）
+  dbtoolsExcel?: { data: string; filename: string }; // gzip+base64 嵌入的 dbtools Excel
 }
 
 // ==================== 默认值生成函数 ====================
@@ -1136,6 +1137,7 @@ interface JsonDataState {
   flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
   uiAnimateData: UIAnimateData | null; // UI 动画数据
   uiCompareData: Record<string, UICompareResult> | null; // UI 对比数据
+  dbtoolsExcel: { data: string; filename: string } | null; // gzip+base64 嵌入的 dbtools Excel
 }
 
 /**
@@ -1227,6 +1229,7 @@ export const useJsonDataStore = defineStore('config', {
     flameGraph: null,
     uiAnimateData: null,
     uiCompareData: null,
+    dbtoolsExcel: null,
   }),
 
   actions: {
@@ -1386,6 +1389,7 @@ export const useJsonDataStore = defineStore('config', {
       this.steps = jsonData.steps;
       this.summary = jsonData.summary || null;
       this.perfData = jsonData.perf || null;
+      this.dbtoolsExcel = jsonData.dbtoolsExcel || null;
       this.baseMark = window.baseMark;
       this.compareMark = window.compareMark;
 
