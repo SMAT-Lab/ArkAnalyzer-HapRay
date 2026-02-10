@@ -15,6 +15,11 @@ declare module 'd3-flame-graph' {
     HierarchyRectangularNode<FlamegraphDatum>
   >;
 
+  export type FlameGraphColorMapper = (
+    node: HierarchyRectangularNode<FlamegraphDatum>,
+    originalColor: string,
+  ) => string;
+
   export interface FlameGraph {
     (selection: Selection<Element, FlamegraphDatum, Element, unknown>): void;
     height(value: number): FlameGraph;
@@ -32,6 +37,7 @@ declare module 'd3-flame-graph' {
         b: HierarchyRectangularNode<FlamegraphDatum>,
       ) => number,
     ): FlameGraph;
+    color(mapper: FlameGraphColorMapper): FlameGraph;
   }
 
   export function flamegraph(): FlameGraph;
