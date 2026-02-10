@@ -658,15 +658,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 }
             }
 
-            let totalEventClassifySet = new Set<number>();
-            totalEventClassifySet.add(callchain.stack[callchain.selfEvent].classification.category);
-
-            // 计算symbolTotalEvents, 从栈顶至栈底赋给每个分类第一次出现的符号
-            for (let i = callchain.selfEvent + 1; i < callchain.stack.length; i++) {
-                let category = callchain.stack[i].classification.category;
-                if (!totalEventClassifySet.has(category)) {
+            // Total：从栈顶到当前符号（selfEvent）之间，所有非纯计算帧累加 Total（不含栈顶叶子 0、不含 selfEvent 本身）
+            for (let i = 1; i < callchain.selfEvent; i++) {
+                if (!this.isPureCompute(callchain.stack[i])) {
                     callchain.totalEvents.push(i);
-                    totalEventClassifySet.add(category);
                 }
             }
         }
@@ -880,11 +875,6 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 thirdCategoryName: sourceClassification.thirdCategoryName,
             };
 
-            // Total指令数 = 当前符号调用栈上调用的其他符号的指令数的和，不包含符号本身的指令数
-            // 栈顶(index 0)是叶子，selfEvent 是叶子位置。当 selfEvent > 0 时，callees 为 stack[0]..stack[selfEvent-1]，
-            // 本次 sample 的 event_count 归属于叶子(stack[0])，因此 callees 的指令数和 = event_count
-            const symbolTotalEvents = callchain.selfEvent > 0 ? sample.event_count : 0;
-
             let data: PerfSymbolDetailData = {
                 stepIdx: groupId,
                 eventType: event,
@@ -898,7 +888,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 fileEvents: 0,
                 symbol: this.symbolsMap.get(call.symbolId) ?? '',
                 symbolEvents: sample.event_count,
-                symbolTotalEvents,
+                // Total：当前符号从栈顶到自身之间的 callees 负载；本 sample 仅叶子有负载，故 selfEvent>0 时为 event_count
+                symbolTotalEvents: callchain.selfEvent > 0 ? sample.event_count : 0,
                 componentCategory: finalClassification,
                 isMainApp: process.systemClassifyCategory.isMainApp,
                 sysDomain: process.systemClassifyCategory.domain,
@@ -951,6 +942,82 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 fileEventMaps.set(fileKey, value + data.symbolEvents);
             } else {
                 fileEventMaps.set(fileKey, data.symbolEvents);
+            }
+
+            // 统计「当前符号调用的其他符号」的 Total 指令数（不包含当前 self 符号自身）
+            // 使用 callchain.totalEvents：该数组从 selfEvent+1 开始，按“分类第一次出现”的规则挑选调用栈中的代表符号
+            if (callchain.totalEvents.length > 0) {
+                for (const idx of callchain.totalEvents) {
+                    const totalCall = callchain.stack[idx];
+
+                    // 使用与 self 相同的规则做符号分类（支持 symbolsClassifyMap 覆盖）
+                    const sourceTotalClassification = this.symbolsClassifyMap.get(totalCall.symbolId) ?? totalCall.classification;
+                    const totalClassification: FileClassification = {
+                        file: sourceTotalClassification.file,
+                        category: sourceTotalClassification.category,
+                        categoryName: sourceTotalClassification.categoryName,
+                        subCategoryName: sourceTotalClassification.subCategoryName,
+                        thirdCategoryName: sourceTotalClassification.thirdCategoryName,
+                    };
+
+                    let totalData: PerfSymbolDetailData = {
+                        stepIdx: groupId,
+                        eventType: event,
+                        pid: process.processId,
+                        processName: process.name,
+                        processEvents: 0,
+                        tid: thread.threadId,
+                        threadEvents: 0,
+                        threadName: thread.name,
+                        file: totalClassification.file,
+                        fileEvents: 0,
+                        symbol: this.symbolsMap.get(totalCall.symbolId) ?? '',
+                        // 被调用方本身的 Self 不在这里统计，只在其作为 selfEvent 时由上面的逻辑统计
+                        symbolEvents: 0,
+                        // 这里的 Total 表示：当前 self 符号调用该符号带来的负载
+                        symbolTotalEvents: sample.event_count,
+                        componentCategory: totalClassification,
+                        isMainApp: process.systemClassifyCategory.isMainApp,
+                        sysDomain: process.systemClassifyCategory.domain,
+                        sysSubSystem: process.systemClassifyCategory.subSystem,
+                        sysComponent: process.systemClassifyCategory.component,
+                    };
+
+                    // 根据线程名直接分类（与 self 的逻辑保持一致）
+                    if (thread.classification.category !== ComponentCategory.UNKNOWN) {
+                        if (thread.classification.subCategoryName) {
+                            totalData.componentCategory.subCategoryName = thread.classification.subCategoryName;
+                        } else {
+                            totalData.componentCategory.subCategoryName = path.basename(totalClassification.file);
+                        }
+
+                        totalData.componentCategory.category = thread.classification.category;
+                        totalData.componentCategory.categoryName = thread.classification.categoryName;
+                    }
+
+                    // 仍然按域过滤 DFX/Test，避免把这些系统/测试负载记入 total
+                    if (totalData.sysDomain === 'DFX' || totalData.sysDomain === 'Test') {
+                        skipDfxEvents += sample.event_count;
+                        continue;
+                    }
+
+                    // SYS_SDK/Other 特殊处理，与 self 保持一致
+                    if (totalData.componentCategory.category === ComponentCategory.SYS_SDK && totalData.componentCategory.subCategoryName === 'Other') {
+                        if (path.basename(totalData.processName) === path.basename(totalData.file)) {
+                            totalData.componentCategory.subCategoryName = totalData.sysDomain;
+                        }
+                    }
+
+                    const totalKey = this.getSymbolKey(totalData);
+                    if (resultMaps.has(totalKey)) {
+                        const existed = resultMaps.get(totalKey)!;
+                        existed.symbolTotalEvents += totalData.symbolTotalEvents;
+                    } else {
+                        resultMaps.set(totalKey, totalData);
+                    }
+                    // 注意：Total 不参与 fileEvents/threadEvents/processEvents 的统计，
+                    // 这些统计仍然只基于 Self（symbolEvents），所以这里不更新 fileEventMaps/threadsEventMap/processEventMap。
+                }
             }
 
         }
