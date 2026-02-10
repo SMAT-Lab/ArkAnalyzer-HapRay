@@ -653,21 +653,16 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             callchain.selfEvent = 0;
             for (let i = 0; i < callchain.stack.length; i++) {
                 if (!this.isPureCompute(callchain.stack[i])) {
-                    callchain.selfEvent = i;
+                    callchain.selfEvent = i; // selfEvent 标记本次 sample 归属的符号
                     break;
                 }
             }
 
-            let totalEventClassifySet = new Set<number>();
-            totalEventClassifySet.add(callchain.stack[callchain.selfEvent].classification.category);
-
-            // 计算symbolTotalEvents, 从栈顶至栈底赋给每个分类第一次出现的符号
+            // 计算 totalEvents：从 selfEvent 继续向上遍历整条调用栈，
+            // 将 selfEvent 之上的所有符号都标记为 Total 归属点，与分类无关
+            callchain.totalEvents = [];
             for (let i = callchain.selfEvent + 1; i < callchain.stack.length; i++) {
-                let category = callchain.stack[i].classification.category;
-                if (!totalEventClassifySet.has(category)) {
-                    callchain.totalEvents.push(i);
-                    totalEventClassifySet.add(category);
-                }
+                callchain.totalEvents.push(i);
             }
         }
     }
@@ -867,25 +862,18 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             }
 
             const callchain = this.callchainsMap.get(sample.callchain_id)!;
-            const call = callchain.stack[callchain.selfEvent];
 
-            // 优先使用symbolsClassifyMap中的特殊处理结果，如果没有则使用call.classification
-            // 创建副本以避免修改callchainsMap中的原始对象
-            const sourceClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
-            const finalClassification: FileClassification = {
-                file: sourceClassification.file,
-                category: sourceClassification.category,
-                categoryName: sourceClassification.categoryName,
-                subCategoryName: sourceClassification.subCategoryName,
-                thirdCategoryName: sourceClassification.thirdCategoryName,
-            };
+            // 进程维度的 DFX/Test 过滤（一个 sample 只统计一次）
+            if (
+                process.systemClassifyCategory.domain === 'DFX' ||
+                process.systemClassifyCategory.domain === 'Test'
+            ) {
+                skipDfxEvents += sample.event_count;
+                continue;
+            }
 
-            // Total指令数 = 当前符号调用栈上调用的其他符号的指令数的和，不包含符号本身的指令数
-            // 栈顶(index 0)是叶子，selfEvent 是叶子位置。当 selfEvent > 0 时，callees 为 stack[0]..stack[selfEvent-1]，
-            // 本次 sample 的 event_count 归属于叶子(stack[0])，因此 callees 的指令数和 = event_count
-            const symbolTotalEvents = callchain.selfEvent > 0 ? sample.event_count : 0;
-
-            let data: PerfSymbolDetailData = {
+            // 线程 / 进程事件数：一个 sample 只加一次，避免按栈帧重复放大
+            const baseDataForKey: PerfSymbolDetailData = {
                 stepIdx: groupId,
                 eventType: event,
                 pid: process.processId,
@@ -894,63 +882,97 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 tid: thread.threadId,
                 threadEvents: 0,
                 threadName: thread.name,
-                file: finalClassification.file,
+                file: '',
                 fileEvents: 0,
-                symbol: this.symbolsMap.get(call.symbolId) ?? '',
-                symbolEvents: sample.event_count,
-                symbolTotalEvents,
-                componentCategory: finalClassification,
+                symbol: '',
+                symbolEvents: 0,
+                symbolTotalEvents: 0,
+                componentCategory: {
+                    category: ComponentCategory.UNKNOWN,
+                    categoryName: UNKNOWN_STR,
+                    subCategoryName: UNKNOWN_STR,
+                    thirdCategoryName: undefined,
+                },
                 isMainApp: process.systemClassifyCategory.isMainApp,
                 sysDomain: process.systemClassifyCategory.domain,
                 sysSubSystem: process.systemClassifyCategory.subSystem,
                 sysComponent: process.systemClassifyCategory.component,
             };
 
-            let threadEventCount = threadsEventMap.get(this.getThreadKey(data)) ?? 0;
-            threadsEventMap.set(this.getThreadKey(data), threadEventCount + sample.event_count);
+            let threadEventCount = threadsEventMap.get(this.getThreadKey(baseDataForKey)) ?? 0;
+            threadsEventMap.set(this.getThreadKey(baseDataForKey), threadEventCount + sample.event_count);
 
-            let processEventCount = processEventMap.get(this.getProcessKey(data)) ?? 0;
-            processEventMap.set(this.getProcessKey(data), processEventCount + sample.event_count);
+            let processEventCount = processEventMap.get(this.getProcessKey(baseDataForKey)) ?? 0;
+            processEventMap.set(this.getProcessKey(baseDataForKey), processEventCount + sample.event_count);
 
-            // 根据线程名直接分类
-            if (thread.classification.category !== ComponentCategory.UNKNOWN) {
-                if (thread.classification.subCategoryName) {
-                    data.componentCategory.subCategoryName = thread.classification.subCategoryName;
+            // 遍历当前 sample 关联的符号：self 符号 + 所有 Total 符号
+            const frameIndexes: Array<number> = [callchain.selfEvent, ...callchain.totalEvents];
+
+            for (const frameIndex of frameIndexes) {
+                const call = callchain.stack[frameIndex];
+
+                // 优先使用symbolsClassifyMap中的特殊处理结果，如果没有则使用call.classification
+                // 创建副本以避免修改callchainsMap中的原始对象
+                const sourceClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
+                const finalClassification: FileClassification = {
+                    file: sourceClassification.file,
+                    category: sourceClassification.category,
+                    categoryName: sourceClassification.categoryName,
+                    subCategoryName: sourceClassification.subCategoryName,
+                    thirdCategoryName: sourceClassification.thirdCategoryName,
+                };
+
+                // self 符号记录自身事件数，其调用者只记录 Total（子调用的事件数）
+                const isSelfSymbol = frameIndex === callchain.selfEvent;
+                const symbolEvents = isSelfSymbol ? sample.event_count : 0;
+                const symbolTotalEvents = isSelfSymbol ? 0 : sample.event_count;
+
+                let data: PerfSymbolDetailData = {
+                    ...baseDataForKey,
+                    file: finalClassification.file,
+                    symbol: this.symbolsMap.get(call.symbolId) ?? '',
+                    symbolEvents,
+                    symbolTotalEvents,
+                    componentCategory: { ...finalClassification },
+                };
+
+                // 根据线程名直接分类（覆盖符号/文件分类）
+                if (thread.classification.category !== ComponentCategory.UNKNOWN) {
+                    if (thread.classification.subCategoryName) {
+                        data.componentCategory.subCategoryName = thread.classification.subCategoryName;
+                    } else {
+                        data.componentCategory.subCategoryName = path.basename(finalClassification.file);
+                    }
+
+                    data.componentCategory.category = thread.classification.category;
+                    data.componentCategory.categoryName = thread.classification.categoryName;
+                }
+
+                if (data.componentCategory.category === ComponentCategory.SYS_SDK && data.componentCategory.subCategoryName === 'Other') {
+                    if (path.basename(data.processName) === path.basename(data.file)) {
+                        data.componentCategory.subCategoryName = data.sysDomain;
+                    }
+                }
+
+                let key = this.getSymbolKey(data);
+                if (resultMaps.has(key)) {
+                    let value = resultMaps.get(key)!;
+                    value.symbolEvents += data.symbolEvents;
+                    value.symbolTotalEvents += data.symbolTotalEvents;
                 } else {
-                    data.componentCategory.subCategoryName = path.basename(finalClassification.file);
+                    resultMaps.set(key, data);
                 }
 
-                data.componentCategory.category = thread.classification.category;
-                data.componentCategory.categoryName = thread.classification.categoryName;
-            }
-
-            if (data.sysDomain === 'DFX' || data.sysDomain === 'Test') {
-                skipDfxEvents += sample.event_count;
-                continue;
-            }
-
-            if (data.componentCategory.category === ComponentCategory.SYS_SDK && data.componentCategory.subCategoryName === 'Other') {
-                if (path.basename(data.processName) === path.basename(data.file)) {
-                    data.componentCategory.subCategoryName = data.sysDomain;
+                // files：只用 self 的 symbolEvents 统计文件事件数，避免重复累计
+                if (isSelfSymbol) {
+                    let fileKey = this.getFileKey(data);
+                    if (fileEventMaps.has(fileKey)) {
+                        let value = fileEventMaps.get(fileKey)!;
+                        fileEventMaps.set(fileKey, value + data.symbolEvents);
+                    } else {
+                        fileEventMaps.set(fileKey, data.symbolEvents);
+                    }
                 }
-            }
-
-            let key = this.getSymbolKey(data);
-            if (resultMaps.has(key)) {
-                let value = resultMaps.get(key)!;
-                value.symbolEvents += data.symbolEvents;
-                value.symbolTotalEvents += data.symbolTotalEvents;
-            } else {
-                resultMaps.set(key, data);
-            }
-
-            // files
-            let fileKey = this.getFileKey(data);
-            if (fileEventMaps.has(fileKey)) {
-                let value = fileEventMaps.get(fileKey)!;
-                fileEventMaps.set(fileKey, value + data.symbolEvents);
-            } else {
-                fileEventMaps.set(fileKey, data.symbolEvents);
             }
 
         }
