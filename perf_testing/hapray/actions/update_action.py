@@ -108,6 +108,12 @@ class UpdateAction:
             metavar='HOMECHECK_DIR',
             help='Enable HapFlow pipeline and specify Homecheck root directory',
         )
+        parser.add_argument(
+            '--no-thread-analysis',
+            action='store_true',
+            default=False,
+            help='Disable redundant thread analysis (ThreadAnalyzer). By default thread analysis is enabled.',
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -164,6 +170,7 @@ class UpdateAction:
             export_comparison=parsed_args.export_comparison,
             symbol_statistic=parsed_args.symbol_statistic,
             time_range_strings=parsed_args.time_ranges,
+            enable_thread_analysis=not parsed_args.no_thread_analysis,
         )
 
         if parsed_args.hapflow:
@@ -244,6 +251,7 @@ class UpdateAction:
         export_comparison: bool = False,
         symbol_statistic: str = None,
         time_range_strings: list[str] = None,
+        enable_thread_analysis: bool = True,
     ):
         """Processes reports using parallel execution.
 
@@ -255,6 +263,7 @@ class UpdateAction:
             export_comparison: Export comparison Excel for memory analysis
             symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
             time_range_strings: List of time range strings for symbol statistics (optional)
+            enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True.
         """
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
@@ -263,6 +272,7 @@ class UpdateAction:
                 export_comparison=export_comparison,
                 symbol_statistic=symbol_statistic,
                 time_range_strings=time_range_strings,
+                enable_thread_analysis=enable_thread_analysis,
             )
 
             for case_dir in testcase_dirs:

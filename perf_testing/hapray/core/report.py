@@ -502,6 +502,7 @@ class ReportGenerator:
         export_comparison: bool = False,
         symbol_statistic: str = None,
         time_range_strings: list[str] = None,
+        enable_thread_analysis: bool = True,
     ):
         """Initialize ReportGenerator
 
@@ -510,12 +511,14 @@ class ReportGenerator:
             export_comparison: Export comparison Excel for memory analysis
             symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
             time_range_strings: List of time range strings in format "startTime-endTime" (optional)
+            enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True.
         """
         self.report_template_path = os.path.abspath(ExeUtils.get_tools_dir('web', 'report_template.html'))
         self.use_refined_lib_symbol = use_refined_lib_symbol
         self.export_comparison = export_comparison
         self.symbol_statistic = symbol_statistic
         self.time_range_strings = time_range_strings or []
+        self.enable_thread_analysis = enable_thread_analysis
 
     def update_report(self, scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Update an existing performance report
@@ -586,6 +589,7 @@ class ReportGenerator:
             time_ranges,
             use_refined_lib_symbol=use_refined_lib_symbol,
             export_comparison=export_comparison,
+            enable_thread_analysis=getattr(self, 'enable_thread_analysis', True),
         )
 
         # Step 3: Generate step summary (summary.json & embed into main json)
