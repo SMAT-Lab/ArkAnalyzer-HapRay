@@ -430,6 +430,7 @@ class ReportData:
             'frameLoads': 'trace_frameLoads.json',
             'vsyncAnomaly': 'trace_vsyncAnomaly.json',
             'faultTree': 'trace_fault_tree.json',
+            'redundantThread': 'redundant_thread_analysis.json',
         }
 
         for key, filename in trace_files.items():
@@ -951,6 +952,10 @@ class ReportGenerator:
             fault_tree_path = os.path.join(report_dir, 'trace_fault_tree.json')
             fault_tree_data = ReportGenerator._load_json_safe(fault_tree_path, default={})
 
+            # Load redundant thread analysis data
+            redundant_thread_path = os.path.join(report_dir, 'redundant_thread_analysis.json')
+            redundant_thread_data = ReportGenerator._load_json_safe(redundant_thread_path, default={})
+
             # Load UI animate data (for image oversize & component tree stats)
             ui_animate_path = os.path.join(report_dir, 'ui_animate.json')
             ui_animate_data = ReportGenerator._load_json_safe(ui_animate_path, default={})
@@ -992,6 +997,9 @@ class ReportGenerator:
                 # Get fault tree data for this step (raw fault tree node, front-end再做可视化与标签)
                 step_fault_tree = self._get_fault_tree_for_step(fault_tree_data, step_idx)
 
+                # Get redundant thread summary for this step
+                step_redundant_thread = self._get_redundant_thread_for_step(redundant_thread_data, step_idx)
+
                 # Get UI related summaries (image oversize & component tree on/off tree stats)
                 step_image_oversize, step_component_tree = self._get_ui_summary_for_step(ui_animate_data, step_idx)
 
@@ -1010,6 +1018,7 @@ class ReportGenerator:
                     # 新增：组件复用、故障树、Image 超尺寸、组件树上/未上树统计
                     'component_reuse': step_component_reuse,
                     'fault_tree': step_fault_tree,
+                    'redundant_thread': step_redundant_thread,
                     'image_oversize': step_image_oversize,
                     'component_tree': step_component_tree,
                     # 新增：重点函数分析
@@ -1182,6 +1191,28 @@ class ReportGenerator:
             return None
 
         return step_data
+
+    @staticmethod
+    def _get_redundant_thread_for_step(redundant_thread_data: dict, step_idx: int) -> dict | None:
+        """Get redundant thread summary for a specific step.
+
+        redundant_thread_analysis.json is keyed by step (e.g. step1, step2).
+        Each step value has redundant_threads_summary and optional summary.
+        Returns the redundant_threads_summary dict for summary.json and front-end display.
+        """
+        if not isinstance(redundant_thread_data, dict):
+            return None
+
+        step_key = f'step{step_idx}'
+        step_data = redundant_thread_data.get(step_key)
+        if not isinstance(step_data, dict):
+            return None
+
+        summary = step_data.get('redundant_threads_summary')
+        if not isinstance(summary, dict):
+            return None
+
+        return summary
 
     @staticmethod
     def _get_ui_summary_for_step(ui_animate_data: dict, step_idx: int) -> tuple[dict | None, dict | None]:

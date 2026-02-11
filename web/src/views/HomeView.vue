@@ -132,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import AppNavigation from '@/components/common/AppNavigation.vue';
 import PerfLoadOverview from '@/components/single-analysis/overview/PerfLoadOverview.vue';
 import SummaryOverview from '@/components/single-analysis/overview/SummaryOverview.vue';
@@ -159,8 +159,99 @@ import ComponentsDeps from '@/components/single-analysis/deps/ComponentsDeps.vue
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
-const showPage = ref('perf_load_overview');
+const DEFAULT_PAGE = 'perf_load_overview';
+const showPage = ref(DEFAULT_PAGE);
 const isNavCollapsed = ref(false);
+
+/** 将 URL hash 路径解析为页面 id，例如 #/step/1 -> perf_step_1，解析失败返回 null */
+function parseHashToPage(hash: string): string | null {
+  const path = hash.replace(/^#\/?/, '').replace(/\/$/, '').trim();
+  const segments = path ? path.split('/').filter(Boolean) : [];
+  if (segments.length === 0) return DEFAULT_PAGE;
+  const first = segments[0];
+  if (first === 'welcome') return 'welcome';
+  if (first === 'overview') return 'perf_load_overview';
+  if (first === 'summary') return 'summary_overview';
+  if (first === 'compare') {
+    if (segments.length === 1) return 'compare_overview';
+    if (segments[1] === 'step' && segments[2] && segments[3]) {
+      const stepId = segments[2];
+      const typeMap: Record<string, string> = {
+        'load': 'compare_step_load_',
+        'detail': 'compare_step_detail_',
+        'new': 'compare_step_new_',
+        'top10': 'compare_step_top10_',
+        'fault-tree': 'compare_step_fault_tree_',
+        'ui': 'compare_step_ui_',
+      };
+      const prefix = typeMap[segments[3]];
+      if (prefix) return `${prefix}${stepId}`;
+    }
+    return null;
+  }
+  if (first === 'step' && segments[1]) {
+    const stepId = segments[1];
+    const type = segments[2];
+    // 必须指定类型，/step/x 无效，必须是 /step/x/perf 等
+    if (!type) return null;
+    const stepPrefix: Record<string, string> = {
+      'perf': 'perf_step_',
+      'frame': 'frame_step_',
+      'fault-tree': 'fault_tree_step_',
+      'flame': 'flame_step_',
+      'memory': 'memory_step_',
+      'ui': 'ui_animate_step_',
+      'hilog': 'hilog_step_',
+    };
+    const prefix = stepPrefix[type];
+    if (!prefix) return null;
+    return `${prefix}${stepId}`;
+  }
+  if (first === 'perf_compare') return 'perf_compare';
+  if (first === 'perf_multi') return 'perf_multi';
+  if (first === 'deps') return 'deps';
+  // 兼容旧格式：/perf_load、/perf_frame 等直接作为页面 id 的片段
+  if (path.indexOf('/') === -1) return path;
+  return null;
+}
+
+/** 将页面 id 转为 hash 路径，例如 perf_step_1 -> /step/1，用于写入 location.hash */
+function pageToHashPath(page: string): string {
+  if (page === 'welcome') return '/welcome';
+  if (page === 'perf_load_overview') return '/overview';
+  if (page === 'summary_overview') return '/summary';
+  if (page === 'compare_overview') return '/compare';
+  if (page === 'perf_compare') return '/perf_compare';
+  if (page === 'perf_multi') return '/perf_multi';
+  if (page === 'deps') return '/deps';
+  const perfStep = page.match(/^perf_step_(\d+)$/);
+  if (perfStep) return `/step/${perfStep[1]}/perf`;
+  const frameStep = page.match(/^frame_step_(\d+)$/);
+  if (frameStep) return `/step/${frameStep[1]}/frame`;
+  const faultStep = page.match(/^fault_tree_step_(\d+)$/);
+  if (faultStep) return `/step/${faultStep[1]}/fault-tree`;
+  const flameStep = page.match(/^flame_step_(\d+)$/);
+  if (flameStep) return `/step/${flameStep[1]}/flame`;
+  const memoryStep = page.match(/^memory_step_(\d+)$/);
+  if (memoryStep) return `/step/${memoryStep[1]}/memory`;
+  const uiStep = page.match(/^ui_animate_step_(\d+)$/);
+  if (uiStep) return `/step/${uiStep[1]}/ui`;
+  const hilogStep = page.match(/^hilog_step_(\d+)$/);
+  if (hilogStep) return `/step/${hilogStep[1]}/hilog`;
+  const compareLoad = page.match(/^compare_step_load_(\d+)$/);
+  if (compareLoad) return `/compare/step/${compareLoad[1]}/load`;
+  const compareDetail = page.match(/^compare_step_detail_(\d+)$/);
+  if (compareDetail) return `/compare/step/${compareDetail[1]}/detail`;
+  const compareNew = page.match(/^compare_step_new_(\d+)$/);
+  if (compareNew) return `/compare/step/${compareNew[1]}/new`;
+  const compareTop10 = page.match(/^compare_step_top10_(\d+)$/);
+  if (compareTop10) return `/compare/step/${compareTop10[1]}/top10`;
+  const compareFault = page.match(/^compare_step_fault_tree_(\d+)$/);
+  if (compareFault) return `/compare/step/${compareFault[1]}/fault-tree`;
+  const compareUi = page.match(/^compare_step_ui_(\d+)$/);
+  if (compareUi) return `/compare/step/${compareUi[1]}/ui`;
+  return `/${page}`;
+}
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -178,6 +269,12 @@ const testSteps = computed(() => {
 
 const changeContent = (page: string) => {
   showPage.value = page;
+  const path = pageToHashPath(page);
+  const newHash = path.startsWith('/') ? '#' + path : '#' + '/' + path;
+  if (location.hash !== newHash) {
+    const url = location.pathname + location.search + newHash;
+    history.replaceState(null, '', url);
+  }
   // 页面切换后滚动到顶部
   setTimeout(() => {
     const contentBody = document.querySelector('.content-body');
@@ -186,6 +283,20 @@ const changeContent = (page: string) => {
     }
   }, 100);
 };
+
+function applyHashToPage() {
+  const page = parseHashToPage(location.hash);
+  if (page) showPage.value = page;
+}
+
+onMounted(() => {
+  applyHashToPage();
+  window.addEventListener('hashchange', applyHashToPage);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('hashchange', applyHashToPage);
+});
 
 const handleCollapseChange = (collapsed: boolean) => {
   isNavCollapsed.value = collapsed;
