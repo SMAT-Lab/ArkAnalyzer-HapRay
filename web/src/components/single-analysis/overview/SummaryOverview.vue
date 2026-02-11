@@ -10,11 +10,11 @@
           :icon="Download"
           @click="downloadDbtoolsExcel"
         >
-          下载 instructions/cycles Excel
+          下载负载拆解表
         </el-button>
       </div>
       <p class="summary-desc">
-        汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、Image 超尺寸统计以及组件树上/未上树节点情况。
+        汇总各步骤的关键故障类信息，包括组件复用、故障树识别结果、冗余线程分析、Image 超尺寸统计以及组件树上/未上树节点情况。
       </p>
     </div>
 
@@ -107,6 +107,14 @@
           <span>复用率 &lt; 30% 且总构建 &gt; 0 时显示，&lt; 10% 为严重，10-30% 为中等</span>
         </div>
         <div class="rule-item">
+          <strong>冗余线程：</strong>
+          <span>
+            指对业务贡献小却占用 CPU/内存的线程，包括：被频繁唤醒却立即进入等待、从未被唤醒、短周期内频繁「跑一下就睡」、高指令数但运行占比极低或大量 yield（忙等）等。
+            检测到任意冗余线程时在本页展示；冗余线程数 ≥10 判定为严重，&lt;10 为中等。
+            详细线程列表、类型说明及优化建议见「故障树分析」页的「冗余线程分析」卡片。
+          </span>
+        </div>
+        <div class="rule-item">
           <strong>技术栈与日志：</strong>
           <span>不在此页面显示</span>
         </div>
@@ -146,6 +154,40 @@
         <span class="step-name">{{ getStepName(item.step_id) }}</span>
       </div>
 
+      <!-- 本步骤关键指标概览 -->
+      <div class="step-metrics">
+        <div class="metric-chip">
+          <span class="metric-label">空刷帧</span>
+          <span class="metric-value">
+            {{ formatEmptyFrame(item.empty_frame) }}
+          </span>
+        </div>
+        <div class="metric-chip">
+          <span class="metric-label">组件复用率</span>
+          <span class="metric-value">
+            {{ formatComponentReuse(item.component_reuse) }}
+          </span>
+        </div>
+        <div class="metric-chip" :class="{ 'has-issue': getRedundantThreadIssueLevel(item.redundant_thread) }">
+          <span class="metric-label">冗余线程</span>
+          <span class="metric-value">
+            {{ formatRedundantThread(item.redundant_thread) }}
+          </span>
+        </div>
+        <div class="metric-chip">
+          <span class="metric-label">Image 超尺寸</span>
+          <span class="metric-value">
+            {{ formatImageOversize(item.image_oversize) }}
+          </span>
+        </div>
+        <div class="metric-chip">
+          <span class="metric-label">组件未上树</span>
+          <span class="metric-value">
+            {{ formatComponentTree(item.component_tree) }}
+          </span>
+        </div>
+      </div>
+
       <el-table
         :data="getIssuesForStep(item)"
         stripe
@@ -162,6 +204,19 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="查看详情" width="100" align="center">
+          <template #default="{ row }">
+            <el-link
+              v-if="row.detailLink"
+              type="primary"
+              :underline="false"
+              @click="goToDetail(row.detailLink!.page)"
+            >
+              查看详情
+            </el-link>
+            <span v-else class="detail-placeholder">—</span>
+          </template>
+        </el-table-column>
       </el-table>
     </div>
   </div>
@@ -171,6 +226,12 @@
 import { computed, ref } from 'vue';
 import { Download } from '@element-plus/icons-vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
+
+const emit = defineEmits<{ (e: 'page-change', page: string): void }>();
+
+const goToDetail = (page: string) => {
+  emit('page-change', page);
+};
 
 interface SummaryItem {
   step_id: string;
@@ -199,12 +260,20 @@ interface SummaryItem {
     off_tree_nodes?: number;
     off_tree_ratio?: number;
   };
+  redundant_thread?: {
+    total_redundant_thread_patterns?: number;
+    total_redundant_threads?: number;
+    redundant_instructions_ratio?: number;
+    redundant_threads?: unknown[];
+  };
 }
 
 interface IssueRow {
   issue: string;
   detail: string;
   severity: '严重' | '中等' | '轻微';
+  /** 查看详情跳转页面（如故障树步骤页） */
+  detailLink?: { page: string };
 }
 
 const jsonDataStore = useJsonDataStore();
@@ -214,7 +283,7 @@ const summaryItems = computed<SummaryItem[]>(() => (jsonDataStore.summary ?? [])
 /** 是否有嵌入的 dbtools Excel 数据 */
 const hasDbtoolsExcel = computed(() => !!jsonDataStore.dbtoolsExcel);
 
-const showRules = ref(true);
+const showRules = ref(false);
 
 /** 从 JSON 中的 gzip+base64 数据解压并下载 dbtools Excel */
 const downloadDbtoolsExcel = async () => {
@@ -265,6 +334,48 @@ const getStepIndex = (stepId: string) => {
 
 const getStepName = (stepId: string) => {
   return stepNameMap.value[stepId] ?? stepId;
+};
+
+// 指标概览：格式化显示（无数据显示 —）
+const formatEmptyFrame = (v?: SummaryItem['empty_frame']) => {
+  if (!v) return '—';
+  const count = v.count ?? 0;
+  const pct = v.percentage ?? '0%';
+  return `${count} 帧 (${pct})`;
+};
+
+const formatComponentReuse = (v?: SummaryItem['component_reuse']) => {
+  if (v == null || typeof v !== 'object') return '—';
+  const ratio = ((v.reusability_ratio ?? 0) * 100).toFixed(1);
+  const builds = v.total_builds ?? 0;
+  return builds > 0 ? `${ratio}% (${builds} 次构建)` : `${ratio}%`;
+};
+
+const formatRedundantThread = (v?: SummaryItem['redundant_thread']) => {
+  if (v == null) return '—';
+  const n = v.total_redundant_threads ?? 0;
+  const ratio = v.redundant_instructions_ratio;
+  if (ratio != null && ratio > 0) {
+    return `${n} 个（冗余指令占比 ${(ratio * 100).toFixed(2)}%）`;
+  }
+  return `${n} 个`;
+};
+
+/** 冗余线程是否有问题（用于指标 chip 高亮） */
+const getRedundantThreadIssueLevel = (v?: SummaryItem['redundant_thread']): boolean => {
+  if (!v) return false;
+  return (v.total_redundant_threads ?? 0) > 0;
+};
+
+const formatImageOversize = (v?: SummaryItem['image_oversize']) => {
+  if (!v || ((v.exceed_count ?? 0) === 0 && (v.total_excess_memory_mb ?? 0) === 0)) return '—';
+  return `${v.exceed_count ?? 0} 个，${(v.total_excess_memory_mb ?? 0).toFixed(2)} MB`;
+};
+
+const formatComponentTree = (v?: SummaryItem['component_tree']) => {
+  if (!v || (v.total_nodes ?? 0) === 0) return '—';
+  const ratio = ((v.off_tree_ratio ?? 0) * 100).toFixed(1);
+  return `未上树 ${ratio}%`;
 };
 
 const scrollToStep = (stepIndex: number) => {
@@ -444,8 +555,9 @@ const getNested = (obj: Record<string, unknown>, path: string[]): unknown => {
 // 获取步骤的所有问题列表
 const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
   const issues: IssueRow[] = [];
+  const stepIdx = getStepIndex(item.step_id);
 
-  // 1. 空刷帧：占比 > 10% 显示，> 50% 严重，10-50% 中等
+  // 1. 空刷帧：占比 > 10% 显示，> 50% 严重，10-50% 中等（可跳转帧分析）
   if (item.empty_frame) {
     const percentage = parsePercentage(item.empty_frame.percentage);
     if (percentage > 10) {
@@ -454,11 +566,12 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         issue: `空刷帧占比过高 (${item.empty_frame.percentage ?? '0.00%'})`,
         detail: `空刷帧数: ${item.empty_frame.count ?? 0}, 占比: ${item.empty_frame.percentage ?? '0.00%'}`,
         severity,
+        detailLink: { page: `frame_step_${stepIdx}` },
       });
     }
   }
 
-  // 2. 故障树：超过阈值的显示
+  // 2. 故障树：超过阈值的显示（可跳转故障树分析）
   if (item.fault_tree) {
     const ft = item.fault_tree as Record<string, unknown>;
 
@@ -475,6 +588,7 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         issue: '音视频使用软解码',
         detail: '检测到使用软解码器进行视频解码，软解码性能较差，建议使用硬解码以提升性能',
         severity: '中等',
+        detailLink: { page: `fault_tree_step_${stepIdx}` },
       });
     }
 
@@ -490,11 +604,12 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         issue: `${issueName} (当前值: ${valueStr})`,
         detail: `${description}。当前值: ${valueStr}, 阈值: ${thresholdStr}`,
         severity,
+        detailLink: { page: `fault_tree_step_${stepIdx}` },
       });
     }
   }
 
-  // 3. Image 超尺寸：超尺寸数量 > 0 或额外内存 > 10MB 显示
+  // 3. Image 超尺寸：超尺寸数量 > 0 或额外内存 > 10MB 显示（可跳转 UI 动画）
   if (item.image_oversize) {
     const exceedCount = item.image_oversize.exceed_count ?? 0;
     const excessMemory = item.image_oversize.total_excess_memory_mb ?? 0;
@@ -504,11 +619,12 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         issue: `Image 超尺寸问题 (${exceedCount} 个, ${excessMemory.toFixed(2)} MB)`,
         detail: `超尺寸数量: ${exceedCount}, 额外内存: ${excessMemory.toFixed(2)} MB`,
         severity,
+        detailLink: { page: `ui_animate_step_${stepIdx}` },
       });
     }
   }
 
-  // 4. 组件树：未上树占比 > 20% 显示
+  // 4. 组件树：未上树占比 > 20% 显示（可跳转 UI 动画）
   if (item.component_tree) {
     const offTreeRatio = (item.component_tree.off_tree_ratio ?? 0) * 100;
     if (offTreeRatio > 20) {
@@ -517,6 +633,7 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         issue: `组件未上树占比过高 (${offTreeRatio.toFixed(2)}%)`,
         detail: `未上树节点: ${item.component_tree.off_tree_nodes ?? 0}, 占比: ${offTreeRatio.toFixed(2)}%`,
         severity,
+        detailLink: { page: `ui_animate_step_${stepIdx}` },
       });
     }
   }
@@ -530,6 +647,35 @@ const getIssuesForStep = (item: SummaryItem): IssueRow[] => {
         issue: `组件复用率过低 (${reusabilityRatio.toFixed(2)}%)`,
         detail: `复用率: ${reusabilityRatio.toFixed(2)}%, 总构建: ${item.component_reuse.total_builds ?? 0}, 复用构建: ${item.component_reuse.recycled_builds ?? 0}`,
         severity,
+      });
+    }
+  }
+
+  // 6. 冗余线程：存在冗余线程时显示（附线程名 + 线程ID + 详情页跳转）
+  if (item.redundant_thread) {
+    const rt = item.redundant_thread;
+    const threads = rt.total_redundant_threads ?? 0;
+    if (threads > 0) {
+      const severity: '严重' | '中等' = threads >= 10 ? '严重' : '中等';
+      const ratioStr = rt.redundant_instructions_ratio != null
+        ? `，冗余指令占比: ${(rt.redundant_instructions_ratio * 100).toFixed(2)}%`
+        : '';
+      // 将线程名和对应的ID配对显示
+      const threadItems = (rt.redundant_threads as Array<{ thread_name?: string; redundant_thread_ids?: number[] }> | undefined)
+        ?.filter((t) => t.thread_name && (t.redundant_thread_ids?.length ?? 0) > 0)
+        .map((t) => {
+          const ids = (t.redundant_thread_ids ?? []).filter((id) => id != null);
+          return `${t.thread_name}(${ids.join(', ')})`;
+        }) ?? [];
+      
+      const threadDisplay = threadItems.length > 0 ? `线程名: ${threadItems.join('、')}。` : '';
+      
+      const stepIdx = getStepIndex(item.step_id);
+      issues.push({
+        issue: `冗余线程 (共 ${threads} 个)`,
+        detail: `${threadDisplay}检测到 ${threads} 个冗余线程${ratioStr}。`,
+        severity,
+        detailLink: { page: `fault_tree_step_${stepIdx}` },
       });
     }
   }
@@ -604,6 +750,43 @@ const getSeverityType = (severity: string): 'danger' | 'warning' | 'info' => {
   align-items: center;
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.step-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.metric-chip .metric-label {
+  color: #909399;
+}
+
+.metric-chip .metric-value {
+  color: #303133;
+  font-weight: 500;
+}
+
+.metric-chip.has-issue .metric-value {
+  color: #e6a23c;
+}
+
+.detail-placeholder {
+  color: #c0c4cc;
+  font-size: 13px;
 }
 
 .step-tag {
