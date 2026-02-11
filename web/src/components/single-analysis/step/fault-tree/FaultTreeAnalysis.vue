@@ -222,6 +222,62 @@
       </div>
     </div>
 
+    <!-- 冗余线程分析 -->
+    <div v-if="redundantThreadStepData" class="redundant-thread-section">
+      <div class="stat-card data-panel">
+        <div class="card-title">
+          <i>🧵</i> 冗余线程分析
+        </div>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <div class="metric-label">冗余线程数</div>
+            <div class="metric-value" :class="getRedundantThreadClass(redundantThreadStepData.total_redundant_threads)">
+              {{ redundantThreadStepData.total_redundant_threads }}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">冗余指令占比</div>
+            <div class="metric-value">
+              {{ formatRedundantRatio(redundantThreadStepData.redundant_instructions_ratio) }}
+            </div>
+          </div>
+        </div>
+        <div v-if="redundantThreadStepData.redundant_threads?.length > 0" class="detail-section">
+          <div class="detail-title">
+            <span>冗余线程列表</span>
+            <span class="detail-subtitle">按冗余得分排序，可关注高得分线程的优化</span>
+          </div>
+          <el-table :data="redundantThreadStepData.redundant_threads" stripe class="redundant-table">
+            <el-table-column prop="thread_name" label="线程名" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="thread_ids" label="线程ID" min-width="150" align="center">
+              <template #default="{ row }">
+                <span v-if="row.redundant_thread_ids && row.redundant_thread_ids.length > 0">
+                  {{ formatThreadIds(row.redundant_thread_ids) }}
+                </span>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="redundant_count" label="冗余数量" width="100" align="center">
+              <template #default="{ row }">
+                {{ row.redundant_thread_ids?.length ?? 0 }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="type_label" label="类型说明" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="redundancy_score" label="冗余得分" width="100" align="center">
+              <template #default="{ row }">{{ row.redundancy_score != null ? row.redundancy_score.toFixed(2) : '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="redundancy_level" label="等级" width="80" align="center" />
+            <el-table-column prop="waiting_ratio" label="等待占比(%)" width="100" align="center">
+              <template #default="{ row }">{{ row.waiting_ratio != null ? row.waiting_ratio : '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="estimated_memory_mb" label="预估内存(MB)" width="110" align="center">
+              <template #default="{ row }">{{ row.estimated_memory_mb != null ? row.estimated_memory_mb : '-' }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </div>
+    </div>
+
     <!-- 故障树诊断建议 -->
     <div class="diagnosis-section">
       <div class="section-title">
@@ -270,6 +326,15 @@ const faultTreeData = computed(() => {
   return getDefaultFaultTreeStepData();
 });
 
+// 获取当前步骤的冗余线程分析数据
+const redundantThreadStepData = computed(() => {
+  const stepKey = `step${props.step}`;
+  if (jsonDataStore.redundantThreadData && jsonDataStore.redundantThreadData[stepKey]) {
+    return jsonDataStore.redundantThreadData[stepKey];
+  }
+  return null;
+});
+
 // 格式化数字显示
 const formatNumber = (num) => {
   if (num >= 1000000) {
@@ -288,6 +353,24 @@ const getStatusClass = (value, threshold) => {
     return 'status-warning';
   }
   return 'status-normal';
+};
+
+// 冗余线程数量/模式数：>0 为 warning，较多为 critical
+const getRedundantThreadClass = (value) => {
+  if (value == null || value === 0) return 'status-normal';
+  if (value >= 10) return 'status-critical';
+  return 'status-warning';
+};
+
+const formatRedundantRatio = (ratio) => {
+  if (ratio == null) return '-';
+  return `${(ratio * 100).toFixed(2)}%`;
+};
+
+// 格式化线程ID数组显示
+const formatThreadIds = (threadIds) => {
+  if (!threadIds || threadIds.length === 0) return '—';
+  return threadIds.join(', ');
 };
 
 // 生成诊断建议
@@ -549,6 +632,16 @@ const getDiagnosisSuggestions = () => {
 /* IPC Binder 独立区域样式 */
 .ipc-binder-section {
   margin-bottom: 24px;
+}
+
+/* 冗余线程分析区域 */
+.redundant-thread-section {
+  margin-bottom: 24px;
+}
+
+.redundant-table {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .ipc-card {

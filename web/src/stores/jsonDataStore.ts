@@ -406,6 +406,40 @@ interface FaultTreeStepData {
 
 export type FaultTreeData = Record<string, FaultTreeStepData>;
 
+// 冗余线程分析：每步为 redundant_threads_summary 结构
+export interface RedundantThreadItem {
+  thread_name: string;
+  thread_name_variants?: string[];
+  type: string;
+  type_label: string;
+  total_thread_count?: number;
+  redundant_count: number;
+  redundant_instructions?: number;
+  redundant_instructions_ratio?: number;
+  estimated_memory_mb?: number;
+  redundancy_score?: number;
+  redundancy_level?: string;
+  leak_score?: number;
+  leak_level?: string;
+  waiting_ratio?: number;
+  wakeup_pattern?: string;
+  redundant_thread_ids?: number[];
+  callchain_sample?: unknown[];
+}
+
+export interface RedundantThreadStepData {
+  redundancy_types?: Record<string, string>;
+  total_redundant_thread_patterns: number;
+  total_redundant_threads: number;
+  total_cpu_instructions?: number;
+  total_redundant_instructions?: number;
+  redundant_instructions_ratio?: number;
+  redundant_threads: RedundantThreadItem[];
+  below_threshold_patterns?: unknown[];
+}
+
+export type RedundantThreadData = Record<string, RedundantThreadStepData>;
+
 interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
@@ -415,6 +449,7 @@ interface TraceData {
   frameLoads?: FrameLoadsData;
   vsyncAnomaly?: VSyncAnomalyData;
   faultTree?: FaultTreeData;
+  redundantThread?: Record<string, { redundant_threads_summary?: RedundantThreadStepData; summary?: unknown }>;
 }
 
 interface MoreData {
@@ -457,6 +492,7 @@ export interface SummaryItem {
     off_tree_nodes?: number;
     off_tree_ratio?: number;
   };
+  redundant_thread?: RedundantThreadStepData;
 }
 
 export interface JSONData {
@@ -880,6 +916,42 @@ export function safeProcessFaultTreeData(data: FaultTreeData | null | undefined)
   return result;
 }
 
+/** 获取默认的冗余线程步骤数据 */
+export function getDefaultRedundantThreadStepData(): RedundantThreadStepData {
+  return {
+    total_redundant_thread_patterns: 0,
+    total_redundant_threads: 0,
+    redundant_threads: [],
+  };
+}
+
+/** 获取默认的冗余线程数据（空对象，无步骤时前端不展示） */
+export function getDefaultRedundantThreadData(): RedundantThreadData {
+  return {};
+}
+
+/**
+ * 安全处理冗余线程数据 - 从 trace.redundantThread 提取各步 redundant_threads_summary
+ * @param data 原始 redundantThread（每步为 { redundant_threads_summary, summary }）
+ * @returns 按步骤的冗余线程摘要数据
+ */
+export function safeProcessRedundantThreadData(
+  data: Record<string, { redundant_threads_summary?: RedundantThreadStepData; summary?: unknown }> | null | undefined
+): RedundantThreadData {
+  if (!data || typeof data !== 'object') return getDefaultRedundantThreadData();
+
+  const result: RedundantThreadData = {};
+  for (const [stepName, stepRaw] of Object.entries(data)) {
+    const summary = stepRaw?.redundant_threads_summary;
+    if (summary && typeof summary === 'object' && Array.isArray(summary.redundant_threads)) {
+      result[stepName] = summary;
+    } else {
+      result[stepName] = getDefaultRedundantThreadStepData();
+    }
+  }
+  return result;
+}
+
 // ==================== UI 动画数据类型 ====================
 
 // 图像动画区域
@@ -1131,6 +1203,7 @@ interface JsonDataState {
   frameLoadsData: FrameLoadsData | null;
   vsyncAnomalyData: VSyncAnomalyData | null;
   faultTreeData: FaultTreeData | null;
+  redundantThreadData: RedundantThreadData | null;
   compareFaultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
@@ -1223,6 +1296,7 @@ export const useJsonDataStore = defineStore('config', {
     frameLoadsData: null,
     vsyncAnomalyData: null,
     faultTreeData: null,
+    redundantThreadData: null,
     compareFaultTreeData: null,
     baseMark: null,
     compareMark: null,
@@ -1404,6 +1478,7 @@ export const useJsonDataStore = defineStore('config', {
           frameLoads: this.decompressTraceField(jsonData.trace.frameLoads),
           vsyncAnomaly: this.decompressTraceField(jsonData.trace.vsyncAnomaly),
           faultTree: jsonData.trace.faultTree,
+          redundantThread: jsonData.trace.redundantThread,
         };
 
         // Safely process all trace-related data
@@ -1415,6 +1490,7 @@ export const useJsonDataStore = defineStore('config', {
         this.frameLoadsData = safeProcessFrameLoadsData(decompressedTrace.frameLoads);
         this.vsyncAnomalyData = safeProcessVSyncAnomalyData(decompressedTrace.vsyncAnomaly);
         this.faultTreeData = safeProcessFaultTreeData(decompressedTrace.faultTree);
+        this.redundantThreadData = safeProcessRedundantThreadData(decompressedTrace.redundantThread);
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
@@ -1425,6 +1501,7 @@ export const useJsonDataStore = defineStore('config', {
         this.frameLoadsData = getDefaultFrameLoadsData();
         this.vsyncAnomalyData = getDefaultVSyncAnomalyData();
         this.faultTreeData = getDefaultFaultTreeData();
+        this.redundantThreadData = getDefaultRedundantThreadData();
       }
       if (jsonData.more) {
         // Flame graph - Data organized by step, each step is separately compressed
