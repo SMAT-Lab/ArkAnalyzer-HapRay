@@ -11,9 +11,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-"""
 
-"""
 按所有线程做唤醒链分析（供 thread_analyzer 使用）。
 按 docs/des_table.md：perf_sample.thread_id 与 perf_thread.thread_id 关联，必须通过 perf_thread 映射后再查 callchain。
 """
@@ -21,15 +19,16 @@ limitations under the License.
 import logging
 import os
 import sqlite3
-from typing import Any, Optional
+import traceback
+from typing import Optional
 
+from hapray.core.common.frame.frame_core_load_calculator import calculate_thread_instructions
+from hapray.core.common.frame.frame_utils import is_system_thread
 from hapray.core.common.frame.frame_wakeup_chain import (
     _check_perf_sample_has_data,
     find_wakeup_chain,
     map_itid_to_perf_thread_id,
 )
-from hapray.core.common.frame.frame_core_load_calculator import calculate_thread_instructions
-from hapray.core.common.frame.frame_utils import is_system_thread
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ def _build_perf_thread_id_map(perf_conn, app_pids: list) -> tuple:
             return pid_tid_to_perf_tid, pid_name_to_perf_tid, valid_perf_tids_by_pid
         ph = ','.join('?' * len(app_pids))
         cur.execute(
-            "SELECT thread_id, process_id, thread_name FROM perf_thread WHERE process_id IN (%s)" % ph,
+            f"SELECT thread_id, process_id, thread_name FROM perf_thread WHERE process_id IN ({ph})",
             list(app_pids),
         )
         for thread_id, process_id, thread_name in cur.fetchall():
@@ -76,12 +75,12 @@ def _query_thread_states_batch(trace_conn, itids_list: list, range_start: int, r
             return out
         ph = ','.join('?' * len(itids_list))
         cur.execute(
-            """
+            f"""
             SELECT itid, ts, COALESCE(dur, 0), state
             FROM thread_state
-            WHERE itid IN (%s) AND ts < ? AND (ts + COALESCE(dur, 0)) > ?
+            WHERE itid IN ({ph}) AND ts < ? AND (ts + COALESCE(dur, 0)) > ?
             ORDER BY itid, ts
-            """ % ph,
+            """,
             itids_list + [range_end, range_start],
         )
         for itid, ts, dur, state in cur.fetchall():
@@ -104,13 +103,13 @@ def _query_callchains_batch(perf_conn, tid_list: list, range_start: int, range_e
         ts_col = 'timestamp_trace' if 'timestamp_trace' in cols else 'timeStamp'
         ph = ','.join('?' * len(tid_list))
         cur.execute(
-            """
+            f"""
             SELECT thread_id, callchain_id
             FROM perf_sample
-            WHERE thread_id IN (%s) AND %s >= ? AND %s <= ?
+            WHERE thread_id IN ({ph}) AND {ts_col} >= ? AND {ts_col} <= ?
             AND callchain_id IS NOT NULL
             ORDER BY thread_id, callchain_id
-            """ % (ph, ts_col, ts_col),
+            """,
             list(tid_list) + [range_start, range_end],
         )
         rows = cur.fetchall()
@@ -130,7 +129,7 @@ def _query_callchains_batch(perf_conn, tid_list: list, range_start: int, range_e
             return out
         ph2 = ','.join('?' * len(all_chain_ids))
         cur.execute(
-            "SELECT callchain_id, depth, file_id, symbol_id, name FROM perf_callchain WHERE callchain_id IN (%s) ORDER BY callchain_id, depth" % ph2,
+            f"SELECT callchain_id, depth, file_id, symbol_id, name FROM perf_callchain WHERE callchain_id IN ({ph2}) ORDER BY callchain_id, depth",
             all_chain_ids,
         )
         chain_frames = {}
@@ -159,7 +158,7 @@ def _query_callchains_batch(perf_conn, tid_list: list, range_start: int, range_e
             for cid in (tid_to_chain_ids.get(tid) or [])[:max_frames_per_tid]:
                 frames = chain_frames.get(cid, [])
                 functions = []
-                for depth, file_id, symbol_id, name in frames:
+                for _depth, file_id, symbol_id, name in frames:
                     symbol = (str(name) if name is not None else '').strip()
                     path = ''
                     if file_id is not None and symbol_id is not None:
@@ -207,7 +206,7 @@ def analyze_all_threads_wakeup_chain(
                         if tbl == 'trace_range':
                             cursor.execute("SELECT start_ts, end_ts FROM trace_range LIMIT 1")
                         else:
-                            cursor.execute("SELECT min(ts), max(ts) FROM %s" % tbl)
+                            cursor.execute(f"SELECT min(ts), max(ts) FROM {tbl}")
                         row = cursor.fetchone()
                         if row and row[0] is not None and row[1] is not None:
                             range_start, range_end = row[0], row[1]
@@ -227,7 +226,7 @@ def analyze_all_threads_wakeup_chain(
             return None
         ph = ','.join('?' * len(app_pids))
         cursor.execute(
-            "SELECT t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE p.pid IN (%s)" % ph,
+            f"SELECT t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE p.pid IN ({ph})",
             list(app_pids),
         )
         app_threads = cursor.fetchall()
@@ -243,7 +242,7 @@ def analyze_all_threads_wakeup_chain(
         results = []
         total_threads = len(app_threads)
         progress_interval = max(1, total_threads // 20)  # 约 20 次进度
-        for idx, (itid, tid, thread_name, pid, process_name) in enumerate(app_threads, 1):
+        for idx, (itid, tid, thread_name, pid, _process_name) in enumerate(app_threads, 1):
             if idx == 1 or idx % progress_interval == 0 or idx == total_threads:
                 logger.info('唤醒链分析进度: %d/%d 线程', idx, total_threads)
             related_itids_ordered = find_wakeup_chain(
@@ -273,7 +272,7 @@ def analyze_all_threads_wakeup_chain(
             ph2 = ','.join('?' * len(itids_list))
             # des_table：thread_state.itid = thread.id；find_wakeup_chain 可能返回 id 或 itid，故用 id 与 itid 都能查到
             cursor.execute(
-                "SELECT t.id, t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE t.itid IN (%s) OR t.id IN (%s)" % (ph2, ph2),
+                f"SELECT t.id, t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE t.itid IN ({ph2}) OR t.id IN ({ph2})",
                 itids_list + itids_list,
             )
             thread_info_map = {}
@@ -343,7 +342,6 @@ def analyze_all_threads_wakeup_chain(
         return results
     except Exception as e:
         logger.error('analyze_all_threads_wakeup_chain: %s', e)
-        import traceback
         traceback.print_exc()
         return None
 
