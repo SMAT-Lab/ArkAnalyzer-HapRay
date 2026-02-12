@@ -5,7 +5,7 @@
 import type { FileInfo } from '../core/techstack/types';
 import JSZip from 'jszip';
 import path from 'path';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from './logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

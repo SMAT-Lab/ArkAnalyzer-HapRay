@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import type { Ohpm } from '../../config/types';
 import { getConfig } from '../../config';
 import type { Component } from '../../types/component';

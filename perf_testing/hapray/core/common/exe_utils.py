@@ -253,7 +253,7 @@ class ExeUtils:
         Returns:
             Full command as a list of strings
         """
-        return ['node', ExeUtils.hapray_cmd_path, 'hapray', *args]
+        return [ExeUtils.hapray_cmd_path, 'hapray', *args]
 
     @staticmethod
     def execute_command_check_output(cmd, timeout=120000):
@@ -472,6 +472,7 @@ class ExeUtils:
 
 
 # Initialize commonly used tool paths after class definition
-ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', 'hapray-sa-cmd.js'))
+_hapray_cmd_name = 'hapray-sa-cmd.exe' if platform.system() == 'Windows' else 'hapray-sa-cmd'
+ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', _hapray_cmd_name))
 ExeUtils.trace_streamer_path = ExeUtils._get_trace_streamer_path()
 ExeUtils.opt_detector_path = ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False)

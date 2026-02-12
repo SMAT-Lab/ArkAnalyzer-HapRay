@@ -2,6 +2,14 @@
 
 #### 使用说明
 
+## 构建
+
+支持三种构建方式：
+
+- **Webpack（默认）**: `npm run build` — 使用 tsc + webpack 构建
+- **Bun JS**: `npm run build:bun` — 使用 Bun 打包为 hapray-sa-cmd.js
+- **Bun 二进制**: `npm run build:bun:binary` — 使用 Bun 编译为独立可执行文件
+
 ## 1. HAP静态分析 (`hapray hap`)
 分析HAP/ZIP文件或目录中的框架与资源，支持多种输出格式和并发处理。
 
