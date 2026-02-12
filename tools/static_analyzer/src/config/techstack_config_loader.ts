@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import type { TechStackConfig } from '../core/techstack/types';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

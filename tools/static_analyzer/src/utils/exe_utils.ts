@@ -14,7 +14,7 @@
  */
 
 import { spawn, spawnSync } from 'child_process';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from './logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

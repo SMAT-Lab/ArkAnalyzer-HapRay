@@ -15,7 +15,7 @@
 
 import { Command } from 'commander';
 import { HapAnalysisService } from '../../services/analysis/hap_analysis';
-import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
