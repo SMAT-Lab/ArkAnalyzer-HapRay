@@ -11,27 +11,25 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-"""
 
-"""
 冗余线程与优化机会分析。算法说明见 ALGORITHM.md。
 """
 
 import sys
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Any
 
 from hapray.core.common.thread_utils import (
-    pattern_key,
-    should_ignore_system_pattern,
+    calculate_thread_memory_estimate,
     collect_callchain_sample,
     count_callchain_frames,
-    calculate_thread_memory_estimate,
     num,
+    pattern_key,
+    should_ignore_system_pattern,
 )
 
 
-def per_thread_redundancy_score(thread: Dict[str, Any]) -> int:
+def per_thread_redundancy_score(thread: dict[str, Any]) -> int:
     """单线程冗余分数 0-100。做工线程自然得低分，只有真正冗余的线程才得高分。"""
     score = 0
     wts = thread.get('wakeup_threads', [])
@@ -70,9 +68,8 @@ def per_thread_redundancy_score(thread: Dict[str, Any]) -> int:
                     if any(k in s for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
                         has_yield = True
                         break
-            else:
-                if any(k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
-                    has_yield = True
+            elif any(k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
+                has_yield = True
             if has_yield:
                 break
         if has_yield:
@@ -101,9 +98,7 @@ def per_thread_redundancy_score(thread: Dict[str, Any]) -> int:
             continue
         prev = states[i - 1].get('state', '') if i > 0 else ''
         nxt = states[i + 1].get('state', '') if i < len(states) - 1 else ''
-        if prev == 'R' and nxt in ['S', 'D', 'T']:
-            short_cycles += 1
-        elif prev == 'Running' and nxt == 'Running':
+        if (prev == 'R' and nxt in ['S', 'D', 'T']) or (prev == 'Running' and nxt == 'Running'):
             short_cycles += 1
     if wakeup_count >= 3 and short_cycles / max(wakeup_count, 1) > 0.5:
         score += 10
@@ -118,7 +113,7 @@ def per_thread_redundancy_score(thread: Dict[str, Any]) -> int:
     return min(100, score)
 
 
-def thread_redundancy_features(thread: Dict[str, Any]) -> Dict[str, Any]:
+def thread_redundancy_features(thread: dict[str, Any]) -> dict[str, Any]:
     """提取单线程用于冗余打分的特征，供 below_threshold_patterns 的特征汇总使用。"""
     out = {
         'waiting_ratio': 0.0, 'total_instructions': 0, 'has_callchain': False,
@@ -148,9 +143,8 @@ def thread_redundancy_features(thread: Dict[str, Any]) -> Dict[str, Any]:
                     if any(k in s for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
                         out['has_yield'] = True
                         break
-            else:
-                if any(k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
-                    out['has_yield'] = True
+            elif any(k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
+                out['has_yield'] = True
             if out['has_yield']:
                 break
         if out['has_yield']:
@@ -172,19 +166,17 @@ def thread_redundancy_features(thread: Dict[str, Any]) -> Dict[str, Any]:
             continue
         prev = states[i - 1].get('state', '') if i > 0 else ''
         nxt = states[i + 1].get('state', '') if i < len(states) - 1 else ''
-        if prev == 'R' and nxt in ['S', 'D', 'T']:
-            short_cycles += 1
-        elif prev == 'Running' and nxt == 'Running':
+        if (prev == 'R' and nxt in ['S', 'D', 'T']) or (prev == 'Running' and nxt == 'Running'):
             short_cycles += 1
     out['short_cycles'] = short_cycles
     return out
 
 
 def analyze_optimization_opportunities(
-    results: List[Dict[str, Any]],
+    results: list[dict[str, Any]],
     framework_name: str = '',
     verbose: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """分析优化机会（冗余/忙等待等）。算法说明见 ALGORITHM.md。verbose 为 True 时打印分析进度。"""
     analysis = {
         'framework': framework_name,
@@ -383,13 +375,11 @@ def analyze_optimization_opportunities(
                 threads_never_running += 1
             thread_instructions = num(thread.get('total_instructions', 0))
             thread_lifetime = (num(end_ts) - num(start_ts)) if (start_ts is not None and end_ts is not None) else sum(num(s.get('dur', 0)) for s in thread_states)
-            if thread_instructions > 10000 and running_duration > 0 and thread_lifetime > 0:
-                if running_duration / thread_lifetime < high_inst_low_work_running_ratio and short_running_cycles >= high_inst_low_work_short_cycles:
-                    threads_high_instructions_low_work += 1
+            if thread_instructions > 10000 and running_duration > 0 and thread_lifetime > 0 and running_duration / thread_lifetime < high_inst_low_work_running_ratio and short_running_cycles >= high_inst_low_work_short_cycles:
+                threads_high_instructions_low_work += 1
             total_running_periods = len([s for s in states if s.get('state') == 'Running'])
-            if this_thread_short_periods >= busy_wait_min_periods and total_running_periods > 0:
-                if this_thread_short_periods / total_running_periods > busy_wait_short_ratio:
-                    threads_busy_waiting_pattern += 1
+            if this_thread_short_periods >= busy_wait_min_periods and total_running_periods > 0 and this_thread_short_periods / total_running_periods > busy_wait_short_ratio:
+                threads_busy_waiting_pattern += 1
             if len(states) >= 20 and thread_lifetime > 0:
                 rate = len(states) / (thread_lifetime / 1_000_000_000)
                 if rate > high_freq_transitions_per_sec:
@@ -571,7 +561,7 @@ def analyze_optimization_opportunities(
     return analysis
 
 
-def print_optimization_report(analysis: Dict[str, Any]):
+def print_optimization_report(analysis: dict[str, Any]):
     """打印优化报告。"""
     print("=" * 80)
     print(f"冗余线程优化机会分析 - {analysis['framework'] or '未知框架'}")

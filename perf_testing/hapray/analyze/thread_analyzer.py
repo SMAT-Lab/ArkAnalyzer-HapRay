@@ -11,19 +11,16 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-"""
 
-"""
 冗余线程分析器（Redundant Thread Analysis）。
 报告输出为 redundant_thread_analysis.json，结果合并到 result['redundant_thread_analysis']。
 """
 
-import logging
 from typing import Any, Optional
 
 from hapray.analyze.base_analyzer import BaseAnalyzer
-from hapray.core.common.thread_wakeup_chain import analyze_all_threads_wakeup_chain
 from hapray.analyze.thread_optimization import analyze_optimization_opportunities
+from hapray.core.common.thread_wakeup_chain import analyze_all_threads_wakeup_chain
 
 REDUNDANCY_TYPE_LABELS = {
     'normal': '未命中下述唤醒模式，多为高等待或混合行为。',
