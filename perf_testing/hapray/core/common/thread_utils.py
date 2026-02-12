@@ -11,16 +11,14 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-"""
 
-"""
 线程分析工具：pattern 归一化、样本收集、内存估算等。
 供 thread_analyzer 与 thread_optimization 使用。
 """
 
 import re
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Any
 
 
 def pattern_key(thread_name: str) -> str:
@@ -39,7 +37,7 @@ def should_ignore_system_pattern(pattern_key_str: str) -> bool:
     return pattern_key_str.strip().startswith('OS_')
 
 
-def collect_callchain_sample(thread_list: List[Dict], max_entries: int = 10, user_space_only: bool = True) -> List[Dict[str, Any]]:
+def collect_callchain_sample(thread_list: list[dict], max_entries: int = 10, user_space_only: bool = True) -> list[dict[str, Any]]:
     """从线程列表中收集 callchain 的 symbol/file_path 样本，按出现频率降序。
 
     Args:
@@ -49,7 +47,7 @@ def collect_callchain_sample(thread_list: List[Dict], max_entries: int = 10, use
             面向开发者展示应用层 so/库；为 False 时纳入系统库（如 /system/lib）、
             内核（[kernel.kallsyms]）等全部帧，便于排查系统调用或内核态问题。
     """
-    count_map: Dict[tuple, int] = defaultdict(int)
+    count_map: dict[tuple, int] = defaultdict(int)
     for thread in thread_list:
         for wt in thread.get('wakeup_threads', []):
             for callchain in wt.get('callchains', []):
@@ -68,7 +66,7 @@ def collect_callchain_sample(thread_list: List[Dict], max_entries: int = 10, use
     return [{'symbol': name[:200], 'file_path': path[:300], 'count': cnt} for (name, path), cnt in sorted_items]
 
 
-def count_callchain_frames(thread_list: List[Dict]) -> tuple:
+def count_callchain_frames(thread_list: list[dict]) -> tuple:
     """按 pattern 汇总：callchain 帧总数、sample 数（=调用链条数）。"""
     total_frames = 0
     total_callchains = 0
@@ -78,7 +76,7 @@ def count_callchain_frames(thread_list: List[Dict]) -> tuple:
                 if not isinstance(callchain, dict):
                     continue
                 total_callchains += 1
-                for func in callchain.get('functions', []):
+                for _func in callchain.get('functions', []):
                     total_frames += 1
     return total_frames, total_callchains
 
