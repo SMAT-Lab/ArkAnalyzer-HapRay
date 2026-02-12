@@ -96,8 +96,8 @@ callchain_filter:
 key_functions:
   # 重点要总结的函数列表，只收集函数负载和函数总负载
   functions:
-    - "OHOS::Ace::NG::PipelineContext::HandleOnAreaChangeEvent"
-    - "OHOS::Ace::NG::PipelineContext::HandleVisibleAreaChangeEvent"
+    - "HandleOnAreaChange"
+    - "VisibleAreaChange"
 
 gui-agent:
   scenes:
