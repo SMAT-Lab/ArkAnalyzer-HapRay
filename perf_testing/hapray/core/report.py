@@ -1419,30 +1419,29 @@ class ReportGenerator:
         return step_hilog
 
     @staticmethod
-    def _get_key_functions_for_step(perf_data: list, step_idx: int) -> Optional[dict]:
+    def _default_key_functions_value() -> dict:
+        """无数据时 summary.json 中使用的默认值（-1）。"""
+        return {'symbolEvents': -1, 'symbolTotalEvents': -1}
+
+    @staticmethod
+    def _get_key_functions_for_step(perf_data: list, step_idx: int) -> dict:
         """Get key functions analysis data for a specific step from perf_data
 
-        Args:
-            perf_data: Performance data list (from hiperf_info.json)
-            step_idx: Step index
-
-        Returns:
-            Dictionary with key functions load data, or None if not available
+        有配置但无 perf 数据、或该 step 无数据、或没有匹配到配置中的函数时，
+        对配置中的每个函数名返回 {"函数名": {"symbolEvents": -1, "symbolTotalEvents": -1}}。
         """
+        default_val = ReportGenerator._default_key_functions_value()
         try:
-            # Get key functions list from config
             key_functions_config = Config.get('key_functions.functions', [])
             if not key_functions_config:
-                return None
+                return {'_': dict(default_val)}
 
+            # 有配置但无 perf 数据或该 step 无数据：对配置中每个函数名返回 -1
             if not perf_data:
-                return None
+                return {k: dict(default_val) for k in key_functions_config}
 
-            # Get first entry's steps data
             first_entry = perf_data[0]
             steps = first_entry.get('steps', [])
-
-            # Find the step data
             step_data = None
             for step in steps:
                 if step.get('step_id') == step_idx:
@@ -1450,54 +1449,47 @@ class ReportGenerator:
                     break
 
             if not step_data:
-                return None
+                return {k: dict(default_val) for k in key_functions_config}
 
-            # Get data items for this step
             data_items = step_data.get('data', [])
-
-            # Extract key functions data
-            key_functions_data = {}
+            # 先按配置为每个函数名初始化，无匹配时保持 0，最后统一把 0,0 置为 -1
+            key_functions_data = {
+                k: {'symbolEvents': 0, 'symbolTotalEvents': 0}
+                for k in key_functions_config
+            }
             for item in data_items:
-                # Only count instruction events
-                if item.get('eventType') != 1:  # 1 = INSTRUCTION_EVENT
+                if item.get('eventType') != 1:
                     continue
-
                 symbol = item.get('symbol', '')
                 if not symbol:
                     continue
-
-                # Check if this symbol matches any key function
                 matched_function = None
                 for key_func in key_functions_config:
-                    # Match if key function name is contained in symbol
                     if key_func in symbol:
                         matched_function = key_func
                         break
-
                 if matched_function:
-                    # Get symbolEvents (函数负载) and symbolTotalEvents (函数总负载)
                     symbol_events = item.get('symbolEvents', 0)
                     symbol_total_events = item.get('symbolTotalEvents', 0)
-
-                    # Initialize if not exists
-                    if matched_function not in key_functions_data:
-                        key_functions_data[matched_function] = {
-                            'symbolEvents': 0,
-                            'symbolTotalEvents': 0,
-                        }
-
-                    # Accumulate data for this function
                     key_functions_data[matched_function]['symbolEvents'] += symbol_events
                     key_functions_data[matched_function]['symbolTotalEvents'] += symbol_total_events
 
-            if not key_functions_data:
-                return None
+            # 没有匹配到配置中的函数（或某函数未匹配）：该函数用 -1
+            for func_name, data in key_functions_data.items():
+                if data['symbolEvents'] == 0 and data['symbolTotalEvents'] == 0:
+                    key_functions_data[func_name] = dict(default_val)
 
             return key_functions_data
 
         except Exception as e:
             logging.warning('Failed to get key functions data: %s', str(e))
-            return None
+            try:
+                key_functions_config = Config.get('key_functions.functions', [])
+                if key_functions_config:
+                    return {k: dict(default_val) for k in key_functions_config}
+            except Exception:
+                pass
+            return {'_': dict(default_val)}
 
 
 def merge_summary_info(directory: str) -> list[dict[str, Any]]:
