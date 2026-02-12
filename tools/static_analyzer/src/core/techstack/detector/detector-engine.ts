@@ -5,7 +5,7 @@
 import type { TechStackConfig, FileInfo, FileDetectionResult, ExcludeRule } from '../types';
 import { TechStackConfigLoader } from '../../../config/techstack_config_loader';
 import { ParallelExecutor } from './parallel-executor';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../../utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 

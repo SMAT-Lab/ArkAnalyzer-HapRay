@@ -21,7 +21,7 @@ import writeXlsxFile from 'write-excel-file/node';
 import type { SheetData } from 'write-excel-file';
 import { fileExists, ensureDirectoryExists, getAllFiles } from '../../utils/file_utils';
 import { ErrorFactory } from '../../errors';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { DetectorEngine } from '../../core/techstack/detector/detector-engine';
 import type { FormatOptions } from '../../core/techstack/report';
 import { FormatterFactory, OutputFormat } from '../../core/techstack/report';

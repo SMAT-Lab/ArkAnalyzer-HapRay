@@ -14,7 +14,7 @@
  */
 
 import { Command } from 'commander';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { Report } from 'bjc';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);

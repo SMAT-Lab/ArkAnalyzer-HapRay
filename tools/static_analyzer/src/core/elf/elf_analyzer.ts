@@ -16,7 +16,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as readline from 'readline';
-import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import type { ELF } from './elfy';
 import { parseELF } from './elfy';
 import { getAllFiles } from '../../utils/file_utils';
