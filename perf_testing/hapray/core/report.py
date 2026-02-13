@@ -1420,15 +1420,15 @@ class ReportGenerator:
 
     @staticmethod
     def _default_key_functions_value() -> dict:
-        """无数据时 summary.json 中使用的默认值（-1）。"""
-        return {'symbolEvents': -1, 'symbolTotalEvents': -1}
+        """无数据时 summary.json 中使用的默认值（0）。"""
+        return {'symbolEvents': 0, 'symbolTotalEvents': 0}
 
     @staticmethod
     def _get_key_functions_for_step(perf_data: list, step_idx: int) -> dict:
         """Get key functions analysis data for a specific step from perf_data
 
         有配置但无 perf 数据、或该 step 无数据、或没有匹配到配置中的函数时，
-        对配置中的每个函数名返回 {"函数名": {"symbolEvents": -1, "symbolTotalEvents": -1}}。
+        对配置中的每个函数名返回 {"函数名": {"symbolEvents": 0, "symbolTotalEvents": 0}}。
         """
         default_val = ReportGenerator._default_key_functions_value()
         try:
@@ -1436,7 +1436,7 @@ class ReportGenerator:
             if not key_functions_config:
                 return {'_': dict(default_val)}
 
-            # 有配置但无 perf 数据或该 step 无数据：对配置中每个函数名返回 -1
+            # 有配置但无 perf 数据或该 step 无数据：对配置中每个函数名返回 0
             if not perf_data:
                 return {k: dict(default_val) for k in key_functions_config}
 
@@ -1452,7 +1452,7 @@ class ReportGenerator:
                 return {k: dict(default_val) for k in key_functions_config}
 
             data_items = step_data.get('data', [])
-            # 先按配置为每个函数名初始化，无匹配时保持 0，最后统一把 0,0 置为 -1
+            # 先按配置为每个函数名初始化，无匹配时保持 0
             key_functions_data = {
                 k: {'symbolEvents': 0, 'symbolTotalEvents': 0}
                 for k in key_functions_config
@@ -1471,14 +1471,17 @@ class ReportGenerator:
                 if matched_function:
                     symbol_events = item.get('symbolEvents', 0)
                     symbol_total_events = item.get('symbolTotalEvents', 0)
+                    # 重点函数只统计 self 符号（symbolEvents > 0），忽略调用者（symbolEvents == 0）
+                    # 如果 symbolEvents 为 0，说明这是调用者符号，不应该统计到重点函数中
+                    if symbol_events == 0:
+                        # 跳过调用者符号，只统计函数本身的事件
+                        continue
+                    # symbolEvents 不为 0 时，symbolTotalEvents 可以是任意值（包括 0）
                     key_functions_data[matched_function]['symbolEvents'] += symbol_events
                     key_functions_data[matched_function]['symbolTotalEvents'] += symbol_total_events
 
-            # 没有匹配到配置中的函数（或某函数未匹配）：该函数用 -1
-            for func_name, data in key_functions_data.items():
-                if data['symbolEvents'] == 0 and data['symbolTotalEvents'] == 0:
-                    key_functions_data[func_name] = dict(default_val)
-
+            # 由于只统计 self 符号（symbolEvents > 0），所以不会出现 symbolEvents == 0 但 symbolTotalEvents != 0 的情况
+            # 没有匹配到配置中的函数时，保持为 0（不再使用 -1）
             return key_functions_data
 
         except Exception as e:
