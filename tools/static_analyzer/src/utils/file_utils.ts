@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from './logger';
 import { getTechStackConfigLoader } from '../config/techstack_config_loader';
 import type { BinaryMagicEntry } from '../core/techstack/types';
 

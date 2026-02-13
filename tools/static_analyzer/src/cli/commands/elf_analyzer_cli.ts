@@ -16,7 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { ElfAnalyzer } from '../../core/elf/elf_analyzer';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
