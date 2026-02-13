@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import platform
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -13,11 +14,14 @@ from optimization_detector.file_info import FileInfo
 
 
 def _find_hapray_sa_cmd() -> Optional[str]:
-    """查找 hapray-sa-cmd.js 文件的路径
+    """查找 hapray-sa-cmd 文件的路径
 
     Returns:
-        hapray-sa-cmd.js 的绝对路径，如果未找到则返回 None
+        hapray-sa-cmd 的绝对路径，如果未找到则返回 None
     """
+    # Windows 使用 .exe，Linux/macOS 无扩展名
+    cmd_name = 'hapray-sa-cmd.exe' if platform.system() == 'Windows' else 'hapray-sa-cmd'
+
     # 获取当前文件的目录
     current_file = Path(__file__).resolve()
     # 从当前文件向上查找项目根目录
@@ -26,17 +30,17 @@ def _find_hapray_sa_cmd() -> Optional[str]:
 
     # 尝试多个可能的路径
     candidates = [
-        project_root / 'dist' / 'tools' / 'sa-cmd' / 'hapray-sa-cmd.js',
-        project_root / 'tools' / 'sa-cmd' / 'hapray-sa-cmd.js',
-        project_root.parent / 'dist' / 'tools' / 'sa-cmd' / 'hapray-sa-cmd.js',
-        project_root.parent / 'tools' / 'sa-cmd' / 'hapray-sa-cmd.js',
+        project_root / 'dist' / 'tools' / 'sa-cmd' / cmd_name,
+        project_root / 'tools' / 'sa-cmd' / cmd_name,
+        project_root.parent / 'dist' / 'tools' / 'sa-cmd' / cmd_name,
+        project_root.parent / 'tools' / 'sa-cmd' / cmd_name,
     ]
 
     for candidate in candidates:
         if candidate.exists() and candidate.is_file():
             return str(candidate)
 
-    logging.warning('hapray-sa-cmd.js not found in expected locations')
+    logging.warning('%s not found in expected locations', cmd_name)
     return None
 
 
@@ -52,11 +56,11 @@ def execute_hapray_cmd(args: list[str], timeout: int = 1800) -> bool:
     """
     hapray_cmd_path = _find_hapray_sa_cmd()
     if not hapray_cmd_path:
-        logging.error('hapray-sa-cmd.js not found, cannot execute command')
+        logging.error('hapray-sa-cmd not found, cannot execute command')
         return False
 
     # 构建完整命令: node hapray-sa-cmd.js hapray <args>
-    cmd = ['node', hapray_cmd_path, 'hapray', *args]
+    cmd = [hapray_cmd_path, 'hapray', *args]
 
     try:
         result = subprocess.run(

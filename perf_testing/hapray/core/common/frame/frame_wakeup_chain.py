@@ -1470,19 +1470,23 @@ def analyze_empty_frame_wakeup_chain(
                             # 这可能是数据问题，但指令数确实为0
                             logger.debug(f'线程 {thread_name} (itid={itid}) 没有找到perf_thread_id，指令数为0')
 
-                    related_threads_info.append(
-                        {
-                            'itid': itid,
-                            'tid': thread_info['tid'],
-                            'thread_name': thread_name,
-                            'pid': thread_info['pid'],
-                            'process_name': process_name,
-                            'perf_thread_id': perf_thread_id,
-                            'instruction_count': instruction_count,
-                            'is_system_thread': is_system,
-                            'wakeup_depth': depth,  # 添加唤醒链深度信息
-                        }
-                    )
+                        # 只有在 thread_info 存在时才添加到列表
+                        related_threads_info.append(
+                            {
+                                'itid': itid,
+                                'tid': thread_info['tid'],
+                                'thread_name': thread_name,
+                                'pid': thread_info['pid'],
+                                'process_name': process_name,
+                                'perf_thread_id': perf_thread_id,
+                                'instruction_count': instruction_count,
+                                'is_system_thread': is_system,
+                                'wakeup_depth': depth,  # 添加唤醒链深度信息
+                            }
+                        )
+                    else:
+                        # thread_info 为 None，记录警告但继续处理其他线程
+                        logger.warning(f'帧 {frame_id}: 线程 itid={itid} 在 thread_info_map 中未找到，跳过')
             elapsed = time.time() - stage_start
             stage_timings['build_thread_info'] += elapsed
             logger.debug(

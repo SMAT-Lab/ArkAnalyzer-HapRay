@@ -19,7 +19,7 @@ import path from 'path';
 import type { GlobalConfig } from '../../config/types';
 import { initConfig, updateKindConfig } from '../../config';
 import type { TimeRange } from '../../core/perf/perf_analyzer';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { PerfAnalysisService } from '../../services/analysis/perf_analysis';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);

@@ -634,12 +634,20 @@ class EmptyFrameAnalyzer:
     def _filter_false_positives(self, trace_df: pd.DataFrame, trace_conn) -> pd.DataFrame:
         """过滤假阳性帧（对所有flag=2帧进行过滤）
 
-        假阳性定义：flag=2的帧，但通过NativeWindow API成功提交了内容
+        假阳性定义：
+        1. NativeWindow API 假阳性：flag=2的帧，但通过NativeWindow API成功提交了内容
+        2. 重复vsync假阳性：flag=2的帧，但同一vsync+同一线程(itid)上存在flag=0或flag=1的帧，
+           说明该vsync实际上已经成功绘制，flag=2只是硬件重复发送vsync信号导致的
 
         检测方法：
+        规则1 - NativeWindow API:
         1. 预加载 NativeWindow API 事件（RequestBuffer, FlushBuffer等）
         2. 对每个 flag=2 帧，检查帧时间范围内是否有NativeWindow API提交事件
         3. 如果有，标记为假阳性并从DataFrame中过滤
+
+        规则2 - 重复vsync:
+        1. 查询frame_slice表，找出所有与flag=2帧共享vsync+itid但flag!=2的帧
+        2. 如果存在，说明该vsync信号已被正常处理，flag=2是硬件重复导致的假阳性
 
         Args:
             trace_df: 包含flag=2帧的DataFrame
@@ -651,6 +659,9 @@ class EmptyFrameAnalyzer:
         if trace_df.empty:
             return trace_df
 
+        original_count = len(trace_df)
+
+        # ========== 规则1：NativeWindow API 假阳性过滤 ==========
         # 计算时间范围
         # 注意：处理dur可能为NaN的情况，并确保类型为int
         min_ts = int(trace_df['ts'].min())
@@ -692,10 +703,8 @@ class EmptyFrameAnalyzer:
         for itid in nw_events_cache:
             nw_events_cache[itid].sort()
 
-        # logging.info(f'预加载NativeWindow API事件: {len(nw_records)}条记录, {len(nw_events_cache)}个线程')
-
-        # 过滤假阳性（使用DataFrame操作）
-        def is_false_positive(row):
+        # 过滤NativeWindow API假阳性
+        def is_nw_false_positive(row):
             try:
                 frame_itid = row['itid']
                 frame_start = row['ts']
@@ -708,21 +717,82 @@ class EmptyFrameAnalyzer:
                         return True
                 return False
             except Exception:
-                # 如果检查过程中出现异常，记录日志但不标记为假阳性（保守策略）
-                # logging.warning(f'假阳性检查异常: {e}, row={row.to_dict() if hasattr(row, "to_dict") else row}')
                 return False
 
-        # 标记假阳性
-        false_positive_mask = trace_df.apply(is_false_positive, axis=1)
-        false_positive_mask.sum()
+        nw_false_positive_mask = trace_df.apply(is_nw_false_positive, axis=1)
+        nw_fp_count = nw_false_positive_mask.sum()
+        trace_df = trace_df[~nw_false_positive_mask].copy()
 
-        # 过滤假阳性
-        return trace_df[~false_positive_mask].copy()
+        # ========== 规则2：重复vsync假阳性过滤 ==========
+        # 硬件可能对同一vsync信号重复发送2-3次，导致frame_slice中出现多条相同vsync的记录。
+        # 例如 vsync=1000 出现3行：flag=0(正常), flag=1(卡帧), flag=2(空刷)。
+        # 其中flag=2并非真正的空刷，而是重复vsync信号没有新内容可绘制。
+        # 检测方法：查询同vsync+同itid下是否存在flag!=2的帧（说明该vsync已正常绘制）。
+        dup_vsync_fp_count = 0
+        if not trace_df.empty and 'vsync' in trace_df.columns and 'itid' in trace_df.columns:
+            # 收集所有需要检查的(vsync, itid)组合
+            vsync_itid_pairs = set()
+            for _, row in trace_df.iterrows():
+                vsync_val = row.get('vsync')
+                itid_val = row.get('itid')
+                if vsync_val is not None and not pd.isna(vsync_val) and itid_val is not None and not pd.isna(itid_val):
+                    vsync_itid_pairs.add((int(vsync_val), int(itid_val)))
 
-        # logging.info(
-        # f'假阳性过滤: 过滤前={len(trace_df)}, 过滤后={len(filtered_df)}, '
-        # f'假阳性={false_positive_count} ({false_positive_count/len(trace_df)*100:.1f}%)'
-        # )
+            if vsync_itid_pairs:
+                # 批量查询：找出哪些(vsync, itid)组合在frame_slice中存在flag!=2的帧
+                # 使用分批查询避免SQL参数过多
+                dup_vsync_set = set()  # 存储有重复的(vsync, itid)组合
+                batch_size = 200
+                pairs_list = list(vsync_itid_pairs)
+
+                for i in range(0, len(pairs_list), batch_size):
+                    batch = pairs_list[i:i + batch_size]
+                    # 构建WHERE条件：(vsync = ? AND itid = ?) OR (vsync = ? AND itid = ?) ...
+                    conditions = ' OR '.join(['(fs.vsync = ? AND fs.itid = ?)'] * len(batch))
+                    params = []
+                    for vsync_val, itid_val in batch:
+                        params.extend([vsync_val, itid_val])
+
+                    dup_query = f"""
+                    SELECT DISTINCT fs.vsync, fs.itid
+                    FROM frame_slice fs
+                    WHERE ({conditions})
+                    AND fs.flag != 2
+                    AND fs.type = 0
+                    """
+                    try:
+                        cursor = trace_conn.cursor()
+                        cursor.execute(dup_query, params)
+                        for vsync_val, itid_val in cursor.fetchall():
+                            dup_vsync_set.add((int(vsync_val), int(itid_val)))
+                    except Exception as e:
+                        logging.warning(f'重复vsync查询失败: batch_size={len(batch)}, error={e}')
+
+                if dup_vsync_set:
+                    # 标记重复vsync假阳性
+                    def is_dup_vsync_false_positive(row):
+                        try:
+                            vsync_val = row.get('vsync')
+                            itid_val = row.get('itid')
+                            if vsync_val is None or pd.isna(vsync_val) or itid_val is None or pd.isna(itid_val):
+                                return False
+                            return (int(vsync_val), int(itid_val)) in dup_vsync_set
+                        except Exception:
+                            return False
+
+                    dup_vsync_mask = trace_df.apply(is_dup_vsync_false_positive, axis=1)
+                    dup_vsync_fp_count = dup_vsync_mask.sum()
+                    trace_df = trace_df[~dup_vsync_mask].copy()
+
+        # 记录过滤结果
+        total_fp_count = nw_fp_count + dup_vsync_fp_count
+        if total_fp_count > 0:
+            logging.info(
+                f'假阳性过滤: 过滤前={original_count}, 过滤后={len(trace_df)}, '
+                f'NativeWindow假阳性={nw_fp_count}, 重复vsync假阳性={dup_vsync_fp_count}'
+            )
+
+        return trace_df
 
     def _analyze_top_frames_wakeup_chain(self, frame_loads: list, trace_df: pd.DataFrame, trace_conn) -> None:
         """对Top N帧进行唤醒链分析，填充wakeup_threads字段

@@ -430,6 +430,7 @@ class ReportData:
             'frameLoads': 'trace_frameLoads.json',
             'vsyncAnomaly': 'trace_vsyncAnomaly.json',
             'faultTree': 'trace_fault_tree.json',
+            'redundantThread': 'redundant_thread_analysis.json',
         }
 
         for key, filename in trace_files.items():
@@ -502,6 +503,7 @@ class ReportGenerator:
         export_comparison: bool = False,
         symbol_statistic: str = None,
         time_range_strings: list[str] = None,
+        enable_thread_analysis: bool = True,
     ):
         """Initialize ReportGenerator
 
@@ -510,12 +512,14 @@ class ReportGenerator:
             export_comparison: Export comparison Excel for memory analysis
             symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
             time_range_strings: List of time range strings in format "startTime-endTime" (optional)
+            enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True.
         """
         self.report_template_path = os.path.abspath(ExeUtils.get_tools_dir('web', 'report_template.html'))
         self.use_refined_lib_symbol = use_refined_lib_symbol
         self.export_comparison = export_comparison
         self.symbol_statistic = symbol_statistic
         self.time_range_strings = time_range_strings or []
+        self.enable_thread_analysis = enable_thread_analysis
 
     def update_report(self, scene_dir: str, time_ranges: list[dict] = None) -> bool:
         """Update an existing performance report
@@ -586,17 +590,21 @@ class ReportGenerator:
             time_ranges,
             use_refined_lib_symbol=use_refined_lib_symbol,
             export_comparison=export_comparison,
+            enable_thread_analysis=getattr(self, 'enable_thread_analysis', True),
         )
 
-        # Step 3: Generate HTML report
+        # Step 3: Generate step summary (summary.json & embed into main json)
+        summary_list = self._generate_summary_json(scene_dir) or []
+        if isinstance(summary_list, list):
+            # 将 summary 直接注入到主 JSON 结构中，前端通过 window.jsonData 访问
+            result['summary'] = summary_list
+
+        # Step 4: Generate HTML report
         self._create_html_report(scene_dir, result)
 
-        # Step 4: Process symbol statistics (if enabled)
+        # Step 5: Process symbol statistics (if enabled)
         if self.symbol_statistic:
             self._process_symbol_statistics(scene_dir)
-
-        # Step 5: Generate summary.json
-        self._generate_summary_json(scene_dir)
 
         logging.info('Report successfully %s for %s', 'updated' if skip_round_selection else 'generated', scene_dir)
         return True
@@ -724,6 +732,28 @@ class ReportGenerator:
         return testcase_dirs
 
     @staticmethod
+    def _find_dbtools_excel(report_dir: str) -> Optional[str]:
+        """查找 report 目录下最新的 dbtools 导入 Excel 文件（ecol_load_perf_*.xlsx）
+
+        Args:
+            report_dir: report 目录路径
+
+        Returns:
+            文件名（非完整路径），与 HTML 同目录便于前端相对路径下载；若未找到则返回 None
+        """
+        if not os.path.isdir(report_dir):
+            return None
+        candidates = [f for f in os.listdir(report_dir) if f.startswith('ecol_load_perf_') and f.endswith('.xlsx')]
+        if not candidates:
+            return None
+        # 按修改时间取最新
+        candidates.sort(
+            key=lambda f: os.path.getmtime(os.path.join(report_dir, f)),
+            reverse=True,
+        )
+        return candidates[0]
+
+    @staticmethod
     def _build_json_data(scene_dir: str, result: dict) -> str:
         """构建JSON数据，支持三种分析模式
 
@@ -740,6 +770,11 @@ class ReportGenerator:
         # 根据分析模式决定是否加载性能数据
         load_perf = analysis_mode in ['all', 'perf']
 
+        # 将 dbtools Excel 压缩后注入 result（gzip+base64，供前端解压下载）
+        dbtools_data, dbtools_filename = ReportGenerator._build_dbtools_excel_data(scene_dir)
+        if dbtools_data and dbtools_filename:
+            result['dbtoolsExcel'] = {'data': dbtools_data, 'filename': dbtools_filename}
+
         # 创建 ReportData 实例
         report_data = ReportData.from_paths(scene_dir, result)
 
@@ -749,6 +784,35 @@ class ReportGenerator:
             report_data.result['perf']['steps'] = []
 
         return str(report_data)
+
+    @staticmethod
+    def _build_dbtools_excel_data(scene_dir: str) -> tuple[str, str]:
+        """读取 dbtools Excel 文件，gzip 压缩后 base64 编码，供前端嵌入 HTML 下载
+
+        Args:
+            scene_dir: 场景目录路径
+
+        Returns:
+            (base64_encoded_data, filename)，无文件时返回 ('', '')
+        """
+        report_dir = os.path.join(scene_dir, 'report')
+        filename = ReportGenerator._find_dbtools_excel(report_dir)
+        if not filename:
+            return '', ''
+
+        file_path = os.path.join(report_dir, filename)
+        if not os.path.isfile(file_path):
+            return '', ''
+
+        try:
+            with open(file_path, 'rb') as f:
+                raw_data = f.read()
+            compressed = gzip.compress(raw_data, compresslevel=9)
+            data_b64 = base64.b64encode(compressed).decode('ascii')
+            return data_b64, filename
+        except Exception as e:
+            logging.error('Failed to build dbtools Excel data: %s', str(e))
+            return '', ''
 
     @staticmethod
     def _build_db_data(scene_dir: str) -> str:
@@ -853,8 +917,8 @@ class ReportGenerator:
             logging.error('Error loading %s: %s', path, str(e))
             return default
 
-    def _generate_summary_json(self, scene_dir: str) -> None:
-        """Generate summary.json for each test step
+    def _generate_summary_json(self, scene_dir: str) -> list[dict[str, Any]] | None:
+        """Generate summary.json for each test step and return summary list
 
         Args:
             scene_dir: Scene directory path
@@ -870,7 +934,7 @@ class ReportGenerator:
             steps_data = ReportGenerator._load_json_safe(steps_path, default=[])
             if not steps_data:
                 logging.warning('No steps data found in scene_dir: %s, skipping summary.json generation', steps_path)
-                return
+                return None
 
             # Load empty frame data
             empty_frame_path = os.path.join(report_dir, 'trace_emptyFrame.json')
@@ -879,6 +943,22 @@ class ReportGenerator:
             # Load perf data for tech_stack statistics
             perf_data_path = os.path.join(scene_dir, 'hiperf', 'hiperf_info.json')
             perf_data = ReportGenerator._load_json_safe(perf_data_path, default=[])
+
+            # Load component reuse data
+            component_reuse_path = os.path.join(report_dir, 'trace_componentReuse.json')
+            component_reuse_data = ReportGenerator._load_json_safe(component_reuse_path, default={})
+
+            # Load fault tree data
+            fault_tree_path = os.path.join(report_dir, 'trace_fault_tree.json')
+            fault_tree_data = ReportGenerator._load_json_safe(fault_tree_path, default={})
+
+            # Load redundant thread analysis data
+            redundant_thread_path = os.path.join(report_dir, 'redundant_thread_analysis.json')
+            redundant_thread_data = ReportGenerator._load_json_safe(redundant_thread_path, default={})
+
+            # Load UI animate data (for image oversize & component tree stats)
+            ui_animate_path = os.path.join(report_dir, 'ui_animate.json')
+            ui_animate_data = ReportGenerator._load_json_safe(ui_animate_path, default={})
 
             # Run hilog analysis if log or hilog directory exists
             # Prioritize 'log' directory as it's the current standard
@@ -911,8 +991,23 @@ class ReportGenerator:
                 # Get tech_stack data for this step
                 step_tech_stack = self._get_tech_stack_for_step(perf_data, step_idx)
 
+                # Get component reuse data for this step
+                step_component_reuse = self._get_component_reuse_for_step(component_reuse_data, step_idx)
+
+                # Get fault tree data for this step (raw fault tree node, front-end再做可视化与标签)
+                step_fault_tree = self._get_fault_tree_for_step(fault_tree_data, step_idx)
+
+                # Get redundant thread summary for this step
+                step_redundant_thread = self._get_redundant_thread_for_step(redundant_thread_data, step_idx)
+
+                # Get UI related summaries (image oversize & component tree on/off tree stats)
+                step_image_oversize, step_component_tree = self._get_ui_summary_for_step(ui_animate_data, step_idx)
+
                 # Get hilog data for this step
                 step_hilog = self._get_hilog_for_step(hilog_data, step_idx)
+
+                # Get key functions analysis data for this step
+                step_key_functions = self._get_key_functions_for_step(perf_data, step_idx)
 
                 summary_item = {
                     'step_id': step_id,
@@ -920,6 +1015,14 @@ class ReportGenerator:
                     'empty_frame': step_empty_frame,
                     'tech_stack': step_tech_stack,
                     'log': step_hilog,
+                    # 新增：组件复用、故障树、Image 超尺寸、组件树上/未上树统计
+                    'component_reuse': step_component_reuse,
+                    'fault_tree': step_fault_tree,
+                    'redundant_thread': step_redundant_thread,
+                    'image_oversize': step_image_oversize,
+                    'component_tree': step_component_tree,
+                    # 新增：重点函数分析
+                    'key_functions': step_key_functions,
                 }
                 summary_list.append(summary_item)
 
@@ -932,8 +1035,11 @@ class ReportGenerator:
 
             logging.info('Summary JSON generated at %s', summary_path)
 
+            return summary_list
+
         except Exception as e:
             logging.error('Failed to generate summary.json: %s', str(e))
+            return None
 
     @staticmethod
     def _get_empty_frame_for_step(empty_frame_data: dict, step_idx: int) -> dict:
@@ -1042,6 +1148,170 @@ class ReportGenerator:
         return tech_stack
 
     @staticmethod
+    def _get_component_reuse_for_step(component_reuse_data: dict, step_idx: int) -> dict | None:
+        """Get component reuse statistics for a specific step.
+
+        The structure is aligned with front-end ComponentResuStepData:
+        {
+            "total_builds": int,
+            "recycled_builds": int,
+            "reusability_ratio": float,
+            "max_component": str
+        }
+        """
+        if not isinstance(component_reuse_data, dict):
+            return None
+
+        step_key = f'step{step_idx}'
+        step_data = component_reuse_data.get(step_key)
+        if not isinstance(step_data, dict):
+            return None
+
+        # 字段可能缺失，这里统一做容错处理
+        return {
+            'total_builds': int(step_data.get('total_builds', 0)),
+            'recycled_builds': int(step_data.get('recycled_builds', 0)),
+            'reusability_ratio': float(step_data.get('reusability_ratio', 0.0)),
+            'max_component': step_data.get('max_component') or '',
+        }
+
+    @staticmethod
+    def _get_fault_tree_for_step(fault_tree_data: dict, step_idx: int) -> dict | None:
+        """Get fault tree data for a specific step.
+
+        We keep the raw fault tree node for this step so that the web
+        can interpret and render detailed fault information.
+        """
+        if not isinstance(fault_tree_data, dict):
+            return None
+
+        step_key = f'step{step_idx}'
+        step_data = fault_tree_data.get(step_key)
+        if not isinstance(step_data, dict):
+            return None
+
+        return step_data
+
+    @staticmethod
+    def _get_redundant_thread_for_step(redundant_thread_data: dict, step_idx: int) -> dict | None:
+        """Get redundant thread summary for a specific step.
+
+        redundant_thread_analysis.json is keyed by step (e.g. step1, step2).
+        Each step value has redundant_threads_summary and optional summary.
+        Returns the redundant_threads_summary dict for summary.json and front-end display.
+        """
+        if not isinstance(redundant_thread_data, dict):
+            return None
+
+        step_key = f'step{step_idx}'
+        step_data = redundant_thread_data.get(step_key)
+        if not isinstance(step_data, dict):
+            return None
+
+        summary = step_data.get('redundant_threads_summary')
+        if not isinstance(summary, dict):
+            return None
+
+        return summary
+
+    @staticmethod
+    def _get_ui_summary_for_step(ui_animate_data: dict, step_idx: int) -> tuple[dict | None, dict | None]:
+        """Get UI-related summary (image oversize & component tree stats) for a specific step.
+
+        The ui_animate.json structure is compatible with UIAnimateData on the web side.
+        We aggregate per-page statistics into step-level summaries:
+
+        image_oversize:
+          {
+            "total_images": int,
+            "exceed_count": int,
+            "total_excess_memory_mb": float
+          }
+
+        component_tree:
+          {
+            "total_nodes": int,
+            "on_tree_nodes": int,
+            "off_tree_nodes": int,
+            "off_tree_ratio": float
+          }
+        """
+        if not isinstance(ui_animate_data, dict):
+            return None, None
+
+        step_key = f'step{step_idx}'
+        step_data = ui_animate_data.get(step_key)
+        if not step_data:
+            return None, None
+
+        # 兼容两种格式：直接数组或包含 pages 字段的对象
+        pages = None
+        if isinstance(step_data, dict):
+            pages = step_data.get('pages')
+        if pages is None:
+            # 可能是直接的页面数组
+            pages = step_data
+
+        if not isinstance(pages, list) or len(pages) == 0:
+            return None, None
+
+        total_images = 0
+        exceed_count = 0
+        total_excess_memory_mb = 0.0
+
+        total_nodes = 0
+        on_tree_nodes = 0
+        off_tree_nodes = 0
+
+        for page in pages:
+            if not isinstance(page, dict):
+                continue
+
+            # Image 超尺寸统计
+            image_analysis = page.get('image_size_analysis') or {}
+            if isinstance(image_analysis, dict):
+                total_images += int(image_analysis.get('total_images', 0))
+
+                images_exceeding = image_analysis.get('images_exceeding_framerect') or []
+                if isinstance(images_exceeding, list):
+                    exceed_count += len(images_exceeding)
+
+                total_excess_memory_mb += float(image_analysis.get('total_excess_memory_mb', 0.0))
+
+            # 组件树上/未上树统计（使用 canvas 节点计数）
+            canvas_node_cnt = page.get('canvasNodeCnt')
+            if isinstance(canvas_node_cnt, (int, float)):
+                total_nodes += int(canvas_node_cnt)
+
+            on_tree = page.get('canvas_node_on_tree')
+            if isinstance(on_tree, (int, float)):
+                on_tree_nodes += int(on_tree)
+
+            off_tree = page.get('canvas_node_off_tree')
+            if isinstance(off_tree, (int, float)):
+                off_tree_nodes += int(off_tree)
+
+        image_oversize_summary = None
+        if total_images > 0 or exceed_count > 0 or total_excess_memory_mb > 0:
+            image_oversize_summary = {
+                'total_images': total_images,
+                'exceed_count': exceed_count,
+                'total_excess_memory_mb': total_excess_memory_mb,
+            }
+
+        component_tree_summary = None
+        if total_nodes > 0 or on_tree_nodes > 0 or off_tree_nodes > 0:
+            off_tree_ratio = float(off_tree_nodes) / float(total_nodes) if total_nodes > 0 else 0.0
+            component_tree_summary = {
+                'total_nodes': total_nodes,
+                'on_tree_nodes': on_tree_nodes,
+                'off_tree_nodes': off_tree_nodes,
+                'off_tree_ratio': off_tree_ratio,
+            }
+
+        return image_oversize_summary, component_tree_summary
+
+    @staticmethod
     def _should_classify_as_arkui(component_category: int, component_name: str, sub_category_name: str) -> bool:
         """Check if should classify as ArkUI
 
@@ -1102,17 +1372,22 @@ class ReportGenerator:
             Dictionary with hilog analysis results by step
         """
         try:
-            # Run hilog analysis
+            # Run hilog analysis (detail=True 以生成 hilog_detail.json，供前端展示详细匹配信息)
             hilog_action = HilogAction()
             output_file = os.path.join(report_dir, 'hilog_analysis.xlsx')
-            hilog_action.run(hilog_dir, output_file, detail=False)
+            hilog_action.run(hilog_dir, output_file, detail=True)
 
             # Load hilog analysis results from JSON file
             hilog_json_path = os.path.join(report_dir, 'hilog_analysis.json')
-            if os.path.exists(hilog_json_path):
-                return ReportGenerator._load_json_safe(hilog_json_path, default={})
+            hilog_data = ReportGenerator._load_json_safe(hilog_json_path, default={})
 
-            return {}
+            # Load hilog_detail.json（规则匹配详情：各规则 matched、其他 未匹配任何规则）
+            hilog_detail_path = os.path.join(report_dir, 'hilog_detail.json')
+            if os.path.exists(hilog_detail_path):
+                hilog_detail = ReportGenerator._load_json_safe(hilog_detail_path, default={})
+                hilog_data['_detail'] = hilog_detail
+
+            return hilog_data
 
         except Exception as e:
             logging.warning('Hilog analysis failed: %s', str(e))
@@ -1142,6 +1417,82 @@ class ReportGenerator:
 
         # Return the hilog statistics (pattern name -> count)
         return step_hilog
+
+    @staticmethod
+    def _default_key_functions_value() -> dict:
+        """无数据时 summary.json 中使用的默认值（0）。"""
+        return {'symbolEvents': 0, 'symbolTotalEvents': 0}
+
+    @staticmethod
+    def _get_key_functions_for_step(perf_data: list, step_idx: int) -> dict:
+        """Get key functions analysis data for a specific step from perf_data
+
+        有配置但无 perf 数据、或该 step 无数据、或没有匹配到配置中的函数时，
+        对配置中的每个函数名返回 {"函数名": {"symbolEvents": 0, "symbolTotalEvents": 0}}。
+        """
+        default_val = ReportGenerator._default_key_functions_value()
+        try:
+            key_functions_config = Config.get('key_functions.functions', [])
+            if not key_functions_config:
+                return {'_': dict(default_val)}
+
+            # 有配置但无 perf 数据或该 step 无数据：对配置中每个函数名返回 0
+            if not perf_data:
+                return {k: dict(default_val) for k in key_functions_config}
+
+            first_entry = perf_data[0]
+            steps = first_entry.get('steps', [])
+            step_data = None
+            for step in steps:
+                if step.get('step_id') == step_idx:
+                    step_data = step
+                    break
+
+            if not step_data:
+                return {k: dict(default_val) for k in key_functions_config}
+
+            data_items = step_data.get('data', [])
+            # 先按配置为每个函数名初始化，无匹配时保持 0
+            key_functions_data = {
+                k: {'symbolEvents': 0, 'symbolTotalEvents': 0}
+                for k in key_functions_config
+            }
+            for item in data_items:
+                if item.get('eventType') != 1:
+                    continue
+                symbol = item.get('symbol', '')
+                if not symbol:
+                    continue
+                matched_function = None
+                for key_func in key_functions_config:
+                    if key_func in symbol:
+                        matched_function = key_func
+                        break
+                if matched_function:
+                    symbol_events = item.get('symbolEvents', 0)
+                    symbol_total_events = item.get('symbolTotalEvents', 0)
+                    # 重点函数只统计 self 符号（symbolEvents > 0），忽略调用者（symbolEvents == 0）
+                    # 如果 symbolEvents 为 0，说明这是调用者符号，不应该统计到重点函数中
+                    if symbol_events == 0:
+                        # 跳过调用者符号，只统计函数本身的事件
+                        continue
+                    # symbolEvents 不为 0 时，symbolTotalEvents 可以是任意值（包括 0）
+                    key_functions_data[matched_function]['symbolEvents'] += symbol_events
+                    key_functions_data[matched_function]['symbolTotalEvents'] += symbol_total_events
+
+            # 由于只统计 self 符号（symbolEvents > 0），所以不会出现 symbolEvents == 0 但 symbolTotalEvents != 0 的情况
+            # 没有匹配到配置中的函数时，保持为 0（不再使用 -1）
+            return key_functions_data
+
+        except Exception as e:
+            logging.warning('Failed to get key functions data: %s', str(e))
+            try:
+                key_functions_config = Config.get('key_functions.functions', [])
+                if key_functions_config:
+                    return {k: dict(default_val) for k in key_functions_config}
+            except Exception:
+                pass
+            return {'_': dict(default_val)}
 
 
 def merge_summary_info(directory: str) -> list[dict[str, Any]]:

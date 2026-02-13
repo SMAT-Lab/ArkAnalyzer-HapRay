@@ -10,8 +10,7 @@
       "script": "src/cli/index.ts"
     },
     "release": {
-      "cmd": ["node"],
-      "script": "hapray-sa-cmd.js"
+      "cmd": ["hapray-sa-cmd", "hapray-sa-cmd.exe"]
     }
   },
   "actions": {

@@ -14,7 +14,7 @@
  */
 
 import { Command, program } from 'commander';
-import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from '../utils/logger';
 import { HapAnalyzerCli } from './commands/hap_analyzer_cli';
 import { PerfCli } from './commands/perf_cli';
 import { ElfAnalyzerCli } from './commands/elf_analyzer_cli';

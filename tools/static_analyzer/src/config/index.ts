@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
+import Logger, { LOG_MODULE_TYPE } from '../utils/logger';
 import { loadConfig } from './loader';
 import type { ComponentConfig, GlobalConfig } from './types';
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);

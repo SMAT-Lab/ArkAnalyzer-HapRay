@@ -3,7 +3,7 @@ import path from 'path';
 import axios from 'axios';
 import * as tar from 'tar';
 import { Ohpm } from '../src/config/types';
-import Logger, { LOG_MODULE_TYPE, LOG_LEVEL } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE, LOG_LEVEL } from '../src/utils/logger';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 Logger.configure('arkanalyzer-toolbox.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);

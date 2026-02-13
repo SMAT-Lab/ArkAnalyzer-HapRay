@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { LOG_MODULE_TYPE, Logger } from 'arkanalyzer';
+import Logger, { LOG_MODULE_TYPE } from './logger';
 import * as fs from 'fs';
 import * as path from 'path';
 

@@ -48,6 +48,9 @@ def analyze_image_sizes(tree_dict: dict[str, Any]) -> dict[str, Any]:
             results['total_images'] += 1
             attrs = component.get('attributes', {})
 
+            # 获取Image的URL（支持多种格式：resource://、pixmapID等）
+            image_url = attrs.get('url') or attrs.get('src') or attrs.get('Url') or ''
+
             # 获取renderedImageSize（从RenderedImageInfo的Width和Height）
             rendered_image_size = attrs.get('renderedImageSize')
             rendered_image_info_str = attrs.get('renderedImageInfoStr', '')
@@ -86,6 +89,7 @@ def analyze_image_sizes(tree_dict: dict[str, Any]) -> dict[str, Any]:
                     image_info = {
                         'path': current_path,
                         'id': attrs.get('id', ''),
+                        'url': image_url,
                         'bounds_rect': attrs.get('bounds_rect', ''),
                         'frameRect': {
                             'width': frame_width,

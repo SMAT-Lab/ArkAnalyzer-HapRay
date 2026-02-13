@@ -16,7 +16,7 @@
 import * as JSZip from 'jszip';
 import path from 'path';
 import fs from 'fs';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { ResourceIndexParser } from './resource_index_parser';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
