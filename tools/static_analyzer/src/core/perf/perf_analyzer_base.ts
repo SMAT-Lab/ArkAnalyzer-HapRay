@@ -24,7 +24,7 @@ import writeXlsxFile from 'write-excel-file/node';
 import { PerfDatabase } from './perf_database';
 import { saveJsonArray } from '../../utils/json_utils';
 import type { SheetData } from 'write-excel-file';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import type { SoOriginal } from '../../config/types';
 import { PackageMatcher } from './package_matcher';
 

@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import type { Step } from '../../core/perf/perf_analyzer';
 import type { GlobalConfig } from '../../config/types';
 
