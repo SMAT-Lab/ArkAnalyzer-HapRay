@@ -98,18 +98,20 @@ class ThreadAnalyzer(BaseAnalyzer):
                 'redundant_instructions_ratio': round(pattern.get('redundant_instructions_ratio', 0), 6),
                 'estimated_memory_mb': round(pattern.get('estimated_memory_mb', 0), 2),
                 'redundancy_score': pattern.get('redundancy_score', 0),
+                'score_breakdown': pattern.get('score_breakdown', {}),
                 'redundancy_level': pattern.get('redundancy_level', 'none'),
                 'leak_score': pattern.get('leak_score', 0),
                 'leak_level': pattern.get('leak_level', 'none'),
                 'waiting_ratio': round(pattern.get('avg_waiting_ratio', 0) * 100, 1),
                 'wakeup_pattern': wp,
+                'all_thread_ids': pattern.get('all_thread_ids', []),
                 'redundant_thread_ids': pattern.get('redundant_thread_ids', []),
                 'callchain_sample': pattern.get('callchain_sample', []),
             })
         redundant_threads_summary['redundant_threads'].sort(key=lambda x: x['redundancy_score'], reverse=True)
-        redundant_threads_summary['below_threshold_patterns'] = analysis.get('below_threshold_patterns', [])
 
         return {
             'redundant_threads_summary': redundant_threads_summary,
             'summary': s,
+            'below_threshold_patterns': analysis.get('below_threshold_patterns', []),
         }
