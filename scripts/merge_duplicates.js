@@ -233,12 +233,15 @@ function mergeDuplicateFiles(sourceDir) {
   );
 }
 
-// 执行合并
-const distDir = path.resolve(__dirname, "../dist");
-if (!fs.existsSync(distDir)) {
-  console.error(`错误: dist 目录不存在: ${distDir}`);
+// 执行合并，支持传入目标目录参数
+const targetDir = process.argv[2]
+  ? path.resolve(process.cwd(), process.argv[2])
+  : path.resolve(__dirname, "../dist");
+
+if (!fs.existsSync(targetDir)) {
+  console.error(`错误: 目录不存在: ${targetDir}`);
   process.exit(1);
 }
 
-console.log(`正在处理目录: ${distDir}\n`);
-mergeDuplicateFiles(distDir);
+console.log(`正在处理目录: ${targetDir}\n`);
+mergeDuplicateFiles(targetDir);

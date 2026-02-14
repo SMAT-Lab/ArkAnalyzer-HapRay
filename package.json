@@ -10,7 +10,8 @@
     "tools/static_analyzer",
     "perf_testing",
     "tools/optimization_detector",
-    "tools/symbol_recovery"
+    "tools/symbol_recovery",
+    "desktop"
   ],
   "scripts": {
     "build": "npm run build --ws && node scripts/unzip_third-party.js",
