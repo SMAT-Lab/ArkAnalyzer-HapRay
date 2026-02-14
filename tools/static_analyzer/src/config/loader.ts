@@ -155,7 +155,11 @@ function getExtToolsRoot(): string {
             return path.resolve(root);
         }
     }
-    
+    // exe 在 tools/sa-cmd 下时，上一级即为 tools 目录
+    const exeDirTools = path.join(path.dirname(process.execPath), '..');
+    if (fs.existsSync(exeDirTools)) {
+        return path.resolve(exeDirTools);
+    }
     throw new Error('not found ext_tools');
 }
 
@@ -163,6 +167,9 @@ function loadResCfg(): Partial<GlobalConfig> {
     let res = path.join(__dirname, 'res');
     if (!fs.existsSync(res)) {
         res = path.join(__dirname, '../../res');
+    }
+    if (!fs.existsSync(res)) {
+        res = path.join(path.dirname(process.execPath), 'res');
     }
 
     const config: GlobalConfig = {
