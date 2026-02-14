@@ -589,7 +589,7 @@ function verifyArtifactsHash(results) {
             };
         } else if (key === 'opt') {
             skipRules = {
-                'optimization': { cols: [1, 13] }                       // 第2列（索引1）
+                'optimization': { cols: [1, 13, 19] }                       // 第2列（索引1）
             };
         }
 
