@@ -36,7 +36,7 @@ function createDmgWithBundleScript() {
   // 读取 tauri 配置
   const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
   const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
-  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
+  const productName = tauriConf.productName || "HapRay";
   const version = tauriConf.version || "1.5.0";
   const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
   const dmgName = `${productName}_${version}_${arch}.dmg`;
@@ -77,11 +77,11 @@ function createDmgWithBundleScript() {
 
 /**
  * 将 desktop 构建产物复制到项目根目录 ./dist，供 e2e 测试和 release 使用
- * 结构: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/Contents/MacOS/desktop, dist/tools/
+ * 结构: dist/HapRay.app/, dist/HapRay -> .app/Contents/MacOS/desktop, dist/tools/
  */
 function copyToDist() {
   const tauriConf = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../src-tauri/tauri.conf.json"), "utf-8"));
-  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
+  const productName = tauriConf.productName || "HapRay";
   const appName = `${productName}.app`;
   const appPath = path.join(macosDir, appName);
   const exeInApp = path.join(appPath, "Contents", "MacOS", "desktop");
@@ -142,10 +142,12 @@ function main() {
 
     console.log("\nStep 3: 生成 .dmg...");
     if (!fs.existsSync(bundleDmgSh)) {
-      // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh
+      // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh，但会清理 .app
       console.log("bundle_dmg.sh 不存在，先运行 tauri bundle 以创建 dmg 工具...");
       run("node", [runWithCargo, "npx", "tauri", "bundle", "--bundles", "dmg"]);
-      // 此时 dmg 已生成但包含未 merge 的 .app，需重新 merge 后覆盖
+      // tauri bundle 会清理 .app，需重新构建 .app 才能继续
+      console.log("\n重新构建 .app（tauri bundle 已清理）...");
+      run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
       console.log("\n重新执行 merge...");
       run("node", [mergeScript]);
     }

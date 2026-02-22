@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "HapRay"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "indexmap 2.13.0",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-decorum",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tauri-plugin-os",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -736,22 +752,6 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 2.0.115",
-]
-
-[[package]]
-name = "desktop"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "indexmap 2.13.0",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-decorum",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tauri-plugin-os",
 ]
 
 [[package]]
