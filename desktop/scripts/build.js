@@ -30,6 +30,17 @@ function run(cmd, args = [], options = {}) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+  return result;
+}
+
+/** 执行命令，失败时不退出，返回是否成功 */
+function runOptional(cmd, args = [], options = {}) {
+  const result = spawnSync(cmd, args, {
+    stdio: "inherit",
+    cwd: path.resolve(__dirname, ".."),
+    ...options,
+  });
+  return result.status === 0;
 }
 
 function createDmgWithBundleScript() {
@@ -142,11 +153,22 @@ function main() {
 
     console.log("\nStep 3: 生成 .dmg...");
     if (!fs.existsSync(bundleDmgSh)) {
-      // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh，但会清理 .app
+      // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh
+      // 注意：tauri bundle 内部运行 bundle_dmg.sh 时可能因 AppleScript 权限失败，
+      // 但我们只需要 bundle_dmg.sh 文件，后续用 --skip-jenkins 自行调用即可
       console.log("bundle_dmg.sh 不存在，先运行 tauri bundle 以创建 dmg 工具...");
-      run("node", [runWithCargo, "npx", "tauri", "bundle", "--bundles", "dmg"]);
+      const bundleOk = runOptional("node", [runWithCargo, "npx", "tauri", "bundle", "--bundles", "dmg"], {
+        env: { ...process.env, CI: "1" },
+      });
+      if (!fs.existsSync(bundleDmgSh)) {
+        console.error("错误: tauri bundle 未生成 bundle_dmg.sh，无法继续");
+        process.exit(1);
+      }
+      if (!bundleOk) {
+        console.log("(tauri bundle 因 AppleScript 权限失败，但 bundle_dmg.sh 已创建，继续用 --skip-jenkins 生成 dmg)");
+      }
       // tauri bundle 会清理 .app，需重新构建 .app 才能继续
-      console.log("\n重新构建 .app（tauri bundle 已清理）...");
+      console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
       run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
       console.log("\n重新执行 merge...");
       run("node", [mergeScript]);

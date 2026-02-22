@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "prebuild": "node scripts/prebuild.js",
-    "build": "npm run build --ws",
+    "build": "npm run prebuild && npm run build --ws",
     "release": "node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",

@@ -215,8 +215,11 @@
 import { ref, watch, computed, onMounted, onUnmounted, nextTick } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import type { PluginMetadata, ActionConfig, ParameterDef } from "../composables/usePlugins"
-import type { ExecutionRecord } from "../composables/useHistory"
+import type { PluginMetadata, ActionConfig, ParameterDef } from "../types"
+import type { ExecutionRecord } from "../types"
+import { isTauriEnv, openPath as openPathUtil } from "../utils/tauri"
+
+const hasTauri = isTauriEnv()
 
 const props = defineProps<{
   plugin: PluginMetadata | null
@@ -242,8 +245,6 @@ const loadingChoicesKeys = ref<Set<string>>(new Set())
 const nargsInputTemp = ref<Record<string, string | number>>({})
 /** choice multi_select 下拉框的当前选中值（添加前） */
 const choiceMultiTemp = ref<Record<string, string>>({})
-
-const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
 
 /** tool-output / tool-command 事件取消监听函数 */
 let unlistenToolOutput: (() => void) | null = null
@@ -344,12 +345,7 @@ function getChoices(param: ParameterDef, paramKey: string): string[] {
 }
 
 async function openPath(path: string) {
-  if (!hasTauri) return
-  try {
-    await invoke("open_path_command", { path })
-  } catch {
-    // 打开失败时静默处理
-  }
+  await openPathUtil(path)
 }
 
 async function browsePath(paramKey: string, paramType: string) {
@@ -370,7 +366,6 @@ async function browsePath(paramKey: string, paramType: string) {
 }
 
 async function loadDynamicChoices(paramKey: string, choicesFunc: string) {
-  const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
   if (!hasTauri) return
   loadingChoicesKeys.value = new Set([...loadingChoicesKeys.value, paramKey])
   try {
@@ -551,8 +546,6 @@ function buildParamsForExecute(): Record<string, unknown> {
 
 async function execute() {
   if (!props.plugin || !props.action) return
-
-  const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
   if (!hasTauri) {
     output.value = "请在 Tauri 环境中运行以执行工具"
     return
