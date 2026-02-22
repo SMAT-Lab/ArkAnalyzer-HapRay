@@ -5,6 +5,11 @@ use std::path::Path;
 
 use crate::common;
 
+/// 当前平台是否应跳过 .exe 条目（macOS/Linux 无法执行 Windows .exe）
+fn should_skip_exe() -> bool {
+    !cfg!(target_os = "windows")
+}
+
 /// 解析可执行文件路径（python/node/相对路径/插件内路径）
 pub fn resolve_executable(cmd: &str, plugin_path: &Path) -> String {
     let cmd_lower = cmd.to_lowercase();
@@ -28,29 +33,34 @@ pub fn resolve_executable(cmd: &str, plugin_path: &Path) -> String {
     cmd.to_string()
 }
 
-/// 从 cmd 数组选取第一个存在的可执行文件
+/// 从 cmd 数组选取第一个存在的可执行文件（平台感知：macOS/Linux 跳过 .exe）
 pub fn pick_executable(
     cmd_arr: &[serde_json::Value],
     plugin_dir: &Path,
 ) -> String {
-    cmd_arr
+    let skip_exe = should_skip_exe();
+    let chosen = cmd_arr
         .iter()
         .filter_map(|v| v.as_str())
         .find_map(|cmd_str| {
+            if skip_exe && cmd_str.ends_with(".exe") {
+                return None;
+            }
             let path = plugin_dir.join(cmd_str);
             if path.exists() {
                 Some(path.to_string_lossy().to_string())
             } else {
                 None
             }
-        })
-        .unwrap_or_else(|| {
-            cmd_arr
-                .first()
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        })
+        });
+    chosen.unwrap_or_else(|| {
+        cmd_arr
+            .iter()
+            .filter_map(|v| v.as_str())
+            .find(|s| !(skip_exe && s.ends_with(".exe")))
+            .unwrap_or("")
+            .to_string()
+    })
 }
 
 /// 应用 action_mapping 将参数转为命令参数

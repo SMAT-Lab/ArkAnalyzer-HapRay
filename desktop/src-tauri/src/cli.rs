@@ -1,7 +1,6 @@
 //! CLI 模式 - 无 UI 命令行执行
 //!
 //! 用法: ArkAnalyzer-HapRay <action> [--param value]...
-//! 环境变量: HAPRAY_PLUGINS_DIR 指定插件目录
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,17 +22,6 @@ struct CliRunRequest {
 // -----------------------------------------------------------------------------
 // 路径解析
 // -----------------------------------------------------------------------------
-
-fn plugins_dir_from_env() -> Option<PathBuf> {
-    std::env::var("HAPRAY_PLUGINS_DIR").ok().and_then(|dir| {
-        let p = PathBuf::from(&dir);
-        if p.exists() {
-            Some(p)
-        } else {
-            None
-        }
-    })
-}
 
 fn plugins_dir_from_workspace() -> Option<PathBuf> {
     #[cfg(debug_assertions)]
@@ -78,9 +66,7 @@ fn plugins_dir_from_exe() -> Option<PathBuf> {
 }
 
 fn find_plugins_dir() -> Option<PathBuf> {
-    plugins_dir_from_env()
-        .or_else(plugins_dir_from_workspace)
-        .or_else(plugins_dir_from_exe)
+    plugins_dir_from_workspace().or_else(plugins_dir_from_exe)
 }
 
 fn config_file_path() -> Option<PathBuf> {
@@ -352,18 +338,23 @@ fn execute_tool(
     }
 
     let exe_path = execution::resolve_executable(&executable, &plugin_path);
-    let cwd = plugin_path.to_str().unwrap_or(".");
+    let exe_path_abs = Path::new(&exe_path)
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(&exe_path));
+    let cwd = plugin_path
+        .canonicalize()
+        .unwrap_or_else(|_| plugin_path.to_path_buf());
 
-    log_command(&exe_path, &args);
+    log_command(exe_path_abs.to_str().unwrap_or(&exe_path), &args);
 
-    let mut cmd = Command::new(&exe_path);
+    let mut cmd = Command::new(&exe_path_abs);
     for (k, v) in load_plugin_env_config(&request.plugin_id) {
         cmd.env(k, v);
     }
 
     let status = cmd
         .args(&args)
-        .current_dir(cwd)
+        .current_dir(&cwd)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
@@ -393,8 +384,7 @@ fn log_command(exe: &str, args: &[String]) {
 // -----------------------------------------------------------------------------
 
 const USAGE: &str = r#"用法: ArkAnalyzer-HapRay <action> [--param value]...
-示例: ArkAnalyzer-HapRay analyze --input ./path
-环境变量: HAPRAY_PLUGINS_DIR 指定插件目录"#;
+示例: ArkAnalyzer-HapRay analyze --input ./path"#;
 
 fn print_usage() {
     eprintln!("{}", USAGE);
@@ -416,7 +406,7 @@ pub fn run(args: &[String]) -> ! {
         Some(d) => d,
         None => {
             eprintln!("错误: 未找到插件目录");
-            eprintln!("请设置 HAPRAY_PLUGINS_DIR 或确保 tools 目录存在于可执行文件附近");
+            eprintln!("请确保 tools 目录存在于可执行文件附近");
             print_usage();
             std::process::exit(1);
         }
