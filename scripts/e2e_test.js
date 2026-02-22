@@ -613,7 +613,7 @@ function verifyArtifactsHash(results) {
  * 主测试函数
  */
 async function runE2ETests() {
-    console.log('🚀 开始 ArkAnalyzer-HapRay 端到端测试\n');
+    console.log('🚀 开始 HapRay 端到端测试\n');
 
     // 先下载/更新测试资源
     runCommand(`node ${path.join(__dirname, 'download_test_products.js')} "${DIST_DIR}"`, '下载测试资源', { silent: false });

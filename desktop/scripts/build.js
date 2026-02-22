@@ -36,7 +36,7 @@ function createDmgWithBundleScript() {
   // 读取 tauri 配置
   const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
   const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
-  const productName = tauriConf.productName || "HapRay";
+  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
   const version = tauriConf.version || "1.5.0";
   const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
   const dmgName = `${productName}_${version}_${arch}.dmg`;
@@ -77,14 +77,14 @@ function createDmgWithBundleScript() {
 
 /**
  * 将 desktop 构建产物复制到项目根目录 ./dist，供 e2e 测试和 release 使用
- * 结构: dist/HapRay.app/, dist/HapRay -> .app/Contents/MacOS/desktop, dist/tools/
+ * 结构: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/Contents/MacOS/ArkAnalyzer-HapRay, dist/tools/
  */
 function copyToDist() {
   const tauriConf = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../src-tauri/tauri.conf.json"), "utf-8"));
-  const productName = tauriConf.productName || "HapRay";
+  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
   const appName = `${productName}.app`;
   const appPath = path.join(macosDir, appName);
-  const exeInApp = path.join(appPath, "Contents", "MacOS", "desktop");
+  const exeInApp = path.join(appPath, "Contents", "MacOS", "ArkAnalyzer-HapRay");
   const toolsInApp = path.join(appPath, "Contents", "Resources", "tools");
 
   if (!fs.existsSync(appPath) || !fs.existsSync(exeInApp)) {
@@ -106,7 +106,7 @@ function copyToDist() {
   if (fs.existsSync(distExePath)) {
     fs.unlinkSync(distExePath);
   }
-  fs.symlinkSync(path.join(appName, "Contents", "MacOS", "desktop"), distExePath, "file");
+  fs.symlinkSync(path.join(appName, "Contents", "MacOS", "ArkAnalyzer-HapRay"), distExePath, "file");
 
   if (fs.existsSync(toolsInApp)) {
     if (fs.existsSync(distToolsPath)) {
