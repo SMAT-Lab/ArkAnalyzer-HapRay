@@ -38,7 +38,18 @@ fn plugins_dir_from_workspace() -> Option<PathBuf> {
 
 fn plugins_dir_from_exe() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
+    let exe = exe.canonicalize().unwrap_or(exe);
+    eprintln!("[cli] exe: {}", exe.display());
     let parent = exe.parent()?;
+    eprintln!("[cli] exe.parent: {}", parent.display());
+    
+    #[cfg(target_os = "macos")]
+    if let Some(contents) = parent.parent() {
+        let tools = contents.join("Resources").join("tools");
+        if tools.exists() {
+            return Some(tools);
+        }
+    }
 
     let relative_paths = [
         "../Resources/tools",
@@ -49,14 +60,6 @@ fn plugins_dir_from_exe() -> Option<PathBuf> {
 
     for rel in relative_paths {
         let tools = parent.join(rel);
-        if tools.exists() {
-            return Some(tools);
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    if let Some(contents) = parent.parent() {
-        let tools = contents.join("Resources").join("tools");
         if tools.exists() {
             return Some(tools);
         }
@@ -300,6 +303,8 @@ fn execute_tool(
     plugins_dir: &Path,
     request: &mut CliRunRequest,
 ) -> Result<i32, String> {
+    eprintln!("[cli] plugins_dir: {}", plugins_dir.display());
+
     let plugin_dir = find_plugin_dir_by_id(plugins_dir, &request.plugin_id).ok_or_else(|| {
         format!(
             "插件不存在: 未找到 id={} (plugins_dir: {})",
@@ -307,6 +312,7 @@ fn execute_tool(
             plugins_dir.display()
         )
     })?;
+    eprintln!("[cli] plugin_dir: {}", plugin_dir.display());
 
     let meta = read_plugin_json(&plugin_dir)
         .ok_or_else(|| "读取插件配置失败".to_string())?;
@@ -322,8 +328,10 @@ fn execute_tool(
         .ok_or("cmd 配置缺失")?;
 
     let executable = execution::pick_executable(cmd_arr, &plugin_dir);
+    eprintln!("[cli] picked executable (raw): {}", executable);
+
     let script = execution.get("script").and_then(|s| s.as_str());
-    let plugin_path = plugin_dir.canonicalize().unwrap_or(plugin_dir);
+    let plugin_path = plugin_dir.canonicalize().unwrap_or_else(|_| plugin_dir.to_path_buf());
 
     let mut args: Vec<String> = Vec::new();
     if let Some(s) = script {
@@ -338,9 +346,43 @@ fn execute_tool(
     }
 
     let exe_path = execution::resolve_executable(&executable, &plugin_path);
-    let exe_path_abs = Path::new(&exe_path)
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from(&exe_path));
+    eprintln!("[cli] resolved exe_path: {}", exe_path);
+
+    // 将相对路径解析为基于 plugin_path 的绝对路径，避免依赖进程 cwd
+    let exe_path_abs = if Path::new(&exe_path).is_absolute() {
+        PathBuf::from(&exe_path)
+    } else if exe_path.starts_with("./") || exe_path.starts_with("../") {
+        let joined = plugin_path.join(&exe_path);
+        if joined.exists() {
+            joined.canonicalize().unwrap_or(joined)
+        } else {
+            eprintln!("[cli] 可执行文件不存在: {} (从 plugin_path 解析)", joined.display());
+            return Err(format!(
+                "可执行文件不存在: {}。请确保已构建 opt-detector 并放入 tools/opt-detector/ 目录",
+                joined.display()
+            ));
+        }
+    } else {
+        Path::new(&exe_path)
+            .canonicalize()
+            .unwrap_or_else(|_| {
+                let in_plugin = plugin_path.join(&exe_path);
+                if in_plugin.exists() {
+                    in_plugin.canonicalize().unwrap_or(in_plugin)
+                } else {
+                    eprintln!("[cli] 可执行文件不存在: {} 或 {}", exe_path, in_plugin.display());
+                    PathBuf::from(&exe_path)
+                }
+            })
+    };
+
+    if !exe_path_abs.exists() {
+        return Err(format!(
+            "可执行文件不存在: {}。请确保已构建 opt-detector 并放入 tools/opt-detector/ 目录",
+            exe_path_abs.display()
+        ));
+    }
+
     let cwd = plugin_path
         .canonicalize()
         .unwrap_or_else(|_| plugin_path.to_path_buf());
