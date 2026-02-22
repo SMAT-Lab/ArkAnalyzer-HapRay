@@ -3,9 +3,17 @@ const path = require('path');
 const fs = require('fs');
 const copyFile = require('./copy_file');
 
+const DIST_DIR = path.join(__dirname, '../dist');
 const DIST_TOOLS_DIR = path.join(__dirname, '../dist/tools');
 const TRACE_STREAMER_BIN = ['trace_streamer_linux', 'trace_streamer_mac', 'trace_streamer_windows.exe'];
 const HILOGTOOL_BIN = ['hilogtool', 'hilogtool.exe'];
+
+function removeDistDir() {
+    if (fs.existsSync(DIST_DIR)) {
+        fs.rmSync(DIST_DIR, { recursive: true, force: true });
+        console.log('已删除 dist 目录');
+    }
+}
 
 function ensureDistToolsDir() {
     if (!fs.existsSync(DIST_TOOLS_DIR)) {
@@ -150,6 +158,7 @@ function cleanupHilogtool(basePath) {
     }
 }
 
+removeDistDir();
 unzipFile('trace_streamer_binary.zip', 'trace_streamer_binary');
 unzipFile('xvm.zip', 'xvm');
 unzipFile('hilogtool.zip', 'hilogtool');

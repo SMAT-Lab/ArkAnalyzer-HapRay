@@ -13,7 +13,7 @@
     "desktop"
   ],
   "scripts": {
-    "prebuild": "node scripts/unzip_third-party.js",
+    "prebuild": "node scripts/prebuild.js",
     "build": "npm run build --ws",
     "release": "node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
