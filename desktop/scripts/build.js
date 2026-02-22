@@ -82,7 +82,7 @@ function createDmgWithBundleScript() {
 
   console.log("正在调用 bundle_dmg.sh 生成 .dmg...");
   run("bash", [bundleDmgSh, ...args], {
-    env: { ...process.env, CI: "1" },
+    env: { ...process.env, CI: "true" },
   });
 }
 
@@ -158,7 +158,7 @@ function main() {
       // 但我们只需要 bundle_dmg.sh 文件，后续用 --skip-jenkins 自行调用即可
       console.log("bundle_dmg.sh 不存在，先运行 tauri bundle 以创建 dmg 工具...");
       const bundleOk = runOptional("node", [runWithCargo, "npx", "tauri", "bundle", "--bundles", "dmg"], {
-        env: { ...process.env, CI: "1" },
+        env: { ...process.env, CI: "true" },
       });
       if (!fs.existsSync(bundleDmgSh)) {
         console.error("错误: tauri bundle 未生成 bundle_dmg.sh，无法继续");
