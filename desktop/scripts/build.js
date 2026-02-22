@@ -18,6 +18,8 @@ const bundleBase = path.resolve(__dirname, "../src-tauri/target/release/bundle")
 const macosDir = path.join(bundleBase, "macos");
 const dmgDir = path.join(bundleBase, "dmg");
 const bundleDmgSh = path.join(dmgDir, "bundle_dmg.sh");
+// 项目根目录的 dist（desktop 的祖父目录）
+const rootDistDir = path.resolve(__dirname, "../../dist");
 
 function run(cmd, args = [], options = {}) {
   const result = spawnSync(cmd, args, {
@@ -73,6 +75,62 @@ function createDmgWithBundleScript() {
   });
 }
 
+/**
+ * 将 desktop 构建产物复制到项目根目录 ./dist，供 e2e 测试和 release 使用
+ * 结构: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/Contents/MacOS/desktop, dist/tools/
+ */
+function copyToDist() {
+  const tauriConf = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../src-tauri/tauri.conf.json"), "utf-8"));
+  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
+  const appName = `${productName}.app`;
+  const appPath = path.join(macosDir, appName);
+  const exeInApp = path.join(appPath, "Contents", "MacOS", "desktop");
+  const toolsInApp = path.join(appPath, "Contents", "Resources", "tools");
+
+  if (!fs.existsSync(appPath) || !fs.existsSync(exeInApp)) {
+    console.warn("跳过 copyToDist: .app 或可执行文件不存在");
+    return;
+  }
+
+  fs.mkdirSync(rootDistDir, { recursive: true });
+
+  const distAppPath = path.join(rootDistDir, appName);
+  const distExePath = path.join(rootDistDir, productName);
+  const distToolsPath = path.join(rootDistDir, "tools");
+
+  if (fs.existsSync(distAppPath)) {
+    fs.rmSync(distAppPath, { recursive: true });
+  }
+  copyDirSync(appPath, distAppPath);
+
+  if (fs.existsSync(distExePath)) {
+    fs.unlinkSync(distExePath);
+  }
+  fs.symlinkSync(path.join(appName, "Contents", "MacOS", "desktop"), distExePath, "file");
+
+  if (fs.existsSync(toolsInApp)) {
+    if (fs.existsSync(distToolsPath)) {
+      fs.rmSync(distToolsPath, { recursive: true });
+    }
+    copyDirSync(toolsInApp, distToolsPath);
+  }
+
+  console.log(`✓ 构建产物已复制到 ${rootDistDir}`);
+}
+
+function copyDirSync(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirSync(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 function main() {
   if (process.platform === "darwin") {
     // macOS: app -> merge -> dmg，确保 dmg 包含 merge 后的内容
@@ -92,6 +150,8 @@ function main() {
       run("node", [mergeScript]);
     }
     createDmgWithBundleScript();
+    console.log("\nStep 4: 复制产物到 ./dist...");
+    copyToDist();
   } else {
     // 其他平台：保持原有流程
     console.log("构建应用...");
@@ -99,6 +159,9 @@ function main() {
 
     console.log("\n对 bundle 内 tools 做硬链接合并...");
     run("node", [mergeScript]);
+
+    console.log("\n复制产物到 ./dist...");
+    copyToDist();
   }
 }
 
