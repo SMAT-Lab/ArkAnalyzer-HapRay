@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "HapRay",
+  "productName": "ArkAnalyzer-HapRay",
   "version": "1.5.0",
   "identifier": "hapray.desktop",
   "build": {
@@ -15,7 +15,7 @@
       {
         "label": "main",
         "create": false,
-        "title": "Hapray",
+        "title": "ArkAnalyzer-HapRay",
         "url": "/",
         "decorations": true,
         "dragDropEnabled": false,

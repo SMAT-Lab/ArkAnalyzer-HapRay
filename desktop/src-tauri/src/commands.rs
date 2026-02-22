@@ -1,5 +1,6 @@
 //! Tauri 命令 - 插件加载、工具执行与配置管理
 
+use crate::cli::CliRunPayload;
 use crate::plugins::{build_sidebar_menu, get_plugins_dir, load_plugins_with_log, resolve_plugin_dir, PluginMetadata, SidebarMenu};
 #[derive(Debug, Serialize)]
 pub struct LoadPluginsResult {
@@ -16,6 +17,19 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use tauri::Manager;
+
+/// 获取待执行的 CLI 参数（启动时通过命令行传入），取走后清空
+#[tauri::command]
+pub async fn get_pending_cli_run_command(
+    app: tauri::AppHandle,
+) -> Result<Option<CliRunPayload>, String> {
+    let state = app
+        .try_state::<std::sync::Mutex<Option<CliRunPayload>>>()
+        .ok_or_else(|| "状态未初始化".to_string())?;
+    let mut guard = state.lock().map_err(|e| format!("锁失败: {}", e))?;
+    Ok(guard.take())
+}
+
 fn get_config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let home = app
         .path()

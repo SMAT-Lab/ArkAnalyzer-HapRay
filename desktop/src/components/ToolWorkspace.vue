@@ -221,6 +221,8 @@ import type { ExecutionRecord } from "../composables/useHistory"
 const props = defineProps<{
   plugin: PluginMetadata | null
   action: string | null
+  /** 命令行传入的初始参数，用于自动执行 */
+  initialParams?: Record<string, unknown> | null
   selectedHistoryRecord?: ExecutionRecord | null
 }>()
 
@@ -499,6 +501,31 @@ watch(
         loadDynamicChoices(key, param.choices)
       }
     }
+  },
+  { immediate: true }
+)
+
+// 命令行传入的 initialParams：应用后自动执行
+watch(
+  () => props.initialParams,
+  (params) => {
+    if (!params || !props.plugin || !props.action || Object.keys(params).length === 0) return
+    nextTick(() => {
+      for (const [key, param] of Object.entries(parameters.value)) {
+        if (key in params) {
+          const val = params[key]
+          if (param.nargs) {
+            formData.value = {
+              ...formData.value,
+              [key]: Array.isArray(val) ? val : val != null ? [val] : [],
+            }
+          } else {
+            formData.value = { ...formData.value, [key]: val }
+          }
+        }
+      }
+      execute()
+    })
   },
   { immediate: true }
 )

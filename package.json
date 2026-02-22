@@ -5,7 +5,6 @@
   "private": true,
   "files": [],
   "workspaces": [
-    "hapray-gui",
     "web",
     "tools/static_analyzer",
     "perf_testing",
@@ -14,7 +13,8 @@
     "desktop"
   ],
   "scripts": {
-    "build": "npm run build --ws && node scripts/unzip_third-party.js",
+    "prebuild": "node scripts/unzip_third-party.js",
+    "build": "npm run build --ws",
     "release": "node scripts/merge_duplicates.js && node scripts/zip.js ArkAnalyzer-HapRay",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
