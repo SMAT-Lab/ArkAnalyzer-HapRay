@@ -1,9 +1,10 @@
-//! 工具执行 - 命令构建、可执行文件解析、参数转换
+//! 工具执行 - 命令构建、可执行文件解析、参数转换（CLI 与 GUI 共用）
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::common;
+use crate::plugins;
 
 /// 当前平台是否应跳过 .exe 条目（macOS/Linux 无法执行 Windows .exe）
 fn should_skip_exe() -> bool {
@@ -147,4 +148,108 @@ pub fn push_param_as_args(
         }
         _ => {}
     }
+}
+
+/// 准备执行工具命令（CLI 与 GUI 共用）
+#[derive(Debug)]
+pub struct PreparedToolCommand {
+    pub exe_path: PathBuf,
+    pub args: Vec<String>,
+    pub cwd: PathBuf,
+    pub meta: serde_json::Value,
+}
+
+/// 解析插件目录、读取配置并构建可执行路径与参数（CLI 与 GUI 共用）
+pub fn prepare_tool_command(
+    plugins_dir: &Path,
+    plugin_id: &str,
+    action: &str,
+    params: &mut HashMap<String, serde_json::Value>,
+) -> Result<PreparedToolCommand, String> {
+    let plugin_dir = plugins::resolve_plugin_dir(plugins_dir, plugin_id).ok_or_else(|| {
+        format!(
+            "插件不存在: 未找到 id={} (plugins_dir: {})",
+            plugin_id,
+            plugins_dir.display()
+        )
+    })?;
+
+    let plugin_json_path = plugin_dir.join("plugin.json");
+    let content = std::fs::read_to_string(&plugin_json_path)
+        .map_err(|e| format!("读取插件配置失败: {}", e))?;
+    let meta: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("解析插件配置失败: {}", e))?;
+
+    let execution = meta
+        .get("execution")
+        .and_then(|e| e.get("release").or_else(|| e.get("debug")))
+        .ok_or("execution 配置缺失")?;
+
+    let cmd_arr = execution
+        .get("cmd")
+        .and_then(|c| c.as_array())
+        .ok_or("cmd 配置缺失")?;
+
+    let executable = pick_executable(cmd_arr, &plugin_dir);
+    let script = execution.get("script").and_then(|s| s.as_str());
+    let plugin_path = plugin_dir
+        .canonicalize()
+        .unwrap_or_else(|_| plugin_dir.to_path_buf());
+
+    let mut args: Vec<String> = Vec::new();
+    if let Some(s) = script {
+        args.push(s.to_string());
+    }
+
+    params.insert("action".to_string(), serde_json::json!(action));
+    apply_action_mapping(&meta, action, params, &mut args);
+
+    for (key, value) in params.drain() {
+        push_param_as_args(&key, value, &mut args);
+    }
+
+    let exe_path = resolve_executable(&executable, &plugin_path);
+
+    let exe_path_abs = if Path::new(&exe_path).is_absolute() {
+        PathBuf::from(&exe_path)
+    } else if exe_path.starts_with("./") || exe_path.starts_with("../") {
+        let joined = plugin_path.join(&exe_path);
+        if joined.exists() {
+            joined.canonicalize().unwrap_or(joined)
+        } else {
+            return Err(format!(
+                "可执行文件不存在: {}。请确保已构建并放入插件目录",
+                joined.display()
+            ));
+        }
+    } else {
+        Path::new(&exe_path)
+            .canonicalize()
+            .unwrap_or_else(|_| {
+                let in_plugin = plugin_path.join(&exe_path);
+                if in_plugin.exists() {
+                    in_plugin.canonicalize().unwrap_or(in_plugin)
+                } else {
+                    PathBuf::from(&exe_path)
+                }
+            })
+    };
+
+    if !exe_path_abs.exists() {
+        return Err(format!(
+            "可执行文件不存在: {}。请确保已构建并放入插件目录",
+            exe_path_abs.display()
+        ));
+    }
+
+    let cwd = plugin_path
+        .canonicalize()
+        .unwrap_or_else(|_| plugin_path.to_path_buf());
+
+    Ok(PreparedToolCommand {
+        exe_path: exe_path_abs,
+        args,
+        cwd,
+        meta,
+    })
 }

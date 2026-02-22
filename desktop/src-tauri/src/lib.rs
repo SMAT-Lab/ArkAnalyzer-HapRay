@@ -1,7 +1,7 @@
 mod commands;
 pub mod common;
 pub mod execution;
-mod plugins;
+pub mod plugins;
 
 use tauri::WebviewWindowBuilder;
 #[cfg(windows)]

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use desktop_lib::{common, execution};
+use desktop_lib::{common, execution, plugins::load_plugins_with_log};
 
 // -----------------------------------------------------------------------------
 // 类型定义
@@ -36,32 +36,50 @@ fn plugins_dir_from_workspace() -> Option<PathBuf> {
     None
 }
 
+/// 检查目录是否包含至少一个有效插件（有 plugin.json 的子目录）
+fn plugins_dir_has_plugins(p: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(p) else {
+        return false;
+    };
+    entries.flatten().any(|e| {
+        let path = e.path();
+        path.is_dir() && path.join("plugin.json").exists()
+    })
+}
+
 fn plugins_dir_from_exe() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe = exe.canonicalize().unwrap_or(exe);
     eprintln!("[cli] exe: {}", exe.display());
     let parent = exe.parent()?;
     eprintln!("[cli] exe.parent: {}", parent.display());
-    
-    #[cfg(target_os = "macos")]
-    if let Some(contents) = parent.parent() {
-        let tools = contents.join("Resources").join("tools");
-        if tools.exists() {
-            return Some(tools);
+
+    let candidates: Vec<PathBuf> = {
+        let mut v = Vec::new();
+        #[cfg(target_os = "macos")]
+        if let Some(contents) = parent.parent() {
+            v.push(contents.join("Resources").join("tools"));
+        }
+        v.extend([
+            parent.join("../Resources/tools"),
+            parent.join("../tools"),
+            parent.join("../../dist/tools"),
+            parent.join("../../../tools"), // dist/ArkAnalyzer-HapRay.app/Contents/MacOS -> dist/tools
+            parent.join("tools"),
+        ]);
+        v
+    };
+
+    for tools in &candidates {
+        if tools.exists() && plugins_dir_has_plugins(tools) {
+            return Some(tools.clone());
         }
     }
 
-    let relative_paths = [
-        "../Resources/tools",
-        "../tools",
-        "../../dist/tools",
-        "tools",
-    ];
-
-    for rel in relative_paths {
-        let tools = parent.join(rel);
+    // 若所有候选都无有效插件，返回第一个存在的（兼容空目录场景）
+    for tools in &candidates {
         if tools.exists() {
-            return Some(tools);
+            return Some(tools.clone());
         }
     }
 
@@ -76,97 +94,25 @@ fn config_file_path() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".hapray-gui").join("config.json"))
 }
 
-// -----------------------------------------------------------------------------
-// 插件元数据
-// -----------------------------------------------------------------------------
-
-fn read_plugin_json(plugin_dir: &Path) -> Option<serde_json::Value> {
-    let path = plugin_dir.join("plugin.json");
-    let content = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&content).ok()
-}
-
-fn find_plugin_dir_by_id(plugins_dir: &Path, plugin_id: &str) -> Option<PathBuf> {
-    let direct = plugins_dir.join(plugin_id).join("plugin.json");
-    if direct.exists() {
-        return Some(plugins_dir.join(plugin_id));
-    }
-
-    for entry in std::fs::read_dir(plugins_dir).ok()?.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let meta = read_plugin_json(&path)?;
-        if meta.get("id").and_then(|v| v.as_str()) == Some(plugin_id) {
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn build_action_registry(plugins_dir: &Path) -> HashMap<String, String> {
-    let mut registry = HashMap::new();
-
-    let entries = match std::fs::read_dir(plugins_dir) {
-        Ok(e) => e,
-        Err(_) => return registry,
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        let meta = match read_plugin_json(&path) {
-            Some(m) => m,
-            None => continue,
-        };
-
-        let plugin_id = meta
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .unwrap_or_else(|| path.file_name().unwrap().to_string_lossy().to_string());
-
-        if let Some(actions) = meta.get("actions").and_then(|a| a.as_object()) {
-            for action_key in actions.keys() {
-                registry.insert(action_key.clone(), plugin_id.clone());
-            }
-        }
-    }
-    registry
-}
-
-fn short_option_mappings(
-    plugins_dir: &Path,
-    plugin_id: &str,
-    action: &str,
-) -> Option<HashMap<String, String>> {
-    let plugin_dir = find_plugin_dir_by_id(plugins_dir, plugin_id)?;
-    let meta = read_plugin_json(&plugin_dir)?;
-    let params = meta
-        .get("actions")
-        .and_then(|a| a.get(action))
-        .and_then(|ac| ac.get("parameters"))
-        .and_then(|p| p.as_object())?;
-
-    let mut mappings = HashMap::new();
-    for (param_name, param_def) in params {
-        if let Some(short) = param_def.get("short").and_then(|s| s.as_str()) {
-            mappings.insert(short.to_string(), param_name.clone());
-        }
-    }
-    Some(mappings)
-}
-
-fn short_option_mappings_or_empty(
-    plugins_dir: &Path,
+/// 从已加载的插件中提取短参数映射 (short -> param_name)
+fn short_option_mappings_from_plugins(
+    plugins: &[desktop_lib::plugins::PluginMetadata],
     plugin_id: &str,
     action: &str,
 ) -> HashMap<String, String> {
-    short_option_mappings(plugins_dir, plugin_id, action).unwrap_or_default()
+    let mut mappings = HashMap::new();
+    let Some(meta) = plugins.iter().find(|p| p.id == plugin_id) else {
+        return mappings;
+    };
+    let Some(action_config) = meta.actions.get(action) else {
+        return mappings;
+    };
+    for (param_name, param_def) in &action_config.parameters {
+        if let Some(ref short) = param_def.short {
+            mappings.insert(short.clone(), param_name.clone());
+        }
+    }
+    mappings
 }
 
 // -----------------------------------------------------------------------------
@@ -251,9 +197,14 @@ fn parse_cli_request(
         return None;
     }
 
-    let registry = build_action_registry(plugins_dir);
+    let plugins_path = plugins_dir.to_path_buf();
+    let (plugins, _log) = load_plugins_with_log(&plugins_path);
+    let registry: HashMap<String, String> = plugins
+        .iter()
+        .flat_map(|meta| meta.actions.keys().map(move |k| (k.clone(), meta.id.clone())))
+        .collect();
     let plugin_id = registry.get(&action)?.clone();
-    let short_to_param = short_option_mappings_or_empty(plugins_dir, &plugin_id, &action);
+    let short_to_param = short_option_mappings_from_plugins(&plugins, &plugin_id, &action);
     let params = parse_raw_args(&raw_args[2..], &short_to_param);
 
     Some(CliRunRequest {
@@ -305,98 +256,21 @@ fn execute_tool(
 ) -> Result<i32, String> {
     eprintln!("[cli] plugins_dir: {}", plugins_dir.display());
 
-    let plugin_dir = find_plugin_dir_by_id(plugins_dir, &request.plugin_id).ok_or_else(|| {
-        format!(
-            "插件不存在: 未找到 id={} (plugins_dir: {})",
-            request.plugin_id,
-            plugins_dir.display()
-        )
-    })?;
-    eprintln!("[cli] plugin_dir: {}", plugin_dir.display());
+    let prepared =
+        execution::prepare_tool_command(plugins_dir, &request.plugin_id, &request.action, &mut request.params)?;
 
-    let meta = read_plugin_json(&plugin_dir)
-        .ok_or_else(|| "读取插件配置失败".to_string())?;
+    eprintln!("[cli] plugin_dir (cwd): {}", prepared.cwd.display());
+    eprintln!("[cli] resolved exe_path: {}", prepared.exe_path.display());
+    log_command(prepared.exe_path.to_str().unwrap_or(""), &prepared.args);
 
-    let execution = meta
-        .get("execution")
-        .and_then(|e| e.get("release").or_else(|| e.get("debug")))
-        .ok_or("execution 配置缺失")?;
-
-    let cmd_arr = execution
-        .get("cmd")
-        .and_then(|c| c.as_array())
-        .ok_or("cmd 配置缺失")?;
-
-    let executable = execution::pick_executable(cmd_arr, &plugin_dir);
-    eprintln!("[cli] picked executable (raw): {}", executable);
-
-    let script = execution.get("script").and_then(|s| s.as_str());
-    let plugin_path = plugin_dir.canonicalize().unwrap_or_else(|_| plugin_dir.to_path_buf());
-
-    let mut args: Vec<String> = Vec::new();
-    if let Some(s) = script {
-        args.push(s.to_string());
-    }
-
-    request.params.insert("action".to_string(), serde_json::json!(request.action.clone()));
-    execution::apply_action_mapping(&meta, &request.action, &mut request.params, &mut args);
-
-    for (key, value) in request.params.drain() {
-        execution::push_param_as_args(&key, value, &mut args);
-    }
-
-    let exe_path = execution::resolve_executable(&executable, &plugin_path);
-    eprintln!("[cli] resolved exe_path: {}", exe_path);
-
-    // 将相对路径解析为基于 plugin_path 的绝对路径，避免依赖进程 cwd
-    let exe_path_abs = if Path::new(&exe_path).is_absolute() {
-        PathBuf::from(&exe_path)
-    } else if exe_path.starts_with("./") || exe_path.starts_with("../") {
-        let joined = plugin_path.join(&exe_path);
-        if joined.exists() {
-            joined.canonicalize().unwrap_or(joined)
-        } else {
-            eprintln!("[cli] 可执行文件不存在: {} (从 plugin_path 解析)", joined.display());
-            return Err(format!(
-                "可执行文件不存在: {}。请确保已构建 opt-detector 并放入 tools/opt-detector/ 目录",
-                joined.display()
-            ));
-        }
-    } else {
-        Path::new(&exe_path)
-            .canonicalize()
-            .unwrap_or_else(|_| {
-                let in_plugin = plugin_path.join(&exe_path);
-                if in_plugin.exists() {
-                    in_plugin.canonicalize().unwrap_or(in_plugin)
-                } else {
-                    eprintln!("[cli] 可执行文件不存在: {} 或 {}", exe_path, in_plugin.display());
-                    PathBuf::from(&exe_path)
-                }
-            })
-    };
-
-    if !exe_path_abs.exists() {
-        return Err(format!(
-            "可执行文件不存在: {}。请确保已构建 opt-detector 并放入 tools/opt-detector/ 目录",
-            exe_path_abs.display()
-        ));
-    }
-
-    let cwd = plugin_path
-        .canonicalize()
-        .unwrap_or_else(|_| plugin_path.to_path_buf());
-
-    log_command(exe_path_abs.to_str().unwrap_or(&exe_path), &args);
-
-    let mut cmd = Command::new(&exe_path_abs);
+    let mut cmd = Command::new(&prepared.exe_path);
     for (k, v) in load_plugin_env_config(&request.plugin_id) {
         cmd.env(k, v);
     }
 
     let status = cmd
-        .args(&args)
-        .current_dir(&cwd)
+        .args(&prepared.args)
+        .current_dir(&prepared.cwd)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
@@ -453,6 +327,7 @@ pub fn run(args: &[String]) -> ! {
             std::process::exit(1);
         }
     };
+    eprintln!("[cli] plugins_dir: {}", plugins_dir.display());
 
     let request = match parse_cli_request(&plugins_dir, args) {
         Some(r) => r,

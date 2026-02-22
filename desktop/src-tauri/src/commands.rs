@@ -2,7 +2,7 @@
 
 use crate::common;
 use crate::execution;
-use crate::plugins::{build_sidebar_menu, get_plugins_dir, load_plugins_with_log, resolve_plugin_dir, PluginMetadata, SidebarMenu};
+use crate::plugins::{build_sidebar_menu, get_plugins_dir, load_plugins_with_log, PluginMetadata, SidebarMenu};
 
 #[derive(Debug, Serialize)]
 pub struct LoadPluginsResult {
@@ -202,62 +202,26 @@ pub async fn execute_tool_command(
     payload: ExecuteToolPayload,
 ) -> Result<ExecuteToolResult, String> {
     let plugins_dir = get_plugins_dir(&app).ok_or_else(|| "插件目录不存在".to_string())?;
-    let plugin_dir = match resolve_plugin_dir(&plugins_dir, &payload.plugin_id) {
-        Some(d) => d,
-        None => {
+    let mut params = payload.params.clone();
+    let prepared = match execution::prepare_tool_command(
+        &plugins_dir,
+        &payload.plugin_id,
+        &payload.action,
+        &mut params,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
             return Ok(ExecuteToolResult {
                 success: false,
-                message: format!(
-                    "插件不存在: 未找到 id={} (plugins_dir: {})",
-                    payload.plugin_id,
-                    plugins_dir.display()
-                ),
+                message: e,
                 output: String::new(),
             });
         }
     };
-    let plugin_json_path = plugin_dir.join("plugin.json");
 
-    let content = std::fs::read_to_string(&plugin_json_path)
-        .map_err(|e| format!("读取插件配置失败: {}", e))?;
-    let meta: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("解析插件配置失败: {}", e))?;
-
-    let execution = meta
-        .get("execution")
-        .and_then(|e| e.get("release").or_else(|| e.get("debug")))
-        .ok_or("execution 配置缺失")?;
-
-    let cmd_arr = execution
-        .get("cmd")
-        .and_then(|c| c.as_array())
-        .ok_or("cmd 配置缺失")?;
-
-    let executable = execution::pick_executable(cmd_arr, &plugin_dir);
-
-    let script = execution.get("script").and_then(|s| s.as_str());
-    let plugin_path = plugin_dir.canonicalize().unwrap_or(plugin_dir);
-
-    // 构建参数
-    let mut args: Vec<String> = Vec::new();
-    if let Some(s) = script {
-        args.push(s.to_string());
-    }
-
-    let mut params = payload.params.clone();
-    params.insert("action".to_string(), serde_json::json!(payload.action));
-
-    execution::apply_action_mapping(&meta, &payload.action, &mut params, &mut args);
-
-    for (key, value) in params {
-        execution::push_param_as_args(&key, value, &mut args);
-    }
-
-    let exe_path = execution::resolve_executable(&executable, &plugin_path);
-    let cwd = plugin_path.to_str().unwrap_or(".");
-
-    // 构建完整命令字符串并 emit 到前端
-    let args_str: Vec<String> = args
+    let exe_path_str = prepared.exe_path.to_string_lossy();
+    let args_str: Vec<String> = prepared
+        .args
         .iter()
         .map(|a| {
             if a.contains(' ') || a.contains('"') || a.is_empty() {
@@ -267,19 +231,18 @@ pub async fn execute_tool_command(
             }
         })
         .collect();
-    let full_cmd = format!("执行命令:\n$ {} {}\n\n", exe_path, args_str.join(" "));
+    let full_cmd = format!("执行命令:\n$ {} {}\n\n", exe_path_str, args_str.join(" "));
     let _ = app.emit("tool-command", &full_cmd);
 
-    // 获取插件配置并作为环境变量传递（参考 tool_executor.py）
     let plugin_config = get_plugin_config(&app, &payload.plugin_id)?;
-    let mut cmd_builder = Command::new(&exe_path);
+    let mut cmd_builder = Command::new(&prepared.exe_path);
     for (env_key, env_value) in plugin_config {
         cmd_builder.env(env_key, env_value);
     }
 
     let mut child = match cmd_builder
-        .args(&args)
-        .current_dir(cwd)
+        .args(&prepared.args)
+        .current_dir(&prepared.cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -361,7 +324,7 @@ pub async fn execute_tool_command(
         "执行失败".to_string()
     };
 
-    let output_path = extract_output_path(&payload.params, Path::new(cwd));
+    let output_path = extract_output_path(&payload.params, prepared.cwd.as_path());
 
     save_execution_record(
         &app,
@@ -370,7 +333,7 @@ pub async fn execute_tool_command(
         success,
         &message,
         &payload.params,
-        &meta,
+        &prepared.meta,
         &full_cmd,
         output_path.as_deref(),
         &output_log,

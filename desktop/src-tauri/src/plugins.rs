@@ -38,7 +38,10 @@ pub fn resolve_plugin_dir(plugins_dir: &Path, plugin_id: &str) -> Option<PathBuf
         }
         let content = std::fs::read_to_string(&plugin_json).ok()?;
         let meta: serde_json::Value = serde_json::from_str(&content).ok()?;
-        if meta.get("id").and_then(|v| v.as_str()) == Some(plugin_id) {
+        let json_id = meta.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let dir_name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+        // 与 load_plugins_with_log 一致：JSON 的 id 为空时用目录名作为 id
+        if json_id == plugin_id || (json_id.is_empty() && dir_name == plugin_id) {
             return Some(path);
         }
     }
