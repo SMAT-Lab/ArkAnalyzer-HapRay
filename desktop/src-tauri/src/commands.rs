@@ -1,6 +1,9 @@
 //! Tauri 命令 - 插件加载、工具执行与配置管理
 
-use crate::plugins::{build_sidebar_menu, get_plugins_dir, load_plugins_with_log, resolve_plugin_dir, PluginMetadata, SidebarMenu};
+use crate::common;
+use crate::execution;
+use crate::plugins::{build_sidebar_menu, get_plugins_dir, load_plugins_with_log, PluginMetadata, SidebarMenu};
+
 #[derive(Debug, Serialize)]
 pub struct LoadPluginsResult {
     pub plugins: Vec<PluginMetadata>,
@@ -16,6 +19,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use tauri::Manager;
+
 fn get_config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let home = app
         .path()
@@ -152,7 +156,16 @@ pub async fn load_plugins_command(app: tauri::AppHandle) -> Result<LoadPluginsRe
             p
         }
         None => {
-            load_log.push("[ERROR] 插件目录不存在，已尝试: 1) 开发环境 workspace/dist/tools 2) $RESOURCE/tools 及父级".to_string());
+            let tried = crate::plugins::get_plugins_dir_tried_paths(&app);
+            load_log.push(format!(
+                "[ERROR] 插件目录不存在，已尝试:\n{}",
+                tried
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("  {}) {}", i + 1, p))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ));
             return Err(load_log.join("\n"));
         }
     };
@@ -189,159 +202,26 @@ pub async fn execute_tool_command(
     payload: ExecuteToolPayload,
 ) -> Result<ExecuteToolResult, String> {
     let plugins_dir = get_plugins_dir(&app).ok_or_else(|| "插件目录不存在".to_string())?;
-    let plugin_dir = match resolve_plugin_dir(&plugins_dir, &payload.plugin_id) {
-        Some(d) => d,
-        None => {
+    let mut params = payload.params.clone();
+    let prepared = match execution::prepare_tool_command(
+        &plugins_dir,
+        &payload.plugin_id,
+        &payload.action,
+        &mut params,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
             return Ok(ExecuteToolResult {
                 success: false,
-                message: format!(
-                    "插件不存在: 未找到 id={} (plugins_dir: {})",
-                    payload.plugin_id,
-                    plugins_dir.display()
-                ),
+                message: e,
                 output: String::new(),
             });
         }
     };
-    let plugin_json_path = plugin_dir.join("plugin.json");
 
-    let content = std::fs::read_to_string(&plugin_json_path)
-        .map_err(|e| format!("读取插件配置失败: {}", e))?;
-    let meta: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("解析插件配置失败: {}", e))?;
-
-    let execution = meta
-        .get("execution")
-        .and_then(|e| e.get("release").or_else(|| e.get("debug")))
-        .ok_or("execution 配置缺失")?;
-
-    let cmd_arr = execution
-        .get("cmd")
-        .and_then(|c| c.as_array())
-        .ok_or("cmd 配置缺失")?;
-
-    // 从 cmd_arr 中选取第一个相对于 plugin.json 所在目录存在的可执行文件
-    let executable = cmd_arr
-        .iter()
-        .filter_map(|v| v.as_str())
-        .find_map(|cmd_str| {
-            let path = plugin_dir.join(cmd_str);
-            if path.exists() {
-                Some(path.to_string_lossy().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| {
-            cmd_arr
-                .first()
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        });
-
-    let script = execution.get("script").and_then(|s| s.as_str());
-    let plugin_path = plugin_dir.canonicalize().unwrap_or(plugin_dir);
-
-    // 构建参数
-    let mut args: Vec<String> = Vec::new();
-    if let Some(s) = script {
-        args.push(s.to_string());
-    }
-
-    let mut params = payload.params.clone();
-    params.insert("action".to_string(), serde_json::json!(payload.action));
-
-    // 处理 action 映射（参考 tool_executor.py）
-    let action_mapping = meta
-        .get("actions")
-        .and_then(|a| a.get(&payload.action))
-        .and_then(|ac| ac.get("action_mapping"))
-        .and_then(|am| am.as_object());
-
-    if let Some(mapping) = action_mapping {
-        let mapping_type = mapping.get("type").and_then(|t| t.as_str());
-        match mapping_type {
-            Some("position") => args.push(payload.action.clone()),
-            Some("remove") => {}
-            Some("map") => {
-                if let Some(cmd_arr) = mapping.get("command").and_then(|c| c.as_array()) {
-                    for item in cmd_arr {
-                        if let Some(s) = item.as_str() {
-                            if s.starts_with('{') && s.ends_with('}') {
-                                let placeholder_key = &s[1..s.len() - 1];
-                                if let Some(v) = params.remove(placeholder_key) {
-                                    let val = json_value_to_str(&v);
-                                    if !val.is_empty() {
-                                        args.push(val);
-                                    }
-                                }
-                            } else {
-                                args.push(s.to_string());
-                            }
-                        } else {
-                            args.push(json_value_to_str(item));
-                        }
-                    }
-                }
-            }
-            _ => args.push(payload.action.clone()),
-        }
-    } else {
-        args.push(payload.action.clone());
-    }
-
-    // 参考 tool_executor.py：参数转换逻辑
-    for (key, value) in params {
-        if key == "action" {
-            continue;
-        }
-        // 跳过 None 和空字符串
-        if value.is_null() {
-            continue;
-        }
-        match value {
-            serde_json::Value::String(s) if s.is_empty() => continue,
-            serde_json::Value::Bool(b) => {
-                // 特殊处理：trace 和 perf 参数，false 时添加 --no-trace/--no-perf
-                if key == "trace" {
-                    if !b {
-                        args.push("--no-trace".to_string());
-                    }
-                } else if key == "perf" {
-                    if !b {
-                        args.push("--no-perf".to_string());
-                    }
-                } else if b {
-                    args.push(format!("--{}", key));
-                }
-            }
-            serde_json::Value::Array(arr) => {
-                if !arr.is_empty() {
-                    args.push(format!("--{}", key));
-                    for v in arr {
-                        args.push(json_value_to_str(&v));
-                    }
-                }
-            }
-            serde_json::Value::String(s) => {
-                args.push(format!("--{}", key));
-                args.push(s);
-            }
-            serde_json::Value::Number(n) => {
-                args.push(format!("--{}", key));
-                args.push(n.to_string());
-            }
-            _ => {}
-        }
-    }
-
-    // 解析可执行文件路径
-    let exe_path = resolve_executable(&executable, &plugin_path);
-    let cwd = plugin_path.to_str().unwrap_or(".");
-
-    // 构建完整命令字符串并 emit 到前端
-    let args_str: Vec<String> = args
+    let exe_path_str = prepared.exe_path.to_string_lossy();
+    let args_str: Vec<String> = prepared
+        .args
         .iter()
         .map(|a| {
             if a.contains(' ') || a.contains('"') || a.is_empty() {
@@ -351,19 +231,18 @@ pub async fn execute_tool_command(
             }
         })
         .collect();
-    let full_cmd = format!("执行命令:\n$ {} {}\n\n", exe_path, args_str.join(" "));
+    let full_cmd = format!("执行命令:\n$ {} {}\n\n", exe_path_str, args_str.join(" "));
     let _ = app.emit("tool-command", &full_cmd);
 
-    // 获取插件配置并作为环境变量传递（参考 tool_executor.py）
     let plugin_config = get_plugin_config(&app, &payload.plugin_id)?;
-    let mut cmd_builder = Command::new(&exe_path);
+    let mut cmd_builder = Command::new(&prepared.exe_path);
     for (env_key, env_value) in plugin_config {
         cmd_builder.env(env_key, env_value);
     }
 
     let mut child = match cmd_builder
-        .args(&args)
-        .current_dir(cwd)
+        .args(&prepared.args)
+        .current_dir(&prepared.cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -445,7 +324,7 @@ pub async fn execute_tool_command(
         "执行失败".to_string()
     };
 
-    let output_path = extract_output_path(&payload.params, Path::new(cwd));
+    let output_path = extract_output_path(&payload.params, prepared.cwd.as_path());
 
     save_execution_record(
         &app,
@@ -454,7 +333,7 @@ pub async fn execute_tool_command(
         success,
         &message,
         &payload.params,
-        &meta,
+        &prepared.meta,
         &full_cmd,
         output_path.as_deref(),
         &output_log,
@@ -473,51 +352,7 @@ fn get_plugin_config(
     plugin_id: &str,
 ) -> Result<Vec<(String, String)>, String> {
     let path = get_config_path(app)?;
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("读取配置失败: {}", e))?;
-    let config: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("解析配置失败: {}", e))?;
-
-    let plugins = config
-        .get("plugins")
-        .and_then(|p| p.as_object())
-        .and_then(|p| p.get(plugin_id))
-        .and_then(|e| e.get("config"))
-        .and_then(|c| c.as_object());
-
-    let mut env_vars = Vec::new();
-    if let Some(config_obj) = plugins {
-        for (key, value) in config_obj {
-            let env_key = key.to_uppercase().replace('-', "_");
-            let env_value = match value {
-                serde_json::Value::Bool(b) => {
-                    if *b {
-                        "true".to_string()
-                    } else {
-                        "false".to_string()
-                    }
-                }
-                serde_json::Value::Null => String::new(),
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Number(n) => n.to_string(),
-                _ => value.to_string(),
-            };
-            env_vars.push((env_key, env_value));
-        }
-    }
-    Ok(env_vars)
-}
-
-fn json_value_to_str(v: &serde_json::Value) -> String {
-    match v {
-        serde_json::Value::String(s) => s.clone(),
-        serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::Bool(b) => b.to_string(),
-        serde_json::Value::Null => String::new(),
-        _ => v.to_string(),
-    }
+    common::load_plugin_env_config(&path, plugin_id)
 }
 
 /// 获取执行记录历史（参考 result_processor.get_result_history）
@@ -723,31 +558,4 @@ fn get_installed_apps() -> Result<Vec<String>, String> {
     apps.sort();
     apps.dedup();
     Ok(apps)
-}
-
-fn resolve_executable(cmd: &str, plugin_path: &Path) -> String {
-    let cmd_lower = cmd.to_lowercase();
-    if cmd_lower.contains("python") {
-        return "python".to_string();
-    }
-    if cmd_lower.contains("node") {
-        return "node".to_string();
-    }
-
-    // 相对路径
-    if cmd.starts_with("./") || cmd.starts_with("../") {
-        let joined = plugin_path.join(cmd);
-        if joined.exists() {
-            return joined.to_string_lossy().to_string();
-        }
-    }
-
-    // 插件目录下查找
-    let name = cmd.trim_start_matches("./");
-    let in_plugin = plugin_path.join(name);
-    if in_plugin.exists() {
-        return in_plugin.to_string_lossy().to_string();
-    }
-
-    cmd.to_string()
 }

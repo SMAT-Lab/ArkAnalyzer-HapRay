@@ -22,7 +22,6 @@ if (pathParts.length) {
 
 const result = spawnSync(process.argv[2], process.argv.slice(3), {
   stdio: "inherit",
-  shell: true,
   env,
 });
 process.exit(result.status ?? 1);

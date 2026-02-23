@@ -6,9 +6,23 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
+// -----------------------------------------------------------------------------
+// 常量
+// -----------------------------------------------------------------------------
+
+const DEFAULT_ORDER: i32 = 999;
+const DEFAULT_ICON: &str = "⚙️";
+const PLUGIN_JSON: &str = "plugin.json";
+
+/// 顶层菜单配置: (显示名, 图标, 排序)
+const TOP_MENUS: &[(&str, &str, i32)] = &[
+    ("负载测试", "📊", 1),
+    ("应用分析", "🔍", 2),
+];
+
 /// 根据 plugin_id 解析插件目录（支持目录名与 id 不一致，如 opt-detector 目录下 plugin.json 的 id 为 optimization_detector）
 pub fn resolve_plugin_dir(plugins_dir: &Path, plugin_id: &str) -> Option<PathBuf> {
-    let direct = plugins_dir.join(plugin_id).join("plugin.json");
+    let direct = plugins_dir.join(plugin_id).join(PLUGIN_JSON);
     if direct.exists() {
         return Some(plugins_dir.join(plugin_id));
     }
@@ -18,13 +32,16 @@ pub fn resolve_plugin_dir(plugins_dir: &Path, plugin_id: &str) -> Option<PathBuf
         if !path.is_dir() {
             continue;
         }
-        let plugin_json = path.join("plugin.json");
+        let plugin_json = path.join(PLUGIN_JSON);
         if !plugin_json.exists() {
             continue;
         }
         let content = std::fs::read_to_string(&plugin_json).ok()?;
         let meta: serde_json::Value = serde_json::from_str(&content).ok()?;
-        if meta.get("id").and_then(|v| v.as_str()) == Some(plugin_id) {
+        let json_id = meta.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let dir_name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+        // 与 load_plugins_with_log 一致：JSON 的 id 为空时用目录名作为 id
+        if json_id == plugin_id || (json_id.is_empty() && dir_name == plugin_id) {
             return Some(path);
         }
     }
@@ -65,10 +82,10 @@ pub struct MenuConfig {
 }
 
 fn default_order() -> i32 {
-    999
+    DEFAULT_ORDER
 }
 fn default_icon() -> String {
-    "⚙️".to_string()
+    DEFAULT_ICON.to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,43 +150,55 @@ pub struct SidebarMenu {
     pub items: Vec<MenuItem>,
 }
 
-pub fn get_plugins_dir(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
-    // 开发环境：优先 dist/tools（构建产物），不存在则用 tools/（源码）
+/// 返回插件目录的候选路径（按优先级），用于查找与错误诊断
+fn plugins_dir_candidates(app_handle: &tauri::AppHandle) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
     #[cfg(debug_assertions)]
     {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let workspace = manifest.parent()?.parent()?;
-        let dist_tools = workspace.join("dist").join("tools");
-        if dist_tools.exists() {
-            return Some(dist_tools);
+        if let Some(workspace) = manifest.parent().and_then(|p| p.parent()) {
+            candidates.push(workspace.join("dist").join("tools"));
+            candidates.push(workspace.join("tools"));
         }
-        let src_tools = workspace.join("tools");
-        if src_tools.exists() {
-            return Some(src_tools);
+        if let Some(desktop) = manifest.parent() {
+            candidates.push(desktop.join("dist").join("tools"));
         }
     }
 
-    // 打包后：优先从 $RESOURCE/tools 读取（bundle.resources 打包的插件）
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        let tools = resource_dir.join("tools");
-        if tools.exists() {
-            return Some(tools);
-        }
+        candidates.push(resource_dir.join("tools"));
         if let Some(parent) = resource_dir.parent() {
-            let tools = parent.join("tools");
-            if tools.exists() {
-                return Some(tools);
-            }
-            if let Some(grandparent) = parent.parent() {
-                let tools = grandparent.join("tools");
-                if tools.exists() {
-                    return Some(tools);
-                }
+            candidates.push(parent.join("tools"));
+            if let Some(gp) = parent.parent() {
+                candidates.push(gp.join("tools"));
             }
         }
     }
-    None
+
+    #[cfg(target_os = "macos")]
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(contents) = exe.parent().and_then(|p| p.parent()) {
+            candidates.push(contents.join("Resources").join("tools"));
+        }
+    }
+
+    candidates
 }
+
+/// 尝试的路径列表，用于错误诊断
+pub(crate) fn get_plugins_dir_tried_paths(app_handle: &tauri::AppHandle) -> Vec<String> {
+    plugins_dir_candidates(app_handle)
+        .into_iter()
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
+pub fn get_plugins_dir(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    plugins_dir_candidates(app_handle)
+        .into_iter()
+        .find(|p| p.exists())
+    }
 
 /// 加载插件并返回加载日志，用于诊断加载失败原因
 pub fn load_plugins_with_log(plugins_dir: &PathBuf) -> (Vec<PluginMetadata>, Vec<String>) {
@@ -195,7 +224,7 @@ pub fn load_plugins_with_log(plugins_dir: &PathBuf) -> (Vec<PluginMetadata>, Vec
             continue;
         }
 
-        let plugin_json = path.join("plugin.json");
+        let plugin_json = path.join(PLUGIN_JSON);
         if !plugin_json.exists() {
             log.push(format!("[SKIP] {}: 缺少 plugin.json", dir_name));
             continue;
@@ -236,12 +265,10 @@ pub fn load_plugins_with_log(plugins_dir: &PathBuf) -> (Vec<PluginMetadata>, Vec
 }
 
 pub fn build_sidebar_menu(plugins: &[PluginMetadata]) -> Vec<SidebarMenu> {
-    let top_menus: HashMap<String, (String, i32)> = [
-        ("负载测试".to_string(), ("📊".to_string(), 1)),
-        ("应用分析".to_string(), ("🔍".to_string(), 2)),
-    ]
-    .into_iter()
-    .collect();
+    let top_menus: HashMap<String, (String, i32)> = TOP_MENUS
+        .iter()
+        .map(|(name, icon, order)| ((*name).to_string(), ((*icon).to_string(), *order)))
+        .collect();
 
     let mut menu_actions: HashMap<String, Vec<MenuItem>> = HashMap::new();
 
