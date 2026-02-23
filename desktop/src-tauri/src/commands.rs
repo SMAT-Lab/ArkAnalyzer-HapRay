@@ -352,23 +352,7 @@ fn get_plugin_config(
     plugin_id: &str,
 ) -> Result<Vec<(String, String)>, String> {
     let path = get_config_path(app)?;
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("读取配置失败: {}", e))?;
-    let config: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("解析配置失败: {}", e))?;
-
-    let plugins = config
-        .get("plugins")
-        .and_then(|p| p.as_object())
-        .and_then(|p| p.get(plugin_id))
-        .and_then(|e| e.get("config"))
-        .and_then(|c| c.as_object());
-
-    Ok(plugins
-        .map(common::config_object_to_env_vars)
-        .unwrap_or_default())
+    common::load_plugin_env_config(&path, plugin_id)
 }
 
 /// 获取执行记录历史（参考 result_processor.get_result_history）

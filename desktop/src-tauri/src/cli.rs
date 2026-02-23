@@ -136,6 +136,15 @@ fn parse_long_arg(
     }
 }
 
+/// 常见短参数 fallback（当 plugin.json 的 short 映射缺失时使用）
+fn common_short_fallback(short: &str) -> Option<&'static str> {
+    match short {
+        "i" => Some("input"),
+        "o" => Some("output"),
+        _ => None,
+    }
+}
+
 fn parse_short_arg(
     short: &str,
     short_to_param: &HashMap<String, String>,
@@ -145,6 +154,7 @@ fn parse_short_arg(
     let param_key = short_to_param
         .get(short)
         .cloned()
+        .or_else(|| common_short_fallback(short).map(String::from))
         .unwrap_or_else(|| short.to_string());
 
     let value = if *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
@@ -219,31 +229,9 @@ fn parse_cli_request(
 // -----------------------------------------------------------------------------
 
 fn load_plugin_env_config(plugin_id: &str) -> Vec<(String, String)> {
-    let path = match config_file_path() {
-        Some(p) if p.exists() => p,
-        _ => return Vec::new(),
-    };
-
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
-    let config: serde_json::Value = match serde_json::from_str(&content) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
-    let config_obj = match config
-        .get("plugins")
-        .and_then(|p| p.as_object())
-        .and_then(|p| p.get(plugin_id))
-        .and_then(|e| e.get("config"))
-        .and_then(|c| c.as_object())
-    {
-        Some(obj) => obj,
-        None => return Vec::new(),
-    };
-
-    common::config_object_to_env_vars(config_obj)
+    config_file_path()
+        .and_then(|p| common::load_plugin_env_config(&p, plugin_id).ok())
+        .unwrap_or_default()
 }
 
 // -----------------------------------------------------------------------------
