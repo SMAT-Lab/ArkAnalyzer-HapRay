@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SidebarMenu } from "../composables/usePlugins"
+import type { SidebarMenu } from "../types"
 
 defineProps<{
   width: number

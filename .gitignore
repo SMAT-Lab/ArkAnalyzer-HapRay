@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-.npmrc
 package-lock.json
 .DS_Store
 

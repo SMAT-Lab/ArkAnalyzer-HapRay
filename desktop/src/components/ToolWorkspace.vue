@@ -215,12 +215,17 @@
 import { ref, watch, computed, onMounted, onUnmounted, nextTick } from "vue"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import type { PluginMetadata, ActionConfig, ParameterDef } from "../composables/usePlugins"
-import type { ExecutionRecord } from "../composables/useHistory"
+import type { PluginMetadata, ActionConfig, ParameterDef } from "../types"
+import type { ExecutionRecord } from "../types"
+import { isTauriEnv, openPath as openPathUtil } from "../utils/tauri"
+
+const hasTauri = isTauriEnv()
 
 const props = defineProps<{
   plugin: PluginMetadata | null
   action: string | null
+  /** 命令行传入的初始参数，用于自动执行 */
+  initialParams?: Record<string, unknown> | null
   selectedHistoryRecord?: ExecutionRecord | null
 }>()
 
@@ -240,8 +245,6 @@ const loadingChoicesKeys = ref<Set<string>>(new Set())
 const nargsInputTemp = ref<Record<string, string | number>>({})
 /** choice multi_select 下拉框的当前选中值（添加前） */
 const choiceMultiTemp = ref<Record<string, string>>({})
-
-const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
 
 /** tool-output / tool-command 事件取消监听函数 */
 let unlistenToolOutput: (() => void) | null = null
@@ -342,12 +345,7 @@ function getChoices(param: ParameterDef, paramKey: string): string[] {
 }
 
 async function openPath(path: string) {
-  if (!hasTauri) return
-  try {
-    await invoke("open_path_command", { path })
-  } catch {
-    // 打开失败时静默处理
-  }
+  await openPathUtil(path)
 }
 
 async function browsePath(paramKey: string, paramType: string) {
@@ -368,7 +366,6 @@ async function browsePath(paramKey: string, paramType: string) {
 }
 
 async function loadDynamicChoices(paramKey: string, choicesFunc: string) {
-  const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
   if (!hasTauri) return
   loadingChoicesKeys.value = new Set([...loadingChoicesKeys.value, paramKey])
   try {
@@ -503,6 +500,31 @@ watch(
   { immediate: true }
 )
 
+// 命令行传入的 initialParams：应用后自动执行
+watch(
+  () => props.initialParams,
+  (params) => {
+    if (!params || !props.plugin || !props.action || Object.keys(params).length === 0) return
+    nextTick(() => {
+      for (const [key, param] of Object.entries(parameters.value)) {
+        if (key in params) {
+          const val = params[key]
+          if (param.nargs) {
+            formData.value = {
+              ...formData.value,
+              [key]: Array.isArray(val) ? val : val != null ? [val] : [],
+            }
+          } else {
+            formData.value = { ...formData.value, [key]: val }
+          }
+        }
+      }
+      execute()
+    })
+  },
+  { immediate: true }
+)
+
 function parseNargsValue(value: unknown, param: ParameterDef): unknown {
   if (!param.nargs) return value
   if (Array.isArray(value)) return value
@@ -524,8 +546,6 @@ function buildParamsForExecute(): Record<string, unknown> {
 
 async function execute() {
   if (!props.plugin || !props.action) return
-
-  const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
   if (!hasTauri) {
     output.value = "请在 Tauri 环境中运行以执行工具"
     return

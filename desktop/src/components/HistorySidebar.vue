@@ -39,7 +39,7 @@
           </div>
           <div class="history-sidebar__item-meta">
             <span class="history-sidebar__item-action">{{ record.action_name || record.action || "" }}</span>
-            <span class="history-sidebar__item-time">{{ formatTime(record.timestamp) }}</span>
+            <span class="history-sidebar__item-time">{{ formatTimestamp(record.timestamp) }}</span>
           </div>
           <p v-if="record.message" class="history-sidebar__item-msg">{{ record.message }}</p>
         </div>
@@ -51,7 +51,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue"
 import { useHistory } from "../composables/useHistory"
-import type { ExecutionRecord } from "../composables/useHistory"
+import type { ExecutionRecord } from "../types"
+import { formatTimestamp } from "../utils/format"
 
 const props = withDefaults(
   defineProps<{
@@ -77,20 +78,6 @@ const sortedHistory = computed(() =>
 function selectRecord(record: ExecutionRecord) {
   selectedRecord.value = record
   emit("select", record)
-}
-
-function formatTime(ts?: string): string {
-  if (!ts) return ""
-  if (ts.length >= 15) {
-    const y = ts.slice(0, 4)
-    const m = ts.slice(4, 6)
-    const d = ts.slice(6, 8)
-    const h = ts.slice(9, 11)
-    const min = ts.slice(11, 13)
-    const s = ts.slice(13, 15)
-    return `${y}-${m}-${d} ${h}:${min}:${s}`
-  }
-  return ts
 }
 
 onMounted(() => {
