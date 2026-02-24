@@ -1,36 +1,26 @@
 import { ref } from "vue"
 import { invoke } from "@tauri-apps/api/core"
+import { isTauriEnv } from "../utils/tauri"
+import type { ExecutionRecord } from "../types"
 
-export interface ExecutionRecord {
-  tool_name?: string
-  plugin_id?: string
-  action?: string
-  action_name?: string
-  menu_category?: string
-  timestamp?: string
-  success?: boolean
-  message?: string
-  params?: Record<string, unknown>
-  command?: string
-  output_path?: string | null
-  output?: string
-  result_dir?: string
-}
+export type { ExecutionRecord }
 
 export function useHistory() {
   const history = ref<ExecutionRecord[]>([])
   const loading = ref(false)
 
-  const loadHistory = async (toolName?: string) => {
-    if (!(window as { __TAURI__?: unknown }).__TAURI__) {
+  const loadHistory = async (toolName?: string): Promise<void> => {
+    if (!isTauriEnv()) {
       history.value = []
       return
     }
+
     loading.value = true
     try {
-      history.value = (await invoke<ExecutionRecord[]>("get_execution_history_command", {
-        tool_name: toolName ?? null,
-      })) ?? []
+      history.value =
+        (await invoke<ExecutionRecord[]>("get_execution_history_command", {
+          tool_name: toolName ?? null,
+        })) ?? []
     } catch {
       history.value = []
     } finally {
