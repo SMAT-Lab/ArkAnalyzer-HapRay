@@ -85,6 +85,14 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
 
+    # Desktop (Tauri) 需要 Rust 环境
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Cache Cargo registry and target
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: desktop/src-tauri
+
     - name: Install dependencies
       run: |        
         npm install --no-package-lock
@@ -105,3 +113,11 @@ jobs:
       with:
         name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}
         path: opt-detector-*.zip
+
+    # macOS 构建产物：收集 Desktop .dmg 安装包
+    - name: Upload Desktop DMG (macOS)
+      if: matrix.item.platform == 'darwin'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ArkAnalyzer-HapRay-desktop-macos-${{ matrix.item.arch }}
+        path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
