@@ -17,6 +17,9 @@ use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -239,6 +242,8 @@ pub async fn execute_tool_command(
     for (env_key, env_value) in plugin_config {
         cmd_builder.env(env_key, env_value);
     }
+    #[cfg(windows)]
+    cmd_builder.creation_flags(0x08000000); // CREATE_NO_WINDOW，避免点击菜单时闪出命令行窗口
 
     let mut child = match cmd_builder
         .args(&prepared.args)
@@ -531,7 +536,13 @@ fn get_testcases(app: &tauri::AppHandle) -> Result<Vec<String>, String> {
 }
 
 fn get_installed_apps() -> Result<Vec<String>, String> {
-    let output = std::process::Command::new("hdc")
+    let mut cmd = std::process::Command::new("hdc");
+    #[cfg(windows)]
+    {
+        // CREATE_NO_WINDOW，避免加载应用包名（调用 hdc）时闪出命令行窗口
+        cmd.creation_flags(0x08000000);
+    }
+    let output = cmd
         .args(["shell", "bm", "dump", "-a"])
         .output()
         .map_err(|e| {
