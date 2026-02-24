@@ -13,7 +13,10 @@
       <template v-if="mac">
         <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
       </template>
-      <div class="flex-1 h-full" data-tauri-drag-region />
+      <div class="flex items-center gap-2 h-full" data-tauri-drag-region>
+        <span class="px-2 text-xs font-semibold text-muted-foreground select-none">HapRay</span>
+        <div class="flex-1 h-full" />
+      </div>
       <div class="flex gap-3 shrink-0 flex-1 justify-end items-center pr-2" data-tauri-drag-region>
         <button
           type="button"
