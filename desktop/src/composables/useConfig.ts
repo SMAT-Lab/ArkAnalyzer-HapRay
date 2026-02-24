@@ -1,25 +1,27 @@
 import { ref } from "vue"
 import { invoke } from "@tauri-apps/api/core"
+import { isTauriEnv } from "../utils/tauri"
 
 type ConfigValue = Record<string, unknown>
 
 const config = ref<ConfigValue>({})
 
 export function useConfig() {
-  const loadConfig = async () => {
-    if (!(window as { __TAURI__?: unknown }).__TAURI__) {
+  const loadConfig = async (): Promise<void> => {
+    if (!isTauriEnv()) {
       config.value = {}
       return
     }
     try {
-      config.value = (await invoke<ConfigValue>("read_config_command")) ?? {}
+      config.value =
+        (await invoke<ConfigValue>("read_config_command")) ?? {}
     } catch {
       config.value = {}
     }
   }
 
-  const saveConfig = async (newConfig: ConfigValue) => {
-    if (!(window as { __TAURI__?: unknown }).__TAURI__) return
+  const saveConfig = async (newConfig: ConfigValue): Promise<void> => {
+    if (!isTauriEnv()) return
     try {
       await invoke("write_config_command", { config: newConfig })
       config.value = newConfig
@@ -29,9 +31,11 @@ export function useConfig() {
   }
 
   const getPluginConfig = (pluginId: string): Record<string, unknown> => {
-    const plugins = (config.value.plugins as Record<string, Record<string, unknown>>) ?? {}
+    const plugins =
+      (config.value.plugins as Record<string, Record<string, unknown>>) ?? {}
     const pluginEntry = plugins[pluginId] ?? {}
     const nested = pluginEntry.config
+
     if (nested && typeof nested === "object" && !Array.isArray(nested)) {
       return nested as Record<string, unknown>
     }
