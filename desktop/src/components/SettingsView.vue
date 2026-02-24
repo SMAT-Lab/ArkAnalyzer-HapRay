@@ -123,7 +123,7 @@
 import { ref, computed, onMounted, watch } from "vue"
 import { usePlugins } from "../composables/usePlugins"
 import { useConfig } from "../composables/useConfig"
-import type { ConfigItemDef } from "../composables/usePlugins"
+import type { ConfigItemDef } from "../types"
 
 const { plugins, loadPlugins, loading } = usePlugins()
 const { config, loadConfig, saveConfig: persistConfig, getPluginConfig } = useConfig()

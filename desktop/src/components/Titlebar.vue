@@ -112,7 +112,9 @@ defineEmits<{ "toggle-sidebar": []; "toggle-history-sidebar": []; "open-settings
 const mac = ref(false)
 const windows = ref(false)
 
-const isTauri = () => !!(window as unknown as { __TAURI__?: unknown }).__TAURI__
+import { isTauriEnv } from "../utils/tauri"
+
+const isTauri = isTauriEnv
 
 const interactive = (target: EventTarget | null): boolean => {
   if (!(target instanceof Element)) return false
