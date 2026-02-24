@@ -28,6 +28,9 @@ function run(cmd, args = [], options = {}) {
     ...options,
   });
   if (result.status !== 0) {
+    const msg = [cmd, ...args].join(" ");
+    console.error(`\n[build] 命令失败 (退出码 ${result.status ?? 1}): ${msg}`);
+    if (result.error) console.error("[build] 子进程错误:", result.error.message);
     process.exit(result.status ?? 1);
   }
   return result;
@@ -86,44 +89,60 @@ function createDmgWithBundleScript() {
   });
 }
 
+const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
+
 /**
  * 将 desktop 构建产物复制到项目根目录 ./dist，供 e2e 测试和 release 使用
- * 结构: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/Contents/MacOS/ArkAnalyzer-HapRay, dist/tools/
+ * macOS: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/..., dist/tools/
+ * Windows/Linux: dist/ArkAnalyzer-HapRay.exe 或 dist/ArkAnalyzer-HapRay
  */
 function copyToDist() {
   const tauriConf = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../src-tauri/tauri.conf.json"), "utf-8"));
   const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
-  const appName = `${productName}.app`;
-  const appPath = path.join(macosDir, appName);
-  const exeInApp = path.join(appPath, "Contents", "MacOS", "ArkAnalyzer-HapRay");
-  const toolsInApp = path.join(appPath, "Contents", "Resources", "tools");
-
-  if (!fs.existsSync(appPath) || !fs.existsSync(exeInApp)) {
-    console.warn("跳过 copyToDist: .app 或可执行文件不存在");
-    return;
-  }
-
   fs.mkdirSync(rootDistDir, { recursive: true });
 
-  const distAppPath = path.join(rootDistDir, appName);
-  const distExePath = path.join(rootDistDir, productName);
-  const distToolsPath = path.join(rootDistDir, "tools");
+  if (process.platform === "darwin") {
+    const appName = `${productName}.app`;
+    const appPath = path.join(macosDir, appName);
+    const exeInApp = path.join(appPath, "Contents", "MacOS", productName);
+    const toolsInApp = path.join(appPath, "Contents", "Resources", "tools");
 
-  if (fs.existsSync(distAppPath)) {
-    fs.rmSync(distAppPath, { recursive: true });
-  }
-  copyDirSync(appPath, distAppPath);
-
-  if (fs.existsSync(distExePath)) {
-    fs.unlinkSync(distExePath);
-  }
-  fs.symlinkSync(path.join(appName, "Contents", "MacOS", "ArkAnalyzer-HapRay"), distExePath, "file");
-
-  if (fs.existsSync(toolsInApp)) {
-    if (fs.existsSync(distToolsPath)) {
-      fs.rmSync(distToolsPath, { recursive: true });
+    if (!fs.existsSync(appPath) || !fs.existsSync(exeInApp)) {
+      console.warn("跳过 copyToDist: .app 或可执行文件不存在");
+      return;
     }
-    copyDirSync(toolsInApp, distToolsPath);
+
+    const distAppPath = path.join(rootDistDir, appName);
+    const distExePath = path.join(rootDistDir, productName);
+    const distToolsPath = path.join(rootDistDir, "tools");
+
+    if (fs.existsSync(distAppPath)) {
+      fs.rmSync(distAppPath, { recursive: true });
+    }
+    copyDirSync(appPath, distAppPath);
+
+    if (fs.existsSync(distExePath)) {
+      fs.unlinkSync(distExePath);
+    }
+    fs.symlinkSync(path.join(appName, "Contents", "MacOS", productName), distExePath, "file");
+
+    if (fs.existsSync(toolsInApp)) {
+      if (fs.existsSync(distToolsPath)) {
+        fs.rmSync(distToolsPath, { recursive: true });
+      }
+      copyDirSync(toolsInApp, distToolsPath);
+    }
+  } else {
+    // Windows: .exe；Linux: 无后缀
+    const exeName = process.platform === "win32" ? `${productName}.exe` : productName;
+    const srcExe = path.join(releaseDir, exeName);
+    const destExe = path.join(rootDistDir, exeName);
+
+    if (!fs.existsSync(srcExe)) {
+      console.warn(`跳过 copyToDist: 未找到 ${srcExe}`);
+      return;
+    }
+    fs.copyFileSync(srcExe, destExe);
   }
 
   console.log(`✓ 构建产物已复制到 ${rootDistDir}`);
