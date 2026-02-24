@@ -16,9 +16,19 @@
           <button
             type="button"
             class="history-view__btn history-view__btn--primary"
-            @click="openPath(record.output_path!)"
+            @click="openPath(record.output_path as string)"
           >
             打开输出路径
+          </button>
+        </div>
+        <div v-if="record.result_dir" class="history-view__section">
+          <h3 class="history-view__label">记录目录</h3>
+          <button
+            type="button"
+            class="history-view__btn history-view__btn--secondary"
+            @click="openPath(record.result_dir as string)"
+          >
+            打开记录目录
           </button>
         </div>
         <div v-if="record.output" class="history-view__section">
@@ -72,7 +82,7 @@
               </div>
               <div class="history-view__item-meta">
                 <span class="history-view__item-action">{{ item.action_name || item.action || "" }}</span>
-                <span class="history-view__item-time">{{ formatTime(item.timestamp) }}</span>
+                <span class="history-view__item-time">{{ formatTimestamp(item.timestamp) }}</span>
               </div>
               <p v-if="item.message" class="history-view__item-msg">{{ item.message }}</p>
             </div>
@@ -91,9 +101,19 @@
               <button
                 type="button"
                 class="history-view__btn history-view__btn--primary"
-                @click="openPath(selectedRecord.output_path!)"
+                @click="openPath(selectedRecord.output_path as string)"
               >
                 打开输出路径
+              </button>
+            </div>
+            <div v-if="selectedRecord.result_dir" class="history-view__section">
+              <h3 class="history-view__label">记录目录</h3>
+              <button
+                type="button"
+                class="history-view__btn history-view__btn--secondary"
+                @click="openPath(selectedRecord.result_dir as string)"
+              >
+                打开记录目录
               </button>
             </div>
             <div v-if="selectedRecord.output" class="history-view__section">
@@ -112,39 +132,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue"
-import { invoke } from "@tauri-apps/api/core"
 import { useHistory } from "../composables/useHistory"
-import type { ExecutionRecord } from "../composables/useHistory"
+import type { ExecutionRecord } from "../types"
+import { formatTimestamp } from "../utils/format"
+import { openPath } from "../utils/tauri"
 
 const props = defineProps<{ record?: ExecutionRecord | null }>()
 
 const { history, loading, loadHistory } = useHistory()
 const selectedRecord = ref<ExecutionRecord | null>(null)
-
-const hasTauri = !!(window as { __TAURI__?: unknown }).__TAURI__
-
-function formatTime(ts?: string): string {
-  if (!ts) return ""
-  if (ts.length >= 15) {
-    const y = ts.slice(0, 4)
-    const m = ts.slice(4, 6)
-    const d = ts.slice(6, 8)
-    const h = ts.slice(9, 11)
-    const min = ts.slice(11, 13)
-    const s = ts.slice(13, 15)
-    return `${y}-${m}-${d} ${h}:${min}:${s}`
-  }
-  return ts
-}
-
-async function openPath(path: string) {
-  if (!hasTauri) return
-  try {
-    await invoke("open_path_command", { path })
-  } catch {
-    // 打开失败时静默处理
-  }
-}
 
 onMounted(() => {
   if (!props.record) {

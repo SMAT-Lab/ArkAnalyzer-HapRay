@@ -33,17 +33,16 @@
             <ToolWorkspace
               :plugin="getPlugin(selectedTool.pluginId) ?? null"
               :action="selectedTool.action"
+              :initial-params="cliInitialParams"
               @execution-finished="onExecutionFinished"
             />
           </div>
         </template>
         <template v-else>
-          <div class="py-12 text-center">
-            <h1 class="text-xl font-medium">欢迎使用 HapRay</h1>
-            <p class="mt-2 text-muted-foreground">请从左侧选择工具开始使用</p>
-            <p v-if="loading" class="mt-4 text-sm text-muted-foreground">正在加载插件...</p>
-            <p v-else-if="error" class="mt-4 text-sm text-red-500">{{ error }}</p>
-          </div>
+          <WelcomeView
+            :loading="loading"
+            :error="error"
+          />
         </template>
       </main>
       <template v-if="historySidebarOpen">
@@ -67,64 +66,47 @@ import ToolWorkspace from "./components/ToolWorkspace.vue"
 import SettingsView from "./components/SettingsView.vue"
 import HistorySidebar from "./components/HistorySidebar.vue"
 import HistoryView from "./components/HistoryView.vue"
-import type { ExecutionRecord } from "./composables/useHistory"
+import WelcomeView from "./components/WelcomeView.vue"
+import type { ExecutionRecord } from "./types"
 import { usePlugins } from "./composables/usePlugins"
-const { sidebarMenu, loading, error, loadPlugins, getPlugin } = usePlugins()
+import { useSidebarResize } from "./composables/useSidebarResize"
 
-const MIN_WIDTH = 160
+const { sidebarMenu, loading, error, loadPlugins, getPlugin } = usePlugins()
+const { sidebarWidth, onResizeStart } = useSidebarResize()
+
 const sidebarOpen = ref(true)
+const historySidebarOpen = ref(true)
 const page = ref<"home" | "settings" | "tool">("home")
 const selectedTool = ref<{ pluginId: string; action: string } | null>(null)
-const MAX_WIDTH = 400
-const DEFAULT_WIDTH = 220
-
-const sidebarWidth = ref(DEFAULT_WIDTH)
-const historySidebarOpen = ref(true)
 const historyRefreshKey = ref(0)
 const selectedHistoryRecord = ref<ExecutionRecord | null>(null)
+const cliInitialParams = ref<Record<string, unknown> | null>(null)
 
-onMounted(() => {
-  loadPlugins()
-})
+onMounted(loadPlugins)
 
-const openSettings = () => {
+function openSettings(): void {
   page.value = "settings"
 }
 
-const onExecutionFinished = () => {
+function onExecutionFinished(): void {
   historyRefreshKey.value++
   selectedHistoryRecord.value = null
+  cliInitialParams.value = null
 }
 
-const onNavigate = (payload: { page: "home" | "settings" | "tool"; pluginId?: string; action?: string }) => {
+function onNavigate(payload: {
+  page: "home" | "settings" | "tool"
+  pluginId?: string
+  action?: string
+}): void {
   page.value = payload.page
   selectedHistoryRecord.value = null
+
   if (payload.page === "tool" && payload.pluginId && payload.action) {
     selectedTool.value = { pluginId: payload.pluginId, action: payload.action }
   } else {
     selectedTool.value = null
+    cliInitialParams.value = null
   }
-}
-
-const onResizeStart = (e: MouseEvent) => {
-  if (e.buttons !== 1) return
-  e.preventDefault()
-
-  const onMove = (move: MouseEvent) => {
-    const next = sidebarWidth.value + move.movementX
-    sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, next))
-  }
-
-  const onUp = () => {
-    document.removeEventListener("mousemove", onMove)
-    document.removeEventListener("mouseup", onUp)
-    document.body.style.cursor = ""
-    document.body.style.userSelect = ""
-  }
-
-  document.body.style.cursor = "col-resize"
-  document.body.style.userSelect = "none"
-  document.addEventListener("mousemove", onMove)
-  document.addEventListener("mouseup", onUp)
 }
 </script>

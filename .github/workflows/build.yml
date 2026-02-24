@@ -2,9 +2,9 @@ name: Build Executables
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
 
 jobs:
   build:
@@ -78,12 +78,37 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+
+    # Linux 下 Desktop (Tauri) 需要 GTK/WebKit 等系统库
+    - name: Install Tauri Linux dependencies
+      if: matrix.item.platform == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwebkit2gtk-4.1-dev \
+          build-essential \
+          curl \
+          wget \
+          file \
+          libxdo-dev \
+          libssl-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev \
+          libgtk-3-dev
     
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
+
+    # Desktop (Tauri) 需要 Rust 环境
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Cache Cargo registry and target
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: desktop/src-tauri
 
     - name: Install dependencies
       run: |        
@@ -105,3 +130,11 @@ jobs:
       with:
         name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}
         path: opt-detector-*.zip
+
+    # macOS 构建产物：收集 Desktop .dmg 安装包
+    - name: Upload Desktop DMG (macOS)
+      if: matrix.item.platform == 'darwin'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ArkAnalyzer-HapRay-desktop-macos-${{ matrix.item.arch }}
+        path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
