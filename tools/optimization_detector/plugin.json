@@ -59,14 +59,14 @@
           "short": "f",
           "help": "输出格式: excel, json, csv, or xml. Can specify multiple formats (e.g., -f excel json)."
         },
-        "no_lto": {
+        "no-lto": {
           "type": "bool",
           "label": "禁用LTO检测",
           "required": false,
           "default": false,
           "help": "禁用LTO（链接时优化）检测"
         },
-        "no_opt": {
+        "no-opt": {
           "type": "bool",
           "label": "禁用优化级别检测",
           "required": false,
