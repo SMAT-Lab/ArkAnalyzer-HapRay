@@ -404,9 +404,14 @@ function testSymbolRecoveryModule() {
             console.log('✓ symbol-recovery 命令执行成功');
             console.log(`输出结果保存在: ${outputDir}`);
 
-            // 校验 cache/llm_analysis_cache.json 中的对象数
-            const cacheFile = path.join(DIST_DIR, 'cache', 'llm_analysis_cache.json');
-            if (fs.existsSync(cacheFile)) {
+            // 校验 cache/llm_analysis_cache.json 中的对象数（按多路径查找）
+            const cacheCandidates = [
+                path.join(DIST_DIR, 'ArkAnalyzer-HapRay.app', 'Contents', 'Resources', 'tools', 'symbol-recovery', 'cache', 'llm_analysis_cache.json'),
+                path.join(DIST_DIR, 'tools', 'symbol-recovery', 'cache', 'llm_analysis_cache.json'),
+                path.join(DIST_DIR, 'cache', 'llm_analysis_cache.json'),
+            ];
+            const cacheFile = cacheCandidates.find((p) => fs.existsSync(p));
+            if (cacheFile) {
                 const cacheData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
                 const objectCount = Object.keys(cacheData).length;
                 if (objectCount === 3) {
@@ -418,6 +423,7 @@ function testSymbolRecoveryModule() {
                 }
             } else {
                 console.log('✗ symbol-recovery 校验失败: cache文件不存在');
+                console.log(`  已尝试路径: ${cacheCandidates.join(', ')}`);
                 return { success: false, error: 'cache文件不存在' };
             }
 

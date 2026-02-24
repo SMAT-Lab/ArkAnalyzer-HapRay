@@ -20,9 +20,15 @@ if (pathParts.length) {
   env[pathKey] = pathParts.join(sep) + sep + (env[pathKey] || env.PATH || "");
 }
 
-const result = spawnSync(process.argv[2], process.argv.slice(3), {
-  stdio: "inherit",
-  shell: true,
-  env,
-});
+const cmd = process.argv[2];
+const args = process.argv.slice(3);
+// Windows 上 node_modules\.bin\npx 为 npx.cmd，无 shell 时 spawn 可能找不到，故用 shell 执行
+const opts = { stdio: "inherit", env };
+let result;
+if (process.platform === "win32" && (cmd === "npx" || cmd === "npx.cmd")) {
+  const fullCmd = [cmd, ...args].map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ");
+  result = spawnSync(fullCmd, { ...opts, shell: true });
+} else {
+  result = spawnSync(cmd, args, opts);
+}
 process.exit(result.status ?? 1);
