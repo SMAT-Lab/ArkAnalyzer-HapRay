@@ -126,10 +126,22 @@ pub fn push_param_as_args(
         serde_json::Value::String(s) if s.is_empty() => {}
         serde_json::Value::Bool(b) => {
             match key {
-                "trace" if !b => args.push("--no-trace".to_string()),
-                "perf" if !b => args.push("--no-perf".to_string()),
-                _ if b => args.push(format!("--{}", key)),
-                _ => {}
+                // trace/perf 在 CLI 里只有 --no-trace / --no-perf，true 使用默认值，不追加参数
+                "trace" => {
+                    if !b {
+                        args.push("--no-trace".to_string());
+                    }
+                }
+                "perf" => {
+                    if !b {
+                        args.push("--no-perf".to_string());
+                    }
+                }
+                _ => {
+                    if b {
+                        args.push(format!("--{}", key));
+                    }
+                }
             }
         }
         serde_json::Value::Array(arr) if !arr.is_empty() => {
