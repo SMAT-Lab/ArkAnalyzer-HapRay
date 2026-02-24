@@ -54,19 +54,25 @@ fn plugins_dir_from_exe() -> Option<PathBuf> {
     let parent = exe.parent()?;
     eprintln!("[cli] exe.parent: {}", parent.display());
 
+    // 候选顺序：与 exe 同目录的 tools 优先（dist/ArkAnalyzer-HapRay.exe -> dist/tools），再考虑上级目录
     let candidates: Vec<PathBuf> = {
         let mut v = Vec::new();
         #[cfg(target_os = "macos")]
         if let Some(contents) = parent.parent() {
             v.push(contents.join("Resources").join("tools"));
         }
+        #[cfg(not(target_os = "macos"))]
+        {
+            v.push(parent.join("tools")); // dist/xxx.exe -> dist/tools
+        }
         v.extend([
             parent.join("../Resources/tools"),
             parent.join("../tools"),
             parent.join("../../dist/tools"),
             parent.join("../../../tools"), // dist/ArkAnalyzer-HapRay.app/Contents/MacOS -> dist/tools
-            parent.join("tools"),
         ]);
+        #[cfg(target_os = "macos")]
+        v.push(parent.join("tools"));
         v
     };
 
