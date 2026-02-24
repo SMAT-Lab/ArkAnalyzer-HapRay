@@ -945,7 +945,10 @@ button#decorum-tb-close:hover {
 /* ToolWorkspace - OpenCode style */
 .tool-workspace-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-height: 0;
 }
 
 .tool-workspace {
@@ -954,12 +957,32 @@ button#decorum-tb-close:hover {
   gap: 24px;
   max-width: 1152px; /* 640 * 1.8，扩大 80% */
   width: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .tool-workspace__content {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tool-workspace__main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tool-workspace__params-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .tool-workspace__header {
@@ -991,6 +1014,10 @@ button#decorum-tb-close:hover {
 
 .tool-workspace__panel:hover {
   border-color: var(--tool-panel-border-hover, var(--border));
+}
+
+.tool-workspace__output-panel:hover {
+  border-color: var(--tool-output-border);
 }
 
 .tool-workspace__panel-title {
@@ -1256,9 +1283,122 @@ button#decorum-tb-close:hover {
   background: var(--sidebar-item-hover, rgba(0, 0, 0, 0.06));
 }
 
+/* 输出面板容器（含拖拽条） */
+.tool-workspace__output-wrapper {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* 输出面板顶部拖拽调整高度 */
+.tool-workspace__output-resize-handle {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.tool-workspace__output-resize-handle:hover {
+  background: var(--tool-output-border);
+}
+
+/* Cursor/VS Code Panel 风格 */
 .tool-workspace__output-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid var(--tool-output-border);
+  padding: 0;
   background: var(--tool-output-bg);
-  border-color: var(--tool-output-border);
+}
+
+.tool-workspace__output-panel-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 12px;
+  background: var(--tool-output-bg);
+  border-bottom: 1px solid var(--tool-output-border);
+}
+
+.tool-workspace__output-panel .tool-workspace__panel-title {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  background: transparent;
+  border-bottom: none;
+}
+
+.tool-workspace__output-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tool-workspace__output-toggle:hover {
+  color: var(--foreground);
+  background: var(--sidebar-item-hover, rgba(0, 0, 0, 0.06));
+}
+
+.tool-workspace__output-panel .tool-workspace__output {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 折叠时的展开按钮栏 */
+.tool-workspace__output-collapsed {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-top: 1px solid var(--tool-output-border);
+  background: var(--tool-output-bg);
+}
+
+.tool-workspace__output-expand-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 1px solid var(--tool-output-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.tool-workspace__output-expand-btn:hover {
+  color: var(--foreground);
+  background: var(--sidebar-item-hover, rgba(0, 0, 0, 0.06));
+  border-color: var(--border);
 }
 
 .tool-workspace__history-detail {
@@ -1315,10 +1455,10 @@ button#decorum-tb-close:hover {
   border-radius: 6px;
   overflow: auto;
   overflow-anchor: auto;
-  max-height: 400px;
   white-space: pre-wrap;
   word-break: break-word;
 }
+
 
 .tool-workspace__empty {
   padding: 48px 24px;

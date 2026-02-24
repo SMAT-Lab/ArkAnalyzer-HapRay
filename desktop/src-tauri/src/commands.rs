@@ -235,7 +235,19 @@ pub async fn execute_tool_command(
         })
         .collect();
     let full_cmd = format!("执行命令:\n$ {} {}\n\n", exe_path_str, args_str.join(" "));
-    let _ = app.emit("tool-command", &full_cmd);
+    let tool_key = format!("{}-{}", payload.plugin_id, payload.action);
+    #[derive(Clone, Serialize)]
+    struct ToolCommandPayload {
+        tool_key: String,
+        command: String,
+    }
+    let _ = app.emit(
+        "tool-command",
+        ToolCommandPayload {
+            tool_key: tool_key.clone(),
+            command: full_cmd.clone(),
+        },
+    );
 
     let plugin_config = get_plugin_config(&app, &payload.plugin_id)?;
     let mut cmd_builder = Command::new(&prepared.exe_path);
@@ -270,6 +282,14 @@ pub async fn execute_tool_command(
     let out_stderr = Arc::clone(&output_collector);
     let app_stdout = app.clone();
     let app_stderr = app.clone();
+    let tool_key_stdout = tool_key.clone();
+    let tool_key_stderr = tool_key.clone();
+
+    #[derive(Clone, Serialize)]
+    struct ToolOutputPayload {
+        tool_key: String,
+        chunk: String,
+    }
 
     let t1 = std::thread::spawn(move || {
         let mut buf = [0u8; 256];
@@ -279,7 +299,13 @@ pub async fn execute_tool_command(
                 Ok(0) => break,
                 Ok(n) => {
                     let s = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let _ = app_stdout.emit("tool-output", &s);
+                    let _ = app_stdout.emit(
+                        "tool-output",
+                        ToolOutputPayload {
+                            tool_key: tool_key_stdout.clone(),
+                            chunk: s.clone(),
+                        },
+                    );
                     if let Ok(mut out) = out_stdout.lock() {
                         out.push_str(&s);
                     }
@@ -297,7 +323,13 @@ pub async fn execute_tool_command(
                 Ok(0) => break,
                 Ok(n) => {
                     let s = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let _ = app_stderr.emit("tool-output", &s);
+                    let _ = app_stderr.emit(
+                        "tool-output",
+                        ToolOutputPayload {
+                            tool_key: tool_key_stderr.clone(),
+                            chunk: s.clone(),
+                        },
+                    );
                     if let Ok(mut out) = out_stderr.lock() {
                         out.push_str(&s);
                     }
