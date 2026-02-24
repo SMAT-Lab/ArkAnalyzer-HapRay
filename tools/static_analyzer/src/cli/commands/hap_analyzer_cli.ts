@@ -22,7 +22,7 @@ const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 interface AnalyzeOptions {
     input: string;
     output: string;
-    jobs?: string;
+    jobs?: number;
     beautifyJs?: boolean;
 }
 
@@ -33,7 +33,7 @@ export const HapAnalyzerCli = new Command('hap')
     .description('HAP 静态分析器 - 分析 HAP/ZIP 文件或目录中的技术栈与资源')
     .requiredOption('-i, --input <path>', '分析输入路径（HAP/ZIP 文件或目录）')
     .option('-o, --output <path>', '输出目录', './output')
-    .option('-j, --jobs <number>', '并发分析数量，默认为CPU核心数', 'auto')
+    .option('-j, --jobs <number>', '并发分析数量，默认为CPU核心数', undefined)
     .option('--beautify-js', '美化压缩的 JS 文件并保存到输出目录', false)
     .action(async (options: AnalyzeOptions) => {
         await analyzeHap(options);
