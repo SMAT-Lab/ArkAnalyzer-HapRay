@@ -2,24 +2,44 @@
 
 use std::path::Path;
 
-/// 从配置文件加载插件配置并转为环境变量（GUI 与 CLI 共用）
+/// 从配置文件加载通用配置 + 插件特有配置，并转为环境变量（GUI 与 CLI 共用）
 /// 路径通常为 ~/.hapray-gui/config.json
 pub fn load_plugin_env_config(path: &Path, plugin_id: &str) -> Result<Vec<(String, String)>, String> {
     if !path.exists() {
         return Ok(Vec::new());
     }
+
     let content = std::fs::read_to_string(path).map_err(|e| format!("读取配置失败: {}", e))?;
     let config: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| format!("解析配置失败: {}", e))?;
-    let plugins = config
+
+    let mut envs: Vec<(String, String)> = Vec::new();
+
+    // 通用配置：顶层除 plugins 外的字段
+    if let Some(obj) = config.as_object() {
+        let mut global_obj = serde_json::Map::new();
+        for (k, v) in obj {
+            if k != "plugins" {
+                global_obj.insert(k.clone(), v.clone());
+            }
+        }
+        if !global_obj.is_empty() {
+            envs.extend(config_object_to_env_vars(&global_obj));
+        }
+    }
+
+    // 插件特有配置：config.plugins[plugin_id].config
+    let plugin_config = config
         .get("plugins")
         .and_then(|p| p.as_object())
         .and_then(|p| p.get(plugin_id))
         .and_then(|e| e.get("config"))
         .and_then(|c| c.as_object());
-    Ok(plugins
-        .map(config_object_to_env_vars)
-        .unwrap_or_default())
+    if let Some(obj) = plugin_config {
+        envs.extend(config_object_to_env_vars(obj));
+    }
+
+    Ok(envs)
 }
 
 /// 将 serde_json::Value 转为命令行参数字符串

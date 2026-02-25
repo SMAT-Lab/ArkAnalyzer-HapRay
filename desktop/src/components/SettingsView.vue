@@ -3,36 +3,110 @@
     <div class="settings-layout">
       <nav class="settings-nav">
         <div class="settings-nav-section">
+          <div
+            class="settings-nav-item"
+            :class="{ active: activeSection === 'general' }"
+            @click="
+              activeSection = 'general';
+              activePluginId = null;
+            "
+          >
+            通用
+          </div>
+        </div>
+        <div
+          v-if="pluginsWithConfig.length > 0"
+          class="settings-nav-section"
+        >
           <div class="settings-nav-group">插件配置</div>
-          <template v-if="pluginsWithConfig.length === 0">
-            <div
-              class="settings-nav-item"
-              :class="{ active: activeSection === 'plugins' }"
-              @click="activeSection = 'plugins'"
-            >
-              插件配置
-            </div>
-          </template>
-          <template v-else>
-            <div
-              v-for="plugin in pluginsWithConfig"
-              :key="plugin.id"
-              class="settings-nav-item settings-nav-item--plugin"
-              :class="{ active: activePluginId === plugin.id }"
-              @click="selectPlugin(plugin.id)"
-            >
-              {{ plugin.name }}
-            </div>
-          </template>
+          <div
+            v-for="plugin in pluginsWithConfig"
+            :key="plugin.id"
+            class="settings-nav-item settings-nav-item--plugin"
+            :class="{ active: activePluginId === plugin.id }"
+            @click="selectPlugin(plugin.id)"
+          >
+            {{ plugin.name }}
+          </div>
         </div>
       </nav>
 
       <div class="settings-content">
+        <div v-show="activeSection === 'general'" class="settings-panel">
+          <div class="settings-panel-header">
+            <h2 class="settings-panel-title">通用</h2>
+            <p class="settings-panel-desc">
+              全局设置，保存至 ~/.hapray-gui/config.json。
+            </p>
+          </div>
+          <form @submit.prevent="saveGeneralConfig" class="settings-form">
+            <div
+              v-for="item in GENERAL_CONFIG_ITEMS"
+              :key="item.key"
+              class="settings-form-row"
+            >
+              <label class="settings-form-label">{{ item.label }}</label>
+              <div class="settings-form-control">
+                <template v-if="item.type === 'dir'">
+                  <div class="settings-path-row">
+                    <input
+                      v-model="generalForm[item.key]"
+                      type="text"
+                      class="settings-input"
+                      :placeholder="item.placeholder"
+                    />
+                    <button
+                      v-if="hasTauri"
+                      type="button"
+                      class="settings-btn-secondary"
+                      @click="browseGeneralDir(item.key)"
+                    >
+                      浏览
+                    </button>
+                  </div>
+                </template>
+                <template v-else-if="item.type === 'choice'">
+                  <select
+                    v-model="generalForm[item.key]"
+                    class="settings-input settings-select"
+                  >
+                    <option
+                      v-for="opt in item.choices ?? []"
+                      :key="opt"
+                      :value="opt"
+                    >
+                      {{ opt }}
+                    </option>
+                  </select>
+                </template>
+                <template v-else>
+                  <input
+                    v-model="generalForm[item.key]"
+                    type="text"
+                    class="settings-input"
+                    :placeholder="item.placeholder"
+                  />
+                </template>
+                <p v-if="item.help" class="settings-form-hint">
+                  {{ item.help }}
+                </p>
+              </div>
+            </div>
+            <button
+              type="submit"
+              class="settings-btn-primary"
+              :disabled="saving"
+            >
+              {{ saving ? "保存中..." : "保存" }}
+            </button>
+          </form>
+        </div>
         <div v-show="activeSection === 'plugins'" class="settings-panel">
           <div v-if="pluginsWithConfig.length === 0" class="settings-empty">
             <h2 class="settings-panel-title">插件配置</h2>
             <p class="settings-panel-desc">
-              根据已加载插件的 config 配置项动态生成，配置保存至 ~/.hapray-gui/config.json。
+              根据已加载插件的 config 配置项动态生成，配置保存至
+              ~/.hapray-gui/config.json。
             </p>
             <p class="settings-empty-text">暂无插件配置项，或插件尚未加载。</p>
             <button
@@ -48,7 +122,10 @@
           <template v-else-if="activePlugin">
             <div class="settings-panel-header">
               <h2 class="settings-panel-title">{{ activePlugin.name }}</h2>
-              <p v-if="activePlugin.config?.description" class="settings-panel-desc">
+              <p
+                v-if="activePlugin.config?.description"
+                class="settings-panel-desc"
+              >
                 {{ activePlugin.config.description }}
               </p>
             </div>
@@ -77,13 +154,18 @@
                     type="number"
                     class="settings-input"
                   />
-                  <label v-else-if="item.type === 'bool'" class="settings-checkbox-wrap">
+                  <label
+                    v-else-if="item.type === 'bool'"
+                    class="settings-checkbox-wrap"
+                  >
                     <input
                       v-model="formData[activePlugin.id]![key]"
                       type="checkbox"
                       class="settings-checkbox"
                     />
-                    <span class="settings-checkbox-label">{{ item.help || item.label }}</span>
+                    <span class="settings-checkbox-label">{{
+                      item.help || item.label
+                    }}</span>
                   </label>
                   <select
                     v-else-if="item.type === 'choice'"
@@ -98,9 +180,14 @@
                       {{ opt }}
                     </option>
                   </select>
-                  <p v-else class="settings-unsupported">暂不支持类型: {{ item.type }}</p>
+                  <p v-else class="settings-unsupported">
+                    暂不支持类型: {{ item.type }}
+                  </p>
                 </div>
-                <p v-if="item.help && item.type !== 'bool'" class="settings-form-hint">
+                <p
+                  v-if="item.help && item.type !== 'bool'"
+                  class="settings-form-hint"
+                >
                   {{ item.help }}
                 </p>
               </div>
@@ -120,104 +207,258 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue"
-import { usePlugins } from "../composables/usePlugins"
-import { useConfig } from "../composables/useConfig"
-import type { ConfigItemDef } from "../types"
+import { ref, computed, onMounted, watch } from "vue";
+import { usePlugins } from "../composables/usePlugins";
+import { useConfig } from "../composables/useConfig";
+import { isTauriEnv } from "../utils/tauri";
+import type { ConfigItemDef, GeneralConfigItemDef } from "../types";
 
-const { plugins, loadPlugins, loading } = usePlugins()
-const { config, loadConfig, saveConfig: persistConfig, getPluginConfig } = useConfig()
+/** 全局配置项描述（JSON 配置驱动通用表单） */
+const GENERAL_CONFIG_ITEMS: GeneralConfigItemDef[] = [
+  {
+    key: "exec_cwd",
+    type: "dir",
+    label: "工作目录",
+    help: "工具执行时将以该目录为当前工作目录；留空则使用应用当前目录。",
+    placeholder: "执行工具时子进程的工作目录，留空则使用当前目录",
+    default: "",
+  },
+  {
+    key: "logger_level",
+    type: "choice",
+    label: "日志级别",
+    help: "日志输出级别，供支持该配置的工具使用。",
+    default: "INFO",
+    choices: ["DEBUG", "INFO", "WARNING", "ERROR"],
+  },
+  {
+    key: "llm_api_key",
+    type: "str",
+    label: "LLM API Key",
+    help: "LLM API Key",
+    default: "",
+  },
+  {
+    key: "llm_base_url",
+    type: "str",
+    label: "LLM Base URL",
+    help: "LLM Base URL",
+    default: "https://api.poe.com/v1",
+  },
+  {
+    key: "llm_model",
+    type: "str",
+    label: "LLM Model",
+    help: "LLM Model",
+    default: "GPT-5",
+  },
+  {
+    key: "glm_api_key",
+    type: "str",
+    label: "GUI LLM API Key",
+    help: "GUI LLM API Key",
+    default: "5204740c936d4398af51b002266822fd.dlm5SutvGl8c2njz",
+  },
+  {
+    key: "glm_base_url",
+    type: "str",
+    label: "GUI LLM Base URL",
+    help: "GUI LLM Base URL",
+    default: "https://open.bigmodel.cn/api/paas/v4",
+  },
+  {
+    key: "glm_model",
+    type: "str",
+    label: "GUI LLM Model",
+    help: "GUI LLM Model",
+    default: "autoglm-phone",
+  },
+];
 
-const activeSection = ref<"plugins">("plugins")
-const activePluginId = ref<string | null>(null)
-const saving = ref(false)
-const formData = ref<Record<string, Record<string, unknown>>>({})
+const hasTauri = isTauriEnv();
+const { plugins, loadPlugins, loading } = usePlugins();
+const {
+  config,
+  loadConfig,
+  saveConfig: persistConfig,
+  getPluginConfig,
+  getExecCwd,
+  getLoggerLevel,
+} = useConfig();
+
+const activeSection = ref<"general" | "plugins">("general");
+const activePluginId = ref<string | null>(null);
+const saving = ref(false);
+const formData = ref<Record<string, Record<string, unknown>>>({});
+const generalForm = ref<Record<string, string>>(
+  GENERAL_CONFIG_ITEMS.reduce(
+    (acc, it) => ({ ...acc, [it.key]: (it.default as string) ?? "" }),
+    {},
+  ),
+);
 
 const pluginsWithConfig = computed(() =>
-  plugins.value.filter((p) => p.config?.items && Object.keys(p.config.items).length > 0),
-)
+  plugins.value.filter(
+    (p) => p.config?.items && Object.keys(p.config.items).length > 0,
+  ),
+);
 
 const activePlugin = computed(() => {
-  if (!activePluginId.value) return null
-  return pluginsWithConfig.value.find((p) => p.id === activePluginId.value) ?? null
-})
+  if (!activePluginId.value) return null;
+  return (
+    pluginsWithConfig.value.find((p) => p.id === activePluginId.value) ?? null
+  );
+});
 
 /** 按 plugin.json 中定义的顺序排列的 [key, item] 数组 */
 const configItemEntries = computed<[string, ConfigItemDef][]>(() => {
-  const items = activePlugin.value?.config?.items ?? {}
-  return Object.entries(items)
-})
+  const items = activePlugin.value?.config?.items ?? {};
+  return Object.entries(items);
+});
 
 function selectPlugin(pluginId: string) {
-  activePluginId.value = pluginId
+  activeSection.value = "plugins";
+  activePluginId.value = pluginId;
+}
+
+function initGeneralForm() {
+  const next: Record<string, string> = {};
+  for (const item of GENERAL_CONFIG_ITEMS) {
+    const fromConfig =
+      (config.value[item.key] as string) ?? (item.default as string) ?? "";
+    if (item.key === "exec_cwd") next[item.key] = getExecCwd();
+    else if (item.key === "logger_level") next[item.key] = getLoggerLevel();
+    else next[item.key] = fromConfig;
+  }
+  generalForm.value = next;
+}
+
+async function saveGeneralConfig() {
+  saving.value = true;
+  try {
+    const merged = { ...config.value } as Record<string, unknown>;
+    for (const item of GENERAL_CONFIG_ITEMS) {
+      const raw = generalForm.value[item.key] ?? (item.default as string) ?? "";
+      if (item.key === "exec_cwd") {
+        const v = raw.trim() || null;
+        if (v !== null) merged.exec_cwd = v;
+        else delete merged.exec_cwd;
+      } else if (item.key === "logger_level") {
+        merged.logger_level = raw || "INFO";
+      } else {
+        merged[item.key] = raw.trim() || undefined;
+      }
+    }
+    await persistConfig(merged);
+  } catch (e) {
+    console.error("保存通用配置失败:", e);
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function browseGeneralDir(key: string) {
+  if (!hasTauri) return;
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath: generalForm.value[key] || undefined,
+    });
+    if (selected) {
+      generalForm.value = {
+        ...generalForm.value,
+        [key]: typeof selected === "string" ? selected : (selected?.[0] ?? ""),
+      };
+    }
+  } catch {
+    // 用户取消或出错时忽略
+  }
 }
 
 function getChoices(item: ConfigItemDef): unknown[] {
-  if (!item.choices) return []
-  if (Array.isArray(item.choices)) return item.choices
-  return []
+  if (!item.choices) return [];
+  if (Array.isArray(item.choices)) return item.choices;
+  return [];
 }
 
 function initFormData() {
-  const next: Record<string, Record<string, unknown>> = {}
+  const next: Record<string, Record<string, unknown>> = {};
   for (const plugin of pluginsWithConfig.value) {
-    next[plugin.id] = {}
-    const saved = getPluginConfig(plugin.id)
+    next[plugin.id] = {};
+    const saved = getPluginConfig(plugin.id);
     for (const [key, item] of Object.entries(plugin.config?.items ?? {})) {
-      next[plugin.id][key] = saved[key] ?? item.default ?? (item.type === "bool" ? false : "")
+      next[plugin.id][key] =
+        saved[key] ?? item.default ?? (item.type === "bool" ? false : "");
     }
   }
-  formData.value = next
+  formData.value = next;
 }
 
 async function saveConfig() {
-  saving.value = true
+  saving.value = true;
   try {
-    const merged = { ...config.value }
-    const pluginsConfig = { ...((merged.plugins as Record<string, Record<string, unknown>>) ?? {}) }
+    const merged = { ...config.value };
+    const pluginsConfig = {
+      ...((merged.plugins as Record<string, Record<string, unknown>>) ?? {}),
+    };
     for (const [pluginId, values] of Object.entries(formData.value)) {
-      const existing = pluginsConfig[pluginId] ?? {}
-      if (existing.config && typeof existing.config === "object" && !Array.isArray(existing.config)) {
+      const existing = pluginsConfig[pluginId] ?? {};
+      if (
+        existing.config &&
+        typeof existing.config === "object" &&
+        !Array.isArray(existing.config)
+      ) {
         pluginsConfig[pluginId] = {
           ...existing,
-          config: { ...(existing.config as Record<string, unknown>), ...values },
-        }
+          config: {
+            ...(existing.config as Record<string, unknown>),
+            ...values,
+          },
+        };
       } else {
-        pluginsConfig[pluginId] = { ...existing, ...values }
+        pluginsConfig[pluginId] = { ...existing, ...values };
       }
     }
-    merged.plugins = pluginsConfig
-    await persistConfig(merged)
+    merged.plugins = pluginsConfig;
+    await persistConfig(merged);
   } catch (e) {
-    console.error("保存配置失败:", e)
+    console.error("保存配置失败:", e);
   } finally {
-    saving.value = false
+    saving.value = false;
   }
 }
 
 onMounted(async () => {
-  await loadPlugins()
-  await loadConfig()
-  initFormData()
-})
+  await loadPlugins();
+  await loadConfig();
+  initGeneralForm();
+  initFormData();
+});
 
+watch(
+  () => [config.value.exec_cwd, config.value.logger_level],
+  () => initGeneralForm(),
+);
 watch(
   pluginsWithConfig,
   (list) => {
-    initFormData()
+    initFormData();
     if (list.length > 0) {
-      const valid = activePluginId.value && list.some((p) => p.id === activePluginId.value)
-      if (!valid) activePluginId.value = list[0].id
+      const valid =
+        activePluginId.value && list.some((p) => p.id === activePluginId.value);
+      if (!valid) activePluginId.value = list[0].id;
     } else {
-      activePluginId.value = null
+      activePluginId.value = null;
     }
   },
   { deep: true },
-)
+);
 
 async function reloadPlugins() {
-  await loadPlugins()
-  initFormData()
+  await loadPlugins();
+  initFormData();
 }
 </script>
 
@@ -263,7 +504,9 @@ async function reloadPlugins() {
   color: var(--muted-foreground);
   cursor: pointer;
   border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .settings-nav-item:hover {
@@ -354,6 +597,18 @@ async function reloadPlugins() {
 }
 
 .settings-form-control {
+  min-width: 0;
+}
+
+.settings-path-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 480px;
+}
+
+.settings-path-row .settings-input {
+  flex: 1;
   min-width: 0;
 }
 

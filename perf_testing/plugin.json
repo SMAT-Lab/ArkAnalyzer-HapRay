@@ -508,39 +508,5 @@
         }
       }
     }
-  },
-  "config": {
-    "description": "负载测试插件配置项",
-    "items": {
-      "glm_api_key": {
-        "type": "str",
-        "label": "GUI LLM API Key",
-        "default": "",
-        "help": "GUI LLM API Key",
-        "required": false
-      },
-      "glm_base_url": {
-        "type": "str",
-        "label": "GUI LLM Base URL",
-        "default": "http://localhost:8000/v1",
-        "help": "GUI LLM Base URL",
-        "required": false
-      },
-      "glm_model": {
-        "type": "str",
-        "label": "GUI LLM Model",
-        "default": "autoglm-phone-9b",
-        "help": "GUI LLM Model",
-        "required": false
-      },
-      "logger_level": {
-        "type": "choice",
-        "label": "日志级别",
-        "default": "INFO",
-        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
-        "help": "日志输出级别",
-        "required": false
-      }
-    }
   }
 }
