@@ -231,8 +231,10 @@ import { listen } from "@tauri-apps/api/event"
 import type { PluginMetadata, ActionConfig, ParameterDef } from "../types"
 import { isTauriEnv } from "../utils/tauri"
 import { useToolStateCache, toolKey } from "../composables/useToolStateCache"
+import { useConfig } from "../composables/useConfig"
 
 const hasTauri = isTauriEnv()
+const { getExecCwd } = useConfig()
 const { save: saveToolState, load: loadToolState, updateOutput: updateOutputInCache } = useToolStateCache()
 
 const props = defineProps<{
@@ -720,6 +722,7 @@ async function execute() {
         plugin_id: props.plugin.id,
         action: props.action,
         params: buildParamsForExecute(),
+        cwd: getExecCwd() || undefined,
       },
     })
     flushOutput()

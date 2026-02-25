@@ -50,6 +50,17 @@ export interface ConfigSchema {
   items?: Record<string, ConfigItemDef>
 }
 
+/** 全局配置单项描述（用于设置页「通用」表单） */
+export interface GeneralConfigItemDef {
+  key: string
+  type: "str" | "dir" | "choice"
+  label: string
+  help?: string
+  placeholder?: string
+  default?: string
+  choices?: string[]
+}
+
 export interface PluginMetadata {
   id: string
   name: string
