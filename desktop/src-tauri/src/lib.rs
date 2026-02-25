@@ -3,12 +3,18 @@ pub mod common;
 pub mod execution;
 pub mod plugins;
 
+// ---------------- GUI（Tauri）相关：仅在启用 desktop feature 时编译 ----------------
+
+#[cfg(feature = "desktop")]
 use tauri::WebviewWindowBuilder;
-#[cfg(windows)]
+
+#[cfg(all(feature = "desktop", windows))]
 use tauri_plugin_decorum::WebviewWindowExt;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 
+/// 桌面 GUI 入口：仅在启用 `desktop` feature 时存在
+#[cfg(feature = "desktop")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -31,6 +37,7 @@ pub fn run() {
         .run(|_app, _event| {});
 }
 
+#[cfg(feature = "desktop")]
 fn setup_window(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error + 'static>> {
     let config = app
         .config()
@@ -48,13 +55,13 @@ fn setup_window(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error + 
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
 
-    #[cfg(windows)]
+    #[cfg(all(feature = "desktop", windows))]
     let window_builder = window_builder.decorations(false);
 
     #[allow(unused_variables)]
     let window = window_builder.build().expect("Failed to create window");
 
-    #[cfg(windows)]
+    #[cfg(all(feature = "desktop", windows))]
     let _ = window.create_overlay_titlebar();
 
     Ok(())

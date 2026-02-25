@@ -171,6 +171,19 @@ function copyDirSync(src, dest) {
   }
 }
 
+/** 判断当前系统是否为 Ubuntu 20.04（仅用于决定是否只构建 CLI 版本） */
+function isUbuntu20_04() {
+  if (process.platform !== "linux") return false;
+  try {
+    const content = fs.readFileSync("/etc/os-release", "utf-8");
+    const isUbuntu = content.includes("Ubuntu");
+    const is20_04 = /VERSION_ID="?20\.04/.test(content);
+    return isUbuntu && is20_04;
+  } catch {
+    return false;
+  }
+}
+
 function main() {
   if (process.platform === "darwin") {
     // macOS: app -> merge -> dmg，确保 dmg 包含 merge 后的内容
@@ -206,20 +219,38 @@ function main() {
     console.log("\nStep 4: 复制产物到 ./dist...");
     copyToDist();
   } else {
-    // 其他平台：保持原有流程
-    console.log("构建应用...");
-    run("node", [runWithCargo, "npx", "tauri", "build"]);
+    // 非 macOS 平台
+    if (process.platform === "linux" && isUbuntu20_04()) {
+      // Ubuntu 20.04: 仅构建 CLI（不依赖 Tauri GUI），避免系统 WebKit/GTK 版本过旧导致构建失败
+      console.log("检测到 Ubuntu 20.04，构建 CLI-only 版本（不包含 GUI/Tauri）...");
+      run("node", [
+        runWithCargo,
+        "cargo",
+        "build",
+        "--release",
+        "--no-default-features",
+        "--features",
+        "cli-only",
+      ]);
 
-    if (process.platform === "linux") {
-      console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");
-      run("node", [path.resolve(__dirname, "bundle-linux-libs.js")]);
+      console.log("\n复制 CLI-only 构建产物到 ./dist...");
+      copyToDist();
+    } else {
+      // 其他平台：保持原有 Tauri 构建流程
+      console.log("构建应用...");
+      run("node", [runWithCargo, "npx", "tauri", "build"]);
+
+      if (process.platform === "linux") {
+        console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");
+        run("node", [path.resolve(__dirname, "bundle-linux-libs.js")]);
+      }
+
+      console.log("\n对 bundle 内 tools 做硬链接合并...");
+      run("node", [mergeScript]);
+
+      console.log("\n复制产物到 ./dist...");
+      copyToDist();
     }
-
-    console.log("\n对 bundle 内 tools 做硬链接合并...");
-    run("node", [mergeScript]);
-
-    console.log("\n复制产物到 ./dist...");
-    copyToDist();
   }
 }
 
