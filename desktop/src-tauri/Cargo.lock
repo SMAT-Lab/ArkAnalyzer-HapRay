@@ -3,23 +3,6 @@
 version = 4
 
 [[package]]
-name = "ArkAnalyzer-HapRay"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "dirs 5.0.1",
- "indexmap 2.13.0",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-decorum",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tauri-plugin-os",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,6 +52,23 @@ name = "anyhow"
 version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f0e0fee31ef5ed1ba1316088939cea399010ed7731dba877ed44aeb407a75ea"
+
+[[package]]
+name = "arkanalyzer-hapray"
+version = "1.5.0"
+dependencies = [
+ "chrono",
+ "dirs 5.0.1",
+ "indexmap 2.13.0",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-decorum",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tauri-plugin-os",
+]
 
 [[package]]
 name = "async-broadcast"
