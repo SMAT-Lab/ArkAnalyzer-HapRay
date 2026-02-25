@@ -14,7 +14,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 
@@ -185,11 +185,27 @@ pub async fn load_plugins_command(app: tauri::AppHandle) -> Result<LoadPluginsRe
     })
 }
 
+/// 解析子进程工作目录：若传入的 cwd 非空且为有效目录则使用，否则使用当前目录。
+fn resolve_work_dir(cwd_override: Option<&str>) -> PathBuf {
+    if let Some(s) = cwd_override {
+        let s = s.trim();
+        if !s.is_empty() {
+            let p = PathBuf::from(s);
+            if p.is_dir() {
+                return p.canonicalize().unwrap_or(p);
+            }
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ExecuteToolPayload {
     pub plugin_id: String,
     pub action: String,
     pub params: HashMap<String, serde_json::Value>,
+    /// 可选。子进程的工作目录；不传或无效则使用当前目录。
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -250,6 +266,7 @@ pub async fn execute_tool_command(
     );
 
     let plugin_config = get_plugin_config(&app, &payload.plugin_id)?;
+    let work_dir: PathBuf = resolve_work_dir(payload.cwd.as_deref());
     let mut cmd_builder = Command::new(&prepared.exe_path);
     for (env_key, env_value) in plugin_config {
         cmd_builder.env(env_key, env_value);
@@ -259,7 +276,7 @@ pub async fn execute_tool_command(
 
     let mut child = match cmd_builder
         .args(&prepared.args)
-        .current_dir(&prepared.cwd)
+        .current_dir(&work_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -361,7 +378,7 @@ pub async fn execute_tool_command(
         "执行失败".to_string()
     };
 
-    let output_path = extract_output_path(&payload.params, prepared.cwd.as_path());
+    let output_path = extract_output_path(&payload.params, work_dir.as_path());
 
     save_execution_record(
         &app,
