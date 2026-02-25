@@ -47,6 +47,18 @@ fn plugins_dir_has_plugins(p: &Path) -> bool {
     })
 }
 
+/// deb 安装后 exe 在 /usr/bin，resources 通常在 /usr/lib/<identifier>/ 或 /usr/share/；此处与 tauri 的 resource_dir 约定一致。
+#[cfg(target_os = "linux")]
+fn plugins_dir_linux_system_candidates() -> Vec<PathBuf> {
+    [
+        PathBuf::from("/usr/lib/arkanalyzer-hapray/tools"),
+        PathBuf::from("/usr/share/arkanalyzer-hapray/tools"),
+        PathBuf::from("/usr/lib/ArkAnalyzer-HapRay/tools"),
+        PathBuf::from("/usr/share/ArkAnalyzer-HapRay/tools"),
+    ]
+    .to_vec()
+}
+
 fn plugins_dir_from_exe() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe = exe.canonicalize().unwrap_or(exe);
@@ -57,6 +69,10 @@ fn plugins_dir_from_exe() -> Option<PathBuf> {
     // 候选顺序：与 exe 同目录的 tools 优先（dist/ArkAnalyzer-HapRay.exe -> dist/tools），再考虑上级目录
     let candidates: Vec<PathBuf> = {
         let mut v = Vec::new();
+        #[cfg(target_os = "linux")]
+        if parent == Path::new("/usr/bin") {
+            v.extend(plugins_dir_linux_system_candidates());
+        }
         #[cfg(target_os = "macos")]
         if let Some(contents) = parent.parent() {
             v.push(contents.join("Resources").join("tools"));
@@ -93,6 +109,12 @@ fn plugins_dir_from_exe() -> Option<PathBuf> {
 }
 
 fn find_plugins_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("HAPRAY_PLUGINS_DIR") {
+        let p = PathBuf::from(&dir);
+        if p.exists() && (plugins_dir_has_plugins(&p) || std::fs::read_dir(&p).is_ok()) {
+            return Some(p);
+        }
+    }
     plugins_dir_from_workspace().or_else(plugins_dir_from_exe)
 }
 
@@ -317,7 +339,9 @@ pub fn run(args: &[String]) -> ! {
         Some(d) => d,
         None => {
             eprintln!("错误: 未找到插件目录");
-            eprintln!("请确保 tools 目录存在于可执行文件附近");
+            eprintln!("请确保 tools 目录存在于可执行文件附近，或设置环境变量 HAPRAY_PLUGINS_DIR 指向 tools 目录");
+            #[cfg(target_os = "linux")]
+            eprintln!("deb 安装后插件通常在 /usr/lib/arkanalyzer-hapray/tools 或 /usr/share/arkanalyzer-hapray/tools，若不存在可设置: export HAPRAY_PLUGINS_DIR=/path/to/tools");
             print_usage();
             std::process::exit(1);
         }

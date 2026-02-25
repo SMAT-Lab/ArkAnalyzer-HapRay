@@ -143,6 +143,16 @@ function copyToDist() {
       return;
     }
     fs.copyFileSync(srcExe, destExe);
+
+    // Linux: 复制 lib/ 下的 .so，使目标机无需安装 libwebkit2gtk 等
+    if (process.platform === "linux") {
+      const srcLib = path.join(releaseDir, "lib");
+      const destLib = path.join(rootDistDir, "lib");
+      if (fs.existsSync(srcLib)) {
+        if (fs.existsSync(destLib)) fs.rmSync(destLib, { recursive: true });
+        copyDirSync(srcLib, destLib);
+      }
+    }
   }
 
   console.log(`✓ 构建产物已复制到 ${rootDistDir}`);
@@ -199,6 +209,11 @@ function main() {
     // 其他平台：保持原有流程
     console.log("构建应用...");
     run("node", [runWithCargo, "npx", "tauri", "build"]);
+
+    if (process.platform === "linux") {
+      console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");
+      run("node", [path.resolve(__dirname, "bundle-linux-libs.js")]);
+    }
 
     console.log("\n对 bundle 内 tools 做硬链接合并...");
     run("node", [mergeScript]);

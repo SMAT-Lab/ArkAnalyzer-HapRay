@@ -1,0 +1,13 @@
+# Linux：将 rpath 设为 $ORIGIN 与 $ORIGIN/lib，使二进制从同目录或 lib/ 加载 .so，
+# 从而无需在目标系统安装 libwebkit2gtk-4.1 等依赖。
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C", "link-arg=-Wl,-rpath,$ORIGIN",
+  "-C", "link-arg=-Wl,-rpath,$ORIGIN/lib",
+]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+  "-C", "link-arg=-Wl,-rpath,$ORIGIN",
+  "-C", "link-arg=-Wl,-rpath,$ORIGIN/lib",
+]

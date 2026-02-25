@@ -13,20 +13,30 @@ jobs:
     strategy:
       matrix:
         item:
-          # Linux - 使用标准 Python
+          # Linux Ubuntu 22.04（LTS）
           - os: ubuntu-22.04
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
-            use_static_python: false  # 使用标准Python避免numpy打包问题
-            
+            use_static_python: false
+            artifact_suffix: "-ubuntu22.04"
+
+          # Linux Ubuntu 24.04（LTS）
+          - os: ubuntu-24.04
+            arch: x64
+            platform: linux
+            package_lock_path: .github/workflows/package-lock.json
+            use_static_python: false
+            artifact_suffix: "-ubuntu24.04"
+
           # Windows
           - os: windows-latest
             arch: x64
             platform: win32
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
-            
+            artifact_suffix: ""
+
           # macOS - ARM (Apple Silicon)
           - os: macos-14
             arch: arm64
@@ -34,6 +44,7 @@ jobs:
             pyinstaller_arch: arm64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
+            artifact_suffix: ""
             
         # 将 node-version 移到每个 item 中
         include:
@@ -124,13 +135,21 @@ jobs:
       if: matrix.item.platform != 'darwin'
       uses: actions/upload-artifact@v4
       with:
-        name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
+        name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}${{ matrix.item.artifact_suffix }}
         path: ArkAnalyzer-HapRay-*.zip
+
+    # Linux 构建产物：收集 Desktop .deb 安装包（按 Ubuntu 版本区分）
+    - name: Upload Desktop DEB (Linux)
+      if: matrix.item.platform == 'linux'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ArkAnalyzer-HapRay-deb-${{ matrix.item.arch }}${{ matrix.item.artifact_suffix }}
+        path: desktop/src-tauri/target/release/bundle/deb/*.deb
 
     - name: Upload opt-detector artifact
       uses: actions/upload-artifact@v4
       with:
-        name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}
+        name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}${{ matrix.item.artifact_suffix }}
         path: opt-detector-*.zip
 
     # macOS 构建产物：收集 Desktop .dmg 安装包
