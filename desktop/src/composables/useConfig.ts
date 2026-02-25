@@ -42,10 +42,26 @@ export function useConfig() {
     return pluginEntry
   }
 
+  /** 全局工作目录（执行工具时子进程 cwd），来自 config.exec_cwd */
+  const getExecCwd = (): string => {
+    const v = config.value.exec_cwd
+    return typeof v === "string" ? v.trim() : ""
+  }
+
+  /** 全局日志级别，来自 config.logger_level，默认 INFO */
+  const getLoggerLevel = (): string => {
+    const v = config.value.logger_level
+    if (typeof v !== "string" || !v) return "INFO"
+    const u = v.toUpperCase()
+    return ["DEBUG", "INFO", "WARNING", "ERROR"].includes(u) ? u : "INFO"
+  }
+
   return {
     config,
     loadConfig,
     saveConfig,
     getPluginConfig,
+    getExecCwd,
+    getLoggerLevel,
   }
 }
