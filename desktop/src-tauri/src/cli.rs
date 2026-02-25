@@ -285,9 +285,10 @@ fn execute_tool(
         cmd.env(k, v);
     }
 
+    // 默认在当前工作目录下执行子进程；若获取失败则退回插件目录 cwd
     let status = cmd
         .args(&prepared.args)
-        .current_dir(&prepared.cwd)
+        .current_dir(std::env::current_dir().unwrap_or_else(|_| prepared.cwd.clone()))
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
