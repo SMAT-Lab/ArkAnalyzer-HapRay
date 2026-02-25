@@ -1,9 +1,9 @@
 [package]
-name = "ArkAnalyzer-HapRay"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-edition = "2021"
+name = "arkanalyzer-hapray"
+version = "1.5.0"
+description = "a tool designed for performance analysis of OpenHarmony applications."
+authors = ["sunbo"]
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +13,11 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# 可执行文件名保持 ArkAnalyzer-HapRay（与 build/zip 脚本一致）；deb 包名由 tauri identifier 决定
+[[bin]]
+name = "ArkAnalyzer-HapRay"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
