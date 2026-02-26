@@ -113,31 +113,122 @@
                   <input v-model="formData[key]" type="checkbox" class="tool-workspace__checkbox" />
                   <span class="tool-workspace__checkbox-label">{{ param.help }}</span>
                 </label>
-                <select
+                <!-- 单选 choice：下拉框内带过滤 -->
+                <div
                   v-else-if="param.type === 'choice' && !isChoiceMulti(param)"
-                  v-model="formData[key]"
-                  class="tool-workspace__input tool-workspace__select"
+                  class="tool-workspace__choice-dropdown"
+                  :data-choice-dropdown="key"
                 >
-                  <option value="">请选择</option>
-                  <option v-if="loadingChoicesKeys.has(key)" value="" disabled>加载中...</option>
-                  <option v-for="opt in getChoices(param, key)" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
+                  <button
+                    type="button"
+                    class="tool-workspace__input tool-workspace__select tool-workspace__choice-trigger"
+                    @click="toggleChoiceDropdown(key)"
+                  >
+                    <span class="tool-workspace__choice-trigger-text">{{
+                      formData[key] || (loadingChoicesKeys.has(key) ? "加载中..." : "请选择")
+                    }}</span>
+                    <svg class="tool-workspace__choice-chevron" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  <div v-show="openChoiceKey === key" class="tool-workspace__choice-panel">
+                    <input
+                      :ref="(el) => setChoiceFilterRef(key, el)"
+                      v-model="choiceFilter[key]"
+                      type="text"
+                      class="tool-workspace__input tool-workspace__choice-panel-filter"
+                      placeholder="输入以过滤选项"
+                      @keydown.stop
+                    />
+                    <div class="tool-workspace__choice-list">
+                      <div
+                        v-if="loadingChoicesKeys.has(key)"
+                        class="tool-workspace__choice-item tool-workspace__choice-item--muted"
+                      >
+                        加载中...
+                      </div>
+                      <template v-else>
+                        <button
+                          v-for="opt in getFilteredChoices(param, key)"
+                          :key="opt"
+                          type="button"
+                          class="tool-workspace__choice-item"
+                          :class="{ 'tool-workspace__choice-item--selected': formData[key] === opt }"
+                          @click="selectChoiceSingle(key, opt)"
+                        >
+                          {{ opt }}
+                        </button>
+                        <div
+                          v-if="getFilteredChoices(param, key).length === 0"
+                          class="tool-workspace__choice-item tool-workspace__choice-item--muted"
+                        >
+                          无匹配项
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+                <!-- 多选 choice：下拉框内带过滤 -->
                 <div
                   v-else-if="param.type === 'choice' && isChoiceMulti(param)"
                   class="tool-workspace__choice-multi-wrap"
                 >
-                  <div class="tool-workspace__nargs-input-row">
-                    <select
-                      v-model="choiceMultiTemp[key]"
-                      class="tool-workspace__input tool-workspace__select"
+                  <div
+                    class="tool-workspace__choice-dropdown"
+                    :data-choice-dropdown="key"
+                  >
+                    <button
+                      type="button"
+                      class="tool-workspace__input tool-workspace__select tool-workspace__choice-trigger"
+                      @click="toggleChoiceDropdown(key)"
                     >
-                      <option value="">请选择</option>
-                      <option v-if="loadingChoicesKeys.has(key)" value="" disabled>加载中...</option>
-                      <option v-for="opt in getChoices(param, key)" :key="opt" :value="opt">{{ opt }}</option>
-                    </select>
-                    <button type="button" class="tool-workspace__add-btn" @click="addChoiceMultiItem(key)">
-                      添加
+                      <span class="tool-workspace__choice-trigger-text">{{
+                        loadingChoicesKeys.has(key)
+                          ? "加载中..."
+                          : getChoiceMultiItems(key).length > 0
+                            ? `已选 ${getChoiceMultiItems(key).length} 项（点击可继续添加）`
+                            : "请选择（可输入过滤）"
+                      }}</span>
+                      <svg class="tool-workspace__choice-chevron" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                      </svg>
                     </button>
+                    <div v-show="openChoiceKey === key" class="tool-workspace__choice-panel">
+                      <input
+                        :ref="(el) => setChoiceFilterRef(key, el)"
+                        v-model="choiceFilter[key]"
+                        type="text"
+                        class="tool-workspace__input tool-workspace__choice-panel-filter"
+                        placeholder="输入以过滤选项"
+                        @keydown.stop
+                      />
+                      <div class="tool-workspace__choice-list">
+                        <div
+                          v-if="loadingChoicesKeys.has(key)"
+                          class="tool-workspace__choice-item tool-workspace__choice-item--muted"
+                        >
+                          加载中...
+                        </div>
+                        <template v-else>
+                          <button
+                            v-for="opt in getFilteredChoices(param, key)"
+                            :key="opt"
+                            type="button"
+                            class="tool-workspace__choice-item"
+                            :class="{ 'tool-workspace__choice-item--selected': getChoiceMultiItems(key).includes(opt) }"
+                            @click="selectChoiceMulti(key, opt)"
+                          >
+                            {{ opt }}
+                          </button>
+                          <div
+                            v-if="getFilteredChoices(param, key).length === 0"
+                            class="tool-workspace__choice-item tool-workspace__choice-item--muted"
+                          >
+                            无匹配项
+                          </div>
+                        </template>
+                      </div>
+                    </div>
                   </div>
                   <ul v-if="getChoiceMultiItems(key).length > 0" class="tool-workspace__nargs-list">
                     <li
@@ -296,6 +387,12 @@ const loadingChoicesKeys = ref<Set<string>>(new Set())
 const nargsInputTemp = ref<Record<string, string | number>>({})
 /** choice multi_select 下拉框的当前选中值（添加前） */
 const choiceMultiTemp = ref<Record<string, string>>({})
+/** choice 类型参数的过滤关键词（paramKey -> 用户输入的过滤文本） */
+const choiceFilter = ref<Record<string, string>>({})
+/** 当前展开的 choice 下拉的 paramKey，用于点击外部关闭 */
+const openChoiceKey = ref<string | null>(null)
+/** 下拉打开时聚焦过滤输入框的 ref 回调缓存 */
+const choiceFilterRefs: Record<string, HTMLInputElement | null> = {}
 
 /** tool-output / tool-command 事件取消监听函数 */
 let unlistenToolOutput: (() => void) | null = null
@@ -339,7 +436,14 @@ function pushPendingChunk(toolKey: string, chunk: string) {
   pendingChunksByTool.value = { ...pendingChunksByTool.value, [toolKey]: [...cur, chunk] }
 }
 
+function onDocumentClick(e: MouseEvent) {
+  if (openChoiceKey.value && !(e.target as Element).closest("[data-choice-dropdown]")) {
+    openChoiceKey.value = null
+  }
+}
+
 onMounted(async () => {
+  document.addEventListener("click", onDocumentClick)
   if (!hasTauri) return
   try {
     unlistenToolCommand = await listen<{ tool_key: string; command: string } | string>("tool-command", (event) => {
@@ -385,6 +489,7 @@ onBeforeUnmount(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener("click", onDocumentClick)
   unlistenToolOutput?.()
   unlistenToolCommand?.()
 })
@@ -455,6 +560,46 @@ function getChoices(param: ParameterDef, paramKey: string): string[] {
   return []
 }
 
+/** 根据当前过滤关键词返回过滤后的选项列表（用于 choice 下拉） */
+function getFilteredChoices(param: ParameterDef, paramKey: string): string[] {
+  const list = getChoices(param, paramKey)
+  const keyword = (choiceFilter.value[paramKey] ?? "").trim().toLowerCase()
+  if (!keyword) return list
+  return list.filter((opt) => opt.toLowerCase().includes(keyword))
+}
+
+function setChoiceFilterRef(paramKey: string, el: unknown) {
+  choiceFilterRefs[paramKey] = el instanceof HTMLInputElement ? el : null
+}
+
+function toggleChoiceDropdown(paramKey: string) {
+  if (openChoiceKey.value === paramKey) {
+    openChoiceKey.value = null
+    return
+  }
+  openChoiceKey.value = paramKey
+  choiceFilter.value = { ...choiceFilter.value, [paramKey]: "" }
+  nextTick(() => {
+    const input = choiceFilterRefs[paramKey]
+    if (input) {
+      input.focus()
+    }
+  })
+}
+
+function selectChoiceSingle(paramKey: string, value: string) {
+  formData.value = { ...formData.value, [paramKey]: value }
+  openChoiceKey.value = null
+  choiceFilter.value = { ...choiceFilter.value, [paramKey]: "" }
+}
+
+function selectChoiceMulti(paramKey: string, value: string) {
+  const arr = getChoiceMultiItems(paramKey)
+  if (arr.includes(value)) return
+  formData.value = { ...formData.value, [paramKey]: [...arr, value] }
+  choiceFilter.value = { ...choiceFilter.value, [paramKey]: "" }
+}
+
 async function browsePath(paramKey: string, paramType: string) {
   if (!hasTauri) return
   try {
@@ -511,6 +656,9 @@ function initForm() {
     if (param.type === "choice" && isChoiceMulti(param)) {
       choiceTemp[key] = ""
     }
+    if (param.type === "choice") {
+      choiceFilter.value = { ...choiceFilter.value, [key]: "" }
+    }
   }
   formData.value = data
   nargsInputTemp.value = temp
@@ -520,14 +668,6 @@ function initForm() {
 function getChoiceMultiItems(paramKey: string): string[] {
   const val = formData.value[paramKey]
   return Array.isArray(val) ? val.map(String) : []
-}
-
-function addChoiceMultiItem(paramKey: string) {
-  const selected = choiceMultiTemp.value[paramKey]
-  if (!selected) return
-  const arr = getChoiceMultiItems(paramKey)
-  if (arr.includes(selected)) return
-  formData.value = { ...formData.value, [paramKey]: [...arr, selected] }
 }
 
 function removeChoiceMultiItem(paramKey: string, index: number) {
