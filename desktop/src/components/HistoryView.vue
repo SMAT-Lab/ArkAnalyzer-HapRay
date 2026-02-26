@@ -18,17 +18,18 @@
             class="history-view__btn history-view__btn--primary"
             @click="openPath(record.output_path as string)"
           >
-            打开输出路径
+            打开输出目录
           </button>
         </div>
         <div v-if="record.result_dir" class="history-view__section">
-          <h3 class="history-view__label">记录目录</h3>
+          <h3 class="history-view__label">日志目录</h3>
+          <p class="history-view__path">{{ record.result_dir }}</p>
           <button
             type="button"
             class="history-view__btn history-view__btn--secondary"
             @click="openPath(record.result_dir as string)"
           >
-            打开记录目录
+            打开日志目录
           </button>
         </div>
         <div v-if="record.output" class="history-view__section">
@@ -103,17 +104,18 @@
                 class="history-view__btn history-view__btn--primary"
                 @click="openPath(selectedRecord.output_path as string)"
               >
-                打开输出路径
+                打开输出目录
               </button>
             </div>
             <div v-if="selectedRecord.result_dir" class="history-view__section">
-              <h3 class="history-view__label">记录目录</h3>
+              <h3 class="history-view__label">日志目录</h3>
+              <p class="history-view__path">{{ selectedRecord.result_dir }}</p>
               <button
                 type="button"
                 class="history-view__btn history-view__btn--secondary"
                 @click="openPath(selectedRecord.result_dir as string)"
               >
-                打开记录目录
+                打开日志目录
               </button>
             </div>
             <div v-if="selectedRecord.output" class="history-view__section">
