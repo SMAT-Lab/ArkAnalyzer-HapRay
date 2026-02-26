@@ -11,6 +11,7 @@ pub struct LoadPluginsResult {
     pub load_log: Vec<String>,
 }
 use chrono::Utc;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Read;
@@ -33,12 +34,25 @@ fn get_config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String>
     Ok(config_dir.join("config.json"))
 }
 
+/// 获取与可执行文件同级的目录（ArkAnalyzer-HapRay.exe 所在目录，其它系统为同名可执行文件所在目录）。
+/// 开发环境下 current_exe 可能是 target/debug/xxx，打包后为安装目录。
+fn get_exe_parent_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+}
+
 fn get_results_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    let home = app
-        .path()
-        .home_dir()
-        .map_err(|e| format!("获取用户目录失败: {}", e))?;
-    let results_dir = home.join(".hapray-gui").join("results");
+    // 优先使用 exe 同级目录下的 results，避免结果目录落在 C 盘用户目录
+    let results_dir = if let Some(exe_parent) = get_exe_parent_dir() {
+        exe_parent.join("results")
+    } else {
+        let home = app
+            .path()
+            .home_dir()
+            .map_err(|e| format!("获取用户目录失败: {}", e))?;
+        home.join(".hapray-gui").join("results")
+    };
     std::fs::create_dir_all(&results_dir).map_err(|e| format!("创建结果目录失败: {}", e))?;
     Ok(results_dir)
 }
@@ -59,6 +73,72 @@ fn extract_output_path(params: &HashMap<String, serde_json::Value>, cwd: &Path) 
                         return Some(abs.to_string_lossy().to_string());
                     }
                     return Some(abs.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 从执行日志中尝试解析产物输出目录（params 未提供时的兜底）。
+/// 匹配常见关键词后的路径（中英文），并校验为已存在的目录。
+fn extract_output_path_from_log(log: &str, cwd: &Path) -> Option<String> {
+    if log.is_empty() {
+        return None;
+    }
+    // 按行或常见分隔看，避免单行过长时漏掉靠后的路径
+    let normalized = log.replace("\r\n", "\n").replace('\r', "\n");
+    let haystack = normalized.as_str();
+
+    // 关键词 + 冒号/等号后的路径；捕获组为非空、不含换行的串（路径可能含空格）
+    let patterns = [
+        (r"(?i)输出目录\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)输出路径\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)结果\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)output\s+(?:directory|path|dir)\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)saved\s+to\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)written\s+to\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"保存到\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"报告\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+    ];
+
+    let mut candidates: Vec<String> = Vec::new();
+    for (pat, group) in patterns {
+        if let Ok(re) = Regex::new(pat) {
+            for cap in re.captures_iter(haystack) {
+                if let Some(m) = cap.get(group) {
+                    let s = m.as_str().trim().trim_matches(|c| c == '"' || c == '\'' || c == ',' || c == '.');
+                    let looks_like_path = s.contains('/')
+                        || s.contains('\\')
+                        || (s.as_bytes().len() >= 2
+                            && s.as_bytes()[0].is_ascii_alphabetic()
+                            && s.as_bytes().get(1) == Some(&b':'));
+                    if !s.is_empty() && looks_like_path {
+                        candidates.push(s.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    for raw in candidates {
+        let trimmed = raw.trim();
+        let path = Path::new(trimmed);
+        let abs = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            cwd.join(path)
+        };
+        if abs.exists() {
+            if abs.is_dir() {
+                return Some(abs.to_string_lossy().to_string());
+            }
+            // 日志里常见的是报告/文件路径，其父目录即输出目录
+            if abs.is_file() {
+                if let Some(parent) = abs.parent() {
+                    if parent.exists() && parent.is_dir() {
+                        return Some(parent.to_string_lossy().to_string());
+                    }
                 }
             }
         }
@@ -378,7 +458,8 @@ pub async fn execute_tool_command(
         "执行失败".to_string()
     };
 
-    let output_path = extract_output_path(&payload.params, work_dir.as_path());
+    let output_path = extract_output_path(&payload.params, work_dir.as_path())
+        .or_else(|| extract_output_path_from_log(&output_log, work_dir.as_path()));
 
     save_execution_record(
         &app,
