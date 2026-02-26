@@ -33,4 +33,5 @@ tauri-plugin-os = "2"
 chrono = "0.4"
 tauri-plugin-decorum = "1.1.1"
 dirs = "5"
+regex = "1"
 

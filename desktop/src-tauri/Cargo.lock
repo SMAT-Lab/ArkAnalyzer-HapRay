@@ -60,6 +60,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "indexmap 2.13.0",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
