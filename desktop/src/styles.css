@@ -1207,15 +1207,101 @@ button#decorum-tb-close:hover {
   min-height: 120px;
 }
 
+/* 带过滤的 choice 下拉：触发区 + 展开后面板内嵌过滤与列表 */
+.tool-workspace__choice-dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.tool-workspace__choice-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  font: inherit;
+}
+
+.tool-workspace__choice-trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-workspace__choice-chevron {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  color: var(--muted-foreground);
+}
+
+.tool-workspace__choice-panel {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  padding: 8px;
+  background: var(--background-base);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+}
+
+.tool-workspace__choice-panel-filter {
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tool-workspace__choice-list {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-workspace__choice-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--foreground);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.tool-workspace__choice-item:hover {
+  background: var(--sidebar-item-hover, rgba(0, 0, 0, 0.06));
+}
+
+.tool-workspace__choice-item--selected {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--sidebar-accent);
+}
+
+.tool-workspace__choice-item--muted {
+  color: var(--muted-foreground);
+  cursor: default;
+}
+
 .tool-workspace__choice-multi-wrap {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.tool-workspace__choice-multi-wrap .tool-workspace__nargs-input-row .tool-workspace__select {
-  flex: 1;
-  min-width: 0;
 }
 
 .tool-workspace__checkbox-wrap {
