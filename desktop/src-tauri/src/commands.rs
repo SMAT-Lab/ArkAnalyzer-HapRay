@@ -34,25 +34,13 @@ fn get_config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String>
     Ok(config_dir.join("config.json"))
 }
 
-/// 获取与可执行文件同级的目录（ArkAnalyzer-HapRay.exe 所在目录，其它系统为同名可执行文件所在目录）。
-/// 开发环境下 current_exe 可能是 target/debug/xxx，打包后为安装目录。
-fn get_exe_parent_dir() -> Option<PathBuf> {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-}
-
 fn get_results_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    // 优先使用 exe 同级目录下的 results，避免结果目录落在 C 盘用户目录
-    let results_dir = if let Some(exe_parent) = get_exe_parent_dir() {
-        exe_parent.join("results")
-    } else {
-        let home = app
-            .path()
-            .home_dir()
-            .map_err(|e| format!("获取用户目录失败: {}", e))?;
-        home.join(".hapray-gui").join("results")
-    };
+    // 将执行记录统一保存在用户目录下 ~/.hapray-gui/results，保持与原有行为一致
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("获取用户目录失败: {}", e))?;
+    let results_dir = home.join(".hapray-gui").join("results");
     std::fs::create_dir_all(&results_dir).map_err(|e| format!("创建结果目录失败: {}", e))?;
     Ok(results_dir)
 }
