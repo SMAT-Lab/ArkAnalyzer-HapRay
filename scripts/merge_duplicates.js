@@ -191,19 +191,12 @@ function mergeDuplicateFiles(sourceDir) {
 
           if (targetIno === sourceStat.ino) {
             // 已经是同一个文件的硬链接
-            console.log(`[跳过] ${targetFile} 已是 ${sourceFile} 的硬链接`);
             continue;
           }
 
           // 删除原文件（包括符号链接）并创建硬链接
-          const originalType = targetStat.isSymbolicLink() ? '符号链接' : '普通文件';
           fs.unlinkSync(targetFile);
           fs.linkSync(sourceFile, targetFile);
-          console.log(`[硬链接] 创建硬链接: ${targetFile}`);
-          console.log(`  └─ 原类型: ${originalType}`);
-          console.log(`  └─ 指向: ${sourceFile}`);
-          console.log(`  └─ 节省: ${fileSize} 字节`);
-          console.log(`  └─ inode: ${sourceStat.ino}`);
           linksCreated++;
           totalSaved += fileSize;
         } catch (error) {
@@ -233,12 +226,15 @@ function mergeDuplicateFiles(sourceDir) {
   );
 }
 
-// 执行合并
-const distDir = path.resolve(__dirname, "../dist");
-if (!fs.existsSync(distDir)) {
-  console.error(`错误: dist 目录不存在: ${distDir}`);
+// 执行合并，支持传入目标目录参数
+const targetDir = process.argv[2]
+  ? path.resolve(process.cwd(), process.argv[2])
+  : path.resolve(__dirname, "../dist");
+
+if (!fs.existsSync(targetDir)) {
+  console.error(`错误: 目录不存在: ${targetDir}`);
   process.exit(1);
 }
 
-console.log(`正在处理目录: ${distDir}\n`);
-mergeDuplicateFiles(distDir);
+console.log(`正在处理目录: ${targetDir}\n`);
+mergeDuplicateFiles(targetDir);

@@ -59,12 +59,12 @@ export class HapAnalysisService {
      * 分析多个HAP/ZIP文件或目录
      * @param inputPath 输入路径（文件或目录）
      * @param outputDir 输出目录
-     * @param jobs 并发数量
+     * @param jobs 并发数量（不传时自动使用 CPU 核心数）
      */
     public async analyzeMultipleHaps(
         inputPath: string,
         outputDir: string,
-        jobs?: string
+        jobs?: number
     ): Promise<void> {
         if (!fs.existsSync(inputPath)) {
             throw ErrorFactory.createHapFileError(`Input not found: ${inputPath}`, inputPath);
@@ -217,7 +217,7 @@ export class HapAnalysisService {
     /**
      * 分析多个应用包目录
      */
-    private async analyzeMultipleAppDirectories(rootDir: string, outputDir: string, jobs?: string): Promise<void> {
+    private async analyzeMultipleAppDirectories(rootDir: string, outputDir: string, jobs?: number): Promise<void> {
         logger.info('搜索应用包目录（格式：xxxxx@xxxx）...');
 
         // 搜索所有符合格式的子目录
@@ -355,10 +355,11 @@ export class HapAnalysisService {
     private async analyzeTargetsWithConcurrency(
         targets: Array<{ label: string; data?: Buffer; outputBase: string; relativePath: string }>,
         outputDir: string,
-        jobs?: string
+        jobs?: number
     ): Promise<void> {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const maxJobs = jobs === 'auto' ? os.cpus().length : parseInt(String(jobs ?? '4'), 10);
+        // jobs 为空时使用 CPU 核心数量；传入非正数时回退到 1
+        const maxJobs = jobs && jobs > 0 ? jobs : os.cpus().length;
 
         logger.info(`开始并行分析 ${targets.length} 个HAP包，并发数：${maxJobs}...`);
 

@@ -32,7 +32,7 @@ HaprayCli.addCommand(BjcCli);
 
 try {
     program
-        .name('arkanalyzer-hapray')
+        .name('hapray-sa-cmd')
         .description('CLI to arkanalyzer hapray')
         .version(VERSION)
         .addCommand(HaprayCli)

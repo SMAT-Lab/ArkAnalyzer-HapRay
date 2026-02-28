@@ -43,18 +43,10 @@
           "help": "输出目录路径"
         },
         "jobs": {
-          "type": "str",
+          "type": "int",
           "label": "并发数量",
           "required": false,
-          "default": "auto",
           "help": "并发分析数量，默认为CPU核心数"
-        },
-        "include_details": {
-          "type": "bool",
-          "label": "包含详细信息",
-          "required": false,
-          "default": false,
-          "help": "是否包含详细信息"
         }
       }
     }

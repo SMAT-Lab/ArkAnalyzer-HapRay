@@ -66,7 +66,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -135,7 +135,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -191,7 +191,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -456,9 +456,10 @@
           "help": "多设备环境下的设备ID"
         },
         "apps": {
-          "type": "str",
+          "type": "choice",
           "label": "应用包名",
           "required": true,
+          "choices": "get_installed_apps",
           "nargs": "+",
           "help": "要执行测试的多个应用包名，支持多个值"
         },
@@ -496,7 +497,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -505,40 +506,6 @@
           "default": false,
           "help": "启用Snapshot捕获"
         }
-      }
-    }
-  },
-  "config": {
-    "description": "负载测试插件配置项",
-    "items": {
-      "glm_api_key": {
-        "type": "str",
-        "label": "GUI LLM API Key",
-        "default": "",
-        "help": "GUI LLM API Key",
-        "required": false
-      },
-      "glm_base_url": {
-        "type": "str",
-        "label": "GUI LLM Base URL",
-        "default": "http://localhost:8000/v1",
-        "help": "GUI LLM Base URL",
-        "required": false
-      },
-      "glm_model": {
-        "type": "str",
-        "label": "GUI LLM Model",
-        "default": "autoglm-phone-9b",
-        "help": "GUI LLM Model",
-        "required": false
-      },
-      "logger_level": {
-        "type": "choice",
-        "label": "日志级别",
-        "default": "INFO",
-        "choices": ["DEBUG", "INFO", "WARNING", "ERROR"],
-        "help": "日志输出级别",
-        "required": false
       }
     }
   }

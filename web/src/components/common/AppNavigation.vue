@@ -2,7 +2,7 @@
   <div class="sidebar-navigation" :class="{ collapsed: isCollapsed }">
     <div class="logo-section" @click="goToHome">
       <!-- <h2 v-show="!isCollapsed" class="app-title">ArkAnalyzer</h2> -->
-      <h2 v-show="!isCollapsed" class="app-title">HapRay</h2>
+      <h2 v-show="!isCollapsed" class="app-title">ArkAnalyzer-HapRay</h2>
       <div v-show="isCollapsed" class="logo-icon">H</div>
     </div>
 
