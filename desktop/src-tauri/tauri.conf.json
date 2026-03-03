@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "arkanalyzer-hapray",
+  "productName": "ArkAnalyzer-HapRay",
   "version": "1.5.0",
   "identifier": "arkanalyzer.hapray",
   "build": {
