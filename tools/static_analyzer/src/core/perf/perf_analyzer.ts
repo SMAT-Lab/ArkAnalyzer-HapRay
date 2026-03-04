@@ -193,13 +193,48 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         this.samples = [];
     }
 
+    /**
+     * 统一获取 sql.js 运行时依赖（sql-wasm.js / sql-wasm.wasm）所在目录
+     * 为了避免在 Bun 二进制中出现打包机上的“幽灵路径”，这里在运行时按多种可能位置探测。
+     */
+    private getSqlJsRuntimeDir(): string {
+        const candidates: string[] = [];
+
+        // 1. 与当前文件同级的 node_modules（脚本模式下的 dist/tools/sa-cmd）
+        candidates.push(path.join(__dirname, 'node_modules', 'sql.js', 'dist'));
+
+        // 2. 进程工作目录（防御性兜底）
+        candidates.push(path.join(process.cwd(), 'node_modules', 'sql.js', 'dist'));
+
+        // 3. 可执行文件所在目录（Bun 二进制模式）
+        if (process.execPath) {
+            candidates.push(path.join(path.dirname(process.execPath), 'node_modules', 'sql.js', 'dist'));
+        }
+
+        for (const dir of candidates) {
+            try {
+                if (fs.existsSync(path.join(dir, 'sql-wasm.wasm'))) {
+                    return dir;
+                }
+            } catch {
+                // 忽略单个路径的访问错误，继续尝试其他候选
+            }
+        }
+
+        // 如果都没找到，就默认用与当前文件同级的路径（保持与原来行为最接近）
+        return path.join(__dirname, 'node_modules', 'sql.js', 'dist');
+    }
+
     public async calcPerfDbTotalInstruction(dbfile: string): Promise<number> {
         let total = 0;
         if (dbfile === '') {
             return 0;
         }
 
-        let SQL = await initSqlJs();
+        const sqlJsDir = this.getSqlJsRuntimeDir();
+        let SQL = await initSqlJs({
+            locateFile: (file) => path.join(sqlJsDir, file),
+        });
 
         logger.info(`calcTotalInstruction ${dbfile} start`);
         let db: Database | null = null;
@@ -240,7 +275,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         const fileBuffer = fs.readFileSync(dbFilePath);
         
         // 加载 db 文件
-        const SQL = await initSqlJs();
+        const sqlJsDir = this.getSqlJsRuntimeDir();
+        const SQL = await initSqlJs({
+            locateFile: (file) => path.join(sqlJsDir, file),
+        });
         const db = new SQL.Database(fileBuffer);
 
         try {
@@ -397,7 +435,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * 仅加载数据库和统计信息，不产生输出文件
      */
     private async loadDbAndStatisticsOnly(testInfo: TestSceneInfo, packageName: string, timeRange?: TimeRange): Promise<void> {
-        let SQL = await initSqlJs();
+        const sqlJsDir = this.getSqlJsRuntimeDir();
+        let SQL = await initSqlJs({
+            locateFile: (file) => path.join(sqlJsDir, file),
+        });
         for (const stepGroup of testInfo.rounds[testInfo.chooseRound].steps) {
             logger.info(`loadDbAndStatisticsOnly groupId=${stepGroup.groupId} parse dbfile ${stepGroup.dbfile}`);
             const db = new SQL.Database(fs.readFileSync(stepGroup.dbfile!));
