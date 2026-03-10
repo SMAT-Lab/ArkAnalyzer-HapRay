@@ -122,12 +122,18 @@ fn config_file_path() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".hapray-gui").join("config.json"))
 }
 
-/// 从已加载的插件中提取短参数映射 (short -> param_name)
+/// 短参数信息：参数名 + 是否支持多值（multi_select）
+struct ShortParamInfo {
+    param_name: String,
+    multi_select: bool,
+}
+
+/// 从已加载的插件中提取短参数映射 (short -> param_info)
 fn short_option_mappings_from_plugins(
     plugins: &[desktop_lib::plugins::PluginMetadata],
     plugin_id: &str,
     action: &str,
-) -> HashMap<String, String> {
+) -> HashMap<String, ShortParamInfo> {
     let mut mappings = HashMap::new();
     let Some(meta) = plugins.iter().find(|p| p.id == plugin_id) else {
         return mappings;
@@ -137,10 +143,35 @@ fn short_option_mappings_from_plugins(
     };
     for (param_name, param_def) in &action_config.parameters {
         if let Some(ref short) = param_def.short {
-            mappings.insert(short.clone(), param_name.clone());
+            mappings.insert(
+                short.clone(),
+                ShortParamInfo {
+                    param_name: param_name.clone(),
+                    multi_select: param_def.multi_select,
+                },
+            );
         }
     }
     mappings
+}
+
+/// 从已加载的插件中提取参数名 -> multi_select 映射（用于长参数 --format 等）
+fn param_multi_select_from_plugins(
+    plugins: &[desktop_lib::plugins::PluginMetadata],
+    plugin_id: &str,
+    action: &str,
+) -> HashMap<String, bool> {
+    let mut map = HashMap::new();
+    let Some(meta) = plugins.iter().find(|p| p.id == plugin_id) else {
+        return map;
+    };
+    let Some(action_config) = meta.actions.get(action) else {
+        return map;
+    };
+    for (param_name, param_def) in &action_config.parameters {
+        map.insert(param_name.clone(), param_def.multi_select);
+    }
+    map
 }
 
 // -----------------------------------------------------------------------------
@@ -151,43 +182,69 @@ fn parse_long_arg(
     key: &str,
     args: &[String],
     i: &mut usize,
+    param_multi_select: &HashMap<String, bool>,
 ) -> (String, serde_json::Value) {
     if key.starts_with("no-") {
         let param_key = key.trim_start_matches("no-").to_string();
         (param_key, serde_json::json!(false))
     } else if *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+        let multi_select = param_multi_select.get(key).copied().unwrap_or(false);
+        let mut values = Vec::new();
         *i += 1;
-        let value = args[*i].clone();
-        (key.to_string(), serde_json::json!(value))
+        values.push(args[*i].clone());
+        if multi_select {
+            while *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+                *i += 1;
+                values.push(args[*i].clone());
+            }
+        }
+        let value = if values.len() == 1 && !multi_select {
+            serde_json::json!(values[0].clone())
+        } else {
+            serde_json::json!(values)
+        };
+        (key.to_string(), value)
     } else {
         (key.to_string(), serde_json::json!(true))
     }
 }
 
 /// 常见短参数 fallback（当 plugin.json 的 short 映射缺失时使用）
-fn common_short_fallback(short: &str) -> Option<&'static str> {
+fn common_short_fallback(short: &str) -> Option<(&'static str, bool)> {
     match short {
-        "i" => Some("input"),
-        "o" => Some("output"),
+        "i" => Some(("input", false)),
+        "o" => Some(("output", false)),
         _ => None,
     }
 }
 
 fn parse_short_arg(
     short: &str,
-    short_to_param: &HashMap<String, String>,
+    short_to_param: &HashMap<String, ShortParamInfo>,
     args: &[String],
     i: &mut usize,
 ) -> (String, serde_json::Value) {
-    let param_key = short_to_param
+    let (param_key, multi_select) = short_to_param
         .get(short)
-        .cloned()
-        .or_else(|| common_short_fallback(short).map(String::from))
-        .unwrap_or_else(|| short.to_string());
+        .map(|info| (info.param_name.clone(), info.multi_select))
+        .or_else(|| common_short_fallback(short).map(|(n, m)| (n.to_string(), m)))
+        .unwrap_or_else(|| (short.to_string(), false));
 
     let value = if *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+        let mut values = Vec::new();
         *i += 1;
-        serde_json::json!(args[*i].clone())
+        values.push(args[*i].clone());
+        if multi_select {
+            while *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+                *i += 1;
+                values.push(args[*i].clone());
+            }
+        }
+        if values.len() == 1 && !multi_select {
+            serde_json::json!(values[0].clone())
+        } else {
+            serde_json::json!(values)
+        }
     } else {
         serde_json::json!(true)
     };
@@ -196,7 +253,8 @@ fn parse_short_arg(
 
 fn parse_raw_args(
     args: &[String],
-    short_to_param: &HashMap<String, String>,
+    short_to_param: &HashMap<String, ShortParamInfo>,
+    param_multi_select: &HashMap<String, bool>,
 ) -> HashMap<String, serde_json::Value> {
     let mut params = HashMap::new();
     let mut i = 0;
@@ -207,7 +265,7 @@ fn parse_raw_args(
         if arg.starts_with("--") {
             let key = arg.trim_start_matches('-');
             if !key.is_empty() {
-                let (k, v) = parse_long_arg(key, args, &mut i);
+                let (k, v) = parse_long_arg(key, args, &mut i, param_multi_select);
                 params.insert(k, v);
             }
         } else if arg.starts_with('-')
@@ -243,7 +301,8 @@ fn parse_cli_request(
         .collect();
     let plugin_id = registry.get(&action)?.clone();
     let short_to_param = short_option_mappings_from_plugins(&plugins, &plugin_id, &action);
-    let params = parse_raw_args(&raw_args[2..], &short_to_param);
+    let param_multi_select = param_multi_select_from_plugins(&plugins, &plugin_id, &action);
+    let params = parse_raw_args(&raw_args[2..], &short_to_param, &param_multi_select);
 
     Some(CliRunRequest {
         plugin_id,
