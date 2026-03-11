@@ -65,6 +65,26 @@ class UpdateAction:
             help='SIMPLE mode need perf paths (supports multiple files)',
         )
         parser.add_argument(
+            '--app-name',
+            default='',
+            help='SIMPLE mode optional app name',
+        )
+        parser.add_argument(
+            '--rom-version',
+            default='',
+            help='SIMPLE mode optional rom version',
+        )
+        parser.add_argument(
+            '--app-version',
+            default='',
+            help='SIMPLE mode optional app version',
+        )
+        parser.add_argument(
+            '--scene',
+            default='',
+            help='SIMPLE mode optional scene name',
+        )
+        parser.add_argument(
             '--traces',
             nargs='+',
             default=[],
@@ -128,6 +148,10 @@ class UpdateAction:
             perf_paths = parsed_args.perfs
             trace_paths = parsed_args.traces
             pids = parsed_args.pids
+            app_name = parsed_args.app_name
+            app_version = parsed_args.app_version
+            rom_version = parsed_args.rom_version
+            scene = parsed_args.scene
 
             # if not perf_paths:
             #     logging.error('SIMPLE mode requires --perfs parameter')
@@ -142,7 +166,16 @@ class UpdateAction:
             timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             report_dir = os.path.join(report_dir, timestamp)
             create_simple_mode_structure(
-                report_dir, perf_paths, trace_paths, package_name, pids=pids, steps_file_path=steps_file_path
+                report_dir,
+                perf_paths,
+                trace_paths,
+                package_name,
+                pids=pids,
+                steps_file_path=steps_file_path,
+                app_name=app_name,
+                app_version=app_version,
+                rom_version=rom_version,
+                scene=scene,
             )
         logging.info('Updating reports in: %s', report_dir)
         if so_dir:
