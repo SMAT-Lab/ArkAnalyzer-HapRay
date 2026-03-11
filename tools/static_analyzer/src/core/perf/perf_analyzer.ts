@@ -1204,4 +1204,70 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
         logger.info(`已生成 summary_info.json，包含 ${summaryJsonObject.length} 个步骤的汇总信息`);
     }
+
+    /**
+     * 生成 so_file_load.json，按 .so 文件维度统计应用负载
+     */
+    async generateFileLoadJson(
+        input: string,
+        testInfo: TestReportInfo,
+        steps: Array<Step>
+    ): Promise<void> {
+        const outputDir = path.join(input, 'report');
+        const records: Array<{
+            rom_version: string;
+            app_name: string;
+            app_version: string;
+            scene: string;
+            step_id: number;
+            file: string;
+            file_path: string;
+            load: number;
+        }> = [];
+
+        const appId = testInfo.app_id ?? '';
+        const appName = testInfo.app_name ?? '';
+
+        // 按 step 和 file 聚合负载（仅统计应用进程）
+        for (const step of steps) {
+            const stepIdx = step.stepIdx;
+            const fileLoadMap: Map<string, number> = new Map();
+
+            for (const data of this.details) {
+                if (data.stepIdx !== stepIdx) {
+                    continue;
+                }
+
+                // 仅统计应用相关进程：进程名包含 app_id
+                if (appId && !data.processName.includes(appId)) {
+                    continue;
+                }
+
+                const filePath = data.file;
+                // 只统计 .so 文件
+                if (!filePath.toLowerCase().endsWith('.so')) {
+                    continue;
+                }
+
+                const prev = fileLoadMap.get(filePath) ?? 0;
+                fileLoadMap.set(filePath, prev + data.symbolEvents);
+            }
+
+            for (const [filePath, load] of fileLoadMap) {
+                records.push({
+                    rom_version: testInfo.rom_version,
+                    app_name: appName,
+                    app_version: testInfo.app_version,
+                    scene: `${testInfo.scene}_step${stepIdx}`,
+                    step_id: stepIdx,
+                    file: path.basename(filePath),
+                    file_path: filePath,
+                    load,
+                });
+            }
+        }
+
+        await saveJsonArray(records, path.join(outputDir, 'so_file_load.json'));
+        logger.info(`已生成 so_file_load.json，包含 ${records.length} 条 .so 文件负载记录`);
+    }
 }
