@@ -414,6 +414,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         await perfAnalyzer.analyze(testSceneInfo, outputDir, timeRange);
         await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
         await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
+        await perfAnalyzer.generateFileLoadJson(inputPath, testInfo, steps);
 
         // 注意：内存分析已由 Python 完成，SA 不再处理内存数据
     }
@@ -453,6 +454,7 @@ export class PerfAnalysisService extends AnalysisServiceBase {
         await perfAnalyzer.analyze(testSceneInfo, outputDir, timeRange);
         await perfAnalyzer.saveHiperfJson(testSceneInfo, path.join(outputDir, '../', 'hiperf', 'hiperf_info.json'));
         await perfAnalyzer.generateSummaryInfoJson(inputPath, testInfo, steps);
+        await perfAnalyzer.generateFileLoadJson(inputPath, testInfo, steps);
 
         logger.info('负载分析完成，未生成内存数据');
     }
