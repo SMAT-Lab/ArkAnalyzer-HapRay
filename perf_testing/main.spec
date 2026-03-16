@@ -1,10 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
-import pkg_resources
 import sys
 import os
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files
 
-venv_packages = [pkg.key for pkg in pkg_resources.working_set]
+# 获取已安装包列表（兼容无 pkg_resources 的 Python 3.12+）
+def _get_venv_packages():
+    try:
+        import pkg_resources
+        return [pkg.key for pkg in pkg_resources.working_set]
+    except ModuleNotFoundError:
+        import importlib.metadata
+        name_map = {'pyyaml': 'yaml', 'pillow': 'PIL'}
+        result = []
+        for d in importlib.metadata.distributions():
+            name = (d.metadata.get('Name') or d.name or '').lower().replace('-', '_')
+            result.append(name_map.get(name, name))
+        return result
+
+venv_packages = _get_venv_packages()
 venv_packages.append('ohos')
 venv_packages.append('devicetest')
 venv_packages.append('xdevice')
