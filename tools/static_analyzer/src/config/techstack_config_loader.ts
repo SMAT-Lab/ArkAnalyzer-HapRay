@@ -20,10 +20,16 @@ export class TechStackConfigLoader {
 
     private constructor() {
         // 使用与 loadFrameworkConfig 相同的路径查找策略
-        // 先尝试从当前工作目录查找（适用于 ts-node 运行）
-        let configPath = path.join(process.cwd(), 'res/techstack/techstack-config.yaml');
+        // 1. 可执行文件同目录的 res（适用于 Bun 编译的二进制，cwd 可能为任意目录）
+        const exeDir = path.dirname(process.execPath || __filename);
+        let configPath = path.join(exeDir, 'res/techstack/techstack-config.yaml');
 
-        // 如果找不到，尝试从编译后的目录查找（适用于编译后运行）
+        // 2. 当前工作目录（适用于 ts-node 或从 sa-cmd 目录运行）
+        if (!fs.existsSync(configPath)) {
+            configPath = path.join(process.cwd(), 'res/techstack/techstack-config.yaml');
+        }
+
+        // 3. __dirname 相对路径（适用于源码/编译后 js 运行）
         if (!fs.existsSync(configPath)) {
             let resDir = path.join(__dirname, 'res');
             if (!fs.existsSync(resDir)) {
@@ -167,5 +173,20 @@ export function getTechStackConfigLoader(): TechStackConfigLoader {
  */
 export function loadTechStackConfig(): TechStackConfig {
     return TechStackConfigLoader.getInstance().loadConfig();
+}
+
+/**
+ * 解析 res 目录路径（与可执行文件同目录，适用于 Bun 编译的二进制）
+ * 供 pub_dev_packages.json、flutter_versions.json 等资源加载使用
+ */
+export function resolveResPath(relativePath: string): string {
+    const exeDir = path.dirname(process.execPath || __filename);
+    let resPath = path.join(exeDir, 'res', relativePath);
+    if (fs.existsSync(resPath)) return resPath;
+    resPath = path.join(process.cwd(), 'res', relativePath);
+    if (fs.existsSync(resPath)) return resPath;
+    let resDir = path.join(__dirname, 'res');
+    if (!fs.existsSync(resDir)) resDir = path.join(__dirname, '../../res');
+    return path.join(resDir, relativePath);
 }
 
