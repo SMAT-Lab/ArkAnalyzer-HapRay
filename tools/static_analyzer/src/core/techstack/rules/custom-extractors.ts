@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 import { ElfAnalyzer } from '../../elf/elf_analyzer';
+import { resolveResPath } from '../../../config/techstack_config_loader';
 
 /**
  * 自定义提取器注册表（单例）
@@ -115,19 +116,7 @@ async function extractDartPackages(fileInfo: FileInfo, _pattern?: MetadataPatter
 
             // 加载 pub.dev 包列表，只保留开源包
             try {
-                // 使用与 loadFrameworkConfig 相同的路径查找策略
-                // 先尝试从当前工作目录查找（适用于 ts-node 运行）
-                let resPath = path.join(process.cwd(), 'res/techstack/pub_dev_packages.json');
-
-                // 如果找不到，尝试从编译后的目录查找（适用于编译后运行）
-                if (!fs.existsSync(resPath)) {
-                    let resDir = path.join(__dirname, 'res');
-                    if (!fs.existsSync(resDir)) {
-                        resDir = path.join(__dirname, '../../../../res');
-                    }
-                    resPath = path.join(resDir, 'techstack/pub_dev_packages.json');
-                }
-
+                const resPath = resolveResPath('techstack/pub_dev_packages.json');
                 const data = fs.readFileSync(resPath, 'utf-8');
                 const jsonData = JSON.parse(data) as { packages: Array<string> };
                 const pubDevPackages = new Set(jsonData.packages);
@@ -330,19 +319,7 @@ async function extractFlutterHex40(fileInfo: FileInfo, _pattern?: MetadataPatter
  */
 async function getFlutterVersions(): Promise<Map<string, { lastModified: string }>> {
     try {
-        // 使用与 loadFrameworkConfig 相同的路径查找策略
-        // 先尝试从当前工作目录查找（适用于 ts-node 运行）
-        let resPath = path.join(process.cwd(), 'res/techstack/flutter_versions.json');
-
-        // 如果找不到，尝试从编译后的目录查找（适用于编译后运行）
-        if (!fs.existsSync(resPath)) {
-            let resDir = path.join(__dirname, 'res');
-            if (!fs.existsSync(resDir)) {
-                resDir = path.join(__dirname, '../../../../res');
-            }
-            resPath = path.join(resDir, 'techstack/flutter_versions.json');
-        }
-
+        const resPath = resolveResPath('techstack/flutter_versions.json');
         if (fs.existsSync(resPath)) {
             const data = fs.readFileSync(resPath, 'utf-8');
             const versionsData = JSON.parse(data) as Record<string, { lastModified: string }>;
