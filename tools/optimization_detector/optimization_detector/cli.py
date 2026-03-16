@@ -20,8 +20,8 @@ import multiprocessing
 import sys
 from typing import Optional
 
-from optimization_detector import FileCollector, OptimizationDetector, __version__
-from optimization_detector.report_formatters import ReportFormatterFactory
+from optimization_detector import __version__, detect_optimization
+from optimization_detector.errors import OptDetectorInputError, OptDetectorNoFilesError
 
 _STDOUT_WRAPPER = None
 
@@ -88,45 +88,31 @@ class OptAction:
 
         parsed_args = parser.parse_args()
 
-        # 配置日志
         OptAction.setup_logging(parsed_args.verbose, parsed_args.log_file)
 
-        action = OptAction()
-        file_collector = FileCollector()
         try:
-            logging.info('Collecting binary files from: %s', parsed_args.input)
-            file_infos = file_collector.collect_binary_files(parsed_args.input)
-
-            if not file_infos:
-                logging.warning('No valid binary files found')
-                return 1
-
-            logging.info('Starting optimization detection on %d files', len(file_infos))
-            if parsed_args.timeout:
-                logging.info('Timeout per file: %d seconds', parsed_args.timeout)
-            multiprocessing.freeze_support()
-            data = action.run_detection(
-                parsed_args.jobs,
-                file_infos,
-                parsed_args.timeout,
-                parsed_args.lto,
-                parsed_args.opt,
+            result = detect_optimization(
+                parsed_args.input,
+                output=parsed_args.output,
+                output_format=parsed_args.format,
+                jobs=parsed_args.jobs,
+                timeout=parsed_args.timeout,
+                enable_lto=parsed_args.lto,
+                enable_opt=parsed_args.opt,
+                return_dict=False,
+                save_reports=True,
             )
-            # 保存报告到指定格式
-            ReportFormatterFactory.save_reports(data, parsed_args.format, parsed_args.output)
-            return 0
-        finally:
-            file_collector.cleanup()
-
-    @staticmethod
-    def run_detection(jobs, file_infos, timeout=None, enable_lto=False, enable_opt=True):
-        """Run optimization detection in a separate process"""
-        try:
-            detector = OptimizationDetector(jobs, timeout=timeout, enable_lto=enable_lto, enable_opt=enable_opt)
-            return detector.detect_optimization(file_infos)
-        except Exception as e:
-            logging.error('OptimizationDetector error: %s', str(e))
-            return []
+            if result.get('success'):
+                logging.info('Analysis complete. Summary: %s', result.get('summary', {}))
+                return 0
+            logging.error('Analysis failed: %s', result.get('error', 'Unknown error'))
+            return 1
+        except OptDetectorInputError as e:
+            logging.error('Input error: %s', e.message)
+            return 1
+        except OptDetectorNoFilesError as e:
+            logging.warning('No valid binary files found: %s', e.message)
+            return 1
 
     @staticmethod
     def setup_logging(verbose: bool = False, log_file: Optional[str] = None):
@@ -134,8 +120,6 @@ class OptAction:
         level = logging.DEBUG if verbose else logging.INFO
         global _STDOUT_WRAPPER
         if _STDOUT_WRAPPER is None:
-            # Use TextIOWrapper to set UTF-8 encoding for stdout
-            # Keep reference to prevent the wrapper from being closed
             _STDOUT_WRAPPER = io.TextIOWrapper(
                 sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True
             )
@@ -150,6 +134,11 @@ class OptAction:
         )
 
 
-if __name__ == '__main__':
+def main() -> int:
+    """Entry point for opt-detector CLI."""
     multiprocessing.freeze_support()
-    sys.exit(OptAction.execute())
+    return OptAction.execute()
+
+
+if __name__ == '__main__':
+    sys.exit(main())

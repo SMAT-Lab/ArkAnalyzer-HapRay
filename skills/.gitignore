@@ -1,0 +1,4 @@
+# Runtime artifacts in bundled optimization_detector
+hapray/opt-detector/optimization_detector/.venv
+hapray/opt-detector/optimization_detector/files_results_cache
+hapray/opt-detector/optimization_detector/*.egg-info
