@@ -17,6 +17,7 @@ import argparse
 import logging
 import os
 import shutil
+import sys
 import time
 import traceback
 from typing import Optional
@@ -117,8 +118,16 @@ class HapTestAction:
         if parsed.no_perf:
             Config.set('hiperf.disabled', True)
 
+        # 仅在 macOS App 打包场景下，避免 cwd 为只读目录导致写入 /reports 或 ./reports 失败
         root_path = os.getcwd()
+        if sys.platform == 'darwin':
+            try:
+                root_path = os.path.join(os.path.expanduser('~'), 'ArkAnalyzer-HapRay')
+                os.makedirs(root_path, exist_ok=True)
+            except Exception:
+                root_path = os.getcwd()
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+        # 保持旧行为：非 macOS 仍然写到 <cwd>/reports/...
         reports_path = os.path.join(root_path, 'reports', f'haptest_{parsed.app_package}_{timestamp}')
         os.makedirs(reports_path, exist_ok=True)
 

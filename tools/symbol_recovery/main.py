@@ -42,6 +42,34 @@ from core.utils.time_tracker import TimeTracker
 logger = get_logger(__name__)
 
 
+def _is_dir_writable(p: Path) -> bool:
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        probe = p / '.writable_probe'
+        probe.write_text('ok', encoding='utf-8')
+        probe.unlink(missing_ok=True)
+        return True
+    except Exception:
+        return False
+
+
+def _ensure_writable_cwd():
+    """
+    在 macOS App 打包场景下，工具可能从只读目录启动（如 .app/Contents/Resources），
+    依赖或默认输出（output/cache）使用相对路径时会触发 EROFS。
+
+    仅在 cwd 不可写的情况下，将 cwd 切换到用户主目录下的可写运行目录。
+    """
+    if sys.platform != 'darwin':
+        return
+    cwd = Path.cwd()
+    if _is_dir_writable(cwd):
+        return
+    runtime_dir = Path.home() / 'ArkAnalyzer-HapRay' / 'runtime'
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    os.chdir(str(runtime_dir))
+
+
 def create_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='SymRecover - 二进制符号恢复工具：支持 perf.data 和 Excel 偏移量两种模式',
@@ -732,6 +760,7 @@ def summarize_outputs(args, output_dir: Path):
 
 
 def main():
+    _ensure_writable_cwd()
     parser = create_argument_parser()
     args = parser.parse_args()
 
