@@ -32,7 +32,8 @@ export const ElfAnalyzerCli = new Command('elf')
     .requiredOption('-r, --report_dir <string>', 'Directory containing reports to read')
     .requiredOption('-o, --output <string>', 'output file')
     .action(async (options: ElfAnalyzerOptions) => {
-        await main(options.input, options.report_dir, options.output);
+        const mappedOutput = Logger.mapOutputPath('elf', options.output);
+        await main(options.input, options.report_dir, mappedOutput);
     });
 
 async function main(input: string, report: string, output: string): Promise<void> {

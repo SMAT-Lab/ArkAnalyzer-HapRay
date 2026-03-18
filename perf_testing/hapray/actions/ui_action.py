@@ -17,6 +17,7 @@ import argparse
 import base64
 import logging
 import os
+import sys
 import time
 from typing import Optional
 
@@ -24,6 +25,7 @@ from hypium import UiDriver
 
 from hapray import VERSION
 from hapray.analyze.ui_analyzer import UIAnalyzer
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.collection.capture_ui import CaptureUI
 
 
@@ -441,6 +443,9 @@ class UIAction:
 
         # 创建输出目录
         output_dir = os.path.abspath(parsed_args.output)
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            output_dir = str(get_user_data_root('ui_output') / os.path.basename(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
         # 创建UIAction实例并执行

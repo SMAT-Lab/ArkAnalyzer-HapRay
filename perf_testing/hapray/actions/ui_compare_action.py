@@ -18,8 +18,10 @@ import base64
 import glob
 import logging
 import os
+import sys
 
 from hapray import VERSION
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.ui_detector.ui_tree_comparator import UITreeComparator
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -101,6 +103,10 @@ class UICompareAction:
         if not os.path.exists(parsed_args.compare_dir):
             logging.error(f'对比目录不存在: {parsed_args.compare_dir}')
             return None
+
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            parsed_args.output = str(get_user_data_root('ui_compare_output') / os.path.basename(parsed_args.output))
 
         # 自动查找UI文件
         base_files = UICompareAction._find_ui_files(parsed_args.base_dir)
