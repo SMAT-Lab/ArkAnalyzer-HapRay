@@ -36,9 +36,13 @@ pandas_hidden_imports = [
 venv_packages.extend(numpy_hidden_imports)
 venv_packages.extend(pandas_hidden_imports)
 
+# 直接打包 resource 目录（含 web、xvm 等）
+_resource_dir = os.path.join(os.path.dirname(SPEC), 'resource')
 datas = [
     ('hapray', 'hapray'),
 ]
+if os.path.isdir(_resource_dir):
+    datas.append((_resource_dir, 'resource'))
 
 # 初始化 binaries 列表
 binaries = []

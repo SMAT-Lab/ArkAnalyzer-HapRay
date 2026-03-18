@@ -63,13 +63,22 @@ class ExeUtils:
         # 打包后：project_root 是 exe 所在目录（D:\haprayTest\tools\perf-testing）
         # 开发环境：project_root 是仓库根目录
         candidates = []
+        # web 和 xvm 打包在 perf-testing 内，需优先从 project_root 查找
+        bundled_in_perf_testing = relative_segments and relative_segments[0] in ('web', 'xvm')
 
         if getattr(sys, 'frozen', False):
-            # 打包后：从 exe 所在目录向上一级就是 tools 目录
-            # D:\haprayTest\tools\perf-testing -> D:\haprayTest\tools
+            if bundled_in_perf_testing:
+                # 打包后：resource 目录整体打包，web/xvm 在 _internal/resource 下
+                candidates.append(os.path.join(project_root, '_internal', 'resource'))
+                # 兼容旧版：web/xvm 直接在 _internal 下
+                candidates.append(os.path.join(project_root, '_internal'))
+                candidates.append(project_root)
+            # 其他工具（trace_streamer_binary、sa-cmd 等）在 tools 目录
             candidates.append(os.path.join(project_root, '..'))
         else:
-            # 开发环境：尝试多个可能的路径
+            # 开发环境：web/xvm 在 perf_testing/resource 下
+            if bundled_in_perf_testing:
+                candidates.append(os.path.join(project_root, 'resource'))
             candidates.extend(
                 [
                     os.path.join(project_root, 'tools'),  # 仓库根目录/tools
