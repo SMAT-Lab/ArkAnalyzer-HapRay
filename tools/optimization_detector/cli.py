@@ -17,6 +17,7 @@ import argparse
 import io
 import logging
 import multiprocessing
+import os
 import sys
 from typing import Optional
 
@@ -28,6 +29,18 @@ _STDOUT_WRAPPER = None
 
 class OptAction:
     """Handles binary optimization analysis actions."""
+
+    @staticmethod
+    def _map_output_path_for_macos(path_str: str, subdir: str) -> str:
+        """
+        macOS 下统一把输出落到用户目录，避免只读目录写入失败。
+        Windows/Linux 保持原样。
+        """
+        if sys.platform != 'darwin':
+            return path_str
+        root = os.path.join(os.path.expanduser('~'), 'ArkAnalyzer-HapRay', 'optimization_detector', subdir)
+        os.makedirs(root, exist_ok=True)
+        return os.path.join(root, os.path.basename(path_str))
 
     @staticmethod
     def execute() -> int:
@@ -87,6 +100,11 @@ class OptAction:
         parser.add_argument('--log-file', help='Path to log file')
 
         parsed_args = parser.parse_args()
+
+        # macOS 下无论是否显式传参，都将输出/日志写到用户目录
+        parsed_args.output = OptAction._map_output_path_for_macos(parsed_args.output, 'reports')
+        if parsed_args.log_file:
+            parsed_args.log_file = OptAction._map_output_path_for_macos(parsed_args.log_file, 'logs')
 
         # 配置日志
         OptAction.setup_logging(parsed_args.verbose, parsed_args.log_file)
