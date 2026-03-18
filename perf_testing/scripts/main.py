@@ -33,6 +33,22 @@ from hapray.actions.static_action import StaticAction
 from hapray.actions.ui_action import UIAction
 from hapray.actions.ui_compare_action import UICompareAction
 from hapray.actions.update_action import UpdateAction
+from hapray.core.common.path_utils import get_log_file_path, get_runtime_root
+
+
+def _ensure_writable_cwd():
+    """
+    在打包后的 macOS App 中，默认 cwd 可能落在只读的 Resources 目录，
+    会导致依赖库使用相对路径（例如 ./tmp_hypium）时创建目录失败。
+    这里仅在 macOS 下，把进程 cwd 统一切到当前用户的数据目录下。
+    """
+    if sys.platform != 'darwin':
+        return
+    try:
+        os.chdir(str(get_runtime_root()))
+    except Exception:
+        # 如果这里失败，就保持原 cwd，让上层明确暴露错误，而不是静默吞掉
+        logging.warning('切换到可写工作目录失败，当前 cwd: %s', os.getcwd())
 
 
 def configure_logging(log_file='HapRay.log'):
@@ -77,16 +93,28 @@ def configure_logging(log_file='HapRay.log'):
     logger.addHandler(console_handler)
 
     # 文件处理器（如果指定了日志文件）- 使用 UTF-8 编码和错误处理
-    file_handler = RotatingFileHandler(
-        log_file, mode='a', maxBytes=10 * 1024 * 1024, backupCount=10, encoding='UTF-8', errors='replace'
-    )
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    log_file_path = get_log_file_path(log_file)
+    try:
+        file_handler = RotatingFileHandler(
+            log_file_path,
+            mode='a',
+            maxBytes=10 * 1024 * 1024,
+            backupCount=10,
+            encoding='UTF-8',
+            errors='replace',
+        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError:
+        # 如果日志文件仍然不可写，则只保留控制台输出，避免程序崩溃
+        logger.warning('日志文件不可写，将仅输出到控制台：%s', log_file_path)
 
 
 class HapRayCmd:
     def __init__(self):
+        # 先确保 cwd 在一个可写目录（仅 macOS 生效），避免依赖内部使用 ./tmp_xxx 时报只读错误
+        _ensure_writable_cwd()
         configure_logging('HapRay.log')
 
         actions = {

@@ -29,6 +29,7 @@ from xdevice.__main__ import main_process
 from hapray import VERSION
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.folder_utils import delete_folder, scan_folders
+from hapray.core.common.path_utils import get_reports_root
 from hapray.core.config.config import Config
 from hapray.core.dsl.dsl_test_runner import DSLTestRunner
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
@@ -301,9 +302,8 @@ class PerfAction:
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
             parsed_args.circles = True
-        root_path = os.getcwd()
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        reports_path = os.path.join(root_path, 'reports', timestamp)
+        reports_path = os.path.join(str(get_reports_root()), timestamp)
         logging.info('Reports will be saved to: %s', reports_path)
 
         # Update configuration based on arguments
