@@ -42,15 +42,13 @@ const OUTPUT_DIR = path.join(TEST_PRODUCTS_DIR, 'output');
 // 基准结果目录
 const ORIGIN_RESULT_DIR = path.join(TEST_PRODUCTS_DIR, 'origin-result');
 
-// 需要检查的工具目录列表
+// 需要检查的工具目录列表（web/xvm 已打包进 perf-testing，不再单独存在）
 const REQUIRED_TOOLS = [
     'opt-detector',
-    'perf-testing',  // 对应 perf_testing
+    'perf-testing',  // 对应 perf_testing（含 web、xvm 资源）
     'sa-cmd',        // 对应 static_analyzer
     'symbol-recovery',
-    'trace_streamer_binary',
-    'web',
-    'xvm'
+    'trace_streamer_binary'
 ];
 
 // 获取平台相关的可执行文件名

@@ -10,7 +10,7 @@
     "dev": "cross-env NODE_ENV=development vite",
     "debug": "node ../node_modules/vite/bin/vite.js",
     "build": "run-p type-check \"build-only {@}\" --",
-    "postbuild": "node ../scripts/copy_file.js web/dist/index.html dist/tools/web/report_template.html",
+    "postbuild": "node ../scripts/copy_file.js web/dist/index.html perf_testing/resource/web/report_template.html",
     "prepack": "npm run build",
     "preview": "vite preview",
     "test:unit": "vitest",

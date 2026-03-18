@@ -30,6 +30,8 @@ perf_testing/hypium-6.0.7.210/
 perf_testing/binary_analysis_report.xlsx
 perf_testing/files_results_cache/
 
+perf_testing/resource/
+
 # Log
 *.log
 
