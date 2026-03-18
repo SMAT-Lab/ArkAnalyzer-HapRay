@@ -68,6 +68,11 @@ fn extract_output_path(params: &HashMap<String, serde_json::Value>, cwd: &Path) 
     None
 }
 
+fn extract_output_path_from_params(action: &str, params: &HashMap<String, serde_json::Value>, cwd: &Path) -> Option<String> {
+    let _ = action; // 保留 action 参数，便于未来按 action 扩展，但此处不做路径映射
+    extract_output_path(params, cwd)
+}
+
 /// 从执行日志中尝试解析产物输出目录（params 未提供时的兜底）。
 /// 匹配常见关键词后的路径（中英文），并校验为已存在的目录。
 fn extract_output_path_from_log(log: &str, cwd: &Path) -> Option<String> {
@@ -84,6 +89,10 @@ fn extract_output_path_from_log(log: &str, cwd: &Path) -> Option<String> {
         (r"(?i)输出路径\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
         (r"(?i)结果\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
         (r"(?i)output\s+(?:directory|path|dir)\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)reports?\s+(?:will\s+be\s+saved\s+to|path)\s*[:：]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)reports?\s*(?:path)?\s*[:：]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)reports?\s+will\s+be\s+saved\s+to\s*[:：]\s*([^\s\n\r][^\n\r]*)", 1),
+        (r"(?i)reports?\s+path\s*[:：]\s*([^\s\n\r][^\n\r]*)", 1),
         (r"(?i)saved\s+to\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
         (r"(?i)written\s+to\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
         (r"保存到\s*[：:=]\s*([^\s\n\r][^\n\r]*)", 1),
@@ -132,6 +141,11 @@ fn extract_output_path_from_log(log: &str, cwd: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_output_path_from_log_first(action: &str, log: &str, cwd: &Path) -> Option<String> {
+    let _ = action;
+    extract_output_path_from_log(log, cwd)
 }
 
 /// 保存执行记录（参考 result_processor.py）
@@ -446,8 +460,10 @@ pub async fn execute_tool_command(
         "执行失败".to_string()
     };
 
-    let output_path = extract_output_path(&payload.params, work_dir.as_path())
-        .or_else(|| extract_output_path_from_log(&output_log, work_dir.as_path()));
+    // 以日志输出为准（工具在 macOS 下会自行重定向到用户目录并打印最终路径）
+    // 仅当日志无法解析到路径时，才回退到 params 推导路径。
+    let output_path = extract_output_path_from_log_first(&payload.action, &output_log, work_dir.as_path())
+        .or_else(|| extract_output_path_from_params(&payload.action, &params, work_dir.as_path()));
 
     save_execution_record(
         &app,
