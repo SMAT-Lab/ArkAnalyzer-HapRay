@@ -15,10 +15,12 @@ limitations under the License.
 
 import argparse
 import os
+import sys
 import time
 from typing import Optional
 
 from hapray import VERSION
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.config.config import Config
 from hapray.core.gui_agent import GuiAgentConfig, execute_scenes
 
@@ -138,6 +140,9 @@ class GuiAgentAction:
 
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
         output = os.path.abspath(parsed_args.output) if parsed_args.output else os.getcwd()
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            output = str(get_user_data_root('gui_agent') / os.path.basename(output))
         reports_path = os.path.join(output, 'reports', timestamp)
 
         # Create configuration

@@ -43,8 +43,9 @@ async function analyzeHap(options: AnalyzeOptions): Promise<void> {
     const { input, output, jobs, beautifyJs } = options;
 
     try {
+        const mappedOutput = Logger.mapOutputPath('hap', output);
         const analyzer = new HapAnalysisService({ verbose: true, beautifyJs });
-        await analyzer.analyzeMultipleHaps(input, output, jobs);
+        await analyzer.analyzeMultipleHaps(input, mappedOutput, jobs);
     } catch (error) {
         logger.error('分析失败：', error);
         process.exit(1);

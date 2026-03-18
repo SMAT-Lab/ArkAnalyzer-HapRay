@@ -17,9 +17,11 @@ import argparse
 import json
 import logging
 import os
+import sys
 
 import pandas as pd
 
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.common.excel_utils import ExcelReportSaver
 
 
@@ -101,7 +103,14 @@ class CompareAction:
 
         base_dir = os.path.abspath(parsed.base_dir)
         compare_dir = os.path.abspath(parsed.compare_dir)
-        output_path = parsed.output or os.path.join(os.getcwd(), 'compare_result.xlsx')
+        # 保持旧逻辑：非 macOS 仍为 <cwd>/compare_result.xlsx
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if parsed.output:
+            output_path = os.path.abspath(parsed.output)
+        else:
+            output_path = os.path.join(os.getcwd(), 'compare_result.xlsx')
+        if sys.platform == 'darwin':
+            output_path = str(get_user_data_root('compare') / os.path.basename(output_path))
 
         if not os.path.isdir(base_dir):
             logging.error('Base directory does not exist: %s', base_dir)
