@@ -4,12 +4,19 @@ const fs = require('fs');
 const copyFile = require('./copy_file');
 
 const DIST_TOOLS_DIR = path.join(__dirname, '../dist/tools');
+const PERF_TESTING_RESOURCE_DIR = path.join(__dirname, '../perf_testing/resource');
 const TRACE_STREAMER_BIN = ['trace_streamer_linux', 'trace_streamer_mac', 'trace_streamer_windows.exe'];
 const HILOGTOOL_BIN = ['hilogtool', 'hilogtool.exe'];
 
 function ensureDistToolsDir() {
     if (!fs.existsSync(DIST_TOOLS_DIR)) {
         fs.mkdirSync(DIST_TOOLS_DIR, { recursive: true });
+    }
+}
+
+function ensurePerfTestingResourceDir() {
+    if (!fs.existsSync(PERF_TESTING_RESOURCE_DIR)) {
+        fs.mkdirSync(PERF_TESTING_RESOURCE_DIR, { recursive: true });
     }
 }
 
@@ -151,6 +158,22 @@ function cleanupHilogtool(basePath) {
 }
 
 unzipFile('trace_streamer_binary.zip', 'trace_streamer_binary');
-unzipFile('xvm.zip', 'xvm');
 unzipFile('hilogtool.zip', 'hilogtool');
-copyFile('third-party/report.html', 'dist/tools/web/hiperf_report_template.html');
+
+// xvm 和 web 放到 perf_testing/resource，供 PyInstaller 打包（避免 dist 被清理导致资源丢失）
+function unzipToPerfTestingResource(zipFile, subfolder) {
+    try {
+        ensurePerfTestingResourceDir();
+        const zipPath = path.join(__dirname, '../third-party', zipFile);
+        const extractPath = path.join(PERF_TESTING_RESOURCE_DIR, subfolder);
+        if (fs.existsSync(extractPath)) {
+            return;
+        }
+        const zip = new AdmZip(zipPath);
+        zip.extractAllTo(PERF_TESTING_RESOURCE_DIR, true);
+    } catch (error) {
+        console.error(`Error extracting ${zipFile} to perf_testing/resource:`, error.message);
+    }
+}
+unzipToPerfTestingResource('xvm.zip', 'xvm');
+copyFile('third-party/report.html', 'perf_testing/resource/web/hiperf_report_template.html');
