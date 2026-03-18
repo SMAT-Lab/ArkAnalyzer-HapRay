@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * 构建脚本：在 macOS 上先构建 .app -> merge-bundle-resources -> 再生成 .dmg
- * 确保 .dmg 包含 merge 后的 Resources/tools 硬链接去重结果
+ * 构建脚本：在 macOS 上先构建 .app -> 再生成 .dmg
  *
- * 注意：tauri bundle --bundles dmg 会重新创建 .app 并覆盖 merge 结果，
- * 因此必须 merge 后直接调用 bundle_dmg.sh 生成 dmg，而非使用 tauri bundle。
+ * 注意：tauri bundle --bundles dmg 会重新创建 .app，
+ * 因此需先构建 .app 再直接调用 bundle_dmg.sh 生成 dmg，而非使用 tauri bundle。
  */
 import { spawnSync } from "child_process";
 import path from "path";
@@ -93,7 +92,7 @@ const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
 
 /**
  * 将 desktop 构建产物复制到项目根目录 ./dist，供 e2e 测试和 release 使用
- * macOS: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/..., dist/tools/
+ * macOS: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/...（不覆盖 dist/tools/）
  * Windows/Linux: dist/ArkAnalyzer-HapRay.exe 或 dist/ArkAnalyzer-HapRay
  */
 function copyToDist() {
@@ -105,7 +104,6 @@ function copyToDist() {
     const appName = `${productName}.app`;
     const appPath = path.join(macosDir, appName);
     const exeInApp = path.join(appPath, "Contents", "MacOS", productName);
-    const toolsInApp = path.join(appPath, "Contents", "Resources", "tools");
 
     if (!fs.existsSync(appPath) || !fs.existsSync(exeInApp)) {
       console.warn("跳过 copyToDist: .app 或可执行文件不存在");
@@ -114,7 +112,6 @@ function copyToDist() {
 
     const distAppPath = path.join(rootDistDir, appName);
     const distExePath = path.join(rootDistDir, productName);
-    const distToolsPath = path.join(rootDistDir, "tools");
 
     if (fs.existsSync(distAppPath)) {
       fs.rmSync(distAppPath, { recursive: true });
@@ -125,13 +122,6 @@ function copyToDist() {
       fs.unlinkSync(distExePath);
     }
     fs.symlinkSync(path.join(appName, "Contents", "MacOS", productName), distExePath, "file");
-
-    if (fs.existsSync(toolsInApp)) {
-      if (fs.existsSync(distToolsPath)) {
-        fs.rmSync(distToolsPath, { recursive: true });
-      }
-      copyDirSync(toolsInApp, distToolsPath);
-    }
   } else {
     // Windows: .exe；Linux: 无后缀
     const exeName = process.platform === "win32" ? `${productName}.exe` : productName;
@@ -163,7 +153,10 @@ function copyDirSync(src, dest) {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
+    if (entry.isSymbolicLink()) {
+      const target = fs.readlinkSync(srcPath);
+      fs.symlinkSync(target, destPath);
+    } else if (entry.isDirectory()) {
       copyDirSync(srcPath, destPath);
     } else {
       fs.copyFileSync(srcPath, destPath);
@@ -173,14 +166,17 @@ function copyDirSync(src, dest) {
 
 function main() {
   if (process.platform === "darwin") {
-    // macOS: app -> merge -> dmg，确保 dmg 包含 merge 后的内容
+    // macOS: app -> dmg
     console.log("Step 1: 构建 .app bundle...");
     run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
 
-    console.log("\nStep 2: 对 bundle 内 tools 做硬链接合并...");
+    // Tauri bundle.resources 使用 fs::copy 会解析软连接，导致 opt-detector 等 PyInstaller 产物的符号链接丢失。
+    // 用保留软连接的复制覆盖 tools。
+    console.log("\nStep 1.5: 恢复 tools 软连接...");
+    run("node", [path.resolve(__dirname, "copy-tools-with-symlinks.js")]);
     run("node", [mergeScript]);
 
-    console.log("\nStep 3: 生成 .dmg...");
+    console.log("\nStep 2: 生成 .dmg...");
     if (!fs.existsSync(bundleDmgSh)) {
       // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh
       // 注意：tauri bundle 内部运行 bundle_dmg.sh 时可能因 AppleScript 权限失败，
@@ -199,24 +195,24 @@ function main() {
       // tauri bundle 会清理 .app，需重新构建 .app 才能继续
       console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
       run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
-      console.log("\n重新执行 merge...");
-      run("node", [mergeScript]);
     }
     createDmgWithBundleScript();
-    console.log("\nStep 4: 复制产物到 ./dist...");
+    console.log("\nStep 3: 复制产物到 ./dist...");
     copyToDist();
   } else {
     // 其他平台：保持原有流程
     console.log("构建应用...");
     run("node", [runWithCargo, "npx", "tauri", "build"]);
 
+    // 恢复 tools 软连接（Tauri bundle.resources 会解析软连接）
+    console.log("\n恢复 tools 软连接...");
+    run("node", [path.resolve(__dirname, "copy-tools-with-symlinks.js")]);
+    run("node", [mergeScript]);
+
     if (process.platform === "linux") {
       console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");
       run("node", [path.resolve(__dirname, "bundle-linux-libs.js")]);
     }
-
-    console.log("\n对 bundle 内 tools 做硬链接合并...");
-    run("node", [mergeScript]);
 
     console.log("\n复制产物到 ./dist...");
     copyToDist();
