@@ -45,7 +45,16 @@ jobs:
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
             artifact_suffix: ""
-            
+
+          # macOS - Intel (x86_64)，使用 macos-13 以获取 Intel runner
+          - os: macos-13
+            arch: x64
+            platform: darwin
+            pyinstaller_arch: x86_64
+            package_lock_path: .github/workflows/package-lock.json
+            use_static_python: false
+            artifact_suffix: ""
+
         # 将 node-version 移到每个 item 中
         include:
           - node-version: 18.x

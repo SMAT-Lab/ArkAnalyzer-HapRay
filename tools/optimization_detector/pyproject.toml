@@ -31,7 +31,7 @@ dependencies = [
     "pandas==2.3.3",
     # TensorFlow：Windows/Linux 及 macOS Intel 使用标准 tensorflow，
     # macOS + arm64 使用 tensorflow-macos，macOS 上统一配合 tensorflow-metal 做加速
-    "tensorflow==2.16.2; platform_system != 'Darwin' or platform_machine != 'arm64'",
+    "tensorflow==2.16.2; (platform_system != 'Darwin') or (platform_system == 'Darwin' and platform_machine != 'arm64')",
     "tensorflow-macos==2.16.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tensorflow-metal>=1.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tqdm>=4.67.1",
