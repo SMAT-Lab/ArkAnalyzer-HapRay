@@ -6,6 +6,7 @@
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -109,7 +110,13 @@ class LLMConfig:
     def _get_cache_dir(self) -> Path:
         """获取缓存目录"""
         cache_dir = os.getenv(ENV_KEY_LLM_CACHE_DIR, DEFAULT_CACHE_DIR)
-        return Path(cache_dir)
+        cache_path = Path(cache_dir)
+        if sys.platform != 'darwin':
+            return cache_path
+        # macOS 下统一落到用户目录，避免只读目录写入失败
+        root = Path.home() / 'ArkAnalyzer-HapRay' / 'symbol_recovery' / 'cache'
+        root.mkdir(parents=True, exist_ok=True)
+        return root / cache_path.name
 
     def get_model(self) -> str:
         """
@@ -233,9 +240,13 @@ class Config:
         Returns:
             Path: 输出目录路径对象
         """
-        if custom_dir:
-            return Path(custom_dir)
-        return DEFAULT_OUTPUT_DIR
+        out = Path(custom_dir) if custom_dir else DEFAULT_OUTPUT_DIR
+        if sys.platform != 'darwin':
+            return out
+        # macOS 下无论是否显式传参，输出目录统一落到用户目录
+        root = Path.home() / 'ArkAnalyzer-HapRay' / 'symbol_recovery'
+        root.mkdir(parents=True, exist_ok=True)
+        return root / out.name
 
     def ensure_output_dir(self, output_dir: Path) -> Path:
         """

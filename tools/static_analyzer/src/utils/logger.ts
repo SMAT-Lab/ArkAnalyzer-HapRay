@@ -4,6 +4,9 @@
  */
 
 import log4js from 'log4js';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
 
 export const LOG_LEVEL = {
     ERROR: 'ERROR',
@@ -22,6 +25,68 @@ type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
 type LogModuleType = (typeof LOG_MODULE_TYPE)[keyof typeof LOG_MODULE_TYPE];
 
 class Logger {
+    static resolveDefaultRuntimeDir(dirName = 'runtime'): string {
+        // 仅在 macOS App 打包场景下，cwd 可能落在只读目录；这里统一把临时目录放到用户目录
+        // Windows/Linux 保持原行为（相对当前工作目录即可）。
+        if (process.platform !== 'darwin') {
+            return path.join(process.cwd(), dirName);
+        }
+        const dir = path.join(os.homedir(), 'ArkAnalyzer-HapRay', dirName);
+        fs.mkdirSync(dir, { recursive: true });
+        return dir;
+    }
+
+    static resolveUserDataDir(dirName: string): string {
+        if (process.platform !== 'darwin') {
+            return path.join(process.cwd(), dirName);
+        }
+        const dir = path.join(os.homedir(), 'ArkAnalyzer-HapRay', dirName);
+        fs.mkdirSync(dir, { recursive: true });
+        return dir;
+    }
+
+    /**
+     * macOS 下将输出路径统一映射到用户目录，避免只读目录写入失败。
+     * - Windows/Linux：保持用户传入路径不变
+     * - macOS：映射为 ~/ArkAnalyzer-HapRay/static_analyzer/<subdir>/<basename(outputPath)>
+     */
+    static mapOutputPath(subdir: string, outputPath: string): string {
+        if (process.platform !== 'darwin') {
+            return outputPath;
+        }
+        const root = path.join(Logger.resolveUserDataDir('static_analyzer'), subdir);
+        fs.mkdirSync(root, { recursive: true });
+        return path.join(root, path.basename(outputPath));
+    }
+
+    static ensureWritableCwd(): void {
+        if (process.platform !== 'darwin') {
+            return;
+        }
+        try {
+            const runtimeDir = Logger.resolveDefaultRuntimeDir('runtime');
+            process.chdir(runtimeDir);
+        } catch {
+            // 保持现状，由后续 IO 显式报错
+        }
+    }
+
+    static resolveDefaultLogPath(logFileName: string): string {
+        // 仅在 macOS App 打包场景下，cwd 可能落在只读目录；这里统一把日志写到用户目录
+        // Windows/Linux 保持原行为（相对路径即可）。
+        if (process.platform !== 'darwin') {
+            return logFileName;
+        }
+        const dir = path.join(os.homedir(), 'ArkAnalyzer-HapRay', 'logs');
+        try {
+            fs.mkdirSync(dir, { recursive: true });
+            return path.join(dir, logFileName);
+        } catch {
+            // 如果用户目录不可写，退回不写文件（让调用方只走 console appender）
+            return '';
+        }
+    }
+
     static configure(
         logFilePath: string,
         arkanalyzerLevel: LogLevel = LOG_LEVEL.ERROR,
