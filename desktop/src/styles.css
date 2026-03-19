@@ -1262,6 +1262,33 @@ button#decorum-tb-close:hover {
   box-sizing: border-box;
 }
 
+.tool-workspace__choice-category-tabs {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tool-workspace__choice-category-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.tool-workspace__choice-category-btn:hover {
+  background: var(--sidebar-item-hover, rgba(0, 0, 0, 0.06));
+}
+
+.tool-workspace__choice-category-btn--selected {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--sidebar-accent);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
 .tool-workspace__choice-list {
   overflow-y: auto;
   min-height: 0;
