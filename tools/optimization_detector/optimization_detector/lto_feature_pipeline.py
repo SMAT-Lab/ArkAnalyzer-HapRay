@@ -7,6 +7,7 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
@@ -15,7 +16,6 @@ import joblib
 import numpy as np
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-from hapray.core.common.path_utils import get_user_data_root
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.feature_selection import f_classif
 from sklearn.linear_model import LogisticRegression
@@ -24,6 +24,20 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+
+
+def get_user_data_root(subdir: str) -> Path:
+    """
+    获取本工具在当前平台下的用户数据根目录。
+
+    - macOS：固定放到用户主目录的 `~/ArkAnalyzer-HapRay/<subdir>` 下，避免 App 包 cwd 落在只读目录。
+    - 其他平台：使用当前工作目录作为基准目录（与原工具行为兼容）。
+    """
+    if sys.platform == 'darwin':
+        root = Path.home() / 'ArkAnalyzer-HapRay' / subdir
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    return Path(os.getcwd()) / subdir
 
 
 # -------------------- Utils --------------------
