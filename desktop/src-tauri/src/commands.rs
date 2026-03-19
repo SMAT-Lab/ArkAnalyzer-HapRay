@@ -695,8 +695,16 @@ fn get_installed_apps() -> Result<Vec<String>, String> {
             if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
                 continue;
             }
-            if line.contains('.') && !line.starts_with("com.huawei.") && !line.starts_with("com.ohos.") {
-                apps.push(line.to_string());
+            // 依据包名前缀进行分类：
+            // - com.huawei.* 视为系统 App
+            // - 其它视为三方 App
+            if line.contains('.') {
+                let category = if line.starts_with("com.huawei.") {
+                    "system"
+                } else {
+                    "third"
+                };
+                apps.push(format!("{}::{}", category, line));
             }
         }
     }
