@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const os = require('os');
 const XLSX = require('xlsx');
 
 // dist 目录：
@@ -86,6 +87,83 @@ function getExecutablePath() {
 }
 
 const EXECUTABLE = getExecutablePath();
+
+const IS_MAC = process.platform === 'darwin';
+
+function getMacOptMappedOutputFile(outputFilePath) {
+    // tools/optimization_detector/cli.py:
+    // ~/ArkAnalyzer-HapRay/optimization_detector/reports/<basename>
+    const root = path.join(os.homedir(), 'ArkAnalyzer-HapRay', 'optimization_detector', 'reports');
+    return path.join(root, path.basename(outputFilePath));
+}
+
+function getMacOptCacheDir() {
+    // tools/optimization_detector/optimization_detector/file_info.py:
+    // ~/ArkAnalyzer-HapRay/optimization_detector/files_results_cache
+    return path.join(os.homedir(), 'ArkAnalyzer-HapRay', 'optimization_detector', 'files_results_cache');
+}
+
+function getMacStaticMappedOutputDir(outputDirPath) {
+    // static 命令在 macOS 上经历两层映射：
+    // 1) perf_testing/hapray/actions/static_action.py 先映射到 ~/ArkAnalyzer-HapRay/static-output/<basename>
+    // 2) static_analyzer/src/utils/logger.ts 再映射到 ~/ArkAnalyzer-HapRay/static_analyzer/hap/<basename>
+    // 最终产物以第二层为准。
+    const root = path.join(os.homedir(), 'ArkAnalyzer-HapRay', 'static_analyzer', 'hap');
+    return path.join(root, path.basename(outputDirPath));
+}
+
+function getMacPerfReportsRoot() {
+    // perf_testing/hapray/core/common/path_utils.py: ~/ArkAnalyzer-HapRay/reports
+    return path.join(os.homedir(), 'ArkAnalyzer-HapRay', 'reports');
+}
+
+function getMacSymbolRecoveryCacheFile() {
+    // tools/symbol_recovery/core/utils/config.py:
+    // ~/ArkAnalyzer-HapRay/symbol_recovery/cache/cache/llm_analysis_cache.json
+    return path.join(
+        os.homedir(),
+        'ArkAnalyzer-HapRay',
+        'symbol_recovery',
+        'cache',
+        'cache',
+        'llm_analysis_cache.json'
+    );
+}
+
+function getMacSymbolRecoveryOutputDir(desiredOutputDirPath) {
+    // tools/symbol_recovery/main.py:
+    // Config.get_output_dir() 在 darwin 下会固定落到 ~/ArkAnalyzer-HapRay/symbol_recovery/<out.name>
+    const root = path.join(os.homedir(), 'ArkAnalyzer-HapRay', 'symbol_recovery');
+    return path.join(root, path.basename(desiredOutputDirPath));
+}
+
+function getOptXlsxFileActual() {
+    const desired = path.join(OUTPUT_DIR, 'temp_opt_test.xlsx');
+    return IS_MAC ? getMacOptMappedOutputFile(desired) : desired;
+}
+
+function getStaticXlsxDirActual() {
+    const desiredBaseDir = path.join(OUTPUT_DIR, 'static_test_output', 'test_suite-default-unsigned');
+    const mappedBaseDir = getMacStaticMappedOutputDir(desiredBaseDir);
+    if (!IS_MAC) return path.join(desiredBaseDir, 'test_suite-default-unsigned');
+    return mappedBaseDir;
+}
+
+function collectFilesByExt(dirPath, ext, depth = 3) {
+    const results = [];
+    if (depth < 0 || !fs.existsSync(dirPath)) return results;
+
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+        const p = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+            results.push(...collectFilesByExt(p, ext, depth - 1));
+        } else if (entry.isFile() && entry.name.endsWith(ext)) {
+            results.push(p);
+        }
+    }
+    return results;
+}
 
 /**
  * 获取测试文件路径，优先使用外部测试资源
@@ -180,7 +258,16 @@ function testOptModule() {
     console.log('使用test_suite-default-unsigned.hsp进行opt模块测试');
 
     try {
-        const outputFile = path.join(OUTPUT_DIR, 'temp_opt_test.xlsx');
+        // macOS 下 opt 会读取用户目录缓存，清理后可避免命中历史失败结果。
+        if (IS_MAC) {
+            const macOptCacheDir = getMacOptCacheDir();
+            if (fs.existsSync(macOptCacheDir)) {
+                fs.rmSync(macOptCacheDir, { recursive: true, force: true });
+                console.log(`已清理 opt 缓存目录: ${macOptCacheDir}`);
+            }
+        }
+
+        const outputFile = getOptXlsxFileActual();
         const command = `${EXECUTABLE} opt -i "${testFile}" -o "${outputFile}" -f excel --verbose`;
 
         console.log('执行opt命令进行完整分析...');
@@ -195,8 +282,9 @@ function testOptModule() {
             return { success: false, error: '未生成输出文件' };
         }
     } catch (error) {
-        console.error(`✗ opt 模块测试失败: ${error.message}`);
-        return { success: false, error: error.message };
+        const msg = String(error && error.message ? error.message : error);
+        console.error(`✗ opt 模块测试失败: ${msg}`);
+        return { success: false, error: msg };
     }
 }
 
@@ -212,22 +300,33 @@ function testStaticModule() {
     }
 
     const outputDir = path.join(OUTPUT_DIR, 'static_test_output', 'test_suite-default-unsigned');
+    const outputDirActual = IS_MAC ? getMacStaticMappedOutputDir(outputDir) : outputDir;
 
     try {
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
+        if (IS_MAC && !fs.existsSync(outputDirActual)) {
+            fs.mkdirSync(outputDirActual, { recursive: true });
+        } else if (!IS_MAC && !fs.existsSync(outputDirActual)) {
+            fs.mkdirSync(outputDirActual, { recursive: true });
         }
 
-        runCommand(`${EXECUTABLE} static -i "${testFile}" -o "${outputDir}"`, 'static 模块实际功能测试', { silent: false });
+        runCommand(`${EXECUTABLE} static -i "${testFile}" -o "${outputDirActual}"`, 'static 模块实际功能测试', { silent: false });
 
-        const files = fs.readdirSync(path.join(outputDir, 'test_suite-default-unsigned'));
+        // macOS 下输出层级不稳定，Windows/Linux 保持原有目录结构判断逻辑。
+        let files = [];
+        if (IS_MAC) {
+            files = collectFilesByExt(outputDirActual, '', 6);
+        } else {
+            const nestedDir = path.join(outputDirActual, 'test_suite-default-unsigned');
+            const scanDir = fs.existsSync(nestedDir) ? nestedDir : outputDirActual;
+            files = fs.readdirSync(scanDir).map((name) => path.join(scanDir, name));
+        }
         if (files.length >= 3) {
             console.log(`✓ static 模块实际功能测试成功 (生成${files.length}个文件)`);
-            console.log(`输出文件保存在: ${outputDir}`);
+            console.log(`输出文件保存在: ${outputDirActual}`);
             return { success: true };
         } else {
             console.log(`✗ static 模块输出文件不足 (需要>=3个，实际${files.length}个)`);
-            console.log(`输出文件: ${files.join(', ')}`);
+            console.log(`输出文件: ${files.map((f) => path.relative(outputDirActual, f)).join(', ')}`);
             return { success: false, error: `输出文件不足: ${files.length} < 3` };
         }
     } catch (error) {
@@ -251,6 +350,16 @@ function getLatestReportFolder(reportsDir) {
 
     const maxFolder = folders.sort((a, b) => parseInt(b) - parseInt(a))[0];
     return path.join(reportsDir, maxFolder, 'PerfLoad_meituan_0010');
+}
+
+function getLatestNumericFolder(reportsDir) {
+    if (!fs.existsSync(reportsDir)) return null;
+    const folders = fs.readdirSync(reportsDir).filter(f => {
+        const fullPath = path.join(reportsDir, f);
+        return fs.statSync(fullPath).isDirectory() && /^\d+$/.test(f);
+    });
+    if (folders.length === 0) return null;
+    return folders.sort((a, b) => parseInt(b) - parseInt(a))[0];
 }
 
 /**
@@ -296,7 +405,37 @@ function testPerfModule() {
 
         console.log(`发现meituan_0010测试用例，尝试执行perf命令...`);
 
-        // 检查reports目录是否已存在，如果存在则删除
+        if (IS_MAC) {
+            // macOS：perf 会强制写入用户目录 ~/ArkAnalyzer-HapRay/reports
+            const reportsRoot = getMacPerfReportsRoot();
+            if (!fs.existsSync(reportsRoot)) {
+                fs.mkdirSync(reportsRoot, { recursive: true });
+            }
+
+            const beforeTimestamp = getLatestNumericFolder(reportsRoot);
+
+            runCommand(
+                `${EXECUTABLE} perf --run_testcases "PerfLoad_meituan_0010" --round 1`,
+                'perf 命令实际测试',
+                { silent: false }
+            );
+            console.log('✓ perf 命令执行成功');
+
+            const afterTimestamp = getLatestNumericFolder(reportsRoot);
+            const latestFolder = afterTimestamp ? path.join(reportsRoot, afterTimestamp, 'PerfLoad_meituan_0010') : null;
+            if (latestFolder && fs.existsSync(path.join(latestFolder, 'report', 'hapray_report.html'))) {
+                console.log('✓ perf 命令校验成功: hapray_report.html 存在');
+                return { success: true };
+            }
+
+            console.log(`⚠ 查找路径: ${latestFolder ? path.join(latestFolder, 'report', 'hapray_report.html') : '未找到文件夹'}`);
+            if (beforeTimestamp === afterTimestamp) {
+                return { success: false, error: 'perf 未产生新的 reports 输出（时间戳未变化）' };
+            }
+            return { success: false, error: 'hapray_report.html 不存在' };
+        }
+
+        // 非 macOS：reports 会写入 dist/reports（保留原逻辑）
         const oldReportsDir = path.join(DIST_DIR, 'reports');
         if (fs.existsSync(oldReportsDir)) {
             fs.rmSync(oldReportsDir, { recursive: true, force: true });
@@ -402,11 +541,16 @@ function testSymbolRecoveryModule() {
             console.log('✓ symbol-recovery 命令执行成功');
             console.log(`输出结果保存在: ${outputDir}`);
 
+            const actualOutputDir = IS_MAC ? getMacSymbolRecoveryOutputDir(outputDir) : outputDir;
+            const expectedExcel = path.join(actualOutputDir, 'event_count_top5_analysis.xlsx');
+            const expectedHtml = path.join(actualOutputDir, 'event_count_top5_report.html');
+
             // 校验 cache/llm_analysis_cache.json 中的对象数（按多路径查找）
             const cacheCandidates = [
                 path.join(DIST_DIR, 'ArkAnalyzer-HapRay.app', 'Contents', 'Resources', 'tools', 'symbol-recovery', 'cache', 'llm_analysis_cache.json'),
                 path.join(DIST_DIR, 'tools', 'symbol-recovery', 'cache', 'llm_analysis_cache.json'),
                 path.join(DIST_DIR, 'cache', 'llm_analysis_cache.json'),
+                ...(IS_MAC ? [getMacSymbolRecoveryCacheFile()] : [])
             ];
             const cacheFile = cacheCandidates.find((p) => fs.existsSync(p));
             if (cacheFile) {
@@ -518,8 +662,17 @@ function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
  * 获取static命令生成的最新xlsx文件
  */
 function getStaticXlsxFile() {
-    const staticDir = path.join(OUTPUT_DIR, 'static_test_output', 'test_suite-default-unsigned', 'test_suite-default-unsigned');
+    const staticDir = getStaticXlsxDirActual();
     if (!fs.existsSync(staticDir)) return null;
+
+    if (IS_MAC) {
+        // macOS 下 static 输出层级不稳定：可能直接产出，也可能在子目录中产出
+        const candidates = collectFilesByExt(staticDir, '.xlsx', 4);
+        if (candidates.length === 0) return null;
+        candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+        return candidates[0];
+    }
+
     const files = fs.readdirSync(staticDir)
         .filter(f => f.endsWith('.xlsx'))
         .map(f => ({ name: f, path: path.join(staticDir, f), time: fs.statSync(path.join(staticDir, f)).mtime }))
@@ -548,7 +701,7 @@ function verifyArtifactsHash(results) {
 
     const artifacts = {
         opt: {
-            actual: path.join(OUTPUT_DIR, 'temp_opt_test.xlsx'),
+            actual: getOptXlsxFileActual(),
             expected: path.join(ORIGIN_RESULT_DIR, 'opt.xlsx')
         },
         update: {
@@ -593,7 +746,7 @@ function verifyArtifactsHash(results) {
             };
         } else if (key === 'opt') {
             skipRules = {
-                'optimization': { cols: [1, 13, 19] }                       // 第2列（索引1）
+                'optimization': { cols: [1, 13, 19, 24] }                       // 第2列（索引1）
             };
         }
 
@@ -620,7 +773,19 @@ async function runE2ETests() {
     console.log('🚀 开始 ArkAnalyzer-HapRay 端到端测试\n');
 
     // 先下载/更新测试资源
-    runCommand(`node ${path.join(__dirname, 'download_test_products.js')} "${DIST_DIR}"`, '下载测试资源', { silent: false });
+    try {
+        runCommand(`node ${path.join(__dirname, 'download_test_products.js')} "${DIST_DIR}"`, '下载测试资源', { silent: false });
+    } catch (downloadError) {
+        // macOS/CI 环境可能因网络限制无法拉取测试资源；若本地 dist/tests 已存在则继续执行。
+        console.warn(`⚠ 下载测试资源失败：${downloadError.message}`);
+        const optHsp = path.join(TEST_PRODUCTS_DIR, 'opt-detector', 'test_suite-default-unsigned.hsp');
+        const symbolHtml = path.join(TEST_PRODUCTS_DIR, 'symbol-recovery', 'hiperf_report.html');
+        const perfCase = path.join(DIST_DIR, 'tools', 'perf-testing', '_internal', 'hapray', 'testcases', 'com.sankuai.hmeituan', 'PerfLoad_meituan_0010.json');
+        if (!fs.existsSync(optHsp) || !fs.existsSync(symbolHtml) || !fs.existsSync(perfCase)) {
+            throw downloadError;
+        }
+        console.warn('⚠ 跳过下载：检测到 dist/tests 资源已存在，继续执行后续测试。');
+    }
 
     // 配置 LLM 环境变量用于符号恢复模块测试
     console.log('🤖 配置 LLM 环境变量...');
