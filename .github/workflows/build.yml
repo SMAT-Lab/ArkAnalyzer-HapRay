@@ -38,7 +38,7 @@ jobs:
             artifact_suffix: ""
 
           # macOS - ARM (Apple Silicon)
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             platform: darwin
             pyinstaller_arch: arm64
@@ -46,8 +46,8 @@ jobs:
             use_static_python: false
             artifact_suffix: ""
 
-          # macOS - Intel (x86_64)，使用 macos-13 以获取 Intel runner
-          - os: macos-13
+          # macOS - Intel (x86_64)，使用 macos-15-intel 以获取 Intel runner
+          - os: macos-15-intel
             arch: x64
             platform: darwin
             pyinstaller_arch: x86_64
