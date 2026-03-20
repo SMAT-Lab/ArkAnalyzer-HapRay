@@ -5,7 +5,7 @@
  * 注意：tauri bundle --bundles dmg 会重新创建 .app，
  * 因此需先构建 .app 再直接调用 bundle_dmg.sh 生成 dmg，而非使用 tauri bundle。
  */
-import { spawnSync } from "child_process";
+import { spawnSync, execSync } from "child_process";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -83,9 +83,42 @@ function createDmgWithBundleScript() {
   }
 
   console.log("正在调用 bundle_dmg.sh 生成 .dmg...");
-  run("bash", [bundleDmgSh, ...args], {
+  const result = spawnSync("bash", [bundleDmgSh, ...args], {
+    stdio: "inherit",
+    cwd: path.resolve(__dirname, ".."),
     env: { ...process.env, CI: "true" },
   });
+  if (result.status !== 0) {
+    const msg = ["bash", bundleDmgSh, ...args].join(" ");
+    console.error(`\n[build] 命令失败 (退出码 ${result.status ?? 1}): ${msg}`);
+    if (result.error) console.error("[build] 子进程错误:", result.error.message);
+    return false;
+  }
+  return true;
+}
+
+/** Intel macOS runner 上 create-dmg 偶发 hdiutil detach 超时，卸载残留卷并删除 rw.* 临时 dmg 以便重试 */
+function cleanupTauriDmgMounts() {
+  if (process.platform !== "darwin") return;
+  try {
+    execSync(
+      'shopt -s nullglob; for f in /Volumes/dmg.*; do [ -d "$f" ] && hdiutil detach "$f" -force 2>/dev/null || true; done',
+      { shell: "/bin/bash", stdio: "ignore" }
+    );
+  } catch {
+    // ignore
+  }
+  if (fs.existsSync(dmgDir)) {
+    for (const name of fs.readdirSync(dmgDir)) {
+      if (name.startsWith("rw.") && name.endsWith(".dmg")) {
+        try {
+          fs.unlinkSync(path.join(dmgDir, name));
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
 }
 
 const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
@@ -196,7 +229,24 @@ function main() {
       console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
       run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
     }
-    createDmgWithBundleScript();
+    const intelMac = process.platform === "darwin" && process.arch === "x64";
+    const maxDmgAttempts = intelMac ? 3 : 1;
+    let dmgOk = false;
+    for (let attempt = 1; attempt <= maxDmgAttempts; attempt++) {
+      if (attempt > 1) {
+        cleanupTauriDmgMounts();
+        const waitSec = 5 * attempt;
+        console.log(
+          `\nDMG 生成失败（Intel CI 上 hdiutil detach 超时较常见），${waitSec}s 后重试 (${attempt}/${maxDmgAttempts})...`
+        );
+        spawnSync("sleep", [String(waitSec)], { stdio: "inherit" });
+      }
+      dmgOk = createDmgWithBundleScript();
+      if (dmgOk) break;
+    }
+    if (!dmgOk) {
+      process.exit(1);
+    }
     console.log("\nStep 3: 复制产物到 ./dist...");
     copyToDist();
   } else {
