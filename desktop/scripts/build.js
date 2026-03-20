@@ -97,30 +97,6 @@ function createDmgWithBundleScript() {
   return true;
 }
 
-/** Intel macOS runner 上 create-dmg 偶发 hdiutil detach 超时，卸载残留卷并删除 rw.* 临时 dmg 以便重试 */
-function cleanupTauriDmgMounts() {
-  if (process.platform !== "darwin") return;
-  try {
-    execSync(
-      'shopt -s nullglob; for f in /Volumes/dmg.*; do [ -d "$f" ] && hdiutil detach "$f" -force 2>/dev/null || true; done',
-      { shell: "/bin/bash", stdio: "ignore" }
-    );
-  } catch {
-    // ignore
-  }
-  if (fs.existsSync(dmgDir)) {
-    for (const name of fs.readdirSync(dmgDir)) {
-      if (name.startsWith("rw.") && name.endsWith(".dmg")) {
-        try {
-          fs.unlinkSync(path.join(dmgDir, name));
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }
-}
-
 const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
 
 /**
@@ -228,29 +204,8 @@ function main() {
       // tauri bundle 会清理 .app，需重新构建 .app 才能继续
       console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
       run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
-      // Intel runner 上 bundle_dmg.sh 缺失时会触发重建，这会冲掉之前对 tools 做的硬链接合并。
-      // 只在 intel（x64）场景下补做一次恢复+合并，避免影响其他环境打包差异。
-      if (process.arch === "x64") {
-        console.log("\nIntel 重建后：再次恢复 tools 软连接并合并硬链接...");
-        run("node", [path.resolve(__dirname, "copy-tools-with-symlinks.js")]);
-        run("node", [mergeScript]);
-      }
     }
-    const intelMac = process.platform === "darwin" && process.arch === "x64";
-    const maxDmgAttempts = intelMac ? 3 : 1;
-    let dmgOk = false;
-    for (let attempt = 1; attempt <= maxDmgAttempts; attempt++) {
-      if (attempt > 1) {
-        cleanupTauriDmgMounts();
-        const waitSec = 5 * attempt;
-        console.log(
-          `\nDMG 生成失败（Intel CI 上 hdiutil detach 超时较常见），${waitSec}s 后重试 (${attempt}/${maxDmgAttempts})...`
-        );
-        spawnSync("sleep", [String(waitSec)], { stdio: "inherit" });
-      }
-      dmgOk = createDmgWithBundleScript();
-      if (dmgOk) break;
-    }
+    const dmgOk = createDmgWithBundleScript();
     if (!dmgOk) {
       process.exit(1);
     }
