@@ -3,22 +3,19 @@ const path = require("path");
 const crypto = require("crypto");
 
 /**
- * 计算文件的 MD5 哈希值，支持符号链接
+ * 计算文件的 MD5 哈希值，支持符号链接（仅对最终为普通文件的路径）
  */
 function calculateFileHash(filePath) {
   try {
-    const stat = fs.lstatSync(filePath);
-    if (stat.isSymbolicLink()) {
-      // 对于符号链接，读取链接目标的内容
-      const targetPath = fs.readlinkSync(filePath);
-      const resolvedPath = path.resolve(path.dirname(filePath), targetPath);
-      const buffer = fs.readFileSync(resolvedPath);
-      return crypto.createHash("md5").update(buffer).digest("hex");
-    } else {
-      // 对于普通文件，直接读取内容
-      const buffer = fs.readFileSync(filePath);
-      return crypto.createHash("md5").update(buffer).digest("hex");
+    const lstat = fs.lstatSync(filePath);
+    if (lstat.isSymbolicLink()) {
+      const realStat = fs.statSync(filePath);
+      if (realStat.isDirectory()) {
+        throw new Error("路径为指向目录的符号链接，不应参与去重");
+      }
     }
+    const buffer = fs.readFileSync(filePath);
+    return crypto.createHash("md5").update(buffer).digest("hex");
   } catch (error) {
     throw new Error(`无法读取文件 ${filePath}: ${error.message}`);
   }
@@ -37,13 +34,28 @@ function getAllFiles(dirPath, arrayOfFiles = []) {
       try {
         const stat = fs.lstatSync(filePath); // 使用 lstat 而不是 stat 来获取符号链接本身的状态
 
-        if (stat.isDirectory()) {
+        // 指向目录的符号链接：lstat 下 isDirectory 为 false，需跟随后再递归，否则会误当作“文件”去 readFile 导致 EISDIR
+        if (stat.isSymbolicLink()) {
+          let realStat;
+          try {
+            realStat = fs.statSync(filePath);
+          } catch (e) {
+            console.warn(`无法跟随符号链接 ${filePath}:`, e.message);
+            return;
+          }
+          if (realStat.isDirectory()) {
+            if (!file.startsWith(".") && file !== "node_modules") {
+              getAllFiles(filePath, arrayOfFiles);
+            }
+          } else if (realStat.isFile() && realStat.size > 0) {
+            arrayOfFiles.push(filePath);
+          }
+        } else if (stat.isDirectory()) {
           // 跳过一些不需要处理的目录
           if (!file.startsWith(".") && file !== "node_modules") {
             getAllFiles(filePath, arrayOfFiles);
           }
-        } else if (stat.isFile() || stat.isSymbolicLink()) {
-          // 处理普通文件和符号链接，但跳过空文件（大小为0）
+        } else if (stat.isFile()) {
           if (stat.size > 0) {
             arrayOfFiles.push(filePath);
           }
