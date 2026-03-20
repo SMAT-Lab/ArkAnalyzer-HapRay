@@ -304,6 +304,9 @@ pub async fn execute_tool_command(
 ) -> Result<ExecuteToolResult, String> {
     let plugins_dir = get_plugins_dir(&app).ok_or_else(|| "插件目录不存在".to_string())?;
     let mut params = payload.params.clone();
+    // prepare_tool_command 内部会对 params 做 drain() 以构建命令行参数；
+    // 因此这里保留一份未被清空的副本，用于输出目录历史记录的兜底解析。
+    let params_for_history = params.clone();
     let prepared = match execution::prepare_tool_command(
         &plugins_dir,
         &payload.plugin_id,
@@ -463,7 +466,7 @@ pub async fn execute_tool_command(
     // 以日志输出为准（工具在 macOS 下会自行重定向到用户目录并打印最终路径）
     // 仅当日志无法解析到路径时，才回退到 params 推导路径。
     let output_path = extract_output_path_from_log_first(&payload.action, &output_log, work_dir.as_path())
-        .or_else(|| extract_output_path_from_params(&payload.action, &params, work_dir.as_path()));
+        .or_else(|| extract_output_path_from_params(&payload.action, &params_for_history, work_dir.as_path()));
 
     save_execution_record(
         &app,
