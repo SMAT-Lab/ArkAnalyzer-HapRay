@@ -231,6 +231,41 @@
                       </svg>
                     </button>
                     <div v-show="openChoiceKey === key" class="tool-workspace__choice-panel">
+                      <div
+                        v-if="isCategorizedChoiceKey(key)"
+                        class="tool-workspace__choice-category-tabs"
+                      >
+                        <button
+                          type="button"
+                          class="tool-workspace__choice-category-btn"
+                          :class="{
+                            'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'all',
+                          }"
+                          @click="setChoiceCategory(key, 'all')"
+                        >
+                          全部
+                        </button>
+                        <button
+                          type="button"
+                          class="tool-workspace__choice-category-btn"
+                          :class="{
+                            'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'system',
+                          }"
+                          @click="setChoiceCategory(key, 'system')"
+                        >
+                          系统 App
+                        </button>
+                        <button
+                          type="button"
+                          class="tool-workspace__choice-category-btn"
+                          :class="{
+                            'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'third',
+                          }"
+                          @click="setChoiceCategory(key, 'third')"
+                        >
+                          三方 App
+                        </button>
+                      </div>
                       <input
                         :ref="(el) => setChoiceFilterRef(key, el)"
                         v-model="choiceFilter[key]"
