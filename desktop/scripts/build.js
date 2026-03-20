@@ -20,6 +20,63 @@ const bundleDmgSh = path.join(dmgDir, "bundle_dmg.sh");
 // 项目根目录的 dist（desktop 的祖父目录）
 const rootDistDir = path.resolve(__dirname, "../../dist");
 
+function patchBundleDmgShDetachTimeout() {
+  if (!fs.existsSync(bundleDmgSh)) return false;
+  const sh = fs.readFileSync(bundleDmgSh, "utf8");
+
+  // 已经打过补丁就跳过（确保幂等）
+  if (sh.includes("DiskArbitration timeout")) return true;
+
+  const oldFnRegex =
+    /function hdiutil_detach_retry\(\) \{[\s\S]*?\n\s*unset unmounting_attempts\n\s*\}/m;
+
+  if (!oldFnRegex.test(sh)) {
+    console.error("错误: 未找到可替换的 hdiutil_detach_retry 函数块，无法修补 bundle_dmg.sh");
+    return false;
+  }
+
+  const newFn = `function hdiutil_detach_retry() {
+	# Unmount with retries; macOS (e.g. 15) may fail with DiskArbitration timeout.
+	unmounting_attempts=0
+	while :; do
+		echo "Unmounting disk image..."
+		(( unmounting_attempts++ ))
+		set +e
+		detach_output="$(hdiutil detach "$1" 2>&1)"
+		exit_code=$?
+		set -e
+
+		# nothing goes wrong
+		(( exit_code == 0 )) && break
+
+		# Retry on busy (EBUSY) or known DiskArbitration timeout texts
+		if (( exit_code == 16 )) || echo "$detach_output" | grep -Eqi 'timeout for DiskArbitration expired|drive not detached'; then
+			if (( unmounting_attempts == MAXIMUM_UNMOUNTING_ATTEMPTS )); then
+				echo "Unmount patience exhausted, trying force detach..."
+				set +e
+				hdiutil detach -force "$1" 2>&1
+				force_code=$?
+				set -e
+				exit $force_code
+			fi
+			echo "Wait a moment..."
+			sleep $(( 1 * (2 ** unmounting_attempts) ))
+			continue
+		fi
+
+		# Other detach errors are not retryable.
+		echo "$detach_output" >&2
+		exit $exit_code
+	done
+	unset unmounting_attempts
+}`;
+
+  const patched = sh.replace(oldFnRegex, newFn);
+  if (patched === sh) return false;
+  fs.writeFileSync(bundleDmgSh, patched, "utf8");
+  return true;
+}
+
 function run(cmd, args = [], options = {}) {
   const result = spawnSync(cmd, args, {
     stdio: "inherit",
@@ -50,7 +107,7 @@ function createDmgWithBundleScript() {
   const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
   const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
   const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
-  const version = tauriConf.version || "1.5.0";
+  const version = tauriConf.version || "1.5.1";
   const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
   const dmgName = `${productName}_${version}_${arch}.dmg`;
   const dmgPath = path.join(dmgDir, dmgName);
@@ -204,6 +261,14 @@ function main() {
       // tauri bundle 会清理 .app，需重新构建 .app 才能继续
       console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
       run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
+    }
+
+    // tauri bundle 生成的 create-dmg 脚本在 macOS 15 的 CI 环境可能遇到 detach 超时
+    // （例如 "timeout for DiskArbitration expired"），导致脚本返回码非 0 进而让 npm 构建失败。
+    const patched = patchBundleDmgShDetachTimeout();
+    if (!patched) {
+      console.error("错误: 修补 bundle_dmg.sh 的 detach 逻辑失败");
+      process.exit(1);
     }
     const dmgOk = createDmgWithBundleScript();
     if (!dmgOk) {
