@@ -50,7 +50,7 @@ function createDmgWithBundleScript() {
   const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
   const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
   const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
-  const version = tauriConf.version || "1.5.0";
+  const version = tauriConf.version || "1.5.1";
   const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
   const dmgName = `${productName}_${version}_${arch}.dmg`;
   const dmgPath = path.join(dmgDir, dmgName);
