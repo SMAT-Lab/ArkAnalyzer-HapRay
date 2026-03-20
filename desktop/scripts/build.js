@@ -228,6 +228,13 @@ function main() {
       // tauri bundle 会清理 .app，需重新构建 .app 才能继续
       console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
       run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
+      // Intel runner 上 bundle_dmg.sh 缺失时会触发重建，这会冲掉之前对 tools 做的硬链接合并。
+      // 只在 intel（x64）场景下补做一次恢复+合并，避免影响其他环境打包差异。
+      if (process.arch === "x64") {
+        console.log("\nIntel 重建后：再次恢复 tools 软连接并合并硬链接...");
+        run("node", [path.resolve(__dirname, "copy-tools-with-symlinks.js")]);
+        run("node", [mergeScript]);
+      }
     }
     const intelMac = process.platform === "darwin" && process.arch === "x64";
     const maxDmgAttempts = intelMac ? 3 : 1;
