@@ -181,32 +181,21 @@ function mergeDuplicateFiles(sourceDir) {
           // 获取目标文件的状态信息
           const targetStat = fs.lstatSync(targetFile);
 
-          // 统一使用硬链接处理所有文件（包括符号链接）
-
-          // 检查目标文件是否已经是源文件的硬链接
-          let targetIno;
+          // 保留符号链接（如 PyInstaller/TensorFlow 的 _pywrap_tensorflow_internal.so）：
+          // 若改为硬链接会丢失相对路径语义，失败时 copyFileSync 还会变成整文件拷贝。
           if (targetStat.isSymbolicLink()) {
-            // 对于符号链接，解析到实际文件并检查其inode
-            const targetLink = fs.readlinkSync(targetFile);
-            const resolvedTarget = path.resolve(path.dirname(targetFile), targetLink);
-            try {
-              const resolvedStat = fs.statSync(resolvedTarget);
-              targetIno = resolvedStat.ino;
-            } catch (error) {
-              // 如果解析失败，使用符号链接本身的inode
-              targetIno = targetStat.ino;
-            }
-          } else {
-            // 对于普通文件，直接使用其inode
-            targetIno = fs.statSync(targetFile).ino;
+            continue;
           }
+
+          // 检查目标文件是否已经是源文件的硬链接（此处已排除符号链接）
+          const targetIno = fs.statSync(targetFile).ino;
 
           if (targetIno === sourceStat.ino) {
             // 已经是同一个文件的硬链接
             continue;
           }
 
-          // 删除原文件（包括符号链接）并创建硬链接
+          // 删除原文件并创建硬链接
           fs.unlinkSync(targetFile);
           fs.linkSync(sourceFile, targetFile);
           linksCreated++;

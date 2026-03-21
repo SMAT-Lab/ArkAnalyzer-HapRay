@@ -57,7 +57,7 @@ jobs:
 
         # 将 node-version 移到每个 item 中
         include:
-          - node-version: 18.x
+          - node-version: 24.x
     
     steps:
     - name: Checkout code
