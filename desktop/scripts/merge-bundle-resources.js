@@ -1,6 +1,7 @@
 /**
  * Tauri 打包完成后，对 bundle 内 Resources/tools 做硬链接去重
- * 因 Tauri 拷贝 resources 时不会保留硬链接，需在拷贝后对 bundle 内文件做合并
+ * 因 Tauri 拷贝 resources 时不会保留硬链接，需在拷贝后对 bundle 内文件做合并。
+ * merge_duplicates.js 会跳过已是符号链接的路径，避免破坏 PyInstaller/TensorFlow 等依赖的软链接。
  */
 import path from "path";
 import fs from "fs";

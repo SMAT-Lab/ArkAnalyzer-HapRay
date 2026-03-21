@@ -60,27 +60,24 @@ binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 # 收集其他依赖
-# 收集 tensorflow-macos 和 tensorflow-metal (macOS 特定)
+# macOS：tensorflow-macos；tensorflow-metal 仅 Apple Silicon 可用，Intel 上打包会显著增大体积且无收益
 if platform.system() == 'Darwin':
-    # 收集 tensorflow-macos
     tmp_ret = collect_all('tensorflow_macos')
     datas += tmp_ret[0]
     binaries += tmp_ret[1]
     hiddenimports += tmp_ret[2]
-    
-    # 收集 tensorflow-metal
-    tmp_ret = collect_all('tensorflow_metal')
-    datas += tmp_ret[0]
-    binaries += tmp_ret[1]
-    hiddenimports += tmp_ret[2]
-    
-    # 添加 tensorflow-metal 的关键隐藏导入
-    hiddenimports += [
-        'tensorflow_metal',
-        'tensorflow_metal.python',
-        'tensorflow_metal.python.gpu',
-        'tensorflow_metal.python.gpu.device',
-    ]
+
+    if platform.machine() == 'arm64':
+        tmp_ret = collect_all('tensorflow_metal')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+        hiddenimports += [
+            'tensorflow_metal',
+            'tensorflow_metal.python',
+            'tensorflow_metal.python.gpu',
+            'tensorflow_metal.python.gpu.device',
+        ]
 else:
     tmp_ret = collect_all('tensorflow')
     datas += tmp_ret[0]
@@ -187,6 +184,8 @@ a = Analysis(
         'sphinx',
         'numpy.tests',
         'pandas.tests',
+        'scipy.tests',
+        'sklearn.tests',
         'pkg_resources',  # 排除已弃用的 pkg_resources，使用 importlib.metadata 和 importlib.resources 替代
     ],
     noarchive=False,
@@ -203,7 +202,7 @@ exe = EXE(
     name='opt-detector',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=True,
     upx=True,
     console=True,
     disable_windowed_traceback=False,
@@ -219,7 +218,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
-    strip=False,
+    strip=True,
     upx=True,
     upx_exclude=[],
     name='opt-detector',
