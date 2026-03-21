@@ -19,7 +19,16 @@ function copyDirWithSymlinks(src, dest) {
     const destPath = path.join(dest, entry.name);
     if (entry.isSymbolicLink()) {
       const target = fs.readlinkSync(srcPath);
-      fs.symlinkSync(target, destPath);
+      try {
+        fs.symlinkSync(target, destPath);
+      } catch (err) {
+        // Windows 未开开发者模式/无管理员权限时 symlink 常失败，回退为复制真实文件以免打包中断
+        if (process.platform === "win32") {
+          fs.copyFileSync(fs.realpathSync(srcPath), destPath);
+        } else {
+          throw err;
+        }
+      }
     } else if (entry.isDirectory()) {
       copyDirWithSymlinks(srcPath, destPath);
     } else {

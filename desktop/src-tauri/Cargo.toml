@@ -35,3 +35,9 @@ tauri-plugin-decorum = "1.1.1"
 dirs = "5"
 regex = "1"
 
+# 减小 release 产物体积（影响 DMG / 各平台安装包内的主程序）
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+
