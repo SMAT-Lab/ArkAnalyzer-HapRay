@@ -102,6 +102,43 @@ function runOptional(cmd, args = [], options = {}) {
   return result.status === 0;
 }
 
+/**
+ * create-dmg / hdiutil 默认 zlib 等级往往低于 9，对 UDZO 再压一次可略减 DMG 体积（通常数 MB 级）。
+ * 注意：-o 若不以 .dmg 结尾，hdiutil 会再追加 .dmg，导致实际路径与预期不一致。
+ */
+function recompressDmgUdzoZlib9(dmgPath) {
+  const tmpDmg = dmgPath.replace(/\.dmg$/i, ".udzo9-tmp.dmg");
+  if (fs.existsSync(tmpDmg)) fs.unlinkSync(tmpDmg);
+  const r = spawnSync(
+    "hdiutil",
+    ["convert", dmgPath, "-format", "UDZO", "-imagekey", "zlib-level=9", "-o", tmpDmg],
+    { stdio: "inherit" },
+  );
+  if (r.status !== 0) {
+    if (fs.existsSync(tmpDmg)) fs.unlinkSync(tmpDmg);
+    console.warn(`[build] DMG zlib-level=9 重压缩跳过（hdiutil 退出码 ${r.status ?? 1}）`);
+    return;
+  }
+  let produced = tmpDmg;
+  if (!fs.existsSync(produced)) {
+    // 兼容：旧逻辑曾用 *.dmg.udzo9，hdiutil 生成 *.dmg.udzo9.dmg
+    const legacy = `${dmgPath}.udzo9.dmg`;
+    if (fs.existsSync(legacy)) produced = legacy;
+  }
+  if (!fs.existsSync(produced)) {
+    console.error("[build] DMG 重压缩后未找到输出文件:", tmpDmg);
+    return;
+  }
+  try {
+    fs.unlinkSync(dmgPath);
+    fs.renameSync(produced, dmgPath);
+    console.log("  ✓ DMG 已用 zlib-level=9 重新压缩");
+  } catch (e) {
+    console.error("[build] 替换 DMG 失败:", e.message);
+    if (fs.existsSync(tmpDmg) && tmpDmg !== dmgPath) fs.unlinkSync(tmpDmg);
+  }
+}
+
 function createDmgWithBundleScript() {
   // 读取 tauri 配置
   const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
@@ -151,6 +188,7 @@ function createDmgWithBundleScript() {
     if (result.error) console.error("[build] 子进程错误:", result.error.message);
     return false;
   }
+  recompressDmgUdzoZlib9(dmgPath);
   return true;
 }
 

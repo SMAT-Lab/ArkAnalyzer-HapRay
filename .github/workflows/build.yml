@@ -1,6 +1,7 @@
 name: Build Executables
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main", "dev" ]
   pull_request:

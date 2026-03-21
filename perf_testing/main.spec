@@ -134,8 +134,11 @@ a = Analysis(
         'pytest',
         'numpy.tests',
         'pandas.tests',
+        'scipy.tests',
+        'sklearn.tests',
     ],
     noarchive=False,
+    # 不可使用 optimize=2（-OO）：会去掉 docstring，numpy 的 add_docstring 在运行时报 TypeError
     optimize=0,
 )
 pyz = PYZ(a.pure)
