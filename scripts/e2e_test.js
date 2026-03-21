@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const os = require('os');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 // dist 目录：
 // - 读取命令行入参：node e2e_test.js <dist_dir>
@@ -580,30 +580,76 @@ function testSymbolRecoveryModule() {
     }
 }
 
+/** ExcelJS 单元格转为可对比字符串（优先用显示文本，贴近旧 xlsx 的 sheet_to_json） */
+function excelCellToString(cell) {
+    if (!cell) return '';
+    if (cell.text !== undefined && cell.text !== null && String(cell.text) !== '') {
+        return String(cell.text);
+    }
+    const v = cell.value;
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'object' && v !== null) {
+        if (v.richText && Array.isArray(v.richText)) {
+            return v.richText.map((r) => r.text || '').join('');
+        }
+        if (v.text !== undefined) return String(v.text);
+        if (v.result !== undefined) return String(v.result);
+        if (v.hyperlink !== undefined && v.text !== undefined) return String(v.text);
+        if (v.formula !== undefined && v.result !== undefined) return String(v.result);
+    }
+    if (v instanceof Date) return v.toISOString();
+    return String(v);
+}
+
+/** 将工作表转为二维数组（行主序，空单元格为 ''），对齐原 sheet_to_json({ header: 1, defval: '' }) */
+function worksheetToRows(worksheet) {
+    const rows = [];
+    worksheet.eachRow({ includeEmpty: true }, (row) => {
+        const arr = [];
+        const n = row.cellCount;
+        for (let c = 1; c <= n; c++) {
+            arr.push(excelCellToString(row.getCell(c)));
+        }
+        rows.push(arr);
+    });
+    return rows;
+}
+
+async function readWorkbookSheetRows(filePath) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(filePath);
+    const names = wb.worksheets.map((ws) => ws.name);
+    const sheets = {};
+    for (const ws of wb.worksheets) {
+        sheets[ws.name] = worksheetToRows(ws);
+    }
+    return { names, sheets };
+}
+
 /**
  * 对比两个xlsx文件内容是否相同（排除时间戳等动态字段）
  */
-function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
-    const wb1 = XLSX.readFile(file1);
-    const wb2 = XLSX.readFile(file2);
+async function compareXlsxFiles(file1, file2, showDetails = false, skipRules = {}) {
+    const wb1 = await readWorkbookSheetRows(file1);
+    const wb2 = await readWorkbookSheetRows(file2);
 
     if (showDetails) {
         console.log(`  文件1: ${path.basename(file1)}`);
         console.log(`  文件2: ${path.basename(file2)}`);
-        console.log(`  Sheet数量: ${wb1.SheetNames.length} vs ${wb2.SheetNames.length}`);
+        console.log(`  Sheet数量: ${wb1.names.length} vs ${wb2.names.length}`);
     }
 
-    if (wb1.SheetNames.length !== wb2.SheetNames.length) {
+    if (wb1.names.length !== wb2.names.length) {
         if (showDetails) console.log(`  ✗ Sheet数量不同`);
         return false;
     }
 
-    for (let i = 0; i < wb1.SheetNames.length; i++) {
-        const sheetName = wb1.SheetNames[i];
+    for (let i = 0; i < wb1.names.length; i++) {
+        const sheetName = wb1.names[i];
         if (showDetails) console.log(`  检查Sheet: ${sheetName}`);
 
-        const sheet1 = XLSX.utils.sheet_to_json(wb1.Sheets[sheetName], { header: 1, defval: '' });
-        const sheet2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[i]], { header: 1, defval: '' });
+        const sheet1 = wb1.sheets[sheetName];
+        const sheet2 = wb2.sheets[wb2.names[i]];
 
         if (showDetails) console.log(`    行数: ${sheet1.length} vs ${sheet2.length}`);
 
@@ -696,7 +742,7 @@ function getUpdateXlsxFile() {
 /**
  * 校验关键产物内容
  */
-function verifyArtifactsHash(results) {
+async function verifyArtifactsHash(results) {
     console.log('🔍 开始校验关键产物内容...\n');
 
     const artifacts = {
@@ -750,7 +796,7 @@ function verifyArtifactsHash(results) {
             };
         }
 
-        if (compareXlsxFiles(files.actual, files.expected, true, skipRules)) {
+        if (await compareXlsxFiles(files.actual, files.expected, true, skipRules)) {
             console.log(`✓ ${key}: 内容匹配`);
         } else {
             console.log(`✗ ${key}: 内容不匹配`);
@@ -869,7 +915,7 @@ async function runE2ETests() {
 
         // 5. 校验关键产物hash
         console.log('\n' + '=' .repeat(60));
-        const hashVerification = verifyArtifactsHash(results);
+        const hashVerification = await verifyArtifactsHash(results);
 
         if (failedModules.length === 0 && hashVerification.success) {
             console.log('🎉 所有模块测试通过，产物hash校验通过！');
