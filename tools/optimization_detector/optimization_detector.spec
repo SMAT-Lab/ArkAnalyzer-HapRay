@@ -2,6 +2,7 @@
 from PyInstaller.utils.hooks import collect_all
 import os
 import platform
+import sys
 from pathlib import Path
 
 # 获取项目根目录
@@ -162,6 +163,7 @@ hiddenimports += [
 ]
 
 runtime_hooks = []
+IS_WIN = sys.platform.startswith('win')
 
 a = Analysis(
     ['cli.py'],
@@ -202,7 +204,7 @@ exe = EXE(
     name='opt-detector',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=not IS_WIN,
     upx=True,
     console=True,
     disable_windowed_traceback=False,
@@ -218,7 +220,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
-    strip=True,
+    strip=not IS_WIN,
     upx=True,
     upx_exclude=[],
     name='opt-detector',
