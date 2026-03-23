@@ -17,6 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
+import sys
 import tarfile
 import tempfile
 import zipfile
@@ -47,7 +48,11 @@ class FileInfo:
     """Represents information about a binary file"""
 
     TEXT_SECTION = '.text'
-    CACHE_DIR = 'files_results_cache'
+    CACHE_DIR = (
+        os.path.join(os.path.expanduser('~'), 'ArkAnalyzer-HapRay', 'optimization_detector', 'files_results_cache')
+        if sys.platform == 'darwin'
+        else 'files_results_cache'
+    )
 
     @staticmethod
     def _is_elf_file(file_path: str) -> bool:

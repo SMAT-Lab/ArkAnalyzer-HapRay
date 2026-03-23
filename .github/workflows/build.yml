@@ -1,6 +1,7 @@
 name: Build Executables
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main", "dev" ]
   pull_request:
@@ -38,17 +39,26 @@ jobs:
             artifact_suffix: ""
 
           # macOS - ARM (Apple Silicon)
-          - os: macos-14
+          - os: macos-15
             arch: arm64
             platform: darwin
             pyinstaller_arch: arm64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
             artifact_suffix: ""
-            
+
+          # macOS - Intel (x86_64)，使用 macos-15-intel 以获取 Intel runner
+          - os: macos-15-intel
+            arch: x64
+            platform: darwin
+            pyinstaller_arch: x86_64
+            package_lock_path: .github/workflows/package-lock.json
+            use_static_python: false
+            artifact_suffix: ""
+
         # 将 node-version 移到每个 item 中
         include:
-          - node-version: 18.x
+          - node-version: 24.x
     
     steps:
     - name: Checkout code

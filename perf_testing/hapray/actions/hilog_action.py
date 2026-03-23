@@ -20,6 +20,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +28,7 @@ import pandas as pd
 
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.config.config import Config
 
 
@@ -307,6 +309,9 @@ class HilogAction:
         )
 
         parsed_args = parser.parse_args(args)
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            parsed_args.output = str(get_user_data_root('hilog') / os.path.basename(parsed_args.output))
         action = HilogAction()
         return action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
 

@@ -132,6 +132,41 @@
                     </svg>
                   </button>
                   <div v-show="openChoiceKey === key" class="tool-workspace__choice-panel">
+                    <div
+                      v-if="isCategorizedChoiceKey(key)"
+                      class="tool-workspace__choice-category-tabs"
+                    >
+                      <button
+                        type="button"
+                        class="tool-workspace__choice-category-btn"
+                        :class="{
+                          'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'all',
+                        }"
+                        @click="setChoiceCategory(key, 'all')"
+                      >
+                        全部
+                      </button>
+                      <button
+                        type="button"
+                        class="tool-workspace__choice-category-btn"
+                        :class="{
+                          'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'system',
+                        }"
+                        @click="setChoiceCategory(key, 'system')"
+                      >
+                        系统 App
+                      </button>
+                      <button
+                        type="button"
+                        class="tool-workspace__choice-category-btn"
+                        :class="{
+                          'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'third',
+                        }"
+                        @click="setChoiceCategory(key, 'third')"
+                      >
+                        三方 App
+                      </button>
+                    </div>
                     <input
                       :ref="(el) => setChoiceFilterRef(key, el)"
                       v-model="choiceFilter[key]"
@@ -153,10 +188,12 @@
                           :key="opt"
                           type="button"
                           class="tool-workspace__choice-item"
-                          :class="{ 'tool-workspace__choice-item--selected': formData[key] === opt }"
+                          :class="{
+                            'tool-workspace__choice-item--selected': String(formData[key] ?? '') === getChoiceValue(opt),
+                          }"
                           @click="selectChoiceSingle(key, opt)"
                         >
-                          {{ opt }}
+                          {{ getChoiceLabel(opt) }}
                         </button>
                         <div
                           v-if="getFilteredChoices(param, key).length === 0"
@@ -194,6 +231,41 @@
                       </svg>
                     </button>
                     <div v-show="openChoiceKey === key" class="tool-workspace__choice-panel">
+                      <div
+                        v-if="isCategorizedChoiceKey(key)"
+                        class="tool-workspace__choice-category-tabs"
+                      >
+                        <button
+                          type="button"
+                          class="tool-workspace__choice-category-btn"
+                          :class="{
+                            'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'all',
+                          }"
+                          @click="setChoiceCategory(key, 'all')"
+                        >
+                          全部
+                        </button>
+                        <button
+                          type="button"
+                          class="tool-workspace__choice-category-btn"
+                          :class="{
+                            'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'system',
+                          }"
+                          @click="setChoiceCategory(key, 'system')"
+                        >
+                          系统 App
+                        </button>
+                        <button
+                          type="button"
+                          class="tool-workspace__choice-category-btn"
+                          :class="{
+                            'tool-workspace__choice-category-btn--selected': getChoiceCategory(key) === 'third',
+                          }"
+                          @click="setChoiceCategory(key, 'third')"
+                        >
+                          三方 App
+                        </button>
+                      </div>
                       <input
                         :ref="(el) => setChoiceFilterRef(key, el)"
                         v-model="choiceFilter[key]"
@@ -215,10 +287,12 @@
                             :key="opt"
                             type="button"
                             class="tool-workspace__choice-item"
-                            :class="{ 'tool-workspace__choice-item--selected': getChoiceMultiItems(key).includes(opt) }"
+                            :class="{
+                              'tool-workspace__choice-item--selected': getChoiceMultiItems(key).includes(getChoiceValue(opt)),
+                            }"
                             @click="selectChoiceMulti(key, opt)"
                           >
-                            {{ opt }}
+                            {{ getChoiceLabel(opt) }}
                           </button>
                           <div
                             v-if="getFilteredChoices(param, key).length === 0"
@@ -389,6 +463,9 @@ const nargsInputTemp = ref<Record<string, string | number>>({})
 const choiceMultiTemp = ref<Record<string, string>>({})
 /** choice 类型参数的过滤关键词（paramKey -> 用户输入的过滤文本） */
 const choiceFilter = ref<Record<string, string>>({})
+/** choice 下拉的分类快速筛选：paramKey -> all/system/third */
+type ChoiceCategory = "all" | "system" | "third"
+const choiceCategoryFilter = ref<Record<string, ChoiceCategory>>({})
 /** 当前展开的 choice 下拉的 paramKey，用于点击外部关闭 */
 const openChoiceKey = ref<string | null>(null)
 /** 下拉打开时聚焦过滤输入框的 ref 回调缓存 */
@@ -560,12 +637,54 @@ function getChoices(param: ParameterDef, paramKey: string): string[] {
   return []
 }
 
+function parseCategorizedChoice(raw: string): {
+  category: "system" | "third" | "unknown"
+  value: string
+  label: string
+} {
+  if (raw.startsWith("system::")) {
+    const value = raw.slice("system::".length)
+    return { category: "system", value, label: value }
+  }
+  if (raw.startsWith("third::")) {
+    const value = raw.slice("third::".length)
+    return { category: "third", value, label: value }
+  }
+  return { category: "unknown", value: raw, label: raw }
+}
+
+function isCategorizedChoiceKey(paramKey: string): boolean {
+  const list = dynamicChoicesCache.value[paramKey] ?? []
+  return list.some((o) => o.startsWith("system::") || o.startsWith("third::"))
+}
+
+function getChoiceCategory(paramKey: string): ChoiceCategory {
+  return choiceCategoryFilter.value[paramKey] ?? "all"
+}
+
+function setChoiceCategory(paramKey: string, category: ChoiceCategory) {
+  choiceCategoryFilter.value = { ...choiceCategoryFilter.value, [paramKey]: category }
+}
+
+function getChoiceValue(raw: string): string {
+  return parseCategorizedChoice(raw).value
+}
+
+function getChoiceLabel(raw: string): string {
+  return parseCategorizedChoice(raw).label
+}
+
 /** 根据当前过滤关键词返回过滤后的选项列表（用于 choice 下拉） */
 function getFilteredChoices(param: ParameterDef, paramKey: string): string[] {
   const list = getChoices(param, paramKey)
   const keyword = (choiceFilter.value[paramKey] ?? "").trim().toLowerCase()
-  if (!keyword) return list
-  return list.filter((opt) => opt.toLowerCase().includes(keyword))
+  const category = getChoiceCategory(paramKey)
+  return list.filter((rawOpt) => {
+    const parsed = parseCategorizedChoice(rawOpt)
+    if (category !== "all" && parsed.category !== category) return false
+    if (!keyword) return true
+    return parsed.label.toLowerCase().includes(keyword)
+  })
 }
 
 function setChoiceFilterRef(paramKey: string, el: unknown) {
@@ -579,6 +698,7 @@ function toggleChoiceDropdown(paramKey: string) {
   }
   openChoiceKey.value = paramKey
   choiceFilter.value = { ...choiceFilter.value, [paramKey]: "" }
+  choiceCategoryFilter.value = { ...choiceCategoryFilter.value, [paramKey]: "all" }
   nextTick(() => {
     const input = choiceFilterRefs[paramKey]
     if (input) {
@@ -587,13 +707,16 @@ function toggleChoiceDropdown(paramKey: string) {
   })
 }
 
-function selectChoiceSingle(paramKey: string, value: string) {
-  formData.value = { ...formData.value, [paramKey]: value }
+function selectChoiceSingle(paramKey: string, rawOpt: string) {
+  const parsed = parseCategorizedChoice(rawOpt)
+  formData.value = { ...formData.value, [paramKey]: parsed.value }
   openChoiceKey.value = null
   choiceFilter.value = { ...choiceFilter.value, [paramKey]: "" }
 }
 
-function selectChoiceMulti(paramKey: string, value: string) {
+function selectChoiceMulti(paramKey: string, rawOpt: string) {
+  const parsed = parseCategorizedChoice(rawOpt)
+  const value = parsed.value
   const arr = getChoiceMultiItems(paramKey)
   if (arr.includes(value)) return
   formData.value = { ...formData.value, [paramKey]: [...arr, value] }

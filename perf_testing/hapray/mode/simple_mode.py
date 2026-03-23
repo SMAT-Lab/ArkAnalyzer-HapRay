@@ -29,6 +29,10 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
     """
     pids = kwargs.get('pids', [])
     steps_file_path = kwargs.get('steps_file_path', '')
+    app_name = kwargs.get('app_name', '')
+    app_version = kwargs.get('app_version', '')
+    rom_version = kwargs.get('rom_version', '')
+    scene = kwargs.get('scene', '')
 
     # 检查输入文件是否存在
     for perf_path in perf_paths:
@@ -95,15 +99,15 @@ def create_simple_mode_structure(report_dir, perf_paths, trace_paths, package_na
         # 创建testInfo.json
         test_info = {
             'app_id': package_name,
-            'app_name': '',
-            'app_version': '',
-            'scene': '',
+            'app_name': app_name,
+            'app_version': app_version,
+            'scene': scene,
             'device': {
                 'sn': '',
                 'model': '',
                 'type': '',
                 'platform': 'HarmonyOS NEXT',
-                'version': '',
+                'version': rom_version,
                 'others': {},
             },
             'timestamp': 0,

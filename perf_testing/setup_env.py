@@ -27,7 +27,7 @@ check_python_version()
 
 # Configuration Constants
 VENV_NAME = '.venv'
-VERSION = '5.0.7.200'
+VERSION = '6.0.7.210'
 
 # Path Configuration
 CURRENT_DIR = Path(os.path.abspath(Path(__file__).parent))

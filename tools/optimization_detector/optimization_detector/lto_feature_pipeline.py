@@ -7,6 +7,7 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
@@ -23,6 +24,20 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+
+
+def get_user_data_root(subdir: str) -> Path:
+    """
+    获取本工具在当前平台下的用户数据根目录。
+
+    - macOS：固定放到用户主目录的 `~/ArkAnalyzer-HapRay/<subdir>` 下，避免 App 包 cwd 落在只读目录。
+    - 其他平台：使用当前工作目录作为基准目录（与原工具行为兼容）。
+    """
+    if sys.platform == 'darwin':
+        root = Path.home() / 'ArkAnalyzer-HapRay' / subdir
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    return Path(os.getcwd()) / subdir
 
 
 # -------------------- Utils --------------------
@@ -51,6 +66,19 @@ def which_any(cands: list[str]) -> Optional[str]:
         if p:
             return p
     return None
+
+
+def _resolve_log_root(log_dir: str) -> str:
+    """
+    统一训练产物/log 的根目录，复用 perf_testing 中的用户数据路径策略。
+
+    - 所有平台：以 `get_user_data_root('optimization_detector')` 作为基准，
+      在其下再拼接调用方传入的 `log_dir`（默认是 'outs'）。
+    """
+    base = get_user_data_root('optimization_detector')
+    root = base / log_dir
+    root.mkdir(parents=True, exist_ok=True)
+    return str(root)
 
 
 # -------------------- 阈值优化 --------------------
@@ -1484,7 +1512,8 @@ class CompilerProvenanceMLP:
 class _BaseTrainer:
     def __init__(self, level: str, log_dir: str, logger_name: str, group_split: bool):
         self.level = level
-        self.out_dir = Path(log_dir) / level / logger_name
+        resolved_log_dir = _resolve_log_root(log_dir)
+        self.out_dir = Path(resolved_log_dir) / level / logger_name
         self.out_dir.mkdir(parents=True, exist_ok=True)
         logfile = self.out_dir.parent / f'{level}_{logger_name}.log'
         if logfile.exists():
