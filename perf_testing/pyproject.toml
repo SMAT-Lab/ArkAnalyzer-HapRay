@@ -3,7 +3,7 @@ requires = ["setuptools>=64.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "arkanayzer-hapray"
+name = "hapray-perf-testing"
 version = "1.0.0"
 description = "HapRay Performance Analysis Toolkit"
 authors = [
@@ -20,9 +20,21 @@ classifiers = [
 ]
 
 dependencies = [
+    "setuptools>=65.0.0,<82.0.0",
+    "pillow>=9.0.0",
     "pyyaml>=6.0",
     "psutil>=5.9.0",
-    "rich>=13.0"
+    "rich>=13.0",
+    "pyinstaller==6.13.0",
+    "numpy==1.26.4",
+    "pandas==2.3.3",
+    "xlsxwriter>=3.0.0",
+    "jsonschema",
+    "lxml",
+    "tox",
+    "opencv-python>=4.10.0",
+    "opencv-contrib-python>=4.10.0",
+    "hypium>=6.0.7.210"
 ]
 
 [project.scripts]

@@ -6,7 +6,6 @@ const copyFile = require('./copy_file');
 const DIST_TOOLS_DIR = path.join(__dirname, '../dist/tools');
 const PERF_TESTING_RESOURCE_DIR = path.join(__dirname, '../perf_testing/resource');
 const TRACE_STREAMER_BIN = ['trace_streamer_linux', 'trace_streamer_mac', 'trace_streamer_windows.exe'];
-const HILOGTOOL_BIN = ['hilogtool', 'hilogtool.exe'];
 
 function ensureDistToolsDir() {
     if (!fs.existsSync(DIST_TOOLS_DIR)) {

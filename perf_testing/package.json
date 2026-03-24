@@ -9,9 +9,10 @@
     "setup": "npm run setup:win --if-present || npm run setup:unix",
     "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
     "setup:unix": "python3 setup_env.py",
-    "build": "npm run build:python",
+    "build": "npm run build:onefile",
     "postbuild": "webpack --config webpack.config.js",
-    "build:python": "./.venv/bin/pyinstaller -y --distpath ../dist/tools main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y --distpath ../dist/tools main.spec",
+    "build:onefile": "./.venv/bin/pyinstaller -y --distpath ../dist/tools/perf-testing main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y --distpath ../dist/tools/perf-testing main.spec",
+    "build:python": "npm run build:onefile",
     "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint || python3 -m ruff check .",
     "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix || python3 -m ruff check --fix .",
     "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe"
