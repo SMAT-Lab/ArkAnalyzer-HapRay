@@ -1,9 +1,7 @@
 import os
 import platform
-import re
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 # Version requirements
@@ -27,22 +25,13 @@ check_python_version()
 
 # Configuration Constants
 VENV_NAME = '.venv'
-VERSION = '6.0.7.210'
 
 # Path Configuration
 CURRENT_DIR = Path(os.path.abspath(Path(__file__).parent))
-HYPIUM_ZIP_PATH = CURRENT_DIR.parent / 'third-party' / f'hypium-{VERSION}.zip'
-
-HYPIUM_DIR = f'hypium-{VERSION}'
-REQUIREMENTS_FILE = 'requirements.txt'
 
 # Phone-agent Configuration
 PHONE_AGENT_REPO_URL = 'https://gitcode.com/zai-org/Open-AutoGLM.git'
 PHONE_AGENT_DIR = 'Open-AutoGLM'
-
-# Package Installation Order
-PACKAGE_INSTALL_ORDER = {'xdevice': 0, 'xdevice-devicetest': 1, 'xdevice-ohos': 2, 'hypium': 3}
-
 
 def execute_command(command: list, working_dir: Path = None, error_message: str = '') -> None:
     """
@@ -63,37 +52,6 @@ def execute_command(command: list, working_dir: Path = None, error_message: str 
         print(f'Command: {e.cmd}')
         print(f'Error output: {e.stderr}')
         sys.exit(1)
-
-
-def get_package_files(directory: Path) -> list[Path]:
-    """Get all .tar.gz and .whl files in the specified directory."""
-    return [file for file in directory.iterdir() if file.suffix in ('.tar.gz', '.whl') or file.name.endswith('.tar.gz')]
-
-
-def extract_package_prefix(file_name: str) -> str:
-    """
-    Extract package name prefix from a package filename.
-
-    Args:
-        file_name: Name of the package file (e.g., "perf_analyzer-5.0.7.200b0-py3-none-any.whl")
-
-    Returns:
-        Extracted package name prefix (e.g., "perf_analyzer")
-    """
-    patterns = [
-        r'^([a-zA-Z0-9_]+?)-\d.*\.(whl|tar\.gz)$',  # Standard package naming
-        r'^([a-zA-Z0-9_-]+?)-\d+[a-zA-Z0-9.]*\.(whl|tar\.gz)$',  # Complex package names
-    ]
-
-    for pattern in patterns:
-        match = re.match(pattern, file_name)
-        if match:
-            prefix = match.group(1)
-            # Filter numeric suffixes
-            if any(c.isdigit() for c in prefix.split('-')[-1]):
-                return '-'.join(prefix.split('-')[:-1])
-            return prefix
-    return ''
 
 
 def setup_virtual_environment() -> None:
@@ -123,69 +81,26 @@ def get_virtualenv_paths() -> tuple[Path, Path]:
     return python_path, pip_path
 
 
-def extract_package(zip_path: Path, extractall_dir: Path) -> None:
-    """
-    Extract package from zip archive.
-
-    Args:
-        zip_path: Path to the zip file
-    """
-    print(f'\n[2/4] Extract package: {zip_path.name}...')
-
-    if not zip_path.exists():
-        sys.exit(f'Error: package not found: {zip_path}')
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extractall_dir)
-        print(f'Extracted to: {extractall_dir}')
-    except zipfile.BadZipFile as e:
-        sys.exit(f'Error: Failed to extract {zip_path}: {str(e)}')
-
-
 def install_project_dependencies(pip_executable: Path) -> None:
-    """Install project dependencies from requirements file and Hypium packages."""
-    # Install requirements.txt
-    requirements_path = Path(REQUIREMENTS_FILE)
-    if not requirements_path.exists():
-        print(f'\n[3/4] Warning: Requirements file not found: {requirements_path}')
-        return
-
-    print(f'\n[3/4] Installing dependencies from {REQUIREMENTS_FILE}...')
+    """Install project dependencies from pyproject.toml."""
+    print('\n[2/3] Installing dependencies from pyproject.toml...')
     print(f'Using pip executable: {pip_executable}')
-    print(f'Requirements file path: {requirements_path}')
 
     try:
         execute_command(
-            [str(pip_executable), 'install', '-r', str(requirements_path)],
-            error_message='Failed to install requirements',
+            [str(pip_executable), 'install', '-e', '.'],
+            working_dir=CURRENT_DIR,
+            error_message='Failed to install project dependencies from pyproject.toml',
         )
-        print('Successfully installed requirements')
+        print('Successfully installed project dependencies')
     except Exception as e:
-        print(f'Error installing requirements: {str(e)}')
+        print(f'Error installing project dependencies: {str(e)}')
         raise
-
-    # Install Hypium packages in specific order
-    packages_dir = Path(HYPIUM_DIR)
-    package_files = get_package_files(packages_dir)
-
-    package_files.sort(key=lambda p: PACKAGE_INSTALL_ORDER.get(extract_package_prefix(p.name), float('inf')))
-
-    for package in package_files:
-        print(f'Installing package: {package.name}')
-        try:
-            execute_command(
-                [str(pip_executable), 'install', str(package)],
-                error_message=f'Failed to install package: {package.name}',
-            )
-            print(f'Successfully installed {package.name}')
-        except Exception as e:
-            print(f'Error installing {package.name}: {str(e)}')
-            raise
 
 
 def install_phone_agent(pip_executable: Path) -> None:
     """Install phone-agent library from git repository."""
-    print('\n[4/4] Installing phone-agent library...')
+    print('\n[3/3] Installing phone-agent library...')
 
     phone_agent_path = CURRENT_DIR / '..' / 'third-party' / PHONE_AGENT_DIR
 
@@ -267,9 +182,6 @@ def main() -> None:
 
     setup_virtual_environment()
     _, pip_executable = get_virtualenv_paths()
-
-    extract_package(HYPIUM_ZIP_PATH, HYPIUM_DIR)
-
     install_project_dependencies(pip_executable)
     install_phone_agent(pip_executable)
     display_activation_instructions()

@@ -55,3 +55,7 @@ perf_testing/hapray/testcases/__haptest_generated__/
 # HapTest documentation (personal notes)
 perf_testing/hapray/haptest/GIT_GUIDE.md
 
+# Desktop generated artifacts
+desktop/src-tauri/Cargo.lock
+desktop/src-tauri/tools/
+

@@ -5,20 +5,41 @@
  * 注意：tauri bundle --bundles dmg 会重新创建 .app，
  * 因此需先构建 .app 再直接调用 bundle_dmg.sh 生成 dmg，而非使用 tauri bundle。
  */
-import { spawnSync, execSync } from "child_process";
+import { spawnSync } from "child_process";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const desktopRoot = path.resolve(__dirname, "..");
 const runWithCargo = path.resolve(__dirname, "run-with-cargo.js");
-const mergeScript = path.resolve(__dirname, "merge-bundle-resources.js");
 const bundleBase = path.resolve(__dirname, "../src-tauri/target/release/bundle");
 const macosDir = path.join(bundleBase, "macos");
 const dmgDir = path.join(bundleBase, "dmg");
 const bundleDmgSh = path.join(dmgDir, "bundle_dmg.sh");
+const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
 // 项目根目录的 dist（desktop 的祖父目录）
 const rootDistDir = path.resolve(__dirname, "../../dist");
+
+function loadTauriConf() {
+  return JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
+}
+
+function getMacBundleArtifacts() {
+  const tauriConf = loadTauriConf();
+  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
+  const version = tauriConf.version;
+  const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+  const appName = `${productName}.app`;
+  const dmgName = `${productName}_${version}_${arch}.dmg`;
+  return {
+    productName,
+    appName,
+    appPath: path.join(macosDir, appName),
+    dmgName,
+    dmgPath: path.join(dmgDir, dmgName),
+  };
+}
 
 function patchBundleDmgShDetachTimeout() {
   if (!fs.existsSync(bundleDmgSh)) return false;
@@ -80,7 +101,7 @@ function patchBundleDmgShDetachTimeout() {
 function run(cmd, args = [], options = {}) {
   const result = spawnSync(cmd, args, {
     stdio: "inherit",
-    cwd: path.resolve(__dirname, ".."),
+    cwd: desktopRoot,
     ...options,
   });
   if (result.status !== 0) {
@@ -96,60 +117,14 @@ function run(cmd, args = [], options = {}) {
 function runOptional(cmd, args = [], options = {}) {
   const result = spawnSync(cmd, args, {
     stdio: "inherit",
-    cwd: path.resolve(__dirname, ".."),
+    cwd: desktopRoot,
     ...options,
   });
   return result.status === 0;
 }
 
-/**
- * create-dmg / hdiutil 默认 zlib 等级往往低于 9，对 UDZO 再压一次可略减 DMG 体积（通常数 MB 级）。
- * 注意：-o 若不以 .dmg 结尾，hdiutil 会再追加 .dmg，导致实际路径与预期不一致。
- */
-function recompressDmgUdzoZlib9(dmgPath) {
-  const tmpDmg = dmgPath.replace(/\.dmg$/i, ".udzo9-tmp.dmg");
-  if (fs.existsSync(tmpDmg)) fs.unlinkSync(tmpDmg);
-  const r = spawnSync(
-    "hdiutil",
-    ["convert", dmgPath, "-format", "UDZO", "-imagekey", "zlib-level=9", "-o", tmpDmg],
-    { stdio: "inherit" },
-  );
-  if (r.status !== 0) {
-    if (fs.existsSync(tmpDmg)) fs.unlinkSync(tmpDmg);
-    console.warn(`[build] DMG zlib-level=9 重压缩跳过（hdiutil 退出码 ${r.status ?? 1}）`);
-    return;
-  }
-  let produced = tmpDmg;
-  if (!fs.existsSync(produced)) {
-    // 兼容：旧逻辑曾用 *.dmg.udzo9，hdiutil 生成 *.dmg.udzo9.dmg
-    const legacy = `${dmgPath}.udzo9.dmg`;
-    if (fs.existsSync(legacy)) produced = legacy;
-  }
-  if (!fs.existsSync(produced)) {
-    console.error("[build] DMG 重压缩后未找到输出文件:", tmpDmg);
-    return;
-  }
-  try {
-    fs.unlinkSync(dmgPath);
-    fs.renameSync(produced, dmgPath);
-    console.log("  ✓ DMG 已用 zlib-level=9 重新压缩");
-  } catch (e) {
-    console.error("[build] 替换 DMG 失败:", e.message);
-    if (fs.existsSync(tmpDmg) && tmpDmg !== dmgPath) fs.unlinkSync(tmpDmg);
-  }
-}
-
 function createDmgWithBundleScript() {
-  // 读取 tauri 配置
-  const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
-  const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
-  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
-  const version = tauriConf.version || "1.5.1";
-  const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
-  const dmgName = `${productName}_${version}_${arch}.dmg`;
-  const dmgPath = path.join(dmgDir, dmgName);
-  const appName = `${productName}.app`;
-  const appPath = path.join(macosDir, appName);
+  const { appName, appPath, dmgPath } = getMacBundleArtifacts();
 
   if (!fs.existsSync(appPath)) {
     console.error(`错误: 未找到 .app: ${appPath}`);
@@ -179,7 +154,7 @@ function createDmgWithBundleScript() {
   console.log("正在调用 bundle_dmg.sh 生成 .dmg...");
   const result = spawnSync("bash", [bundleDmgSh, ...args], {
     stdio: "inherit",
-    cwd: path.resolve(__dirname, ".."),
+    cwd: desktopRoot,
     env: { ...process.env, CI: "true" },
   });
   if (result.status !== 0) {
@@ -188,7 +163,6 @@ function createDmgWithBundleScript() {
     if (result.error) console.error("[build] 子进程错误:", result.error.message);
     return false;
   }
-  recompressDmgUdzoZlib9(dmgPath);
   return true;
 }
 
@@ -200,7 +174,7 @@ const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
  * Windows/Linux: dist/ArkAnalyzer-HapRay.exe 或 dist/ArkAnalyzer-HapRay
  */
 function copyToDist() {
-  const tauriConf = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../src-tauri/tauri.conf.json"), "utf-8"));
+  const tauriConf = loadTauriConf();
   const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
   fs.mkdirSync(rootDistDir, { recursive: true });
 
@@ -268,20 +242,38 @@ function copyDirSync(src, dest) {
   }
 }
 
+/**
+ * 公证要求 Resources/tools 内嵌的 PyInstaller 等 Mach-O 也使用 Developer ID；
+ * 仅在设置 APPLE_SIGNING_IDENTITY 时对 dist/tools 递归签名（于 tauri build 之前）。
+ */
+function signDistToolsDeveloperId() {
+  const identity = process.env.APPLE_SIGNING_IDENTITY;
+  if (!identity) return;
+  const toolsDir = path.join(rootDistDir, "tools");
+  if (!fs.existsSync(toolsDir)) {
+    console.warn(`[build] 跳过 dist/tools Developer ID 签名：目录不存在 ${toolsDir}`);
+    return;
+  }
+  const signScript = path.resolve(__dirname, "../../scripts/sign_dist_tools_developer_id.sh");
+  if (!fs.existsSync(signScript)) {
+    console.warn(`[build] 未找到 ${signScript}`);
+    return;
+  }
+  console.log("\nStep 0: Developer ID 签名 dist/tools（嵌套二进制，满足公证）...");
+  run("bash", [signScript, toolsDir], { env: { ...process.env } });
+}
+
 function main() {
   if (process.platform === "darwin") {
     // macOS: app -> dmg
+    signDistToolsDeveloperId();
     console.log("Step 1: 构建 .app bundle...");
     run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
 
-    // Tauri bundle.resources 使用 fs::copy 会解析软连接，导致 opt-detector 等 PyInstaller 产物的符号链接丢失。
-    // 用保留软连接的复制覆盖 tools。
-    console.log("\nStep 1.5: 恢复 tools 软连接...");
-    run("node", [path.resolve(__dirname, "copy-tools-with-symlinks.js")]);
-    run("node", [mergeScript]);
-
     console.log("\nStep 2: 生成 .dmg...");
+    let reuseExistingDmg = false;
     if (!fs.existsSync(bundleDmgSh)) {
+      const { appPath, dmgPath } = getMacBundleArtifacts();
       // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh
       // 注意：tauri bundle 内部运行 bundle_dmg.sh 时可能因 AppleScript 权限失败，
       // 但我们只需要 bundle_dmg.sh 文件，后续用 --skip-jenkins 自行调用即可
@@ -296,21 +288,30 @@ function main() {
       if (!bundleOk) {
         console.log("(tauri bundle 因 AppleScript 权限失败，但 bundle_dmg.sh 已创建，继续用 --skip-jenkins 生成 dmg)");
       }
-      // tauri bundle 会清理 .app，需重新构建 .app 才能继续
-      console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
-      run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
+      // tauri bundle 首次成功后若已产出 dmg，则直接复用，避免再生成一次 dmg。
+      if (bundleOk && fs.existsSync(dmgPath)) {
+        console.log("\n检测到 tauri bundle 已生成 dmg，直接复用该产物。");
+        reuseExistingDmg = true;
+      }
+      // tauri bundle 可能清理 .app；后续 copyToDist 仍需要 .app，缺失时补构建一次。
+      if (!fs.existsSync(appPath)) {
+        console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
+        run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
+      }
     }
 
-    // tauri bundle 生成的 create-dmg 脚本在 macOS 15 的 CI 环境可能遇到 detach 超时
-    // （例如 "timeout for DiskArbitration expired"），导致脚本返回码非 0 进而让 npm 构建失败。
-    const patched = patchBundleDmgShDetachTimeout();
-    if (!patched) {
-      console.error("错误: 修补 bundle_dmg.sh 的 detach 逻辑失败");
-      process.exit(1);
-    }
-    const dmgOk = createDmgWithBundleScript();
-    if (!dmgOk) {
-      process.exit(1);
+    if (!reuseExistingDmg) {
+      // tauri bundle 生成的 create-dmg 脚本在 macOS 15 的 CI 环境可能遇到 detach 超时
+      // （例如 "timeout for DiskArbitration expired"），导致脚本返回码非 0 进而让 npm 构建失败。
+      const patched = patchBundleDmgShDetachTimeout();
+      if (!patched) {
+        console.error("错误: 修补 bundle_dmg.sh 的 detach 逻辑失败");
+        process.exit(1);
+      }
+      const dmgOk = createDmgWithBundleScript();
+      if (!dmgOk) {
+        process.exit(1);
+      }
     }
     console.log("\nStep 3: 复制产物到 ./dist...");
     copyToDist();
@@ -318,11 +319,6 @@ function main() {
     // 其他平台：保持原有流程
     console.log("构建应用...");
     run("node", [runWithCargo, "npx", "tauri", "build"]);
-
-    // 恢复 tools 软连接（Tauri bundle.resources 会解析软连接）
-    console.log("\n恢复 tools 软连接...");
-    run("node", [path.resolve(__dirname, "copy-tools-with-symlinks.js")]);
-    run("node", [mergeScript]);
 
     if (process.platform === "linux") {
       console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");

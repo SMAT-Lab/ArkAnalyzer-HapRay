@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:tauri": "tauri dev",
     "build": "node scripts/build.js",
-    "build:frontend": "vue-tsc --noEmit && vite build",
+    "build:frontend": "rm -rf ./src-tauri/tools && mkdir -p ./src-tauri/tools && cp -a ../dist/tools/. ./src-tauri/tools && vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "install:rust": "node scripts/install-rust.js",
