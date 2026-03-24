@@ -14,13 +14,15 @@
  */
 
 import { Command, program } from 'commander';
-import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_LEVEL, LOG_MODULE_TYPE } from '../utils/logger';
 import { HapAnalyzerCli } from './commands/hap_analyzer_cli';
 import { PerfCli } from './commands/perf_cli';
 import { ElfAnalyzerCli } from './commands/elf_analyzer_cli';
 import { BjcCli } from './commands/bjc_cli';
 
-Logger.configure('arkanalyzer-hapray.log', LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
+// macOS App 打包场景下，先切换到可写 cwd，避免 ./output / .temp 等相对路径写入只读目录
+Logger.ensureWritableCwd();
+Logger.configure(Logger.resolveDefaultLogPath('HapRay.log'), LOG_LEVEL.ERROR, LOG_LEVEL.INFO, true);
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 const VERSION = '1.1.0';
 
@@ -32,7 +34,7 @@ HaprayCli.addCommand(BjcCli);
 
 try {
     program
-        .name('arkanalyzer-hapray')
+        .name('hapray-sa-cmd')
         .description('CLI to arkanalyzer hapray')
         .version(VERSION)
         .addCommand(HaprayCli)

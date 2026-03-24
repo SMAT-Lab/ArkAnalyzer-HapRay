@@ -65,6 +65,26 @@ class UpdateAction:
             help='SIMPLE mode need perf paths (supports multiple files)',
         )
         parser.add_argument(
+            '--app-name',
+            default='',
+            help='SIMPLE mode optional app name',
+        )
+        parser.add_argument(
+            '--rom-version',
+            default='',
+            help='SIMPLE mode optional rom version',
+        )
+        parser.add_argument(
+            '--app-version',
+            default='',
+            help='SIMPLE mode optional app version',
+        )
+        parser.add_argument(
+            '--scene',
+            default='',
+            help='SIMPLE mode optional scene name',
+        )
+        parser.add_argument(
             '--traces',
             nargs='+',
             default=[],
@@ -108,6 +128,12 @@ class UpdateAction:
             metavar='HOMECHECK_DIR',
             help='Enable HapFlow pipeline and specify Homecheck root directory',
         )
+        parser.add_argument(
+            '--no-thread-analysis',
+            action='store_true',
+            default=False,
+            help='Disable redundant thread analysis (ThreadAnalyzer). By default thread analysis is enabled.',
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -122,6 +148,10 @@ class UpdateAction:
             perf_paths = parsed_args.perfs
             trace_paths = parsed_args.traces
             pids = parsed_args.pids
+            app_name = parsed_args.app_name
+            app_version = parsed_args.app_version
+            rom_version = parsed_args.rom_version
+            scene = parsed_args.scene
 
             # if not perf_paths:
             #     logging.error('SIMPLE mode requires --perfs parameter')
@@ -136,7 +166,16 @@ class UpdateAction:
             timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             report_dir = os.path.join(report_dir, timestamp)
             create_simple_mode_structure(
-                report_dir, perf_paths, trace_paths, package_name, pids=pids, steps_file_path=steps_file_path
+                report_dir,
+                perf_paths,
+                trace_paths,
+                package_name,
+                pids=pids,
+                steps_file_path=steps_file_path,
+                app_name=app_name,
+                app_version=app_version,
+                rom_version=rom_version,
+                scene=scene,
             )
         logging.info('Updating reports in: %s', report_dir)
         if so_dir:
@@ -164,6 +203,7 @@ class UpdateAction:
             export_comparison=parsed_args.export_comparison,
             symbol_statistic=parsed_args.symbol_statistic,
             time_range_strings=parsed_args.time_ranges,
+            enable_thread_analysis=not parsed_args.no_thread_analysis,
         )
 
         if parsed_args.hapflow:
@@ -244,6 +284,7 @@ class UpdateAction:
         export_comparison: bool = False,
         symbol_statistic: str = None,
         time_range_strings: list[str] = None,
+        enable_thread_analysis: bool = True,
     ):
         """Processes reports using parallel execution.
 
@@ -255,6 +296,7 @@ class UpdateAction:
             export_comparison: Export comparison Excel for memory analysis
             symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
             time_range_strings: List of time range strings for symbol statistics (optional)
+            enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True.
         """
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
@@ -263,6 +305,7 @@ class UpdateAction:
                 export_comparison=export_comparison,
                 symbol_statistic=symbol_statistic,
                 time_range_strings=time_range_strings,
+                enable_thread_analysis=enable_thread_analysis,
             )
 
             for case_dir in testcase_dirs:

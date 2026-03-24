@@ -14,6 +14,7 @@ limitations under the License.
 """
 
 import importlib
+import json
 import logging
 import os
 import re
@@ -36,6 +37,7 @@ ANALYZER_CLASSES = [
     'CovAnalyzer',
     'UIAnalyzer',
     'IpcBinderAnalyzer',  # IPC binder 事务分析器
+    'ThreadAnalyzer',  # 线程唤醒链与冗余分析（来自 standalone_tools/thread_analysis 合并）
     # Add more analyzers here
 ]
 
@@ -57,6 +59,7 @@ def analyze_data(
     time_ranges: list[dict] = None,
     use_refined_lib_symbol: bool = False,
     export_comparison: bool = False,
+    enable_thread_analysis: bool = True,
 ) -> dict:
     """Main entry point for data analysis pipeline.
 
@@ -65,6 +68,7 @@ def analyze_data(
         time_ranges: Optional list of time range filters, each containing 'startTime' and 'endTime' in nanoseconds
         use_refined_lib_symbol: Enable refined mode for memory analysis
         export_comparison: Export comparison Excel for memory analysis
+        enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True; set False to skip.
     """
     total_start_time = time.time()
     logging.info('=== Starting data analysis pipeline for %s ===', scene_dir)
@@ -72,6 +76,8 @@ def analyze_data(
         logging.info('Memory analysis refined mode enabled')
     if export_comparison:
         logging.info('Memory analysis comparison export enabled')
+    if not enable_thread_analysis:
+        logging.info('Redundant thread analysis (ThreadAnalyzer) disabled')
 
     report_dir = os.path.join(scene_dir, 'report')
     os.makedirs(report_dir, exist_ok=True)
@@ -92,6 +98,7 @@ def analyze_data(
         time_ranges,
         use_refined_lib_symbol=use_refined_lib_symbol,
         export_comparison=export_comparison,
+        enable_thread_analysis=enable_thread_analysis,
     )
     init_time = time.time() - init_start_time
     logging.info('Phase 1: Analyzer initialization completed in %.2f seconds (%d analyzers)', init_time, len(analyzers))
@@ -100,16 +107,11 @@ def analyze_data(
         logging.error('No analyzers initialized. Aborting analysis.')
         return result
 
-    hiperf_path = os.path.join(scene_dir, 'hiperf')
-    if not os.path.exists(hiperf_path):
-        logging.error('hiperf directory not found: %s', hiperf_path)
-        return result
-
     # Phase 2: Parallel step processing
     try:
         processing_start_time = time.time()
         logging.info('Phase 2: Starting parallel step processing...')
-        _process_steps_parallel(hiperf_path, scene_dir, analyzers)
+        _process_steps_parallel(scene_dir, analyzers)
         processing_time = time.time() - processing_start_time
         logging.info('Phase 2: Parallel processing completed in %.2f seconds', processing_time)
     except Exception as e:
@@ -146,6 +148,7 @@ def _initialize_analyzers(
     time_ranges: list[dict] = None,
     use_refined_lib_symbol: bool = False,
     export_comparison: bool = False,
+    enable_thread_analysis: bool = True,
 ) -> list[BaseAnalyzer]:
     """Initialize all registered analyzers.
 
@@ -154,12 +157,14 @@ def _initialize_analyzers(
         time_ranges: Optional list of time range filters
         use_refined_lib_symbol: Enable refined mode for memory analysis
         export_comparison: Export comparison Excel for memory analysis
+        enable_thread_analysis: Enable ThreadAnalyzer (redundant thread analysis). Default True.
 
     Returns:
         List of initialized analyzer instances
     """
+    analyzer_classes = [c for c in ANALYZER_CLASSES if enable_thread_analysis or c != 'ThreadAnalyzer']
     analyzers = []
-    for analyzer_class in ANALYZER_CLASSES:
+    for analyzer_class in analyzer_classes:
         try:
             module_name = camel_to_snake(analyzer_class)
             module = importlib.import_module(f'hapray.analyze.{module_name}')
@@ -193,20 +198,30 @@ def _initialize_analyzers(
     return analyzers
 
 
-def _process_steps_parallel(hiperf_path: str, scene_dir: str, analyzers: list[BaseAnalyzer]):
+def _process_steps_parallel(scene_dir: str, analyzers: list[BaseAnalyzer]):
     """Process all steps in parallel using a thread pool.
 
     Args:
-        hiperf_path: Path to hiperf directory
         scene_dir: Root scene directory
         analyzers: List of analyzer instances
     """
-    # Collect all valid step directories
+    # Collect step directories from steps.json
     step_dirs = []
-    for step_dir in os.listdir(hiperf_path):
-        step_path = os.path.join(hiperf_path, step_dir)
-        if os.path.isdir(step_path):
-            step_dirs.append(step_dir)
+    steps_json_path = os.path.join(scene_dir, 'steps.json')
+    if os.path.exists(steps_json_path):
+        try:
+            with open(steps_json_path, encoding='utf-8') as f:
+                steps_data = json.load(f)
+                for step in steps_data:
+                    if 'name' in step:
+                        step_dirs.append(step['name'])
+            logging.info('Loaded %d steps from steps.json', len(step_dirs))
+        except (OSError, json.JSONDecodeError) as e:
+            logging.error('Failed to load steps.json: %s', e)
+            step_dirs = ['step1']
+    else:
+        logging.warning('steps.json not found, falling back to default step1')
+        step_dirs = ['step1']
 
     if not step_dirs:
         logging.warning('No valid step directories found')
@@ -282,18 +297,30 @@ def _process_single_step(step_dir: str, scene_dir: str, analyzers: list[BaseAnal
         perf_convert_start = time.time()
         if not ExeUtils.convert_data_to_db(perf_file, perf_db):
             logging.error('Failed to convert perf to db for %s', step_dir)
-            return
-        perf_convert_time = time.time() - perf_convert_start
-        logging.info('Perf conversion for %s completed in %.2f seconds', step_dir, perf_convert_time)
+        else:
+            perf_convert_time = time.time() - perf_convert_start
+            logging.info('Perf conversion for %s completed in %.2f seconds', step_dir, perf_convert_time)
 
     if not os.path.exists(trace_db) and os.path.exists(htrace_file):
         logging.info('Converting htrace to db for %s...', step_dir)
         trace_convert_start = time.time()
         if not ExeUtils.convert_data_to_db(htrace_file, trace_db):
             logging.error('Failed to convert htrace to db for %s', step_dir)
-            return
-        trace_convert_time = time.time() - trace_convert_start
-        logging.info('Htrace conversion for %s completed in %.2f seconds', step_dir, trace_convert_time)
+        else:
+            trace_convert_time = time.time() - trace_convert_start
+            logging.info('Htrace conversion for %s completed in %.2f seconds', step_dir, trace_convert_time)
+
+    # If trace_db exists but perf_db doesn't, create a hard link
+    if not os.path.exists(perf_db) and os.path.exists(trace_db):
+        logging.info('Creating hard link from perf_db to trace_db for %s...', step_dir)
+        perf_db_dir = os.path.dirname(perf_db)
+        if not os.path.exists(perf_db_dir):
+            os.makedirs(perf_db_dir, exist_ok=True)
+        try:
+            os.link(trace_db, perf_db)
+            logging.info('Hard link created: %s -> %s', perf_db, trace_db)
+        except OSError as e:
+            logging.error('Failed to create hard link from %s to %s: %s', perf_db, trace_db, e)
 
     conversion_total_time = time.time() - conversion_start_time
     logging.info('Data conversion phase for %s completed in %.2f seconds', step_dir, conversion_total_time)

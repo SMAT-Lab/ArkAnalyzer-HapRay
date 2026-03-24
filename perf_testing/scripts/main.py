@@ -22,6 +22,10 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 from hapray.actions.compare_action import CompareAction
+from hapray.actions.gui_agent_action import GuiAgentAction
+from hapray.actions.haptest_action import HapTestAction
+
+# from hapray.actions.gui_agent_action import GuiAgentAction
 from hapray.actions.hilog_action import HilogAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
@@ -29,7 +33,22 @@ from hapray.actions.static_action import StaticAction
 from hapray.actions.ui_action import UIAction
 from hapray.actions.ui_compare_action import UICompareAction
 from hapray.actions.update_action import UpdateAction
-from hapray.core.config.config import Config
+from hapray.core.common.path_utils import get_log_file_path, get_runtime_root
+
+
+def _ensure_writable_cwd():
+    """
+    在打包后的 macOS App 中，默认 cwd 可能落在只读的 Resources 目录，
+    会导致依赖库使用相对路径（例如 ./tmp_hypium）时创建目录失败。
+    这里仅在 macOS 下，把进程 cwd 统一切到当前用户的数据目录下。
+    """
+    if sys.platform != 'darwin':
+        return
+    try:
+        os.chdir(str(get_runtime_root()))
+    except Exception:
+        # 如果这里失败，就保持原 cwd，让上层明确暴露错误，而不是静默吞掉
+        logging.warning('切换到可写工作目录失败，当前 cwd: %s', os.getcwd())
 
 
 def configure_logging(log_file='HapRay.log'):
@@ -74,17 +93,28 @@ def configure_logging(log_file='HapRay.log'):
     logger.addHandler(console_handler)
 
     # 文件处理器（如果指定了日志文件）- 使用 UTF-8 编码和错误处理
-    file_handler = RotatingFileHandler(
-        log_file, mode='a', maxBytes=10 * 1024 * 1024, backupCount=10, encoding='UTF-8', errors='replace'
-    )
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    log_file_path = get_log_file_path(log_file)
+    try:
+        file_handler = RotatingFileHandler(
+            log_file_path,
+            mode='a',
+            maxBytes=10 * 1024 * 1024,
+            backupCount=10,
+            encoding='UTF-8',
+            errors='replace',
+        )
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError:
+        # 如果日志文件仍然不可写，则只保留控制台输出，避免程序崩溃
+        logger.warning('日志文件不可写，将仅输出到控制台：%s', log_file_path)
 
 
 class HapRayCmd:
     def __init__(self):
-        self._load_config()
+        # 先确保 cwd 在一个可写目录（仅 macOS 生效），避免依赖内部使用 ./tmp_xxx 时报只读错误
+        _ensure_writable_cwd()
         configure_logging('HapRay.log')
 
         actions = {
@@ -96,6 +126,8 @@ class HapRayCmd:
             'ui': UIAction,
             'ui-compare': UICompareAction,
             'hilog': HilogAction,
+            'gui-agent': GuiAgentAction,
+            'haptest': HapTestAction,
         }
 
         parser = argparse.ArgumentParser(
@@ -109,7 +141,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis)',
+            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis, haptest: strategy-driven UI automation with perf collection)',
         )
         # Parse action
         action_args = []
@@ -123,11 +155,6 @@ class HapRayCmd:
 
         # Dispatch to action handler
         actions[args.action].execute(sub_args)
-
-    def _load_config(self):
-        """Loads application configuration from YAML file."""
-        config_path = os.path.join(os.getcwd(), 'config.yaml')
-        Config(config_path)
 
 
 if __name__ == '__main__':

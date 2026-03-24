@@ -1,9 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
+import sys
 
 datas = [('core/utils', 'core/utils'), ('core/analyzers', 'core/analyzers'), ('core/llm', 'core/llm')]
 binaries = []
 hiddenimports = ['core.utils', 'core.analyzers', 'core.llm']
+IS_WIN = sys.platform.startswith('win')
 # 显式收集 numpy（pandas 的依赖）
 tmp_ret = collect_all('numpy')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
@@ -56,7 +58,7 @@ exe = EXE(
     name='symbol-recovery',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=not IS_WIN,
     upx=True,
     console=True,
     disable_windowed_traceback=False,
@@ -69,7 +71,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
-    strip=False,
+    strip=not IS_WIN,
     upx=True,
     upx_exclude=[],
     name='symbol-recovery',

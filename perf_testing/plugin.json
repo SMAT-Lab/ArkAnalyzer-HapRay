@@ -17,6 +17,11 @@
     "perf": {
       "name": "自动化性能测试",
       "description": "执行性能测试，收集性能数据和trace信息",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 2,
+        "icon": "📊"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -61,7 +66,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -88,6 +93,11 @@
     "manual": {
       "name": "手动性能测试",
       "description": "手动性能测试模式，交互式收集性能数据",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 4,
+        "icon": "🎯"
+      },
       "action_mapping": {
         "type": "map",
         "command": ["perf", "--manual"]
@@ -125,7 +135,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -146,6 +156,11 @@
     "ui-tech-stack": {
       "name": "页面技术栈动态识别",
       "description": "页面技术栈动态识别模式，自动分析UI技术栈",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 5,
+        "icon": "🔍"
+      },
       "action_mapping": {
         "type": "map",
         "command": ["perf", "--ui-tech-stack"]
@@ -176,7 +191,7 @@
           "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "启用内存分析"
+          "help": "启用内存捕获"
         },
         "snapshot": {
           "type": "bool",
@@ -197,6 +212,11 @@
     "prepare": {
       "name": "用例前置条件配置",
       "description": "简化的测试执行，不生成复杂报告",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 1,
+        "icon": "🔧"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -227,6 +247,11 @@
     "update": {
       "name": "更新测试报告",
       "description": "更新现有测试性能报告",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 6,
+        "icon": "🔄"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -306,6 +331,11 @@
     "compare": {
       "name": "对比报告",
       "description": "对比两个报告目录",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 7,
+        "icon": "⚖️"
+      },
       "action_mapping": {
         "type": "position"
       },
@@ -331,62 +361,81 @@
         }
       }
     },
-    "ui-compare": {
-      "name": "UI组件树对比",
-      "description": "对比两个报告的UI组件树",
+    "gui-agent": {
+      "name": "LLM GUI-Agent性能测试",
+      "description": "使用LLM驱动的Agent进行手机自动化操作",
+      "menu": {
+        "menu1": "负载测试",
+        "order": 3,
+        "icon": "🤖"
+      },
       "action_mapping": {
         "type": "position"
       },
       "parameters": {
-        "base_dir": {
-          "type": "dir",
-          "label": "基准报告目录",
-          "required": true,
-          "help": "基准报告根目录（如：PerfLoad_meituan_0010）"
+        "max-steps": {
+          "type": "int",
+          "label": "最大步数",
+          "required": false,
+          "default": 20,
+          "help": "每个任务的最大执行步数（默认: 20）"
         },
-        "compare_dir": {
-          "type": "dir",
-          "label": "对比报告目录",
-          "required": true,
-          "help": "对比报告根目录（如：PerfLoad_meituan_0010）"
+        "device-id": {
+          "type": "str",
+          "label": "设备ID",
+          "required": false,
+          "help": "多设备环境下的设备ID"
         },
+        "apps": {
+          "type": "choice",
+          "label": "应用包名",
+          "required": true,
+          "choices": "get_installed_apps",
+          "nargs": "+",
+          "help": "要执行测试的多个应用包名，支持多个值"
+        },
+        "scenes": {
+          "type": "str",
+          "label": "多个场景",
+          "required": false,
+          "nargs": "+",
+          "help": "要执行的多个场景（自然语言描述），支持多个值"
+        },
+        
         "output": {
           "type": "dir",
           "label": "输出目录",
           "required": false,
-          "default": "./ui_compare_output",
           "short": "o",
-          "help": "输出目录（默认：./ui_compare_output）"
-        }
-      }
-    },
-    "hilog": {
-      "name": "hilog分析",
-      "description": "hilog日志分析，分析图片解码参数。",
-      "action_mapping": {
-        "type": "position"
-      },
-      "parameters": {
-        "hilog-dir": {
-          "type": "dir",
-          "label": "基准报告目录",
-          "required": true,
-          "help": "基准报告根目录（如：PerfLoad_meituan_0010）"
+          "help": "保存步骤数据的路径（格式: output / 应用名 / 任务名）"
         },
-        "output": {
-          "type": "file",
-          "label": "输出表格文件",
-          "required": false,
-          "default": "hilog_analysis.xlsx",
-          "short": "o",
-          "help": "输出表格文件（默认：hilog_analysis.xlsx）"
-        },
-        "detail": {
+        "trace": {
           "type": "bool",
-          "label": "详细模式",
+          "label": "Trace捕获",
+          "required": false,
+          "default": true,
+          "help": "启用trace捕获"
+        },
+        "perf": {
+          "type": "bool",
+          "label": "Perf捕获",
+          "required": false,
+          "default": true,
+          "help": "启用perf捕获"
+        },
+        "memory": {
+          "type": "bool",
+          "label": "内存捕获",
           "required": false,
           "default": false,
-          "help": "开启详细模式：将匹配到的字符串保存到 hilog_detail.json 文件中"
+          "help": "启用内存捕获"
+        },
+        "snapshot": {
+          "type": "bool",
+          "label": "Snapshot捕获",
+          "required": false,
+          "default": false,
+          "help": "启用Snapshot捕获"
         }
       }
     }

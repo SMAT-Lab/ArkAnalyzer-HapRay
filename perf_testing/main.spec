@@ -1,8 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 import pkg_resources
-import sys
 import os
-from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files
+import sys
+import sysconfig
+from PyInstaller.utils.hooks import (
+    collect_dynamic_libs,
+    collect_submodules,
+    collect_data_files,
+    copy_metadata,
+)
 
 venv_packages = [pkg.key for pkg in pkg_resources.working_set]
 venv_packages.append('ohos')
@@ -36,9 +42,55 @@ pandas_hidden_imports = [
 venv_packages.extend(numpy_hidden_imports)
 venv_packages.extend(pandas_hidden_imports)
 
+# xdevice 在包内用 sys.path +「from _core.xxx」导入，PyInstaller 无法静态解析，必须显式收集子模块
+try:
+    venv_packages.extend(collect_submodules('xdevice'))
+except Exception as e:
+    print(f"Warning: collect_submodules('xdevice') failed: {e}")
+
+# entry_points 会加载 devicetest.driver.device_test 等，Analysis 不会自动打入 devicetest 包
+try:
+    venv_packages.extend(collect_submodules('devicetest'))
+except Exception as e:
+    print(f"Warning: collect_submodules('devicetest') failed: {e}")
+
+# ohos 不用 collect_submodules：遍历 ohos.parser 等子包时会在 spec 执行阶段 import 失败，导致漏打包。
+# 改为在下方把整个 site-packages/ohos 目录作为 datas 打入（见 copy_metadata 之后）。
+
+# 直接打包 resource 目录（含 web、xvm 等）
+_resource_dir = os.path.join(os.path.dirname(SPEC), 'resource')
 datas = [
     ('hapray', 'hapray'),
 ]
+if os.path.isdir(_resource_dir):
+    datas.append((_resource_dir, 'resource'))
+
+# xdevice 的默认 user_config.xml、报表模板等位于 _core/resource（非 .py），须随包一起收集
+try:
+    datas += collect_data_files('xdevice')
+except Exception as e:
+    print(f"Warning: collect_data_files('xdevice') failed: {e}")
+
+# hypium 含 dfx/privacy_policy.md 等运行时按路径读取的资源
+try:
+    datas += collect_data_files('hypium')
+except Exception as e:
+    print(f"Warning: collect_data_files('hypium') failed: {e}")
+
+# xdevice 在启动时用 importlib.metadata.entry_points 加载 driver（如 DeviceTest→device_test）等插件；
+# 未打入 .dist-info 时 frozen 环境找不到 entry_points，报「驱动插件未安装」
+for _dist_name in ("xdevice", "xdevice-devicetest", "xdevice-ohos"):
+    try:
+        datas += copy_metadata(_dist_name)
+    except Exception as e:
+        print(f"Warning: copy_metadata({_dist_name!r}) failed: {e}")
+
+# 完整打入 xdevice-ohos 的 ohos 包（含 parser/drivers 等全部 .py）
+_ohos_pkg = os.path.join(sysconfig.get_path("purelib"), "ohos")
+if os.path.isdir(_ohos_pkg):
+    datas.append((_ohos_pkg, "ohos"))
+else:
+    print("Warning: site-packages/ohos 不存在，无法整包收集 ohos")
 
 # 初始化 binaries 列表
 binaries = []
@@ -55,18 +107,17 @@ try:
 except Exception as e:
     print(f"Warning: Could not collect pandas dynamic libs: {e}")
 
-# 查找有效的 site-packages 目录
-site_packages_dir = None
-for path in sys.path:
-    if 'site-packages' in path and os.path.isdir(path):
-        site_packages_dir = path
-        break
+# phone_agent（如 xctest/screenshot）依赖 Pillow（import PIL）；动态库在 PIL/.dylibs
+try:
+    binaries.extend(collect_dynamic_libs('PIL'))
+except Exception as e:
+    print(f"Warning: Could not collect PIL/Pillow dynamic libs: {e}")
 
-if site_packages_dir and os.path.exists(site_packages_dir):
-    for item in os.listdir(site_packages_dir):
-        item_path = os.path.join(site_packages_dir, item)
-        if os.path.isdir(item_path) and not item.startswith('__'):
-            datas.append((item_path, item))
+# 不再把整份 site-packages 目录作为 datas 全量拷贝：会与 Analysis 已收集的依赖重复，
+# 在 x86_64 上尤其会把 numpy/pandas 等 wheel 再拷一份，体积可接近翻倍。
+# 依赖关系由下方 Analysis + hiddenimports 与 PyInstaller hooks 解析即可。
+
+IS_WIN = sys.platform.startswith('win')
 
 a = Analysis(
     ['scripts/main.py'],
@@ -77,8 +128,20 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'matplotlib',
+        'tkinter',
+        'IPython',
+        'jupyter',
+        'notebook',
+        'pytest',
+        'numpy.tests',
+        'pandas.tests',
+        'scipy.tests',
+        'sklearn.tests',
+    ],
     noarchive=False,
+    # 不可使用 optimize=2（-OO）：会去掉 docstring，numpy 的 add_docstring 在运行时报 TypeError
     optimize=0,
 )
 pyz = PYZ(a.pure)
@@ -92,7 +155,7 @@ exe = EXE(
     name='perf-testing',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=not IS_WIN,
     upx=False,  # 禁用 UPX 以避免 DLL 加载问题
     upx_exclude=[],
     console=True,
@@ -108,7 +171,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
+    strip=not IS_WIN,
     upx=False,  # 禁用 UPX 以避免 DLL 加载问题
     upx_exclude=[],
     name='perf-testing',

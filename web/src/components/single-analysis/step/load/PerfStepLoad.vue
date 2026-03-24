@@ -40,76 +40,6 @@
 
     <!-- 步骤负载分析 -->
     <el-tabs v-model="activeTab" class="analysis-tabs" @tab-change="handleTabChange">
-      <el-tab-pane label="按进程拆解" name="process">
-        <el-row :gutter="20">
-          <el-col :span="24">
-            <!-- 进程负载饼图 -->
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag">进程负载分布</span>
-              </h3>
-              <!-- 面包屑导航 -->
-              <div v-if="processPieDrilldownStack.length > 0" class="breadcrumb-nav">
-                <span v-for="(item, index) in processPieDrilldownStack" :key="index" class="breadcrumb-item">
-                  <i v-if="index > 0" class="breadcrumb-separator">></i>
-                  <span @click="handleProcessBreadcrumbClick(index)">
-                    {{ getBreadcrumbLabel('process', index, item) }}
-                  </span>
-                </span>
-              </div>
-              <PieChart
-                :step-id="stepId" height="600px" :chart-data="processPieData" :title="pieChartTitle"
-                :drilldown-stack="processPieDrilldownStack" :legend-truncate="false"
-                @drilldown="handleProcessPieDrilldown" @drillup="handleProcessPieDrillup"
-              />
-            </div>
-          </el-col>
-        </el-row>
-
-        <!-- 详细负载表格 -->
-        <el-row :gutter="20">
-          <el-col :span="24">
-            <!-- 线程负载 -->
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag">线程负载</span>
-              </h3>
-              <PerfThreadTable
-                :step-id="stepId" :data="filteredThreadPerformanceDataDrill" :hide-column="isHidden"
-                :has-category="false" />
-            </div>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="24">
-            <!-- 文件负载 -->
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag">文件负载</span>
-              </h3>
-              <PerfFileTable
-                :step-id="stepId" :data="filteredFilePerformanceDataDrill" :hide-column="isHidden"
-                :has-category="false" />
-            </div>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :span="24">
-            <!-- 函数负载 -->
-            <div class="data-panel">
-              <h3 class="panel-title">
-                <span class="version-tag">函数负载</span>
-              </h3>
-              <PerfSymbolTable
-                :step-id="stepId" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden"
-                :has-category="false" />
-            </div>
-          </el-col>
-        </el-row>
-      </el-tab-pane>
-
       <el-tab-pane label="按分类拆解" name="category">
         <el-row :gutter="20">
           <el-col :span="24">
@@ -119,11 +49,11 @@
                 <span class="version-tag">分类负载分布</span>
               </h3>
               <!-- 面包屑导航 -->
-              <div v-if="stepPieDrilldownStack.length > 0" class="breadcrumb-nav">
-                <span v-for="(item, index) in stepPieDrilldownStack" :key="index" class="breadcrumb-item">
+              <div class="breadcrumb-nav">
+                <span v-for="(item, index) in stepBreadcrumbItems" :key="index" class="breadcrumb-item">
                   <i v-if="index > 0" class="breadcrumb-separator">></i>
                   <span @click="handleStepBreadcrumbClick(index)">
-                    {{ getBreadcrumbLabel('category', index, item) }}
+                    {{ item }}
                   </span>
                 </span>
               </div>
@@ -136,8 +66,8 @@
           </el-col>
         </el-row>
 
-        <!-- 详细负载表格 -->
-        <el-row :gutter="20">
+        <!-- 详细负载表格：根据分类饼图下钻层级显示（0首页 1大分类 2小分类 3三级分类 4文件 5符号） -->
+        <el-row v-if="stepPieDrilldownStack.length < 2" :gutter="20">
           <el-col :span="24">
             <!-- 小分类负载 -->
             <div class="data-panel">
@@ -151,7 +81,21 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20">
+        <el-row v-if="stepPieDrilldownStack.length < 3" :gutter="20">
+          <el-col :span="24">
+            <!-- 三级分类负载 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">三级分类负载</span>
+              </h3>
+              <PerfThreadTable
+                :step-id="stepId" :data="filteredThirdCategoryPerformanceDataDrill"
+                :hide-column="isHidden" :has-category="true" :show-third-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+
+        <el-row v-if="stepPieDrilldownStack.length < 4" :gutter="20">
           <el-col :span="24">
             <!-- 文件负载（分类） -->
             <div class="data-panel">
@@ -165,7 +109,7 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="20">
+        <el-row v-if="stepPieDrilldownStack.length < 5" :gutter="20">
           <el-col :span="24">
             <!-- 函数负载（分类） -->
             <div class="data-panel">
@@ -175,6 +119,83 @@
               <PerfSymbolTable
                 :step-id="stepId" :data="filteredSymbolPerformanceData1Drill" :hide-column="isHidden"
                 :has-category="true" />
+            </div>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
+      <el-tab-pane label="按进程拆解" name="process">
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <!-- 进程负载饼图 -->
+            <div class="data-panel">
+              <h3 class="panel-title">
+                <span class="version-tag">进程负载分布</span>
+              </h3>
+              <!-- 面包屑导航 -->
+              <div class="breadcrumb-nav">
+                <span v-for="(item, index) in processBreadcrumbItems" :key="index" class="breadcrumb-item">
+                  <i v-if="index > 0" class="breadcrumb-separator">></i>
+                  <span @click="handleProcessBreadcrumbClick(index)">
+                    {{ item }}
+                  </span>
+                </span>
+              </div>
+              <PieChart
+                :step-id="stepId" height="600px" :chart-data="processPieData" :title="pieChartTitle"
+                :drilldown-stack="processPieDrilldownStack" :legend-truncate="false"
+                @drilldown="handleProcessPieDrilldown" @drillup="handleProcessPieDrillup"
+              />
+            </div>
+          </el-col>
+        </el-row>
+
+        <!-- 详细负载表格：进程-线程-大类-小类-三级分类-文件-符号 -->
+        <el-row v-if="processPieDrilldownStack.length < 2" :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <h3 class="panel-title"><span class="version-tag">线程负载</span></h3>
+              <PerfThreadTable :step-id="stepId" :data="filteredThreadPerformanceDataDrill" :hide-column="isHidden" :has-category="false" :process-drill-path-level="0" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row v-if="processPieDrilldownStack.length < 3" :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <h3 class="panel-title"><span class="version-tag">大类负载</span></h3>
+              <PerfThreadTable :step-id="stepId" :data="filteredProcessThreadCategoryDataDrill" :hide-column="isHidden" :has-category="true" :process-drill-path-level="1" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row v-if="processPieDrilldownStack.length < 4" :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <h3 class="panel-title"><span class="version-tag">小类负载</span></h3>
+              <PerfThreadTable :step-id="stepId" :data="filteredProcessThreadSubCategoryDataDrill" :hide-column="isHidden" :has-category="true" :process-drill-path-level="2" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row v-if="processPieDrilldownStack.length < 5" :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <h3 class="panel-title"><span class="version-tag">三级分类负载</span></h3>
+              <PerfThreadTable :step-id="stepId" :data="filteredProcessThreadThirdCategoryDataDrill" :hide-column="isHidden" :has-category="true" :show-third-category="true" :process-drill-path-level="3" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row v-if="processPieDrilldownStack.length < 6" :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <h3 class="panel-title"><span class="version-tag">文件负载</span></h3>
+              <PerfFileTable :step-id="stepId" :data="filteredFilePerformanceDataDrill" :hide-column="isHidden" :has-category="true" :process-drill-path-level="4" />
+            </div>
+          </el-col>
+        </el-row>
+        <el-row v-if="processPieDrilldownStack.length < 7" :gutter="20">
+          <el-col :span="24">
+            <div class="data-panel">
+              <h3 class="panel-title"><span class="version-tag">函数负载</span></h3>
+              <PerfSymbolTable :step-id="stepId" :data="filteredSymbolPerformanceDataDrill" :hide-column="isHidden" :has-category="true" :process-drill-path-level="5" />
             </div>
           </el-col>
         </el-row>
@@ -190,17 +211,23 @@ import PerfThreadTable from './tables/PerfThreadTable.vue';
 import PerfFileTable from './tables/PerfFileTable.vue';
 import PerfSymbolTable from './tables/PerfSymbolTable.vue';
 import PieChart from '../../../common/charts/PieChart.vue';
-import { useJsonDataStore } from '../../../../stores/jsonDataStore.ts';
+import { useJsonDataStore, ComponentCategory } from '../../../../stores/jsonDataStore.ts';
 import {
   calculateComponentNameData,
-  calculateFileData,
+  // calculateFileData,
   calculateFileData1,
-  calculateSymbolData,
+  // calculateSymbolData,
   calculateSymbolData1,
   calculateThreadData,
+  calculateProcessThreadCategoryData,
+  calculateProcessThreadSubCategoryData,
+  calculateProcessThreadThirdCategoryData,
+  calculateProcessThreadFileData,
+  calculateProcessThreadSymbolData,
   processJson2PieChartData,
   processJson2ProcessPieChartData,
   calculateCategorysData,
+  calculateThirdCategoryData,
   type ProcessDataItem,
   type ThreadDataItem,
   type FileDataItem,
@@ -213,7 +240,7 @@ const props = defineProps<{
 }>();
 
 const isHidden = true;
-const activeTab = ref('process');
+const activeTab = ref('category');
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -251,18 +278,26 @@ const mergedThreadPerformanceData = computed(() =>
 const mergedComponentNamePerformanceData = computed(() =>
   calculateComponentNameData(perfData!, null, false)
 );
-const mergedFilePerformanceData = computed(() =>
-  calculateFileData(perfData!, null, false)
+const mergedThirdCategoryPerformanceData = computed(() =>
+  calculateThirdCategoryData(perfData!, null, false)
 );
+// const mergedFilePerformanceData = computed(() =>
+//   calculateFileData(perfData!, null, false)
+// );
 const mergedFilePerformanceData1 = computed(() =>
   calculateFileData1(perfData!, null, false)
 );
-const mergedSymbolsPerformanceData = computed(() =>
-  calculateSymbolData(perfData!, null, false)
-);
+// const mergedSymbolsPerformanceData = computed(() =>
+//   calculateSymbolData(perfData!, null, false)
+// );
 const mergedSymbolsPerformanceData1 = computed(() =>
   calculateSymbolData1(perfData!, null, false)
 );
+const mergedProcessThreadCategoryData = computed(() => calculateProcessThreadCategoryData(perfData!, null, false));
+const mergedProcessThreadSubCategoryData = computed(() => calculateProcessThreadSubCategoryData(perfData!, null, false));
+const mergedProcessThreadThirdCategoryData = computed(() => calculateProcessThreadThirdCategoryData(perfData!, null, false));
+const mergedProcessThreadFileData = computed(() => calculateProcessThreadFileData(perfData!, null, false));
+const mergedProcessThreadSymbolData = computed(() => calculateProcessThreadSymbolData(perfData!, null, false));
 
 // 工具函数：安全排序，避免副作用
 function sortByInstructions<T extends { instructions: number }>(arr: T[]): T[] {
@@ -299,49 +334,54 @@ watch(() => props.stepId, (newStepId) => {
   stepPieDataStack.value = [];
 }, { immediate: true });
 
-// 饼图钻取逻辑
+// 饼图钻取逻辑（进程-线程-大类-小类-三级分类-文件-符号）
 function getProcessPieDrilldownData(name: string, stack: string[]) {
-  // 层级：0-进程 1-线程 2-文件 3-符号
+  const stepMatch = (item: { stepId: number }) => item.stepId === props.stepId;
   if (stack.length === 0) {
     const data = processJson2ProcessPieChartData(perfData!, props.stepId);
     const sorted = [...data.seriesData].sort((a, b) => b.value - a.value);
     return { legendData: sorted.map(d => d.name), seriesData: sorted };
   } else if (stack.length === 1) {
     const processName = name;
-    const threadData = calculateThreadData(perfData!, null, false).filter((item: ThreadDataItem) =>
-      item.process === processName && item.stepId === props.stepId);
+    const threadData = calculateThreadData(perfData!, null, false).filter((item: ThreadDataItem) => item.process === processName && stepMatch(item));
     const sorted = [...threadData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: ThreadDataItem) => d.thread);
-    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.thread, value: d.instructions }));
-    return { legendData, seriesData };
+    return { legendData: sorted.map(d => d.thread), seriesData: sorted.map(d => ({ name: d.thread, value: d.instructions })) };
   } else if (stack.length === 2) {
-    const processName = stack[0];
-    const threadName = name;
-    const fileData = calculateFileData(perfData!, null, false).filter((item: FileDataItem) =>
-      item.process === processName && item.thread === threadName && item.stepId === props.stepId);
-    const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: FileDataItem) => d.file);
-    const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
-    return { legendData, seriesData };
+    const [processName, threadKey] = stack;
+    const categoryData = calculateProcessThreadCategoryData(perfData!, null, false).filter((item: ThreadDataItem) => item.process === processName && item.thread === threadKey && stepMatch(item));
+    const sorted = [...categoryData].sort((a, b) => b.instructions - a.instructions);
+    return { legendData: sorted.map(d => d.category), seriesData: sorted.map(d => ({ name: d.category, value: d.instructions })) };
   } else if (stack.length === 3) {
-    const processName = stack[0];
-    const threadName = stack[1];
-    const fileName = name;
-    const symbolData = calculateSymbolData(perfData!, null, false).filter((item: SymbolDataItem) =>
-      item.process === processName && item.thread === threadName && item.file === fileName && item.stepId === props.stepId);
+    const [processName, threadKey, category] = stack;
+    const subData = calculateProcessThreadSubCategoryData(perfData!, null, false).filter((item: ThreadDataItem) => item.process === processName && item.thread === threadKey && item.category === category && stepMatch(item));
+    const sorted = [...subData].sort((a, b) => b.instructions - a.instructions);
+    return { legendData: sorted.map(d => d.subCategoryName), seriesData: sorted.map(d => ({ name: d.subCategoryName, value: d.instructions })) };
+  } else if (stack.length === 4) {
+    const [processName, threadKey, category, subCategoryName] = stack;
+    const thirdData = calculateProcessThreadThirdCategoryData(perfData!, null, false).filter((item: ThreadDataItem) => item.process === processName && item.thread === threadKey && item.category === category && item.subCategoryName === subCategoryName && stepMatch(item));
+    const sorted = [...thirdData].sort((a, b) => b.instructions - a.instructions);
+    return { legendData: sorted.map(d => d.thirdCategoryName || 'Unknown'), seriesData: sorted.map(d => ({ name: d.thirdCategoryName || 'Unknown', value: d.instructions })) };
+  } else if (stack.length === 5) {
+    const [processName, threadKey, category, subCategoryName, thirdCategoryName] = stack;
+    const fileData = calculateProcessThreadFileData(perfData!, null, false).filter((item: FileDataItem) => item.process === processName && item.thread === threadKey && item.category === category && item.subCategoryName === subCategoryName && (item.thirdCategoryName || '') === (thirdCategoryName || '') && stepMatch(item));
+    const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
+    return { legendData: sorted.map(d => d.file), seriesData: sorted.map(d => ({ name: d.file, value: d.instructions })) };
+  } else if (stack.length === 6) {
+    const [processName, threadKey, category, subCategoryName, thirdCategoryName, fileName] = stack;
+    const symbolData = calculateProcessThreadSymbolData(perfData!, null, false).filter((item: SymbolDataItem) => item.process === processName && item.thread === threadKey && item.category === category && item.subCategoryName === subCategoryName && (item.thirdCategoryName || '') === (thirdCategoryName || '') && item.file === fileName && stepMatch(item));
     const sorted = [...symbolData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: SymbolDataItem) => d.symbol);
-    const seriesData = sorted.map((d: SymbolDataItem) => ({ name: d.symbol, value: d.instructions }));
-    return { legendData, seriesData };
+    return { legendData: sorted.map(d => d.symbol), seriesData: sorted.map(d => ({ name: d.symbol, value: d.instructions })) };
   } else {
     return processPieData.value;
   }
 }
 
+// 进程饼图最大下钻深度：进程-线程-大类-小类-三级分类-文件-符号（共7层）
+const PROCESS_PIE_MAX_STACK = 7;
 function handleProcessPieDrilldown(name: string) {
   const newStack = [...processPieDrilldownStack.value, name];
   const newData = getProcessPieDrilldownData(name, newStack);
-  if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(processPieData.value)) {
+  if (!newData.seriesData || newData.seriesData.length === 0 || newStack.length === PROCESS_PIE_MAX_STACK) {
     return;
   }
   processPieDrilldownStack.value = newStack;
@@ -357,7 +397,7 @@ function handleProcessPieDrillup() {
 }
 
 function getDrilldownPieData(name: string, stack: string[]) {
-  // 新层级：0-大分类 1-小分类 2-文件 3-符号
+  // 新层级：0-大分类 1-小分类 2-三级分类 3-文件 4-符号
   if (stack.length === 0) {
     const categoryData = calculateCategorysData(perfData!, null, false);
     const sorted = [...categoryData].sort((a, b) => b.instructions - a.instructions);
@@ -373,20 +413,41 @@ function getDrilldownPieData(name: string, stack: string[]) {
     const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.subCategoryName, value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 2) {
+    // 三级分类分布
     const category = stack[0];
     const subCategoryName = name;
-    const fileData = calculateFileData1(perfData!, null, false).filter((d: FileDataItem) =>
-      d.category === category && d.subCategoryName === subCategoryName && d.stepId === props.stepId);
-    const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
-    const legendData = sorted.map((d: FileDataItem) => d.file);
-    const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
+    const thirdCategoryData = calculateThirdCategoryData(perfData!, null, false).filter((d: ThreadDataItem) =>
+      d.category === category && 
+      d.subCategoryName === subCategoryName && 
+      d.stepId === props.stepId);
+    const sorted = [...thirdCategoryData].sort((a, b) => b.instructions - a.instructions);
+    const legendData = sorted.map((d: ThreadDataItem) => d.thirdCategoryName || 'Unknown');
+    const seriesData = sorted.map((d: ThreadDataItem) => ({ name: d.thirdCategoryName || 'Unknown', value: d.instructions }));
     return { legendData, seriesData };
   } else if (stack.length === 3) {
     const category = stack[0];
     const subCategoryName = stack[1];
+    const thirdCategoryName = name;
+    const fileData = calculateFileData1(perfData!, null, false).filter((d: FileDataItem) =>
+      d.category === category && 
+      d.subCategoryName === subCategoryName && 
+      d.thirdCategoryName === thirdCategoryName && 
+      d.stepId === props.stepId);
+    const sorted = [...fileData].sort((a, b) => b.instructions - a.instructions);
+    const legendData = sorted.map((d: FileDataItem) => d.file);
+    const seriesData = sorted.map((d: FileDataItem) => ({ name: d.file, value: d.instructions }));
+    return { legendData, seriesData };
+  } else if (stack.length === 4) {
+    const category = stack[0];
+    const subCategoryName = stack[1];
+    const thirdCategoryName = stack[2];
     const file = name;
     const symbolData = calculateSymbolData1(perfData!, null, false).filter((d: SymbolDataItem) =>
-      d.category === category && d.subCategoryName === subCategoryName && d.file === file && d.stepId === props.stepId);
+      d.category === category && 
+      d.subCategoryName === subCategoryName && 
+      d.thirdCategoryName === thirdCategoryName && 
+      d.file === file && 
+      d.stepId === props.stepId);
     const sorted = [...symbolData].sort((a, b) => b.instructions - a.instructions);
     const legendData = sorted.map((d: SymbolDataItem) => d.symbol);
     const seriesData = sorted.map((d: SymbolDataItem) => ({ name: d.symbol, value: d.instructions }));
@@ -396,10 +457,12 @@ function getDrilldownPieData(name: string, stack: string[]) {
   }
 }
 
+// 步骤饼图最大下钻深度：大类-小类-三级分类-文件-符号（共5层）
+const STEP_PIE_MAX_STACK = 5;
 function handleStepPieDrilldown(name: string) {
   const newStack = [...stepPieDrilldownStack.value, name];
   const newData = getDrilldownPieData(name, newStack);
-  if (!newData.seriesData || newData.seriesData.length === 0 || JSON.stringify(newData) === JSON.stringify(stepPieData.value)) {
+  if (!newData.seriesData || newData.seriesData.length === 0 || newStack.length === STEP_PIE_MAX_STACK) {
     return;
   }
   stepPieDrilldownStack.value = newStack;
@@ -417,17 +480,41 @@ function handleStepPieDrillup() {
 // 获取面包屑标签
 function getBreadcrumbLabel(type: 'process' | 'category', level: number, item: string): string {
   if (type === 'process') {
-    const labels = ['进程', '线程', '文件', '符号'];
+    const labels = ['进程', '线程', '大分类', '小分类', '三级分类', '文件', '符号'];
     return `${labels[level]}: ${item}`;
   } else {
-    const labels = ['大分类', '小分类', '文件', '符号'];
+    const labels = ['大分类', '小分类', '三级分类', '文件', '符号'];
     return `${labels[level]}: ${item}`;
   }
 }
 
+// 进程饼图面包屑项（首页 + 下钻层级）
+const processBreadcrumbItems = computed(() => {
+  const items = ['首页'];
+  processPieDrilldownStack.value.forEach((name, index) => {
+    items.push(getBreadcrumbLabel('process', index, name));
+  });
+  return items;
+});
+
+// 分类饼图面包屑项（首页 + 下钻层级）
+const stepBreadcrumbItems = computed(() => {
+  const items = ['首页'];
+  stepPieDrilldownStack.value.forEach((name, index) => {
+    items.push(getBreadcrumbLabel('category', index, name));
+  });
+  return items;
+});
+
 // 处理面包屑点击
 function handleProcessBreadcrumbClick(targetIndex: number) {
-  const targetLevel = targetIndex + 1;
+  if (targetIndex === 0) {
+    processPieDrilldownStack.value = [];
+    processPieDataStack.value = [];
+    processPieData.value = getProcessPieDrilldownData('', []);
+    return;
+  }
+  const targetLevel = targetIndex;
   while (processPieDrilldownStack.value.length > targetLevel) {
     processPieDrilldownStack.value.pop();
     processPieData.value = processPieDataStack.value.pop() || processPieData.value;
@@ -435,7 +522,13 @@ function handleProcessBreadcrumbClick(targetIndex: number) {
 }
 
 function handleStepBreadcrumbClick(targetIndex: number) {
-  const targetLevel = targetIndex + 1;
+  if (targetIndex === 0) {
+    stepPieDrilldownStack.value = [];
+    stepPieDataStack.value = [];
+    stepPieData.value = getDrilldownPieData('', []);
+    return;
+  }
+  const targetLevel = targetIndex;
   while (stepPieDrilldownStack.value.length > targetLevel) {
     stepPieDrilldownStack.value.pop();
     stepPieData.value = stepPieDataStack.value.pop() || stepPieData.value;
@@ -455,11 +548,17 @@ const filteredComponentNamePerformanceData = computed(() => {
   );
 });
 
-const filteredFilePerformanceData = computed(() => {
+const filteredThirdCategoryPerformanceData = computed(() => {
   return sortByInstructions(
-    mergedFilePerformanceData.value.filter((item) => item.stepId === props.stepId)
+    mergedThirdCategoryPerformanceData.value.filter((item) => item.stepId === props.stepId)
   );
 });
+
+// const filteredFilePerformanceData = computed(() => {
+//   return sortByInstructions(
+//     mergedFilePerformanceData.value.filter((item) => item.stepId === props.stepId)
+//   );
+// });
 
 const filteredFilePerformanceData1 = computed(() => {
   return sortByInstructions(
@@ -467,11 +566,11 @@ const filteredFilePerformanceData1 = computed(() => {
   );
 });
 
-const filteredSymbolPerformanceData = computed(() => {
-  return sortByInstructions(
-    mergedSymbolsPerformanceData.value.filter((item) => item.stepId === props.stepId)
-  );
-});
+// const filteredSymbolPerformanceData = computed(() => {
+//   return sortByInstructions(
+//     mergedSymbolsPerformanceData.value.filter((item) => item.stepId === props.stepId)
+//   );
+// });
 
 const filteredSymbolPerformanceData1 = computed(() => {
   return sortByInstructions(
@@ -481,37 +580,65 @@ const filteredSymbolPerformanceData1 = computed(() => {
 
 
 
-// 左侧 drill 联动
+// 按联合 key 过滤并聚合：只看当前条件，不跨维汇总，每行保留实际维度值
+function filterAndAggregateByStack<T extends { process: string; thread: string; category: string; subCategoryName: string; thirdCategoryName?: string; instructions: number; stepId: number; compareInstructions?: number; increaseInstructions?: number; increasePercentage?: number }>(
+  data: T[], stack: string[], groupByKeys: (keyof T)[]): T[] {
+  const stepMatch = (d: T) => d.stepId === props.stepId;
+  let filtered = data.filter(stepMatch);
+  if (stack.length >= 1) filtered = filtered.filter(d => d.process === stack[0]);
+  if (stack.length >= 2) filtered = filtered.filter(d => d.thread === stack[1]);
+  if (stack.length >= 3) filtered = filtered.filter(d => d.category === stack[2]);
+  if (stack.length >= 4) filtered = filtered.filter(d => d.subCategoryName === stack[3]);
+  if (stack.length >= 5) filtered = filtered.filter(d => (d.thirdCategoryName || '') === (stack[4] || ''));
+  const map = new Map<string, Partial<T> & { instructions: number }>();
+  for (const item of filtered) {
+    const key = groupByKeys.map(k => item[k] ?? '').join('|');
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...item } as Partial<T> & { instructions: number });
+    } else {
+      existing.instructions += item.instructions;
+      if (existing.compareInstructions !== undefined) existing.compareInstructions += item.compareInstructions ?? 0;
+    }
+  }
+  return sortByInstructions(Array.from(map.values()) as T[]);
+}
+
+// 左侧 drill 联动（进程-线程-大类-小类-三级分类-文件-符号）
 const filteredThreadPerformanceDataDrill = computed(() => {
   const stack = processPieDrilldownStack.value;
   let data = filteredThreadPerformanceData.value;
-  if (stack.length === 1) {
-    data = data.filter(d => d.process === stack[0]);
-  }
+  if (stack.length >= 1) data = data.filter(d => d.process === stack[0]);
   return data;
 });
-
+const filteredProcessThreadCategoryDataDrill = computed(() =>
+  filterAndAggregateByStack(mergedProcessThreadCategoryData.value, processPieDrilldownStack.value, ['process', 'thread', 'category'])
+);
+const filteredProcessThreadSubCategoryDataDrill = computed(() =>
+  filterAndAggregateByStack(mergedProcessThreadSubCategoryData.value, processPieDrilldownStack.value, ['process', 'thread', 'category', 'subCategoryName'])
+);
+const filteredProcessThreadThirdCategoryDataDrill = computed(() =>
+  filterAndAggregateByStack(mergedProcessThreadThirdCategoryData.value, processPieDrilldownStack.value, ['process', 'thread', 'category', 'subCategoryName', 'thirdCategoryName'])
+);
 const filteredFilePerformanceDataDrill = computed(() => {
   const stack = processPieDrilldownStack.value;
-  let data = filteredFilePerformanceData.value;
-  if (stack.length === 1) {
-    data = data.filter(d => d.process === stack[0]);
-  } else if (stack.length === 2) {
-    data = data.filter(d => d.process === stack[0] && d.thread === stack[1]);
-  }
+  let data = sortByInstructions(mergedProcessThreadFileData.value.filter(d => d.stepId === props.stepId));
+  if (stack.length >= 1) data = data.filter(d => d.process === stack[0]);
+  if (stack.length >= 2) data = data.filter(d => d.thread === stack[1]);
+  if (stack.length >= 3) data = data.filter(d => d.category === stack[2]);
+  if (stack.length >= 4) data = data.filter(d => d.subCategoryName === stack[3]);
+  if (stack.length >= 5) data = data.filter(d => (d.thirdCategoryName || '') === (stack[4] || ''));
   return data;
 });
-
 const filteredSymbolPerformanceDataDrill = computed(() => {
   const stack = processPieDrilldownStack.value;
-  let data = filteredSymbolPerformanceData.value;
-  if (stack.length === 1) {
-    data = data.filter(d => d.process === stack[0]);
-  } else if (stack.length === 2) {
-    data = data.filter(d => d.process === stack[0] && d.thread === stack[1]);
-  } else if (stack.length === 3) {
-    data = data.filter(d => d.process === stack[0] && d.thread === stack[1] && d.file === stack[2]);
-  }
+  let data = sortByInstructions(mergedProcessThreadSymbolData.value.filter(d => d.stepId === props.stepId));
+  if (stack.length >= 1) data = data.filter(d => d.process === stack[0]);
+  if (stack.length >= 2) data = data.filter(d => d.thread === stack[1]);
+  if (stack.length >= 3) data = data.filter(d => d.category === stack[2]);
+  if (stack.length >= 4) data = data.filter(d => d.subCategoryName === stack[3]);
+  if (stack.length >= 5) data = data.filter(d => (d.thirdCategoryName || '') === (stack[4] || ''));
+  if (stack.length >= 6) data = data.filter(d => d.file === stack[5]);
   return data;
 });
 
@@ -525,6 +652,17 @@ const filteredComponentNamePerformanceDataDrill = computed(() => {
   return data;
 });
 
+const filteredThirdCategoryPerformanceDataDrill = computed(() => {
+  const stack = stepPieDrilldownStack.value;
+  let data = filteredThirdCategoryPerformanceData.value;
+  if (stack.length === 1) {
+    data = data.filter((d: ThreadDataItem) => d.category === stack[0]);
+  } else if (stack.length === 2) {
+    data = data.filter((d: ThreadDataItem) => d.category === stack[0] && d.subCategoryName === stack[1]);
+  }
+  return data;
+});
+
 const filteredFilePerformanceData1Drill = computed(() => {
   const stack = stepPieDrilldownStack.value;
   let data = filteredFilePerformanceData1.value;
@@ -532,6 +670,12 @@ const filteredFilePerformanceData1Drill = computed(() => {
     data = data.filter(d => d.category === stack[0]);
   } else if (stack.length === 2) {
     data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
+  } else if (stack.length === 3) {
+    data = data.filter(d => 
+      d.category === stack[0] && 
+      d.subCategoryName === stack[1] && 
+      d.thirdCategoryName === stack[2]
+    );
   }
   return data;
 });
@@ -544,7 +688,18 @@ const filteredSymbolPerformanceData1Drill = computed(() => {
   } else if (stack.length === 2) {
     data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1]);
   } else if (stack.length === 3) {
-    data = data.filter(d => d.category === stack[0] && d.subCategoryName === stack[1] && d.file === stack[2]);
+    data = data.filter(d => 
+      d.category === stack[0] && 
+      d.subCategoryName === stack[1] && 
+      d.thirdCategoryName === stack[2]
+    );
+  } else if (stack.length === 4) {
+    data = data.filter(d => 
+      d.category === stack[0] && 
+      d.subCategoryName === stack[1] && 
+      d.thirdCategoryName === stack[2] && 
+      d.file === stack[3]
+    );
   }
   return data;
 });
@@ -566,46 +721,164 @@ function toggleCategory(categoryName: string) {
   }
 }
 
-// 计算技术栈数据（所有kind的分类，动态从数据中获取）
+/**
+ * 判断是否应该归类到ArkUI技术栈
+ * ArkUI技术栈包含：
+ * - kind=1的：APP_ABC, APP_LIB
+ * - kind=2的：ArkUI
+ * - kind=3的：Ability, ArkTS Runtime, ArkTS System LIB
+ */
+function shouldClassifyAsArkUI(category: ComponentCategory, categoryName: string, subCategoryName?: string): boolean {
+  // kind=2的ArkUI
+  if (category === ComponentCategory.ArkUI || categoryName === 'ArkUI') {
+    return true;
+  }
+  
+  // kind=1的APP_ABC, APP_LIB
+  if (category === ComponentCategory.APP && subCategoryName) {
+    if (subCategoryName === 'APP_ABC' || subCategoryName === 'APP_LIB') {
+      return true;
+    }
+  }
+  
+  // kind=3的Ability, ArkTS Runtime, ArkTS System LIB
+  if (category === ComponentCategory.OS_Runtime && subCategoryName) {
+    if (subCategoryName === 'Ability' || 
+        subCategoryName === 'ArkTS Runtime' || 
+        subCategoryName === 'ArkTS System LIB') {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// 计算技术栈数据（与后端 saveTechStackXlsx 逻辑一致）
 const techStackData = computed(() => {
+  if (!perfData) {
+    return [];
+  }
+
   // 需要排除的分类名称（对应 kind = 1, 3, 4, -1）
   const excludedCategories = ['APP', 'OS_Runtime', 'SYS_SDK', 'UNKNOWN'];
 
-  // 获取大分类数据并排除
-  const categoryData = calculateCategorysData(perfData!, null, false)
-    .filter(item => item.stepId === props.stepId && !excludedCategories.includes(item.category));
+  // 按技术栈分类和子分类统计指令数
+  // Map<技术栈分类, Map<子分类, 指令数>>
+  const categoryMap = new Map<string, Map<string, number>>();
+  // 统计所有主应用数据的总负载（用于计算应用占比）
+  let totalAppInstructions = 0;
+  // 统计所有技术栈数据的总负载（用于计算相对占比）
+  let totalTechStackInstructions = 0;
 
-  // 获取小分类数据并排除
-  const subCategoryData = calculateComponentNameData(perfData!, null, false)
-    .filter(item => item.stepId === props.stepId && !excludedCategories.includes(item.category));
+  // 遍历所有详细数据，只统计指令数
+  for (const step of perfData.steps) {
+    for (const item of step.data) {
+      // 只统计当前步骤的数据
+      if (item.stepIdx !== props.stepId) {
+        continue;
+      }
 
-  // 计算总指令数（仅基于未排除的数据）
-  const totalInstructions = categoryData.reduce((sum, item) => sum + item.instructions, 0);
+      // 只保留主应用的数据（如果数据中有 isMainApp 字段）
+      // 注意：前端数据可能没有 isMainApp 字段，这里先不过滤
+      // 如果需要过滤，需要确保数据中包含 isMainApp 字段
+      // if ((item as any).isMainApp !== true) {
+      //   continue;
+      // }
 
-  // 生成所有分类数据
-  const techStackItems = categoryData
-    .map(item => {
-      const percentage = totalInstructions > 0 ? ((item.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+      const category = item.componentCategory;
+      const categoryName = item.categoryName || ComponentCategory[category] || 'UNKNOWN';
+      const subCategoryName = item.subCategoryName || 'Unknown';
+      
+      // 统计所有主应用数据的总负载（包括被排除的分类）
+      // 这个统计应该在判断是否排除之前进行，以包含所有主应用数据
+      totalAppInstructions += item.symbolEvents;
+      
+      // 判断是否应该归类到ArkUI
+      const isArkUI = shouldClassifyAsArkUI(category, categoryName, subCategoryName);
+      
+      // 确定最终的技术栈分类名称和子分类名称
+      let finalCategoryName: string;
+      let finalSubCategoryName: string;
+      
+      if (isArkUI) {
+        finalCategoryName = 'ArkUI';
+        // 对于ArkUI，子分类保持原样（APP_ABC, APP_LIB, Ability等）
+        finalSubCategoryName = subCategoryName;
+      } else {
+        // 排除指定的分类
+        if (excludedCategories.includes(categoryName)) {
+          continue;
+        }
+        finalCategoryName = categoryName;
+        finalSubCategoryName = subCategoryName;
+      }
 
-      // 获取该大分类下的所有小分类
-      const subCategories = subCategoryData
-        .filter(sub => sub.category === item.category)
-        .map(sub => {
-          const subPercentage = totalInstructions > 0 ? ((sub.instructions / totalInstructions) * 100).toFixed(1) : '0.0';
+      // 初始化技术栈分类
+      if (!categoryMap.has(finalCategoryName)) {
+        categoryMap.set(finalCategoryName, new Map());
+      }
+      
+      // 统计技术栈分类和子分类
+      const subCategoryMap = categoryMap.get(finalCategoryName)!;
+      const current = subCategoryMap.get(finalSubCategoryName) || 0;
+      subCategoryMap.set(finalSubCategoryName, current + item.symbolEvents);
+      totalTechStackInstructions += item.symbolEvents;
+    }
+  }
+
+  // 如果没有技术栈数据，返回空数组
+  if (categoryMap.size === 0) {
+    return [];
+  }
+
+  // 生成技术栈数据
+  const techStackItems = Array.from(categoryMap.entries())
+    .map(([categoryName, subCategoryMap]) => {
+      // 计算技术栈分类的总指令数
+      const categoryInstructions = Array.from(subCategoryMap.values())
+        .reduce((sum, instructions) => sum + instructions, 0);
+      
+      // 相对占比：技术栈分类在所有技术栈中的占比
+      const relativePercentage = totalTechStackInstructions > 0
+        ? ((categoryInstructions / totalTechStackInstructions) * 100).toFixed(1)
+        : '0.0';
+      
+      // 应用占比：技术栈分类在所有主应用数据中的占比（包括被排除的分类）
+      const appPercentage = totalAppInstructions > 0
+        ? ((categoryInstructions / totalAppInstructions) * 100).toFixed(1)
+        : '0.0';
+
+      // 生成子分类数据
+      const subCategories = Array.from(subCategoryMap.entries())
+        .map(([subCategoryName, instructions]) => {
+          // 子分类的相对占比（相对于所有技术栈数据）
+          const subRelativePercentage = totalTechStackInstructions > 0
+            ? ((instructions / totalTechStackInstructions) * 100).toFixed(1)
+            : '0.0';
+          
+          // 子分类的应用占比（相对于所有主应用数据）
+          const subAppPercentage = totalAppInstructions > 0
+            ? ((instructions / totalAppInstructions) * 100).toFixed(1)
+            : '0.0';
+
           return {
-            name: sub.subCategoryName,
-            instructions: sub.instructions,
-            percentage: subPercentage
+            name: subCategoryName,
+            instructions: instructions,
+            percentage: subRelativePercentage, // 使用相对占比
+            relativePercentage: subRelativePercentage,
+            appPercentage: subAppPercentage
           };
         })
         .sort((a, b) => b.instructions - a.instructions);
 
-      const isExpanded = expandedCategories.value === null ? true : expandedCategories.value.has(item.category);
+      const isExpanded = expandedCategories.value === null ? true : expandedCategories.value.has(categoryName);
 
       return {
-        name: item.category,
-        instructions: item.instructions,
-        percentage: percentage,
+        name: categoryName,
+        instructions: categoryInstructions,
+        relativePercentage: relativePercentage,
+        appPercentage: appPercentage,
+        percentage: relativePercentage, // 保持兼容性，使用相对占比
         subCategories: subCategories,
         expanded: isExpanded
       };

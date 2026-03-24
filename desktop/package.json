@@ -1,0 +1,39 @@
+{
+  "name": "arkanalyzer-hapray",
+  "private": true,
+  "version": "1.5.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:tauri": "tauri dev",
+    "build": "node scripts/build.js",
+    "build:frontend": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "install:rust": "node scripts/install-rust.js",
+    "postinstall": "npm run install:rust",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-os": "^2.3.2",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@tauri-apps/cli": "^2",
+    "@typescript-eslint/eslint-plugin": "^8",
+    "@typescript-eslint/parser": "^8",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "eslint": "^9",
+    "eslint-plugin-vue": "^9",
+    "globals": "^15",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8",
+    "vite": "^6.0.3",
+    "vue-tsc": "^3.2.0"
+  }
+}

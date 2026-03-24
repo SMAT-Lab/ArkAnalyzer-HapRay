@@ -58,7 +58,7 @@ describe('Dbtools CLI Test - isRight Method Validation', () => {
 
         // 3. 验证测试文件存在
         const testInfoPath = path.join(testResourcePath, 'testInfo.json');
-        const stepsPath = path.join(testResourcePath, 'hiperf', 'steps.json');
+        const stepsPath = path.join(testResourcePath, 'steps.json');
         const perfDbPath = path.join(testResourcePath, 'hiperf', 'step1', 'perf.db');
 
         expect(fs.existsSync(testInfoPath)).toBe(true);

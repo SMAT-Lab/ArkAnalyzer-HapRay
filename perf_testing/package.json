@@ -1,6 +1,6 @@
 {
   "name": "perf_testing",
-  "version": "1.4.4",
+  "version": "1.5.1",
   "files": [
     "dist"
   ],
@@ -22,6 +22,6 @@
   "devDependencies": {
     "webpack": "^5.95.0",
     "webpack-cli": "^5.1.4",
-    "copy-webpack-plugin": "^12.0.2"
+    "copy-webpack-plugin": "^14.0.0"
   }
 }

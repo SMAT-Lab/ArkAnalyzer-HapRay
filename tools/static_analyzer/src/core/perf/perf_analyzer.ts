@@ -19,7 +19,7 @@ import type { Database } from 'sql.js';
 import initSqlJs from 'sql.js';
 import writeXlsxFile from 'write-excel-file/node';
 import { createHash } from 'crypto';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { ComponentCategory, getComponentCategories, type ClassifyCategory } from '../../types/component';
 import type {
     FileClassification,
@@ -28,6 +28,7 @@ import type {
     PerfSum,
     PerfSymbolDetailData,
     ProcessClassifyCategory,
+    StepJsonData,
     SummaryInfo,
     TestReportInfo,
     TestSceneInfo,
@@ -192,13 +193,48 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         this.samples = [];
     }
 
+    /**
+     * 统一获取 sql.js 运行时依赖（sql-wasm.js / sql-wasm.wasm）所在目录
+     * 为了避免在 Bun 二进制中出现打包机上的“幽灵路径”，这里在运行时按多种可能位置探测。
+     */
+    private getSqlJsRuntimeDir(): string {
+        const candidates: string[] = [];
+
+        // 1. 与当前文件同级的 node_modules（脚本模式下的 dist/tools/sa-cmd）
+        candidates.push(path.join(__dirname, 'node_modules', 'sql.js', 'dist'));
+
+        // 2. 进程工作目录（防御性兜底）
+        candidates.push(path.join(process.cwd(), 'node_modules', 'sql.js', 'dist'));
+
+        // 3. 可执行文件所在目录（Bun 二进制模式）
+        if (process.execPath) {
+            candidates.push(path.join(path.dirname(process.execPath), 'node_modules', 'sql.js', 'dist'));
+        }
+
+        for (const dir of candidates) {
+            try {
+                if (fs.existsSync(path.join(dir, 'sql-wasm.wasm'))) {
+                    return dir;
+                }
+            } catch {
+                // 忽略单个路径的访问错误，继续尝试其他候选
+            }
+        }
+
+        // 如果都没找到，就默认用与当前文件同级的路径（保持与原来行为最接近）
+        return path.join(__dirname, 'node_modules', 'sql.js', 'dist');
+    }
+
     public async calcPerfDbTotalInstruction(dbfile: string): Promise<number> {
         let total = 0;
         if (dbfile === '') {
             return 0;
         }
 
-        let SQL = await initSqlJs();
+        const sqlJsDir = this.getSqlJsRuntimeDir();
+        let SQL = await initSqlJs({
+            locateFile: (file) => path.join(sqlJsDir, file),
+        });
 
         logger.info(`calcTotalInstruction ${dbfile} start`);
         let db: Database | null = null;
@@ -216,6 +252,94 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
         logger.info(`calcTotalInstruction ${dbfile} done`);
 
         return total;
+    }
+
+    /**
+     * 拆解单个 db 文件
+     * @param dbFilePath db 文件路径
+     * @param packageName 应用包名
+     * @param timeRange 可选的时间范围过滤，格式为 {startTime: number, endTime: number}
+     * @param outputJsonPath 可选的输出 JSON 文件路径，如果指定则保存结果到文件
+     * @returns 返回 StepJsonData 对象，包含分析结果
+     */
+    async analyzeSingleDbFile(
+        dbFilePath: string,
+        packageName: string,
+        timeRange?: TimeRange
+    ): Promise<StepJsonData> {
+        if (!fs.existsSync(dbFilePath)) {
+            throw new Error(`DB file not found: ${dbFilePath}`);
+        }
+
+        // 读取 db 文件并计算 hash
+        const fileBuffer = fs.readFileSync(dbFilePath);
+        
+        // 加载 db 文件
+        const sqlJsDir = this.getSqlJsRuntimeDir();
+        const SQL = await initSqlJs({
+            locateFile: (file) => path.join(sqlJsDir, file),
+        });
+        const db = new SQL.Database(fileBuffer);
+
+        try {
+            // 清空之前的统计数据（包括基类中的 map）
+            this.threadsMap.clear();
+            this.callchainsMap.clear();
+            this.callchainIds.clear();
+            this.testSteps = [];
+            this.samples = [];
+            this.stepSumMap.clear();
+            this.details = [];
+            this.filesClassifyMap.clear();
+            this.symbolsMap.clear();
+            this.symbolsClassifyMap.clear();
+
+            // 获取场景名称（从路径推断或使用默认值）
+            const sceneName = path.basename(path.dirname(path.dirname(dbFilePath))) || 'unknown';
+
+            // 执行统计加载（假设 groupId 为 1）
+            const groupId = 1;
+            const sampleCount = this.loadStatistics(db, packageName, sceneName, groupId, timeRange);
+
+            if (sampleCount === 0) {
+                logger.warn(`No samples found in db file: ${dbFilePath}`);
+            }
+
+            let stepJsonData: StepJsonData = {
+                step_name: '',
+                step_id: 0,
+                count: this.stepSumMap.get(1)?.count ?? 0,
+                round: 0,
+                perf_data_path: dbFilePath.replace(/\.db$/, '.data'),
+                data: this.details,
+                har: new Map<string, { name: string; count: number }>(),
+            };
+    
+            // 遍历详细数据，收集 HAR 信息和详细数据
+            for (const data of this.details) {
+                // 只有进程名包含包名时才是应用负载
+                if (!data.processName.includes(packageName)) {
+                    continue;
+                }
+    
+                // 统计 HAR 组件数据
+                if (
+                    (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_ABC') ||
+                    (data.componentCategory.category === ComponentCategory.APP && data.componentCategory.subCategoryName === 'APP_LIB')
+                ) {
+                    if (stepJsonData.har!.has(data.componentCategory.thirdCategoryName!)) {
+                        let value = stepJsonData.har!.get(data.componentCategory.thirdCategoryName!)!;
+                        value.count += data.symbolEvents;
+                    } else {
+                        stepJsonData.har!.set(data.componentCategory.thirdCategoryName!, { name: data.componentCategory.thirdCategoryName!, count: data.symbolEvents });
+                    }
+                }
+            }
+
+            return stepJsonData;
+        } finally {
+            db.close();
+        }
     }
 
     /**
@@ -311,7 +435,10 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * 仅加载数据库和统计信息，不产生输出文件
      */
     private async loadDbAndStatisticsOnly(testInfo: TestSceneInfo, packageName: string, timeRange?: TimeRange): Promise<void> {
-        let SQL = await initSqlJs();
+        const sqlJsDir = this.getSqlJsRuntimeDir();
+        let SQL = await initSqlJs({
+            locateFile: (file) => path.join(sqlJsDir, file),
+        });
         for (const stepGroup of testInfo.rounds[testInfo.chooseRound].steps) {
             logger.info(`loadDbAndStatisticsOnly groupId=${stepGroup.groupId} parse dbfile ${stepGroup.dbfile}`);
             const db = new SQL.Database(fs.readFileSync(stepGroup.dbfile!));
@@ -567,20 +694,20 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             callchain.selfEvent = 0;
             for (let i = 0; i < callchain.stack.length; i++) {
                 if (!this.isPureCompute(callchain.stack[i])) {
-                    callchain.selfEvent = i;
+                    callchain.selfEvent = i; // selfEvent 标记本次 sample 归属的符号
                     break;
                 }
             }
 
-            let totalEventClassifySet = new Set<number>();
-            totalEventClassifySet.add(callchain.stack[callchain.selfEvent].classification.category);
+            let totalEventSymbolSet = new Set<number>();
+            totalEventSymbolSet.add(callchain.stack[callchain.selfEvent].symbolId);
 
-            // 计算symbolTotalEvents, 从栈顶至栈底赋给每个分类第一次出现的符号
+            // 计算symbolTotalEvents, 从栈顶至栈底赋给每个符号id第一次出现的栈帧
             for (let i = callchain.selfEvent + 1; i < callchain.stack.length; i++) {
-                let category = callchain.stack[i].classification.category;
-                if (!totalEventClassifySet.has(category)) {
+                let symbolId = callchain.stack[i].symbolId;
+                if (!totalEventSymbolSet.has(symbolId)) {
                     callchain.totalEvents.push(i);
-                    totalEventClassifySet.add(category);
+                    totalEventSymbolSet.add(symbolId);
                 }
             }
         }
@@ -780,21 +907,17 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 continue;
             }
 
-            const callchain = this.callchainsMap.get(sample.callchain_id)!;
-            const call = callchain.stack[callchain.selfEvent];
+            // 进程维度的 DFX/Test 过滤（一个 sample 只统计一次）
+            if (
+                process.systemClassifyCategory.domain === 'DFX' ||
+                process.systemClassifyCategory.domain === 'Test'
+            ) {
+                skipDfxEvents += sample.event_count;
+                continue;
+            }
 
-            // 优先使用symbolsClassifyMap中的特殊处理结果，如果没有则使用call.classification
-            // 创建副本以避免修改callchainsMap中的原始对象
-            const sourceClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
-            const finalClassification: FileClassification = {
-                file: sourceClassification.file,
-                category: sourceClassification.category,
-                categoryName: sourceClassification.categoryName,
-                subCategoryName: sourceClassification.subCategoryName,
-                thirdCategoryName: sourceClassification.thirdCategoryName,
-            };
-
-            let data: PerfSymbolDetailData = {
+            // 线程 / 进程事件数：一个 sample 只加一次，避免按栈帧重复放大
+            const baseDataForKey: PerfSymbolDetailData = {
                 stepIdx: groupId,
                 eventType: event,
                 pid: process.processId,
@@ -803,63 +926,99 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
                 tid: thread.threadId,
                 threadEvents: 0,
                 threadName: thread.name,
-                file: finalClassification.file,
+                file: '',
                 fileEvents: 0,
-                symbol: this.symbolsMap.get(call.symbolId) ?? '',
-                symbolEvents: sample.event_count,
+                symbol: '',
+                symbolEvents: 0,
                 symbolTotalEvents: 0,
-                componentCategory: finalClassification,
+                componentCategory: {
+                    category: ComponentCategory.UNKNOWN,
+                    categoryName: UNKNOWN_STR,
+                    subCategoryName: UNKNOWN_STR,
+                    thirdCategoryName: undefined,
+                },
                 isMainApp: process.systemClassifyCategory.isMainApp,
                 sysDomain: process.systemClassifyCategory.domain,
                 sysSubSystem: process.systemClassifyCategory.subSystem,
                 sysComponent: process.systemClassifyCategory.component,
             };
 
-            let threadEventCount = threadsEventMap.get(this.getThreadKey(data)) ?? 0;
-            threadsEventMap.set(this.getThreadKey(data), threadEventCount + sample.event_count);
+            let threadEventCount = threadsEventMap.get(this.getThreadKey(baseDataForKey)) ?? 0;
+            threadsEventMap.set(this.getThreadKey(baseDataForKey), threadEventCount + sample.event_count);
 
-            let processEventCount = processEventMap.get(this.getProcessKey(data)) ?? 0;
-            processEventMap.set(this.getProcessKey(data), processEventCount + sample.event_count);
+            let processEventCount = processEventMap.get(this.getProcessKey(baseDataForKey)) ?? 0;
+            processEventMap.set(this.getProcessKey(baseDataForKey), processEventCount + sample.event_count);
 
-            // 根据线程名直接分类
-            if (thread.classification.category !== ComponentCategory.UNKNOWN) {
-                if (thread.classification.subCategoryName) {
-                    data.componentCategory.subCategoryName = thread.classification.subCategoryName;
+            const callchain = this.callchainsMap.get(sample.callchain_id)!;
+
+            // 遍历当前 sample 关联的符号：self 符号 + 所有 Total 符号
+            const deepthIndexes: Array<number> = [callchain.selfEvent, ...callchain.totalEvents];
+
+            for (const deepthIndex of deepthIndexes) {
+                const call = callchain.stack[deepthIndex];
+
+                // 优先使用symbolsClassifyMap中的特殊处理结果，如果没有则使用call.classification
+                // 创建副本以避免修改callchainsMap中的原始对象
+                const sourceClassification = this.symbolsClassifyMap.get(call.symbolId) ?? call.classification;
+                const finalClassification: FileClassification = {
+                    file: sourceClassification.file,
+                    category: sourceClassification.category,
+                    categoryName: sourceClassification.categoryName,
+                    subCategoryName: sourceClassification.subCategoryName,
+                    thirdCategoryName: sourceClassification.thirdCategoryName,
+                };
+
+                // self 符号记录自身事件数，其调用者只记录 Total（子调用的事件数）
+                const isSelfSymbol = deepthIndex === callchain.selfEvent;
+                const symbolEvents = isSelfSymbol ? sample.event_count : 0;
+                const symbolTotalEvents = isSelfSymbol ? 0 : sample.event_count;
+
+                let data: PerfSymbolDetailData = {
+                    ...baseDataForKey,
+                    file: finalClassification.file,
+                    symbol: this.symbolsMap.get(call.symbolId) ?? '',
+                    symbolEvents,
+                    symbolTotalEvents,
+                    componentCategory: { ...finalClassification },
+                };
+
+                // 根据线程名直接分类（覆盖符号/文件分类）
+                if (thread.classification.category !== ComponentCategory.UNKNOWN) {
+                    if (thread.classification.subCategoryName) {
+                        data.componentCategory.subCategoryName = thread.classification.subCategoryName;
+                    } else {
+                        data.componentCategory.subCategoryName = path.basename(finalClassification.file);
+                    }
+
+                    data.componentCategory.category = thread.classification.category;
+                    data.componentCategory.categoryName = thread.classification.categoryName;
+                }
+
+                if (data.componentCategory.category === ComponentCategory.SYS_SDK && data.componentCategory.subCategoryName === 'Other') {
+                    if (path.basename(data.processName) === path.basename(data.file)) {
+                        data.componentCategory.subCategoryName = data.sysDomain;
+                    }
+                }
+
+                let key = this.getSymbolKey(data);
+                if (resultMaps.has(key)) {
+                    let value = resultMaps.get(key)!;
+                    value.symbolEvents += data.symbolEvents;
+                    value.symbolTotalEvents += data.symbolTotalEvents;
                 } else {
-                    data.componentCategory.subCategoryName = path.basename(finalClassification.file);
+                    resultMaps.set(key, data);
                 }
 
-                data.componentCategory.category = thread.classification.category;
-                data.componentCategory.categoryName = thread.classification.categoryName;
-            }
-
-            if (data.sysDomain === 'DFX' || data.sysDomain === 'Test') {
-                skipDfxEvents += sample.event_count;
-                continue;
-            }
-
-            if (data.componentCategory.category === ComponentCategory.SYS_SDK && data.componentCategory.subCategoryName === 'Other') {
-                if (path.basename(data.processName) === path.basename(data.file)) {
-                    data.componentCategory.subCategoryName = data.sysDomain;
+                // files：只用 self 的 symbolEvents 统计文件事件数，避免重复累计
+                if (isSelfSymbol) {
+                    let fileKey = this.getFileKey(data);
+                    if (fileEventMaps.has(fileKey)) {
+                        let value = fileEventMaps.get(fileKey)!;
+                        fileEventMaps.set(fileKey, value + data.symbolEvents);
+                    } else {
+                        fileEventMaps.set(fileKey, data.symbolEvents);
+                    }
                 }
-            }
-
-            let key = this.getSymbolKey(data);
-            if (resultMaps.has(key)) {
-                let value = resultMaps.get(key)!;
-                value.symbolEvents += data.symbolEvents;
-                value.symbolTotalEvents += data.symbolTotalEvents;
-            } else {
-                resultMaps.set(key, data);
-            }
-
-            // files
-            let fileKey = this.getFileKey(data);
-            if (fileEventMaps.has(fileKey)) {
-                let value = fileEventMaps.get(fileKey)!;
-                fileEventMaps.set(fileKey, value + data.symbolEvents);
-            } else {
-                fileEventMaps.set(fileKey, data.symbolEvents);
             }
 
         }
@@ -1044,5 +1203,71 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
 
         await saveJsonArray(summaryJsonObject, path.join(outputDir, 'summary_info.json'));
         logger.info(`已生成 summary_info.json，包含 ${summaryJsonObject.length} 个步骤的汇总信息`);
+    }
+
+    /**
+     * 生成 so_file_load.json，按 .so 文件维度统计应用负载
+     */
+    async generateFileLoadJson(
+        input: string,
+        testInfo: TestReportInfo,
+        steps: Array<Step>
+    ): Promise<void> {
+        const outputDir = path.join(input, 'report');
+        const records: Array<{
+            rom_version: string;
+            app_name: string;
+            app_version: string;
+            scene: string;
+            step_id: number;
+            file: string;
+            file_path: string;
+            load: number;
+        }> = [];
+
+        const appId = testInfo.app_id ?? '';
+        const appName = testInfo.app_name ?? '';
+
+        // 按 step 和 file 聚合负载（仅统计应用进程）
+        for (const step of steps) {
+            const stepIdx = step.stepIdx;
+            const fileLoadMap: Map<string, number> = new Map();
+
+            for (const data of this.details) {
+                if (data.stepIdx !== stepIdx) {
+                    continue;
+                }
+
+                // 仅统计应用相关进程：进程名包含 app_id
+                if (appId && !data.processName.includes(appId)) {
+                    continue;
+                }
+
+                const filePath = data.file;
+                // 只统计 .so 文件
+                if (!filePath.toLowerCase().endsWith('.so')) {
+                    continue;
+                }
+
+                const prev = fileLoadMap.get(filePath) ?? 0;
+                fileLoadMap.set(filePath, prev + data.symbolEvents);
+            }
+
+            for (const [filePath, load] of fileLoadMap) {
+                records.push({
+                    rom_version: testInfo.rom_version,
+                    app_name: appName,
+                    app_version: testInfo.app_version,
+                    scene: `${testInfo.scene}_step${stepIdx}`,
+                    step_id: stepIdx,
+                    file: path.basename(filePath),
+                    file_path: filePath,
+                    load,
+                });
+            }
+        }
+
+        await saveJsonArray(records, path.join(outputDir, 'so_file_load.json'));
+        logger.info(`已生成 so_file_load.json，包含 ${records.length} 条 .so 文件负载记录`);
     }
 }

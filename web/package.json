@@ -10,7 +10,7 @@
     "dev": "cross-env NODE_ENV=development vite",
     "debug": "node ../node_modules/vite/bin/vite.js",
     "build": "run-p type-check \"build-only {@}\" --",
-    "postbuild": "node ../scripts/copy_file.js web/dist/index.html dist/tools/web/report_template.html",
+    "postbuild": "node ../scripts/copy_file.js web/dist/index.html perf_testing/resource/web/report_template.html",
     "prepack": "npm run build",
     "preview": "vite preview",
     "test:unit": "vitest",
@@ -55,13 +55,13 @@
     "globals": "^16.2.0",
     "jsdom": "^25.0.1",
     "npm-run-all2": "^7.0.1",
-    "typescript": "^5.7.2",
+    "typescript": "^5.8.0",
     "typescript-eslint": "^8.35.0",
     "vite": "^6.3.6",
     "vite-plugin-singlefile": "^2.2.0",
     "vite-plugin-vue-devtools": "^7.6.5",
     "vitest": "^3.2.4",
     "vue-eslint-parser": "^10.1.4",
-    "vue-tsc": "^2.1.10"
+    "vue-tsc": "^3.2.0"
   }
 }

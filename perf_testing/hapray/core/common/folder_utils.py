@@ -42,7 +42,7 @@ def scan_folders(root_dir):
     hiperf_dir = root_dir_path / 'hiperf'
 
     # 读取 steps.json 获取步骤数量
-    steps_json = read_json_arrays_from_dir(str(hiperf_dir))
+    steps_json = read_json_arrays_from_dir(str(root_dir_path))
     if len(steps_json) == 0:
         return False
 

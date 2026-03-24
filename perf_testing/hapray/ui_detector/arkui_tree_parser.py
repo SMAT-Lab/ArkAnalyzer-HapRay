@@ -41,8 +41,12 @@ class ArkUITreeParser:
         self.root = None
         self.current_component = None
         self.component_stack = []
+        self.canvas_node_count = 0  # CanvasNode节点数量统计
 
     def parse_component_tree(self, content: str) -> ArkUIComponent:
+        # 重置CanvasNode计数
+        self.canvas_node_count = 0
+
         lines = content.split('\n')
 
         i = 0
@@ -68,6 +72,15 @@ class ArkUITreeParser:
 
         return self.root
 
+    def get_canvas_node_count(self) -> int:
+        """
+        获取CanvasNode节点数量
+
+        Returns:
+            CanvasNode节点数量
+        """
+        return self.canvas_node_count
+
     def _parse_component_line(self, line: str) -> Optional[ArkUIComponent]:
         # 提取缩进级别和组件信息
         # 匹配模式：任意数量的空格 + |-> + 组件名 + childSize信息
@@ -90,6 +103,10 @@ class ArkUITreeParser:
         component.name = component_name
         component.depth = depth_level
         component.attributes['type'] = component_name
+
+        # 统计CanvasNode节点数量
+        if component_name == 'CanvasNode':
+            self.canvas_node_count += 1
 
         return component
 
@@ -198,7 +215,7 @@ class ArkUITreeParser:
         return i
 
     def _parse_rs_node_block(self, lines: list[str], start_index: int, component: ArkUIComponent) -> int:
-        """解析rsNode信息块"""
+        """解析rsNode信息块，特别处理CanvasNode"""
         i = start_index + 1  # 跳过开始行
 
         if i < len(lines):
@@ -206,10 +223,77 @@ class ArkUITreeParser:
             # 清理行格式 - 去除可能的竖线和多余空格
             clean_line = line.strip().lstrip('|').strip()
 
-            # 将整行内容作为rsNode的值
+            # 将整行内容作为rsNode的值（保留原始值）
             component.attributes['rsNode'] = clean_line
 
+            # 如果包含CanvasNode，解析详细信息
+            if 'CanvasNode[' in clean_line:
+                self._parse_canvas_node_info(clean_line, component)
+
         return i + 1
+
+    def _parse_canvas_node_info(self, line: str, component: ArkUIComponent):
+        """
+        解析CanvasNode的详细信息
+
+        格式示例：
+        CanvasNode[271338853892101] child[271338853892102 ] token:271338853892097 modifierExtractor rsUIContext token is 271338853892097node Is 1 Bounds[0.0 0.0 1084.0 2412.0] Frame[0.0 0.0 1084.0 2412.0], BackgroundColor[#FFFFFFFF]
+
+        Args:
+            line: CanvasNode信息行
+            component: 组件对象
+        """
+        try:
+            # 解析CanvasNode ID
+            canvas_node_match = re.search(r'CanvasNode\[(\d+)\]', line)
+            if canvas_node_match:
+                component.attributes['canvasNodeId'] = canvas_node_match.group(1)
+
+            # 解析Bounds [left top right bottom]
+            bounds_match = re.search(r'Bounds\[([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\]', line)
+            if bounds_match:
+                left = float(bounds_match.group(1))
+                top = float(bounds_match.group(2))
+                right = float(bounds_match.group(3))
+                bottom = float(bounds_match.group(4))
+                component.attributes['canvasBounds'] = {
+                    'left': left,
+                    'top': top,
+                    'right': right,
+                    'bottom': bottom,
+                    'width': right - left,
+                    'height': bottom - top,
+                }
+                # 同时设置bounds_rect格式（与组件树其他部分保持一致）
+                component.attributes['canvasBoundsRect'] = (int(left), int(top), int(right), int(bottom))
+
+            # 解析Frame [left top right bottom]
+            frame_match = re.search(r'Frame\[([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\]', line)
+            if frame_match:
+                left = float(frame_match.group(1))
+                top = float(frame_match.group(2))
+                right = float(frame_match.group(3))
+                bottom = float(frame_match.group(4))
+                component.attributes['canvasFrame'] = {
+                    'left': left,
+                    'top': top,
+                    'right': right,
+                    'bottom': bottom,
+                    'width': right - left,
+                    'height': bottom - top,
+                }
+                component.attributes['canvasFrameRect'] = (int(left), int(top), int(right), int(bottom))
+
+            # 标记这是一个CanvasNode
+            component.attributes['isCanvasNode'] = True
+
+            # 统计CanvasNode节点数量（如果组件名不是CanvasNode，说明CanvasNode只在rsNode中）
+            if component.name != 'CanvasNode':
+                self.canvas_node_count += 1
+
+        except Exception:
+            # 解析失败时记录但不抛出异常，保留原始rsNode值
+            pass
 
     def _handle_component_hierarchy(self, component: ArkUIComponent):
         # 如果是根组件
@@ -541,15 +625,20 @@ class ArkUITreeComparator:
         # 比较当前组件的attributes
         attrs_diff = self._compare_attributes(comp1, comp2)
         if attrs_diff:
+            attrs1 = comp1.get('attributes', {})
+            component_info = {
+                'type': comp_name,
+                'bounds_rect': attrs1.get('bounds_rect', ''),
+                'path': current_path,
+                'attributes': attrs1,
+                'id': attrs1.get('id', ''),
+            }
+            # Image节点添加url便于展示（支持resource://、pixmapID等格式）
+            if comp_name == 'Image':
+                component_info['url'] = attrs1.get('url') or attrs1.get('src') or attrs1.get('Url') or ''
             self.differences.append(
                 {
-                    'component': {
-                        'type': comp_name,
-                        'bounds_rect': comp1.get('attributes', {}).get('bounds_rect', ''),
-                        'path': current_path,
-                        'attributes': comp1.get('attributes', {}),
-                        'id': comp1.get('attributes', {}).get('id', ''),
-                    },
+                    'component': component_info,
                     'is_animation': True,
                     'comparison_result': attrs_diff,
                     'animate_type': 'attribute_animate',
@@ -566,19 +655,26 @@ class ArkUITreeComparator:
             self._compare_components(children1[i], children2[i], current_path)
 
         # 处理多余的子组件（如果结构不同）
+        def _make_component_info(comp: dict, path_suffix: str) -> dict:
+            attrs = comp.get('attributes', {})
+            info = {
+                'type': comp.get('name', comp.get('type', 'Unknown')),
+                'bounds_rect': attrs.get('bounds_rect', ''),
+                'path': path_suffix,
+                'attributes': attrs,
+                'id': attrs.get('id', ''),
+            }
+            if info['type'] == 'Image':
+                info['url'] = attrs.get('url') or attrs.get('src') or attrs.get('Url') or ''
+            return info
+
         if len(children1) > len(children2):
             for i in range(len(children2), len(children1)):
                 comp = children1[i]
                 comp_name = comp.get('name', comp.get('type', 'Unknown'))
                 self.differences.append(
                     {
-                        'component': {
-                            'type': comp_name,
-                            'bounds_rect': comp.get('attributes', {}).get('bounds_rect', ''),
-                            'path': f'{current_path}/{comp_name}',
-                            'attributes': comp.get('attributes', {}),
-                            'id': comp.get('attributes', {}).get('id', ''),
-                        },
+                        'component': _make_component_info(comp, f'{current_path}/{comp_name}'),
                         'is_animation': True,
                         'comparison_result': attrs_diff,
                         'animate_type': 'attribute_animate',
@@ -591,13 +687,7 @@ class ArkUITreeComparator:
                 comp_name = comp.get('name', comp.get('type', 'Unknown'))
                 self.differences.append(
                     {
-                        'component': {
-                            'type': comp_name,
-                            'bounds_rect': comp.get('attributes', {}).get('bounds_rect', ''),
-                            'path': f'{current_path}/{comp_name}',
-                            'attributes': comp.get('attributes', {}),
-                            'id': comp.get('attributes', {}).get('id', ''),
-                        },
+                        'component': _make_component_info(comp, f'{current_path}/{comp_name}'),
                         'is_animation': True,
                         'comparison_result': attrs_diff,
                         'animate_type': 'attribute_animate',
@@ -657,11 +747,117 @@ def parse_arkui_tree(file_content: str) -> dict[str, Any]:
         file_content: hidumper导出的组件树文本内容
 
     Returns:
-        解析后的组件树字典
+        解析后的组件树字典，包含canvas_node_count字段
     """
     parser = ArkUITreeParser()
     root_component = parser.parse_component_tree(file_content)
 
     if root_component:
-        return root_component.to_dict()
-    return {}
+        tree_dict = root_component.to_dict()
+        # 添加CanvasNode数量统计
+        tree_dict['canvas_node_count'] = parser.get_canvas_node_count()
+        return tree_dict
+    return {'canvas_node_count': 0}
+
+
+def parse_rs_tree_canvas_node_ids(rs_tree_content: str) -> set[str]:
+    """
+    从RS树（RenderServiceTree）输出中解析所有CANVAS_NODE的ID
+
+    格式示例: CANVAS_NODE[11720965750795] 或 CanvasNode[271338853892101]
+
+    Args:
+        rs_tree_content: hidumper -s 10 -a 'RSTree' 命令的输出内容
+
+    Returns:
+        CANVAS_NODE ID集合（字符串形式）
+    """
+    # 匹配 CANVAS_NODE[数字] 或 CanvasNode[数字]
+    pattern = re.compile(r'CANVAS_NODE\[(\d+)\]|CanvasNode\[(\d+)\]', re.IGNORECASE)
+    ids = set()
+    for match in pattern.finditer(rs_tree_content):
+        # group(1) 为 CANVAS_NODE 匹配，group(2) 为 CanvasNode 匹配
+        node_id = match.group(1) or match.group(2)
+        if node_id:
+            ids.add(node_id)
+    return ids
+
+
+def extract_canvas_node_ids_from_tree(tree_dict: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    从组件树中提取所有包含canvasNodeId的节点信息
+
+    Args:
+        tree_dict: 解析后的组件树字典
+
+    Returns:
+        节点信息列表，每项包含 canvasNodeId, name, path, attributes 等
+    """
+
+    def _traverse(component: dict[str, Any], path: str, result: list) -> None:
+        if not component:
+            return
+        comp_name = component.get('name', 'Unknown')
+        current_path = f'{path}/{comp_name}' if path else comp_name
+        attrs = component.get('attributes', {})
+
+        canvas_node_id = attrs.get('canvasNodeId') or attrs.get('canvas_node_id')
+        if canvas_node_id:
+            result.append(
+                {
+                    'canvasNodeId': str(canvas_node_id),
+                    'name': comp_name,
+                    'path': current_path,
+                    'attributes': attrs,
+                }
+            )
+
+        for child in component.get('children', []):
+            _traverse(child, current_path, result)
+
+    nodes = []
+    _traverse(tree_dict, '', nodes)
+    return nodes
+
+
+def classify_on_tree_off_tree(tree_dict: dict[str, Any], rs_tree_content: str) -> dict[str, Any]:
+    """
+    统计组件树中CanvasNode的上树/未上树情况
+
+    遍历组件树的CanvasNode id，如果CanvasNode id在RS树上则判定为上树，否则为未上树
+
+    Args:
+        tree_dict: 解析后的组件树字典
+        rs_tree_content: RS树文件内容
+
+    Returns:
+        {
+            'on_tree_count': int,
+            'off_tree_count': int,
+            'on_tree_ids': list[str],
+            'off_tree_ids': list[str],
+            'on_tree_nodes': list[dict],
+            'off_tree_nodes': list[dict],
+        }
+    """
+    rs_tree_ids = parse_rs_tree_canvas_node_ids(rs_tree_content)
+    tree_nodes = extract_canvas_node_ids_from_tree(tree_dict)
+
+    on_tree_nodes = []
+    off_tree_nodes = []
+
+    for node in tree_nodes:
+        node_id = node['canvasNodeId']
+        if node_id in rs_tree_ids:
+            on_tree_nodes.append(node)
+        else:
+            off_tree_nodes.append(node)
+
+    return {
+        'on_tree_count': len(on_tree_nodes),
+        'off_tree_count': len(off_tree_nodes),
+        'on_tree_ids': [n['canvasNodeId'] for n in on_tree_nodes],
+        'off_tree_ids': [n['canvasNodeId'] for n in off_tree_nodes],
+        'on_tree_nodes': on_tree_nodes,
+        'off_tree_nodes': off_tree_nodes,
+    }

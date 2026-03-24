@@ -16,9 +16,11 @@ limitations under the License.
 import argparse
 import logging
 import os
+import sys
 from typing import Optional
 
 from hapray import VERSION
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.common.exe_utils import ExeUtils
 
 
@@ -62,6 +64,10 @@ class StaticAction:
         if not os.path.exists(parsed_args.input):
             logging.error(f'Input file does not exist: {parsed_args.input}')
             return 1
+
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            parsed_args.output = str(get_user_data_root('static-output') / os.path.basename(parsed_args.output))
 
         # 构建命令参数
         cmd_args = [

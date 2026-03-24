@@ -20,6 +20,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +28,7 @@ import pandas as pd
 
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.config.config import Config
 
 
@@ -307,6 +309,9 @@ class HilogAction:
         )
 
         parsed_args = parser.parse_args(args)
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            parsed_args.output = str(get_user_data_root('hilog') / os.path.basename(parsed_args.output))
         action = HilogAction()
         return action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
 
@@ -344,6 +349,12 @@ class HilogAction:
                 detail_json_path = output_path.parent / 'hilog_detail.json'
                 self._save_detail_json(detail_data, detail_json_path)
                 logging.info(f'Detail data saved to: {detail_json_path}')
+
+            # Save summary JSON file for summary.json generation
+            output_path = Path(output_file)
+            summary_json_path = output_path.parent / 'hilog_analysis.json'
+            self._save_summary_json(results, summary_json_path)
+            logging.info(f'Summary JSON saved to: {summary_json_path}')
 
             logging.info(f'Hilog analysis completed. Results saved to: {output_file}')
             return output_file
@@ -439,7 +450,11 @@ class HilogAction:
                 pattern_configs[pattern_name] = {'regex': regex_pattern, 'groups': groups, 'conditions': conditions}
                 results[pattern_name] = []
                 if detail:
-                    detail_data[pattern_name] = {'matched': [], 'unmatched': []}
+                    detail_data[pattern_name] = {'matched': []}  # 仅保留 matched，unmatched 统一放入「其他」
+
+            # 用于计算「其他」：所有正则匹配到的字符串 - 至少被一个规则条件通过的字符串
+            all_regex_match_strings = set()
+            all_matched_strings = set()
 
             for file_path in hilog_files:
                 if not file_path.exists():
@@ -521,11 +536,13 @@ class HilogAction:
                                         conditions_met = False
 
                                 # Handle detail mode: save matched strings
+                                # 规则：匹配且条件通过 -> 加入该规则 matched；若匹配多个规则，每个规则都包含
+                                # 「其他」= 所有正则匹配中，未被任一规则条件通过的（统一去重，避免重复）
                                 if detail and full_match_string:
+                                    all_regex_match_strings.add(full_match_string)
                                     if conditions_met:
                                         detail_data[pattern_name]['matched'].append(full_match_string)
-                                    else:
-                                        detail_data[pattern_name]['unmatched'].append(full_match_string)
+                                        all_matched_strings.add(full_match_string)
 
                                 # Only add to results if conditions are met (or no conditions)
                                 if conditions_met and extracted_values:
@@ -538,6 +555,10 @@ class HilogAction:
                 except Exception as e:
                     logging.warning(f'Error analyzing file {file_path}: {str(e)}')
                     continue
+
+            # 「其他」：所有正则匹配到但任一规则条件均未通过的（去重）
+            if detail and detail_data is not None:
+                detail_data['其他'] = sorted(all_regex_match_strings - all_matched_strings)
 
             return results, detail_data
 
@@ -592,3 +613,18 @@ class HilogAction:
                 json.dump(detail_data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logging.error(f'Error saving detail JSON file: {str(e)}')
+
+    def _save_summary_json(self, results: dict[str, list], output_path: Path):
+        """Save summary JSON file with pattern counts for summary.json generation
+
+        Args:
+            results: Dictionary mapping pattern names to lists of matches
+            output_path: Path to save the JSON file
+        """
+        try:
+            # Convert results to summary format: pattern_name -> count
+            summary_data = {pattern_name: len(matches) for pattern_name, matches in results.items()}
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(summary_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logging.error(f'Error saving summary JSON file: {str(e)}')

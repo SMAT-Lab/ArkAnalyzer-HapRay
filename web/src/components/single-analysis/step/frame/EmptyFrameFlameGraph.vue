@@ -268,6 +268,18 @@ function renderFlameGraph() {
     tooltipInstance = defaultFlamegraphTooltip().html(buildTooltipHtml);
   }
   
+  // 自定义颜色：通过 .color() 注入，库在每次绘制/缩放/返回时都会调用，避免点击返回后上色失效
+  function customColorMapper(d, originalColor) {
+    const file = d.data?.file || '';
+    if (file.startsWith('/proc/') && file !== '/proc/' && !file.includes('unknown')) {
+      return '#3b82f6';
+    }
+    if (file.endsWith('.ets') && file !== '.ets') {
+      return '#10b981';
+    }
+    return originalColor;
+  }
+
   if (!flameGraphInstance) {
     flameGraphInstance = flamegraph()
       .height(height)
@@ -277,9 +289,10 @@ function renderFlameGraph() {
       .minFrameSize(1)
       .tooltip(tooltipInstance)
       .label(buildLabel)
-      .sort((a, b) => (b.value || 0) - (a.value || 0));
+      .sort((a, b) => (b.value || 0) - (a.value || 0))
+      .color(customColorMapper);
   } else {
-    flameGraphInstance.height(height).width(width);
+    flameGraphInstance.height(height).width(width).color(customColorMapper);
   }
 
   // 更新容器高度
@@ -295,7 +308,6 @@ function renderFlameGraph() {
     children: flameData
   };
 
-  console.log('传给d3-flame-graph的根节点:', rootData.name, 'children:', rootData.children.length);
   containerSelection.datum(rootData).call(flameGraphInstance);
 }
 

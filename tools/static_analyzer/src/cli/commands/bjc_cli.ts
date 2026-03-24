@@ -14,7 +14,7 @@
  */
 
 import { Command } from 'commander';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { Report } from 'bjc';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
@@ -30,6 +30,7 @@ export const BjcCli = new Command('bjc')
     .option('-o, --output <string>', 'output path', './')
     .option('--project-path <string>', 'project path directory', '')
     .action(async (options: BjcOptions) => {
+        options.output = Logger.mapOutputPath('bjc', options.output);
         logger.info(`generate coverage report ${options.input} ${options.output}`);
         let report = new Report(options.input, options.projectPath);
         report.generateReport();
