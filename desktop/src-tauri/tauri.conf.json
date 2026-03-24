@@ -52,7 +52,7 @@
     "linux": {
       "deb": {
         "files": {
-          "/usr/share/arkanalyzer-hapray/tools": "./tools/**"
+          "/usr/share/arkanalyzer-hapray/tools": "./tools"
         }
       }
     }
