@@ -48,13 +48,6 @@
     ],
     "resources": [
       "tools"
-    ],
-    "linux": {
-      "deb": {
-        "files": {
-          "/usr/share/arkanalyzer-hapray/tools": "./tools"
-        }
-      }
-    }
+    ]
   }
 }
