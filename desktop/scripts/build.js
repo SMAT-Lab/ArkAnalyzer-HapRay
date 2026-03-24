@@ -123,6 +123,35 @@ function runOptional(cmd, args = [], options = {}) {
   return result.status === 0;
 }
 
+function stripNotaryEnv(env = process.env) {
+  const next = { ...env };
+  // Tauri notarization 常用环境变量（Apple ID / App Store Connect API Key 两套）
+  delete next.APPLE_ID;
+  delete next.APPLE_PASSWORD;
+  delete next.APPLE_TEAM_ID;
+  delete next.APPLE_API_KEY;
+  delete next.APPLE_API_KEY_PATH;
+  delete next.APPLE_API_ISSUER;
+  return next;
+}
+
+function buildAppWithOfflineNotaryFallback() {
+  const baseArgs = [runWithCargo, "npx", "tauri", "build", "--bundles", "app"];
+  // 首次按当前环境执行（包含签名/公证配置）
+  const ok = runOptional("node", baseArgs, { env: { ...process.env } });
+  if (ok) return true;
+
+  // 本地常见失败：网络离线导致 notarization 请求失败；重试时去掉 notarize 相关变量
+  const retryEnv = stripNotaryEnv(process.env);
+  const hadNotaryEnv = Object.keys(process.env).some((k) =>
+    ["APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID", "APPLE_API_KEY", "APPLE_API_KEY_PATH", "APPLE_API_ISSUER"].includes(k),
+  );
+  if (!hadNotaryEnv) return false;
+
+  console.warn("\n[build] 检测到 .app 构建失败，尝试跳过 notarization 后重试（保留签名）...");
+  return runOptional("node", baseArgs, { env: retryEnv });
+}
+
 function createDmgWithBundleScript() {
   const { appName, appPath, dmgPath } = getMacBundleArtifacts();
 
@@ -268,7 +297,10 @@ function main() {
     // macOS: app -> dmg
     signDistToolsDeveloperId();
     console.log("Step 1: 构建 .app bundle...");
-    run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
+    if (!buildAppWithOfflineNotaryFallback()) {
+      console.error("错误: .app 构建失败（含跳过 notarization 重试）");
+      process.exit(1);
+    }
 
     console.log("\nStep 2: 生成 .dmg...");
     let reuseExistingDmg = false;
@@ -296,7 +328,10 @@ function main() {
       // tauri bundle 可能清理 .app；后续 copyToDist 仍需要 .app，缺失时补构建一次。
       if (!fs.existsSync(appPath)) {
         console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
-        run("node", [runWithCargo, "npx", "tauri", "build", "--bundles", "app"]);
+        if (!buildAppWithOfflineNotaryFallback()) {
+          console.error("错误: 重新构建 .app 失败（含跳过 notarization 重试）");
+          process.exit(1);
+        }
       }
     }
 
