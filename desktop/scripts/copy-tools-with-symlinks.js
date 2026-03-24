@@ -12,13 +12,32 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DIST_TOOLS = path.resolve(__dirname, "../../dist/tools");
 
+function computeStableSymlinkTarget(srcPath, srcRoot, destPath, rawTarget) {
+  // 相对链接在 PyInstaller onedir 内通常是正确语义，必须原样保留
+  if (!path.isAbsolute(rawTarget)) {
+    return rawTarget;
+  }
+
+  const relFromSrcRoot = path.relative(srcRoot, rawTarget);
+  // 绝对目标仍在 tools 树内时，重写为目标目录可用的相对路径，避免携带构建机绝对路径
+  if (!relFromSrcRoot.startsWith("..") && !path.isAbsolute(relFromSrcRoot)) {
+    const srcAbsTarget = path.resolve(srcRoot, relFromSrcRoot);
+    const destAbsTarget = path.resolve(destPath, "..", path.relative(srcPath, srcAbsTarget));
+    return path.relative(path.dirname(destPath), destAbsTarget);
+  }
+
+  // tools 之外的绝对目标保持原样（例如系统库）
+  return rawTarget;
+}
+
 function copyDirWithSymlinks(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isSymbolicLink()) {
-      const target = fs.readlinkSync(srcPath);
+      const rawTarget = fs.readlinkSync(srcPath);
+      const target = computeStableSymlinkTarget(srcPath, DIST_TOOLS, destPath, rawTarget);
       try {
         fs.symlinkSync(target, destPath);
       } catch (err) {
@@ -34,6 +53,32 @@ function copyDirWithSymlinks(src, dest) {
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
+  }
+}
+
+function validateSymlinks(rootDir) {
+  const stack = [rootDir];
+  const broken = [];
+  while (stack.length > 0) {
+    const cur = stack.pop();
+    for (const entry of fs.readdirSync(cur, { withFileTypes: true })) {
+      const full = path.join(cur, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!entry.isSymbolicLink()) continue;
+      const target = fs.readlinkSync(full);
+      const resolved = path.isAbsolute(target)
+        ? target
+        : path.resolve(path.dirname(full), target);
+      if (!fs.existsSync(resolved)) {
+        broken.push(`${path.relative(process.cwd(), full)} -> ${target}`);
+      }
+    }
+  }
+  if (broken.length > 0) {
+    throw new Error(`检测到 ${broken.length} 个坏软连接:\n${broken.join("\n")}`);
   }
 }
 
@@ -63,6 +108,7 @@ function main() {
     }
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     copyDirWithSymlinks(DIST_TOOLS, dest);
+    validateSymlinks(dest);
     console.log(`  ✓ 已保留软连接复制 tools -> ${path.relative(process.cwd(), dest)}`);
   }
 }
