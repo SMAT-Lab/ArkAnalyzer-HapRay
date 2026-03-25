@@ -31,6 +31,7 @@ perf_testing/binary_analysis_report.xlsx
 perf_testing/files_results_cache/
 
 perf_testing/resource/
+perf_testing/hapray_perf_testing.egg-info
 
 # Log
 *.log
@@ -56,6 +57,6 @@ perf_testing/hapray/testcases/__haptest_generated__/
 perf_testing/hapray/haptest/GIT_GUIDE.md
 
 # Desktop generated artifacts
-desktop/src-tauri/Cargo.lock
+#desktop/src-tauri/Cargo.lock
 desktop/src-tauri/tools/
 

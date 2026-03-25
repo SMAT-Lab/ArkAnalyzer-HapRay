@@ -71,13 +71,6 @@ jobs:
         echo "File copied successfully"
       shell: bash
 
-    - name: Copy Cargo.lock
-      run: |
-        echo "Copying .github/workflows/Cargo.lock to desktop/src-tauri/Cargo.lock"
-        cp ".github/workflows/Cargo.lock" "desktop/src-tauri/Cargo.lock"
-        echo "Cargo.lock copied successfully"
-      shell: bash
-
     # 设置静态 Python 环境（仅适用于 Ubuntu）
     - name: Set up static Python (Ubuntu only)
       if: ${{ matrix.item.use_static_python }}
