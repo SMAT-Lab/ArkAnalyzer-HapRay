@@ -359,14 +359,13 @@ class LegacyFeatureExtractor:
             with open(p, 'rb') as f:
                 elf = ELFFile(f)
                 header = elf.header
-                d = {
+                return {
                     'elf_type': float(len(header['e_type'].name)) if hasattr(header['e_type'], 'name') else 0.0,
                     'machine_type': float(len(header['e_machine'].name)) if hasattr(header['e_machine'], 'name') else 0.0,
                     'entry_point': 1.0 if header['e_entry'] != 0 else 0.0,
                     'section_header_count': float(elf.num_sections()),
                     'program_header_count': float(elf.num_segments()),
                 }
-                return d
         except Exception:
             return {
                 'elf_type': 0.0,
@@ -408,14 +407,14 @@ class LegacyFeatureExtractor:
                         st_bind = st_info['bind']
                         st_type = st_info['type']
                         st_shndx = symbol.entry['st_shndx']
-                        
+
                         # 函数符号
                         if st_type == 'STT_FUNC':
                             f['function_symbols'] += 1
                         # 数据符号
                         if st_type in ('STT_OBJECT', 'STT_COMMON', 'STT_TLS'):
                             f['data_symbols'] += 1
-                        
+
                         # 绑定类型
                         if st_bind == 'STB_LOCAL':
                             f['local_symbols'] += 1
@@ -423,7 +422,7 @@ class LegacyFeatureExtractor:
                             f['global_symbols'] += 1
                         elif st_bind == 'STB_WEAK':
                             f['weak_symbols'] += 1
-                        
+
                         # 特殊符号类型（st_shndx 是数字）
                         # SHN_UNDEF = 0, SHN_ABS = 0xfff1, SHN_COMMON = 0xfff2 (通常值)
                         if isinstance(st_shndx, int):
@@ -441,21 +440,21 @@ class LegacyFeatureExtractor:
                                 f['absolute_symbols'] += 1
                             elif 'COMMON' in st_shndx:
                                 f['common_symbols'] += 1
-                        
+
                         # 调试符号（通常在 .debug 段）
                         if name.startswith('.debug') or st_type == 'STT_NOTYPE':
                             f['debug_symbols'] += 1
-                        
+
                         # LTO 相关符号
                         if name and (('LTO' in name) or ('lto' in name)):
                             f['lto_symbols'] += 1
-                        
+
                         # 人工符号（通常包含特殊标记）
                         if name and ('<artificial>' in name or name.startswith('$')):
                             f['artificial_symbols'] += 1
         except Exception:
             pass
-        
+
         t = f['total_symbols'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -490,7 +489,7 @@ class LegacyFeatureExtractor:
                     f['total_sections'] += 1
                     name = section.name
                     size = section['sh_size']
-                    
+
                     if '.text' in name:
                         f['text_sections'] += 1
                         f['total_text_size'] += size
@@ -505,7 +504,7 @@ class LegacyFeatureExtractor:
                         f['total_debug_size'] += size
         except Exception:
             pass
-        
+
         total = f['total_text_size'] + f['total_data_size'] + f['total_bss_size'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -538,7 +537,7 @@ class LegacyFeatureExtractor:
                         f['total_relocations'] += 1
                         reloc_type = reloc['r_info_type']
                         reloc_type_name = str(reloc_type) if hasattr(reloc_type, '__str__') else ''
-                        
+
                         # 根据重定位类型判断
                         if 'PLT' in reloc_type_name or 'JUMP_SLOT' in reloc_type_name:
                             f['plt_relocations'] += 1
@@ -546,7 +545,7 @@ class LegacyFeatureExtractor:
                             f['got_relocations'] += 1
                         elif 'DYNAMIC' in reloc_type_name:
                             f['dynamic_relocations'] += 1
-                        
+
                         # 根据节名称判断
                         if '.text' in section_name:
                             f['text_relocations'] += 1
@@ -554,7 +553,7 @@ class LegacyFeatureExtractor:
                             f['data_relocations'] += 1
         except Exception:
             pass
-        
+
         t = f['total_relocations'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -599,7 +598,7 @@ class LegacyFeatureExtractor:
                             f['fini_functions'] += 1
         except Exception:
             pass
-        
+
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
         return f
@@ -630,7 +629,7 @@ class LegacyFeatureExtractor:
                         current_string = []
                 if len(current_string) >= 4:
                     strings.append(bytes(current_string).decode('ascii', errors='ignore'))
-                
+
                 f['total_strings'] = len(strings)
                 for s in strings:
                     sl = s.lower()
@@ -648,7 +647,7 @@ class LegacyFeatureExtractor:
                         f['gnu_strings'] += 1
         except Exception:
             pass
-        
+
         t = f['total_strings'] or 1
         for k in list(f.keys()):  # noqa: PLC0206
             f[k] = float(f[k])
@@ -741,54 +740,54 @@ class LegacyFeatureExtractor:
             'has_vectorized_code': 0.0,
             'has_tail_calls': 0.0,
         }
-        
+
         try:
             import capstone
             from capstone import CS_ARCH_ARM64, CS_MODE_ARM
-            
+
             # 读取 .text 段
             with open(p, 'rb') as file:
                 elf = ELFFile(file)
                 text_section = elf.get_section_by_name('.text')
                 if not text_section:
                     return result
-                
+
                 code = text_section.data()
                 if len(code) == 0:
                     return result
-                
+
                 # 创建 capstone 反汇编器
                 md = capstone.Cs(CS_ARCH_ARM64, CS_MODE_ARM)
                 md.detail = True
-                
+
                 # 反汇编并分析优化模式
                 instructions = []
                 for insn in md.disasm(code, text_section['sh_addr']):
                     instructions.append(insn)
                     mnemonic = insn.mnemonic.lower()
-                    
+
                     # 检测内联函数（call + nop 模式）
                     if mnemonic in ('bl', 'blr') and len(instructions) > 1:
                         # 检查后续是否有 nop
                         if any(i.mnemonic.lower() == 'nop' for i in instructions[-3:]):
                             result['has_inline_functions'] = 1.0
-                    
+
                     # 检测向量化代码
                     if any(v in mnemonic for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins']):
                         if 'v' in insn.op_str or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip()):
                             result['has_vectorized_code'] = 1.0
-                    
+
                     # 检测尾调用（jmp + ret 模式）
                     if mnemonic == 'b' and len(instructions) > 1:
                         # 检查是否有 ret 指令
                         if any(i.mnemonic.lower() == 'ret' for i in instructions[-5:]):
                             result['has_tail_calls'] = 1.0
-                
+
                 # 检测循环展开（重复的 mov 模式，在 ARM64 中表现为重复的指令序列）
                 if len(instructions) > 10:
                     # 检查是否有重复的指令模式（简单的循环展开检测）
                     for i in range(len(instructions) - 3):
-                        pattern = [instructions[i].mnemonic.lower(), 
+                        pattern = [instructions[i].mnemonic.lower(),
                                   instructions[i+1].mnemonic.lower(),
                                   instructions[i+2].mnemonic.lower()]
                         # 检查是否在后续位置重复出现
@@ -806,7 +805,7 @@ class LegacyFeatureExtractor:
         except Exception as e:
             # 反汇编失败，返回默认值
             logging.debug('Optimization analysis failed for %s: %s', p, e)
-        
+
         return result
 
     def extract(self, path: str) -> tuple[np.ndarray, list[str], str]:
@@ -896,7 +895,7 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
                         rel['TOTAL'] += 1
                         reloc_type = reloc['r_info_type']
                         reloc_type_name = str(reloc_type) if hasattr(reloc_type, '__str__') else ''
-                        
+
                         if 'JUMP_SLOT' in reloc_type_name or 'R_AARCH64_JUMP_SLOT' in reloc_type_name:
                             rel['JUMP_SLOT'] += 1
                         elif 'GLOB_DAT' in reloc_type_name or 'R_AARCH64_GLOB_DAT' in reloc_type_name:
@@ -932,11 +931,8 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
                         st_type = st_info['type']
                         # 获取可见性（st_other 的低 3 位）
                         st_other = symbol.entry.get('st_other', 0)
-                        if isinstance(st_other, int):
-                            st_vis_value = st_other & 0x3
-                        else:
-                            st_vis_value = 0
-                        
+                        st_vis_value = st_other & 3 if isinstance(st_other, int) else 0
+
                         if st_type == 'STT_FUNC':
                             d['FUNC_TOTAL'] += 1
                             if st_bind == 'STB_GLOBAL':
@@ -945,7 +941,7 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
                                 d['FUNC_LOCAL'] += 1
                             elif st_bind == 'STB_WEAK':
                                 d['FUNC_WEAK'] += 1
-                            
+
                             if st_vis_value == 0:  # STV_DEFAULT
                                 d['VIS_DEFAULT'] += 1
                             elif st_vis_value == 2:  # STV_HIDDEN
@@ -956,7 +952,7 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
 
     def _disasm_stats_aarch64(self, p: str) -> dict[str, int]:
         """反汇编统计（AArch64指令分析）
-        
+
         使用 capstone Python 库进行反汇编（如果可用），否则返回默认值
         """
         c = {
@@ -976,31 +972,31 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
             'ADD': 0,
             'VEC': 0,
         }
-        
+
         try:
             import capstone
             from capstone import CS_ARCH_ARM64, CS_MODE_ARM
-            
+
             # 读取 .text 段
             with open(p, 'rb') as f:
                 elf = ELFFile(f)
                 text_section = elf.get_section_by_name('.text')
                 if not text_section:
                     return c
-                
+
                 code = text_section.data()
                 if len(code) == 0:
                     return c
-                
+
                 # 创建 capstone 反汇编器
                 md = capstone.Cs(CS_ARCH_ARM64, CS_MODE_ARM)
                 md.detail = True
-                
+
                 # 反汇编并统计指令
                 for insn in md.disasm(code, text_section['sh_addr']):
                     c['INSN_TOTAL'] += 1
                     mnemonic = insn.mnemonic.lower()
-                    
+
                     # 统计各种指令
                     if mnemonic == 'bl':
                         c['BL'] += 1
@@ -1040,7 +1036,7 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
         except Exception as e:
             # 反汇编失败，返回默认值
             logging.debug('Disassembly failed for %s: %s', p, e)
-        
+
         return c
 
     @staticmethod

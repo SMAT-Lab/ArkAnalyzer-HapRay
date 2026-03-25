@@ -746,7 +746,7 @@ class EmptyFrameAnalyzer:
                 pairs_list = list(vsync_itid_pairs)
 
                 for i in range(0, len(pairs_list), batch_size):
-                    batch = pairs_list[i:i + batch_size]
+                    batch = pairs_list[i : i + batch_size]
                     # 构建WHERE条件：(vsync = ? AND itid = ?) OR (vsync = ? AND itid = ?) ...
                     conditions = ' OR '.join(['(fs.vsync = ? AND fs.itid = ?)'] * len(batch))
                     params = []

@@ -37,7 +37,9 @@ def should_ignore_system_pattern(pattern_key_str: str) -> bool:
     return pattern_key_str.strip().startswith('OS_')
 
 
-def collect_callchain_sample(thread_list: list[dict], max_entries: int = 10, user_space_only: bool = True) -> list[dict[str, Any]]:
+def collect_callchain_sample(
+    thread_list: list[dict], max_entries: int = 10, user_space_only: bool = True
+) -> list[dict[str, Any]]:
     """从线程列表中收集 callchain 的 symbol/file_path 样本，按出现频率降序。
 
     Args:

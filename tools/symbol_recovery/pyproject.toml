@@ -1,3 +1,41 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "symbol-recovery"
+version = "1.5.1"
+description = "二进制符号恢复工具：支持 perf.data 和 Excel 偏移量两种模式"
+# 与根目录 .python-version 一致；排除 3.12 可避免 uv 为多版本解析时因 pyinstaller 等失败（尤其企业多索引镜像）
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    "pyelftools>=0.32",
+    "capstone>=5.0.0",
+    "numpy==1.26.4",
+    "pandas==2.3.3",
+    "openpyxl>=3.0.0",
+    "python-dotenv>=1.0.0",
+    "openai>=1.0.0",
+    "r2pipe>=1.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "tox",
+    "pyinstaller==6.13.0",
+]
+
+[project.scripts]
+symbol-recovery = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["core*"]
+exclude = ["node_modules*", "dist*", "build*"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"

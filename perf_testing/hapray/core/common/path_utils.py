@@ -56,4 +56,3 @@ def get_runtime_root() -> Path:
     - 其他平台：`./runtime`
     """
     return get_user_data_root('runtime')
-
