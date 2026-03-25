@@ -130,6 +130,15 @@ jobs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: desktop/src-tauri
+        # 避免 Ubuntu 22/24 之间复用导致的 target 元数据不一致
+        shared-key: tauri-${{ matrix.item.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+        # 优先稳定性：不缓存 target，仅缓存 registry/git 依赖
+        cache-targets: false
+
+    - name: Diagnose Tauri dependency resolution
+      working-directory: desktop/src-tauri
+      run: |
+        cargo tree -i tauri
 
     - name: Install dependencies
       run: |        
