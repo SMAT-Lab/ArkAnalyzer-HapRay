@@ -634,42 +634,44 @@ pub async fn get_dynamic_choices_command(
     }
 }
 
+/// 列举 `perf-testing/testcases` 下与 Python 一致的用例名（.py / .yaml 文件名 stem），由构建脚本从 hapray/testcases 复制而来。
 fn get_testcases(app: &tauri::AppHandle) -> Result<Vec<String>, String> {
     let plugins_dir = get_plugins_dir(app).ok_or_else(|| "插件目录不存在".to_string())?;
-    let testcases_dir = plugins_dir
-        .join("perf-testing")
-        .join("_internal")
-        .join("hapray")
-        .join("testcases");
+    let testcases_dir = plugins_dir.join("perf-testing").join("testcases");
 
-    if !testcases_dir.exists() {
+    if !testcases_dir.is_dir() {
         return Ok(vec![]);
     }
 
-    let mut testcases = Vec::new();
+    let mut names = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&testcases_dir) {
         for entry in entries.flatten() {
             let app_dir = entry.path();
-            if !app_dir.is_dir() || app_dir.file_name().and_then(|n| n.to_str()).unwrap_or("").starts_with('_') {
+            if !app_dir.is_dir() {
                 continue;
             }
-            if let Ok(py_files) = std::fs::read_dir(&app_dir) {
-                for py_entry in py_files.flatten() {
-                    let py_path = py_entry.path();
-                    if py_path.extension().map_or(false, |e| e == "py") {
-                        if let Some(stem) = py_path.file_stem() {
-                            let name = stem.to_string_lossy();
-                            if name != "__init__" {
-                                testcases.push(name.to_string());
-                            }
+            if let Ok(files) = std::fs::read_dir(&app_dir) {
+                for f in files.flatten() {
+                    let p = f.path();
+                    let Some(ext) = p.extension().and_then(|e| e.to_str()) else {
+                        continue;
+                    };
+                    if ext != "py" && ext != "yaml" {
+                        continue;
+                    }
+                    if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                        if stem != "__init__" {
+                            names.push(stem.to_string());
                         }
                     }
                 }
             }
         }
     }
-    testcases.sort();
-    Ok(testcases)
+
+    names.sort();
+    names.dedup();
+    Ok(names)
 }
 
 fn get_installed_apps() -> Result<Vec<String>, String> {
