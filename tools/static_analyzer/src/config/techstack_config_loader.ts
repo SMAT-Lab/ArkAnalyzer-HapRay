@@ -182,11 +182,11 @@ export function loadTechStackConfig(): TechStackConfig {
 export function resolveResPath(relativePath: string): string {
     const exeDir = path.dirname(process.execPath || __filename);
     let resPath = path.join(exeDir, 'res', relativePath);
-    if (fs.existsSync(resPath)) return resPath;
+    if (fs.existsSync(resPath)) {return resPath;}
     resPath = path.join(process.cwd(), 'res', relativePath);
-    if (fs.existsSync(resPath)) return resPath;
+    if (fs.existsSync(resPath)) {return resPath;}
     let resDir = path.join(__dirname, 'res');
-    if (!fs.existsSync(resDir)) resDir = path.join(__dirname, '../../res');
+    if (!fs.existsSync(resDir)) {resDir = path.join(__dirname, '../../res');}
     return path.join(resDir, relativePath);
 }
 

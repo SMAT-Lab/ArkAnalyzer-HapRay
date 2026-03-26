@@ -15,6 +15,11 @@ import numpy as np
 from optimization_detector.file_info import FileInfo
 
 try:
+    from scipy.special import expit
+except ImportError:
+    expit = None
+
+try:
     import joblib
 except ImportError:
     import pickle as joblib  # 降级到pickle（如果joblib不可用）
@@ -201,24 +206,48 @@ class LtoDetector:
 
         # 延迟加载模型
         if not self._load_model():
-            return {'score': None, 'prediction': 'N/A', 'model_used': 'N/A',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+            return {
+                'score': None,
+                'prediction': 'N/A',
+                'model_used': 'N/A',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
 
         if not chunks or len(chunks) == 0:
-            return {'score': None, 'prediction': 'No chunks', 'model_used': 'Unified SVM',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+            return {
+                'score': None,
+                'prediction': 'No chunks',
+                'model_used': 'Unified SVM',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
 
         # 提取文件级别的全局特征（ELF头、符号表等）
         global_features = self._extract_features(so_path)
         if global_features is None:
-            return {'score': None, 'prediction': 'Failed', 'model_used': 'Unified SVM',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+            return {
+                'score': None,
+                'prediction': 'Failed',
+                'model_used': 'Unified SVM',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
 
         # 获取特征提取器以提取局部特征
         if self.feature_extractor is None:
             if self.AllFeatureExtractor is None:
-                return {'score': None, 'prediction': 'Failed', 'model_used': 'Unified SVM',
-                       'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+                return {
+                    'score': None,
+                    'prediction': 'Failed',
+                    'model_used': 'Unified SVM',
+                    'chunk_scores': [],
+                    'chunk_predictions': [],
+                    'distribution': {},
+                }
             self.feature_extractor = self.AllFeatureExtractor()
 
         chunk_scores = []
@@ -251,10 +280,9 @@ class LtoDetector:
                 decision_value = float(decision[0])
 
                 # 转换为概率（用于单个 chunk 的预测）
-                try:
-                    from scipy.special import expit
+                if expit is not None:
                     lto_score = float(expit(decision_value))
-                except ImportError:
+                else:
                     lto_score = 1.0 / (1.0 + math.exp(-decision_value))
 
                 # 使用更低的阈值（0.45）来减少漏报（实际开了 LTO 但被误判为没开）
@@ -270,8 +298,14 @@ class LtoDetector:
                 chunk_predictions.append(prediction)
 
             if len(chunk_scores) == 0:
-                return {'score': None, 'prediction': 'Failed', 'model_used': 'Unified SVM',
-                       'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+                return {
+                    'score': None,
+                    'prediction': 'Failed',
+                    'model_used': 'Unified SVM',
+                    'chunk_scores': [],
+                    'chunk_predictions': [],
+                    'distribution': {},
+                }
 
             # 统计结果（学习 optimization_detector 的累加分数方式）
             # 方案：直接累加每个 chunk 的预测概率（sigmoid 分数）
@@ -304,10 +338,18 @@ class LtoDetector:
 
         except Exception as e:
             logging.debug('Chunk-based LTO prediction failed for %s: %s', so_path, e)
-            return {'score': None, 'prediction': 'Error', 'model_used': 'Unified SVM',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+            return {
+                'score': None,
+                'prediction': 'Error',
+                'model_used': 'Unified SVM',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
 
-    def _extract_chunk_features(self, chunk_data: bytes, global_features: np.ndarray, so_path: str) -> Optional[np.ndarray]:
+    def _extract_chunk_features(
+        self, chunk_data: bytes, global_features: np.ndarray, so_path: str
+    ) -> Optional[np.ndarray]:
         """
         提取 chunk 的混合特征（全局特征 + 局部特征）
 
@@ -343,8 +385,7 @@ class LtoDetector:
 
             # 更新 O3_* 中的指令统计特征
             insn_feature_keywords = ['d_bl', 'd_blr', 'd_br', 'd_ret', 'd_vec', 'INSN']
-            [i for i, n in enumerate(self.feature_names)
-                                   if any(kw in n for kw in insn_feature_keywords)]
+            [i for i, n in enumerate(self.feature_names) if any(kw in n for kw in insn_feature_keywords)]
 
             # 简化实现：直接返回全局特征（因为局部特征提取较复杂）
             # 后续可以优化为真正的混合特征
@@ -387,7 +428,9 @@ class LtoDetector:
         # 但为了简化，暂时返回 None
         return None
 
-    def _extract_chunk_features(self, chunk_data: bytes, global_features: np.ndarray, so_path: str) -> Optional[np.ndarray]:
+    def _extract_chunk_features(
+        self, chunk_data: bytes, global_features: np.ndarray, so_path: str
+    ) -> Optional[np.ndarray]:
         """
         提取 chunk 的混合特征（全局特征 + 局部特征）
 

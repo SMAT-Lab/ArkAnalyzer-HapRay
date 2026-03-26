@@ -198,7 +198,7 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
      * 为了避免在 Bun 二进制中出现打包机上的“幽灵路径”，这里在运行时按多种可能位置探测。
      */
     private getSqlJsRuntimeDir(): string {
-        const candidates: string[] = [];
+        const candidates: Array<string> = [];
 
         // 1. 与当前文件同级的 node_modules（脚本模式下的 dist/tools/sa-cmd）
         candidates.push(path.join(__dirname, 'node_modules', 'sql.js', 'dist'));
@@ -1225,8 +1225,8 @@ export class PerfAnalyzer extends PerfAnalyzerBase {
             load: number;
         }> = [];
 
-        const appId = testInfo.app_id ?? '';
-        const appName = testInfo.app_name ?? '';
+        const appId = testInfo.app_id;
+        const appName = testInfo.app_name;
 
         // 按 step 和 file 聚合负载（仅统计应用进程）
         for (const step of steps) {

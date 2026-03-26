@@ -25,6 +25,14 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
+try:
+    import capstone
+    from capstone import CS_ARCH_ARM64, CS_MODE_ARM
+except ImportError:
+    capstone = None
+    CS_ARCH_ARM64 = None
+    CS_MODE_ARM = None
+
 
 def get_user_data_root(subdir: str) -> Path:
     """
@@ -361,7 +369,9 @@ class LegacyFeatureExtractor:
                 header = elf.header
                 return {
                     'elf_type': float(len(header['e_type'].name)) if hasattr(header['e_type'], 'name') else 0.0,
-                    'machine_type': float(len(header['e_machine'].name)) if hasattr(header['e_machine'], 'name') else 0.0,
+                    'machine_type': float(len(header['e_machine'].name))
+                    if hasattr(header['e_machine'], 'name')
+                    else 0.0,
                     'entry_point': 1.0 if header['e_entry'] != 0 else 0.0,
                     'section_header_count': float(elf.num_sections()),
                     'program_header_count': float(elf.num_segments()),
@@ -428,9 +438,9 @@ class LegacyFeatureExtractor:
                         if isinstance(st_shndx, int):
                             if st_shndx == 0:  # SHN_UNDEF
                                 f['undefined_symbols'] += 1
-                            elif st_shndx == 0xfff1:  # SHN_ABS
+                            elif st_shndx == 0xFFF1:  # SHN_ABS
                                 f['absolute_symbols'] += 1
-                            elif st_shndx == 0xfff2:  # SHN_COMMON
+                            elif st_shndx == 0xFFF2:  # SHN_COMMON
                                 f['common_symbols'] += 1
                         # 也检查字符串形式（某些 elftools 版本可能返回字符串）
                         elif isinstance(st_shndx, str):
@@ -741,10 +751,11 @@ class LegacyFeatureExtractor:
             'has_tail_calls': 0.0,
         }
 
-        try:
-            import capstone
-            from capstone import CS_ARCH_ARM64, CS_MODE_ARM
+        if capstone is None:
+            logging.debug('capstone not available, using default values for optimization features')
+            return result
 
+        try:
             # 读取 .text 段
             with open(p, 'rb') as file:
                 elf = ELFFile(file)
@@ -767,41 +778,54 @@ class LegacyFeatureExtractor:
                     mnemonic = insn.mnemonic.lower()
 
                     # 检测内联函数（call + nop 模式）
-                    if mnemonic in ('bl', 'blr') and len(instructions) > 1:
-                        # 检查后续是否有 nop
-                        if any(i.mnemonic.lower() == 'nop' for i in instructions[-3:]):
-                            result['has_inline_functions'] = 1.0
+                    if (
+                        mnemonic in ('bl', 'blr')
+                        and len(instructions) > 1
+                        and any(i.mnemonic.lower() == 'nop' for i in instructions[-3:])
+                    ):
+                        result['has_inline_functions'] = 1.0
 
                     # 检测向量化代码
-                    if any(v in mnemonic for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins']):
-                        if 'v' in insn.op_str or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip()):
-                            result['has_vectorized_code'] = 1.0
+                    if any(
+                        v in mnemonic
+                        for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins']
+                    ) and (
+                        insn.op_str
+                        and (
+                            'v' in insn.op_str
+                            or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip())
+                        )
+                    ):
+                        result['has_vectorized_code'] = 1.0
 
                     # 检测尾调用（jmp + ret 模式）
-                    if mnemonic == 'b' and len(instructions) > 1:
-                        # 检查是否有 ret 指令
-                        if any(i.mnemonic.lower() == 'ret' for i in instructions[-5:]):
-                            result['has_tail_calls'] = 1.0
+                    if (
+                        mnemonic == 'b'
+                        and len(instructions) > 1
+                        and any(i.mnemonic.lower() == 'ret' for i in instructions[-5:])
+                    ):
+                        result['has_tail_calls'] = 1.0
 
                 # 检测循环展开（重复的 mov 模式，在 ARM64 中表现为重复的指令序列）
                 if len(instructions) > 10:
                     # 检查是否有重复的指令模式（简单的循环展开检测）
                     for i in range(len(instructions) - 3):
-                        pattern = [instructions[i].mnemonic.lower(),
-                                  instructions[i+1].mnemonic.lower(),
-                                  instructions[i+2].mnemonic.lower()]
+                        pattern = [
+                            instructions[i].mnemonic.lower(),
+                            instructions[i + 1].mnemonic.lower(),
+                            instructions[i + 2].mnemonic.lower(),
+                        ]
                         # 检查是否在后续位置重复出现
-                        for j in range(i+3, min(i+20, len(instructions)-2)):
-                            if ([instructions[j].mnemonic.lower(),
-                                instructions[j+1].mnemonic.lower(),
-                                instructions[j+2].mnemonic.lower()] == pattern):
+                        for j in range(i + 3, min(i + 20, len(instructions) - 2)):
+                            if [
+                                instructions[j].mnemonic.lower(),
+                                instructions[j + 1].mnemonic.lower(),
+                                instructions[j + 2].mnemonic.lower(),
+                            ] == pattern:
                                 result['has_unrolled_loops'] = 1.0
                                 break
                         if result['has_unrolled_loops'] > 0:
                             break
-        except ImportError:
-            # capstone 不可用，返回默认值
-            logging.debug('capstone not available, using default values for optimization features')
         except Exception as e:
             # 反汇编失败，返回默认值
             logging.debug('Optimization analysis failed for %s: %s', p, e)
@@ -973,10 +997,11 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
             'VEC': 0,
         }
 
-        try:
-            import capstone
-            from capstone import CS_ARCH_ARM64, CS_MODE_ARM
+        if capstone is None:
+            logging.debug('capstone not available, using default values for disassembly stats')
+            return c
 
+        try:
             # 读取 .text 段
             with open(p, 'rb') as f:
                 elf = ELFFile(f)
@@ -1027,12 +1052,18 @@ class O3FocusedFeatureExtractor(LegacyFeatureExtractor):
                     elif mnemonic == 'add':
                         c['ADD'] += 1
                     # 向量指令
-                    elif any(v in mnemonic for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins', 'eor']):
-                        if insn.op_str and ('v' in insn.op_str or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip())):
-                            c['VEC'] += 1
-        except ImportError:
-            # capstone 不可用，返回默认值
-            logging.debug('capstone not available, using default values for disassembly stats')
+                    elif (
+                        any(
+                            v in mnemonic
+                            for v in ['ld1', 'st1', 'fmla', 'fadd', 'fmul', 'zip1', 'uzp1', 'trn1', 'dup', 'ins', 'eor']
+                        )
+                        and insn.op_str
+                        and (
+                            'v' in insn.op_str
+                            or any(reg.strip().startswith('v') for reg in insn.op_str.split(',') if reg.strip())
+                        )
+                    ):
+                        c['VEC'] += 1
         except Exception as e:
             # 反汇编失败，返回默认值
             logging.debug('Disassembly failed for %s: %s', p, e)
