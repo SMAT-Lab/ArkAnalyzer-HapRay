@@ -16,7 +16,6 @@ dist
 temp_release_test/
 
 # Third-party and Generated Directories
-third-party/HapRayDep/
 third-party/trace_streamer_binary/
 third-party/xvm/
 third-party/Open-AutoGLM/
