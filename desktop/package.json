@@ -1,13 +1,13 @@
 {
   "name": "arkanalyzer-hapray",
   "private": true,
-  "version": "1.5.1",
+  "version": "1.5.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:tauri": "tauri dev",
     "build": "node scripts/build.js",
-    "build:frontend": "vue-tsc --noEmit && vite build",
+    "build:frontend": "node scripts/prepare-tauri-tools.js && vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "install:rust": "node scripts/install-rust.js",

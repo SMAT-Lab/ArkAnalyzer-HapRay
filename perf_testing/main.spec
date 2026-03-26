@@ -10,48 +10,6 @@ from PyInstaller.utils.hooks import (
     copy_metadata,
 )
 
-IS_WIN = sys.platform.startswith("win")
-
-
-def _collect_windows_runtime_dlls():
-    """
-    在 Windows 下兜底收集 Python 运行时依赖，避免 python311.dll 加载失败。
-    """
-    if not IS_WIN:
-        return []
-
-    runtime_dlls = (
-        "vcruntime140.dll",
-        "vcruntime140_1.dll",
-        "msvcp140.dll",
-        "ucrtbase.dll",
-    )
-    search_dirs = []
-    for d in (
-        getattr(sys, "base_prefix", ""),
-        getattr(sys, "prefix", ""),
-        os.path.join(getattr(sys, "base_prefix", ""), "DLLs"),
-        os.path.join(getattr(sys, "base_prefix", ""), "Library", "bin"),
-        os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "System32"),
-    ):
-        if d and os.path.isdir(d):
-            search_dirs.append(d)
-
-    found = []
-    seen = set()
-    for dll_name in runtime_dlls:
-        for directory in search_dirs:
-            candidate = os.path.join(directory, dll_name)
-            if os.path.isfile(candidate) and dll_name.lower() not in seen:
-                # 目标目录 "." 表示和可执行文件同级，确保启动时可被优先加载
-                found.append((candidate, "."))
-                seen.add(dll_name.lower())
-                break
-        if dll_name.lower() not in seen:
-            print(f"Warning: runtime DLL not found: {dll_name}")
-    return found
-
-
 venv_packages = [pkg.key for pkg in pkg_resources.working_set]
 venv_packages.append('ohos')
 venv_packages.append('devicetest')
@@ -99,6 +57,12 @@ except Exception as e:
 # ohos 不用 collect_submodules：遍历 ohos.parser 等子包时会在 spec 执行阶段 import 失败，导致漏打包。
 # 改为在下方把整个 site-packages/ohos 目录作为 datas 打入（见 copy_metadata 之后）。
 
+IS_WIN = sys.platform.startswith("win")  
+IS_DARWIN = sys.platform == "darwin"  
+# macOS：PyInstaller 对 Mach-O strip 后，再经 Developer ID 重签，公证常报 Python / Python.framework signature invalid  
+STRIP_BINARIES = (not IS_WIN) and (not IS_DARWIN)  
+_CODESIGN_IDENTITY = (os.environ.get("APPLE_SIGNING_IDENTITY", "").strip() or None) if IS_DARWIN else None
+
 # 直接打包 resource 目录（含 web、xvm 等）
 _resource_dir = os.path.join(os.path.dirname(SPEC), 'resource')
 datas = [
@@ -137,11 +101,6 @@ else:
 # 初始化 binaries 列表
 binaries = []
 try:
-    binaries.extend(_collect_windows_runtime_dlls())
-except Exception as e:
-    print(f"Warning: Could not collect Windows runtime DLLs: {e}")
-
-try:
     numpy_libs = collect_dynamic_libs('numpy')
     binaries.extend(numpy_libs)
 except Exception as e:
@@ -163,6 +122,8 @@ except Exception as e:
 # 不再把整份 site-packages 目录作为 datas 全量拷贝：会与 Analysis 已收集的依赖重复，
 # 在 x86_64 上尤其会把 numpy/pandas 等 wheel 再拷一份，体积可接近翻倍。
 # 依赖关系由下方 Analysis + hiddenimports 与 PyInstaller hooks 解析即可。
+
+IS_WIN = sys.platform.startswith('win')
 
 a = Analysis(
     ['scripts/main.py'],
@@ -195,30 +156,19 @@ exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    [],
-    exclude_binaries=True,
+    a.zipfiles,
+    a.datas,
     name='perf-testing',
     debug=False,
     bootloader_ignore_signals=False,
-    # Windows 下不执行 strip，避免 PE/DLL（含 python311.dll）被破坏导致 LoadLibrary 失败
-    strip=not IS_WIN,
-    upx=False,  # 禁用 UPX 以避免 DLL 加载问题
+    # Windows：不 strip PE/DLL；macOS：不 strip Mach-O（见 STRIP_BINARIES）；Linux 可 strip 减小体积
+    strip=STRIP_BINARIES,
+    upx=False,  # 禁用 UPX（Windows DLL / macOS Mach-O 与重签、公证）
     upx_exclude=[],
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
+    codesign_identity=_CODESIGN_IDENTITY,
     entitlements_file=None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=not IS_WIN,
-    upx=False,  # 禁用 UPX 以避免 DLL 加载问题
-    upx_exclude=[],
-    name='perf-testing',
 )

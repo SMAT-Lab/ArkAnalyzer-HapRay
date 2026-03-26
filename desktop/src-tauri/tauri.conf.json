@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ArkAnalyzer-HapRay",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "identifier": "arkanalyzer.hapray",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -46,15 +46,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": {
-      "../../dist/tools/": "tools"
-    },
-    "linux": {
-      "deb": {
-        "files": {
-          "/usr/share/arkanalyzer-hapray/tools": "../../dist/tools/"
-        }
-      }
-    }
+    "resources": [
+      "tools"
+    ]
   }
 }

@@ -63,11 +63,17 @@ class ExeUtils:
         # 打包后：project_root 是 exe 所在目录（D:\haprayTest\tools\perf-testing）
         # 开发环境：project_root 是仓库根目录
         candidates = []
+        checked_paths = []
         # web 和 xvm 打包在 perf-testing 内，需优先从 project_root 查找
         bundled_in_perf_testing = relative_segments and relative_segments[0] in ('web', 'xvm')
 
         if getattr(sys, 'frozen', False):
             if bundled_in_perf_testing:
+                # onefile: 资源通常解包到 _MEIPASS（临时目录）
+                meipass = getattr(sys, '_MEIPASS', None)
+                if meipass:
+                    candidates.append(os.path.join(meipass, 'resource'))
+                    candidates.append(meipass)
                 # 打包后：resource 目录整体打包，web/xvm 在 _internal/resource 下
                 candidates.append(os.path.join(project_root, '_internal', 'resource'))
                 # 兼容旧版：web/xvm 直接在 _internal 下
@@ -91,6 +97,7 @@ class ExeUtils:
             tools_dir = os.path.abspath(base)
             if relative_segments:
                 tools_dir = os.path.join(tools_dir, *relative_segments)
+            checked_paths.append(tools_dir)
 
             if os.path.exists(tools_dir):
                 return tools_dir
@@ -100,7 +107,7 @@ class ExeUtils:
         )
         if require:
             raise FileNotFoundError(
-                f'Tools directory not found. Checked: {", ".join(os.path.abspath(c) for c in candidates)}'
+                f'Tools directory not found. Checked: {", ".join(checked_paths)}'
             )
         return None
 
@@ -135,9 +142,18 @@ class ExeUtils:
         if not os.path.exists(tool_path):
             raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
 
-        # Set execute permissions for Unix-like systems
+        # Set execute permissions for Unix-like systems.
+        # 在某些环境（如签名后的 .app、只读卷、受限 ACL）中，chmod 可能被拒绝；
+        # 这里不应在 import 阶段抛异常导致 `perf --help` 等基础命令失败。
         if system in ('darwin', 'linux'):
-            os.chmod(tool_path, 0o755)  # rwxr-xr-x
+            try:
+                current_mode = os.stat(tool_path).st_mode
+                if not (current_mode & 0o111):
+                    os.chmod(tool_path, current_mode | 0o111)
+            except PermissionError as e:
+                logger.warning('No permission to chmod trace_streamer (%s): %s', tool_path, str(e))
+            except OSError as e:
+                logger.warning('Failed to ensure executable bit for trace_streamer (%s): %s', tool_path, str(e))
 
         return tool_path
 

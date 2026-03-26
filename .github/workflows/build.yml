@@ -130,12 +130,78 @@ jobs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: desktop/src-tauri
+        # 避免 Ubuntu 22/24 之间复用导致的 target 元数据不一致
+        shared-key: tauri-${{ matrix.item.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+        # 优先稳定性：不缓存 target，仅缓存 registry/git 依赖
+        cache-targets: false
+
+    - name: Diagnose Tauri dependency resolution
+      working-directory: desktop/src-tauri
+      run: |
+        cargo tree -i tauri
 
     - name: Install dependencies
       run: |        
         npm install --no-package-lock
 
+    # macOS：Base64 p12 → Developer ID Application 签名（未配置 APPLE_CERTIFICATE 则跳过，产物未签名）
+    # 必配 Secrets：APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、KEYCHAIN_PASSWORD、APPLE_SIGNING_IDENTITY
+    # 可选：APPLE_TEAM_ID；公证另配 APPLE_ID+APPLE_PASSWORD 或 APPLE_API_ISSUER+APPLE_API_KEY+APPLE_API_PRIVATE_KEY
+    # 清单见 docs/github-actions-macos-signing.md §3.0
+    - name: Import Apple Developer certificate (macOS)
+      if: matrix.item.platform == 'darwin'
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        set -euo pipefail
+        if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+          echo "APPLE_CERTIFICATE 未配置，跳过导入；DMG 将为未签名（PR/无密钥仓库属正常）。"
+          exit 0
+        fi
+        if [ -z "${KEYCHAIN_PASSWORD:-}" ]; then
+          echo "已设置 APPLE_CERTIFICATE 但缺少 KEYCHAIN_PASSWORD，无法创建临时钥匙串。" >&2
+          exit 1
+        fi
+        echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+        security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+        security set-keychain-settings -t 3600 -u build.keychain
+        security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+        rm -f certificate.p12
+        security find-identity -v -p codesigning build.keychain
+
+    # macOS：将 App Store Connect API 私钥（.p8 全文）写入临时文件，供 notarytool / Tauri 使用的 APPLE_API_KEY_PATH
+    - name: Write App Store Connect API private key (macOS)
+      if: matrix.item.platform == 'darwin'
+      env:
+        APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+      run: |
+        set -euo pipefail
+        if [ -z "${APPLE_API_PRIVATE_KEY:-}" ]; then
+          echo "APPLE_API_PRIVATE_KEY 未配置；若使用 API Key 公证，请设置该 Secret（整段 .p8 内容）。"
+          exit 0
+        fi
+        KEY_PATH="${RUNNER_TEMP}/AuthKey.p8"
+        printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$KEY_PATH"
+        chmod 600 "$KEY_PATH"
+        echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
     - name: PyInstaller build
+      env:
+        # macOS 签名 / 公证（其它平台忽略）；与 Tauri v2 文档一致
+        # Apple ID 公证：配 APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID；勿配 APPLE_API_* / APPLE_API_PRIVATE_KEY
+        # API Key 公证：配 APPLE_API_ISSUER、APPLE_API_KEY，且上一「Write API private key」需有 APPLE_API_PRIVATE_KEY
+        # APPLE_API_KEY_PATH 仅由「Write API private key」写入 GITHUB_ENV，勿在此处用空 secret 覆盖
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       run: |
         npm run build
         npm run release
