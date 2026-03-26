@@ -16,7 +16,7 @@ _LOG_FILE_PATH: Optional[Path] = None
 _STDOUT_WRAPPER = None  # Keep reference to prevent garbage collection
 
 
-def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
+def setup_logging(output_dir, level: Optional[str] = None, machine_json: bool = False) -> Path:
     """
     初始化 logging，配置控制台与文件双通道输出。
 
@@ -35,7 +35,8 @@ def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
     log_level = level or os.getenv('SYMBOL_RECOVERY_LOG_LEVEL', 'INFO')
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    log_dir = output_dir / 'logs'
+    out_base = Path(output_dir)
+    log_dir = out_base / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / 'symbol_recovery.log'
 
@@ -45,15 +46,17 @@ def setup_logging(output_dir: str, level: Optional[str] = None) -> Path:
 
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s - %(message)s', '%Y-%m-%d %H:%M:%S')
 
-    # Create UTF-8 encoded wrapper for stdout
-    # Keep reference in global variable to prevent garbage collection
+    # Create UTF-8 encoded wrapper for stdout or stderr (--machine-json 时控制台走 stderr)
     global _STDOUT_WRAPPER
     if _STDOUT_WRAPPER is None:
-        # Use TextIOWrapper to set UTF-8 encoding for stdout
-        # Keep reference to prevent the wrapper from being closed
         _STDOUT_WRAPPER = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 
-    console_handler = logging.StreamHandler(_STDOUT_WRAPPER)
+    if machine_json:
+        _console_stream = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    else:
+        _console_stream = _STDOUT_WRAPPER
+
+    console_handler = logging.StreamHandler(_console_stream)
     console_handler.setLevel(numeric_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)

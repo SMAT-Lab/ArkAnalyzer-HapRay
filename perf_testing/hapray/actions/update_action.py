@@ -21,6 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
@@ -32,7 +33,7 @@ class UpdateAction:
     """Handles report update actions for existing performance reports."""
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> ActionExecuteReturn:
         """Executes report update workflow."""
         parser = argparse.ArgumentParser(
             description='Update existing performance reports',
@@ -142,7 +143,7 @@ class UpdateAction:
         Config.set('mode', parsed_args.mode)
         if not os.path.exists(report_dir) and Config.get('mode') == Mode.COMMUNITY:
             logging.error('Report directory not found: %s', report_dir)
-            return
+            return (1, '')
         if Config.get('mode') == Mode.SIMPLE:
             # 简单模式构造目录
             perf_paths = parsed_args.perfs
@@ -185,7 +186,7 @@ class UpdateAction:
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
         if not testcase_dirs:
             logging.error('No valid test case reports found')
-            return
+            return (1, '')
 
         # Parse time ranges
         time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
@@ -214,6 +215,8 @@ class UpdateAction:
                 )
             except Exception as e:
                 logging.getLogger().exception('HapFlow pipeline failed: %s', e)
+
+        return (0, report_dir)
 
     @staticmethod
     def find_testcase_dirs(report_dir):

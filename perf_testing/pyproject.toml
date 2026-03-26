@@ -44,6 +44,9 @@ hapray = "scripts.main:main"
 Homepage = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 Documentation = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/-/wikis"
 
+[dependency-groups]
+dev = ["pytest"]
+
 [tool.setuptools.packages.find]
 exclude = ["tests*"]
 

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hapray.local/docs/schemas/hapray-tool-result-v1.json",
+  "title": "HapRay tool-result v1",
+  "description": "Machine-readable CLI exit contract (Agent / automation). Prefer writing to a file: beside -o as hapray-tool-result.json, or --result-file. --machine-json is stdout fallback when the file cannot be written or no output path exists.",
+  "type": "object",
+  "required": ["schema_version", "tool_id", "success", "exit_code", "outputs", "error"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "tool_id": {
+      "type": "string",
+      "enum": ["perf_testing", "optimization_detector", "static_analyzer", "symbol_recovery"]
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "description": "Subcommand or action name when applicable (e.g. perf, static, hap)."
+    },
+    "success": {
+      "description": "false = failure; null = completed but outcome not reduced to a boolean (e.g. legacy actions returning None).",
+      "type": ["boolean", "null"]
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "May include hapray_tool_result_path (written contract file), hapray_tool_result_sink when stdout fallback. optimization_detector adds report_files, reports_by_format, formats for -o/-f outputs."
+    },
+    "error": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

@@ -25,6 +25,7 @@ from typing import Optional
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.path_utils import get_reports_root, get_runtime_root
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator
@@ -48,21 +49,21 @@ class HapTestAction:
     """Strategy-driven UI automation with performance capture"""
 
     @staticmethod
-    def execute(args) -> Optional[str]:
+    def execute(args) -> ActionExecuteReturn:
         """Execute HapTest automation
 
         Args:
             args: Command line arguments
 
         Returns:
-            Report path if successful, None otherwise
+            (exit_code, reports_path)
         """
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         if not check_env():
             logging.error(ENV_ERR_STR)
-            return None
+            return (1, '')
 
         parser = argparse.ArgumentParser(
             description='Strategy-driven UI automation with perf/trace capture', prog='ArkAnalyzer-HapRay haptest'
@@ -157,9 +158,9 @@ class HapTestAction:
             logging.info('HapTest Automation Completed Successfully')
             logging.info('Reports: %s', reports_path)
             logging.info('=' * 60)
-            return reports_path
+            return (0, reports_path)
         logging.error('HapTest Automation Failed')
-        return None
+        return (1, '')
 
 
 class HapTestRunner:

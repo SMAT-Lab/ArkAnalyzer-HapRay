@@ -302,10 +302,13 @@ function main() {
       process.exit(1);
     }
 
-    console.log("\nStep 2: 生成 .dmg...");
+    console.log("\nStep 2: 复制产物到 ./dist...");
+    copyToDist();
+
+    console.log("\nStep 3: 生成 .dmg...");
     let reuseExistingDmg = false;
     if (!fs.existsSync(bundleDmgSh)) {
-      const { appPath, dmgPath } = getMacBundleArtifacts();
+      const { dmgPath } = getMacBundleArtifacts();
       // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh
       // 注意：tauri bundle 内部运行 bundle_dmg.sh 时可能因 AppleScript 权限失败，
       // 但我们只需要 bundle_dmg.sh 文件，后续用 --skip-jenkins 自行调用即可
@@ -325,14 +328,6 @@ function main() {
         console.log("\n检测到 tauri bundle 已生成 dmg，直接复用该产物。");
         reuseExistingDmg = true;
       }
-      // tauri bundle 可能清理 .app；后续 copyToDist 仍需要 .app，缺失时补构建一次。
-      if (!fs.existsSync(appPath)) {
-        console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
-        if (!buildAppWithOfflineNotaryFallback()) {
-          console.error("错误: 重新构建 .app 失败（含跳过 notarization 重试）");
-          process.exit(1);
-        }
-      }
     }
 
     if (!reuseExistingDmg) {
@@ -348,8 +343,6 @@ function main() {
         process.exit(1);
       }
     }
-    console.log("\nStep 3: 复制产物到 ./dist...");
-    copyToDist();
   } else {
     // 其他平台：保持原有流程
     console.log("构建应用...");
