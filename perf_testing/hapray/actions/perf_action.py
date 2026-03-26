@@ -27,6 +27,7 @@ from typing import Optional
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.folder_utils import delete_folder, scan_folders
 from hapray.core.common.path_utils import get_reports_root
@@ -233,14 +234,14 @@ class PerfAction:
         return matched_cases
 
     @staticmethod
-    def execute(args) -> Optional[str]:
-        """Execute performance testing workflow"""
+    def execute(args) -> ActionExecuteReturn:
+        """Execute performance testing workflow. Returns (exit_code, reports_path)."""
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         if not check_env():
             logging.error(ENV_ERR_STR)
-            return None
+            return (1, '')
 
         parser = argparse.ArgumentParser(
             description='Code-oriented Performance Analysis for OpenHarmony Apps', prog='ArkAnalyzer-HapRay perf'
@@ -331,7 +332,7 @@ class PerfAction:
             logging.error(
                 'Invalid configuration: All collection modes are disabled. Enable at least one of: perf, trace, or memory'
             )
-            return None
+            return (1, '')
 
         # Log collection mode
         modes = []
@@ -362,7 +363,7 @@ class PerfAction:
                 )
             except Exception as e:
                 logging.getLogger().exception('HapFlow pipeline failed: %s', e)
-        return reports_path
+        return (0, reports_path)
 
     def run(self):
         """Main execution flow for performance testing"""

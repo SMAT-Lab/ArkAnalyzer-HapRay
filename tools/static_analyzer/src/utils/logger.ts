@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  */
 
-import log4js from 'log4js';
+import log4js, { type Configuration } from 'log4js';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -141,6 +141,66 @@ class Logger {
                 },
             },
         });
+    }
+
+    /**
+     * 将控制台日志改到 stderr，便于 stdout 仅输出 --machine-json 的 JSON 行。
+     * 需在子命令（如 hap）解析到 --machine-json 后、业务日志输出前调用。
+     */
+    static reconfigureForMachineJson(): void {
+        log4js.shutdown();
+        const logFilePath = Logger.resolveDefaultLogPath('HapRay.log');
+        const appendersTypes: Array<string> = [];
+        if (logFilePath) {
+            appendersTypes.push('file');
+        }
+        appendersTypes.push('stderrConsole');
+
+        const appenders: NonNullable<Configuration['appenders']> = {
+            stderrConsole: {
+                type: 'stderr',
+                layout: {
+                    type: 'pattern',
+                    pattern: '[%d] [%p] [%z] [%X{module}] - [%X{tag}] %m',
+                },
+            },
+        };
+        if (logFilePath) {
+            appenders.file = {
+                type: 'fileSync',
+                filename: logFilePath,
+                maxLogSize: 5 * 1024 * 1024,
+                backups: 5,
+                compress: true,
+                encoding: 'utf-8',
+                layout: {
+                    type: 'pattern',
+                    pattern: '[%d] [%p] [%z] [%X{module}] - [%X{tag}] %m',
+                },
+            };
+        }
+
+        const cfg: Configuration = {
+            appenders,
+            categories: {
+                default: {
+                    appenders: ['stderrConsole'],
+                    level: 'info',
+                    enableCallStack: false,
+                },
+                ArkAnalyzer: {
+                    appenders: appendersTypes,
+                    level: LOG_LEVEL.ERROR,
+                    enableCallStack: true,
+                },
+                Tool: {
+                    appenders: appendersTypes,
+                    level: LOG_LEVEL.INFO,
+                    enableCallStack: true,
+                },
+            },
+        };
+        log4js.configure(cfg);
     }
 
     static getLogger(logType: LogModuleType, tag = '-'): log4js.Logger {

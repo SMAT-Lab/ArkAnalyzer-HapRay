@@ -26,6 +26,7 @@ from typing import Optional
 
 import pandas as pd
 
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.common.path_utils import get_user_data_root
@@ -284,7 +285,7 @@ class HilogAction:
     """Handles hilog analysis and statistics generation"""
 
     @staticmethod
-    def execute(args) -> Optional[str]:
+    def execute(args) -> ActionExecuteReturn:
         """Execute hilog analysis workflow"""
         parser = argparse.ArgumentParser(
             description='Analyze hilog files and generate statistics', prog='ArkAnalyzer-HapRay hilog'
@@ -313,7 +314,10 @@ class HilogAction:
         if sys.platform == 'darwin':
             parsed_args.output = str(get_user_data_root('hilog') / os.path.basename(parsed_args.output))
         action = HilogAction()
-        return action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
+        out_path = action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
+        if out_path is None:
+            return (1, '')
+        return (0, out_path)
 
     def run(self, hilog_dir: str, output_file: str, detail: bool = False) -> Optional[str]:
         """Run hilog analysis"""

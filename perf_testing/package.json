@@ -13,7 +13,7 @@
     "build:python": "npm run build:onefile",
     "lint": "uv run tox -e lint",
     "lint:fix": "uv run tox -e lint-fix",
-    "test": "uv run tox",
+    "test": "uv run --group dev pytest tests -v",
     "clean": "rm -rf build .venv && rm -rf ../dist/tools/perf-testing"
   },
   "author": "",

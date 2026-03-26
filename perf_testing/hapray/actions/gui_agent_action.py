@@ -17,9 +17,9 @@ import argparse
 import os
 import sys
 import time
-from typing import Optional
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.config.config import Config
 from hapray.core.gui_agent import GuiAgentConfig, execute_scenes
@@ -29,7 +29,7 @@ class GuiAgentAction:
     """GUI Agent命令行入口，支持单任务和批量任务执行"""
 
     @staticmethod
-    def execute(args) -> Optional[int]:
+    def execute(args) -> ActionExecuteReturn:
         """
         执行GUI Agent工作流
 
@@ -37,10 +37,10 @@ class GuiAgentAction:
             args: 命令行参数列表
 
         Returns:
-            返回码，0表示成功，非0表示失败
+            (exit_code, reports_path)。子进程 fork 返回 (0, '')
         """
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         parser = argparse.ArgumentParser(
             description='GUI Agent - AI-powered phone automation using LLM',
@@ -155,5 +155,6 @@ class GuiAgentAction:
             report_path=reports_path,
         )
 
-        # Execute scenes
-        return execute_scenes(parsed_args.app_packages, parsed_args.scenes, config)
+        # Execute scenes（返回码 + 报告根目录，供 hapray-tool-result.json 使用）
+        code = execute_scenes(parsed_args.app_packages, parsed_args.scenes, config)
+        return (code, reports_path)
