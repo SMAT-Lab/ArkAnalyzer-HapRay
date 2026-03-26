@@ -106,9 +106,7 @@ class ExeUtils:
             f'Tools directory not found. project_root: {project_root}, frozen: {getattr(sys, "frozen", False)}'
         )
         if require:
-            raise FileNotFoundError(
-                f'Tools directory not found. Checked: {", ".join(checked_paths)}'
-            )
+            raise FileNotFoundError(f'Tools directory not found. Checked: {", ".join(checked_paths)}')
         return None
 
     @staticmethod

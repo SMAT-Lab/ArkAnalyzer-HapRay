@@ -15,6 +15,11 @@ import numpy as np
 from optimization_detector.file_info import FileInfo
 
 try:
+    from scipy.special import expit
+except ImportError:
+    expit = None
+
+try:
     import joblib
 except ImportError:
     import pickle as joblib  # 降级到pickle（如果joblib不可用）
@@ -168,12 +173,12 @@ class LtoDetector:
     def detect_chunk_based(self, file_info: FileInfo, chunks: list[bytes], opt_level: Optional[str] = None) -> dict:
         """
         基于 chunk 的 LTO 检测（每个 chunk 单独预测，然后统计）
-        
+
         Args:
             file_info: FileInfo对象
             chunks: 从 .text 段提取的 chunks 列表
             opt_level: 优化级别（已废弃，保留以兼容）
-        
+
         Returns:
             {
                 'score': float,           # 平均 LTO 分数 [0-1]
@@ -201,43 +206,67 @@ class LtoDetector:
 
         # 延迟加载模型
         if not self._load_model():
-            return {'score': None, 'prediction': 'N/A', 'model_used': 'N/A', 
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
-        
+            return {
+                'score': None,
+                'prediction': 'N/A',
+                'model_used': 'N/A',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
+
         if not chunks or len(chunks) == 0:
-            return {'score': None, 'prediction': 'No chunks', 'model_used': 'Unified SVM',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
-        
+            return {
+                'score': None,
+                'prediction': 'No chunks',
+                'model_used': 'Unified SVM',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
+
         # 提取文件级别的全局特征（ELF头、符号表等）
         global_features = self._extract_features(so_path)
         if global_features is None:
-            return {'score': None, 'prediction': 'Failed', 'model_used': 'Unified SVM',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
-        
+            return {
+                'score': None,
+                'prediction': 'Failed',
+                'model_used': 'Unified SVM',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
+
         # 获取特征提取器以提取局部特征
         if self.feature_extractor is None:
             if self.AllFeatureExtractor is None:
-                return {'score': None, 'prediction': 'Failed', 'model_used': 'Unified SVM',
-                       'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
+                return {
+                    'score': None,
+                    'prediction': 'Failed',
+                    'model_used': 'Unified SVM',
+                    'chunk_scores': [],
+                    'chunk_predictions': [],
+                    'distribution': {},
+                }
             self.feature_extractor = self.AllFeatureExtractor()
-        
+
         chunk_scores = []
         chunk_predictions = []
-        
+
         try:
             # 对每个 chunk 提取局部特征并预测
-            for i, chunk_data in enumerate(chunks):
+            for _i, chunk_data in enumerate(chunks):
                 # 提取 chunk 的局部特征（字节直方图、指令统计等）
                 chunk_features = self._extract_chunk_features(chunk_data, global_features, so_path)
-                
+
                 if chunk_features is None:
                     continue
-                
+
                 # 预测
                 features_2d = chunk_features.reshape(1, -1)
                 scaler = self.model.steps[0][1]
                 scaled_features = scaler.transform(features_2d)
-                
+
                 # 应用特征截断修复
                 svm = self.model.steps[-1][1]
                 if hasattr(svm, 'support_vectors_') and len(svm.support_vectors_) > 0:
@@ -246,17 +275,16 @@ class LtoDetector:
                     feature_min = sv_min - 3 * (sv_max - sv_min)
                     feature_max = sv_max + 3 * (sv_max - sv_min)
                     scaled_features = np.clip(scaled_features, feature_min, feature_max)
-                
+
                 decision = svm.decision_function(scaled_features)
                 decision_value = float(decision[0])
-                
+
                 # 转换为概率（用于单个 chunk 的预测）
-                try:
-                    from scipy.special import expit
+                if expit is not None:
                     lto_score = float(expit(decision_value))
-                except ImportError:
+                else:
                     lto_score = 1.0 / (1.0 + math.exp(-decision_value))
-                
+
                 # 使用更低的阈值（0.45）来减少漏报（实际开了 LTO 但被误判为没开）
                 # 根据大规模数据分析（1073个文件）：
                 # - 阈值 0.45：高优化级别识别率 89.0%，低优化级别误报率 16.7%
@@ -264,30 +292,36 @@ class LtoDetector:
                 # 选择 0.45 以显著提高识别率，减少漏报
                 lto_label = 1 if lto_score >= 0.45 else 0
                 prediction = 'LTO' if lto_label == 1 else 'No LTO'
-                
+
                 # 保存分数和预测结果
                 chunk_scores.append(lto_score)  # 保留原始 sigmoid 分数用于参考
                 chunk_predictions.append(prediction)
-            
+
             if len(chunk_scores) == 0:
-                return {'score': None, 'prediction': 'Failed', 'model_used': 'Unified SVM',
-                       'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
-            
+                return {
+                    'score': None,
+                    'prediction': 'Failed',
+                    'model_used': 'Unified SVM',
+                    'chunk_scores': [],
+                    'chunk_predictions': [],
+                    'distribution': {},
+                }
+
             # 统计结果（学习 optimization_detector 的累加分数方式）
             # 方案：直接累加每个 chunk 的预测概率（sigmoid 分数）
             # 类似 optimization_detector 累加每个 chunk 的优化级别分数
             total_chunks = len(chunk_scores)
             total_score = sum(chunk_scores)  # 累加所有 chunks 的预测概率
             avg_score = total_score / total_chunks  # 平均概率作为最终 LTO 分数
-            
+
             # 预测结果：基于累加分数（>= 0.45 为 LTO，使用更低的阈值减少漏报）
             # 根据大规模数据分析，0.45 阈值可以将高优化级别的识别率从 74.4% 提升到 89.0%
             final_prediction = 'LTO' if avg_score >= 0.45 else 'No LTO'
-            
+
             # 统计分布（用于报告）
             lto_count = chunk_predictions.count('LTO')
             no_lto_count = chunk_predictions.count('No LTO')
-            
+
             result = {
                 'score': avg_score,
                 'prediction': final_prediction,
@@ -304,68 +338,75 @@ class LtoDetector:
 
         except Exception as e:
             logging.debug('Chunk-based LTO prediction failed for %s: %s', so_path, e)
-            return {'score': None, 'prediction': 'Error', 'model_used': 'Unified SVM',
-                   'chunk_scores': [], 'chunk_predictions': [], 'distribution': {}}
-    
-    def _extract_chunk_features(self, chunk_data: bytes, global_features: np.ndarray, so_path: str) -> Optional[np.ndarray]:
+            return {
+                'score': None,
+                'prediction': 'Error',
+                'model_used': 'Unified SVM',
+                'chunk_scores': [],
+                'chunk_predictions': [],
+                'distribution': {},
+            }
+
+    def _extract_chunk_features(
+        self, chunk_data: bytes, global_features: np.ndarray, so_path: str
+    ) -> Optional[np.ndarray]:
         """
         提取 chunk 的混合特征（全局特征 + 局部特征）
-        
+
         Args:
             chunk_data: chunk 的二进制数据
             global_features: 文件级别的全局特征向量
             so_path: SO文件路径
-        
+
         Returns:
             混合特征向量 或 None
         """
         try:
             if self.feature_extractor is None or self.feature_names is None:
                 return None
-            
+
             # 提取 chunk 的局部特征
             # 1. 字节直方图特征（类似 CompilerProvenanceExtractor）
             chunk_local_features = self._extract_chunk_byte_features(chunk_data)
-            
+
             # 2. 指令统计特征（如果 chunk 足够大，可以反汇编）
-            chunk_insn_features = self._extract_chunk_instruction_features(chunk_data)
-            
+            self._extract_chunk_instruction_features(chunk_data)
+
             # 3. 将局部特征对齐到全局特征向量
             # 策略：对于可以局部提取的特征，使用局部值；否则使用全局值
-            mixed_features = global_features.copy()
-            
+            global_features.copy()
+
             # 更新 HIER_* 特征（字节直方图）
             hier_feature_indices = [i for i, n in enumerate(self.feature_names) if n.startswith('HIER_')]
             if hier_feature_indices and chunk_local_features:
                 # 提取局部特征的名称（需要从 extractor 获取）
                 # 这里简化处理：直接使用全局特征，但可以后续优化
                 pass
-            
+
             # 更新 O3_* 中的指令统计特征
             insn_feature_keywords = ['d_bl', 'd_blr', 'd_br', 'd_ret', 'd_vec', 'INSN']
-            insn_feature_indices = [i for i, n in enumerate(self.feature_names) 
-                                   if any(kw in n for kw in insn_feature_keywords)]
-            
+            [i for i, n in enumerate(self.feature_names) if any(kw in n for kw in insn_feature_keywords)]
+
             # 简化实现：直接返回全局特征（因为局部特征提取较复杂）
             # 后续可以优化为真正的混合特征
             return global_features
-            
+
         except Exception as e:
             logging.debug('Failed to extract chunk features: %s', e)
             return None
-    
+
     def _extract_chunk_byte_features(self, chunk_data: bytes) -> Optional[dict]:
         """提取 chunk 的字节级特征"""
         try:
             if len(chunk_data) == 0:
                 return None
-            
+
             arr = np.frombuffer(chunk_data, dtype=np.uint8)
             counts = np.bincount(arr, minlength=256)
             probs = counts / len(arr)
             probs = probs[probs > 0]
             entropy = -np.sum(probs * np.log2(probs))
-            
+
             return {
                 'entropy': entropy,
                 'zero_ratio': float(np.mean(arr == 0)),
@@ -376,29 +417,31 @@ class LtoDetector:
             }
         except Exception:
             return None
-    
+
     def _extract_chunk_instruction_features(self, chunk_data: bytes) -> Optional[dict]:
         """提取 chunk 的指令统计特征（如果可能）"""
         # 简化实现：如果 chunk 太小，不进行反汇编
         if len(chunk_data) < 16:
             return None
-        
+
         # 可以在这里添加 capstone 反汇编逻辑
         # 但为了简化，暂时返回 None
         return None
-    
-    def _extract_chunk_features(self, chunk_data: bytes, global_features: np.ndarray, so_path: str) -> Optional[np.ndarray]:
+
+    def _extract_chunk_features(
+        self, chunk_data: bytes, global_features: np.ndarray, so_path: str
+    ) -> Optional[np.ndarray]:
         """
         提取 chunk 的混合特征（全局特征 + 局部特征）
-        
+
         当前实现：直接使用全局特征（因为模型是基于全局特征训练的）
         后续可以优化为真正的混合特征
-        
+
         Args:
             chunk_data: chunk 的二进制数据
             global_features: 文件级别的全局特征向量
             so_path: SO文件路径
-        
+
         Returns:
             混合特征向量（当前返回全局特征）
         """
@@ -443,13 +486,13 @@ class LtoDetector:
         try:
             # 预测（模型是 Pipeline，包含 StandardScaler 和 SVC）
             features_2d = features.reshape(1, -1)  # 转为2D数组
-            
+
             # 临时修复：对异常大的特征值进行截断
             # 标准化后，如果特征值超过合理范围（如 ±100），进行截断
             # 这可以防止 RBF 核值下溢为 0
             scaler = self.model.steps[0][1]
             scaled_features = scaler.transform(features_2d)
-            
+
             # 截断异常大的特征值（基于支持向量的范围）
             svm = self.model.steps[-1][1]
             if hasattr(svm, 'support_vectors_') and len(svm.support_vectors_) > 0:
@@ -461,7 +504,7 @@ class LtoDetector:
                 feature_max = sv_max + 3 * (sv_max - sv_min)
                 # 截断
                 scaled_features = np.clip(scaled_features, feature_min, feature_max)
-            
+
             # 注意：SVM Pipeline 在训练时设置了 probability=False，所以没有 predict_proba
             # 使用 decision_function 并转换为概率
             decision = self.model.steps[-1][1].decision_function(scaled_features)

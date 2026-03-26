@@ -41,7 +41,11 @@ def per_thread_redundancy_score(thread: dict[str, Any]) -> int:
     wakeup_depth = first.get('wakeup_depth', -1)
     wakeup_count = 0
     total_dur = sum(num(s.get('dur', 0)) for s in thread_states) if thread_states else 0
-    wait_dur = sum(num(s.get('dur', 0)) for s in thread_states if s.get('state', '') in ['S', 'D', 'T']) if thread_states else 0
+    wait_dur = (
+        sum(num(s.get('dur', 0)) for s in thread_states if s.get('state', '') in ['S', 'D', 'T'])
+        if thread_states
+        else 0
+    )
     waiting_ratio = wait_dur / total_dur if total_dur > 0 else 0.0
     if waiting_ratio > 0.95:
         score += 30
@@ -68,14 +72,16 @@ def per_thread_redundancy_score(thread: dict[str, Any]) -> int:
                     if any(k in s for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
                         has_yield = True
                         break
-            elif any(k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
+            elif any(
+                k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']
+            ):
                 has_yield = True
             if has_yield:
                 break
         if has_yield:
             break
     if has_yield:
-        score += 15   # 忙等类（含 yield/ITT）收益大，单线程上给予更高权重
+        score += 15  # 忙等类（含 yield/ITT）收益大，单线程上给予更高权重
     if not thread_states:
         return min(100, score)
     states = sorted(thread_states, key=lambda x: num(x.get('ts', 0)))
@@ -105,7 +111,7 @@ def per_thread_redundancy_score(thread: dict[str, Any]) -> int:
     if lifetime > 0 and running_duration >= 0:
         run_ratio = running_duration / lifetime
         if inst > 10000 and run_ratio < 0.05 and short_cycles >= 5:
-            score += 22   # 强忙等：高指令低运行，收益大，提高分数
+            score += 22  # 强忙等：高指令低运行，收益大，提高分数
         elif inst > 5000 and run_ratio < 0.1 and short_cycles >= 3:
             score += 16
         elif inst > 2000 and run_ratio < 0.15 and short_cycles >= 2:
@@ -116,9 +122,14 @@ def per_thread_redundancy_score(thread: dict[str, Any]) -> int:
 def thread_redundancy_features(thread: dict[str, Any]) -> dict[str, Any]:
     """提取单线程用于冗余打分的特征，供 below_threshold_patterns 的特征汇总使用。"""
     out = {
-        'waiting_ratio': 0.0, 'total_instructions': 0, 'has_callchain': False,
-        'has_yield': False, 'short_cycles': 0, 'run_ratio': 0.0,
-        'wakeup_depth': -1, 'wakeup_count': 0,
+        'waiting_ratio': 0.0,
+        'total_instructions': 0,
+        'has_callchain': False,
+        'has_yield': False,
+        'short_cycles': 0,
+        'run_ratio': 0.0,
+        'wakeup_depth': -1,
+        'wakeup_count': 0,
     }
     wts = thread.get('wakeup_threads', [])
     if not wts:
@@ -127,7 +138,11 @@ def thread_redundancy_features(thread: dict[str, Any]) -> dict[str, Any]:
     thread_states = first.get('thread_states', [])
     out['wakeup_depth'] = first.get('wakeup_depth', -1)
     total_dur = sum(num(s.get('dur', 0)) for s in thread_states) if thread_states else 0
-    wait_dur = sum(num(s.get('dur', 0)) for s in thread_states if s.get('state', '') in ['S', 'D', 'T']) if thread_states else 0
+    wait_dur = (
+        sum(num(s.get('dur', 0)) for s in thread_states if s.get('state', '') in ['S', 'D', 'T'])
+        if thread_states
+        else 0
+    )
     out['waiting_ratio'] = wait_dur / total_dur if total_dur > 0 else 0.0
     out['total_instructions'] = num(thread.get('total_instructions', 0))
     out['has_callchain'] = any(wt.get('callchains') for wt in wts)
@@ -143,7 +158,9 @@ def thread_redundancy_features(thread: dict[str, Any]) -> dict[str, Any]:
                     if any(k in s for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
                         out['has_yield'] = True
                         break
-            elif any(k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
+            elif any(
+                k in str(callchain).lower() for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']
+            ):
                 out['has_yield'] = True
             if out['has_yield']:
                 break
@@ -185,7 +202,7 @@ def analyze_optimization_opportunities(
         'below_threshold_patterns': [],
         'cpu_optimization_opportunities': [],
         'memory_optimization_opportunities': [],
-        'recommendations': []
+        'recommendations': [],
     }
     high_inst_low_work_running_ratio = 0.02
     high_inst_low_work_short_cycles = 10
@@ -212,7 +229,7 @@ def analyze_optimization_opportunities(
     patterns_to_process = [k for k in threads_by_name if not should_ignore_system_pattern(k)]
     total_patterns = len(patterns_to_process)
     if verbose and total_patterns > 0:
-        print(f"  共 {total_patterns} 个 pattern 待分析（已排除 OS_ 系统线程）")
+        print(f'  共 {total_patterns} 个 pattern 待分析（已排除 OS_ 系统线程）')
         sys.stdout.flush()
     processed = 0
 
@@ -222,7 +239,7 @@ def analyze_optimization_opportunities(
         processed += 1
         if verbose and (processed == 1 or processed % 20 == 0 or processed == total_patterns):
             name_display = (thread_name[:36] + '...') if len(thread_name) > 36 else thread_name
-            print(f"  进度: pattern {processed}/{total_patterns} — {name_display}")
+            print(f'  进度: pattern {processed}/{total_patterns} — {name_display}')
             sys.stdout.flush()
         total_count = len(thread_list)
         scored = [(per_thread_redundancy_score(t), t) for t in thread_list]
@@ -232,7 +249,9 @@ def analyze_optimization_opportunities(
             primary_worker = max(thread_list, key=lambda t: num(t.get('total_instructions', 0)))
             primary_tid = primary_worker.get('thread_id') or primary_worker.get('thread_info', {}).get('tid')
             if primary_tid is not None:
-                passed_list = [t for t in passed_list if (t.get('thread_id') or t.get('thread_info', {}).get('tid')) != primary_tid]
+                passed_list = [
+                    t for t in passed_list if (t.get('thread_id') or t.get('thread_info', {}).get('tid')) != primary_tid
+                ]
             else:
                 passed_list = [t for t in passed_list if t is not primary_worker]
         count = len(passed_list)
@@ -292,7 +311,11 @@ def analyze_optimization_opportunities(
                         for func in callchain.get('functions', []):
                             raw_name = func.get('name') or func.get('symbol', '') or ''
                             raw_path = func.get('file_path', '') or ''
-                            s = (str(raw_name) + ' ' + str(raw_path)).lower() if isinstance(func, dict) else str(func).lower()
+                            s = (
+                                (str(raw_name) + ' ' + str(raw_path)).lower()
+                                if isinstance(func, dict)
+                                else str(func).lower()
+                            )
                             if any(k in s for k in ['yield', 'sched_yield', '__itt_thread_yield', 'itt_thread_yield']):
                                 has_yield = True
                                 break
@@ -337,7 +360,11 @@ def analyze_optimization_opportunities(
                         if prev == 'R' and nxt in ['S', 'D', 'T']:
                             short_running_cycles += 1
                         elif prev == 'Running' and nxt == 'S' and i + 3 < len(states):
-                            if states[i + 2].get('state') == 'R' and states[i + 3].get('state') == 'Running' and num(states[i + 3].get('dur', 0)) < 1_000_000:
+                            if (
+                                states[i + 2].get('state') == 'R'
+                                and states[i + 3].get('state') == 'Running'
+                                and num(states[i + 3].get('dur', 0)) < 1_000_000
+                            ):
                                 short_running_cycles += 1
                         elif prev == 'Running' and nxt == 'Running':
                             short_running_cycles += 1
@@ -349,11 +376,25 @@ def analyze_optimization_opportunities(
             if running_duration == 0:
                 threads_never_running += 1
             thread_instructions = num(thread.get('total_instructions', 0))
-            thread_lifetime = (num(end_ts) - num(start_ts)) if (start_ts is not None and end_ts is not None) else sum(num(s.get('dur', 0)) for s in thread_states)
-            if thread_instructions > 10000 and running_duration > 0 and thread_lifetime > 0 and running_duration / thread_lifetime < high_inst_low_work_running_ratio and short_running_cycles >= high_inst_low_work_short_cycles:
+            thread_lifetime = (
+                (num(end_ts) - num(start_ts))
+                if (start_ts is not None and end_ts is not None)
+                else sum(num(s.get('dur', 0)) for s in thread_states)
+            )
+            if (
+                thread_instructions > 10000
+                and running_duration > 0
+                and thread_lifetime > 0
+                and running_duration / thread_lifetime < high_inst_low_work_running_ratio
+                and short_running_cycles >= high_inst_low_work_short_cycles
+            ):
                 threads_high_instructions_low_work += 1
             total_running_periods = len([s for s in states if s.get('state') == 'Running'])
-            if this_thread_short_periods >= busy_wait_min_periods and total_running_periods > 0 and this_thread_short_periods / total_running_periods > busy_wait_short_ratio:
+            if (
+                this_thread_short_periods >= busy_wait_min_periods
+                and total_running_periods > 0
+                and this_thread_short_periods / total_running_periods > busy_wait_short_ratio
+            ):
                 threads_busy_waiting_pattern += 1
             if len(states) >= 20 and thread_lifetime > 0:
                 rate = len(states) / (thread_lifetime / 1_000_000_000)
@@ -362,7 +403,10 @@ def analyze_optimization_opportunities(
             if wakeup_count >= frequent_sleep_wakeup_min and short_running_cycles >= frequent_sleep_short_cycles_min:
                 if short_running_cycles / max(wakeup_count, 1) > frequent_sleep_ratio:
                     threads_frequent_immediate_sleep += 1
-            elif this_thread_short_periods >= frequent_sleep_alt_periods and short_running_cycles >= frequent_sleep_alt_cycles:
+            elif (
+                this_thread_short_periods >= frequent_sleep_alt_periods
+                and short_running_cycles >= frequent_sleep_alt_cycles
+            ):
                 threads_frequent_immediate_sleep += 1
             if wakeup_depth == 0 and wakeup_count == 0:
                 threads_never_woken += 1
@@ -383,21 +427,29 @@ def analyze_optimization_opportunities(
         score_breakdown = {}
         # 同名线程数量权重：5个以下不加分，6-9轻度，10+显著加权
         s = 0
-        if unique_tid_count >= 30: s = 40
-        elif unique_tid_count >= 20: s = 30
-        elif unique_tid_count >= 15: s = 25
-        elif unique_tid_count >= 10: s = 20
-        elif unique_tid_count >= 6: s = 5
+        if unique_tid_count >= 30:
+            s = 40
+        elif unique_tid_count >= 20:
+            s = 30
+        elif unique_tid_count >= 15:
+            s = 25
+        elif unique_tid_count >= 10:
+            s = 20
+        elif unique_tid_count >= 6:
+            s = 5
         if s:
             score_breakdown[f'thread_count({unique_tid_count})'] = s
             redundancy_score += s
         # 等待比权重降低：大多数线程等待比都>95%，属于常态
         s = 0
-        if avg_waiting_ratio > 0.95: s = 5
-        elif avg_waiting_ratio > 0.85: s = 3
-        elif avg_waiting_ratio > 0.75: s = 2
+        if avg_waiting_ratio > 0.95:
+            s = 5
+        elif avg_waiting_ratio > 0.85:
+            s = 3
+        elif avg_waiting_ratio > 0.75:
+            s = 2
         if s:
-            score_breakdown[f'waiting_ratio({avg_waiting_ratio*100:.0f}%)'] = s
+            score_breakdown[f'waiting_ratio({avg_waiting_ratio * 100:.0f}%)'] = s
             redundancy_score += s
         if avg_instructions == 0:
             score_breakdown['zero_instructions'] = 10
@@ -406,36 +458,50 @@ def analyze_optimization_opportunities(
             score_breakdown[f'zero_wakeup_depth({zero_wakeup_depth_ratio:.0%})'] = 10
             redundancy_score += 10
         s = 0
-        if frequent_immediate_sleep_ratio > 0.7: s = 15
-        elif frequent_immediate_sleep_ratio > 0.5: s = 10
-        elif frequent_immediate_sleep_ratio > 0.3: s = 5
+        if frequent_immediate_sleep_ratio > 0.7:
+            s = 15
+        elif frequent_immediate_sleep_ratio > 0.5:
+            s = 10
+        elif frequent_immediate_sleep_ratio > 0.3:
+            s = 5
         if s:
             score_breakdown[f'frequent_immediate_sleep({frequent_immediate_sleep_ratio:.0%})'] = s
             redundancy_score += s
         s = 0
-        if busy_waiting_pattern_ratio > 0.8: s = 10
-        elif busy_waiting_pattern_ratio > 0.6: s = 7
-        elif busy_waiting_pattern_ratio > 0.4: s = 5
+        if busy_waiting_pattern_ratio > 0.8:
+            s = 10
+        elif busy_waiting_pattern_ratio > 0.6:
+            s = 7
+        elif busy_waiting_pattern_ratio > 0.4:
+            s = 5
         if s:
             score_breakdown[f'busy_waiting({busy_waiting_pattern_ratio:.0%})'] = s
             redundancy_score += s
         s = 0
-        if high_frequency_transitions_ratio > 0.8: s = 5
-        elif high_frequency_transitions_ratio > 0.6: s = 3
+        if high_frequency_transitions_ratio > 0.8:
+            s = 5
+        elif high_frequency_transitions_ratio > 0.6:
+            s = 3
         if s:
             score_breakdown[f'high_freq_transitions({high_frequency_transitions_ratio:.0%})'] = s
             redundancy_score += s
         s = 0
-        if yield_call_ratio > 0.5: s = 15
-        elif yield_call_ratio > 0.3: s = 11
-        elif yield_call_ratio > 0.1: s = 7
+        if yield_call_ratio > 0.5:
+            s = 15
+        elif yield_call_ratio > 0.3:
+            s = 11
+        elif yield_call_ratio > 0.1:
+            s = 7
         if s:
             score_breakdown[f'yield_calls({yield_call_ratio:.0%})'] = s
             redundancy_score += s
         s = 0
-        if high_instructions_low_work_ratio > 0.5: s = 15
-        elif high_instructions_low_work_ratio > 0.3: s = 11
-        elif high_instructions_low_work_ratio > 0.1: s = 7
+        if high_instructions_low_work_ratio > 0.5:
+            s = 15
+        elif high_instructions_low_work_ratio > 0.3:
+            s = 11
+        elif high_instructions_low_work_ratio > 0.1:
+            s = 7
         if s:
             score_breakdown[f'high_inst_low_work({high_instructions_low_work_ratio:.0%})'] = s
             redundancy_score += s
@@ -465,13 +531,42 @@ def analyze_optimization_opportunities(
             leak_score += 15
         elif never_woken_ratio > 0.3:
             leak_score += 10
-        redundancy_level = 'high' if redundancy_score >= 80 and (unique_tid_count >= 10 or avg_waiting_ratio > 0.9) else 'medium' if redundancy_score >= 60 else 'low' if redundancy_score >= 40 else 'none'
-        leak_level = 'high' if leak_score >= 80 and (avg_lifetime > 5_000_000_000 or avg_waiting_ratio > 0.95) else 'medium' if leak_score >= 60 else 'low' if leak_score >= 40 else 'none'
-        optimization_potential = 'high' if ((redundancy_level == 'high' and redundancy_score >= 90) or (leak_level == 'high' and leak_score >= 90)) else 'medium' if redundancy_level in ('high', 'medium') or leak_level in ('high', 'medium') else 'low'
-        wakeup_pattern = ('frequent_immediate_sleep' if frequent_immediate_sleep_ratio > 0.5 else
-                         'never_woken' if never_woken_ratio > 0.5 else
-                         'busy_waiting' if busy_waiting_pattern_ratio > 0.5 or high_frequency_transitions_ratio > 0.5 else
-                         'busy_wait' if high_instructions_low_work_ratio > 0.5 or yield_call_ratio > 0.5 else 'normal')
+        redundancy_level = (
+            'high'
+            if redundancy_score >= 80 and (unique_tid_count >= 10 or avg_waiting_ratio > 0.9)
+            else 'medium'
+            if redundancy_score >= 60
+            else 'low'
+            if redundancy_score >= 40
+            else 'none'
+        )
+        leak_level = (
+            'high'
+            if leak_score >= 80 and (avg_lifetime > 5_000_000_000 or avg_waiting_ratio > 0.95)
+            else 'medium'
+            if leak_score >= 60
+            else 'low'
+            if leak_score >= 40
+            else 'none'
+        )
+        optimization_potential = (
+            'high'
+            if ((redundancy_level == 'high' and redundancy_score >= 90) or (leak_level == 'high' and leak_score >= 90))
+            else 'medium'
+            if redundancy_level in ('high', 'medium') or leak_level in ('high', 'medium')
+            else 'low'
+        )
+        wakeup_pattern = (
+            'frequent_immediate_sleep'
+            if frequent_immediate_sleep_ratio > 0.5
+            else 'never_woken'
+            if never_woken_ratio > 0.5
+            else 'busy_waiting'
+            if busy_waiting_pattern_ratio > 0.5 or high_frequency_transitions_ratio > 0.5
+            else 'busy_wait'
+            if high_instructions_low_work_ratio > 0.5 or yield_call_ratio > 0.5
+            else 'normal'
+        )
         # 忙等类型在算法上给予更高冗余分，便于优先被识别与优化
         if wakeup_pattern == 'busy_wait':
             score_breakdown['busy_wait_bonus'] = 15
@@ -480,29 +575,50 @@ def analyze_optimization_opportunities(
         # 默认 user_space_only=True，仅展示 /proc/ 用户态帧；改为 False 可包含系统库与内核帧
         callchain_sample = collect_callchain_sample(list_for_stats, max_entries=10)
         callchain_frame_total, sample_count = count_callchain_frames(list_for_stats)
-        redundant_instructions_ratio = (redundant_instructions / total_cpu_instructions) if total_cpu_instructions > 0 else 0.0
+        redundant_instructions_ratio = (
+            (redundant_instructions / total_cpu_instructions) if total_cpu_instructions > 0 else 0.0
+        )
         pattern = {
-            'thread_name': thread_name, 'thread_name_variants': thread_name_variants,
-            'total_thread_count': total_count, 'redundant_count': count,
-            'unique_itid_count': len(unique_itids), 'unique_tid_count': unique_tid_count,
-            'total_instructions': total_instructions, 'avg_instructions_per_thread': avg_instructions,
+            'thread_name': thread_name,
+            'thread_name_variants': thread_name_variants,
+            'total_thread_count': total_count,
+            'redundant_count': count,
+            'unique_itid_count': len(unique_itids),
+            'unique_tid_count': unique_tid_count,
+            'total_instructions': total_instructions,
+            'avg_instructions_per_thread': avg_instructions,
             'redundant_instructions': redundant_instructions,
             'redundant_instructions_ratio': redundant_instructions_ratio,
-            'estimated_memory_bytes': estimated_memory, 'estimated_memory_mb': estimated_memory / (1024 * 1024),
-            'avg_waiting_ratio': avg_waiting_ratio, 'callchain_ratio': callchain_ratio, 'optimization_potential': optimization_potential,
+            'estimated_memory_bytes': estimated_memory,
+            'estimated_memory_mb': estimated_memory / (1024 * 1024),
+            'avg_waiting_ratio': avg_waiting_ratio,
+            'callchain_ratio': callchain_ratio,
+            'optimization_potential': optimization_potential,
             'all_thread_ids': [t.get('thread_id') or t.get('thread_info', {}).get('tid', 0) for t in thread_list],
-            'redundant_thread_ids': [t.get('thread_id') or t.get('thread_info', {}).get('tid', 0) for t in passed_list], 'is_duplicate': unique_tid_count < max(count, 1) * 0.5,
+            'redundant_thread_ids': [t.get('thread_id') or t.get('thread_info', {}).get('tid', 0) for t in passed_list],
+            'is_duplicate': unique_tid_count < max(count, 1) * 0.5,
             'callchain_sample': callchain_sample,
             'callchain_frame_total': callchain_frame_total,
             'sample_count': sample_count,
-            'redundancy_score': redundancy_score, 'score_breakdown': score_breakdown, 'redundancy_level': redundancy_level, 'leak_score': leak_score, 'leak_level': leak_level,
-            'avg_lifetime_ns': avg_lifetime, 'avg_lifetime_sec': avg_lifetime / 1_000_000_000 if avg_lifetime else 0, 'running_time_ratio': running_time_ratio,
-            'never_running_ratio': never_running_ratio, 'zero_wakeup_depth_ratio': zero_wakeup_depth_ratio,
-            'frequent_immediate_sleep_ratio': frequent_immediate_sleep_ratio, 'never_woken_ratio': never_woken_ratio,
-            'avg_wakeup_count': total_wakeup_count / n_stats if n_stats else 0, 'avg_short_running_cycles': total_short_running_cycles / n_stats if n_stats else 0,
-            'avg_short_running_periods': total_short_running_periods / n_stats if n_stats else 0, 'yield_call_ratio': yield_call_ratio,
+            'redundancy_score': redundancy_score,
+            'score_breakdown': score_breakdown,
+            'redundancy_level': redundancy_level,
+            'leak_score': leak_score,
+            'leak_level': leak_level,
+            'avg_lifetime_ns': avg_lifetime,
+            'avg_lifetime_sec': avg_lifetime / 1_000_000_000 if avg_lifetime else 0,
+            'running_time_ratio': running_time_ratio,
+            'never_running_ratio': never_running_ratio,
+            'zero_wakeup_depth_ratio': zero_wakeup_depth_ratio,
+            'frequent_immediate_sleep_ratio': frequent_immediate_sleep_ratio,
+            'never_woken_ratio': never_woken_ratio,
+            'avg_wakeup_count': total_wakeup_count / n_stats if n_stats else 0,
+            'avg_short_running_cycles': total_short_running_cycles / n_stats if n_stats else 0,
+            'avg_short_running_periods': total_short_running_periods / n_stats if n_stats else 0,
+            'yield_call_ratio': yield_call_ratio,
             'high_instructions_low_work_ratio': high_instructions_low_work_ratio,
-            'busy_waiting_pattern_ratio': busy_waiting_pattern_ratio, 'high_frequency_transitions_ratio': high_frequency_transitions_ratio,
+            'busy_waiting_pattern_ratio': busy_waiting_pattern_ratio,
+            'high_frequency_transitions_ratio': high_frequency_transitions_ratio,
             'wakeup_pattern': wakeup_pattern,
         }
         # 按冗余分数分流：多线程用 40 分阈值；单线程用更高阈值 60，仅明显忙等/浪费 CPU 的才进冗余
@@ -511,47 +627,96 @@ def analyze_optimization_opportunities(
             analysis['redundant_patterns'].append(pattern)
         else:
             thread_name_variants = pattern.get('thread_name_variants', [])
-            analysis['below_threshold_patterns'].append({
-                'thread_name': thread_name,
-                'thread_name_variants': thread_name_variants,
-                'total_thread_count': total_count,
-                'all_thread_ids': pattern.get('all_thread_ids', []),
-                'redundant_count': count,
-                'max_score': redundancy_score,
-                'avg_score': round(sum(per_thread_redundancy_score(t) for t in thread_list) / total_count, 1) if total_count else 0,
-            })
+            analysis['below_threshold_patterns'].append(
+                {
+                    'thread_name': thread_name,
+                    'thread_name_variants': thread_name_variants,
+                    'total_thread_count': total_count,
+                    'all_thread_ids': pattern.get('all_thread_ids', []),
+                    'redundant_count': count,
+                    'max_score': redundancy_score,
+                    'avg_score': round(sum(per_thread_redundancy_score(t) for t in thread_list) / total_count, 1)
+                    if total_count
+                    else 0,
+                }
+            )
     analysis['redundant_patterns'].sort(key=lambda x: x['redundant_count'], reverse=True)
     for pattern in analysis['redundant_patterns']:
         if pattern['total_instructions'] > 0 and pattern['redundant_count'] > 10:
-            analysis['cpu_optimization_opportunities'].append({
-                'thread_name': pattern['thread_name'], 'current_instructions': pattern['total_instructions'],
-                'potential_savings': pattern['total_instructions'] * 0.5, 'reduction_percentage': 50, 'method': '减少线程数量'
-            })
+            analysis['cpu_optimization_opportunities'].append(
+                {
+                    'thread_name': pattern['thread_name'],
+                    'current_instructions': pattern['total_instructions'],
+                    'potential_savings': pattern['total_instructions'] * 0.5,
+                    'reduction_percentage': 50,
+                    'method': '减少线程数量',
+                }
+            )
     for pattern in analysis['redundant_patterns']:
         u = pattern.get('unique_tid_count', pattern['redundant_count'])
         if u >= 5:
             sug = u * 0.6 if u >= 20 else u * 0.4 if u >= 10 else u * 0.2
-            analysis['memory_optimization_opportunities'].append({
-                'thread_name': pattern['thread_name'], 'current_threads': u, 'suggested_reduction': int(sug),
-                'current_memory_mb': pattern['estimated_memory_mb'], 'potential_savings_mb': calculate_thread_memory_estimate(int(sug)) / (1024 * 1024),
-                'reduction_percentage': sug / u * 100 if u else 0, 'is_duplicate': pattern.get('is_duplicate', False)
-            })
+            analysis['memory_optimization_opportunities'].append(
+                {
+                    'thread_name': pattern['thread_name'],
+                    'current_threads': u,
+                    'suggested_reduction': int(sug),
+                    'current_memory_mb': pattern['estimated_memory_mb'],
+                    'potential_savings_mb': calculate_thread_memory_estimate(int(sug)) / (1024 * 1024),
+                    'reduction_percentage': sug / u * 100 if u else 0,
+                    'is_duplicate': pattern.get('is_duplicate', False),
+                }
+            )
     total_mem = sum(float(o.get('potential_savings_mb', 0) or 0) for o in analysis['memory_optimization_opportunities'])
     total_cpu = sum(float(o.get('potential_savings', 0) or 0) for o in analysis['cpu_optimization_opportunities'])
     total_redundant_instructions = sum(p.get('redundant_instructions', 0) for p in analysis['redundant_patterns'])
-    redundant_instructions_ratio = (total_redundant_instructions / total_cpu_instructions) if total_cpu_instructions > 0 else 0.0
+    redundant_instructions_ratio = (
+        (total_redundant_instructions / total_cpu_instructions) if total_cpu_instructions > 0 else 0.0
+    )
     high_priority = [p for p in analysis['redundant_patterns'] if p['optimization_potential'] == 'high']
     analysis['recommendations'] = []
     if high_priority:
-        analysis['recommendations'].append({'priority': 'high', 'title': '高优先级优化', 'details': [f"{p['thread_name']}: {p['redundant_count']} 个冗余线程，建议减少到 {max(8, int(p['redundant_count'] * 0.3))} 个" for p in high_priority[:5]]})
+        analysis['recommendations'].append(
+            {
+                'priority': 'high',
+                'title': '高优先级优化',
+                'details': [
+                    f'{p["thread_name"]}: {p["redundant_count"]} 个冗余线程，建议减少到 {max(8, int(p["redundant_count"] * 0.3))} 个'
+                    for p in high_priority[:5]
+                ],
+            }
+        )
     if analysis['cpu_optimization_opportunities']:
-        top_cpu = sorted(analysis['cpu_optimization_opportunities'], key=lambda x: x['potential_savings'], reverse=True)[:3]
-        analysis['recommendations'].append({'priority': 'medium', 'title': 'CPU优化机会', 'details': [f"{o['thread_name']}: 可节省 {o['potential_savings']:,} 指令 ({o['reduction_percentage']}%)" for o in top_cpu]})
+        top_cpu = sorted(
+            analysis['cpu_optimization_opportunities'], key=lambda x: x['potential_savings'], reverse=True
+        )[:3]
+        analysis['recommendations'].append(
+            {
+                'priority': 'medium',
+                'title': 'CPU优化机会',
+                'details': [
+                    f'{o["thread_name"]}: 可节省 {o["potential_savings"]:,} 指令 ({o["reduction_percentage"]}%)'
+                    for o in top_cpu
+                ],
+            }
+        )
     if analysis['memory_optimization_opportunities']:
-        top_mem = sorted(analysis['memory_optimization_opportunities'], key=lambda x: x['potential_savings_mb'], reverse=True)[:5]
-        analysis['recommendations'].append({'priority': 'medium', 'title': '内存优化机会', 'details': [f"{o['thread_name']}: {o['current_threads']} → {o['current_threads'] - o['suggested_reduction']} 个，可节省 {o['potential_savings_mb']:.2f} MB" for o in top_mem]})
+        top_mem = sorted(
+            analysis['memory_optimization_opportunities'], key=lambda x: x['potential_savings_mb'], reverse=True
+        )[:5]
+        analysis['recommendations'].append(
+            {
+                'priority': 'medium',
+                'title': '内存优化机会',
+                'details': [
+                    f'{o["thread_name"]}: {o["current_threads"]} → {o["current_threads"] - o["suggested_reduction"]} 个，可节省 {o["potential_savings_mb"]:.2f} MB'
+                    for o in top_mem
+                ],
+            }
+        )
     analysis['summary'] = {
-        'total_memory_savings_mb': total_mem, 'total_cpu_savings_instructions': total_cpu,
+        'total_memory_savings_mb': total_mem,
+        'total_cpu_savings_instructions': total_cpu,
         'high_priority_patterns_count': len(high_priority),
         'total_cpu_instructions': total_cpu_instructions,
         'total_redundant_instructions': total_redundant_instructions,
@@ -562,54 +727,95 @@ def analyze_optimization_opportunities(
 
 def print_optimization_report(analysis: dict[str, Any]):
     """打印优化报告。"""
-    print("=" * 80)
-    print(f"冗余线程优化机会分析 - {analysis['framework'] or '未知框架'}")
-    print("=" * 80)
+    print('=' * 80)
+    print(f'冗余线程优化机会分析 - {analysis["framework"] or "未知框架"}')
+    print('=' * 80)
     print()
     s = analysis['summary']
-    print("优化摘要:")
-    print(f"  总线程数: {analysis['total_threads']}")
-    print(f"  perf_sample 总 CPU 指令数: {s.get('total_cpu_instructions', 0):,}")
-    print(f"  冗余线程消耗指令数: {s.get('total_redundant_instructions', 0):,} (占比: {s.get('redundant_instructions_ratio', 0)*100:.2f}%)")
-    print("  （说明: 冗余包含两类——几乎不做功的线程 与 忙等待线程；忙等待线程指令数高但有效工作占比极低，故占比可较高）")
-    print(f"  潜在内存节省: {s['total_memory_savings_mb']:.2f} MB")
-    print(f"  潜在CPU指令节省: {s['total_cpu_savings_instructions']:,}")
-    print(f"  高优先级优化项: {s['high_priority_patterns_count']}")
+    print('优化摘要:')
+    print(f'  总线程数: {analysis["total_threads"]}')
+    print(f'  perf_sample 总 CPU 指令数: {s.get("total_cpu_instructions", 0):,}')
+    print(
+        f'  冗余线程消耗指令数: {s.get("total_redundant_instructions", 0):,} (占比: {s.get("redundant_instructions_ratio", 0) * 100:.2f}%)'
+    )
+    print(
+        '  （说明: 冗余包含两类——几乎不做功的线程 与 忙等待线程；忙等待线程指令数高但有效工作占比极低，故占比可较高）'
+    )
+    print(f'  潜在内存节省: {s["total_memory_savings_mb"]:.2f} MB')
+    print(f'  潜在CPU指令节省: {s["total_cpu_savings_instructions"]:,}')
+    print(f'  高优先级优化项: {s["high_priority_patterns_count"]}')
     print()
     patterns = analysis['redundant_patterns']
     if not patterns:
-        print("未发现明显的冗余线程模式")
+        print('未发现明显的冗余线程模式')
         print()
         return
-    print(f"{'线程名':<30} {'出现次数':<8} {'唯一TID':<8} {'等待率':<8} {'浪费CPU占比':<10} {'冗余':<8} {'依赖':<8} {'唤醒模式':<18} {'优化潜力':<10}")
-    print("-" * 130)
-    _hi, _mid, _lo = "[高]", "[中]", "[低]"
+    print(
+        f'{"线程名":<30} {"出现次数":<8} {"唯一TID":<8} {"等待率":<8} {"浪费CPU占比":<10} {"冗余":<8} {"依赖":<8} {"唤醒模式":<18} {"优化潜力":<10}'
+    )
+    print('-' * 130)
+    _hi, _mid, _lo = '[高]', '[中]', '[低]'
     for pattern in patterns[:15]:
-        potential_icon = _hi if pattern['optimization_potential'] == 'high' else _mid if pattern['optimization_potential'] == 'medium' else _lo
+        potential_icon = (
+            _hi
+            if pattern['optimization_potential'] == 'high'
+            else _mid
+            if pattern['optimization_potential'] == 'medium'
+            else _lo
+        )
         u = pattern.get('unique_tid_count', pattern['redundant_count'])
         tc = pattern.get('total_thread_count', pattern['redundant_count'])
-        count_display = f"{pattern['redundant_count']}/{tc}" if tc != pattern['redundant_count'] else str(pattern['redundant_count'])
+        count_display = (
+            f'{pattern["redundant_count"]}/{tc}'
+            if tc != pattern['redundant_count']
+            else str(pattern['redundant_count'])
+        )
         rl, rs = pattern.get('redundancy_level', 'none'), pattern.get('redundancy_score', 0)
-        redundancy_display = f"{_hi}({rs})" if rl == 'high' else f"{_mid}({rs})" if rl == 'medium' else f"{_lo}({rs})" if rl == 'low' else f"-({rs})"
+        redundancy_display = (
+            f'{_hi}({rs})'
+            if rl == 'high'
+            else f'{_mid}({rs})'
+            if rl == 'medium'
+            else f'{_lo}({rs})'
+            if rl == 'low'
+            else f'-({rs})'
+        )
         ll, ls = pattern.get('leak_level', 'none'), pattern.get('leak_score', 0)
-        dep_display = f"{_hi}({ls})" if ll == 'high' else f"{_mid}({ls})" if ll == 'medium' else f"{_lo}({ls})" if ll == 'low' else f"-({ls})"
+        dep_display = (
+            f'{_hi}({ls})'
+            if ll == 'high'
+            else f'{_mid}({ls})'
+            if ll == 'medium'
+            else f'{_lo}({ls})'
+            if ll == 'low'
+            else f'-({ls})'
+        )
         wp = pattern.get('wakeup_pattern', 'normal')
-        pattern_display = (f"频繁唤醒立即等待({pattern.get('frequent_immediate_sleep_ratio', 0)*100:.0f}%)" if wp == 'frequent_immediate_sleep' else
-                          f"从未被唤醒({pattern.get('never_woken_ratio', 0)*100:.0f}%)" if wp == 'never_woken' else
-                          f"忙等待(含yield {pattern.get('yield_call_ratio', 0)*100:.0f}%)" if wp == 'busy_wait' and pattern.get('yield_call_ratio', 0) > 0.3 else
-                          f"忙等待(高指令低工作 {pattern.get('high_instructions_low_work_ratio', 0)*100:.0f}%)" if wp == 'busy_wait' else "正常")
+        pattern_display = (
+            f'频繁唤醒立即等待({pattern.get("frequent_immediate_sleep_ratio", 0) * 100:.0f}%)'
+            if wp == 'frequent_immediate_sleep'
+            else f'从未被唤醒({pattern.get("never_woken_ratio", 0) * 100:.0f}%)'
+            if wp == 'never_woken'
+            else f'忙等待(含yield {pattern.get("yield_call_ratio", 0) * 100:.0f}%)'
+            if wp == 'busy_wait' and pattern.get('yield_call_ratio', 0) > 0.3
+            else f'忙等待(高指令低工作 {pattern.get("high_instructions_low_work_ratio", 0) * 100:.0f}%)'
+            if wp == 'busy_wait'
+            else '正常'
+        )
         ratio_pct = pattern.get('redundant_instructions_ratio', 0) * 100
-        ratio_str = f"{ratio_pct:.2f}%"
-        print(f"{pattern['thread_name']:<30} {count_display:<8} {u:<8} {pattern['avg_waiting_ratio']*100:>6.1f}% {ratio_str:<10} {redundancy_display:<8} {dep_display:<8} {pattern_display:<18} {potential_icon} {pattern['optimization_potential']:<8}")
+        ratio_str = f'{ratio_pct:.2f}%'
+        print(
+            f'{pattern["thread_name"]:<30} {count_display:<8} {u:<8} {pattern["avg_waiting_ratio"] * 100:>6.1f}% {ratio_str:<10} {redundancy_display:<8} {dep_display:<8} {pattern_display:<18} {potential_icon} {pattern["optimization_potential"]:<8}'
+        )
     below = analysis.get('below_threshold_patterns', [])
     if below:
-        print("未达标 pattern（该 pattern 下线程总数<2，仅作参考）:")
+        print('未达标 pattern（该 pattern 下线程总数<2，仅作参考）:')
         for p in sorted(below, key=lambda x: -x.get('avg_per_thread_score', 0))[:10]:
-            line = f"  {p.get('thread_name', '')}: 总个数={p.get('total_thread_count')}, 冗余线程个数={p.get('redundant_count')}, 单线程最高分={p.get('max_per_thread_score')}, 平均分={p.get('avg_per_thread_score')}"
+            line = f'  {p.get("thread_name", "")}: 总个数={p.get("total_thread_count")}, 冗余线程个数={p.get("redundant_count")}, 单线程最高分={p.get("max_per_thread_score")}, 平均分={p.get("avg_per_thread_score")}'
             fs = p.get('feature_summary')
             if fs:
-                line += f" | 特征: 平均等待比={fs.get('avg_waiting_ratio_pct', 0)}%, 指令(min/avg/max)={fs.get('min_instructions', 0)}/{fs.get('avg_instructions', 0)}/{fs.get('max_instructions', 0)}, 有callchain={fs.get('threads_with_callchain', 0)}, 有yield={fs.get('threads_with_yield', 0)}, 平均短周期={fs.get('avg_short_cycles', 0)}, 平均运行比={fs.get('avg_run_ratio_pct', 0)}%, wakeup_depth=0数={fs.get('threads_wakeup_depth_0', 0)}"
+                line += f' | 特征: 平均等待比={fs.get("avg_waiting_ratio_pct", 0)}%, 指令(min/avg/max)={fs.get("min_instructions", 0)}/{fs.get("avg_instructions", 0)}/{fs.get("max_instructions", 0)}, 有callchain={fs.get("threads_with_callchain", 0)}, 有yield={fs.get("threads_with_yield", 0)}, 平均短周期={fs.get("avg_short_cycles", 0)}, 平均运行比={fs.get("avg_run_ratio_pct", 0)}%, wakeup_depth=0数={fs.get("threads_wakeup_depth_0", 0)}'
             print(line)
         print()
-    print("说明: 冗余/唤醒模式算法详见 ALGORITHM.md")
+    print('说明: 冗余/唤醒模式算法详见 ALGORITHM.md')
     print()

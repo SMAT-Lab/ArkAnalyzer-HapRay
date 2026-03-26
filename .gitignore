@@ -49,6 +49,7 @@ hapray-sa
 # Cache directories
 .cache/
 .npm-cache/
+__pycache__/
 
 # HapTest generated test cases
 perf_testing/hapray/testcases/__haptest_generated__/

@@ -21,8 +21,8 @@ import sys
 
 import pandas as pd
 
-from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.common.excel_utils import ExcelReportSaver
+from hapray.core.common.path_utils import get_user_data_root
 
 
 def load_summary_info(directory: str):

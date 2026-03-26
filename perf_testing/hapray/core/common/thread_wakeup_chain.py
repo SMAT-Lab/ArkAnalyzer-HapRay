@@ -49,7 +49,7 @@ def _build_perf_thread_id_map(perf_conn, app_pids: list) -> tuple:
             return pid_tid_to_perf_tid, pid_name_to_perf_tid, valid_perf_tids_by_pid
         ph = ','.join('?' * len(app_pids))
         cur.execute(
-            f"SELECT thread_id, process_id, thread_name FROM perf_thread WHERE process_id IN ({ph})",
+            f'SELECT thread_id, process_id, thread_name FROM perf_thread WHERE process_id IN ({ph})',
             list(app_pids),
         )
         for thread_id, process_id, thread_name in cur.fetchall():
@@ -90,15 +90,21 @@ def _query_thread_states_batch(trace_conn, itids_list: list, range_start: int, r
     return out
 
 
-def _query_callchains_batch(perf_conn, tid_list: list, range_start: int, range_end: int,
-                            max_callchains_per_tid: int = 50, max_frames_per_tid: int = 20) -> dict:
+def _query_callchains_batch(
+    perf_conn,
+    tid_list: list,
+    range_start: int,
+    range_end: int,
+    max_callchains_per_tid: int = 50,
+    max_frames_per_tid: int = 20,
+) -> dict:
     """按 des_table：perf_sample.callchain_id 关联 perf_callchain.callchain_id；perf_callchain.symbol_id 与 perf_files.serial_id 对应。"""
     out = {t: [] for t in tid_list}
     if not perf_conn or not tid_list:
         return out
     try:
         cur = perf_conn.cursor()
-        cur.execute("PRAGMA table_info(perf_sample)")
+        cur.execute('PRAGMA table_info(perf_sample)')
         cols = [r[1] for r in cur.fetchall()]
         ts_col = 'timestamp_trace' if 'timestamp_trace' in cols else 'timeStamp'
         ph = ','.join('?' * len(tid_list))
@@ -129,7 +135,7 @@ def _query_callchains_batch(perf_conn, tid_list: list, range_start: int, range_e
             return out
         ph2 = ','.join('?' * len(all_chain_ids))
         cur.execute(
-            f"SELECT callchain_id, depth, file_id, symbol_id, name FROM perf_callchain WHERE callchain_id IN ({ph2}) ORDER BY callchain_id, depth",
+            f'SELECT callchain_id, depth, file_id, symbol_id, name FROM perf_callchain WHERE callchain_id IN ({ph2}) ORDER BY callchain_id, depth',
             all_chain_ids,
         )
         chain_frames = {}
@@ -141,16 +147,16 @@ def _query_callchains_batch(perf_conn, tid_list: list, range_start: int, range_e
                 if file_id is not None or symbol_id is not None:
                     file_symbol_pairs.add((file_id, symbol_id))
         fs_map = {}
-        for (file_id, symbol_id) in file_symbol_pairs:
+        for file_id, symbol_id in file_symbol_pairs:
             cur.execute(
-                "SELECT symbol, path FROM perf_files WHERE file_id = ? AND serial_id = ? LIMIT 1",
+                'SELECT symbol, path FROM perf_files WHERE file_id = ? AND serial_id = ? LIMIT 1',
                 (file_id, symbol_id),
             )
             row = cur.fetchone()
             if row:
                 fs_map[(file_id, symbol_id)] = (str(row[0] or '').strip(), str(row[1] or '').strip())
             elif file_id is not None:
-                cur.execute("SELECT symbol, path FROM perf_files WHERE file_id = ? LIMIT 1", (file_id,))
+                cur.execute('SELECT symbol, path FROM perf_files WHERE file_id = ? LIMIT 1', (file_id,))
                 row = cur.fetchone()
                 if row:
                     fs_map[(file_id, symbol_id)] = (str(row[0] or '').strip(), str(row[1] or '').strip())
@@ -204,14 +210,14 @@ def analyze_all_threads_wakeup_chain(
                 if cursor.fetchone():
                     try:
                         if tbl == 'trace_range':
-                            cursor.execute("SELECT start_ts, end_ts FROM trace_range LIMIT 1")
+                            cursor.execute('SELECT start_ts, end_ts FROM trace_range LIMIT 1')
                         else:
-                            cursor.execute(f"SELECT min(ts), max(ts) FROM {tbl}")
+                            cursor.execute(f'SELECT min(ts), max(ts) FROM {tbl}')
                         row = cursor.fetchone()
                         if row and row[0] is not None and row[1] is not None:
                             range_start, range_end = row[0], row[1]
                             if tbl == 'frame_slice':
-                                cursor.execute("SELECT max(ts + COALESCE(dur, 0)) FROM frame_slice")
+                                cursor.execute('SELECT max(ts + COALESCE(dur, 0)) FROM frame_slice')
                                 r2 = cursor.fetchone()
                                 if r2 and r2[0] is not None:
                                     range_end = max(range_end, r2[0])
@@ -226,34 +232,32 @@ def analyze_all_threads_wakeup_chain(
             return None
         ph = ','.join('?' * len(app_pids))
         cursor.execute(
-            f"SELECT t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE p.pid IN ({ph})",
+            f'SELECT t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE p.pid IN ({ph})',
             list(app_pids),
         )
         app_threads = cursor.fetchall()
         if max_threads is not None and max_threads > 0:
-            app_threads = app_threads[: max_threads]
+            app_threads = app_threads[:max_threads]
         if not app_threads:
             trace_conn.close()
             if perf_conn and perf_conn != trace_conn:
                 perf_conn.close()
             return []
         itid_to_tid_cache = {row[0]: row[1] for row in app_threads}
-        pid_tid_to_perf_tid, pid_name_to_perf_tid, valid_perf_tids_by_pid = _build_perf_thread_id_map(perf_conn, list(app_pids))
+        pid_tid_to_perf_tid, pid_name_to_perf_tid, valid_perf_tids_by_pid = _build_perf_thread_id_map(
+            perf_conn, list(app_pids)
+        )
         results = []
         total_threads = len(app_threads)
         progress_interval = max(1, total_threads // 20)  # 约 20 次进度
         for idx, (itid, tid, thread_name, pid, _process_name) in enumerate(app_threads, 1):
             if idx == 1 or idx % progress_interval == 0 or idx == total_threads:
                 logger.info('唤醒链分析进度: %d/%d 线程', idx, total_threads)
-            related_itids_ordered = find_wakeup_chain(
-                trace_conn, itid, range_start, range_end, app_pid=pid
-            )
+            related_itids_ordered = find_wakeup_chain(trace_conn, itid, range_start, range_end, app_pid=pid)
             if not isinstance(related_itids_ordered, list):
                 related_itids_ordered = [(itid, 0)]
             related_itids = {i for i, _ in related_itids_ordered}
-            itid_to_perf = map_itid_to_perf_thread_id(
-                trace_conn, perf_conn, related_itids, itid_to_tid_cache
-            )
+            itid_to_perf = map_itid_to_perf_thread_id(trace_conn, perf_conn, related_itids, itid_to_tid_cache)
             perf_thread_ids = set(itid_to_perf.values()) if itid_to_perf else set()
             app_inst, sys_inst = {}, {}
             if perf_conn and perf_thread_ids:
@@ -272,7 +276,7 @@ def analyze_all_threads_wakeup_chain(
             ph2 = ','.join('?' * len(itids_list))
             # des_table：thread_state.itid = thread.id；find_wakeup_chain 可能返回 id 或 itid，故用 id 与 itid 都能查到
             cursor.execute(
-                f"SELECT t.id, t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE t.itid IN ({ph2}) OR t.id IN ({ph2})",
+                f'SELECT t.id, t.itid, t.tid, t.name, p.pid, p.name FROM thread t INNER JOIN process p ON t.ipid = p.ipid WHERE t.itid IN ({ph2}) OR t.id IN ({ph2})',
                 itids_list + itids_list,
             )
             thread_info_map = {}
@@ -292,11 +296,21 @@ def analyze_all_threads_wakeup_chain(
                     pid_tid_to_perf_tid.get((pid_i, tid_i))
                     or pid_name_to_perf_tid.get((pid_i, name_i))
                     or (itid_to_perf.get(i) if itid_to_perf else None)
-                    or (tid_i if (pid_i is not None and tid_i is not None and tid_i in valid_perf_tids_by_pid.get(pid_i, set())) else None)
+                    or (
+                        tid_i
+                        if (
+                            pid_i is not None
+                            and tid_i is not None
+                            and tid_i in valid_perf_tids_by_pid.get(pid_i, set())
+                        )
+                        else None
+                    )
                 )
                 if perf_tid is not None:
                     itid_to_perf_sample_tid[i] = perf_tid
-            tids_for_callchain = [itid_to_perf_sample_tid[i] for i, _ in related_itids_ordered if i in itid_to_perf_sample_tid]
+            tids_for_callchain = [
+                itid_to_perf_sample_tid[i] for i, _ in related_itids_ordered if i in itid_to_perf_sample_tid
+            ]
             callchains_by_tid = {}
             if perf_conn and tids_for_callchain:
                 try:
@@ -316,26 +330,33 @@ def analyze_all_threads_wakeup_chain(
                 thread_states = states_by_itid.get(i, [])
                 perf_sample_tid = itid_to_perf_sample_tid.get(i)
                 callchains = callchains_by_tid.get(perf_sample_tid, []) if perf_sample_tid is not None else []
-                wakeup_threads.append({
-                    'itid': i, 'tid': info['tid'], 'thread_name': info['thread_name'],
-                    'pid': info['pid'], 'process_name': info['process_name'],
-                    'instruction_count': inst,
-                    'is_system_thread': is_system_thread(info.get('process_name', ''), info.get('thread_name', '')),
-                    'wakeup_depth': depth,
-                    'thread_states': thread_states,
-                    'callchains': callchains,
-                })
+                wakeup_threads.append(
+                    {
+                        'itid': i,
+                        'tid': info['tid'],
+                        'thread_name': info['thread_name'],
+                        'pid': info['pid'],
+                        'process_name': info['process_name'],
+                        'instruction_count': inst,
+                        'is_system_thread': is_system_thread(info.get('process_name', ''), info.get('thread_name', '')),
+                        'wakeup_depth': depth,
+                        'thread_states': thread_states,
+                        'callchains': callchains,
+                    }
+                )
             ti = thread_info_map.get(itid) or {}
-            results.append({
-                'thread_id': tid,
-                'thread_info': {
-                    'thread_name': thread_name or '',
-                    'start_ts': ti.get('start_ts'),
-                    'end_ts': ti.get('end_ts'),
-                },
-                'total_instructions': total_instructions,
-                'wakeup_threads': wakeup_threads,
-            })
+            results.append(
+                {
+                    'thread_id': tid,
+                    'thread_info': {
+                        'thread_name': thread_name or '',
+                        'start_ts': ti.get('start_ts'),
+                        'end_ts': ti.get('end_ts'),
+                    },
+                    'total_instructions': total_instructions,
+                    'wakeup_threads': wakeup_threads,
+                }
+            )
         trace_conn.close()
         if perf_conn and perf_conn != trace_conn:
             perf_conn.close()
@@ -351,11 +372,11 @@ def print_thread_results(results: list, top_n: int = 10, framework_name: str = '
     if not results:
         return
     sorted_results = sorted(results, key=lambda x: x.get('total_instructions', 0), reverse=True)
-    logger.info("前 %d 个线程（按 total_instructions 降序）:", top_n)
+    logger.info('前 %d 个线程（按 total_instructions 降序）:', top_n)
     for idx, r in enumerate(sorted_results[:top_n], 1):
         ti = r.get('thread_info', {})
         name = ti.get('thread_name', '')
         tid = r.get('thread_id', 'N/A')
         inst = r.get('total_instructions', 0)
         n_wt = len(r.get('wakeup_threads', []))
-        logger.info("  [%d] %s (TID: %s)  指令数: %s  相关线程数: %s", idx, name, tid, f"{inst:,}", n_wt)
+        logger.info('  [%d] %s (TID: %s)  指令数: %s  相关线程数: %s', idx, name, tid, f'{inst:,}', n_wt)
