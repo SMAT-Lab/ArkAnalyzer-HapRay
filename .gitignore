@@ -16,7 +16,6 @@ dist
 temp_release_test/
 
 # Third-party and Generated Directories
-third-party/HapRayDep/
 third-party/trace_streamer_binary/
 third-party/xvm/
 third-party/Open-AutoGLM/
@@ -49,6 +48,7 @@ hapray-sa
 # Cache directories
 .cache/
 .npm-cache/
+__pycache__/
 
 # HapTest generated test cases
 perf_testing/hapray/testcases/__haptest_generated__/

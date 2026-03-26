@@ -513,12 +513,15 @@ After removing quarantine attributes, you can run the executable:
 
 ### Dependencies
 - pip > 23.0.1
-- Python 3.9 ~ 3.12, 
+- Python 3.11 (managed by `uv`)
+- Node.js 24.x (managed by `nvm`)
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
-> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.12 range.
+> ⚠️ The project manages versions via `.nvmrc` and `.python-version`.
+> Please initialize the environment with the bootstrap scripts before running build/test commands.
 > You can verify this by running:
 > ```bash
+> node --version
 > python --version
 > ```
 
@@ -562,26 +565,41 @@ export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/defa
 # Initialize environment (only needed once)
 git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
+cd my-dev
+
+# Bootstrap Node.js + Python (nvm + uv)
+source ./bootstrap_env.sh
+
+# Install JS dependencies and build
 npm install
 npm run build
-# Activate the python virtual environment perf_testing/.venv
-source activate.sh
+# Activate the python virtual environment
+source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
 ```
 
 ### Windows Installation
-```bash
+```powershell
 # Initialize environment (only needed once)
 git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
+cd my-dev
+
+# Bootstrap Node.js + Python (nvm + uv)
+# Dot-source（. .\）与 bash 的 source 类似：在当前会话生效，无需再 nvm use
+. .\bootstrap_env.ps1
+
+# Install JS dependencies and build
 npm install
 npm run build
-# Command-Line(CMD) Alternative the python virtual environment perf_testing/.venv
-activate.bat
+# Activate virtual environment (PowerShell)
+.\.venv\Scripts\Activate.ps1
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
 ```
+
+若只用 CMD，可运行 `bootstrap_env.bat`（会起子进程），装完后**新开**同一终端或再执行 `nvm use`。
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
 

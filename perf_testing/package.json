@@ -6,16 +6,15 @@
   ],
   "scripts": {
     "postinstall": "npm run setup",
-    "setup": "npm run setup:win --if-present || npm run setup:unix",
-    "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
-    "setup:unix": "python3 setup_env.py",
+    "setup": "node ../scripts/python_setup.js && node ./setup.js",
     "build": "npm run build:onefile",
     "postbuild": "webpack --config webpack.config.js && node scripts/copy-testcases-to-dist.mjs",
-    "build:onefile": "./.venv/bin/pyinstaller -y --distpath ../dist/tools/perf-testing main.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y --distpath ../dist/tools/perf-testing main.spec",
+    "build:onefile": "uv run pyinstaller -y --distpath ../dist/tools/perf-testing main.spec",
     "build:python": "npm run build:onefile",
-    "lint": "./.venv/bin/tox -e lint || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint || python3 -m ruff check .",
-    "lint:fix": "./.venv/bin/tox -e lint-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e lint-fix || python3 -m ruff check --fix .",
-    "test": "./.venv/bin/tox || .\\\\.venv\\\\Scripts\\\\tox.exe"
+    "lint": "uv run tox -e lint",
+    "lint:fix": "uv run tox -e lint-fix",
+    "test": "uv run tox",
+    "clean": "rm -rf build .venv && rm -rf ../dist/tools/perf-testing"
   },
   "author": "",
   "license": "ISC",

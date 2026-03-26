@@ -20,8 +20,8 @@ import sys
 from typing import Optional
 
 from hapray import VERSION
-from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.path_utils import get_user_data_root
 
 
 class StaticAction:

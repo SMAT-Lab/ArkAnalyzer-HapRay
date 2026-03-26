@@ -34,6 +34,8 @@ dependencies = [
     "tensorflow==2.16.2; (platform_system != 'Darwin') or (platform_system == 'Darwin' and platform_machine != 'arm64')",
     "tensorflow-macos==2.16.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tensorflow-metal>=1.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "tensorflow-io-gcs-filesystem==0.31.0; sys_platform == 'win32' and python_full_version < '3.12'",
+    "tensorflow-io-gcs-filesystem==0.37.1; sys_platform != 'win32' and python_full_version < '3.12'",
     "tqdm>=4.67.1",
     "pyelftools>=0.32",
     "arpy~=2.3.0",

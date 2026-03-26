@@ -36,9 +36,7 @@ class CommonUtils:
                 continue
             for third_file in os.listdir(second_path):
                 third_path = os.path.join(second_path, third_file)
-                if os.path.isdir(third_path) or (
-                    not third_file.endswith('.py') and not third_file.endswith('.yaml')
-                ):
+                if os.path.isdir(third_path) or (not third_file.endswith('.py') and not third_file.endswith('.yaml')):
                     continue
                 case_name, file_extension = os.path.splitext(third_file)
                 all_testcases[case_name] = (second_path, file_extension)
