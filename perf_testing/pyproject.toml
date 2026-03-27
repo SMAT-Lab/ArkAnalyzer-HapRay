@@ -10,8 +10,6 @@ authors = [
     { name = "Your Name", email = "your@email.com" }
 ]
 
-requires-python = ">=3.10"
-
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: POSIX :: Linux",
@@ -31,10 +29,10 @@ dependencies = [
     "xlsxwriter>=3.0.0",
     "jsonschema",
     "lxml",
-    "tox",
     "opencv-python>=4.10.0",
     "opencv-contrib-python>=4.10.0",
-    "hypium>=6.0.7.210"
+    "hypium>=6.0.7.210",
+    "phone-agent>=0.1.1"
 ]
 
 [project.scripts]
@@ -45,7 +43,7 @@ Homepage = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 Documentation = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay/-/wikis"
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "tox"]
 
 [tool.setuptools.packages.find]
 exclude = ["tests*"]

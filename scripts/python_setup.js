@@ -55,9 +55,13 @@ for (let i = 2; i < process.argv.length; i += 1) {
 // }
 
 // 企业内网多 PyPI 镜像时，首个索引可能没有某包的指定版本；未设置 UV_INDEX_STRATEGY 时默认用 unsafe-best-match
+// uv 不使用 pip 的 global.index-url（pip config）；需用 UV_DEFAULT_INDEX / UV_INDEX_URL，或与 pip 对齐导出 PIP_INDEX_URL
 const childEnv = { ...process.env };
 if (!childEnv.UV_INDEX_STRATEGY) {
   childEnv.UV_INDEX_STRATEGY = 'unsafe-best-match';
+}
+if (!childEnv.UV_DEFAULT_INDEX && !childEnv.UV_INDEX_URL && process.env.PIP_INDEX_URL) {
+  childEnv.UV_DEFAULT_INDEX = process.env.PIP_INDEX_URL;
 }
 
 const result = spawnSync('uv', args, {

@@ -6,8 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "symbol-recovery"
 version = "1.5.1"
 description = "二进制符号恢复工具：支持 perf.data 和 Excel 偏移量两种模式"
-# 与根目录 .python-version 一致；排除 3.12 可避免 uv 为多版本解析时因 pyinstaller 等失败（尤其企业多索引镜像）
-requires-python = ">=3.9,<3.12"
 dependencies = [
     "pyelftools>=0.32",
     "capstone>=5.0.0",
