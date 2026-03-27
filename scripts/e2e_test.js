@@ -50,7 +50,7 @@ const REQUIRED_TOOLS = [
     'perf-testing',  // 对应 perf_testing（含 web、xvm 资源）
     'sa-cmd',        // 对应 static_analyzer
     'symbol-recovery',
-    'trace_streamer_binary'
+    'bin'
 ];
 
 // 获取平台相关的可执行文件名

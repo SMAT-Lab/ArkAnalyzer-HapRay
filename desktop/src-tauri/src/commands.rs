@@ -13,8 +13,9 @@ pub struct LoadPluginsResult {
 use chrono::Utc;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use std::sync::OnceLock;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -817,44 +818,270 @@ fn get_testcases(app: &tauri::AppHandle) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-fn get_installed_apps() -> Result<Vec<String>, String> {
-    let mut cmd = std::process::Command::new("hdc");
+fn hdc_bundled_candidates() -> Vec<PathBuf> {
+    let name = if cfg!(windows) { "hdc.exe" } else { "hdc" };
+    let mut v = Vec::new();
+
+    #[cfg(debug_assertions)]
+    {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        if let Some(workspace) = manifest.parent().and_then(|p| p.parent()) {
+            v.push(workspace.join("dist").join("tools").join("bin").join(name));
+        }
+        if let Some(desktop) = manifest.parent() {
+            v.push(desktop.join("dist").join("tools").join("bin").join(name));
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        let exe = exe.canonicalize().unwrap_or(exe);
+        if let Some(parent) = exe.parent() {
+            #[cfg(target_os = "macos")]
+            if let Some(contents) = parent.parent() {
+                v.push(
+                    contents
+                        .join("Resources")
+                        .join("tools")
+                        .join("bin")
+                        .join(name),
+                );
+            }
+            #[cfg(not(target_os = "macos"))]
+            v.push(parent.join("tools").join("bin").join(name));
+            v.extend([
+                parent.join("../Resources/tools/bin").join(name),
+                parent.join("../../dist/tools/bin").join(name),
+                parent.join("../../../tools/bin").join(name),
+            ]);
+            #[cfg(target_os = "macos")]
+            v.push(parent.join("tools").join("bin").join(name));
+        }
+    }
+
+    v
+}
+
+/// 解析 hdc 可执行文件路径。注意：**从启动台打开的 GUI 不会读取 ~/.zshrc**，在 .zshrc 里改 PATH 对 App 无效。
+/// 顺序：`HAPRAY_HDC_PATH` → PATH（`which hdc`）→ 打包目录 `tools/bin/hdc` → 常见 SDK 路径 → 命令名 `hdc`。
+/// 对绝对路径设置 cwd 为可执行文件所在目录，便于加载同目录下 `libusb_shared` 等动态库。
+fn resolve_hdc_executable() -> PathBuf {
+    let mut tried: Vec<String> = Vec::new();
+
+    if let Ok(p) = std::env::var("HAPRAY_HDC_PATH") {
+        let pb = PathBuf::from(p.trim());
+        if pb.is_file() {
+            return pb;
+        }
+        tried.push(format!(
+            "HAPRAY_HDC_PATH={:?}（存在且为文件: 否）",
+            p.trim()
+        ));
+    }
+
+    match which::which("hdc") {
+        Ok(p) => return p,
+        Err(e) => tried.push(format!("which hdc: {}", e)),
+    }
+
+    for cand in hdc_bundled_candidates() {
+        if cand.is_file() {
+            return cand;
+        }
+        tried.push(format!("打包/相对路径: {:?}", cand));
+    }
+
+    let mut sdk_candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(home) = std::env::var("HOME") {
+        sdk_candidates.push(
+            Path::new(&home).join("code/command-line-tools/sdk/default/openharmony/toolchains/hdc"),
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // DevEco Studio 自带 OpenHarmony SDK（用户常在 .zshrc 里加此目录的 PATH，但 GUI 读不到）
+        sdk_candidates.push(PathBuf::from(
+            "/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc",
+        ));
+    }
+    #[cfg(windows)]
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        sdk_candidates.push(
+            Path::new(&profile).join("code/command-line-tools/sdk/default/openharmony/toolchains/hdc"),
+        );
+    }
+    for cand in sdk_candidates {
+        if cand.is_file() {
+            return cand;
+        }
+        tried.push(format!("SDK 常见路径: {:?}", cand));
+    }
+
+    eprintln!(
+        "[hdc] resolve: 未在固定位置找到可执行文件，将使用命令名 \"hdc\"（依赖运行时 PATH）。已检查: {}",
+        tried.join(" | ")
+    );
+    PathBuf::from("hdc")
+}
+
+/// 与 hdc 可执行文件同目录的 PATH/cwd，便于加载 libusb 等。
+fn hdc_command_with_env() -> (PathBuf, Command) {
+    let hdc_path = resolve_hdc_executable();
+    let mut cmd = Command::new(&hdc_path);
     #[cfg(windows)]
     {
-        // CREATE_NO_WINDOW，避免加载应用包名（调用 hdc）时闪出命令行窗口
         cmd.creation_flags(0x08000000);
     }
-    let output = cmd
-        .args(["shell", "bm", "dump", "-a"])
-        .output()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                "hdc 命令未找到，请确保已安装 HDC 工具并配置到 PATH".to_string()
-            } else {
-                format!("执行 hdc 失败: {}", e)
+    if hdc_path.is_absolute() {
+        if let Some(toolchains) = hdc_path.parent() {
+            cmd.current_dir(toolchains);
+            let path = std::env::var("PATH").unwrap_or_default();
+            #[cfg(windows)]
+            {
+                cmd.env("PATH", format!("{};{}", toolchains.display(), path));
             }
-        })?;
-
-    let mut apps = Vec::new();
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for raw_line in stdout.lines() {
-            let line = raw_line.trim();
-            if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
-                continue;
-            }
-            // 依据包名前缀进行分类：
-            // - com.huawei.* 视为系统 App
-            // - 其它视为三方 App
-            if line.contains('.') {
-                let category = if line.starts_with("com.huawei.") {
-                    "system"
-                } else {
-                    "third"
-                };
-                apps.push(format!("{}::{}", category, line));
+            #[cfg(not(windows))]
+            {
+                cmd.env("PATH", format!("{}:{}", toolchains.display(), path));
             }
         }
+    }
+    (hdc_path, cmd)
+}
+
+/// 从 `bm dump -a` 输出中提取 Bundle 包名（兼容「每行一个包名」与「bundleName:/bundle name:」等键值格式）。
+fn parse_bundle_names_from_bm_dump(stdout: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+
+    static RE_KV: OnceLock<Regex> = OnceLock::new();
+    let re_kv = RE_KV.get_or_init(|| {
+        Regex::new(
+            r#"(?i)(?:bundle\s*name|bundleName)\s*[:：=]\s*"?([a-zA-Z][a-zA-Z0-9_.]*(?:\.[a-zA-Z0-9_]+)+)"?"#,
+        )
+        .expect("bundle kv regex")
+    });
+    for cap in re_kv.captures_iter(stdout) {
+        if let Some(m) = cap.get(1) {
+            let s = m.as_str();
+            if seen.insert(s.to_string()) {
+                out.push(s.to_string());
+            }
+        }
+    }
+
+    static RE_JSON: OnceLock<Regex> = OnceLock::new();
+    let re_json = RE_JSON.get_or_init(|| {
+        Regex::new(r#""bundleName"\s*:\s*"([^"]+)""#).expect("bundle json regex")
+    });
+    for cap in re_json.captures_iter(stdout) {
+        if let Some(m) = cap.get(1) {
+            let s = m.as_str();
+            if s.contains('.') && seen.insert(s.to_string()) {
+                out.push(s.to_string());
+            }
+        }
+    }
+
+    for raw_line in stdout.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
+            continue;
+        }
+        if !line.contains('.') {
+            continue;
+        }
+        if line.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+        {
+            if seen.insert(line.to_string()) {
+                out.push(line.to_string());
+            }
+        }
+    }
+
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn get_installed_apps() -> Result<Vec<String>, String> {
+    let (hdc_path, mut cmd) = hdc_command_with_env();
+    cmd.args(["shell", "bm", "dump", "-a"]);
+    let output = cmd.output().map_err(|e| {
+        eprintln!(
+            "[hdc] spawn 失败: path={:?}, kind={:?}, error={}",
+            hdc_path,
+            e.kind(),
+            e
+        );
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!(
+                "hdc 未找到或无法执行（已尝试 {:?}）。可设置环境变量 HAPRAY_HDC_PATH 指向 hdc 绝对路径，或把 toolchains 目录加入系统 PATH。",
+                hdc_path
+            )
+        } else {
+            format!("执行 hdc 失败: {}", e)
+        }
+    })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        eprintln!(
+            "[hdc] shell bm dump -a 非零退出: exit={:?}, stderr_len={}, stdout_len={}",
+            output.status.code(),
+            stderr.len(),
+            stdout.len()
+        );
+        eprintln!("[hdc] stderr: {}", stderr.trim());
+        if !stdout.trim().is_empty() {
+            eprintln!("[hdc] stdout: {}", stdout.trim());
+        }
+        return Err(format!(
+            "hdc shell bm dump -a 失败 (exit {:?})。stderr: {}。stdout: {}",
+            output.status.code(),
+            stderr.trim(),
+            stdout.trim()
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let bundle_names = parse_bundle_names_from_bm_dump(&stdout);
+
+    if bundle_names.is_empty() {
+        let preview: String = stdout.chars().take(2048).collect();
+        if preview.trim().is_empty() {
+            eprintln!(
+                "[hdc] bm dump -a stdout 为空（exit 0）。请确认 `hdc list targets` 能列出设备。"
+            );
+        } else {
+            eprintln!(
+                "[hdc] bm dump -a 解析到 0 个包名。stdout 前 2048 字符:\n{}",
+                preview
+            );
+        }
+        let mut t = hdc_command_with_env().1;
+        t.args(["list", "targets"]);
+        if let Ok(tout) = t.output() {
+            let ts = String::from_utf8_lossy(&tout.stdout);
+            let te = String::from_utf8_lossy(&tout.stderr);
+            eprintln!(
+                "[hdc] list targets: exit={:?} stdout={} stderr={}",
+                tout.status.code(),
+                ts.trim(),
+                te.trim()
+            );
+        }
+    }
+
+    let mut apps = Vec::new();
+    for line in bundle_names {
+        let category = if line.starts_with("com.huawei.") {
+            "system"
+        } else {
+            "third"
+        };
+        apps.push(format!("{}::{}", category, line));
     }
     apps.sort();
     apps.dedup();
