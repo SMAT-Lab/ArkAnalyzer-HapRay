@@ -199,6 +199,10 @@ class HapRayCmd:
                 machine_json=machine_json,
             )
 
+        if is_valid_action_execute_return(ret):
+            sys.exit(ret[0])
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()

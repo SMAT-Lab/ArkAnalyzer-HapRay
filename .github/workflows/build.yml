@@ -171,9 +171,9 @@ jobs:
         echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
 
     - name: PyInstaller build
+      # 使用 bash：避免在非 macOS 上设置 CARGO_BUILD_TARGET=空串（会导致 Cargo/Tauri 报 target was empty）
+      shell: bash
       env:
-        # macOS：固定 Rust 目标为 64 位 triple，不产出 i386/通用 fat 误配
-        CARGO_BUILD_TARGET: ${{ matrix.item.platform == 'darwin' && matrix.item.cargo_target || '' }}
         # macOS 签名 / 公证（其它平台忽略）；与 Tauri v2 文档一致
         # Apple ID 公证：配 APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID；勿配 APPLE_API_* / APPLE_API_PRIVATE_KEY
         # API Key 公证：配 APPLE_API_ISSUER、APPLE_API_KEY，且上一「Write API private key」需有 APPLE_API_PRIVATE_KEY
@@ -185,6 +185,9 @@ jobs:
         APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       run: |
+        if [ "${{ matrix.item.platform }}" = "darwin" ]; then
+          export CARGO_BUILD_TARGET="${{ matrix.item.cargo_target }}"
+        fi
         npm run build
         npm run release
 

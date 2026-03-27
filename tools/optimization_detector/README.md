@@ -125,7 +125,7 @@ opt-detector -i libexample.so -o report.xlsx --log-file analysis.log
 
 **与 `-o` 主报告的区别：** `-o` 指定的是**业务分析报告**（优化级别、LTO 等检测结果的载体）。**`hapray-tool-result.json` 不是第二份同类业务数据**，而是描述**本次 CLI 运行本身**的固定结构：成功与否、`exit_code`、工具版本、错误信息，以及在 `-f` 多格式时汇总 **`report_files` / `reports_by_format`**，便于 Agent、CI 与编排脚本用统一 schema 判状态、取路径，而无需从日志猜测或只依赖 `-o` 的 basename 规则。若仅人工阅读分析报告、不需要自动化集成，**可忽略契约文件**。
 
-- 每次运行结束后，会在**主报告 `-o` 所在目录**（与 `dirname(abs(-o))` 一致）额外写入 **`hapray-tool-result.json`**（macOS 下若将输出映射到用户目录，则与映射后的报告同目录）。
+- 每次运行结束后，默认在**主报告 `-o` 所在目录**（与 `dirname(abs(-o))` 一致）额外写入 **`hapray-tool-result.json`**（macOS 下若将输出映射到用户目录，则与映射后的报告同目录）。**`--result-file <path>`** 可显式指定契约文件路径（ArkAnalyzer-HapRay 桌面端 `tool_contract` 会注入该参数）。
 - 契约内 **`outputs.hapray_tool_result_path`** 为本契约文件的绝对路径（写入前即写入字段，文件内容与内存一致）。
 - **`outputs.report_files`**：各格式生成的主报告绝对路径列表；**`outputs.reports_by_format`**：格式名（excel/json/csv/xml）到路径的映射；`-f` 多格式时二者一并列出。
 - **`--machine-json`**：仅当契约文件**无法写入**时，将同一结构以一行 JSON 打到 stdout（兜底）；平时无需使用。

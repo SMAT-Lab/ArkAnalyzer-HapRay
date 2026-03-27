@@ -148,25 +148,130 @@ fn extract_output_path_from_log_first(action: &str, log: &str, cwd: &Path) -> Op
     extract_output_path_from_log(log, cwd)
 }
 
+/// 与 CLI `scripts/main.py` 全局参数一致：`plugin.json` 中 `tool_contract.enabled` 时注入 `--result-file` / 可选 `--machine-json`。
+fn tool_contract_enabled(meta: &serde_json::Value) -> bool {
+    meta.get("tool_contract")
+        .and_then(|v| v.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+fn tool_contract_result_basename(meta: &serde_json::Value) -> String {
+    meta.get("tool_contract")
+        .and_then(|v| v.get("result_file"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| "hapray-tool-result.json".to_string())
+}
+
+fn tool_contract_machine_json(meta: &serde_json::Value) -> bool {
+    meta.get("tool_contract")
+        .and_then(|v| v.get("machine_json"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// 在 argv 中插入 `--result-file <path>`：若首参为脚本入口（`*.py` / `*.ts` 等）则插在脚本名之后，与各工具 CLI 全局参数顺序一致；否则插在开头。
+fn insert_result_file_args(args: &mut Vec<String>, result_path: &str) {
+    let pos = if args
+        .first()
+        .map(|s| {
+            s.contains("main.py")
+                || s.ends_with(".py")
+                || s.ends_with(".ts")
+                || s.ends_with(".tsx")
+        })
+        .unwrap_or(false)
+    {
+        1
+    } else {
+        0
+    };
+    args.insert(pos, result_path.to_string());
+    args.insert(pos, "--result-file".to_string());
+}
+
+fn append_machine_json_arg(args: &mut Vec<String>) {
+    if !args.iter().any(|a| a == "--machine-json") {
+        args.push("--machine-json".to_string());
+    }
+}
+
+/// 解析 `hapray-tool-result.json`（v1），优先取 `outputs.reports_path` 作为打开报告目录的依据。
+#[derive(Debug)]
+struct ParsedHaprayToolResult {
+    success: bool,
+    reports_path: Option<String>,
+}
+
+fn parse_hapray_tool_result(path: &Path) -> Option<ParsedHaprayToolResult> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let exit_code = v
+        .get("exit_code")
+        .and_then(|x| x.as_i64())
+        .or_else(|| v.get("exit_code").and_then(|x| x.as_u64()).map(|u| u as i64))
+        .unwrap_or(-1);
+    let success_flag = v.get("success").and_then(|x| x.as_bool());
+    let success = success_flag.unwrap_or(exit_code == 0);
+
+    let mut reports_path = v
+        .get("outputs")
+        .and_then(|o| o.get("reports_path"))
+        .and_then(|x| x.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    if reports_path.is_none() {
+        if let Some(o) = v.get("outputs").and_then(|x| x.as_object()) {
+            for key in ["output_dir", "output"] {
+                if let Some(s) = o.get(key).and_then(|x| x.as_str()) {
+                    if !s.is_empty() {
+                        reports_path = Some(s.to_string());
+                        break;
+                    }
+                }
+            }
+            if reports_path.is_none() {
+                if let Some(arr) = o.get("report_files").and_then(|x| x.as_array()) {
+                    if let Some(first) = arr.first().and_then(|x| x.as_str()) {
+                        let p = Path::new(first);
+                        if let Some(parent) = p.parent() {
+                            if !parent.as_os_str().is_empty() {
+                                reports_path = Some(parent.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Some(ParsedHaprayToolResult {
+        success,
+        reports_path,
+    })
+}
+
 /// 保存执行记录（参考 result_processor.py）
 fn save_execution_record(
     app: &tauri::AppHandle,
     plugin_id: &str,
     action: &str,
+    timestamp: &str,
     success: bool,
     message: &str,
     params: &HashMap<String, serde_json::Value>,
     meta: &serde_json::Value,
     command: &str,
     output_path: Option<&str>,
+    hapray_tool_result_path: Option<&str>,
     output: &str,
 ) {
     let results_dir = match get_results_dir(app) {
         Ok(d) => d,
         Err(_) => return,
     };
-
-    let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
     let tool_name = meta.get("name").and_then(|n| n.as_str()).unwrap_or(plugin_id);
     let action_name = meta
         .get("actions")
@@ -180,7 +285,7 @@ fn save_execution_record(
         .and_then(|m| m.get("menu1"))
         .and_then(|c| c.as_str());
 
-    let result_dir = results_dir.join(plugin_id).join(&timestamp);
+    let result_dir = results_dir.join(plugin_id).join(timestamp);
     if let Err(e) = std::fs::create_dir_all(&result_dir) {
         eprintln!("创建执行记录目录失败: {}", e);
         return;
@@ -198,6 +303,7 @@ fn save_execution_record(
         "params": params,
         "command": command,
         "output_path": output_path,
+        "hapray_tool_result_path": hapray_tool_result_path,
         "output": output,
         "result_dir": result_dir.to_string_lossy().to_string(),
     });
@@ -323,9 +429,30 @@ pub async fn execute_tool_command(
         }
     };
 
+    let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+    let mut run_args = prepared.args.clone();
+    let mut contract_file_opt: Option<PathBuf> = None;
+
+    if tool_contract_enabled(&prepared.meta) {
+        if let Ok(base) = get_results_dir(&app) {
+            let contract_dir = base.join(&payload.plugin_id).join(&timestamp);
+            if let Err(e) = std::fs::create_dir_all(&contract_dir) {
+                eprintln!("[tool_contract] 创建契约目录失败: {}", e);
+            } else {
+                let basename = tool_contract_result_basename(&prepared.meta);
+                let path = contract_dir.join(&basename);
+                let path_str = path.to_string_lossy().to_string();
+                insert_result_file_args(&mut run_args, &path_str);
+                if tool_contract_machine_json(&prepared.meta) {
+                    append_machine_json_arg(&mut run_args);
+                }
+                contract_file_opt = Some(path);
+            }
+        }
+    }
+
     let exe_path_str = prepared.exe_path.to_string_lossy();
-    let args_str: Vec<String> = prepared
-        .args
+    let args_str: Vec<String> = run_args
         .iter()
         .map(|a| {
             if a.contains(' ') || a.contains('"') || a.is_empty() {
@@ -360,7 +487,7 @@ pub async fn execute_tool_command(
     cmd_builder.creation_flags(0x08000000); // CREATE_NO_WINDOW，避免点击菜单时闪出命令行窗口
 
     let mut child = match cmd_builder
-        .args(&prepared.args)
+        .args(&run_args)
         .current_dir(&work_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -456,28 +583,44 @@ pub async fn execute_tool_command(
     let _ = t2.join();
     let output_log = output_collector.lock().map(|g| g.clone()).unwrap_or_default();
 
-    let success = status.success();
+    let hapray_path_str = contract_file_opt
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string());
+
+    let parsed_from_contract = contract_file_opt
+        .as_ref()
+        .and_then(|p| parse_hapray_tool_result(p));
+
+    let success = parsed_from_contract
+        .as_ref()
+        .map(|p| p.success)
+        .unwrap_or_else(|| status.success());
+
     let message = if success {
         "执行成功".to_string()
     } else {
         "执行失败".to_string()
     };
 
-    // 以日志输出为准（工具在 macOS 下会自行重定向到用户目录并打印最终路径）
-    // 仅当日志无法解析到路径时，才回退到 params 推导路径。
-    let output_path = extract_output_path_from_log_first(&payload.action, &output_log, work_dir.as_path())
+    // 优先：hapray-tool-result.json 的 outputs.reports_path；其次日志启发式；最后表单参数。
+    let output_path = parsed_from_contract
+        .as_ref()
+        .and_then(|p| p.reports_path.clone())
+        .or_else(|| extract_output_path_from_log_first(&payload.action, &output_log, work_dir.as_path()))
         .or_else(|| extract_output_path_from_params(&payload.action, &params_for_history, work_dir.as_path()));
 
     save_execution_record(
         &app,
         &payload.plugin_id,
         &payload.action,
+        &timestamp,
         success,
         &message,
         &payload.params,
         &prepared.meta,
         &full_cmd,
         output_path.as_deref(),
+        hapray_path_str.as_deref(),
         &output_log,
     );
 

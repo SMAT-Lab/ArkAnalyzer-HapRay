@@ -14,7 +14,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { Command } from 'commander';
+import { Command, program } from 'commander';
 import { HapAnalysisService } from '../../services/analysis/hap_analysis';
 import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { buildToolResult, emitToolResult } from '../../utils/machine_output';
@@ -51,7 +51,14 @@ export const HapAnalyzerCli = new Command('hap')
         false
     )
     .action(async (options: AnalyzeOptions) => {
-        await analyzeHap(options);
+        // 根命令 hapray-sa-cmd 上的 --result-file / --machine-json（GUI 在 hapray hap 之前注入）
+        const root = program.opts() as { resultFile?: string; machineJson?: boolean };
+        const merged: AnalyzeOptions = {
+            ...options,
+            resultFile: options.resultFile ?? root.resultFile,
+            machineJson: Boolean(options.machineJson || root.machineJson),
+        };
+        await analyzeHap(merged);
     });
 
 async function writeToolResultToFile(filePath: string, payload: ReturnType<typeof buildToolResult>): Promise<void> {

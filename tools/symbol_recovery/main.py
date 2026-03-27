@@ -257,13 +257,17 @@ def create_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         '--result-file',
+        metavar='PATH',
         default=None,
-        help='将 HapRay tool-result JSON（v1）写入该路径（默认: <output-dir>/hapray-tool-result.json）',
+        help=(
+            '将 HapRay tool-result JSON（v1）写入该路径（默认: <output-dir>/hapray-tool-result.json）。'
+            'ArkAnalyzer-HapRay 桌面端 tool_contract 会注入该参数。'
+        ),
     )
     parser.add_argument(
         '--machine-json',
         action='store_true',
-        help='无法写入结果文件时，在 stdout 输出一行 JSON；日志走 stderr（兜底）',
+        help='无法写入契约文件时，在 stdout 输出一行 JSON；日志走 stderr（兜底）',
     )
     return parser
 

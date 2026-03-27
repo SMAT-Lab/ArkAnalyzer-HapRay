@@ -15,6 +15,7 @@ from hapray.core.common.action_return import ActionExecuteReturn, is_valid_actio
 from hapray.core.common.machine_output import (
     SCHEMA_VERSION,
     build_tool_result,
+    enrich_gui_agent_contract_outputs,
     interpret_perf_testing_return,
 )
 
@@ -92,5 +93,55 @@ def test_success_null_still_validates(tool_result_validator):
         exit_code=0,
         outputs={},
         error=None,
+    )
+    tool_result_validator.validate(payload)
+
+
+def test_enrich_gui_agent_outputs_step_events_and_partial(tmp_path, tool_result_validator):
+    """gui-agent enrich：llm_step_events、perf_steps_summary、partial、contract_mode。"""
+    root = tmp_path / "reports" / "com.example.app" / "scene1"
+    root.mkdir(parents=True)
+    (root / "testInfo.json").write_text("{}", encoding="utf-8")
+    steps = [{"stepIdx": 1, "name": "step1", "description": "场景"}]
+    (root / "steps.json").write_text(json.dumps(steps, ensure_ascii=False), encoding="utf-8")
+    ui_step = root / "ui" / "step1"
+    ui_step.mkdir(parents=True)
+    pages = [
+        {
+            "page_idx": 1,
+            "gui_agent": {
+                "step_index": 1,
+                "finished": False,
+                "success": True,
+                "error_code": None,
+                "action": "tap",
+                "message": "ok",
+            },
+        }
+    ]
+    (ui_step / "pages.json").write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
+
+    extra = enrich_gui_agent_contract_outputs(str(tmp_path / "reports"))
+    assert extra["partial"] is False
+    ga = extra["gui_agent"]
+    assert ga["contract_mode"] == "final"
+    assert ga["reports_dir"] == str((tmp_path / "reports").resolve())
+    sc = ga["scenes"][0]
+    assert sc["step_count"] == 1
+    assert sc["perf_steps_summary"][0]["step_index"] == 1
+    assert len(sc["llm_step_events"]) == 1
+    ev = sc["llm_step_events"][0]
+    assert ev["step_index"] == 1
+    assert ev["finished"] is False
+    assert ev["error_code"] is None
+
+    payload = build_tool_result(
+        "perf_testing",
+        success=True,
+        exit_code=0,
+        action="gui-agent",
+        outputs={"reports_path": str(tmp_path / "reports"), **extra},
+        error=None,
+        tool_version="0",
     )
     tool_result_validator.validate(payload)
