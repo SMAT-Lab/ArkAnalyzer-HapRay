@@ -14,6 +14,7 @@ jobs:
     strategy:
       matrix:
         item:
+          # 全矩阵仅 64 位：Linux/Windows x64、macOS arm64 与 x86_64；不构建 32 位（i386、ia32、armv7）
           # Linux Ubuntu 22.04（LTS）
           - os: ubuntu-22.04
             arch: x64
@@ -36,19 +37,23 @@ jobs:
             use_static_python: false
             artifact_suffix: ""
 
-          # macOS - ARM (Apple Silicon)
+          # macOS - ARM 64 位（Apple Silicon，aarch64）
           - os: macos-15
             arch: arm64
             platform: darwin
+            cargo_target: aarch64-apple-darwin
+            dmg_arch: aarch64
             pyinstaller_arch: arm64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
             artifact_suffix: ""
 
-          # macOS - Intel (x86_64)，使用 macos-15-intel 以获取 Intel runner
+          # macOS - Intel 仅 64 位（x86_64），非 32 位 i386；使用 macos-15-intel runner
           - os: macos-15-intel
             arch: x64
             platform: darwin
+            cargo_target: x86_64-apple-darwin
+            dmg_arch: x86_64
             pyinstaller_arch: x86_64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
@@ -167,6 +172,8 @@ jobs:
 
     - name: PyInstaller build
       env:
+        # macOS：固定 Rust 目标为 64 位 triple，不产出 i386/通用 fat 误配
+        CARGO_BUILD_TARGET: ${{ matrix.item.platform == 'darwin' && matrix.item.cargo_target || '' }}
         # macOS 签名 / 公证（其它平台忽略）；与 Tauri v2 文档一致
         # Apple ID 公证：配 APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID；勿配 APPLE_API_* / APPLE_API_PRIVATE_KEY
         # API Key 公证：配 APPLE_API_ISSUER、APPLE_API_KEY，且上一「Write API private key」需有 APPLE_API_PRIVATE_KEY
@@ -203,10 +210,10 @@ jobs:
         name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}${{ matrix.item.artifact_suffix }}
         path: opt-detector-*.zip
 
-    # macOS 构建产物：收集 Desktop .dmg 安装包
+    # macOS 构建产物：只上传与本 job 架构一致的 dmg（避免 bundle/dmg 内同时存在 *_aarch64 与 *_x86_64 时被 *.dmg 全部打进去）
     - name: Upload Desktop DMG (macOS)
       if: matrix.item.platform == 'darwin'
       uses: actions/upload-artifact@v4
       with:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
-        path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+        path: desktop/src-tauri/target/release/bundle/dmg/*_${{ matrix.item.dmg_arch }}.dmg

@@ -1,11 +1,12 @@
-const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const projectDir = process.cwd();
-const thirdPartyDir = path.resolve(projectDir, '../third-party');
-const openAutoGlmDir = path.join(thirdPartyDir, 'Open-AutoGLM');
-const patchFile = path.resolve(projectDir, '../Open-AutoGLM-swipe.diff');
+
+// 与 ../scripts/python_setup.js 一致：uv 不读 pip config，可与 pip 对齐使用 PIP_INDEX_URL 或 UV_DEFAULT_INDEX
+if (!process.env.UV_DEFAULT_INDEX && !process.env.UV_INDEX_URL && process.env.PIP_INDEX_URL) {
+  process.env.UV_DEFAULT_INDEX = process.env.PIP_INDEX_URL;
+}
 
 function fail(message, error) {
   if (error) {
@@ -30,15 +31,5 @@ function run(command, args, cwd = projectDir) {
   }
 }
 
-if (!fs.existsSync(openAutoGlmDir)) {
-  run('git', ['clone', 'https://gitcode.com/zai-org/Open-AutoGLM.git', openAutoGlmDir]);
-  if (fs.existsSync(patchFile)) {
-    run('git', ['apply', patchFile], openAutoGlmDir);
-  }
-}
-
-const pythonPath =
-  process.platform === 'win32' ? '.\\.venv\\Scripts\\python.exe' : './.venv/bin/python';
-
-run('uv', ['pip', 'install', '--python', pythonPath, '-r', path.join(openAutoGlmDir, 'requirements.txt')]);
-run('uv', ['pip', 'install', '--python', pythonPath, openAutoGlmDir]);
+// phone-agent 由 pyproject 依赖安装；对当前 venv 内 site-packages 的 device.py 打 swipe 补丁（路径由 Python 解析，跨 OS）
+run('uv', ['run', 'python', path.join(projectDir, 'scripts', 'patch_phone_agent_device.py')]);
