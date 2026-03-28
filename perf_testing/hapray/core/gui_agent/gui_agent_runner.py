@@ -197,9 +197,23 @@ class GUIAgentRunner(PerfTestCase):
             step_result.message,
         )
 
-        # Create page information
+        # 结构化步骤边界：供 tool-result / 外层 LLM 续跑改参（非仅日志）
+        success = getattr(step_result, 'success', True)
+        finished = getattr(step_result, 'finished', False)
+        err_code = None
+        if not success:
+            err_code = getattr(step_result, 'error_code', None) or getattr(step_result, 'error', None)
+            if isinstance(err_code, str) and err_code.strip():
+                err_code = err_code.strip()[:64]
+            else:
+                err_code = 'GUI_AGENT_STEP_FAILED'
+
         page_info = {
             'gui_agent': {
+                'step_index': self.agent.step_count,
+                'finished': finished,
+                'success': success,
+                'error_code': err_code,
                 'action': step_result.action or '',
                 'thinking': step_result.thinking or '',
                 'message': step_result.message or '',

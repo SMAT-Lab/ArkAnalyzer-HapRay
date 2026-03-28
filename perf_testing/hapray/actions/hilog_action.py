@@ -17,7 +17,6 @@ import argparse
 import json
 import logging
 import os
-import platform
 import re
 import subprocess
 import sys
@@ -370,17 +369,10 @@ class HilogAction:
     def _execute_hilogtool(self, hilog_dir: str) -> bool:
         """Execute hilogtool to decrypt hilog files"""
         try:
-            # Get hilogtool directory using the standard method
-            tools_dir = ExeUtils.get_tools_dir('hilogtool')
-
-            # Select appropriate executable based on platform
-            if platform.system() == 'Windows':
-                hilogtool_path = os.path.join(tools_dir, 'hilogtool.exe')
-            else:
-                hilogtool_path = os.path.join(tools_dir, 'hilogtool')
-
-            if not os.path.exists(hilogtool_path):
-                logging.error(f'Hilogtool not found at: {hilogtool_path}')
+            try:
+                hilogtool_path = ExeUtils.get_hilogtool_path()
+            except FileNotFoundError as e:
+                logging.error(f'Hilogtool not found: {e}')
                 return False
 
             # Prepare command

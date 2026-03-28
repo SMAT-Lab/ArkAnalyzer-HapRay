@@ -228,6 +228,15 @@ Excel 文件（包含偏移量）
 | `--excel-file` | Excel 文件路径（包含函数偏移量地址） | **必需** |
 | `--so-file` | SO 文件路径 | **必需** |
 
+### 工具契约（Agent / ArkAnalyzer-HapRay GUI）
+
+| 参数 | 说明 |
+|------|------|
+| `--result-file PATH` | 将 **`hapray-tool-result.json`**（HapRay tool-result v1）写入该路径；默认 **`<output-dir>/hapray-tool-result.json`**。桌面端 `plugin.json` 中 **`tool_contract`** 会注入该参数。 |
+| `--machine-json` | 契约文件**无法写入**时，将同一结构以**一行 JSON** 输出到 **stdout**；控制台日志走 **stderr**，避免与管道中的 JSON 混淆。 |
+
+**与业务产物的区别**：`--output-dir` 下为 Excel/HTML 等分析报告；契约文件描述**本次 CLI 运行**本身（成功与否、`exit_code`、`outputs.output_dir` 等），供 Agent、CI 与 ArkAnalyzer-HapRay 桌面解析，无需依赖人类可读日志。
+
 ## 输出文件
 
 ### perf 数据模式输出

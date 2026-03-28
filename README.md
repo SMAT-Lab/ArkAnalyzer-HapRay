@@ -513,8 +513,8 @@ After removing quarantine attributes, you can run the executable:
 
 ### Dependencies
 - pip > 23.0.1
-- Python 3.11 (managed by `uv`)
-- Node.js 24.x (managed by `nvm`)
+- Python version pinned in `.python-version` (currently **3.12**, managed by `uv`)
+- Node.js version pinned in `.nvmrc` / `package.json` engines (currently **24.x**, managed by `nvm`)
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
 > ⚠️ The project manages versions via `.nvmrc` and `.python-version`.
@@ -553,7 +553,7 @@ export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/defa
 ```
 ### MacOS Dependencies
 ```bash
-brew install git git-lfs python@3.11
+brew install git git-lfs python@3.12
 
 # Add Command Line Tools for HarmonyOS to PATH
 # export command_line_tools=[Command Line Tools for HarmonyOS] directory
@@ -573,7 +573,8 @@ source ./bootstrap_env.sh
 # Install JS dependencies and build
 npm install
 npm run build
-# Activate the python virtual environment
+# Activate the Python virtual environment (created under perf_testing by uv)
+cd perf_testing
 source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
@@ -593,7 +594,8 @@ cd my-dev
 # Install JS dependencies and build
 npm install
 npm run build
-# Activate virtual environment (PowerShell)
+# Activate virtual environment (PowerShell; venv lives under perf_testing)
+cd perf_testing
 .\.venv\Scripts\Activate.ps1
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]

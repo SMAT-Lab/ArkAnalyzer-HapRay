@@ -21,6 +21,16 @@
                 {{ param.label || key }}
               </label>
               <div class="tool-workspace__control">
+                <p
+                  v-if="dynamicChoicesErrors[key] || dynamicChoicesWarnings[key]"
+                  class="tool-workspace__dynamic-hint"
+                  :class="{
+                    'tool-workspace__dynamic-hint--error': dynamicChoicesErrors[key],
+                    'tool-workspace__dynamic-hint--warn': dynamicChoicesWarnings[key] && !dynamicChoicesErrors[key],
+                  }"
+                >
+                  {{ dynamicChoicesErrors[key] || dynamicChoicesWarnings[key] }}
+                </p>
                 <div
                   v-if="(param.type === 'str' || param.type === 'file' || param.type === 'dir') && !param.nargs"
                   class="tool-workspace__path-input-wrap"
@@ -457,6 +467,10 @@ function onOutputResizeStart(e: MouseEvent) {
 const dynamicChoicesCache = ref<Record<string, string[]>>({})
 /** 正在加载动态 choices 的 paramKey 集合 */
 const loadingChoicesKeys = ref<Set<string>>(new Set())
+/** 动态选项加载失败：paramKey -> 后端错误文案（界面可见，不依赖控制台） */
+const dynamicChoicesErrors = ref<Record<string, string>>({})
+/** 动态选项成功但为空时的提示（如 get_installed_apps 未解析到包名） */
+const dynamicChoicesWarnings = ref<Record<string, string>>({})
 /** nargs 参数输入框的临时值（添加前的输入） */
 const nargsInputTemp = ref<Record<string, string | number>>({})
 /** choice multi_select 下拉框的当前选中值（添加前） */
@@ -740,14 +754,45 @@ async function browsePath(paramKey: string, paramType: string) {
   }
 }
 
+function omitRecordKey<T>(rec: Record<string, T>, k: string): Record<string, T> {
+  const next = { ...rec }
+  delete next[k]
+  return next
+}
+
+/** 将 Tauri invoke 抛出的错误转为可读字符串（Rust 侧 Err 可能在 message / error） */
+function formatInvokeError(e: unknown): string {
+  if (typeof e === "string") return e
+  if (e instanceof Error) return e.message
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>
+    if (typeof o.message === "string") return o.message
+    if (typeof o.error === "string") return o.error
+  }
+  return String(e)
+}
+
 async function loadDynamicChoices(paramKey: string, choicesFunc: string) {
   if (!hasTauri) return
   loadingChoicesKeys.value = new Set([...loadingChoicesKeys.value, paramKey])
   try {
     const list = await invoke<string[]>("get_dynamic_choices_command", { choicesFunc })
     dynamicChoicesCache.value = { ...dynamicChoicesCache.value, [paramKey]: list }
-  } catch {
+    dynamicChoicesErrors.value = omitRecordKey(dynamicChoicesErrors.value, paramKey)
+    dynamicChoicesWarnings.value = omitRecordKey(dynamicChoicesWarnings.value, paramKey)
+    if (choicesFunc === "get_installed_apps" && list.length === 0) {
+      dynamicChoicesWarnings.value = {
+        ...dynamicChoicesWarnings.value,
+        [paramKey]:
+          "未解析到已安装应用（列表为空）。请确认设备已连接并已授权调试；从终端启动应用时可查看 stderr 中的 [hdc] 日志（含 bm dump 输出片段与 hdc list targets）。",
+      }
+    }
+  } catch (e) {
+    const errText = formatInvokeError(e)
+    console.error(`[get_dynamic_choices] ${choicesFunc} 失败:`, e)
     dynamicChoicesCache.value = { ...dynamicChoicesCache.value, [paramKey]: [] }
+    dynamicChoicesErrors.value = { ...dynamicChoicesErrors.value, [paramKey]: errText }
+    dynamicChoicesWarnings.value = omitRecordKey(dynamicChoicesWarnings.value, paramKey)
   } finally {
     loadingChoicesKeys.value = new Set([...loadingChoicesKeys.value].filter((k) => k !== paramKey))
   }
@@ -876,6 +921,8 @@ watch(
         initForm()
         output.value = ""
         dynamicChoicesCache.value = {}
+        dynamicChoicesErrors.value = {}
+        dynamicChoicesWarnings.value = {}
         loadingChoicesKeys.value = new Set()
       } else if (cached) {
         // 从缓存恢复，与当前参数结构合并
@@ -898,11 +945,15 @@ watch(
         output.value = cached.output
         dynamicChoicesCache.value = { ...cached.dynamicChoicesCache }
         outputPanelVisible.value = cached.outputPanelVisible
+        dynamicChoicesErrors.value = {}
+        dynamicChoicesWarnings.value = {}
         loadingChoicesKeys.value = new Set()
       } else {
         initForm()
         output.value = ""
         dynamicChoicesCache.value = {}
+        dynamicChoicesErrors.value = {}
+        dynamicChoicesWarnings.value = {}
         loadingChoicesKeys.value = new Set()
       }
     }

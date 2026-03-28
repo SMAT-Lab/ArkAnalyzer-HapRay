@@ -1062,6 +1062,27 @@ button#decorum-tb-close:hover {
   min-width: 0;
 }
 
+.tool-workspace__dynamic-hint {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  border-radius: 6px;
+  word-break: break-word;
+}
+
+.tool-workspace__dynamic-hint--error {
+  color: var(--destructive, #b91c1c);
+  background: color-mix(in srgb, var(--destructive, #b91c1c) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--destructive, #b91c1c) 35%, transparent);
+}
+
+.tool-workspace__dynamic-hint--warn {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--muted-foreground, #737373) 12%, transparent);
+  border: 1px solid var(--border);
+}
+
 .tool-workspace__path-input-wrap {
   display: flex;
   gap: 8px;

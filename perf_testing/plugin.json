@@ -4,6 +4,11 @@
   "description": "执行性能测试，收集性能数据和trace信息",
   "version": "1.0.0",
   "author": "HapRay Team",
+  "tool_contract": {
+    "enabled": true,
+    "result_file": "hapray-tool-result.json",
+    "machine_json": false
+  },
   "execution": {
     "debug": {
       "cmd": ["python", "scripts/main.py"],

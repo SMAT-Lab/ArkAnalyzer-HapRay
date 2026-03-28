@@ -33,8 +33,16 @@ _STDOUT_WRAPPER = None
 
 
 def _contract_result_path(output_path: str) -> str:
-    """契约 JSON 固定与 -o 同目录: dirname(abs(-o))/hapray-tool-result.json"""
+    """契约 JSON 默认与 -o 同目录: dirname(abs(-o))/hapray-tool-result.json"""
     return default_result_path_for_output_file(output_path)
+
+
+def _contract_result_path_for_args(parsed_args) -> str:
+    """契约路径：显式 --result-file（与 GUI tool_contract 一致）优先，否则为 -o 同目录。"""
+    rf = getattr(parsed_args, 'result_file', None)
+    if rf:
+        return os.path.abspath(rf)
+    return _contract_result_path(parsed_args.output)
 
 
 def _build_opt_success_outputs(parsed_args, saved_files: list[str]) -> dict:
@@ -125,6 +133,12 @@ class OptAction:
 
         parser.add_argument('--log-file', help='Path to log file')
         parser.add_argument(
+            '--result-file',
+            metavar='PATH',
+            default=None,
+            help='Write hapray-tool-result.json to this path (default: beside --output). Used by ArkAnalyzer-HapRay GUI tool_contract.',
+        )
+        parser.add_argument(
             '--machine-json',
             action='store_true',
             help='If result file cannot be written or no file path, print one JSON line to stdout; logs go to stderr',
@@ -159,7 +173,7 @@ class OptAction:
                 )
                 finalize_contract(
                     payload,
-                    result_path=_contract_result_path(parsed_args.output),
+                    result_path=_contract_result_path_for_args(parsed_args),
                     machine_json=parsed_args.machine_json,
                 )
                 return 1
@@ -188,7 +202,7 @@ class OptAction:
             )
             finalize_contract(
                 payload,
-                result_path=_contract_result_path(parsed_args.output),
+                result_path=_contract_result_path_for_args(parsed_args),
                 machine_json=parsed_args.machine_json,
             )
             return 0
@@ -204,7 +218,7 @@ class OptAction:
             )
             finalize_contract(
                 payload,
-                result_path=_contract_result_path(parsed_args.output),
+                result_path=_contract_result_path_for_args(parsed_args),
                 machine_json=parsed_args.machine_json,
             )
             if parsed_args.machine_json:
