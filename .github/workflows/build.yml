@@ -53,7 +53,7 @@ jobs:
             arch: x64
             platform: darwin
             cargo_target: x86_64-apple-darwin
-            dmg_arch: x86_64
+            dmg_arch: x64
             pyinstaller_arch: x86_64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
@@ -213,10 +213,61 @@ jobs:
         name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}${{ matrix.item.artifact_suffix }}
         path: opt-detector-*.zip
 
-    # macOS 构建产物：只上传与本 job 架构一致的 dmg（避免 bundle/dmg 内同时存在 *_aarch64 与 *_x86_64 时被 *.dmg 全部打进去）
+    # macOS 构建产物：只上传与本 job 架构一致的 dmg（CARGO_BUILD_TARGET 下产物在 target/<triple>/release/bundle/）
     - name: Upload Desktop DMG (macOS)
       if: matrix.item.platform == 'darwin'
       uses: actions/upload-artifact@v4
       with:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
-        path: desktop/src-tauri/target/release/bundle/dmg/*_${{ matrix.item.dmg_arch }}.dmg
+        path: desktop/src-tauri/target/${{ matrix.item.cargo_target }}/release/bundle/dmg/*_${{ matrix.item.dmg_arch }}.dmg
+
+  # 契约冒烟：仅在完整构建矩阵全部成功后运行（与此前独立 contract-smoke.yml 等价，避免未构建即跑 smoke）
+  contract-smoke-optimization-detector:
+    name: Contract smoke / optimization_detector
+    needs: build
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+      - uses: astral-sh/setup-uv@v5
+      - name: Empty input dir writes hapray-tool-result.json beside -o
+        working-directory: tools/optimization_detector
+        run: |
+          set -euo pipefail
+          uv sync
+          mkdir -p /tmp/empty_od
+          set +e
+          uv run python cli.py -i /tmp/empty_od -o /tmp/opt_contract_smoke.xlsx
+          code=$?
+          set -e
+          test "$code" -eq 1
+          test -f /tmp/hapray-tool-result.json
+          python3 -c "import json; json.load(open('/tmp/hapray-tool-result.json'))"
+
+  contract-smoke-symbol-recovery:
+    name: Contract smoke / symbol_recovery
+    needs: build
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+      - uses: astral-sh/setup-uv@v5
+      - name: Missing perf.data writes hapray-tool-result.json under output-dir
+        working-directory: tools/symbol_recovery
+        run: |
+          set -euo pipefail
+          uv sync
+          TMP=$(mktemp -d)
+          set +e
+          uv run python main.py --perf-data "$TMP/missing.perf.data" --output-dir "$TMP/out"
+          code=$?
+          set -e
+          test "$code" -eq 1
+          test -f "$TMP/out/hapray-tool-result.json"
+          python3 -c "import json; json.load(open('$TMP/out/hapray-tool-result.json'))"

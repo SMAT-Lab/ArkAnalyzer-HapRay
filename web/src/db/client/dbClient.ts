@@ -277,7 +277,7 @@ export class DbClient {
   /**
    * Setup request timeout
    */
-  private setupRequestTimeout(id: string, type: WorkerMessageType, reject: (reason: unknown) => void): NodeJS.Timeout {
+  private setupRequestTimeout(id: string, type: WorkerMessageType, reject: (reason: unknown) => void): ReturnType<typeof setTimeout> {
     return setTimeout(() => {
       if (this.pendingRequests.has(id)) {
         console.error('[DbClient] Request timeout, id:', id, 'type:', type);
@@ -291,7 +291,7 @@ export class DbClient {
    * Create wrapped callbacks with timeout cleanup
    */
   private createWrappedCallbacks(
-    timeoutId: NodeJS.Timeout,
+    timeoutId: ReturnType<typeof setTimeout>,
     resolve: (value: unknown) => void,
     reject: (reason: unknown) => void
   ): { wrappedResolve: (value: unknown) => void; wrappedReject: (reason: unknown) => void } {
@@ -313,7 +313,7 @@ export class DbClient {
   private postMessageToWorker(
     request: WorkerRequest,
     id: string,
-    timeoutId: NodeJS.Timeout,
+    timeoutId: ReturnType<typeof setTimeout>,
     wrappedReject: (reason: unknown) => void
   ): void {
     try {
