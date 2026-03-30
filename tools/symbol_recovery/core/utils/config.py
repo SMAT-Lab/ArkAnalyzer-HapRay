@@ -34,6 +34,7 @@ DEFAULT_PERF_DATA = 'perf.data'
 DEFAULT_PERF_DB = 'perf.db'
 DEFAULT_TOP_N = 100
 DEFAULT_BATCH_SIZE = 3
+DEFAULT_REQUEST_DELAY = 0.5   # 请求间隔（秒）
 DEFAULT_LLM_MODEL = 'GPT-5'
 DEFAULT_LLM_TIMEOUT = 30
 DEFAULT_CACHE_DIR = 'cache'
@@ -66,6 +67,42 @@ ENV_KEY_LLM_BASE_URL = 'LLM_BASE_URL'
 ENV_KEY_LLM_MODEL = 'LLM_MODEL'
 ENV_KEY_LLM_TIMEOUT = 'LLM_TIMEOUT'
 ENV_KEY_LLM_CACHE_DIR = 'LLM_CACHE_DIR'
+ENV_KEY_LLM_BATCH_SIZE = 'LLM_BATCH_SIZE'           # 可手动覆盖服务默认值
+ENV_KEY_LLM_REQUEST_DELAY = 'LLM_REQUEST_DELAY'    # 可手动覆盖服务默认值
+ENV_KEY_LLM_MAX_CONCURRENT = 'LLM_MAX_CONCURRENT'  # 并发批次数，1 = 串行
+
+# 服务类型 → API Key 环境变量名映射
+_LLM_SERVICE_TYPE = os.getenv('LLM_SERVICE_TYPE', '').lower()
+_LLM_API_KEY_ENV_MAP: dict[str, str] = {
+    'poe': 'POE_API_KEY',
+    'openai': 'OPENAI_API_KEY',
+    'claude': 'ANTHROPIC_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+}
+_LLM_BASE_URL_MAP: dict[str, str] = {
+    'poe': 'https://api.poe.com/v1',
+    'openai': 'https://api.openai.com/v1',
+    'claude': 'https://api.anthropic.com/v1',
+    'deepseek': 'https://api.deepseek.com/v1',
+}
+_LLM_MODEL_ENV_MAP: dict[str, str] = {
+    'poe': 'POE_MODEL',
+    'openai': 'OPENAI_MODEL',
+    'claude': 'CLAUDE_MODEL',
+    'deepseek': 'DEEPSEEK_MODEL',
+}
+
+# 服务类型 → 吞吐参数默认值 (batch_size, request_delay_s, max_concurrent)
+# Claude Tier 4: 4000 RPM / 2M ITPM / 400K OTPM，留 ~40% buffer 后仍远超需求
+#   batch_size=10（每批 ~15K input tokens，2M ITPM → 理论 133 req/min，留余量）
+#   delay=0.1s（并发模式下批次间不强制等待，只在遇到 429 时 retry）
+#   max_concurrent=5（5 个批次同时发出，约 30s → 6s，提速 ~5x）
+_LLM_SERVICE_PERF_PARAMS: dict[str, tuple[int, float, int]] = {
+    'claude':   (10,  0.1, 5),   # Anthropic API，Tier 4 高限额，启用 5 并发
+    'openai':   (5,   0.2, 1),   # OpenAI，串行保守
+    'deepseek': (3,   0.3, 1),   # DeepSeek，串行保守
+    'poe':      (3,   0.3, 1),   # Poe，串行保守
+}
 
 
 # ============================================================================
@@ -91,12 +128,12 @@ class LLMConfig:
 
     def _determine_base_url(self) -> str:
         """确定 Base URL"""
-        # 从环境变量读取（插件配置和 .env 文件都已加载到环境变量中）
         env_url = os.getenv(ENV_KEY_LLM_BASE_URL)
         if env_url:
             return env_url
-
-        # 默认值（如果没有配置则返回空字符串，由调用方决定）
+        # 按服务类型返回默认 base_url
+        if _LLM_SERVICE_TYPE in _LLM_BASE_URL_MAP:
+            return _LLM_BASE_URL_MAP[_LLM_SERVICE_TYPE]
         return ''
 
     def _get_timeout(self) -> int:
@@ -119,34 +156,65 @@ class LLMConfig:
         return root / cache_path.name
 
     def get_model(self) -> str:
-        """
-        获取 LLM 模型名称
-
-        Returns:
-            str: LLM 模型名称
-        """
-        # 从环境变量读取（插件配置和 .env 文件都已加载到环境变量中）
+        """获取 LLM 模型名称，按服务类型自动选择对应的环境变量。"""
         env_model = os.getenv(ENV_KEY_LLM_MODEL)
         if env_model:
             return env_model
-
-        # 默认值
+        # 按服务类型读取对应的 model 环境变量
+        if _LLM_SERVICE_TYPE in _LLM_MODEL_ENV_MAP:
+            service_model = os.getenv(_LLM_MODEL_ENV_MAP[_LLM_SERVICE_TYPE])
+            if service_model:
+                return service_model
         return DEFAULT_LLM_MODEL
 
     def load_api_key(self) -> Optional[str]:
-        """
-        加载 API Key
-
-        从环境变量读取（插件配置和 .env 文件都已加载到环境变量中）
-
-        Returns:
-            Optional[str]: API Key，如果未找到则返回 None
-        """
+        """加载 API Key，按服务类型自动选择对应的环境变量。"""
+        # 通用 LLM_API_KEY 优先
         env_key = os.getenv(ENV_KEY_LLM_API_KEY)
         if env_key:
             return env_key
-
+        # 按服务类型读取对应的 API key 环境变量
+        if _LLM_SERVICE_TYPE in _LLM_API_KEY_ENV_MAP:
+            service_key = os.getenv(_LLM_API_KEY_ENV_MAP[_LLM_SERVICE_TYPE])
+            if service_key:
+                return service_key
         return None
+
+    def get_batch_size(self) -> int:
+        """获取 batch_size。优先级：LLM_BATCH_SIZE 环境变量 > 服务类型默认值 > 全局默认值。"""
+        env_val = os.getenv(ENV_KEY_LLM_BATCH_SIZE)
+        if env_val:
+            try:
+                return max(1, int(env_val))
+            except ValueError:
+                pass
+        if _LLM_SERVICE_TYPE in _LLM_SERVICE_PERF_PARAMS:
+            return _LLM_SERVICE_PERF_PARAMS[_LLM_SERVICE_TYPE][0]
+        return DEFAULT_BATCH_SIZE
+
+    def get_request_delay(self) -> float:
+        """获取请求间隔（秒）。优先级：LLM_REQUEST_DELAY 环境变量 > 服务类型默认值 > 全局默认值。"""
+        env_val = os.getenv(ENV_KEY_LLM_REQUEST_DELAY)
+        if env_val:
+            try:
+                return max(0.0, float(env_val))
+            except ValueError:
+                pass
+        if _LLM_SERVICE_TYPE in _LLM_SERVICE_PERF_PARAMS:
+            return _LLM_SERVICE_PERF_PARAMS[_LLM_SERVICE_TYPE][1]
+        return DEFAULT_REQUEST_DELAY
+
+    def get_max_concurrent(self) -> int:
+        """获取并发批次数。优先级：LLM_MAX_CONCURRENT 环境变量 > 服务类型默认值 > 1（串行）。"""
+        env_val = os.getenv(ENV_KEY_LLM_MAX_CONCURRENT)
+        if env_val:
+            try:
+                return max(1, int(env_val))
+            except ValueError:
+                pass
+        if _LLM_SERVICE_TYPE in _LLM_SERVICE_PERF_PARAMS:
+            return _LLM_SERVICE_PERF_PARAMS[_LLM_SERVICE_TYPE][2]
+        return 1
 
     def get_config_dict(self) -> dict[str, Any]:
         """
@@ -163,7 +231,9 @@ class LLMConfig:
             'cache_file': self._cache_file,
             'token_stats_file': self._token_stats_file,
             'model': self.get_model(),
-            'batch_size': DEFAULT_BATCH_SIZE,
+            'batch_size': self.get_batch_size(),
+            'request_delay': self.get_request_delay(),
+            'max_concurrent': self.get_max_concurrent(),
         }
 
     @property

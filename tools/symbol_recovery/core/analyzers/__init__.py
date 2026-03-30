@@ -6,6 +6,7 @@
 
 from .event_analyzer import EventCountAnalyzer
 from .excel_analyzer import ExcelOffsetAnalyzer
+from .memory_flamegraph_analyzer import MemoryFlameGraphAnalyzer
 from .perf_analyzer import PerfDataToSqliteConverter
 from .r2_analyzer import R2FunctionAnalyzer
 
@@ -13,5 +14,6 @@ __all__ = [
     'PerfDataToSqliteConverter',
     'EventCountAnalyzer',
     'ExcelOffsetAnalyzer',
+    'MemoryFlameGraphAnalyzer',
     'R2FunctionAnalyzer',
 ]

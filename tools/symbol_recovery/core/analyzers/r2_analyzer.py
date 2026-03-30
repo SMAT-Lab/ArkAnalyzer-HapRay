@@ -409,9 +409,10 @@ class R2FunctionAnalyzer:
             self.r2.cmd(f's @{func_offset}')
 
             # 尝试使用不同的反编译插件（按优先级）
+            # r2ghidra 产出质量最高（显示 tpidr_el0、内存屏障等语义），优先使用
             decompilers = [
+                ('pdg', 'r2ghidra'),  # Ghidra 反编译器（质量最高）
                 ('pdd', 'r2dec'),  # r2dec 反编译器
-                ('pdg', 'r2ghidra'),  # Ghidra 反编译器
                 ('pdq', 'pdq'),  # 快速反编译器
             ]
 
@@ -638,6 +639,11 @@ class R2FunctionAnalyzer:
 
             if decompiled:
                 result['decompiled'] = decompiled
+                # 对于短函数（≤16条指令），反编译器（尤其是 r2ghidra）会过度抽象，
+                # 丢失 ldp/ret、tpidr_el0 等关键汇编指纹。
+                # 追加原始汇编，让 LLM 同时看到伪 C 和汇编层细节。
+                if len(instructions) <= 16:
+                    result['raw_asm_for_short_func'] = instructions
 
             return result
 
