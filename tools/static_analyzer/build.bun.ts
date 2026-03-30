@@ -135,7 +135,8 @@ async function createZip(
         const zip = new AdmZip(traceStreamerZip);
         for (const entry of zip.getEntries()) {
           if (!entry.isDirectory) {
-            archive.append(zip.readFile(entry), { name: `tools/${entry.entryName}` });
+            const flat = entry.entryName.replace(/^trace_streamer_binary[/\\]?/i, "");
+            archive.append(zip.readFile(entry), { name: `tools/bin/${flat}` });
           }
         }
       } catch (err) {

@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import platform
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -28,6 +29,11 @@ from hapray.core.config.config import Config
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+
+_hapray_cmd_name = 'hapray-sa-cmd.exe' if platform.system() == 'Windows' else 'hapray-sa-cmd'
+# 延迟解析：避免无 dist/tools 或 tools/bin 时（如仅跑契约 CLI 冒烟）import 即失败
+_hapray_cmd_path_cache: Optional[str] = None
+_trace_streamer_path_cache: Optional[str] = None
 
 
 class ExeUtils:
@@ -41,7 +47,10 @@ class ExeUtils:
         D:\\haprayTest\tools\
           ├── perf-testing\
           │   └── perf-testing.exe  <- sys.executable
-          ├── trace_streamer_binary\
+          ├── bin\\
+          │   ├── trace_streamer_mac / trace_streamer_linux / trace_streamer_windows.exe\\
+          │   ├── hilogtool（或 hilogtool.exe）\\
+          │   ├── hdc（或 hdc.exe）与 libusb 动态库\\
           ├── sa-cmd\
           └── ...
 
@@ -106,10 +115,57 @@ class ExeUtils:
             f'Tools directory not found. project_root: {project_root}, frozen: {getattr(sys, "frozen", False)}'
         )
         if require:
-            raise FileNotFoundError(
-                f'Tools directory not found. Checked: {", ".join(checked_paths)}'
-            )
+            raise FileNotFoundError(f'Tools directory not found. Checked: {", ".join(checked_paths)}')
         return None
+
+    @staticmethod
+    def _resolve_path_or_bundled(
+        path_names: list[str],
+        bundled_segment_options: tuple[tuple[str, ...], ...],
+        bundled_filename: str,
+    ) -> str:
+        """优先使用 PATH（shutil.which），否则在 tools 目录下查找打包工具。
+
+        bundled_segment_options 按顺序尝试，例如扁平布局 ``('bin',)`` 与旧版 ``('trace_streamer_binary',)`` / ``('bin', 'trace_streamer_binary')``。
+        """
+        for name in path_names:
+            found = shutil.which(name)
+            if found:
+                return found
+
+        last_error: FileNotFoundError | None = None
+        for segments in bundled_segment_options:
+            try:
+                base = ExeUtils.get_tools_dir(*segments)
+            except FileNotFoundError as e:
+                last_error = e
+                continue
+            tool_path = os.path.join(base, bundled_filename)
+            if os.path.exists(tool_path):
+                return tool_path
+
+        checked = ', '.join(path_names)
+        if last_error:
+            raise FileNotFoundError(
+                f'Tool {bundled_filename!r} not found in PATH ({checked}) or under tools: {last_error}'
+            ) from last_error
+        raise FileNotFoundError(f'Tool {bundled_filename!r} not found in PATH ({checked}) or under tools')
+
+    @staticmethod
+    def get_hilogtool_path() -> str:
+        """hilogtool：优先 PATH，其次 ``tools/bin/<可执行文件>``（兼容旧目录 ``tools/hilogtool/``）。"""
+        system = platform.system()
+        if system == 'Windows':
+            path_names = ['hilogtool.exe', 'hilogtool']
+            bundled_name = 'hilogtool.exe'
+        else:
+            path_names = ['hilogtool']
+            bundled_name = 'hilogtool'
+        return ExeUtils._resolve_path_or_bundled(
+            path_names,
+            (('bin',), ('hilogtool',), ('bin', 'hilogtool')),
+            bundled_name,
+        )
 
     @staticmethod
     def _get_trace_streamer_path() -> str:
@@ -134,13 +190,11 @@ class ExeUtils:
         else:
             raise OSError(f'Unsupported operating system: {system}')
 
-        # Construct full path to the executable
-        trace_streamer_dir = ExeUtils.get_tools_dir('trace_streamer_binary')
-        tool_path = os.path.join(trace_streamer_dir, executable)
-
-        # Validate executable exists
-        if not os.path.exists(tool_path):
-            raise FileNotFoundError(f'Trace streamer executable not found at: {tool_path}')
+        tool_path = ExeUtils._resolve_path_or_bundled(
+            [executable],
+            (('bin',), ('trace_streamer_binary',), ('bin', 'trace_streamer_binary')),
+            executable,
+        )
 
         # Set execute permissions for Unix-like systems.
         # 在某些环境（如签名后的 .app、只读卷、受限 ACL）中，chmod 可能被拒绝；
@@ -269,6 +323,22 @@ class ExeUtils:
             logger.warning('Failed to update so_dir cache: %s', str(e))
 
     @staticmethod
+    def get_hapray_cmd_path() -> str:
+        """hapray-sa-cmd 路径；首次调用时解析，避免 import 阶段依赖未构建的 dist/tools。"""
+        global _hapray_cmd_path_cache
+        if _hapray_cmd_path_cache is None:
+            _hapray_cmd_path_cache = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', _hapray_cmd_name))
+        return _hapray_cmd_path_cache
+
+    @staticmethod
+    def get_trace_streamer_path() -> str:
+        """trace_streamer 可执行路径；首次调用时解析，避免 import 阶段依赖未打包的 tools/bin。"""
+        global _trace_streamer_path_cache
+        if _trace_streamer_path_cache is None:
+            _trace_streamer_path_cache = ExeUtils._get_trace_streamer_path()
+        return _trace_streamer_path_cache
+
+    @staticmethod
     def build_hapray_cmd(args: list[str]) -> list[str]:
         """Constructs a command for executing hapray-sa-cmd.
 
@@ -278,7 +348,7 @@ class ExeUtils:
         Returns:
             Full command as a list of strings
         """
-        return [ExeUtils.hapray_cmd_path, 'hapray', *args]
+        return [ExeUtils.get_hapray_cmd_path(), 'hapray', *args]
 
     @staticmethod
     def execute_command_check_output(cmd, timeout=120000):
@@ -417,7 +487,7 @@ class ExeUtils:
             os.makedirs(output_dir, exist_ok=True)
 
             # Prepare conversion command
-            cmd = [ExeUtils.trace_streamer_path, data_file, '-e', output_db]
+            cmd = [ExeUtils.get_trace_streamer_path(), data_file, '-e', output_db]
 
             # Add so_dir parameter if configured
             if so_dir:
@@ -456,7 +526,7 @@ class ExeUtils:
                         pass
                 success = False
             except FileNotFoundError:
-                logger.error('trace_streamer not found: %s', ExeUtils.trace_streamer_path)
+                logger.error('trace_streamer not found: %s', ExeUtils.get_trace_streamer_path())
                 return False
             except Exception as e:
                 logger.error('Unexpected error during conversion: %s', str(e))
@@ -496,8 +566,5 @@ class ExeUtils:
             return False
 
 
-# Initialize commonly used tool paths after class definition
-_hapray_cmd_name = 'hapray-sa-cmd.exe' if platform.system() == 'Windows' else 'hapray-sa-cmd'
-ExeUtils.hapray_cmd_path = os.path.abspath(ExeUtils.get_tools_dir('sa-cmd', _hapray_cmd_name))
-ExeUtils.trace_streamer_path = ExeUtils._get_trace_streamer_path()
+# opt_detector 可选；get_tools_dir(require=False) 在缺失时不抛错
 ExeUtils.opt_detector_path = ExeUtils.get_tools_dir('opt_detector', 'opt-detector', require=False)

@@ -54,6 +54,12 @@ try:
 except Exception as e:
     print(f"Warning: collect_submodules('devicetest') failed: {e}")
 
+# gui-agent：Open-AutoGLM phone_agent（PyPI: phone-agent）；构建前需 pip install phone-agent，否则此处仅告警
+try:
+    venv_packages.extend(collect_submodules('phone_agent'))
+except Exception as e:
+    print(f"Warning: collect_submodules('phone_agent') failed: {e}")
+
 # ohos 不用 collect_submodules：遍历 ohos.parser 等子包时会在 spec 执行阶段 import 失败，导致漏打包。
 # 改为在下方把整个 site-packages/ohos 目录作为 datas 打入（见 copy_metadata 之后）。
 
@@ -85,7 +91,7 @@ except Exception as e:
 
 # xdevice 在启动时用 importlib.metadata.entry_points 加载 driver（如 DeviceTest→device_test）等插件；
 # 未打入 .dist-info 时 frozen 环境找不到 entry_points，报「驱动插件未安装」
-for _dist_name in ("xdevice", "xdevice-devicetest", "xdevice-ohos"):
+for _dist_name in ("xdevice", "xdevice-devicetest", "xdevice-ohos", "phone-agent"):
     try:
         datas += copy_metadata(_dist_name)
     except Exception as e:

@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 /**
- * 构建脚本：在 macOS 上先构建 .app -> 再生成 .dmg
- *
- * 注意：tauri bundle --bundles dmg 会重新创建 .app，
- * 因此需先构建 .app 再直接调用 bundle_dmg.sh 生成 dmg，而非使用 tauri bundle。
+ * macOS：tauri build --no-bundle 编译产物 → tauri bundle --bundles app,dmg 一次打出 .app 与 .dmg
+ * → 再将 dmg 卷内 .app 拷入项目根 dist（本地测试）。
  */
 import { spawnSync } from "child_process";
 import path from "path";
@@ -13,25 +11,57 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const runWithCargo = path.resolve(__dirname, "run-with-cargo.js");
-const bundleBase = path.resolve(__dirname, "../src-tauri/target/release/bundle");
-const macosDir = path.join(bundleBase, "macos");
-const dmgDir = path.join(bundleBase, "dmg");
-const bundleDmgSh = path.join(dmgDir, "bundle_dmg.sh");
+const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
 const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
-// 项目根目录的 dist（desktop 的祖父目录）
 const rootDistDir = path.resolve(__dirname, "../../dist");
+
+const DEFAULT_PRODUCT_NAME = "ArkAnalyzer-HapRay";
+const NOTARY_ENV_KEYS = [
+  "APPLE_ID",
+  "APPLE_PASSWORD",
+  "APPLE_TEAM_ID",
+  "APPLE_API_KEY",
+  "APPLE_API_KEY_PATH",
+  "APPLE_API_ISSUER",
+];
 
 function loadTauriConf() {
   return JSON.parse(fs.readFileSync(tauriConfPath, "utf-8"));
 }
 
+function getProductName() {
+  const conf = loadTauriConf();
+  return conf.productName || DEFAULT_PRODUCT_NAME;
+}
+
+/** 与 Cargo 一致：CI 常设 CARGO_BUILD_TARGET；tauri bundle 默认不读该变量，须传 --target。 */
+function getRustTargetTriple() {
+  const t = process.env.CARGO_BUILD_TARGET || process.env.CARGO_TARGET;
+  return t && String(t).trim() ? String(t).trim() : null;
+}
+
+/** bundle/macos、dmg 位于 target/[triple]/release/bundle/（设了 CARGO_BUILD_TARGET 时）。 */
+function getMacBundleDirs() {
+  const triple = getRustTargetTriple();
+  const bundleBase = triple
+    ? path.resolve(__dirname, "../src-tauri/target", triple, "release", "bundle")
+    : path.resolve(__dirname, "../src-tauri/target/release/bundle");
+  return {
+    bundleBase,
+    macosDir: path.join(bundleBase, "macos"),
+    dmgDir: path.join(bundleBase, "dmg"),
+  };
+}
+
 function getMacBundleArtifacts() {
+  const { macosDir, dmgDir } = getMacBundleDirs();
   const tauriConf = loadTauriConf();
-  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
+  const productName = tauriConf.productName || DEFAULT_PRODUCT_NAME;
   const version = tauriConf.version;
-  const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+  /** Tauri 2 dmg 后缀：Apple Silicon 为 aarch64；Intel 为 x64（与 Rust 三元组 x86_64 不同） */
+  const dmgArchSuffix = process.arch === "arm64" ? "aarch64" : "x64";
   const appName = `${productName}.app`;
-  const dmgName = `${productName}_${version}_${arch}.dmg`;
+  const dmgName = `${productName}_${version}_${dmgArchSuffix}.dmg`;
   return {
     productName,
     appName,
@@ -41,214 +71,109 @@ function getMacBundleArtifacts() {
   };
 }
 
-function patchBundleDmgShDetachTimeout() {
-  if (!fs.existsSync(bundleDmgSh)) return false;
-  const sh = fs.readFileSync(bundleDmgSh, "utf8");
-
-  // 已经打过补丁就跳过（确保幂等）
-  if (sh.includes("DiskArbitration timeout")) return true;
-
-  const oldFnRegex =
-    /function hdiutil_detach_retry\(\) \{[\s\S]*?\n\s*unset unmounting_attempts\n\s*\}/m;
-
-  if (!oldFnRegex.test(sh)) {
-    console.error("错误: 未找到可替换的 hdiutil_detach_retry 函数块，无法修补 bundle_dmg.sh");
-    return false;
-  }
-
-  const newFn = `function hdiutil_detach_retry() {
-	# Unmount with retries; macOS (e.g. 15) may fail with DiskArbitration timeout.
-	unmounting_attempts=0
-	while :; do
-		echo "Unmounting disk image..."
-		(( unmounting_attempts++ ))
-		set +e
-		detach_output="$(hdiutil detach "$1" 2>&1)"
-		exit_code=$?
-		set -e
-
-		# nothing goes wrong
-		(( exit_code == 0 )) && break
-
-		# Retry on busy (EBUSY) or known DiskArbitration timeout texts
-		if (( exit_code == 16 )) || echo "$detach_output" | grep -Eqi 'timeout for DiskArbitration expired|drive not detached'; then
-			if (( unmounting_attempts == MAXIMUM_UNMOUNTING_ATTEMPTS )); then
-				echo "Unmount patience exhausted, trying force detach..."
-				set +e
-				hdiutil detach -force "$1" 2>&1
-				force_code=$?
-				set -e
-				exit $force_code
-			fi
-			echo "Wait a moment..."
-			sleep $(( 1 * (2 ** unmounting_attempts) ))
-			continue
-		fi
-
-		# Other detach errors are not retryable.
-		echo "$detach_output" >&2
-		exit $exit_code
-	done
-	unset unmounting_attempts
-}`;
-
-  const patched = sh.replace(oldFnRegex, newFn);
-  if (patched === sh) return false;
-  fs.writeFileSync(bundleDmgSh, patched, "utf8");
-  return true;
+function logSpawnFailure(cmd, args, result) {
+  const msg = [cmd, ...args].join(" ");
+  console.error(`\n[build] 命令失败 (退出码 ${result.status ?? 1}): ${msg}`);
+  if (result.error) console.error("[build] 子进程错误:", result.error.message);
 }
 
-function run(cmd, args = [], options = {}) {
-  const result = spawnSync(cmd, args, {
+function spawnInDesktop(cmd, args, options = {}) {
+  return spawnSync(cmd, args, {
     stdio: "inherit",
     cwd: desktopRoot,
     ...options,
   });
+}
+
+function run(cmd, args = [], options = {}) {
+  const result = spawnInDesktop(cmd, args, options);
   if (result.status !== 0) {
-    const msg = [cmd, ...args].join(" ");
-    console.error(`\n[build] 命令失败 (退出码 ${result.status ?? 1}): ${msg}`);
-    if (result.error) console.error("[build] 子进程错误:", result.error.message);
+    logSpawnFailure(cmd, args, result);
     process.exit(result.status ?? 1);
   }
   return result;
 }
 
-/** 执行命令，失败时不退出，返回是否成功 */
 function runOptional(cmd, args = [], options = {}) {
-  const result = spawnSync(cmd, args, {
-    stdio: "inherit",
-    cwd: desktopRoot,
-    ...options,
-  });
-  return result.status === 0;
+  return spawnInDesktop(cmd, args, options).status === 0;
 }
 
 function stripNotaryEnv(env = process.env) {
   const next = { ...env };
-  // Tauri notarization 常用环境变量（Apple ID / App Store Connect API Key 两套）
-  delete next.APPLE_ID;
-  delete next.APPLE_PASSWORD;
-  delete next.APPLE_TEAM_ID;
-  delete next.APPLE_API_KEY;
-  delete next.APPLE_API_KEY_PATH;
-  delete next.APPLE_API_ISSUER;
+  for (const k of NOTARY_ENV_KEYS) {
+    delete next[k];
+  }
   return next;
 }
 
-function buildAppWithOfflineNotaryFallback() {
-  const baseArgs = [runWithCargo, "npx", "tauri", "build", "--bundles", "app"];
-  // 首次按当前环境执行（包含签名/公证配置）
-  const ok = runOptional("node", baseArgs, { env: { ...process.env } });
-  if (ok) return true;
-
-  // 本地常见失败：网络离线导致 notarization 请求失败；重试时去掉 notarize 相关变量
-  const retryEnv = stripNotaryEnv(process.env);
-  const hadNotaryEnv = Object.keys(process.env).some((k) =>
-    ["APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID", "APPLE_API_KEY", "APPLE_API_KEY_PATH", "APPLE_API_ISSUER"].includes(k),
-  );
-  if (!hadNotaryEnv) return false;
-
-  console.warn("\n[build] 检测到 .app 构建失败，尝试跳过 notarization 后重试（保留签名）...");
-  return runOptional("node", baseArgs, { env: retryEnv });
+function tauriTargetCliArgs() {
+  const triple = getRustTargetTriple();
+  return triple ? ["--target", triple] : [];
 }
 
-function createDmgWithBundleScript() {
-  const { appName, appPath, dmgPath } = getMacBundleArtifacts();
+function tauriBuildNoBundleArgs() {
+  return [runWithCargo, "npx", "tauri", "build", "--no-bundle", ...tauriTargetCliArgs()];
+}
 
-  if (!fs.existsSync(appPath)) {
-    console.error(`错误: 未找到 .app: ${appPath}`);
-    process.exit(1);
+function tauriBundleAppDmgArgs() {
+  return [runWithCargo, "npx", "tauri", "bundle", "--bundles", "app,dmg", ...tauriTargetCliArgs()];
+}
+
+/** node 调 tauri 子进程；公证失败时去掉 notary 环境变量后重试。extraEnv 如 { CI: "true" } */
+function tryNodeTauriWithNotaryFallback(nodeArgs, logLabel, extraEnv = {}) {
+  const env = { ...process.env, ...extraEnv };
+  if (runOptional("node", nodeArgs, { env })) {
+    return true;
   }
+  const hadNotaryEnv = NOTARY_ENV_KEYS.some((k) => process.env[k] !== undefined);
+  if (!hadNotaryEnv) return false;
 
-  // 使用与 tauri 相同的 dmg 配置（参考 bundle.macOS.dmg 默认值）
-  const args = [
-    "--skip-jenkins", // CI/无 GUI 环境跳过 AppleScript
-    "--window-size", "660", "400",
-    "--icon", appName, "180", "170",
-    "--app-drop-link", "480", "170",
-    "--volicon", path.join(dmgDir, "icon.icns"),
-    dmgPath,
-    macosDir,
-  ];
+  console.warn(`\n[build] ${logLabel} 失败，尝试跳过 notarization 后重试（保留签名）...`);
+  const retryEnv = { ...stripNotaryEnv(process.env), ...extraEnv };
+  return runOptional("node", nodeArgs, { env: retryEnv });
+}
 
-  if (!fs.existsSync(path.join(dmgDir, "icon.icns"))) {
-    args.splice(args.indexOf("--volicon"), 2); // 移除 volicon 参数
+/** tauri build --no-bundle → tauri bundle --bundles app,dmg（需两步：bundle 依赖已编译产物） */
+function buildMacAppAndDmg() {
+  if (!tryNodeTauriWithNotaryFallback(tauriBuildNoBundleArgs(), "tauri build --no-bundle")) {
+    console.error("错误: tauri build 失败（含跳过 notarization 重试）");
+    return false;
   }
-
-  // hdiutil convert 不会覆盖已存在文件，需先删除
-  if (fs.existsSync(dmgPath)) {
-    fs.unlinkSync(dmgPath);
-  }
-
-  console.log("正在调用 bundle_dmg.sh 生成 .dmg...");
-  const result = spawnSync("bash", [bundleDmgSh, ...args], {
-    stdio: "inherit",
-    cwd: desktopRoot,
-    env: { ...process.env, CI: "true" },
-  });
-  if (result.status !== 0) {
-    const msg = ["bash", bundleDmgSh, ...args].join(" ");
-    console.error(`\n[build] 命令失败 (退出码 ${result.status ?? 1}): ${msg}`);
-    if (result.error) console.error("[build] 子进程错误:", result.error.message);
+  console.log("正在执行 tauri bundle --bundles app,dmg …");
+  if (!tryNodeTauriWithNotaryFallback(tauriBundleAppDmgArgs(), "tauri bundle", { CI: "true" })) {
+    console.error("错误: tauri bundle 失败（含跳过 notarization 重试）");
     return false;
   }
   return true;
 }
 
-const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
-
 /**
- * 将 desktop 构建产物复制到项目根目录 ./dist，供 e2e 测试和 release 使用
- * macOS: dist/ArkAnalyzer-HapRay.app/, dist/ArkAnalyzer-HapRay -> .app/...（不覆盖 dist/tools/）
- * Windows/Linux: dist/ArkAnalyzer-HapRay.exe 或 dist/ArkAnalyzer-HapRay
+ * 将 Windows/Linux 构建产物复制到项目根 ./dist。
  */
 function copyToDist() {
-  const tauriConf = loadTauriConf();
-  const productName = tauriConf.productName || "ArkAnalyzer-HapRay";
+  if (process.platform === "darwin") {
+    return;
+  }
+
+  const productName = getProductName();
   fs.mkdirSync(rootDistDir, { recursive: true });
 
-  if (process.platform === "darwin") {
-    const appName = `${productName}.app`;
-    const appPath = path.join(macosDir, appName);
-    const exeInApp = path.join(appPath, "Contents", "MacOS", productName);
+  const exeName = process.platform === "win32" ? `${productName}.exe` : productName;
+  const srcExe = path.join(releaseDir, exeName);
+  const destExe = path.join(rootDistDir, exeName);
 
-    if (!fs.existsSync(appPath) || !fs.existsSync(exeInApp)) {
-      console.warn("跳过 copyToDist: .app 或可执行文件不存在");
-      return;
-    }
+  if (!fs.existsSync(srcExe)) {
+    console.warn(`跳过 copyToDist: 未找到 ${srcExe}`);
+    return;
+  }
+  fs.copyFileSync(srcExe, destExe);
 
-    const distAppPath = path.join(rootDistDir, appName);
-    const distExePath = path.join(rootDistDir, productName);
-
-    if (fs.existsSync(distAppPath)) {
-      fs.rmSync(distAppPath, { recursive: true });
-    }
-    copyDirSync(appPath, distAppPath);
-
-    if (fs.existsSync(distExePath)) {
-      fs.unlinkSync(distExePath);
-    }
-    fs.symlinkSync(path.join(appName, "Contents", "MacOS", productName), distExePath, "file");
-  } else {
-    // Windows: .exe；Linux: 无后缀
-    const exeName = process.platform === "win32" ? `${productName}.exe` : productName;
-    const srcExe = path.join(releaseDir, exeName);
-    const destExe = path.join(rootDistDir, exeName);
-
-    if (!fs.existsSync(srcExe)) {
-      console.warn(`跳过 copyToDist: 未找到 ${srcExe}`);
-      return;
-    }
-    fs.copyFileSync(srcExe, destExe);
-
-    // Linux: 复制 lib/ 下的 .so，使目标机无需安装 libwebkit2gtk 等
-    if (process.platform === "linux") {
-      const srcLib = path.join(releaseDir, "lib");
-      const destLib = path.join(rootDistDir, "lib");
-      if (fs.existsSync(srcLib)) {
-        if (fs.existsSync(destLib)) fs.rmSync(destLib, { recursive: true });
-        copyDirSync(srcLib, destLib);
-      }
+  if (process.platform === "linux") {
+    const srcLib = path.join(releaseDir, "lib");
+    const destLib = path.join(rootDistDir, "lib");
+    if (fs.existsSync(srcLib)) {
+      if (fs.existsSync(destLib)) fs.rmSync(destLib, { recursive: true });
+      copyDirSync(srcLib, destLib);
     }
   }
 
@@ -261,8 +186,7 @@ function copyDirSync(src, dest) {
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isSymbolicLink()) {
-      const target = fs.readlinkSync(srcPath);
-      fs.symlinkSync(target, destPath);
+      fs.symlinkSync(fs.readlinkSync(srcPath), destPath);
     } else if (entry.isDirectory()) {
       copyDirSync(srcPath, destPath);
     } else {
@@ -271,13 +195,110 @@ function copyDirSync(src, dest) {
   }
 }
 
+/** 将 .app 目录复制到 dist，并创建与可执行文件同名的符号链接 */
+function copyMacBundleToDistFromSource(appSrcDir, productName, appName) {
+  const exeInApp = path.join(appSrcDir, "Contents", "MacOS", productName);
+  if (!fs.existsSync(appSrcDir) || !fs.existsSync(exeInApp)) {
+    console.warn(`跳过: .app 不完整: ${appSrcDir}`);
+    return false;
+  }
+  fs.mkdirSync(rootDistDir, { recursive: true });
+  const distAppPath = path.join(rootDistDir, appName);
+  const distExePath = path.join(rootDistDir, productName);
+  if (fs.existsSync(distAppPath)) {
+    fs.rmSync(distAppPath, { recursive: true });
+  }
+  copyDirSync(appSrcDir, distAppPath);
+  if (fs.existsSync(distExePath)) {
+    fs.unlinkSync(distExePath);
+  }
+  fs.symlinkSync(path.join(appName, "Contents", "MacOS", productName), distExePath, "file");
+  return true;
+}
+
+function parseHdiutilAttachMountPoint(stdout) {
+  for (const line of stdout.trim().split("\n")) {
+    const tabParts = line.split("\t").filter(Boolean);
+    if (tabParts.length >= 2) {
+      const c = tabParts[tabParts.length - 1].trim();
+      if (c.startsWith("/Volumes/")) return c;
+    }
+    const words = line.trim().split(/\s+/);
+    const last = words[words.length - 1];
+    if (last?.startsWith("/Volumes/")) return last;
+  }
+  return null;
+}
+
+function findAppBundleInDir(dir) {
+  if (!fs.existsSync(dir)) return null;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.endsWith(".app")) {
+      return path.join(dir, entry.name);
+    }
+  }
+  return null;
+}
+
 /**
- * 公证要求 Resources/tools 内嵌的 PyInstaller 等 Mach-O 也使用 Developer ID；
- * 仅在设置 APPLE_SIGNING_IDENTITY 时对 dist/tools 递归签名（于 tauri build 之前）。
+ * dmg 生成后：优先从挂载卷复制 .app（与安装包一致）；失败则使用 bundle/macos（同源）。
  */
+function copyMacAppToDistAfterDmg() {
+  const { appName, appPath, dmgPath } = getMacBundleArtifacts();
+  const productName = getProductName();
+
+  function fallback(msg) {
+    if (msg) console.warn(msg);
+    if (!copyMacBundleToDistFromSource(appPath, productName, appName)) {
+      process.exit(1);
+    }
+    console.log(`✓ 已复制 ${appName} → ${rootDistDir}（bundle 目录，与 dmg 内应用一致）`);
+  }
+
+  if (!fs.existsSync(dmgPath)) {
+    console.error(`错误: 未找到 .dmg: ${dmgPath}`);
+    process.exit(1);
+  }
+
+  const attached = spawnSync("hdiutil", ["attach", dmgPath, "-nobrowse"], {
+    encoding: "utf8",
+  });
+  if (attached.status !== 0) {
+    fallback("[build] hdiutil attach 失败，使用 bundle 目录");
+    return;
+  }
+
+  const mountPoint = parseHdiutilAttachMountPoint(attached.stdout || "");
+  if (!mountPoint) {
+    fallback("[build] 无法解析 dmg 挂载点，使用 bundle 目录");
+    return;
+  }
+
+  let srcApp = path.join(mountPoint, appName);
+  if (!fs.existsSync(srcApp)) {
+    srcApp = findAppBundleInDir(mountPoint);
+  }
+
+  try {
+    if (!srcApp || !fs.existsSync(srcApp)) {
+      fallback(`[build] 卷内未找到 ${appName}，使用 bundle 目录`);
+      return;
+    }
+    if (!copyMacBundleToDistFromSource(srcApp, productName, appName)) {
+      process.exit(1);
+    }
+    console.log(`✓ 已从 dmg 卷复制 ${appName} → ${rootDistDir}（本地测试）`);
+  } finally {
+    const det = spawnSync("hdiutil", ["detach", mountPoint], { stdio: "pipe" });
+    if (det.status !== 0) {
+      console.warn(`[build] hdiutil detach 未成功，可手动卸载: ${mountPoint}`);
+    }
+  }
+}
+
 function signDistToolsDeveloperId() {
-  const identity = process.env.APPLE_SIGNING_IDENTITY;
-  if (!identity) return;
+  if (!process.env.APPLE_SIGNING_IDENTITY) return;
+
   const toolsDir = path.join(rootDistDir, "tools");
   if (!fs.existsSync(toolsDir)) {
     console.warn(`[build] 跳过 dist/tools Developer ID 签名：目录不存在 ${toolsDir}`);
@@ -292,76 +313,35 @@ function signDistToolsDeveloperId() {
   run("bash", [signScript, toolsDir], { env: { ...process.env } });
 }
 
+function buildMacos() {
+  signDistToolsDeveloperId();
+  console.log("Step 1: tauri build --no-bundle → tauri bundle --bundles app,dmg …");
+  if (!buildMacAppAndDmg()) {
+    process.exit(1);
+  }
+
+  console.log("\nStep 2: 将 dmg 中的应用复制到 ./dist（本地测试）...");
+  copyMacAppToDistAfterDmg();
+}
+
+function buildNonMacos() {
+  console.log("构建应用...");
+  run("node", [runWithCargo, "npx", "tauri", "build"]);
+
+  if (process.platform === "linux") {
+    console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");
+    run("node", [path.resolve(__dirname, "bundle-linux-libs.js")]);
+  }
+
+  console.log("\n复制产物到 ./dist...");
+  copyToDist();
+}
+
 function main() {
   if (process.platform === "darwin") {
-    // macOS: app -> dmg
-    signDistToolsDeveloperId();
-    console.log("Step 1: 构建 .app bundle...");
-    if (!buildAppWithOfflineNotaryFallback()) {
-      console.error("错误: .app 构建失败（含跳过 notarization 重试）");
-      process.exit(1);
-    }
-
-    console.log("\nStep 2: 生成 .dmg...");
-    let reuseExistingDmg = false;
-    if (!fs.existsSync(bundleDmgSh)) {
-      const { appPath, dmgPath } = getMacBundleArtifacts();
-      // 首次构建：tauri bundle 会创建 dmg 目录和 bundle_dmg.sh
-      // 注意：tauri bundle 内部运行 bundle_dmg.sh 时可能因 AppleScript 权限失败，
-      // 但我们只需要 bundle_dmg.sh 文件，后续用 --skip-jenkins 自行调用即可
-      console.log("bundle_dmg.sh 不存在，先运行 tauri bundle 以创建 dmg 工具...");
-      const bundleOk = runOptional("node", [runWithCargo, "npx", "tauri", "bundle", "--bundles", "dmg"], {
-        env: { ...process.env, CI: "true" },
-      });
-      if (!fs.existsSync(bundleDmgSh)) {
-        console.error("错误: tauri bundle 未生成 bundle_dmg.sh，无法继续");
-        process.exit(1);
-      }
-      if (!bundleOk) {
-        console.log("(tauri bundle 因 AppleScript 权限失败，但 bundle_dmg.sh 已创建，继续用 --skip-jenkins 生成 dmg)");
-      }
-      // tauri bundle 首次成功后若已产出 dmg，则直接复用，避免再生成一次 dmg。
-      if (bundleOk && fs.existsSync(dmgPath)) {
-        console.log("\n检测到 tauri bundle 已生成 dmg，直接复用该产物。");
-        reuseExistingDmg = true;
-      }
-      // tauri bundle 可能清理 .app；后续 copyToDist 仍需要 .app，缺失时补构建一次。
-      if (!fs.existsSync(appPath)) {
-        console.log("\n重新构建 .app（tauri bundle 可能已清理）...");
-        if (!buildAppWithOfflineNotaryFallback()) {
-          console.error("错误: 重新构建 .app 失败（含跳过 notarization 重试）");
-          process.exit(1);
-        }
-      }
-    }
-
-    if (!reuseExistingDmg) {
-      // tauri bundle 生成的 create-dmg 脚本在 macOS 15 的 CI 环境可能遇到 detach 超时
-      // （例如 "timeout for DiskArbitration expired"），导致脚本返回码非 0 进而让 npm 构建失败。
-      const patched = patchBundleDmgShDetachTimeout();
-      if (!patched) {
-        console.error("错误: 修补 bundle_dmg.sh 的 detach 逻辑失败");
-        process.exit(1);
-      }
-      const dmgOk = createDmgWithBundleScript();
-      if (!dmgOk) {
-        process.exit(1);
-      }
-    }
-    console.log("\nStep 3: 复制产物到 ./dist...");
-    copyToDist();
+    buildMacos();
   } else {
-    // 其他平台：保持原有流程
-    console.log("构建应用...");
-    run("node", [runWithCargo, "npx", "tauri", "build"]);
-
-    if (process.platform === "linux") {
-      console.log("\n捆绑 Linux 动态库到 lib/（免装 libwebkit2gtk）...");
-      run("node", [path.resolve(__dirname, "bundle-linux-libs.js")]);
-    }
-
-    console.log("\n复制产物到 ./dist...");
-    copyToDist();
+    buildNonMacos();
   }
 }
 

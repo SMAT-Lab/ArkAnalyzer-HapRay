@@ -8,17 +8,15 @@
   ],
   "scripts": {
     "postinstall": "npm run setup",
-    "setup": "npm run setup:win --if-present || npm run setup:unix",
-    "setup:win": "node -e \"if(process.platform!=='win32')process.exit(1)\" && python setup_env.py",
-    "setup:unix": "python3 setup_env.py",
+    "setup": "node ../../scripts/python_setup.js --extra dev",
     "build": "npm run build:onefile",
-    "build:onefile": "./.venv/bin/pyinstaller -y --distpath ../../dist/tools/symbol-recovery symbol_recovery.spec || .\\\\.venv\\\\Scripts\\\\pyinstaller.exe -y --distpath ../../dist/tools/symbol-recovery symbol_recovery.spec",
+    "build:onefile": "uv run --extra dev pyinstaller -y --distpath ../../dist/tools/symbol-recovery symbol_recovery.spec",
     "build:onedir": "npm run build:onefile",
     "postbuild": "webpack --config webpack.config.js",
-    "clean": "rm -rf build/ dist/ *.egg-info symbol_recovery.egg-info dist/*.zip",
+    "clean": "rm -rf build/ dist/ .venv *.egg-info symbol_recovery.egg-info dist/*.zip ../../dist/tools/symbol-recovery",
     "install:dev": "npm run setup",
-    "lint": "./.venv/bin/tox -e ruff || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff || python3 -m ruff check .",
-    "lint:fix": "./.venv/bin/tox -e ruff-fix || .\\\\.venv\\\\Scripts\\\\tox.exe -e ruff-fix || python3 -m ruff check --fix ."
+    "lint": "uv run --extra dev tox -e ruff",
+    "lint:fix": "uv run --extra dev tox -e ruff-fix"
   },
   "keywords": [
     "binary",

@@ -21,8 +21,9 @@ import sys
 
 import pandas as pd
 
-from hapray.core.common.path_utils import get_user_data_root
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.excel_utils import ExcelReportSaver
+from hapray.core.common.path_utils import get_user_data_root
 
 
 def load_summary_info(directory: str):
@@ -89,7 +90,7 @@ class CompareAction:
     """Handles comparison of two report directories and generates a side-by-side Excel report."""
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> ActionExecuteReturn:
         parser = argparse.ArgumentParser(
             description='Compare two report directories and generate a side-by-side Excel.',
             prog='ArkAnalyzer-HapRay compare',
@@ -114,24 +115,25 @@ class CompareAction:
 
         if not os.path.isdir(base_dir):
             logging.error('Base directory does not exist: %s', base_dir)
-            return
+            return (1, '')
         if not os.path.isdir(compare_dir):
             logging.error('Compare directory does not exist: %s', compare_dir)
-            return
+            return (1, '')
 
         logging.info('Comparing base: %s with compare: %s', base_dir, compare_dir)
         base_data = load_summary_info(base_dir)
         compare_data = load_summary_info(compare_dir)
         if not base_data and not compare_data:
             logging.error('No summary_info.json data found in either directory.')
-            return
+            return (1, '')
         base_pivot = pivot_summary_info(base_data, 'base')
         compare_pivot = pivot_summary_info(compare_data, 'compare')
         merged_df = merge_base_compare(base_pivot, compare_pivot)
         if merged_df.empty:
             logging.error('No data to write after merging.')
-            return
+            return (1, '')
         saver = ExcelReportSaver(output_path)
         saver.add_sheet(merged_df, 'Compare')
         saver.save()
         logging.info('Comparison Excel saved to %s', output_path)
+        return (0, output_path)

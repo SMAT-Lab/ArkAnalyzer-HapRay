@@ -156,7 +156,12 @@ class OptimizationDetector:
                 if len(seq) < features:
                     seq = np.pad(seq, (0, features - len(seq)), 'constant')
                 sequences.append(seq)
-            logging.info('_extract_features: Extracted %d chunks from %d bytes for %s', len(sequences), len(data), file_info.absolute_path)
+            logging.info(
+                '_extract_features: Extracted %d chunks from %d bytes for %s',
+                len(sequences),
+                len(data),
+                file_info.absolute_path,
+            )
             return sequences
         except Exception as e:
             # 如果提取失败，返回 None（会在 _run_analysis 中捕获异常）
@@ -242,7 +247,9 @@ class OptimizationDetector:
 
         return lto_results
 
-    def _run_analysis(self, file_info: FileInfo) -> tuple[FileInfo, Optional[list[tuple[int, float]]], Optional[str], Optional[list]]:
+    def _run_analysis(
+        self, file_info: FileInfo
+    ) -> tuple[FileInfo, Optional[list[tuple[int, float]]], Optional[str], Optional[list]]:
         """Run optimization flag detection on a single file with optional timeout.
         Returns: (file_info, flags, error_reason, chunks)
         - flags: None means skip (too few chunks), [] means no data, list means success
@@ -550,7 +557,7 @@ class OptimizationDetector:
                     dist = lto_result['distribution']
                     total_chunks = lto_result.get('total_chunks', dist.get('LTO', 0) + dist.get('No LTO', 0))
                     if total_chunks > 0:
-                        row['LTO Chunks'] = f"{dist.get('LTO', 0)}/{total_chunks}"
+                        row['LTO Chunks'] = f'{dist.get("LTO", 0)}/{total_chunks}'
                         # total_score = 各 chunk 的 sigmoid 概率之和（chunk 数 × 平均 ≈ 该值，可 >1）
                         # 判定用 LTO Score（平均），此列仅作参考
                         total_score = lto_result.get('total_score', 0)

@@ -13,7 +13,8 @@
     "install:rust": "node scripts/install-rust.js",
     "postinstall": "npm run install:rust",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "clean": "rm -rf dist src-tauri/target"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

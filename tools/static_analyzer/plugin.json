@@ -4,6 +4,11 @@
   "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
   "version": "1.0.0",
   "author": "HapRay Team",
+  "tool_contract": {
+    "enabled": true,
+    "result_file": "hapray-tool-result.json",
+    "machine_json": false
+  },
   "execution": {
     "debug": {
       "cmd": ["node -r ts-node/register "],

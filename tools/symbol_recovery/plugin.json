@@ -4,6 +4,11 @@
   "description": "二进制符号恢复工具，支持perf.data和Excel偏移量两种模式",
   "version": "1.0.0",
   "author": "HapRay Team",
+  "tool_contract": {
+    "enabled": true,
+    "result_file": "hapray-tool-result.json",
+    "machine_json": false
+  },
   "execution": {
     "debug": {
       "cmd": ["python", "main.py"],

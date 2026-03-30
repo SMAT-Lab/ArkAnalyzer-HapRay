@@ -47,6 +47,14 @@ class PerfDataToSqliteConverter:
         else:  # Linux
             possible_names = ['trace_streamer_linux', 'trace_streamer']
 
+        # 优先 PATH，与 perf_testing ExeUtils 一致
+        for name in possible_names:
+            found = shutil.which(name)
+            if found:
+                tool_path = Path(found)
+                logger.info(f'找到 trace_streamer 工具: {tool_path}')
+                return tool_path
+
         # 基于当前文件所在目录检查常见位置（开发环境）
         base_dir = Path(__file__).resolve()
         # 打包 onefile 时 __file__ 在 _MEIPASS 临时目录，不可用相对路径推导安装目录
@@ -55,24 +63,34 @@ class PerfDataToSqliteConverter:
         search_paths = []
         if getattr(sys, 'frozen', False):
             exe_dir = Path(sys.executable).resolve().parent
-            # 与 perf_testing 一致：.../tools/symbol-recovery/symbol-recovery.exe 旁为 .../tools/trace_streamer_binary
             search_paths.extend(
                 [
+                    exe_dir.parent / 'bin',
+                    exe_dir / 'bin',
+                    exe_dir.parent / 'bin' / 'trace_streamer_binary',
                     exe_dir.parent / 'trace_streamer_binary',
+                    exe_dir / 'bin' / 'trace_streamer_binary',
                     exe_dir / 'trace_streamer_binary',
                 ]
             )
             meipass = getattr(sys, '_MEIPASS', None)
             if meipass:
-                search_paths.append(Path(meipass) / 'trace_streamer_binary')
+                search_paths.extend(
+                    [
+                        Path(meipass) / 'bin',
+                        Path(meipass) / 'bin' / 'trace_streamer_binary',
+                        Path(meipass) / 'trace_streamer_binary',
+                    ]
+                )
 
         search_paths.extend(
             [
-                # 打包 onedir：.../tools/trace_streamer_binary（旧逻辑，保留兼容）
+                symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'bin',
+                symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'bin' / 'trace_streamer_binary',
                 symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'trace_streamer_binary',
-                # 开发：.../dist/tools/trace_streamer_binary
+                symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'bin',
+                symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'bin' / 'trace_streamer_binary',
                 symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
-                # 可选：插件本目录下放一份
                 symbol_recovery_root / '..' / 'trace_streamer_binary',
             ]
         )
@@ -83,14 +101,6 @@ class PerfDataToSqliteConverter:
                 if tool_path.exists() and tool_path.is_file():
                     logger.info(f'找到 trace_streamer 工具: {tool_path}')
                     return tool_path
-
-        # 尝试在 PATH 中查找（含 Windows）
-        for name in possible_names:
-            found = shutil.which(name)
-            if found:
-                tool_path = Path(found)
-                logger.info(f'找到 trace_streamer 工具: {tool_path}')
-                return tool_path
 
         logger.info(f'当前目录: {Path.cwd()}')
         logger.error('❌ 错误: 未找到 trace_streamer 工具')

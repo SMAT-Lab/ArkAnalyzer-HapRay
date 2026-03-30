@@ -25,8 +25,9 @@ from hypium import UiDriver
 
 from hapray import VERSION
 from hapray.analyze.ui_analyzer import UIAnalyzer
-from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.collection.capture_ui import CaptureUI
+from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.path_utils import get_user_data_root
 
 
 class UIAction:
@@ -406,10 +407,10 @@ class UIAction:
             return False
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> ActionExecuteReturn:
         """执行UI分析工作流"""
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         parser = argparse.ArgumentParser(
             description='应用UI独立入口 - dump组件树、截屏、UI动画分析和HTML报告生成',
@@ -452,7 +453,7 @@ class UIAction:
         action = UIAction(output_dir, device_sn=parsed_args.device)
         success = action.run()
 
-        return output_dir if success else None
+        return (0, output_dir) if success else (1, '')
 
 
 if __name__ == '__main__':
