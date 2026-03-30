@@ -11,9 +11,6 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const runWithCargo = path.resolve(__dirname, "run-with-cargo.js");
-const bundleBase = path.resolve(__dirname, "../src-tauri/target/release/bundle");
-const macosDir = path.join(bundleBase, "macos");
-const dmgDir = path.join(bundleBase, "dmg");
 const releaseDir = path.resolve(__dirname, "../src-tauri/target/release");
 const tauriConfPath = path.resolve(__dirname, "../src-tauri/tauri.conf.json");
 const rootDistDir = path.resolve(__dirname, "../../dist");
@@ -37,13 +34,34 @@ function getProductName() {
   return conf.productName || DEFAULT_PRODUCT_NAME;
 }
 
+/** 与 Cargo 一致：CI 常设 CARGO_BUILD_TARGET；tauri bundle 默认不读该变量，须传 --target。 */
+function getRustTargetTriple() {
+  const t = process.env.CARGO_BUILD_TARGET || process.env.CARGO_TARGET;
+  return t && String(t).trim() ? String(t).trim() : null;
+}
+
+/** bundle/macos、dmg 位于 target/[triple]/release/bundle/（设了 CARGO_BUILD_TARGET 时）。 */
+function getMacBundleDirs() {
+  const triple = getRustTargetTriple();
+  const bundleBase = triple
+    ? path.resolve(__dirname, "../src-tauri/target", triple, "release", "bundle")
+    : path.resolve(__dirname, "../src-tauri/target/release/bundle");
+  return {
+    bundleBase,
+    macosDir: path.join(bundleBase, "macos"),
+    dmgDir: path.join(bundleBase, "dmg"),
+  };
+}
+
 function getMacBundleArtifacts() {
+  const { macosDir, dmgDir } = getMacBundleDirs();
   const tauriConf = loadTauriConf();
   const productName = tauriConf.productName || DEFAULT_PRODUCT_NAME;
   const version = tauriConf.version;
-  const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+  /** Tauri 2 dmg 后缀：Apple Silicon 为 aarch64；Intel 为 x64（与 Rust 三元组 x86_64 不同） */
+  const dmgArchSuffix = process.arch === "arm64" ? "aarch64" : "x64";
   const appName = `${productName}.app`;
-  const dmgName = `${productName}_${version}_${arch}.dmg`;
+  const dmgName = `${productName}_${version}_${dmgArchSuffix}.dmg`;
   return {
     productName,
     appName,
@@ -88,8 +106,18 @@ function stripNotaryEnv(env = process.env) {
   return next;
 }
 
-const TAURI_BUILD_NO_BUNDLE = [runWithCargo, "npx", "tauri", "build", "--no-bundle"];
-const TAURI_BUNDLE_APP_DMG = [runWithCargo, "npx", "tauri", "bundle", "--bundles", "app,dmg"];
+function tauriTargetCliArgs() {
+  const triple = getRustTargetTriple();
+  return triple ? ["--target", triple] : [];
+}
+
+function tauriBuildNoBundleArgs() {
+  return [runWithCargo, "npx", "tauri", "build", "--no-bundle", ...tauriTargetCliArgs()];
+}
+
+function tauriBundleAppDmgArgs() {
+  return [runWithCargo, "npx", "tauri", "bundle", "--bundles", "app,dmg", ...tauriTargetCliArgs()];
+}
 
 /** node 调 tauri 子进程；公证失败时去掉 notary 环境变量后重试。extraEnv 如 { CI: "true" } */
 function tryNodeTauriWithNotaryFallback(nodeArgs, logLabel, extraEnv = {}) {
@@ -107,12 +135,12 @@ function tryNodeTauriWithNotaryFallback(nodeArgs, logLabel, extraEnv = {}) {
 
 /** tauri build --no-bundle → tauri bundle --bundles app,dmg（需两步：bundle 依赖已编译产物） */
 function buildMacAppAndDmg() {
-  if (!tryNodeTauriWithNotaryFallback(TAURI_BUILD_NO_BUNDLE, "tauri build --no-bundle")) {
+  if (!tryNodeTauriWithNotaryFallback(tauriBuildNoBundleArgs(), "tauri build --no-bundle")) {
     console.error("错误: tauri build 失败（含跳过 notarization 重试）");
     return false;
   }
   console.log("正在执行 tauri bundle --bundles app,dmg …");
-  if (!tryNodeTauriWithNotaryFallback(TAURI_BUNDLE_APP_DMG, "tauri bundle", { CI: "true" })) {
+  if (!tryNodeTauriWithNotaryFallback(tauriBundleAppDmgArgs(), "tauri bundle", { CI: "true" })) {
     console.error("错误: tauri bundle 失败（含跳过 notarization 重试）");
     return false;
   }
