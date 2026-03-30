@@ -1,6 +1,6 @@
 # 数据分析子 Skill（可扩展）
 
-本目录存放 **与 HapRay 产物结合的分析知识**，按主题拆成独立 Markdown，便于主 Skill `../SKILL.md` 引用、Agent **按需加载**（用户问题涉及某类分析时再读对应文件）。
+本目录存放 **与 HapRay 产物结合的分析知识**，按主题拆成独立 Markdown。主 Skill `../SKILL.md` 要求：**在 `perf_testing` 采集落盘后尽可能加载本子目录**，对 `trace.db`/报告做 **深入分析**，而非仅浏览自动 HTML（详见主 Skill「采集产物 → 应触发的子 Skill」表）。
 
 ## 索引
 
