@@ -15,6 +15,7 @@ from typing import Optional
 
 from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
+from core.analyzers.kmp_analyzer import KMPAnalyzer
 from core.analyzers.memory_flamegraph_analyzer import MemoryFlameGraphAnalyzer
 from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
 from core.utils.config import (
@@ -137,6 +138,19 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help='启用内存模式：从火焰图 HTML 文件中提取符号地址进行分析',
     )
     parser.add_argument(
+        '--kmp-mode',
+        action='store_true',
+        help='启用 KMP 分析模式：针对 stripped KMP .so 文件，恢复符号名并按 KMP 组件分类',
+    )
+    parser.add_argument(
+        '--kmp-app-name',
+        type=str,
+        default='',
+        help='KMP 模式：目标应用名称（如 "Bilibili"、"快手"），用于在 prompt 中生成对应的业务分类标签。'
+             '不传时使用通用的 "Business Logic" 描述，适用于任意 KMP 库分析。'
+             '可配合 --context 进一步注入该库的具体命名空间/组成比例信息',
+    )
+    parser.add_argument(
         '--html-dir',
         type=str,
         default=None,
@@ -190,8 +204,9 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--batch-size',
         type=int,
-        default=DEFAULT_BATCH_SIZE,
-        help=f'批量分析时每个 prompt 包含的函数数量（默认: {DEFAULT_BATCH_SIZE}，建议范围: 3-10）。当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
+        default=None,
+        help='批量分析时每个 prompt 包含的函数数量（不传则按服务类型自动选择：claude=10, openai=5, deepseek/poe=3）。'
+             '当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
     )
     parser.add_argument(
         '--use-capstone-only',
@@ -880,6 +895,119 @@ def handle_memory_mode(args, output_dir: Path):
     return True
 
 
+def handle_kmp_mode(args, output_dir: Path) -> bool:
+    """处理 KMP 分析模式：stripped KMP .so 符号恢复 + 组件分类。"""
+    if not args.kmp_mode:
+        return False
+
+    logger.info('=' * 80)
+    logger.info('KMP Analysis Mode: Symbol recovery + KMP component classification')
+    logger.info('=' * 80)
+
+    # 验证必要参数
+    perf_db_file = Path(args.perf_db) if args.perf_db else None
+    if not perf_db_file or not perf_db_file.exists():
+        logger.error('❌ KMP 模式需要通过 --perf-db 指定有效的 perf.db 文件')
+        sys.exit(1)
+
+    so_path = Path(args.so_file) if args.so_file else None
+    if not so_path or not so_path.exists():
+        logger.error('❌ KMP 模式需要通过 --so-file 指定 KMP .so 文件路径')
+        sys.exit(1)
+
+    logger.info(f'perf.db : {perf_db_file}')
+    logger.info(f'SO file : {so_path}')
+    logger.info(f'Top-N   : {args.top_n}')
+    if args.kmp_app_name:
+        logger.info(f'App     : {args.kmp_app_name}')
+
+    time_tracker = TimeTracker()
+    time_tracker.start_step('Initialization', 'Initializing KMP analyzer')
+
+    try:
+        analyzer = KMPAnalyzer(
+            perf_db_file=str(perf_db_file),
+            so_dir=str(so_path),
+            use_llm=not args.no_llm,
+            llm_model=args.llm_model,
+            batch_size=args.batch_size,
+            context=args.context,
+            use_capstone_only=args.use_capstone_only,
+            save_prompts=args.save_prompts,
+            output_dir=str(output_dir),
+            skip_decompilation=args.skip_decompilation,
+            open_source_lib=args.open_source_lib,
+            app_name=args.kmp_app_name or '',
+        )
+    except Exception:
+        logger.exception('❌ KMP analyzer initialization failed')
+        sys.exit(1)
+
+    time_tracker.end_step('Initialization completed')
+
+    # 分析 top-N 热点地址
+    time_tracker.start_step('KMP analysis', f'Disassembly + LLM analysis of top {args.top_n} addresses')
+    results = analyzer.analyze_event_count_only(top_n=args.top_n)
+    time_tracker.end_step(f'Analyzed {len(results)} functions')
+
+    if not results:
+        logger.warning('⚠️  No results — check that the SO file has stripped symbols in perf.db')
+        return True
+
+    # 保存 Excel（含 KMP分类 列）
+    time_tracker.start_step('Saving results', 'Writing Excel with KMP classification')
+    output_file = analyzer.save_kmp_results(
+        results,
+        time_tracker=time_tracker,
+        output_dir=output_dir,
+        top_n=args.top_n,
+    )
+    time_tracker.end_step('Results saved')
+
+    logger.info(f'\n✅ KMP Analysis completed! Analyzed {len(results)} functions')
+    logger.info(f'📊 Excel report: {output_file}')
+
+    if analyzer.use_llm and analyzer.llm_analyzer:
+        analyzer.llm_analyzer.finalize()
+        analyzer.llm_analyzer.print_token_stats()
+
+    # HTML 符号替换（如果提供了 --html-input）
+    html_input = detect_html_input(args)
+    if html_input and html_input.exists():
+        logger.info('\n' + '=' * 80)
+        logger.info('KMP Step 4: HTML symbol replacement with [Category] annotations')
+        logger.info('=' * 80)
+
+        kmp_mapping = analyzer.build_kmp_function_mapping(results)
+        if kmp_mapping:
+            with open(html_input, encoding='utf-8') as f:
+                html_content = f.read()
+
+            html_content, replacement_info = replace_symbols_in_html(html_content, kmp_mapping)
+
+            # 嵌入详细分析报告 tab（包含功能描述、KMP分类、优化建议等）
+            llm_analyzer_for_report = analyzer.llm_analyzer if analyzer.use_llm else None
+            html_content = add_disclaimer(
+                html_content,
+                report_data=results,
+                llm_analyzer=llm_analyzer_for_report,
+            )
+
+            html_output = html_input.parent / f'{html_input.stem}_kmp_symbols.html'
+            with open(html_output, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            logger.info(f'✅ Replaced {len(replacement_info)} symbols')
+            logger.info(f'📄 Output HTML: {html_output}')
+        else:
+            logger.warning('⚠️  No function mapping available for HTML replacement')
+    else:
+        logger.info('ℹ️  No --html-input specified, skipping HTML replacement')
+
+    time_tracker.print_summary()
+    return True
+
+
 def main():
     _ensure_writable_cwd()
     parser = create_argument_parser()
@@ -888,6 +1016,10 @@ def main():
     # 处理输出目录配置
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
     setup_logging(output_dir)
+
+    # 处理 KMP 分析模式
+    if handle_kmp_mode(args, output_dir):
+        return
 
     # 处理内存模式
     if handle_memory_mode(args, output_dir):

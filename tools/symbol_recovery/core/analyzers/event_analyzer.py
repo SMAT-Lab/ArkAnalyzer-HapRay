@@ -75,6 +75,8 @@ class EventCountAnalyzer:
         self.context = context
         self.use_capstone_only = use_capstone_only
         self.skip_decompilation = skip_decompilation
+        # 子类可设为 True 以使用自消耗口径（leaf=MAX depth，与 hiperf counts[1] 一致）
+        self._self_cost_only: bool = False
 
         if not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 不存在: {perf_db_file}')
@@ -219,7 +221,7 @@ class EventCountAnalyzer:
         top_n = DEFAULT_TOP_N
         return {k: v for k, v in sorted_items[:top_n]}
 
-    def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None, target_so_name=None):
+    def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None, target_so_name=None, self_cost_only=False):
         """按 event_count 求和统计 topN
 
         Args:
@@ -228,6 +230,9 @@ class EventCountAnalyzer:
             name_to_data: 名称ID到地址数据的映射
             top_n: 返回前N个结果
             target_so_name: 目标SO文件名（如果指定，只统计该SO文件的函数）
+            self_cost_only: 若为 True，只统计调用栈叶节点（MAX depth）属于目标 SO 的样本
+                            （自消耗口径，与 hiperf counts[1] / analyze_so_perf.py 一致）；
+                            否则统计调用链中任意位置出现目标 SO 的样本（inclusive 口径，counts[2]）。
         """
         if top_n is None:
             top_n = DEFAULT_TOP_N
@@ -245,30 +250,76 @@ class EventCountAnalyzer:
             matching_file_ids = [row[0] for row in cursor.fetchall()]
 
             if matching_file_ids:
-                # 使用 IN 子句过滤 file_id
                 placeholders = ','.join('?' * len(matching_file_ids))
-                query = f"""
-                    SELECT pc.file_id, pc.name, SUM(ps.event_count) as total_event_count,
-                           COUNT(*) as call_count, pc.ip, pc.depth
-                    FROM perf_sample ps
-                    JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
-                    WHERE pc.symbol_id = -1 AND pc.file_id IN ({placeholders})
-                    GROUP BY pc.file_id, pc.name
-                """
-                cursor.execute(query, matching_file_ids)
+                if self_cost_only:
+                    # 自消耗口径：仅统计调用栈叶节点（MAX depth）属于目标 SO 的样本
+                    # 与 analyze_so_perf.py query_top_symbols 及 hiperf counts[1] 一致
+                    query = f"""
+                        SELECT pc.file_id, pc.name,
+                               SUM(ps.event_count) AS total_event_count,
+                               COUNT(*) AS call_count,
+                               pc.ip, pc.depth
+                        FROM perf_sample ps
+                        JOIN (
+                            SELECT callchain_id, MAX(depth) AS max_depth
+                            FROM perf_callchain
+                            GROUP BY callchain_id
+                        ) AS leaf ON leaf.callchain_id = ps.callchain_id
+                        JOIN perf_callchain pc
+                            ON pc.callchain_id = leaf.callchain_id
+                            AND pc.depth = leaf.max_depth
+                            AND pc.symbol_id = -1
+                            AND pc.file_id IN ({placeholders})
+                        GROUP BY pc.file_id, pc.name
+                    """
+                    cursor.execute(query, matching_file_ids)
+                else:
+                    # Inclusive 口径：DISTINCT (callchain_id, file_id, name) 去重
+                    # 同一样本中同一地址无论出现几帧只计一次 event_count（counts[2]）
+                    query = f"""
+                        SELECT fn.file_id, fn.name,
+                               SUM(ps.event_count) AS total_event_count,
+                               COUNT(*) AS call_count,
+                               pc_rep.ip, pc_rep.depth
+                        FROM perf_sample ps
+                        JOIN (
+                            SELECT DISTINCT callchain_id, file_id, name
+                            FROM perf_callchain
+                            WHERE symbol_id = -1 AND file_id IN ({placeholders})
+                        ) AS fn ON fn.callchain_id = ps.callchain_id
+                        LEFT JOIN (
+                            SELECT file_id, name, MIN(ip) AS ip, MIN(depth) AS depth
+                            FROM perf_callchain
+                            WHERE symbol_id = -1 AND file_id IN ({placeholders})
+                            GROUP BY file_id, name
+                        ) AS pc_rep ON pc_rep.file_id = fn.file_id AND pc_rep.name = fn.name
+                        GROUP BY fn.file_id, fn.name
+                    """
+                    cursor.execute(query, matching_file_ids + matching_file_ids)
                 all_rows = cursor.fetchall()
             else:
                 # 如果没有匹配的 file_id，返回空结果
                 all_rows = []
         else:
-            # 没有指定 target_so_name，使用原来的查询
+            # 没有指定 target_so_name，全库 DISTINCT 去重查询（不支持 self_cost_only）
             cursor.execute("""
-                SELECT pc.file_id, pc.name, SUM(ps.event_count) as total_event_count,
-                       COUNT(*) as call_count, pc.ip, pc.depth
+                SELECT fn.file_id, fn.name,
+                       SUM(ps.event_count) AS total_event_count,
+                       COUNT(*) AS call_count,
+                       pc_rep.ip, pc_rep.depth
                 FROM perf_sample ps
-                JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
-                WHERE pc.symbol_id = -1
-                GROUP BY pc.file_id, pc.name
+                JOIN (
+                    SELECT DISTINCT callchain_id, file_id, name
+                    FROM perf_callchain
+                    WHERE symbol_id = -1
+                ) AS fn ON fn.callchain_id = ps.callchain_id
+                LEFT JOIN (
+                    SELECT file_id, name, MIN(ip) AS ip, MIN(depth) AS depth
+                    FROM perf_callchain
+                    WHERE symbol_id = -1
+                    GROUP BY file_id, name
+                ) AS pc_rep ON pc_rep.file_id = fn.file_id AND pc_rep.name = fn.name
+                GROUP BY fn.file_id, fn.name
             """)
             all_rows = cursor.fetchall()
 
@@ -457,9 +508,11 @@ class EventCountAnalyzer:
 
                 # Get all data before closing connection
                 event_count_top = self._get_event_count_top100(
-                    cursor, file_id_to_path, name_to_data, top_n, target_so_name
+                    cursor, file_id_to_path, name_to_data, top_n, target_so_name,
+                    self_cost_only=self._self_cost_only,
                 )
-                logger.info(f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n})')
+                cost_mode = 'self-cost' if self._self_cost_only else 'inclusive'
+                logger.info(f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n}, {cost_mode})')
             except Exception:
                 logger.exception('[ERROR] Failed to calculate event_count statistics')
                 raise

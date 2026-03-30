@@ -6,6 +6,8 @@
 import json
 import logging
 import re
+import time as _time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Optional
 
@@ -18,16 +20,22 @@ logger = get_logger(__name__)
 class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
     """支持批量分析的 LLM 分析器"""
 
-    def __init__(self, *args, batch_size: int = 3, **kwargs):
+    def __init__(self, *args, batch_size: int = 3, request_delay: float = 0.5, max_concurrent: int = 1, **kwargs):
         """
         初始化批量分析器
 
         Args:
             batch_size: 每个 prompt 中包含的函数数量（默认: 3）
+            request_delay: 串行模式下批次之间的请求间隔秒数（默认: 0.5s）；
+                           并发模式下忽略此参数（遇到 429 时由 retry 逻辑处理）
+            max_concurrent: 并发批次数（默认: 1 = 串行）。设为 > 1 启用并发，
+                            Claude API 推荐 5，其他 API 保持 1。
             其他参数同 LLMFunctionAnalyzer
         """
         super().__init__(*args, **kwargs)
         self.batch_size = batch_size
+        self.request_delay = request_delay
+        self.max_concurrent = max_concurrent
 
     def _build_batch_prompt(self, functions_data: list[dict[str, Any]], context: Optional[str] = None) -> str:
         """
@@ -141,7 +149,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
             decompiled = func_data.get('decompiled')
 
-            # 如果有反编译代码，优先使用反编译代码，不显示反汇编代码
+            # 如果有反编译代码，优先使用反编译代码
             if decompiled:
                 prompt_parts.append('')
                 prompt_parts.append('反编译代码（伪 C 代码）:')
@@ -149,7 +157,6 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                 decompiled_lines = decompiled.split('\n')
                 filtered_lines = []
                 for line in decompiled_lines:
-                    # 跳过 warning 行（以 //WARNING 开头或包含 WARNING）
                     if not (
                         line.strip().startswith('//WARNING')
                         or 'WARNING' in line.upper()
@@ -157,13 +164,20 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     ):
                         filtered_lines.append(line)
 
-                # 批量模式下，限制反编译代码长度，避免 prompt 过长导致 LLM 响应截断
-                # 注意：如果 prompt 过长，LLM 可能无法返回完整的 JSON，导致某些函数的结果丢失
-                max_decompiled_lines = 300  # 从 1000 行减少到 300 行，避免 prompt 过长
+                max_decompiled_lines = 300
                 for line in filtered_lines[:max_decompiled_lines]:
                     prompt_parts.append(f'  {line}')
                 if len(filtered_lines) > max_decompiled_lines:
                     prompt_parts.append(f'  ... (共 {len(filtered_lines)} 行，此处显示前 {max_decompiled_lines} 行)')
+
+                # 短函数（≤16条指令）额外附上原始汇编：
+                # 反编译器会将 ldp/ret epilog 抽象为 `return`，丢失关键汇编指纹（LeaveFrame、EnterFrame 等）。
+                raw_asm = func_data.get('raw_asm_for_short_func', [])
+                if raw_asm:
+                    prompt_parts.append('')
+                    prompt_parts.append('原始汇编（短函数，仅供汇编指纹识别参考）:')
+                    for i, inst in enumerate(raw_asm, 1):
+                        prompt_parts.append(f'  {i:3d}. {inst}')
             else:
                 # 如果没有反编译代码，则显示反汇编代码
                 instructions = func_data.get('instructions', [])
@@ -305,142 +319,188 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
             if 'function_id' not in func_data:
                 func_data['function_id'] = f'func_{idx}'
 
-        # 分批处理
-        all_results = []
         total_batches = (len(functions_data) + self.batch_size - 1) // self.batch_size
+        batches = [
+            (functions_data[i : i + self.batch_size], i // self.batch_size + 1)
+            for i in range(0, len(functions_data), self.batch_size)
+        ]
 
-        for batch_idx in range(0, len(functions_data), self.batch_size):
-            batch = functions_data[batch_idx : batch_idx + self.batch_size]
-            batch_num = batch_idx // self.batch_size + 1
+        mode = f'concurrent(max_workers={self.max_concurrent})' if self.max_concurrent > 1 else 'serial'
+        logger.info(
+            f'Batch config: batch_size={self.batch_size}, request_delay={self.request_delay}s, '
+            f'total_batches={total_batches}, mode={mode}'
+        )
 
-            logger.info(f'\nBatch analysis batch {batch_num}/{total_batches} (contains {len(batch)} functions)...')
+        if self.max_concurrent > 1:
+            return self._run_concurrent(batches, total_batches, context)
+        else:
+            return self._run_serial(batches, total_batches, context)
 
-            # 检查缓存
-            batch_results = []
-            uncached_batch = []
-            cached_batch = []  # 记录缓存的函数，用于 prompt 保存
+    # ------------------------------------------------------------------
+    # 串行执行
+    # ------------------------------------------------------------------
 
-            for func_data in batch:
-                if self.enable_cache:
-                    cache_key = self._get_cache_key(
-                        func_data.get('instructions', []),
-                        func_data.get('strings', []),
-                        func_data.get('symbol_name'),
-                        func_data.get('called_functions', []),
-                        func_data.get('decompiled'),
-                    )
-                    if cache_key in self.cache:
-                        cache_entry = self.cache[cache_key]
-                        # 缓存结构: {'analysis': {...}, 'metadata': {...}}
-                        # 需要从 'analysis' 字段中获取实际的分析结果
-                        if isinstance(cache_entry, dict) and 'analysis' in cache_entry:
-                            cached_result = cache_entry['analysis'].copy()
-                        else:
-                            # 兼容旧格式（直接存储分析结果）
-                            cached_result = cache_entry.copy() if isinstance(cache_entry, dict) else {}
+    def _run_serial(
+        self,
+        batches: list[tuple[list, int]],
+        total_batches: int,
+        context: Optional[str],
+    ) -> list[dict[str, Any]]:
+        all_results = []
+        for batch_idx, (batch, batch_num) in enumerate(batches):
+            if batch_idx > 0 and self.request_delay > 0:
+                _time.sleep(self.request_delay)
+            _, batch_results = self._process_single_batch(batch, batch_num, total_batches, context)
+            all_results.extend(batch_results)
+        return all_results
 
-                        # 确保旧缓存格式也有 performance_analysis 字段
-                        if 'performance_analysis' not in cached_result:
-                            cached_result['performance_analysis'] = ''
-                            logger.debug(
-                                f'⚠️  函数 {func_data.get("function_id", "unknown")} 的缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）'
-                            )
+    # ------------------------------------------------------------------
+    # 并发执行
+    # ------------------------------------------------------------------
 
-                        cached_result['function_id'] = func_data['function_id']
-                        batch_results.append(cached_result)
-                        cached_batch.append(func_data)  # 记录缓存的函数
-                        self.token_stats['cached_requests'] += 1
-                        self.token_stats['total_requests'] += 1
-                        continue
+    def _run_concurrent(
+        self,
+        batches: list[tuple[list, int]],
+        total_batches: int,
+        context: Optional[str],
+    ) -> list[dict[str, Any]]:
+        results_map: dict[int, list] = {}
+        with ThreadPoolExecutor(max_workers=self.max_concurrent) as executor:
+            futures = {
+                executor.submit(self._process_single_batch, batch, batch_num, total_batches, context): batch_num
+                for batch, batch_num in batches
+            }
+            for future in as_completed(futures):
+                batch_num, batch_results = future.result()
+                results_map[batch_num] = batch_results
 
-                uncached_batch.append(func_data)
+        # 按原始顺序合并
+        all_results = []
+        for batch_num in range(1, total_batches + 1):
+            all_results.extend(results_map.get(batch_num, []))
+        return all_results
 
-            # 保存 prompt（如果启用）
-            # 注意：为了调试方便，prompt 中包含所有函数（包括缓存的），这样可以看到完整的批量分析内容
-            if self.save_prompts and batch:  # 只要有函数就保存 prompt
-                # 构建包含所有函数的 prompt（包括缓存的）
-                all_functions_for_prompt = cached_batch + uncached_batch
-                if all_functions_for_prompt:  # 确保有函数才保存
-                    batch_prompt = self._build_batch_prompt(all_functions_for_prompt, context)
-                    self._save_batch_prompt(batch_prompt, all_functions_for_prompt, batch_num, total_batches)
-                    logger.debug(
-                        f'✅ 已保存 prompt (批次 {batch_num}/{total_batches})，包含 {len(all_functions_for_prompt)} 个函数（缓存: {len(cached_batch)}, 未缓存: {len(uncached_batch)}）'
-                    )
+    # ------------------------------------------------------------------
+    # 单批处理（串行/并发共用，需线程安全）
+    # ------------------------------------------------------------------
 
-            # 如果有未缓存的函数，进行批量分析
-            if uncached_batch:
-                try:
-                    # 构建批量 prompt（只包含未缓存的函数，用于 LLM 分析）
-                    batch_prompt = self._build_batch_prompt(uncached_batch, context)
+    def _process_single_batch(
+        self,
+        batch: list[dict[str, Any]],
+        batch_num: int,
+        total_batches: int,
+        context: Optional[str],
+    ) -> tuple[int, list[dict[str, Any]]]:
+        """处理单个批次，返回 (batch_num, batch_results)，线程安全。"""
+        logger.info(f'\nBatch analysis batch {batch_num}/{total_batches} (contains {len(batch)} functions)...')
 
-                    # 调用 LLM
-                    response = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=[
-                            {
-                                'role': 'system',
-                                'content': '你是一个专业的逆向工程专家，擅长分析 ARM64 汇编代码并推断函数功能和函数名。',
-                            },
-                            {'role': 'user', 'content': batch_prompt},
-                        ],
-                        temperature=0.0,  # 最低随机性，最高一致性和稳定性
-                        max_tokens=8000,  # DeepSeek API 限制为 8192，设置为 8000 留有余量
-                        timeout=120,  # 批量模式下增加超时时间
-                    )
+        # 检查缓存
+        batch_results = []
+        uncached_batch = []
+        cached_batch = []  # 记录缓存的函数，用于 prompt 保存
 
-                    # 统计 token
-                    usage = response.usage
-                    if usage:
-                        input_tokens = usage.prompt_tokens if hasattr(usage, 'prompt_tokens') else 0
-                        output_tokens = usage.completion_tokens if hasattr(usage, 'completion_tokens') else 0
-                        total_tokens = (
-                            usage.total_tokens if hasattr(usage, 'total_tokens') else (input_tokens + output_tokens)
+        for func_data in batch:
+            if self.enable_cache:
+                cache_key = self._get_cache_key(
+                    func_data.get('instructions', []),
+                    func_data.get('strings', []),
+                    func_data.get('symbol_name'),
+                    func_data.get('called_functions', []),
+                    func_data.get('decompiled'),
+                )
+                with self._cache_lock:
+                    cached_entry = self.cache.get(cache_key)
+                if cached_entry is not None:
+                    cache_entry = cached_entry
+                    # 缓存结构: {'analysis': {...}, 'metadata': {...}}
+                    if isinstance(cache_entry, dict) and 'analysis' in cache_entry:
+                        cached_result = cache_entry['analysis'].copy()
+                    else:
+                        cached_result = cache_entry.copy() if isinstance(cache_entry, dict) else {}
+
+                    if 'performance_analysis' not in cached_result:
+                        cached_result['performance_analysis'] = ''
+                        logger.debug(
+                            f'⚠️  函数 {func_data.get("function_id", "unknown")} 的缓存结果缺少 performance_analysis 字段，已添加空值（建议清除缓存重新分析）'
                         )
 
+                    cached_result['function_id'] = func_data['function_id']
+                    batch_results.append(cached_result)
+                    cached_batch.append(func_data)
+                    with self._stats_lock:
+                        self.token_stats['cached_requests'] += 1
+                        self.token_stats['total_requests'] += 1
+                    continue
+
+            uncached_batch.append(func_data)
+
+        # 保存 prompt（如果启用）
+        if self.save_prompts and batch:
+            all_functions_for_prompt = cached_batch + uncached_batch
+            if all_functions_for_prompt:
+                batch_prompt = self._build_batch_prompt(all_functions_for_prompt, context)
+                self._save_batch_prompt(batch_prompt, all_functions_for_prompt, batch_num, total_batches)
+                logger.debug(
+                    f'✅ 已保存 prompt (批次 {batch_num}/{total_batches})，包含 {len(all_functions_for_prompt)} 个函数（缓存: {len(cached_batch)}, 未缓存: {len(uncached_batch)}）'
+                )
+
+        # 如果有未缓存的函数，进行批量分析
+        if uncached_batch:
+            try:
+                batch_prompt = self._build_batch_prompt(uncached_batch, context)
+
+                # 调用 LLM（带简单 429 重试）
+                response = self._call_llm_with_retry(batch_prompt)
+
+                # 统计 token
+                usage = response.usage
+                if usage:
+                    input_tokens = usage.prompt_tokens if hasattr(usage, 'prompt_tokens') else 0
+                    output_tokens = usage.completion_tokens if hasattr(usage, 'completion_tokens') else 0
+                    total_tokens = (
+                        usage.total_tokens if hasattr(usage, 'total_tokens') else (input_tokens + output_tokens)
+                    )
+                    with self._stats_lock:
                         self.token_stats['total_requests'] += 1
                         self.token_stats['total_input_tokens'] += input_tokens
                         self.token_stats['total_output_tokens'] += output_tokens
                         self.token_stats['total_tokens'] += total_tokens
-
-                        # 延迟保存统计（每10次请求保存一次，减少 I/O）
                         if self.token_stats['total_requests'] % 10 == 0:
                             self._save_token_stats()
 
-                    # 解析批量结果
-                    result_text = response.choices[0].message.content
+                result_text = response.choices[0].message.content
 
-                    # 调试：记录响应信息（仅在 debug 级别）
-                    logger.debug('LLM response length: %d characters', len(result_text))
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            'LLM response ending: %s', result_text[-200:] if len(result_text) > 200 else result_text
+                logger.debug('LLM response length: %d characters', len(result_text))
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        'LLM response ending: %s', result_text[-200:] if len(result_text) > 200 else result_text
+                    )
+
+                if self.save_prompts:
+                    try:
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
+                        response_file = (
+                            self.prompt_output_dir / f'llm_response_batch_{batch_num:03d}_{timestamp}.txt'
                         )
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            f.write('=' * 80 + '\n')
+                            f.write(f'LLM 响应 (批次 {batch_num}/{total_batches})\n')
+                            f.write('=' * 80 + '\n')
+                            f.write(f'生成时间: {datetime.now().isoformat()}\n')
+                            f.write(f'函数数量: {len(uncached_batch)}\n')
+                            f.write(f'响应长度: {len(result_text):,} 字符\n')
+                            f.write('=' * 80 + '\n\n')
+                            f.write(result_text)
+                            f.write('\n\n' + '=' * 80 + '\n')
+                        logger.debug(f'LLM response saved: {response_file.name}')
+                    except Exception as e:
+                        logger.warning(f'⚠️  Failed to save LLM response: {e}')
 
-                    # 保存完整的 LLM 响应到文件（用于调试）
-                    if self.save_prompts:
-                        try:
-                            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
-                            response_file = (
-                                self.prompt_output_dir / f'llm_response_batch_{batch_num:03d}_{timestamp}.txt'
-                            )
-                            with open(response_file, 'w', encoding='utf-8') as f:
-                                f.write('=' * 80 + '\n')
-                                f.write(f'LLM 响应 (批次 {batch_num}/{total_batches})\n')
-                                f.write('=' * 80 + '\n')
-                                f.write(f'生成时间: {datetime.now().isoformat()}\n')
-                                f.write(f'函数数量: {len(uncached_batch)}\n')
-                                f.write(f'响应长度: {len(result_text):,} 字符\n')
-                                f.write('=' * 80 + '\n\n')
-                                f.write(result_text)
-                                f.write('\n\n' + '=' * 80 + '\n')
-                            logger.debug(f'LLM response saved: {response_file.name}')
-                        except Exception as e:
-                            logger.warning(f'⚠️  Failed to save LLM response: {e}')
+                batch_parsed_results = self._parse_batch_response(result_text, uncached_batch)
 
-                    batch_parsed_results = self._parse_batch_response(result_text, uncached_batch)
-
-                    # 保存到缓存（包含元信息）
-                    if self.enable_cache:
+                # 保存到缓存（加锁）
+                if self.enable_cache:
+                    with self._cache_lock:
                         for func_data, result in zip(uncached_batch, batch_parsed_results):  # noqa: B905
                             cache_key = self._get_cache_key(
                                 func_data.get('instructions', []),
@@ -449,48 +509,69 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                                 func_data.get('called_functions', []),
                                 func_data.get('decompiled'),
                             )
-                            # 保存时移除 function_id（缓存键中不包含它）
                             cache_result = result.copy()
                             cache_result.pop('function_id', None)
-
-                            # 存储分析结果和元信息
                             cache_entry = {
-                                'analysis': cache_result,  # LLM 分析结果
+                                'analysis': cache_result,
                                 'metadata': {
                                     'instruction_count': len(func_data.get('instructions', [])),
                                     'string_count': len(func_data.get('strings', [])),
                                     'has_decompiled': bool(func_data.get('decompiled')),
                                     'called_functions_count': len(func_data.get('called_functions', [])),
                                     'offset': func_data.get('offset', ''),
-                                    'function_size': None,  # 可以从 func_info 获取，但暂不存储
+                                    'function_size': None,
                                 },
                             }
                             self.cache[cache_key] = cache_entry
-                        # 延迟保存缓存（每批次保存一次，减少 I/O）
                         self._save_cache()
 
-                    batch_results.extend(batch_parsed_results)
+                batch_results.extend(batch_parsed_results)
 
-                except Exception as e:
-                    logger.exception('⚠️  批量分析失败')
-                    # 为失败的函数返回默认结果
-                    for func_data in uncached_batch:
-                        batch_results.append(
-                            {
-                                'function_id': func_data['function_id'],
-                                'functionality': '未知',
-                                'function_name': None,
-                                'performance_analysis': '',
-                                'confidence': '低',
-                                'reasoning': f'批量分析失败: {str(e)}',
-                            }
-                        )
+            except Exception as e:
+                logger.exception('⚠️  批量分析失败')
+                for func_data in uncached_batch:
+                    batch_results.append(
+                        {
+                            'function_id': func_data['function_id'],
+                            'functionality': '未知',
+                            'function_name': None,
+                            'performance_analysis': '',
+                            'confidence': '低',
+                            'reasoning': f'批量分析失败: {str(e)}',
+                        }
+                    )
 
-            all_results.extend(batch_results)
-            logger.info(f'✅ Batch {batch_num} completed, analyzed {len(batch_results)} functions')
-            logger.debug(f'Batch {batch_num} returned function_id: {[r.get("function_id") for r in batch_results]}')
+        logger.info(f'✅ Batch {batch_num} completed, analyzed {len(batch_results)} functions')
+        logger.debug(f'Batch {batch_num} returned function_id: {[r.get("function_id") for r in batch_results]}')
+        return batch_num, batch_results
 
-        return all_results
+    def _call_llm_with_retry(self, batch_prompt: str, max_retries: int = 3):
+        """发送 LLM 请求，遇到 429 时指数退避重试。"""
+        delay = 5.0
+        for attempt in range(max_retries):
+            try:
+                return self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            'role': 'system',
+                            'content': '你是一个专业的逆向工程专家，擅长分析 ARM64 汇编代码并推断函数功能和函数名。',
+                        },
+                        {'role': 'user', 'content': batch_prompt},
+                    ],
+                    temperature=0.0,
+                    max_tokens=8000,
+                    timeout=120,
+                )
+            except Exception as e:
+                err_str = str(e)
+                is_rate_limit = '429' in err_str or 'rate_limit' in err_str.lower() or 'rate limit' in err_str.lower()
+                if is_rate_limit and attempt < max_retries - 1:
+                    logger.warning(f'⚠️  Rate limit (429), retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})')
+                    _time.sleep(delay)
+                    delay *= 2
+                else:
+                    raise
 
     def _parse_batch_response(self, response_text: str, functions_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
