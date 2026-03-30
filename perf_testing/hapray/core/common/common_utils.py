@@ -22,22 +22,35 @@ from pathlib import Path
 
 class CommonUtils:
     @staticmethod
-    def load_all_testcases() -> dict:
-        all_testcases = dict({})
-        testcases_path = files('hapray.testcases')
-        for second_dir in os.listdir(testcases_path):
-            second_path = os.path.join(testcases_path, second_dir)
-
+    def _scan_testcases_directory(testcases_root) -> dict:
+        """扫描 testcases 目录树（与 hapray/testcases 布局一致：包名子目录 / 用例脚本）。
+        testcases_root 可为 pathlib.Path、str 或 importlib.resources 的 Traversable（支持 os.listdir）。"""
+        all_testcases = {}
+        try:
+            second_dirs = os.listdir(testcases_root)
+        except (FileNotFoundError, NotADirectoryError):
+            return all_testcases
+        for second_dir in second_dirs:
+            second_path = os.path.join(testcases_root, second_dir)
             if not os.path.isdir(second_path):
                 continue
             for third_file in os.listdir(second_path):
                 third_path = os.path.join(second_path, third_file)
-
                 if os.path.isdir(third_path) or (not third_file.endswith('.py') and not third_file.endswith('.yaml')):
                     continue
                 case_name, file_extension = os.path.splitext(third_file)
-                all_testcases[case_name] = second_path, file_extension
+                all_testcases[case_name] = (second_path, file_extension)
         return all_testcases
+
+    @staticmethod
+    def load_all_testcases() -> dict:
+        """先加载包内 hapray.testcases，再与可执行文件旁 testcases 目录合并；同名用例以外部为准。"""
+        internal = CommonUtils._scan_testcases_directory(files('hapray.testcases'))
+        external_root = CommonUtils.get_project_root() / 'testcases'
+        if external_root.is_dir():
+            external = CommonUtils._scan_testcases_directory(external_root)
+            return {**internal, **external}
+        return internal
 
     @staticmethod
     def get_project_root() -> Path:

@@ -11,7 +11,7 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import NoReturn, Optional
 
 from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
@@ -33,6 +33,7 @@ from core.utils.config import (
     config,
 )
 from core.utils.logger import get_logger, setup_logging
+from core.utils.machine_output import DEFAULT_RESULT_BASENAME, build_tool_result, finalize_contract
 from core.utils.perf_converter import MissingSymbolFunctionAnalyzer
 from core.utils.symbol_replacer import (
     add_disclaimer,
@@ -43,6 +44,35 @@ from core.utils.symbol_replacer import (
 from core.utils.time_tracker import TimeTracker
 
 logger = get_logger(__name__)
+
+_MACHINE_JSON = False
+_RESULT_FILE: str | None = None
+_SYMBOL_RECOVERY_VERSION = '1.5.1'
+
+
+def _exit_with_result(
+    code: int,
+    *,
+    outputs: dict | None = None,
+    error: str | None = None,
+    output_dir: Path | None = None,
+) -> NoReturn:
+    """优先将 tool-result 写入 --result-file 或 <output_dir>/hapray-tool-result.json；失败或无路经时可用 --machine-json 走 stdout。"""
+    payload = build_tool_result(
+        'symbol_recovery',
+        success=code == 0,
+        exit_code=code,
+        outputs=outputs or {},
+        error=error,
+        tool_version=_SYMBOL_RECOVERY_VERSION,
+    )
+    result_path = None
+    if _RESULT_FILE:
+        result_path = str(Path(_RESULT_FILE).resolve())
+    elif output_dir is not None:
+        result_path = str(Path(output_dir) / DEFAULT_RESULT_BASENAME)
+    finalize_contract(payload, result_path=result_path, machine_json=_MACHINE_JSON)
+    sys.exit(code)
 
 
 def _is_dir_writable(p: Path) -> bool:
@@ -259,6 +289,20 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default=None,
         help='开源库名称（可选，如 "ffmpeg", "openssl", "libcurl" 等）。如果指定，会告诉大模型这是基于该开源库的定制版本，大模型可以利用对开源库的知识来更准确地推断函数名和功能',
     )
+    parser.add_argument(
+        '--result-file',
+        metavar='PATH',
+        default=None,
+        help=(
+            '将 HapRay tool-result JSON（v1）写入该路径（默认: <output-dir>/hapray-tool-result.json）。'
+            'ArkAnalyzer-HapRay 桌面端 tool_contract 会注入该参数。'
+        ),
+    )
+    parser.add_argument(
+        '--machine-json',
+        action='store_true',
+        help='无法写入契约文件时，在 stdout 输出一行 JSON；日志走 stderr（兜底）',
+    )
     return parser
 
 
@@ -312,7 +356,7 @@ def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Op
                 logger.info(f'Using specific SO file: {so_dir}')
             else:
                 logger.error('❌ Error: SO file does not exist: %s', so_file_path)
-                sys.exit(1)
+                _exit_with_result(1, error='so_file_not_found', output_dir=output_dir)
         elif args.so_dir:
             so_dir = resolve_directory(args.so_dir)
     return perf_data_file, perf_db_file, so_dir
@@ -329,12 +373,14 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     excel_file = Path(args.excel_file)
     if not excel_file.exists():
         logger.error('❌ Error: Excel file does not exist: %s', excel_file)
-        sys.exit(1)
+        _exit_with_result(1, error='excel_file_not_found', output_dir=output_dir)
+        return False  # 不可达：_exit_with_result 会 sys.exit
 
-    so_file = resolve_excel_so_file(args)
+    so_file = resolve_excel_so_file(args, output_dir)
     if not so_file.exists():
         logger.error('❌ Error: SO file does not exist: %s', so_file)
-        sys.exit(1)
+        _exit_with_result(1, error='so_file_not_found', output_dir=output_dir)
+        return False  # 不可达：_exit_with_result 会 sys.exit
 
     logger.info(f'Input file: {excel_file}')
     logger.info(f'SO file: {so_file}')
@@ -358,7 +404,8 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
         time_tracker.end_step('初始化')
     except Exception:
         logger.exception('❌ Initialization failed')
-        sys.exit(1)
+        _exit_with_result(1, error='excel_analyzer_init_failed', output_dir=output_dir)
+        return False  # 不可达：_exit_with_result 会 sys.exit
 
     time_tracker.start_step('Analyzing offsets', 'Disassembly and LLM analysis')
     results = analyzer.analyze_all()
@@ -366,7 +413,8 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
 
     if not results:
         logger.error('❌ No analysis results')
-        sys.exit(1)
+        _exit_with_result(1, error='excel_no_analysis_results', output_dir=output_dir)
+        return False  # 不可达：_exit_with_result 会 sys.exit
 
     time_tracker.start_step('Saving results', 'Generating Excel and HTML reports')
     config.ensure_output_dir(output_dir)
@@ -396,10 +444,21 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     if analyzer.use_llm and analyzer.llm_analyzer:
         analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
         analyzer.llm_analyzer.print_token_stats()
-    return True
+    _exit_with_result(
+        0,
+        outputs={
+            'mode': 'excel',
+            'output_dir': str(output_dir),
+            'excel_report': str(excel_file_output),
+            'html_report': str(html_file),
+            'time_stats': str(time_stats_file),
+        },
+        output_dir=output_dir,
+    )
+    return False  # 不可达：_exit_with_result 会 sys.exit
 
 
-def resolve_excel_so_file(args) -> Path:
+def resolve_excel_so_file(args, output_dir: Path) -> Path:
     if args.so_file:
         return Path(args.so_file)
 
@@ -407,7 +466,8 @@ def resolve_excel_so_file(args) -> Path:
     if not so_dir.exists():
         logger.error('❌ Error: SO file directory does not exist: %s', so_dir)
         logger.info('   Please use --so-file parameter to specify SO file path')
-        sys.exit(1)
+        _exit_with_result(1, error='so_dir_not_found', output_dir=output_dir)
+        return Path()  # 不可达：_exit_with_result 会 sys.exit
 
     so_files = list(so_dir.glob('*.so'))
     if so_files:
@@ -417,7 +477,8 @@ def resolve_excel_so_file(args) -> Path:
 
     logger.error('❌ Error: No SO file found in %s', so_dir)
     logger.info('   Please use --so-file parameter to specify SO file path')
-    sys.exit(1)
+    _exit_with_result(1, error='no_so_in_dir', output_dir=output_dir)
+    return Path()  # 不可达：_exit_with_result 会 sys.exit
 
 
 def convert_perf_data(args, perf_data_file: Path, perf_db_file: Optional[Path], output_dir: Path) -> Optional[Path]:
@@ -430,7 +491,7 @@ def convert_perf_data(args, perf_data_file: Path, perf_db_file: Optional[Path], 
 
     if not perf_data_file.exists():
         logger.error('❌ Error: perf.data file does not exist: %s', perf_data_file)
-        sys.exit(1)
+        _exit_with_result(1, error='perf_data_not_found', output_dir=output_dir)
 
     if perf_db_file and perf_db_file.exists() and not args.only_step1:
         logger.info(f'✅ Found existing perf.db: {perf_db_file}')
@@ -444,7 +505,7 @@ def convert_perf_data(args, perf_data_file: Path, perf_db_file: Optional[Path], 
     result = converter.convert_all()
     if not result:
         logger.error('\n❌ Step 1 failed, cannot continue')
-        sys.exit(1)
+        _exit_with_result(1, error='perf_convert_failed', output_dir=output_dir)
 
     return Path(result)
 
@@ -459,7 +520,7 @@ def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path],
 
     if not so_dir or not so_dir.exists():
         logger.error('❌ Error: SO file directory does not exist: %s', so_dir)
-        sys.exit(1)
+        _exit_with_result(1, error='so_dir_invalid', output_dir=output_dir)
 
     if so_dir and so_dir.is_file():
         logger.info(f'SO file: {so_dir}')
@@ -478,7 +539,7 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
     if not perf_db_file or not perf_db_file.exists():
         logger.info(f'❌ Error: perf.db file does not exist: {perf_db_file if perf_db_file else "(not specified)"}')
         logger.info('   Please run Step 1 first')
-        sys.exit(1)
+        _exit_with_result(1, error='perf_db_not_found', output_dir=output_dir)
 
     logger.info(f'Input file: {perf_db_file}')
 
@@ -526,7 +587,7 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
     if not perf_db_file or not perf_db_file.exists():
         logger.error('❌ Error: perf.db file does not exist: %s', perf_db_file)
         logger.info('   Please run Step 1 first')
-        sys.exit(1)
+        _exit_with_result(1, error='perf_db_not_found', output_dir=output_dir)
 
     logger.info(f'Input file: {perf_db_file}')
 
@@ -1009,13 +1070,16 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
 
 
 def main():
+    global _MACHINE_JSON, _RESULT_FILE
     _ensure_writable_cwd()
     parser = create_argument_parser()
     args = parser.parse_args()
+    _MACHINE_JSON = bool(getattr(args, 'machine_json', False))
+    _RESULT_FILE = getattr(args, 'result_file', None)
 
     # 处理输出目录配置
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
-    setup_logging(output_dir)
+    setup_logging(output_dir, machine_json=_MACHINE_JSON)
 
     # 处理 KMP 分析模式
     if handle_kmp_mode(args, output_dir):
@@ -1039,11 +1103,28 @@ def main():
     perf_db_file = convert_perf_data(args, perf_data_file, perf_db_file, output_dir)
     if args.only_step1:
         logger.info('\n✅ Step 1 completed!')
-        return
+        _exit_with_result(
+            0,
+            outputs={
+                'mode': 'only_step1',
+                'output_dir': str(output_dir),
+                'perf_db': str(perf_db_file) if perf_db_file else None,
+            },
+            output_dir=output_dir,
+        )
 
     run_llm_analysis(args, perf_db_file, so_dir, output_dir)
     run_html_symbol_replacement(args, output_dir)
     summarize_outputs(args, output_dir)
+    _exit_with_result(
+        0,
+        outputs={
+            'mode': 'perf_pipeline',
+            'output_dir': str(output_dir),
+            'perf_db': str(perf_db_file) if perf_db_file else None,
+        },
+        output_dir=output_dir,
+    )
 
 
 if __name__ == '__main__':

@@ -17,7 +17,6 @@ import argparse
 import json
 import logging
 import os
-import platform
 import re
 import subprocess
 import sys
@@ -26,6 +25,7 @@ from typing import Optional
 
 import pandas as pd
 
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.common.path_utils import get_user_data_root
@@ -284,7 +284,7 @@ class HilogAction:
     """Handles hilog analysis and statistics generation"""
 
     @staticmethod
-    def execute(args) -> Optional[str]:
+    def execute(args) -> ActionExecuteReturn:
         """Execute hilog analysis workflow"""
         parser = argparse.ArgumentParser(
             description='Analyze hilog files and generate statistics', prog='ArkAnalyzer-HapRay hilog'
@@ -313,7 +313,10 @@ class HilogAction:
         if sys.platform == 'darwin':
             parsed_args.output = str(get_user_data_root('hilog') / os.path.basename(parsed_args.output))
         action = HilogAction()
-        return action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
+        out_path = action.run(parsed_args.hilog_dir, parsed_args.output, parsed_args.detail)
+        if out_path is None:
+            return (1, '')
+        return (0, out_path)
 
     def run(self, hilog_dir: str, output_file: str, detail: bool = False) -> Optional[str]:
         """Run hilog analysis"""
@@ -366,17 +369,10 @@ class HilogAction:
     def _execute_hilogtool(self, hilog_dir: str) -> bool:
         """Execute hilogtool to decrypt hilog files"""
         try:
-            # Get hilogtool directory using the standard method
-            tools_dir = ExeUtils.get_tools_dir('hilogtool')
-
-            # Select appropriate executable based on platform
-            if platform.system() == 'Windows':
-                hilogtool_path = os.path.join(tools_dir, 'hilogtool.exe')
-            else:
-                hilogtool_path = os.path.join(tools_dir, 'hilogtool')
-
-            if not os.path.exists(hilogtool_path):
-                logging.error(f'Hilogtool not found at: {hilogtool_path}')
+            try:
+                hilogtool_path = ExeUtils.get_hilogtool_path()
+            except FileNotFoundError as e:
+                logging.error(f'Hilogtool not found: {e}')
                 return False
 
             # Prepare command

@@ -5,8 +5,10 @@
 """
 
 import platform
+import shutil
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 from core.utils.config import (
@@ -45,20 +47,53 @@ class PerfDataToSqliteConverter:
         else:  # Linux
             possible_names = ['trace_streamer_linux', 'trace_streamer']
 
-        # 基于当前文件所在目录检查常见位置
+        # 优先 PATH，与 perf_testing ExeUtils 一致
+        for name in possible_names:
+            found = shutil.which(name)
+            if found:
+                tool_path = Path(found)
+                logger.info(f'找到 trace_streamer 工具: {tool_path}')
+                return tool_path
+
+        # 基于当前文件所在目录检查常见位置（开发环境）
         base_dir = Path(__file__).resolve()
-        # 打包: symbol-recovery/_internal
-        # 开发: symbol_recovery
+        # 打包 onefile 时 __file__ 在 _MEIPASS 临时目录，不可用相对路径推导安装目录
         symbol_recovery_root = base_dir.parents[2]
 
-        search_paths = [
-            # 打包：.../tools/trace_streamer_binary
-            symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'trace_streamer_binary',
-            # 开发：.../dist/tools/trace_streamer_binary
-            symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
-            # 可选：插件本目录下放一份
-            symbol_recovery_root / '..' / 'trace_streamer_binary',
-        ]
+        search_paths = []
+        if getattr(sys, 'frozen', False):
+            exe_dir = Path(sys.executable).resolve().parent
+            search_paths.extend(
+                [
+                    exe_dir.parent / 'bin',
+                    exe_dir / 'bin',
+                    exe_dir.parent / 'bin' / 'trace_streamer_binary',
+                    exe_dir.parent / 'trace_streamer_binary',
+                    exe_dir / 'bin' / 'trace_streamer_binary',
+                    exe_dir / 'trace_streamer_binary',
+                ]
+            )
+            meipass = getattr(sys, '_MEIPASS', None)
+            if meipass:
+                search_paths.extend(
+                    [
+                        Path(meipass) / 'bin',
+                        Path(meipass) / 'bin' / 'trace_streamer_binary',
+                        Path(meipass) / 'trace_streamer_binary',
+                    ]
+                )
+
+        search_paths.extend(
+            [
+                symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'bin',
+                symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'bin' / 'trace_streamer_binary',
+                symbol_recovery_root / '..' / '..' / '..' / 'tools' / 'trace_streamer_binary',
+                symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'bin',
+                symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'bin' / 'trace_streamer_binary',
+                symbol_recovery_root / '..' / '..' / 'dist' / 'tools' / 'trace_streamer_binary',
+                symbol_recovery_root / '..' / 'trace_streamer_binary',
+            ]
+        )
 
         for search_path in search_paths:
             for name in possible_names:
@@ -66,17 +101,6 @@ class PerfDataToSqliteConverter:
                 if tool_path.exists() and tool_path.is_file():
                     logger.info(f'找到 trace_streamer 工具: {tool_path}')
                     return tool_path
-
-        # 尝试在 PATH 中查找
-        for name in possible_names:
-            try:
-                result = subprocess.run(['which', name], check=False, capture_output=True, timeout=5)
-                if result.returncode == 0:
-                    tool_path = result.stdout.decode().strip()
-                    logger.info(f'找到 trace_streamer 工具: {tool_path}')
-                    return Path(tool_path)
-            except Exception:
-                pass
 
         logger.info(f'当前目录: {Path.cwd()}')
         logger.error('❌ 错误: 未找到 trace_streamer 工具')
@@ -87,7 +111,7 @@ class PerfDataToSqliteConverter:
             status = '✓' if exists else '✗'
             logger.info(f'  {idx}. {status} {resolved_path}')
 
-        logger.info('  4. 系统 PATH 中')
+        logger.info(f'  {len(search_paths) + 1}. 系统 PATH 中')
 
         return None
 

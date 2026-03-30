@@ -19,7 +19,6 @@ resources.index 解析器（Python 版本）
 - 提取字符串资源（ResType.STRING），并支持按 key 获取对应 value
 """
 
-
 from enum import IntEnum
 
 
@@ -31,12 +30,12 @@ class BufferHelper:
         self._offset = 0
 
     def read_int32(self) -> int:
-        value = int.from_bytes(self._buf[self._offset : self._offset + 4], "little", signed=True)
+        value = int.from_bytes(self._buf[self._offset : self._offset + 4], 'little', signed=True)
         self._offset += 4
         return value
 
     def read_int16(self) -> int:
-        value = int.from_bytes(self._buf[self._offset : self._offset + 2], "little", signed=True)
+        value = int.from_bytes(self._buf[self._offset : self._offset + 2], 'little', signed=True)
         self._offset += 2
         return value
 
@@ -45,7 +44,7 @@ class BufferHelper:
         # 去掉末尾的 0 终止符
         if buf and buf[-1] == 0:
             buf = buf[:-1]
-        value = buf.decode("utf-8", errors="replace")
+        value = buf.decode('utf-8', errors='replace')
         self._offset += length
         return value
 
@@ -98,7 +97,7 @@ class ResourceIndexParser:
         for m in self._string_value_map:
             if key in m:
                 return m[key]
-        return ""
+        return ''
 
     # 内部解析逻辑（基本与 TS 版本一一对应）
     def _load_resource_index(self) -> None:
@@ -123,9 +122,9 @@ class ResourceIndexParser:
         self._helper.set_offset(offset)
 
         tag = self._helper.read_string(4)
-        if tag != "IDSS":
+        if tag != 'IDSS':
             self._helper.set_offset(back)
-            raise ValueError("Not found IDSS.")
+            raise ValueError('Not found IDSS.')
 
         # 为当前 idss 创建一个 map
         string_map: dict[str, str] = {}
@@ -158,5 +157,4 @@ class ResourceIndexParser:
         self._helper.set_offset(back)
 
 
-__all__ = ["ResourceIndexParser"]
-
+__all__ = ['ResourceIndexParser']

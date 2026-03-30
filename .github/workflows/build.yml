@@ -14,12 +14,12 @@ jobs:
     strategy:
       matrix:
         item:
+          # 全矩阵仅 64 位：Linux/Windows x64、macOS arm64 与 x86_64；不构建 32 位（i386、ia32、armv7）
           # Linux Ubuntu 22.04（LTS）
           - os: ubuntu-22.04
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
-            use_static_python: false
             artifact_suffix: "-ubuntu22.04"
 
           # Linux Ubuntu 24.04（LTS）
@@ -27,7 +27,6 @@ jobs:
             arch: x64
             platform: linux
             package_lock_path: .github/workflows/package-lock.json
-            use_static_python: false
             artifact_suffix: "-ubuntu24.04"
 
           # Windows
@@ -38,28 +37,28 @@ jobs:
             use_static_python: false
             artifact_suffix: ""
 
-          # macOS - ARM (Apple Silicon)
+          # macOS - ARM 64 位（Apple Silicon，aarch64）
           - os: macos-15
             arch: arm64
             platform: darwin
+            cargo_target: aarch64-apple-darwin
+            dmg_arch: aarch64
             pyinstaller_arch: arm64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
             artifact_suffix: ""
 
-          # macOS - Intel (x86_64)，使用 macos-15-intel 以获取 Intel runner
+          # macOS - Intel 仅 64 位（x86_64），非 32 位 i386；使用 macos-15-intel runner
           - os: macos-15-intel
             arch: x64
             platform: darwin
+            cargo_target: x86_64-apple-darwin
+            dmg_arch: x64
             pyinstaller_arch: x86_64
             package_lock_path: .github/workflows/package-lock.json
             use_static_python: false
             artifact_suffix: ""
 
-        # 将 node-version 移到每个 item 中
-        include:
-          - node-version: 24.x
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -71,34 +70,11 @@ jobs:
         echo "File copied successfully"
       shell: bash
 
-    # 设置静态 Python 环境（仅适用于 Ubuntu）
-    - name: Set up static Python (Ubuntu only)
-      if: ${{ matrix.item.use_static_python }}
-      run: |
-        # 下载预编译的静态Python
-        PYTHON_VERSION=3.11.14
-        BUILD_TAG=20251031
-        wget https://github.com/astral-sh/python-build-standalone/releases/download/${BUILD_TAG}/cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz
-        # 解压到 /opt/python-static
-        sudo mkdir -p /opt/python-static
-        sudo tar -xzf cpython-${PYTHON_VERSION}+${BUILD_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz -C /opt/python-static --strip-components=1
-        
-        # 设置环境变量
-        echo "/opt/python-static/bin" >> $GITHUB_PATH
-        echo "PYTHON_STATIC=/opt/python-static" >> $GITHUB_ENV
-        
-        # 验证安装
-        /opt/python-static/bin/python3 --version
-        /opt/python-static/bin/python3 -c "import sys; print(sys.executable)"
-        export PATH=/opt/python-static/bin/:$PATH
-        python3 --version
-
     # 设置标准 Python 环境（非 Ubuntu 平台）
     - name: Set up Python
-      if: ${{ !matrix.item.use_static_python }}
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version-file: '.python-version'
 
     # Linux 下 Desktop (Tauri) 需要 GTK/WebKit 等系统库
     - name: Install Tauri Linux dependencies
@@ -117,10 +93,10 @@ jobs:
           librsvg2-dev \
           libgtk-3-dev
     
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js from .nvmrc
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version-file: '.nvmrc'
         cache: 'npm'
 
     # Desktop (Tauri) 需要 Rust 环境
@@ -130,13 +106,88 @@ jobs:
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: desktop/src-tauri
+        # 避免 Ubuntu 22/24 之间复用导致的 target 元数据不一致
+        shared-key: tauri-${{ matrix.item.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+        # 优先稳定性：不缓存 target，仅缓存 registry/git 依赖
+        cache-targets: false
+
+    - name: Diagnose Tauri dependency resolution
+      working-directory: desktop/src-tauri
+      run: |
+        cargo tree -i tauri
+
+    # workspace 各子包 postinstall 会执行 scripts/python_setup.js（uv sync），runner 默认无 uv
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
 
     - name: Install dependencies
       run: |        
         npm install --no-package-lock
 
-    - name: PyInstaller build
+    # macOS：Base64 p12 → Developer ID Application 签名（未配置 APPLE_CERTIFICATE 则跳过，产物未签名）
+    # 必配 Secrets：APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、KEYCHAIN_PASSWORD、APPLE_SIGNING_IDENTITY
+    # 可选：APPLE_TEAM_ID；公证另配 APPLE_ID+APPLE_PASSWORD 或 APPLE_API_ISSUER+APPLE_API_KEY+APPLE_API_PRIVATE_KEY
+    # 清单见 docs/github-actions-macos-signing.md §3.0
+    - name: Import Apple Developer certificate (macOS)
+      if: matrix.item.platform == 'darwin'
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
       run: |
+        set -euo pipefail
+        if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+          echo "APPLE_CERTIFICATE 未配置，跳过导入；DMG 将为未签名（PR/无密钥仓库属正常）。"
+          exit 0
+        fi
+        if [ -z "${KEYCHAIN_PASSWORD:-}" ]; then
+          echo "已设置 APPLE_CERTIFICATE 但缺少 KEYCHAIN_PASSWORD，无法创建临时钥匙串。" >&2
+          exit 1
+        fi
+        echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+        security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+        security set-keychain-settings -t 3600 -u build.keychain
+        security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+        rm -f certificate.p12
+        security find-identity -v -p codesigning build.keychain
+
+    # macOS：将 App Store Connect API 私钥（.p8 全文）写入临时文件，供 notarytool / Tauri 使用的 APPLE_API_KEY_PATH
+    - name: Write App Store Connect API private key (macOS)
+      if: matrix.item.platform == 'darwin'
+      env:
+        APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+      run: |
+        set -euo pipefail
+        if [ -z "${APPLE_API_PRIVATE_KEY:-}" ]; then
+          echo "APPLE_API_PRIVATE_KEY 未配置；若使用 API Key 公证，请设置该 Secret（整段 .p8 内容）。"
+          exit 0
+        fi
+        KEY_PATH="${RUNNER_TEMP}/AuthKey.p8"
+        printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$KEY_PATH"
+        chmod 600 "$KEY_PATH"
+        echo "APPLE_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+    - name: PyInstaller build
+      # 使用 bash：避免在非 macOS 上设置 CARGO_BUILD_TARGET=空串（会导致 Cargo/Tauri 报 target was empty）
+      shell: bash
+      env:
+        # macOS 签名 / 公证（其它平台忽略）；与 Tauri v2 文档一致
+        # Apple ID 公证：配 APPLE_ID、APPLE_PASSWORD、APPLE_TEAM_ID；勿配 APPLE_API_* / APPLE_API_PRIVATE_KEY
+        # API Key 公证：配 APPLE_API_ISSUER、APPLE_API_KEY，且上一「Write API private key」需有 APPLE_API_PRIVATE_KEY
+        # APPLE_API_KEY_PATH 仅由「Write API private key」写入 GITHUB_ENV，勿在此处用空 secret 覆盖
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      run: |
+        if [ "${{ matrix.item.platform }}" = "darwin" ]; then
+          export CARGO_BUILD_TARGET="${{ matrix.item.cargo_target }}"
+        fi
         npm run build
         npm run release
 
@@ -162,10 +213,61 @@ jobs:
         name: opt-detector-${{ matrix.item.platform }}-${{ matrix.item.arch }}${{ matrix.item.artifact_suffix }}
         path: opt-detector-*.zip
 
-    # macOS 构建产物：收集 Desktop .dmg 安装包
+    # macOS 构建产物：只上传与本 job 架构一致的 dmg（CARGO_BUILD_TARGET 下产物在 target/<triple>/release/bundle/）
     - name: Upload Desktop DMG (macOS)
       if: matrix.item.platform == 'darwin'
       uses: actions/upload-artifact@v4
       with:
         name: ArkAnalyzer-HapRay-${{ matrix.item.platform }}-${{ matrix.item.arch }}
-        path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+        path: desktop/src-tauri/target/${{ matrix.item.cargo_target }}/release/bundle/dmg/*_${{ matrix.item.dmg_arch }}.dmg
+
+  # 契约冒烟：仅在完整构建矩阵全部成功后运行（与此前独立 contract-smoke.yml 等价，避免未构建即跑 smoke）
+  contract-smoke-optimization-detector:
+    name: Contract smoke / optimization_detector
+    needs: build
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+      - uses: astral-sh/setup-uv@v5
+      - name: Empty input dir writes hapray-tool-result.json beside -o
+        working-directory: tools/optimization_detector
+        run: |
+          set -euo pipefail
+          uv sync
+          mkdir -p /tmp/empty_od
+          set +e
+          uv run python cli.py -i /tmp/empty_od -o /tmp/opt_contract_smoke.xlsx
+          code=$?
+          set -e
+          test "$code" -eq 1
+          test -f /tmp/hapray-tool-result.json
+          python3 -c "import json; json.load(open('/tmp/hapray-tool-result.json'))"
+
+  contract-smoke-symbol-recovery:
+    name: Contract smoke / symbol_recovery
+    needs: build
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+      - uses: astral-sh/setup-uv@v5
+      - name: Missing perf.data writes hapray-tool-result.json under output-dir
+        working-directory: tools/symbol_recovery
+        run: |
+          set -euo pipefail
+          uv sync
+          TMP=$(mktemp -d)
+          set +e
+          uv run python main.py --perf-data "$TMP/missing.perf.data" --output-dir "$TMP/out"
+          code=$?
+          set -e
+          test "$code" -eq 1
+          test -f "$TMP/out/hapray-tool-result.json"
+          python3 -c "import json; json.load(open('$TMP/out/hapray-tool-result.json'))"

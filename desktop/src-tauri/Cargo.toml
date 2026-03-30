@@ -1,6 +1,6 @@
 [package]
 name = "arkanalyzer-hapray"
-version = "1.5.1"
+version = "1.5.2"
 description = "a tool designed for performance analysis of OpenHarmony applications."
 authors = ["sunbo"]
 edition = "2024"
@@ -34,6 +34,7 @@ chrono = "0.4"
 tauri-plugin-decorum = "1.1.1"
 dirs = "5"
 regex = "1"
+which = "6"
 
 # 减小 release 产物体积（影响 DMG / 各平台安装包内的主程序）
 [profile.release]

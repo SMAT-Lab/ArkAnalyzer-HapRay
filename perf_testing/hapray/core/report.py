@@ -1453,10 +1453,7 @@ class ReportGenerator:
 
             data_items = step_data.get('data', [])
             # 先按配置为每个函数名初始化，无匹配时保持 0
-            key_functions_data = {
-                k: {'symbolEvents': 0, 'symbolTotalEvents': 0}
-                for k in key_functions_config
-            }
+            key_functions_data = {k: {'symbolEvents': 0, 'symbolTotalEvents': 0} for k in key_functions_config}
             for item in data_items:
                 if item.get('eventType') != 1:
                     continue

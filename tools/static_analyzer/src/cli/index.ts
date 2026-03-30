@@ -37,6 +37,16 @@ try {
         .name('hapray-sa-cmd')
         .description('CLI to arkanalyzer hapray')
         .version(VERSION)
+        // 与 perf_testing / GUI tool_contract 一致：可在子命令名前注入（如 hapray-sa-cmd --result-file <path> hapray hap ...）
+        .option(
+            '--result-file <path>',
+            'Path for hapray-tool-result.json (merged into hap subcommand; default: <output>/hapray-tool-result.json)'
+        )
+        .option(
+            '--machine-json',
+            'When tool-result cannot be written, emit one JSON line on stdout; logs on stderr',
+            false
+        )
         .addCommand(HaprayCli)
         .parse();
 } catch (error) {

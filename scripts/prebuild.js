@@ -4,13 +4,50 @@ const fs = require('fs');
 const copyFile = require('./copy_file');
 
 const DIST_TOOLS_DIR = path.join(__dirname, '../dist/tools');
+/** 预构建解压的 hdc / hilogtool / trace_streamer_binary 放在 dist/tools/bin 下 */
+const DIST_TOOLS_BIN_DIR = path.join(DIST_TOOLS_DIR, 'bin');
 const PERF_TESTING_RESOURCE_DIR = path.join(__dirname, '../perf_testing/resource');
 const TRACE_STREAMER_BIN = ['trace_streamer_linux', 'trace_streamer_mac', 'trace_streamer_windows.exe'];
-const HILOGTOOL_BIN = ['hilogtool', 'hilogtool.exe'];
+
+function traceStreamerMarkerPath() {
+    const m = {
+        win32: 'trace_streamer_windows.exe',
+        darwin: 'trace_streamer_mac',
+        linux: 'trace_streamer_linux'
+    };
+    return path.join(DIST_TOOLS_BIN_DIR, m[process.platform]);
+}
+
+/** 将 dist/tools/bin/<subdir>/ 下文件提升到 dist/tools/bin/（避免 hdc/hdc、hilogtool/hilogtool 与父目录同名时 rename 冲突：先整体移走再展开） */
+function flattenToolDirToParent(binDir, dirName) {
+    const sub = path.join(binDir, dirName);
+    if (!fs.existsSync(sub) || !fs.statSync(sub).isDirectory()) {
+        return;
+    }
+    const staging = path.join(binDir, `.flatten_tmp_${dirName}_${process.pid}`);
+    fs.renameSync(sub, staging);
+    const names = fs.readdirSync(staging);
+    names.forEach((name) => {
+        const from = path.join(staging, name);
+        const to = path.join(binDir, name);
+        if (fs.existsSync(to)) {
+            fs.rmSync(to, { recursive: true, force: true });
+        }
+        fs.renameSync(from, to);
+    });
+    fs.rmdirSync(staging);
+}
 
 function ensureDistToolsDir() {
     if (!fs.existsSync(DIST_TOOLS_DIR)) {
         fs.mkdirSync(DIST_TOOLS_DIR, { recursive: true });
+    }
+}
+
+function ensureDistToolsBinDir() {
+    ensureDistToolsDir();
+    if (!fs.existsSync(DIST_TOOLS_BIN_DIR)) {
+        fs.mkdirSync(DIST_TOOLS_BIN_DIR, { recursive: true });
     }
 }
 
@@ -22,15 +59,34 @@ function ensurePerfTestingResourceDir() {
 
 function unzipFile(zipFile, output) {
     try {
-        ensureDistToolsDir();
+        ensureDistToolsBinDir();
         const zipPath = path.join(__dirname, '../third-party', zipFile);
-        const extractPath = path.join(DIST_TOOLS_DIR, output);
-        if (fs.existsSync(extractPath)) {
+        const extractPath = path.join(DIST_TOOLS_BIN_DIR, output);
+
+        if (output === 'trace_streamer_binary') {
+            if (fs.existsSync(traceStreamerMarkerPath())) {
+                return;
+            }
+            if (fs.existsSync(extractPath)) {
+                fs.rmSync(extractPath, { recursive: true, force: true });
+            }
+        } else if (output === 'hilogtool') {
+            const marker = path.join(
+                DIST_TOOLS_BIN_DIR,
+                process.platform === 'win32' ? 'hilogtool.exe' : 'hilogtool'
+            );
+            if (fs.existsSync(marker)) {
+                return;
+            }
+            if (fs.existsSync(extractPath)) {
+                fs.rmSync(extractPath, { recursive: true, force: true });
+            }
+        } else if (fs.existsSync(extractPath)) {
             return;
         }
 
         const zip = new AdmZip(zipPath);
-        zip.extractAllTo(DIST_TOOLS_DIR, true);
+        zip.extractAllTo(DIST_TOOLS_BIN_DIR, true);
 
         if (output === 'trace_streamer_binary') {
             cleanupTraceStreamerBinary(extractPath);
@@ -43,6 +99,121 @@ function unzipFile(zipFile, output) {
     }
 }
 
+
+/** hdc-bundles.zip 内平台目录名 -> 当前 Node 进程对应目录 */
+function resolveHdcBundlePlatformDir() {
+    if (process.platform === 'win32') {
+        return 'windows-x64';
+    }
+    if (process.platform === 'linux') {
+        if (process.arch === 'arm64') {
+            return null;
+        }
+        return 'linux-x64';
+    }
+    if (process.platform === 'darwin') {
+        if (process.arch === 'arm64') {
+            return 'darwin-arm64';
+        }
+        return 'darwin-x64';
+    }
+    return null;
+}
+
+/**
+ * 解压 third-party/hdc-bundles.zip，整理后二进制与 libusb 位于 dist/tools/bin/（与 hdc 同目录）。
+ */
+function unzipHdcBundle() {
+    const zipFile = 'hdc-bundles.zip';
+    const output = 'hdc';
+    try {
+        ensureDistToolsBinDir();
+        const zipPath = path.join(__dirname, '../third-party', zipFile);
+        const extractPath = path.join(DIST_TOOLS_BIN_DIR, output);
+        const hdcFileName = process.platform === 'win32' ? 'hdc.exe' : 'hdc';
+        const hdcFlat = path.join(DIST_TOOLS_BIN_DIR, hdcFileName);
+        if (fs.existsSync(hdcFlat) && fs.statSync(hdcFlat).isFile()) {
+            return;
+        }
+        if (fs.existsSync(extractPath)) {
+            fs.rmSync(extractPath, { recursive: true, force: true });
+        }
+        if (!fs.existsSync(zipPath)) {
+            console.warn(`[prebuild] 跳过 hdc：未找到 ${zipPath}`);
+            return;
+        }
+
+        const zip = new AdmZip(zipPath);
+        zip.extractAllTo(DIST_TOOLS_BIN_DIR, true);
+        cleanupHdcBundle(extractPath);
+    } catch (error) {
+        console.error(`Error extracting ${zipFile}:`, error.message);
+    }
+}
+
+function cleanupHdcBundle(basePath) {
+    const keepDir = resolveHdcBundlePlatformDir();
+    const platformDirs = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'windows-x64'];
+
+    if (!keepDir) {
+        console.warn(
+            `[prebuild] hdc 压缩包不包含当前平台 (${process.platform}/${process.arch})，已删除 dist/tools/bin/hdc 目录`
+        );
+        if (fs.existsSync(basePath)) {
+            fs.rmSync(basePath, { recursive: true, force: true });
+        }
+        return;
+    }
+
+    const srcDir = path.join(basePath, keepDir);
+    if (!fs.existsSync(srcDir)) {
+        console.warn(`[prebuild] hdc 压缩包中缺少目录 ${keepDir}，跳过整理`);
+        return;
+    }
+
+    platformDirs.forEach((dir) => {
+        if (dir === keepDir) {
+            return;
+        }
+        const p = path.join(basePath, dir);
+        if (fs.existsSync(p)) {
+            fs.rmSync(p, { recursive: true, force: true });
+        }
+    });
+
+    const names = fs.readdirSync(srcDir);
+    names.forEach((name) => {
+        const from = path.join(srcDir, name);
+        const to = path.join(basePath, name);
+        if (fs.existsSync(to)) {
+            fs.rmSync(to, { recursive: true, force: true });
+        }
+        fs.renameSync(from, to);
+    });
+    fs.rmdirSync(srcDir);
+
+    const readmePath = path.join(basePath, 'README.md');
+    if (fs.existsSync(readmePath)) {
+        fs.rmSync(readmePath, { force: true });
+    }
+
+    const hdcName = process.platform === 'win32' ? 'hdc.exe' : 'hdc';
+    const hdcPath = path.join(basePath, hdcName);
+    if (fs.existsSync(hdcPath) && process.platform !== 'win32') {
+        try {
+            const stats = fs.statSync(hdcPath);
+            fs.chmodSync(hdcPath, stats.mode | 0o111);
+            console.log(`[prebuild] hdc 已解压至 ${basePath}，已设置可执行权限`);
+        } catch (err) {
+            console.warn(`[prebuild] 无法为 hdc 设置可执行权限:`, err.message);
+        }
+    } else if (fs.existsSync(hdcPath)) {
+        console.log(`[prebuild] hdc 已解压至 ${basePath}`);
+    }
+
+    flattenToolDirToParent(DIST_TOOLS_BIN_DIR, 'hdc');
+    console.log(`[prebuild] hdc 已置于 ${DIST_TOOLS_BIN_DIR}`);
+}
 
 function cleanupTraceStreamerBinary(basePath) {
     // 首先为 trace_streamer_mac 和 trace_streamer_linux 添加可执行权限
@@ -88,6 +259,8 @@ function cleanupTraceStreamerBinary(basePath) {
             fs.rmSync(libPath, { recursive: true, force: true });
         }
     }
+
+    flattenToolDirToParent(DIST_TOOLS_BIN_DIR, 'trace_streamer_binary');
 }
 
 // 注意：cleanupHilogtool函数已废弃，因为现在hilogtool通过copyHilogtool函数处理，
@@ -155,10 +328,13 @@ function cleanupHilogtool(basePath) {
             }
         }
     }
+
+    flattenToolDirToParent(DIST_TOOLS_BIN_DIR, 'hilogtool');
 }
 
 unzipFile('trace_streamer_binary.zip', 'trace_streamer_binary');
 unzipFile('hilogtool.zip', 'hilogtool');
+unzipHdcBundle();
 
 // xvm 和 web 放到 perf_testing/resource，供 PyInstaller 打包（避免 dist 被清理导致资源丢失）
 function unzipToPerfTestingResource(zipFile, subfolder) {

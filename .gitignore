@@ -16,7 +16,6 @@ dist
 temp_release_test/
 
 # Third-party and Generated Directories
-third-party/HapRayDep/
 third-party/trace_streamer_binary/
 third-party/xvm/
 third-party/Open-AutoGLM/
@@ -31,6 +30,7 @@ perf_testing/binary_analysis_report.xlsx
 perf_testing/files_results_cache/
 
 perf_testing/resource/
+perf_testing/hapray_perf_testing.egg-info
 
 # Log
 *.log
@@ -48,10 +48,15 @@ hapray-sa
 # Cache directories
 .cache/
 .npm-cache/
+__pycache__/
 
 # HapTest generated test cases
 perf_testing/hapray/testcases/__haptest_generated__/
 
 # HapTest documentation (personal notes)
 perf_testing/hapray/haptest/GIT_GUIDE.md
+
+# Desktop generated artifacts
+#desktop/src-tauri/Cargo.lock
+desktop/src-tauri/tools/
 
