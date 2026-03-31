@@ -26,7 +26,7 @@ from hapray.core.config.config import Config
 Log = platform_logger('FolderUtils')
 
 """
-扫描ResourceUsage_PerformanceDynamic_jingdong_0020_round0/hiperf
+扫描PerfLoad_jingdong_0020_round0/hiperf
 文件夹下是否每个step文件夹下都有perf.data
 
 """
