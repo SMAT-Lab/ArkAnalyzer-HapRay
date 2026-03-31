@@ -1,11 +1,9 @@
 run_testcases:
-#  - PerformanceDynamic_com_example_wsywechat_0010
 #  - .*_xhs_.*
 #  - .*_bilibili_.*
 #  - .*_jingdong_.*
 #  - .*_zhifubao_.*
 #  - .*_Douyin_.*
-#  - ResourceUsage_PerformanceDynamic_taobao_9999
 
 cov:
   # HAP project path

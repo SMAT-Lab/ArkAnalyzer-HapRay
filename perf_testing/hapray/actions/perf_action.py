@@ -317,7 +317,7 @@ class PerfAction:
         if parsed_args.package_name:
             Config.set('package_name', parsed_args.package_name)
         if parsed_args.manual:
-            Config.set('run_testcases', ['PerformanceDynamic_Manual'])
+            Config.set('run_testcases', ['PerfLoad_Manual'])
         if parsed_args.ui_tech_stack:
             Config.set('run_testcases', ['PerfLoad_UIAnalyzer'])
 
