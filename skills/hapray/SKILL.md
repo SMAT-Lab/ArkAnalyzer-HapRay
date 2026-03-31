@@ -54,11 +54,13 @@ metadata:
 |--------------------|---------------------------|------|
 | 存在 **`htrace/**/trace.db`**，且问题含 **滑动、列表、掉帧、卡顿、帧耗时、WaterFlow、手势** 等 | **[`analysis/scroll-jank-trace-analysis.md`](analysis/scroll-jank-trace-analysis.md)** | **默认应触发**：用子文档中的表结构、SQL、手势与 `frame_slice` 规则做 **二次分析**；禁止仅用 HTML 结论代替对 `trace.db` 的可验证推理 |
 | 存在 **`trace.db`** 但用户未明确场景 | 仍建议 **至少浏览** `scroll-jank` 中的「帧统计 / 进程线程定位」章节，再决定是否跑 SQL | 避免漏掉 `depth=0` 等硬规则 |
+| 报告热点中出现 **`libxxx.so+0xXXXXX`** 格式大量缺失符号，或用户提及 **符号恢复、stripped SO、无法定位热点函数、KMP/RN 应用** | **[`analysis/symbol-recovery-analysis.md`](analysis/symbol-recovery-analysis.md)** | 用 SymRecover 工具恢复函数名；KMP 模式区分框架与业务开销；结合调用链判断是否为性能瓶颈 |
 | 未来在 `analysis/` 新增专题（如启动、内存） | 对应新 `.md` | 索引表同步增行；采集产物匹配时 **同样优先加载** |
 
 | ID | 子文档 | 触发场景 | 核心内容 |
 |----|--------|----------|----------|
 | `scroll-jank` | [`analysis/scroll-jank-trace-analysis.md`](analysis/scroll-jank-trace-analysis.md) | 滑动卡顿、掉帧、列表/WaterFlow 滑动、周期性 jank、从 Trace 还原手势 | `trace.db` 表（`process`/`thread`/`callstack`/`frame_slice`）、**`frame_slice` 仅 `type_desc=actural` 且 `depth=0`**、卡顿分级、手势与 `mainDelta`、隔次卡/触顶/拉动、SQL 与 Python 脚本、Hitrace 标记表 |
+| `symbol-recovery` | [`analysis/symbol-recovery-analysis.md`](analysis/symbol-recovery-analysis.md) | 报告中出现 `libxxx.so+0xXXXXX` 缺失符号、stripped SO 热点无法定位、KMP/RN 应用框架与业务负载区分 | SymRecover 工具（perf.data/Excel/KMP 三种模式）、LLM 推断函数名与功能、负载类型判断（热点 vs 瓶颈）、调用链信息、HTML 符号替换 |
 
 **嵌入规则（强化）**：
 
@@ -73,7 +75,11 @@ metadata:
 
 ### 必须执行（按顺序尝试）
 
-0. **`gui-agent` 路径的前置自检（先于任何「结论」或更新 `.md`）**：若本轮意图需要 **`gui-agent`**（负载/场景复现/自然语言驱动 UI），在运行命令或撰写长篇分析前，**必须先**确认 **`GLM_API_KEY`** 是否已配置（可询问用户或检查环境）。若**未配置**且用户未声明「不配置 LLM」：**第一条必须完成的动作**是 **§2.1「交互与等待」**（展示交互对话框或等效分条提示 + 阻塞等待），**禁止**跳过该步骤，也 **禁止**先输出「基于行业共性 / 对标某报告结构 / 仅对话补充」类结论、或 **先** 更新 `hapray-analysis-*.md` 的 **「对话补充」** 等小节来冒充已完成 HapRay 采集分析。
+0. **前置自检（先于任何「结论」或更新 `.md`）**：
+
+   **（0-A）`symbol-recovery` 路径**：若本轮意图涉及 **符号恢复**（用户提及 stripped SO、缺失符号、`libxxx.so+0x...`、KMP 热点定位、SymRecover），在运行命令前，**必须先**检查 `tools/symbol_recovery/.env` 是否含有效 API Key（`grep API_KEY .env`）。若**未配置**：**第一条必须完成的动作**是向用户展示 `analysis/symbol-recovery-analysis.md` Step 0 中的 A/B 选项并等待回复，**禁止**在用户未确认前自行继续分析或运行命令。若用户选择 `--no-llm`，后续所有命令须附加该参数。
+
+   **（0-B）`gui-agent` 路径**：若本轮意图需要 **`gui-agent`**（负载/场景复现/自然语言驱动 UI），在运行命令或撰写长篇分析前，**必须先**确认 **`GLM_API_KEY`** 是否已配置（可询问用户或检查环境）。若**未配置**且用户未声明「不配置 LLM」：**第一条必须完成的动作**是 **§2.1「交互与等待」**（展示交互对话框或等效分条提示 + 阻塞等待），**禁止**跳过该步骤，也 **禁止**先输出「基于行业共性 / 对标某报告结构 / 仅对话补充」类结论、或 **先** 更新 `hapray-analysis-*.md` 的 **「对话补充」** 等小节来冒充已完成 HapRay 采集分析。
 
 1. **定位仓库根目录**：以用户当前工作区 / 打开的路径为准（例如包含 `perf_testing/`、`package.json` 的目录）；若未知，先向用户确认或列目录查找，**不得臆造路径**。
 2. **需要真机时**：先运行 `hdc list targets`（或 `hdc version`）。若设备未授权或不可用，**明确告知用户**并在本回合内**不得假装已生成报告**。

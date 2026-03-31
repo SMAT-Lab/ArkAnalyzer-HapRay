@@ -62,6 +62,44 @@ DEEPSEEK_API_KEY=your_key
 
 ## 三、分析步骤
 
+### Step 0：前置——确认 LLM 配置（**必须先完成，再进行后续步骤**）
+
+在运行任何符号恢复命令前，**必须先**确认 `.env` 是否已配置 LLM API Key：
+
+```bash
+# 检查配置文件是否存在且含有效 Key
+cat <REPO_ROOT>/tools/symbol_recovery/.env 2>/dev/null | grep -E "API_KEY|SERVICE_TYPE"
+```
+
+**根据结果二选一**：
+
+| 情况 | 操作 |
+|------|------|
+| `.env` 已配置且含有效 API Key | 继续 Step 1，无需任何修改 |
+| `.env` 不存在或 API Key 为空 | **停止**，向用户展示下方选项，等待确认后再继续 |
+
+**当 `.env` 未配置时，必须向用户展示以下选项并等待回复**：
+
+> `.env` 中未检测到 LLM API Key，符号恢复有两种运行方式：
+>
+> **方式 A（推荐）：配置 LLM，获得函数名推断与优化建议**
+> ```
+> cp tools/symbol_recovery/.env.example tools/symbol_recovery/.env
+> # 然后编辑 .env，填入以下任一服务的 Key：
+> # DeepSeek: LLM_SERVICE_TYPE=deepseek / DEEPSEEK_API_KEY=xxx
+> # OpenAI:   LLM_SERVICE_TYPE=openai  / OPENAI_API_KEY=xxx
+> # Claude:   LLM_SERVICE_TYPE=claude  / ANTHROPIC_API_KEY=xxx
+> ```
+>
+> **方式 B：跳过 LLM，仅做反汇编分析（速度快，无函数名推断）**
+> ```
+> python3 main.py --no-llm --perf-data perf.data --so-dir so/
+> ```
+>
+> 请选择方式 A 还是方式 B？
+
+**禁止**在用户未明确回复前，自行假设某种方式并继续执行。
+
 ### Step 1：识别缺失符号
 
 从 HapRay HTML 报告或 `perf.data` 中找到需要恢复的 SO 文件：
