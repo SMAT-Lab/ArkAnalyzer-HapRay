@@ -1,210 +1,346 @@
-# LLM 高负载挖掘（原始 perf / trace / log / UI 组件数据）
+# LLM 高负载挖掘（CPU 指令数 · 动态 perf + 静态 SO 交叉）
 
-> **定位**：在 **已有** `perf_testing` 采集产物的基础上，以 **`trace.db`、`hiperf`、原始日志、（可选）`perf.data` / 其它原始粒度落盘** 为主，用 **LLM 推理与交叉印证** 挖掘 **规则化报告未写出或无法覆盖的未知问题**（长尾、尖峰、弱信号）。  
-> **与 `summary.json` / 规则化摘要的关系**：**`summary.json` 等文件是按已知规则对指标做的汇总，不是原始遥测**；**禁止**将其作为 LLM 高负载挖掘的**分析依据**（例如禁止把 Feed/图像/故障树/冗余线程等摘要字段与 HTML 路径做「交叉」来代替对 `trace.db` / `hiperf` / 日志的查询与聚合）。若需与「自动报告」对照，**对照对象**为 **HTML（或等价面向人结论）**，**不是** summary.json 的字段深度解读。  
-> **与「仅读报告总结」的区别**：本方法 **默认不信任「结论章节已够用」**；要求 Agent **枚举原始文件 → 抽取可验证信号 →（可选）与 HTML 结论对照 → 输出「新发现」**，并落盘独立 `.md`。
+> **核心度量**：本文中 **「负载」= CPU 指令数** —— 即 `perf_sample.event_count` 的聚合值（hiperf 采集事件：`raw-instruction-retired`，每个样本代表一个周期内执行的指令数）。  
+> **分析目标**：通过 **动态指令数（perf_sample）** 与 **静态 SO 分析（binary/LTO/符号）** 的交叉，挖掘 **自动报告未写出的** 高指令数热点与优化机会。  
+> **与 `summary.json` 的关系**：`summary.json` 是按已知规则汇总的摘要，**禁止**将其作为本 Skill 挖掘的主线数据源；原始侧以 **`perf_sample`、`perf_callchain`、`perf_files`、`callstack`、`frame_slice`** 为准，静态侧以 **SO 二进制分析产物** 为准。
 
 ---
 
-## 一、何时必须加载本子 Skill（含「尽可能深入分析」的最低标准）
-
-以下任一成立，Agent **必须**加载本文并执行 **§四 工作流**；**禁止**仅用自动 HTML/Excel 摘要或对话复述代替。**「尽可能深入」** 指：在 **时间与 token 允许** 的前提下，按 **§一.2** 完成 **枚举 → 结构化抽取 → 原始多源交叉 →（可选）与 HTML 结论对照 → 落盘**；若某类数据缺失，须在报告中 **显式写明缺口**，不得省略 §四 中可执行步骤。
+## 一、触发条件与最低完成标准
 
 ### 1.1 必须加载的触发条件（满足任一条即强制）
 
 | 类别 | 用户表述或客观信号 | 必须行为 |
-|------|----------------------|----------|
-| **意图明确** | 含「深挖」「高负载挖掘」「LLM 挖掘」「多源交叉」「未知瓶颈」「报告没写」「对比自动结论」「还有没有别的问题」「弱信号」「和 HTML 不一致」等 | 全文流程 + **§三 特征** 逐项检索（有数据则落证据，无数据则记「未检出/无表」） |
-| **产物已齐** | `reports_path` 下同时存在 **`trace.db`** 与 **至少一种原始侧**：`hiperf/**`、`*hilog*`/`*.log`、或其它 **非 summary 的原始** 文件（如 `perf.data` 等，以实际枚举为准） | **禁止**只读 HTML；须对 **`trace.db` + 另一原始源** 做 **时间轴或步骤级** 交叉（见 §一.2）。**`summary.json` 不计入**「第二源」，**禁止**仅靠 summary.json + HTML 完成本流程 |
-| **产物部分齐** | 仅有 `trace.db`，或仅有 perf/log 之一 | 仍须加载本文：在 **§四** 中 **最大化利用已有源**（SQLite 聚合、日志计数/切片），并写明 **未采集到的类型** |
-| **结论冲突** | 自动报告「正常/无异常」，但用户描述 **卡顿、发热、耗电、ANR 感**；或 **多轮采集** 间体验不一致 | 必须用 **§三** 在原始数据中找 **矛盾、长尾、单点尖峰**；不得用「报告说正常」结束 |
-| **与 scroll-jank 同时需要** | 问题涉及 **滑动/掉帧/手势**，且同时关心 **CPU/perf/日志/UI 组件** | **同时**加载 **`scroll-jank`** 与 **本文**：帧结论 **只准**按 scroll-jank 规则；负载/日志/多源 **按本文** 交叉，**两套结论在最终 `.md` 中分节对照** |
-| **主 Skill 已点名** | [`../SKILL.md`](../SKILL.md) 要求对某次采集做 **「深入分析」** 且非「仅摘要」 | 在已有 `perf_testing` 落盘前提下，**默认**须加载本文（除非用户 **书面**只要一句话结论且不要原始数据） |
+|------|--------------------|----------|
+| **意图明确** | 含「深挖」「高负载挖掘」「LLM 挖掘」「CPU 指令数」「未知瓶颈」「报告没写」「还有没有别的问题」「弱信号」「动静交叉」等 | 全文流程 + §三 各维度逐项检索 |
+| **产物已齐** | `reports_path` 下同时存在 `perf.db`（或内嵌 `perf_sample` 的 `trace.db`）与 SO 静态分析产物（`opt`/`static` 输出、`symbol_recovery` 输出等） | 动静交叉；**禁止**只读 HTML 摘要 |
+| **产物部分齐** | 仅有 `perf.db`/`trace.db`（无静态产物），或仅有静态分析产物 | 最大化利用已有源，**显式写明**缺失的另一侧 |
+| **结论冲突** | 自动报告「正常/无异常」，但用户描述卡顿、发热、帧率低 | 必须从 `perf_sample` 找矛盾证据 |
+| **与 scroll-jank 同时需要** | 问题涉及滑动/掉帧，且同时关心 CPU 指令数 | **同时**加载 `scroll-jank` 与本文；帧结论只按 scroll-jank 规则，指令数分析按本文 |
 
-### 1.2 「尽可能深入分析」的最低完成标准（Agent 自检清单）
+### 1.2 最低完成标准（Agent 自检清单）
 
-在触发 §一.1 后，**深入程度**至少达到：
+触发后，深入程度至少达到以下 6 条：
 
-1. **枚举**：列出报告根下 **`trace.db` 全路径**、`hiperf` 与日志、**其它原始文件**（如 `perf.data` 等）的 **真实路径**（可表格）；若存在 `summary.json`，**可记录路径**但须标注 **「不参与挖掘」**。若某类不存在，写 **「未找到：已搜索的模式」**。
-2. **Trace**：对 **每个** `trace.db` 执行 **至少** —— 主进程/主线程定位（与 scroll-jank 一致）+ **`callstack` 上 Top 耗时或 Top 频次** 的聚合查询 **或** 等价脚本输出；若分析帧，**必须**含 **`depth=0` 的 `frame_slice` 统计**（详见 scroll-jank）。
-3. **第二源**：在存在 perf/log 等时，**至少**完成一项 **可引用输出**（例如：`hiperf` 热点摘要、`rg` 某类关键字计数、对 `perf.data` 的解析片段），并与 trace **同一 `step` 或时间窗口** 对齐说明。**禁止**以 **`summary.json` 字段摘录** 作为第二源或替代上述原始侧分析。
-4. **交叉**：用简短文字说明 **perf / 日志 / 帧（trace）** 之间 **是否互相印证或互相矛盾**；矛盾项 **优先**写入「新发现」。**不要**把 summary.json 与 HTML 的「字段对齐」当作交叉印证主体。
-5. **对照**：单列 **「HTML（或等价面向人报告）已写明的结论」** vs **「仅原始数据（trace/perf/log/…）可见」**；后者即 **LLM 挖掘 - 新发现** 候选。**不要求**、**不鼓励**对 summary.json 做逐字段对照分析。
-6. **落盘**：独立 **`hapray-analysis-*.md`** 含 §四.7 所列结构与 **「一份数据一份报告」** 规则；**禁止**仅在对话中给结论而不落盘（除非用户只要对话）。
-
-### 1.3 与 scroll-jank 的衔接
-
-与滑动帧、手势、jank **强相关** 的数值与规则，**唯一权威**为 **[`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md)**（如 **`frame_slice` 仅 `type_desc=actural` 且 `depth=0`**）。本文 **不重复**长 SQL；**帧级表述**须与 scroll-jank **兼容**，**负载/日志/多源挖掘**以本文 §三、§四 为准。
+1. **枚举**：列出 `perf.db`（或含 `perf_sample` 的 `trace.db`）真实路径、SO 静态产物路径、`summary.json`（标注「不参与挖掘」）。若某类不存在，写「未找到：已搜索的模式」。
+2. **动态 Top 热点**：对每个 `perf.db` 执行 **§四.3.A**（SO 级）和 **§四.3.B**（符号级）的聚合 SQL，得到 Top-N 热点（`SUM(event_count)` 排序）。
+3. **帧级指令数**：若存在 `frame_slice`，执行 **§四.3.C** 的逐帧负载 SQL，输出指令数最高的帧列表。
+4. **静态交叉**（有产物时）：将动态热点 SO 与静态分析结论（LTO 状态、代码段大小、符号可见性）对齐，在 **§四.4** 中写出「优化机会」条目。
+5. **对照 HTML**：单列「HTML 已写明的结论」vs「仅从 perf_sample/callchain 可见的额外发现」，后者标为「LLM 挖掘 - 新发现」。
+6. **落盘**：独立 `hapray-analysis-*.md`，含 §四.7 结构；**禁止**仅在对话中给结论而不落盘（除非用户只要对话）。
 
 ---
 
-## 二、数据源清单（Agent 须先枚举，再选择性深入）
+## 二、数据源与表结构
 
-在 **`outputs.reports_path`**（见 [`../hapray-tool-result.md`](../hapray-tool-result.md)）下 **递归浏览**（或按契约给出的子路径），典型包括：
+### 2.1 动态数据（CPU 指令数）
 
-| 类型 | 常见路径模式 | LLM/工具可挖掘的内容 |
-|------|----------------|----------------------|
-| **Trace（SQLite）** | `**/htrace/**/trace.db` | `callstack` 长耗时切片、热点名、`frame_slice` 异常帧、线程/进程维度（表见 scroll-jank）；可继续探索其它表（若存在）如 **调度、锁、内存瞬时** 等 |
-| **Perf / 采样** | `**/hiperf/**`、`*perf*` 相关文本/二进制 | 热点符号、CPU 占比、采样集中时段；与 `callstack` **时间轴对齐** |
-| **日志** | `**/*hilog*`、`**/*.log`、报告目录内文本日志 | 高频 WARN/ERROR、重试、超时、GC/方舟相关关键字、多媒体/网络错误风暴 |
-| **规则化摘要 JSON（如 `summary.json`）** | 常见位于 `report/` 等 | **不作为**本 Skill 的挖掘数据源；**禁止**用其中 Feed/图像/故障树/冗余线程等与 HTML 路径做交叉分析替代 **trace.db / hiperf / 日志**。**可**在「数据范围」中列出路径并标注 **不参与分析**。 |
-| **其它机器可读 JSON**（若存在且为**原始粒度**明细，非 summary） | 以实际枚举为准 | **可选**辅助；**仍以 trace.db、hiperf、日志为第一优先**，不得喧宾夺主。 |
-| **UI / 组件** | 契约或目录中的 **组件树、布局、自动化步骤截图说明**、`gui_agent` 摘要字段 | 层级过深、同屏组件数量异常、与 **卡顿时间段** 的对应关系（仅在有数据时推断） |
+**核心数据库**：`perf.db`（或 `trace.db` 中内嵌的 perf 表组）
 
-**原则**：先 **列目录 + 记录真实绝对路径**，再读；**禁止**臆造子路径或表名。
+| 表 | 关键字段 | 用途 |
+|----|----------|------|
+| `perf_sample` | `event_count`（指令数/周期）、`thread_id`、`timestamp_trace`（或 `timeStamp`）、`callchain_id`、`cpu_id` | **主聚合表**；`SUM(event_count)` = 该线程/时间段的总指令数 |
+| `perf_callchain` | `callchain_id`、`depth`、`file_id`、`symbol_id`、`vaddr_in_file` | 每个采样的调用栈帧；`depth=0` 为栈顶（leaf 函数） |
+| `perf_files` | `file_id`、`serial_id`（= symbol_id）、`symbol`（函数名）、`path`（SO 路径） | 符号与 SO 路径映射 |
+| `perf_thread` | `thread_id`、`process_id`、`thread_name` | 线程元信息 |
+| `perf_report` | `config_name`（事件类型，如 `raw-instruction-retired`）、`cmdline` | 采集配置核查 |
+| `frame_slice` | `ts`、`dur`、`type_desc`、`depth`、`ipid`、`itid`、`flag` | 帧时间边界（与 scroll-jank 一致：`type_desc='actural'` 且 `depth=0`） |
+| `callstack` | `name`、`ts`、`dur`、`callid` | trace 级函数切片（用于长耗时排查） |
+| `process` / `thread` | `pid`/`tid`、`name` | 进程与线程名 |
 
-### 2.1 SQLite：权威文档与运行时自省
-
-**不在本文重复完整 DDL。** 表名、字段含义以 **下文权威 + 本机实库** 为准；Hitrace / 工具版本变化时，**以当前文件为准**。
-
-| 文件 / 库 | 典型路径或形态 | 表结构说明优先查阅 |
-|-----------|----------------|-------------------|
-| **`trace.db`**（Hitrace） | `**/htrace/**/trace.db` | **[`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md)** 中 **`process` / `thread` / `callstack` / `frame_slice`**；帧与深度规则与该文档一致。其它表（调度、锁等）**无文档时必须先自省**（见下）。 |
-| **`perf.db`**（报告侧聚合库，若存在） | 报告目录或工具产物中的 `*.db`，以实际枚举为准 | **以 `sqlite3` 输出为准**；若分析仓库已克隆，可参考工具内建表逻辑（如 **`tools/static_analyzer`** 下 **`PerfDatabase`** 的 `CREATE TABLE`）作为 **辅助**，仍以实库为准。 |
-| **其它 SQLite**（内存/专项等） | 以 `reports_path` 下枚举到的 `.db` 为准 | 若整仓在侧，可参考 [`../../../perf_testing/docs/ARCHITECTURE.md`](../../../perf_testing/docs/ARCHITECTURE.md) 等数据流说明作线索；**列名与表名必须以自省结果为准**（仅复制 Skill 无整仓时忽略该链接）。 |
-
-**运行时自省（分析前建议执行，结果可写入「数据范围」）**：
+**时间戳字段注意**：`perf_sample` 中时间戳字段名因版本而异，使用前先自省：
 
 ```bash
-sqlite3 /绝对路径/某.db ".tables"
-sqlite3 /绝对路径/某.db ".schema 表名"
+sqlite3 /path/to/perf.db "PRAGMA table_info(perf_sample)"
+# timestamp_trace（新版）或 timeStamp（旧版）均有可能
 ```
 
-- 对 **`trace.db`**：若需查询文档未列出的表，**禁止**编造字段；应先 `.schema` 再写 SQL。  
-- 对 **`perf.db`**：不同流水线可能字段不同，**默认先 `.tables`** 再决定聚合维度。
+**事件类型核查**（分析前建议执行）：
+
+```bash
+sqlite3 /path/to/perf.db "SELECT config_name, cmdline FROM perf_report"
+# 确认 event = raw-instruction-retired，period 值，采集范围
+```
+
+### 2.2 静态数据（SO 二进制分析）
+
+| 来源 | 路径模式（以实际枚举为准） | 可提取内容 |
+|------|---------------------------|------------|
+| `hapray opt` / `optimization_detector` 输出 | `<reports_path>/opt/` 下 HTML/JSON/Excel | LTO 状态、`-O2`/`-Os` 标记、符号可见性、代码段大小 |
+| `hapray static` 输出 | `static-output/` 下 JSON | SO 列表、框架识别（RN/Flutter/KMP）、SO 大小 |
+| `symbol_recovery` 输出 | `tools/symbol_recovery/` 下 Excel/JSON | 恢复的函数名、类型推断 |
+| `perf.data` 原始文件 | 与 `perf.db` 同目录 | 可用 `scripts/analyze_so_perf.py` 提取 SO 级热点 |
+
+**动静交叉原则**：动态热点 SO（Top-N by `SUM(event_count)`）→ 查静态产物该 SO 的 LTO 状态、代码大小 → 若未做 LTO 且指令数高，列为「优化机会」。
+
+### 2.3 `summary.json`（排除在外）
+
+若目录中存在 `summary.json`，**可列出路径**并注明**「不参与本次挖掘」**；**禁止**从中复述 Feed/图像/故障树/冗余线程等字段并包装成新发现。
 
 ---
 
-## 三、高负载与「可疑负载」特征（供 LLM 对齐与检索）
+## 三、高指令数可疑模式（检索维度）
 
-以下特征用于 **从原始数据中主动「搜」问题**，而非替代自动报告；**命中越多项，越值得写入「新发现」并给出证据**。
+以下各维度的**证据须来自 `perf_sample` / `perf_callchain` / `perf_files` 等原始侧**，不得仅凭 HTML 摘要断言。
 
-### 3.1 CPU / 主线程 / 采样（perf、callstack）
+### 3.1 SO/库级热点（最优先）
 
-- **长持续时间**：`callstack`（或等价表）中 **`dur` 显著高于同线程 P95** 的片段，或同一符号在短时间内 **反复出现且累计时长大**。
-- **热点集中**：`hiperf`、`perf.data` 解析结果或 **trace 上聚合出的** 热点中 **少数符号/库** 占异常高比例，且与 **用户可感知操作时段** 重叠（**不**从 `summary.json` 抄热点占比当作证据）。
-- **与业务预期不符**：静态场景下仍出现 **持续周期性** 的 CPU 活动（需结合时间窗口说明）。
-- **忙等与短循环**：栈顶或叶子出现 **自旋、轮询、高频小函数** 占满时间片，表现为 **同一线程大量极短 `dur` 切片堆叠** 或 perf 上 **用户态占比高但业务语义单薄**（需符号与采样对照）。
-- **主线程重入 / 深栈**：短窗口内 **同一业务路径多次嵌套** 或 **调用深度异常**，与 **单次交互应完成的工作量** 不匹配（`callstack` 证据）。
-- **内核态偏高**：`hiperf` 或报告中 **syscall、内核符号** 占比异常（若数据源区分 user/kernel），常与 **锁、IO、Binder** 等相关，须与 **3.4 / 3.7** 交叉。
+- 少数 SO 占全部指令数的异常高比例（参考阈值：Top-1 SO 占比 > 30%）。
+- 热点 SO 属于**第三方库或旧版本库**，且静态分析显示未做 LTO——**典型优化机会**。
+- 热点 SO 为**系统框架 SO**（如 `libark_jsruntime.so`、`librender_service.so`）但业务场景单一时，可能是调用路径过深或冗余调用。
 
-### 3.2 帧与交互（trace.db，与 scroll-jank 协同）
+### 3.2 符号/函数级热点
 
-- **`frame_slice`**：`type_desc=actural` 且 `depth=0` 的帧中，**超长 `dur`**、**突发密集卡顿区间**、与手势标记 **不同步的异常**（参见 scroll-jank 文档）。
-- **交互线程矛盾**：手势密集阶段 **主线程 `callstack` 出现大量非 UI 必要路径**（需命名与时长证据）。
-- **场景切换长尾**：冷启动、路由跳转、转场动画结束后 **连续多帧仍超标**（与「首屏/首帧」类 KPI 相关时优先标出）。
-- **输入与显示错位**：若 trace 中存在 **触摸/手势时间线与 Vsync/帧边界** 可对照，出现 **输入已到达但多帧无有效提交** 或 **长帧落在两次手势之间** 等模式（仅在有表或标记时描述，不臆造字段名）。
+- `depth=0`（叶子节点）热点符号的 `SUM(event_count)` 显著高于同文件其他符号——该函数本身耗指令多（循环密集、未内联、无 SIMD 优化等）。
+- 同一符号在**多个不同调用链**中反复出现，说明该路径被多路驱动——优先优化调用频次而非函数体。
+- 符号为 `[unknown]` / 十六进制地址形式——说明 SO 已 strip，需先走 `symbol-recovery` 子 Skill 再分析。
 
-### 3.3 内存与 GC（日志 / trace 若可见）
+### 3.3 帧级指令数分布
 
-- 日志中 **频繁 GC、大块分配、OOM 前兆**；或与 **卡顿尖峰** 时间对齐的内存相关关键字（以实际日志为准，不编造英文标签）。
-- **分配尖峰与帧重叠**：**Young/Full GC 日志**、方舟/Allocator 相关关键字与 **`frame_slice` 长帧** 或 **主线程长 `callstack`** 同一窄窗口（需时间对齐说明）。
-- **Native 与 Ark 同压**：若日志同时出现 **JNI/Native 堆、图形缓冲、大数组** 等与 **JS/Ark 侧 GC** 提示，可能放大卡顿（分项列证据，避免混为一谈）。
+- 指令数最高的帧与普通帧交替出现——尖峰型，通常为某次性操作（解码、IO 回调、首次渲染）触发。
+- **连续多帧**均超过阈值——持续型负载，对应持续性循环或后台任务抢占。
+- 高负载帧与**手势/滑动阶段**时间重叠——与 scroll-jank 协同，优先标注。
 
-### 3.4 并发与锁 / IO
+### 3.4 线程维度异常
 
-- Trace 或日志中出现 **锁等待、阻塞、长时间 `read/write`、磁盘或网络栈** 与主线程卡顿 **同时间段**（需时间戳或相对顺序）。
-- **文件与映射**：`mmap`/`munmap`/`fsync`/`fadvise` 等 **路径集中** 或与 **页面切换、资源包加载** 同屏操作对齐（perf 或系统日志若可见）。
-- **线程池饱和**：工作线程 **队列 backlog**、**任务堆积**、**RejectedExecution** 类日志与 **UI 等待数据回调** 同时间段（日志关键词以实际为准）。
+- **主线程**（UI Thread）的 `SUM(event_count)` 占应用总量比例过高（> 60%），说明工作未充分分线程。
+- **Worker 线程**指令数突发增高与主线程高帧延迟同一时间窗口——后台抢占 CPU 资源。
+- 进程中出现大量短生命周期线程的高指令数（可能为线程池频繁新建/销毁）。
 
-### 3.5 日志「风暴」
+### 3.5 动静交叉发现的优化机会
 
-- 短时间内 **同一 TAG/错误码重复成千上万次**；或 **ERROR 与业务关键路径** 重叠——易被 HTML 摘要忽略，但对负载与稳定性 **有解释力**。
-- **WARN 洪泛**：级别为 WARN 但 **频次极高**，同样会 **拉高日志 IO 与字符串格式化成本**，可与 **CPU 采样或主线程切片** 对照是否同窗口。
+| 模式 | 动态证据 | 静态证据 | 优化建议方向 |
+|------|----------|----------|-------------|
+| 热点 SO 未启用 LTO | `perf_sample` Top SO | `opt` 报告无 LTO 标记 | 启用 LTO 可减少跨函数冗余指令 |
+| 热点 SO 代码段偏大 | 高 `event_count` | `static` 报告 `.text` 段大 | 检查是否有大量 inline 膨胀或未使用代码 |
+| 符号 strip → 无名 | 大量 `[unknown]` 热点 | SO stripped | 先恢复符号再分析（`symbol-recovery`） |
+| 第三方库版本旧 | 热点集中在 libXxx | 静态识别为旧版本 | 升级或替换库 |
 
-### 3.6 UI 组件层面（有数据时）
+### 3.6 跨步骤（step）对比
 
-- **同屏组件数量**、**嵌套深度**、**重复创建/销毁** 的间接证据（日志或结构化 UI dump）；与 **卡顿段** 或 **某次操作** 对齐后，可作为 **新假设**（标注为假设，须可复现验证建议）。
-- **列表 / 瀑布流未充分复用**：同一操作路径下 **「创建/挂载」类日志或计数** 与 **可见 cell 数量** 量级不符（仅在有结构化或日志证据时写）。
+- 不同步骤（`step1` vs `step2`...）间总指令数差异 > 20%——可能是步骤切换触发了额外初始化或清理。
+- 同一操作路径在**多轮采集**间指令数方差大——环境噪声 or 非确定性路径（JIT、懒加载）。
 
-### 3.7 IPC / Binder / 跨进程（trace 或日志若可见）
+### 3.7 弱信号（需多源印证后才能列入新发现）
 
-- **同步 IPC 占主线程**：`callstack` 或 perf 显示 **Binder、`transact`、跨进程访问** 在主线程 **长 `dur` 或高累计时长**，与 **点击/滑动** 同窗口。
-- **IPC 风暴**：短时间内 **对同一远端接口的高频调用**（日志或 trace 若可区分进程边界），易与 **卡顿、耗电** 同屏。
-- **死亡/重连震荡**：服务 **binder died、重连、超时** 与 **业务重试** 叠加（以日志原文为准）。
-
-### 3.8 线程调度与优先级（若 trace 含 sched、Runnable、Wake 等）
-
-- **Runnable 排队过长**：UI 线程或其它关键线程 **长时间处于 Runnable 但未 Running**（若表中有状态与时间戳），提示 **CPU 争用或 cfs 配额**。
-- **优先级倒置**：**低优先级持锁** 导致 **高优先级（如 UI）等待**（需 trace/锁事件，无表则不得断言）。
-- **不必要的唤醒**：日志或系统 trace 显示 **Alarm、Choreographer、轮询** 在 **静止场景仍密集触发**，与 **3.10** 交叉。
-
-### 3.9 网络与多媒体（日志 / perf）
-
-- **重试与退避失效**：**超时、重试、退避** 仍导致 **短时间大量请求**；与 **发热、耗电** 或 **主线程等待网络回调** 同窗口。
-- **编解码与 UI 同压**：**解码、解封装、软解** 热点与 **主线程长帧** 时间重叠（perf + `frame_slice`）。
-- **缓冲抖动**：**underrun、stall、rebuffer** 等（以日志字面为准）与 **卡顿感** 同步出现时，区分 **网络侧** 与 **渲染侧** 证据。
-
-### 3.10 定时任务与后台工作（日志 / JobScheduler / Alarm 若可见）
-
-- **轮询过密**：固定间隔 **远小于业务需要** 的定时任务、位置/埋点 **批量上报** 与 **前台交互** 重叠。
-- **后台与前台抢资源**：**WorkManager、Job、SyncAdapter**（或鸿蒙侧等价概念，以日志标签为准）在 **用户操作高峰** 集中执行，与 **CPU/IO 尖峰** 对齐。
-
-### 3.11 功耗与热相关弱信号（仅在有来源时）
-
-- **温控 / 降频 / 限频** 与 **连续长帧、长 `callstack`** 出现在 **同一粗时间段** 时，可列为 **「可能放大卡顿的环境因素」**（**弱信号**：必须写明 **日志或系统字段来源**，禁止无来源的因果断定）。
-
-### 3.12 图形与合成（若有 GPU、Surface、HWC 相关 trace 或日志）
-
-- **过度绘制 / 无效提交**：合成或图形栈日志出现 **频繁 layer 重建、无效 invalidate** 等（以实际关键字为准），与 **长帧** 对齐分析。
-- **GPU 队列积压**：perf 或专用 trace 显示 **GPU 侧热点** 与 **应用线程** 不同步等待（有数据则写，无则跳过本节）。
+- 内核态采样占比高（`perf_callchain` 中 SO 路径含 `[kernel]`）——与 Binder、IO、锁等相关，需结合 `callstack` 中的系统调用切片印证。
+- GC/Allocator 相关符号（`libark_jsruntime.so` 中 GC 前缀函数）出现在高负载帧——内存压力与指令数同时升高。
 
 ---
 
-## 四、主动挖掘工作流（Agent 强制执行顺序）
+## 四、主动挖掘工作流
 
-1. **定位根目录**  
-   从 `hapray-tool-result.json` 或用户给出的目录读取 **`reports_path`**，记录为报告根。
+### 4.1 定位根目录
 
-2. **全量枚举**  
-   列出：`trace.db` 路径列表、`hiperf` 与日志、其它原始文件；若目录中有 `summary.json`，**可列出**并注明 **「本 LLM 挖掘不采用」**。写入分析笔记（后续写入最终 `.md` 的「数据范围」）。
+从 `hapray-tool-result.json` 或用户给出的目录读取 **`reports_path`**，记录为报告根。
 
-3. **结构化优先、全文次之**  
-   - 对 `trace.db`：用 **`sqlite3`** 或脚本做 **聚合查询**（Top N 耗时、按线程分组、时间窗口过滤），**避免**一次性把百万行 dump 给 LLM。  
-   - 对超大日志：**`grep`/`rg` 计数、按时间切片**，再抽取代表性片段。
+### 4.2 全量枚举
 
-4. **交叉印证**  
-   将 **perf 热点时段**、**trace 长切片**、**日志风暴**、**异常帧** 在 **时间轴上对齐**（允许粗粒度：同一步骤/同一 `stepN` 目录）。
+列出（可表格）：
 
-5. **与自动报告对照**  
-   逐条列出：**HTML（或等价面向人报告）已强调的结论** vs **仅从 trace/perf/log 等原始数据中可见的额外发现**。仅将后者标为 **「LLM 挖掘 - 新发现」**。**禁止**把 **summary.json 与 HTML 的「字段对齐」** 或「重复已知规则」当作新发现来源。
+- `perf.db` 或内嵌 perf 表的 `trace.db` 的**真实绝对路径**（按 `step*` 子目录分列）
+- SO 静态分析产物路径（`opt/`、`static-output/`、`symbol_recovery/` 等）
+- `perf.data` 原始文件（若存在）
+- `summary.json`（列路径并标注「不参与挖掘」）
 
-6. **LLM 推理任务（显式）**  
-   对每类证据向模型请求：**分类（CPU/帧/内存/日志/UI）**、**是否构成独立问题**、**若 HTML 未提及则说明可能原因**、**下一步验证（一条可执行命令或 SQL）**。  
-   **禁止**把缺乏数据支撑的猜测写成确定结论；**禁止**从 **`summary.json`** 复述规则化结论并包装成「新发现」。
+若某类不存在，写「未找到：已搜索模式 `**/perf.db` 等」。
 
-7. **落盘**  
-   **一份采集数据（以同一 `reports_path` 或用户指定的同一报告根目录为界）只对应一份独立分析 `.md`**：禁止对 **同一批** `trace.db`/perf/log 产出 **多份并行** `hapray-analysis-*.md` 复制粘贴式报告。后续补充、修订、多轮对话深挖，**默认在原文件上更新**（追加修订说明或覆盖同结构章节），与 [`../SKILL.md`](../SKILL.md)「多轮分析」一致；**仅当用户明确要求另存为新文件** 或 **换了一套新采集目录** 时，再新建一份。  
-   **独立 `.md` 默认写入** **项目根目录**（Cursor 工作区根 `<PROJECT_ROOT>`）下 **`reports/hapray-analysis-*.md`**（不存在则创建）；**勿**写入 HapRay 克隆目录下的 `reports/`（除非工作区仅单层克隆，见主 Skill 步骤 1）；**勿**与契约中的采集输出 **`reports_path`** 混淆；完整规则见 [`../SKILL.md`](../SKILL.md)「最终分析报告」。  
-   该 **`hapray-analysis-*.md`**（命名见主 `SKILL.md`）须包含：  
-   - **报告元信息**（**文末**必填：单行小字，含 Skill 版本、仓库链接、生成时间；见 [`../SKILL.md`](../SKILL.md)「最终分析报告」）  
-   - **数据范围**（真实路径列表）  
-   - **高负载特征命中表**（对应 §三）  
-   - **新发现**（每条：现象、证据、与报告差异、风险等级、建议验证）  
-   - **未覆盖/数据不足**（诚实列出）
+### 4.3 动态数据：聚合查询
+
+#### A. SO 级热点（优先执行）
+
+```sql
+-- SO 级总指令数 Top-N（用实际 perf.db 路径替换）
+SELECT
+    pf.path                          AS so_path,
+    SUM(ps.event_count)              AS total_instructions,
+    COUNT(*)                         AS sample_count,
+    ROUND(SUM(ps.event_count) * 100.0 /
+          (SELECT SUM(event_count) FROM perf_sample), 2) AS pct
+FROM perf_sample ps
+JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
+                       AND pc.depth = 0          -- 叶子帧（栈顶函数）
+JOIN perf_files pf     ON pc.file_id = pf.file_id
+                       AND pc.symbol_id = pf.serial_id
+GROUP BY pf.path
+ORDER BY total_instructions DESC
+LIMIT 20;
+```
+
+#### B. 符号级热点（对 Top-3 SO 执行）
+
+```sql
+-- 指定 SO 内符号级 Top-N
+SELECT
+    pf.symbol                        AS func_name,
+    pf.path                          AS so_path,
+    SUM(ps.event_count)              AS total_instructions,
+    ROUND(SUM(ps.event_count) * 100.0 /
+          (SELECT SUM(event_count) FROM perf_sample), 2) AS pct_global
+FROM perf_sample ps
+JOIN perf_callchain pc ON ps.callchain_id = pc.callchain_id
+                       AND pc.depth = 0
+JOIN perf_files pf     ON pc.file_id = pf.file_id
+                       AND pc.symbol_id = pf.serial_id
+WHERE pf.path LIKE '%libXxx.so%'     -- 替换为目标 SO 名
+GROUP BY pf.symbol
+ORDER BY total_instructions DESC
+LIMIT 30;
+```
+
+#### C. 帧级指令数分布（有 `frame_slice` 时执行）
+
+先自省时间戳字段名：
+
+```bash
+sqlite3 /path/to/perf.db "PRAGMA table_info(perf_sample)"
+# 若含 timestamp_trace 用该字段；否则用 timeStamp
+```
+
+再执行帧级查询（将 `ps.timestamp_trace` 替换为实际字段名）：
+
+若 `frame_slice` 与 `perf_sample` 在**同一文件**（trace.db 内嵌 perf 表），直接执行：
+
+```sql
+SELECT
+    fs.ts                            AS frame_ts,
+    fs.dur                           AS frame_dur_ns,
+    fs.vsync,
+    COALESCE(SUM(ps.event_count), 0) AS frame_instructions
+FROM frame_slice fs
+LEFT JOIN perf_sample ps
+       ON ps.timestamp_trace        -- ← 按自省结果替换为 timestamp_trace 或 timeStamp
+          BETWEEN fs.ts AND (fs.ts + fs.dur)
+WHERE fs.type_desc = 'actural'      -- 与 scroll-jank 规则一致
+  AND fs.depth = 0
+GROUP BY fs.id
+ORDER BY frame_instructions DESC
+LIMIT 30;
+```
+
+若二者在**不同文件**（trace.db + perf.db 分离），将 ATTACH 放在 SQL 开头一并执行：
+
+```sql
+ATTACH '/path/to/perf.db' AS pdb;  -- 替换为实际 perf.db 路径
+
+SELECT
+    fs.ts                            AS frame_ts,
+    fs.dur                           AS frame_dur_ns,
+    fs.vsync,
+    COALESCE(SUM(ps.event_count), 0) AS frame_instructions
+FROM frame_slice fs
+LEFT JOIN pdb.perf_sample ps        -- 使用 pdb. 前缀访问 perf.db 中的表
+       ON ps.timestamp_trace        -- ← 按自省结果替换为 timestamp_trace 或 timeStamp
+          BETWEEN fs.ts AND (fs.ts + fs.dur)
+WHERE fs.type_desc = 'actural'
+  AND fs.depth = 0
+GROUP BY fs.id
+ORDER BY frame_instructions DESC
+LIMIT 30;
+```
+
+#### D. 线程维度（按进程/线程分组）
+
+先确认目标应用的 `process_id`：
+
+```sql
+-- 第一步：列出所有进程，找到目标应用的 process_id
+SELECT DISTINCT process_id, thread_name
+FROM perf_thread
+ORDER BY process_id;
+```
+
+再按 `process_id` 过滤各线程指令数：
+
+```sql
+-- 目标应用进程各线程指令数（将 <PID> 替换为上方查询得到的实际 process_id）
+SELECT
+    pt.thread_name,
+    SUM(ps.event_count)              AS total_instructions,
+    ROUND(SUM(ps.event_count) * 100.0 /
+          (SELECT SUM(ps2.event_count)
+           FROM perf_sample ps2
+           JOIN perf_thread pt2 ON ps2.thread_id = pt2.thread_id
+           WHERE pt2.process_id = <PID>), 2) AS pct
+FROM perf_sample ps
+JOIN perf_thread pt ON ps.thread_id = pt.thread_id
+WHERE pt.process_id = <PID>
+GROUP BY ps.thread_id
+ORDER BY total_instructions DESC
+LIMIT 20;
+```
+
+#### E. 跨步骤对比（多 step 时执行）
+
+对每个 `stepN/perf.db` 分别执行 A 查询，汇总表格比较各步骤 `total_instructions`。
+
+### 4.4 静态数据交叉
+
+1. 取 §4.3.A Top-5 热点 SO，在 `opt`/`static` 产物中检索各 SO 的：
+   - LTO 是否启用（`-flto`、LTO 标记）
+   - 代码段（`.text`）大小
+   - Strip 状态（是否有符号表）
+2. 将结果填入 §三.3.5 的「动静交叉发现」表。
+3. 若某热点 SO 的符号全为 `[unknown]` 或十六进制，**标记为「需 symbol-recovery」**，并在最终报告的「未覆盖/数据不足」中说明。
+
+### 4.5 与自动报告对照
+
+逐条列出：
+
+- **HTML 已写明的结论**（热点 SO、帧率数值等）
+- **仅从 `perf_sample`/`perf_callchain`/静态产物可见的额外发现** → 标为「LLM 挖掘 - 新发现」
+
+**禁止**把 `summary.json` 字段与 HTML 的「字段对齐」当作新发现来源。
+
+### 4.6 LLM 推理任务（显式）
+
+对每条证据请模型回答：
+
+1. **分类**：SO级热点 / 符号级热点 / 帧级负载 / 线程争抢 / 动静交叉优化机会
+2. **独立性**：是否构成独立优化问题（与其他已知问题无重叠）
+3. **可能原因**：若 HTML 未提及，说明可能的代码/架构原因
+4. **验证步骤**：一条可执行 SQL 或命令（`sqlite3`/`python`/`rg`）
+
+**禁止**把缺乏数据支撑的猜测写成确定结论；**禁止**从 `summary.json` 复述规则化结论并包装成「新发现」。
+
+### 4.7 落盘
+
+**一份采集数据（同一 `reports_path`）只对应一份 `hapray-analysis-*.md`**；后续补充默认在原文件上更新。  
+默认路径：`<PROJECT_ROOT>/reports/hapray-analysis-*.md`（不与 `reports_path` 混淆）。
+
+该 `.md` 须包含：
+
+- **报告元信息**（文末必填，见主 `SKILL.md`）
+- **数据范围**（真实路径列表；`summary.json` 单独注明「不参与挖掘」）
+- **高指令数热点表**（对应 §三，每条含：SO/符号、指令数、占比、来源 SQL/文件）
+- **动静交叉优化机会表**（§三.3.5）
+- **新发现**（每条：现象、可追溯证据、与 HTML 差异、风险/影响等级、建议验证步骤）
+- **未覆盖/数据不足**（诚实列出；含「需 symbol-recovery」的 SO）
 
 ---
 
-## 五、与主 Skill 及其它子 Skill 的关系
+## 五、与其他 Skill 的协作
 
 | 文档 | 关系 |
 |------|------|
-| [`../SKILL.md`](../SKILL.md) | CLI、契约、`gui-agent` 前置条件、独立 `.md` 命名规则 |
-| [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | **帧与手势**的权威规则与 SQL；高负载挖掘涉及帧时 **必须一致** |
+| [`../SKILL.md`](../SKILL.md) | CLI、契约、`gui-agent` 前置条件、独立 `.md` 命名与落盘规则 |
+| [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | **帧与手势**的权威规则与 SQL；帧级指令数与帧结论须保持一致 |
+| [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 当热点函数为 `[unknown]`/stripped 时**必须先执行**，再回到本文分析 |
 | [`../hapray-tool-result.md`](../hapray-tool-result.md) | 定位 `reports_path` 与契约字段 |
 
 ---
 
 ## 六、禁止与质量约束
 
-- **禁止**虚构路径、表名、栈名、百分比与帧耗时。  
-- **禁止**仅根据行业常识输出「高负载清单」而不引用本轮 **真实产物**。  
-- **禁止**以 **`summary.json`**（及同类规则化摘要 JSON）作为 LLM 高负载挖掘的**主线数据源**；**禁止**用其与 HTML 路径做交叉**替代**对 **`trace.db` / `hiperf` / 日志** 的聚合与未知问题挖掘。  
-- **新发现**每条须带：**文件或查询** 可追溯证据（证据须来自 **原始侧**，**非** summary 字段复述）；若为推测，标注 **「待验证」** 并给出验证步骤。  
-- 若仅有 `trace.db` 而无 perf/log，**不得**假装完成「全源挖掘」；在报告中说明 **数据源缺口**。
+- **禁止**虚构路径、表名、栈名、百分比与指令数。
+- **禁止**仅根据行业常识输出「热点清单」而不引用本轮**真实产物**的 SQL 输出。
+- **禁止**以 `summary.json` 作为 LLM 高负载挖掘的主线数据源。
+- 「新发现」每条须带：**文件路径 + 查询**可追溯证据（来自原始侧，非 summary 字段复述）；若为推测，标注**「待验证」**并给出验证步骤。
+- 若仅有 `trace.db` 无独立 `perf.db`，先检查 `trace.db` 中是否存在 `perf_sample` 表（`sqlite3 trace.db ".tables"`），再决定是否可执行 §四.3 的 SQL。
+- 若热点符号大量为 `[unknown]`，**不得**假装完成「符号级分析」；应在报告中标注「需 symbol-recovery 后重分析」。
 
 ---
 
 ## 七、触发词（供主 Skill 索引）
 
-`高负载挖掘`、`LLM 挖掘`、`原始 trace`、`perf 对齐`、`日志风暴`、`报告未覆盖`、`未知瓶颈`、`多源交叉`、`主动发现`、`深挖`、`弱信号`、`结论冲突`、`尽可能深入`、`第二源`、`交叉印证`。
+`CPU指令数`、`高负载挖掘`、`LLM挖掘`、`动静交叉`、`perf_sample`、`perf热点`、`SO级指令数`、`符号级热点`、`帧级负载`、`原始trace`、`报告未覆盖`、`未知瓶颈`、`多源交叉`、`主动发现`、`深挖`、`弱信号`、`结论冲突`、`尽可能深入`、`第二源`、`交叉印证`。
