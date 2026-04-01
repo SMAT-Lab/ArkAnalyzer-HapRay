@@ -8,12 +8,15 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import sys
 from pathlib import Path
 from typing import NoReturn, Optional
 
 from core.analyzers.event_analyzer import EventCountAnalyzer
 from core.analyzers.excel_analyzer import ExcelOffsetAnalyzer
+from core.analyzers.kmp_analyzer import KMPAnalyzer
+from core.analyzers.memory_flamegraph_analyzer import MemoryFlameGraphAnalyzer
 from core.analyzers.perf_analyzer import PerfDataToSqliteConverter
 from core.utils.config import (
     CALL_COUNT_ANALYSIS_PATTERN,
@@ -102,7 +105,7 @@ def _ensure_writable_cwd():
 
 def create_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description='SymRecover - 二进制符号恢复工具：支持 perf.data 和 Excel 偏移量两种模式',
+        description='SymRecover - 二进制符号恢复工具：支持 perf.data、Excel 偏移量和内存模式火焰图三种模式',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
@@ -137,10 +140,16 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
   # Excel 分析模式（不使用 LLM）
   python3 main.py --excel-file test.xlsx --so-file /path/to/lib.so --no-llm
+
+  # 内存模式（从火焰图 HTML 文件中提取符号）
+  python3 main.py --memory-mode --html-dir /path/to/flamegraphs --so-dir /path/to/so/directory
+
+  # 内存模式（指定分析数量）
+  python3 main.py --memory-mode --html-dir /path/to/flamegraphs --so-dir /path/to/so/directory --top-n 100
         """,
     )
 
-    # 模式选择：Excel 分析模式或 perf 分析模式
+    # 模式选择：Excel 分析模式、perf 分析模式或内存模式
     parser.add_argument(
         '--excel-file',
         type=str,
@@ -152,6 +161,30 @@ def create_argument_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help='SO 文件路径（Excel 分析模式必需）。如果未指定，将使用 --so-dir 目录下的默认 SO 文件',
+    )
+    parser.add_argument(
+        '--memory-mode',
+        action='store_true',
+        help='启用内存模式：从火焰图 HTML 文件中提取符号地址进行分析',
+    )
+    parser.add_argument(
+        '--kmp-mode',
+        action='store_true',
+        help='启用 KMP 分析模式：针对 stripped KMP .so 文件，恢复符号名并按 KMP 组件分类',
+    )
+    parser.add_argument(
+        '--kmp-app-name',
+        type=str,
+        default='',
+        help='KMP 模式：目标应用名称（如 "Bilibili"、"快手"），用于在 prompt 中生成对应的业务分类标签。'
+             '不传时使用通用的 "Business Logic" 描述，适用于任意 KMP 库分析。'
+             '可配合 --context 进一步注入该库的具体命名空间/组成比例信息',
+    )
+    parser.add_argument(
+        '--html-dir',
+        type=str,
+        default=None,
+        help='火焰图 HTML 文件目录（内存模式必需）。包含需要分析的 HTML 火焰图文件',
     )
 
     # 输入参数（perf 分析模式）
@@ -201,8 +234,9 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--batch-size',
         type=int,
-        default=DEFAULT_BATCH_SIZE,
-        help=f'批量分析时每个 prompt 包含的函数数量（默认: {DEFAULT_BATCH_SIZE}，建议范围: 3-10）。当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
+        default=None,
+        help='批量分析时每个 prompt 包含的函数数量（不传则按服务类型自动选择：claude=10, openai=5, deepseek/poe=3）。'
+             '当 batch-size > 1 时使用批量分析，否则使用单个函数分析',
     )
     parser.add_argument(
         '--use-capstone-only',
@@ -820,6 +854,221 @@ def summarize_outputs(args, output_dir: Path):
             logger.info(f'  - {html_input} (modified, symbols replaced)')
 
 
+def handle_memory_mode(args, output_dir: Path):
+    """处理内存模式：从火焰图 HTML 文件中提取符号并恢复"""
+    if not args.memory_mode:
+        return False
+
+    logger.info('=' * 80)
+    logger.info('内存模式：从火焰图 HTML 文件中提取符号地址')
+    logger.info('=' * 80)
+
+    # 验证参数
+    if not args.html_dir:
+        logger.error('❌ 错误: 内存模式需要指定 --html-dir 参数')
+        sys.exit(1)
+
+    html_dir = Path(args.html_dir)
+    if not html_dir.exists():
+        logger.error(f'❌ 错误: HTML 目录不存在: {html_dir}')
+        sys.exit(1)
+
+    so_dir = args.so_dir
+    if not so_dir:
+        logger.error('❌ 错误: 内存模式需要指定 --so-dir 参数')
+        sys.exit(1)
+
+    so_dir = Path(so_dir)
+    if not so_dir.exists():
+        logger.error(f'❌ 错误: SO 目录不存在: {so_dir}')
+        sys.exit(1)
+
+    # 创建内存模式分析器
+    memory_analyzer = MemoryFlameGraphAnalyzer(
+        html_dir=str(html_dir),
+        so_dir=str(so_dir),
+        output_dir=str(output_dir),
+    )
+
+    # 处理所有 HTML 文件，提取符号并创建 perf.db
+    perf_db_file, html_symbols = memory_analyzer.process_all_html_files()
+
+    # 运行 LLM 分析（使用创建的 perf.db）
+    logger.info('\n' + '=' * 80)
+    logger.info('开始符号恢复分析')
+    logger.info('=' * 80)
+
+    run_llm_analysis(args, perf_db_file, so_dir, output_dir)
+
+    # 替换所有 HTML 文件中的符号
+    logger.info('\n' + '=' * 80)
+    logger.info('替换火焰图 HTML 文件中的符号')
+    logger.info('=' * 80)
+
+    # 加载函数映射
+    if args.stat_method == 'event_count':
+        excel_file = output_dir / EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
+    else:
+        excel_file = output_dir / CALL_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
+
+    if not excel_file.exists():
+        logger.error(f'❌ 错误: Excel 分析文件不存在: {excel_file}')
+        logger.info('   请先完成符号恢复分析')
+        sys.exit(1)
+
+    from core.utils.symbol_replacer import load_function_mapping, replace_symbols_in_html
+
+    function_mapping = load_function_mapping(excel_file)
+    logger.info(f'✅ 加载了 {len(function_mapping)} 个函数映射')
+    
+    if len(function_mapping) == 0:
+        logger.warning('⚠️  警告: 没有函数映射，可能是未使用 LLM 分析')
+        logger.warning('   建议使用 LLM 分析（移除 --no-llm 参数）以获得符号恢复结果')
+        logger.warning('   将继续处理，但不会替换任何符号')
+
+    # 处理每个 HTML 文件
+    html_files = list(html_dir.glob('*.html'))
+    output_html_dir = output_dir / 'memory_flamegraphs_recovered'
+    output_html_dir.mkdir(parents=True, exist_ok=True)
+
+    for html_file in html_files:
+        logger.info(f'处理: {html_file.name}')
+        try:
+            with open(html_file, 'r', encoding='utf-8', errors='ignore') as f:
+                html_content = f.read()
+
+            # 替换符号
+            # replace_symbols_in_html 返回 (html_content, replacement_info) 元组
+            replaced_html, replacement_info = replace_symbols_in_html(html_content, function_mapping)
+
+            # 保存到输出目录
+            output_file = output_html_dir / html_file.name
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(replaced_html)
+            
+            logger.info(f'    替换了 {len(replacement_info)} 个符号')
+
+            logger.info(f'  ✅ 已保存: {output_file}')
+        except Exception as e:
+            logger.error(f'  ❌ 处理失败: {html_file.name}, 错误: {e}')
+
+    logger.info(f'\n✅ 所有火焰图已处理完成，输出目录: {output_html_dir}')
+    return True
+
+
+def handle_kmp_mode(args, output_dir: Path) -> bool:
+    """处理 KMP 分析模式：stripped KMP .so 符号恢复 + 组件分类。"""
+    if not args.kmp_mode:
+        return False
+
+    logger.info('=' * 80)
+    logger.info('KMP Analysis Mode: Symbol recovery + KMP component classification')
+    logger.info('=' * 80)
+
+    # 验证必要参数
+    perf_db_file = Path(args.perf_db) if args.perf_db else None
+    if not perf_db_file or not perf_db_file.exists():
+        logger.error('❌ KMP 模式需要通过 --perf-db 指定有效的 perf.db 文件')
+        sys.exit(1)
+
+    so_path = Path(args.so_file) if args.so_file else None
+    if not so_path or not so_path.exists():
+        logger.error('❌ KMP 模式需要通过 --so-file 指定 KMP .so 文件路径')
+        sys.exit(1)
+
+    logger.info(f'perf.db : {perf_db_file}')
+    logger.info(f'SO file : {so_path}')
+    logger.info(f'Top-N   : {args.top_n}')
+    if args.kmp_app_name:
+        logger.info(f'App     : {args.kmp_app_name}')
+
+    time_tracker = TimeTracker()
+    time_tracker.start_step('Initialization', 'Initializing KMP analyzer')
+
+    try:
+        analyzer = KMPAnalyzer(
+            perf_db_file=str(perf_db_file),
+            so_dir=str(so_path),
+            use_llm=not args.no_llm,
+            llm_model=args.llm_model,
+            batch_size=args.batch_size,
+            context=args.context,
+            use_capstone_only=args.use_capstone_only,
+            save_prompts=args.save_prompts,
+            output_dir=str(output_dir),
+            skip_decompilation=args.skip_decompilation,
+            open_source_lib=args.open_source_lib,
+            app_name=args.kmp_app_name or '',
+        )
+    except Exception:
+        logger.exception('❌ KMP analyzer initialization failed')
+        sys.exit(1)
+
+    time_tracker.end_step('Initialization completed')
+
+    # 分析 top-N 热点地址
+    time_tracker.start_step('KMP analysis', f'Disassembly + LLM analysis of top {args.top_n} addresses')
+    results = analyzer.analyze_event_count_only(top_n=args.top_n)
+    time_tracker.end_step(f'Analyzed {len(results)} functions')
+
+    if not results:
+        logger.warning('⚠️  No results — check that the SO file has stripped symbols in perf.db')
+        return True
+
+    # 保存 Excel（含 KMP分类 列）
+    time_tracker.start_step('Saving results', 'Writing Excel with KMP classification')
+    output_file = analyzer.save_kmp_results(
+        results,
+        time_tracker=time_tracker,
+        output_dir=output_dir,
+        top_n=args.top_n,
+    )
+    time_tracker.end_step('Results saved')
+
+    logger.info(f'\n✅ KMP Analysis completed! Analyzed {len(results)} functions')
+    logger.info(f'📊 Excel report: {output_file}')
+
+    if analyzer.use_llm and analyzer.llm_analyzer:
+        analyzer.llm_analyzer.finalize()
+        analyzer.llm_analyzer.print_token_stats()
+
+    # HTML 符号替换（如果提供了 --html-input）
+    html_input = detect_html_input(args)
+    if html_input and html_input.exists():
+        logger.info('\n' + '=' * 80)
+        logger.info('KMP Step 4: HTML symbol replacement with [Category] annotations')
+        logger.info('=' * 80)
+
+        kmp_mapping = analyzer.build_kmp_function_mapping(results)
+        if kmp_mapping:
+            with open(html_input, encoding='utf-8') as f:
+                html_content = f.read()
+
+            html_content, replacement_info = replace_symbols_in_html(html_content, kmp_mapping)
+
+            # 嵌入详细分析报告 tab（包含功能描述、KMP分类、优化建议等）
+            llm_analyzer_for_report = analyzer.llm_analyzer if analyzer.use_llm else None
+            html_content = add_disclaimer(
+                html_content,
+                report_data=results,
+                llm_analyzer=llm_analyzer_for_report,
+            )
+
+            html_output = html_input.parent / f'{html_input.stem}_kmp_symbols.html'
+            with open(html_output, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            logger.info(f'✅ Replaced {len(replacement_info)} symbols')
+            logger.info(f'📄 Output HTML: {html_output}')
+        else:
+            logger.warning('⚠️  No function mapping available for HTML replacement')
+    else:
+        logger.info('ℹ️  No --html-input specified, skipping HTML replacement')
+
+    time_tracker.print_summary()
+    return True
+
+
 def main():
     global _MACHINE_JSON, _RESULT_FILE
     _ensure_writable_cwd()
@@ -832,8 +1081,19 @@ def main():
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
     setup_logging(output_dir, machine_json=_MACHINE_JSON)
 
-    handle_excel_mode(args, output_dir)
+    # 处理 KMP 分析模式
+    if handle_kmp_mode(args, output_dir):
+        return
 
+    # 处理内存模式
+    if handle_memory_mode(args, output_dir):
+        return
+
+    # 处理 Excel 模式
+    if handle_excel_mode(args, output_dir):
+        return
+
+    # 处理 perf 模式（默认）
     perf_data_file, perf_db_file, so_dir = resolve_perf_paths(args, output_dir)
 
     logger.info('=' * 80)

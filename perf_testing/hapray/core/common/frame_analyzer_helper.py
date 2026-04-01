@@ -167,7 +167,7 @@ def update_one_empty_frame_results(report_dir: str) -> bool:
 def update_empty_frame_results():
     """
     批量更新空帧分析数据
-    递归获取目录中的所有ResourceUsage_PerformanceDynamic_xxx_xxxx格式的目录
+    递归获取目录中的所有PerfLoad_xxx_xxxx格式的目录
     并依次调用update_empty_frame_results函数进行分析
     """
     # 测试目录路径
@@ -180,7 +180,7 @@ def update_empty_frame_results():
         for root, dirs, _ in os.walk(root_dir):
             # 过滤出符合条件的目录
             target_dirs = [
-                d for d in dirs if d.startswith('ResourceUsage_PerformanceDynamic_') and 'round' not in d.lower()
+                d for d in dirs if d.startswith('PerfLoad_') and 'round' not in d.lower()
             ]
 
             for target_dir in target_dirs:
@@ -218,9 +218,9 @@ def visualize_empty_frame_loads(results: list, output_dir: str):
 
         # 简化场景名称
         def simplify_scene_name(scene_name: str) -> str:
-            # 移除 "ResourceUsage_PerformanceDynamic_" 前缀
-            if scene_name.startswith('ResourceUsage_PerformanceDynamic_'):
-                return scene_name[len('ResourceUsage_PerformanceDynamic_') :]
+            # 移除 "PerfLoad_" 前缀
+            if scene_name.startswith('PerfLoad_'):
+                return scene_name[len('PerfLoad_') :]
             return scene_name
 
         # 1. 按场景分组的空帧负载柱状图
@@ -365,11 +365,11 @@ def collect_empty_frame_analysis_results(root_dir: str) -> list:
             with open(file_path, encoding='utf-8') as f:
                 data = json.load(f)
 
-            # 获取场景名称（最近的包含ResourceUsage_PerformanceDynamic的目录）
+            # 获取场景名称（最近的包含PerfLoad_的目录）
             current_dir = os.path.dirname(file_path)
             scene_name = None
             while current_dir != root_dir:
-                if 'ResourceUsage_PerformanceDynamic' in os.path.basename(current_dir):
+                if 'PerfLoad_' in os.path.basename(current_dir):
                     scene_name = os.path.basename(current_dir)
                     break
                 current_dir = os.path.dirname(current_dir)
