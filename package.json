@@ -15,6 +15,7 @@
   "scripts": {
     "prebuild": "node scripts/prebuild.js",
     "build": "npm run prebuild && npm run build --ws",
+    "build:quick": "npm run prebuild && npm run build --workspace web --workspace tools/static_analyzer --workspace perf_testing",
     "release": "node scripts/release.js",
     "lint": "npm run lint --ws",
     "lint:fix": "npm run lint:fix --ws",
