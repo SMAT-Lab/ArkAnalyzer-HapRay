@@ -50,6 +50,11 @@ hapray-sa
 # HapTest generated test cases
 perf_testing/hapray/testcases/__haptest_generated__/
 
-# HapTest documentation (personal notes)
-perf_testing/hapray/haptest/GIT_GUIDE.md
+# HapTest documentation (personal notes, except README)
+perf_testing/hapray/haptest/*.md
+!perf_testing/hapray/haptest/README.md
 
+# Environment variables
+.env
+
+perf_testing/hapray/testcases/autoglm/

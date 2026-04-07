@@ -86,8 +86,8 @@ class HapTestAction:
             '--strategy',
             type=str,
             default='depth_first',
-            choices=['depth_first', 'breadth_first', 'random'],
-            help='Exploration strategy: depth_first (default), breadth_first, random',
+            choices=['depth_first', 'breadth_first', 'random', 'llm'],
+            help='Exploration strategy: depth_first (default), breadth_first, random, llm (LLM-based intelligent exploration)',
         )
 
         parser.add_argument('--max-steps', type=int, default=30, help='Maximum exploration steps (default: 30)')

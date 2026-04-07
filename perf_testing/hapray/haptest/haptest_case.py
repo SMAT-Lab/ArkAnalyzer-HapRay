@@ -161,7 +161,7 @@ class HapTest(PerfTestCase):
 
             # 添加状态到管理器
             is_new_state = self.state_mgr.add_state(ui_state)
-            Log.info(f'UI状态: {"新状态" if is_new_state else "已访问"}')
+            # Log.info(f'UI状态: {"新状态" if is_new_state else "已访问"}')
             Log.info(f'当前应用: {ui_state.current_bundle_name or "未知"}')
             Log.info(f'目标应用: {ui_state.app_package}')
             Log.info(f'在目标应用内: {"是" if ui_state.is_in_target_app() else "否"}')
@@ -188,6 +188,21 @@ class HapTest(PerfTestCase):
 
             # 执行操作并采集性能数据
             self._execute_action_with_perf(action_type, target)
+
+            # 如果使用LLM策略,在操作后更新深度
+            if hasattr(self.strategy.strategy, 'update_depth_after_action'):
+                # 等待UI稳定后获取新状态
+                time.sleep(1)
+                next_ui_state = self._get_next_ui_state()
+
+                # Pass full UIState objects, target, and report_path for visualization
+                self.strategy.strategy.update_depth_after_action(
+                    action_type,
+                    ui_state,
+                    next_ui_state,
+                    target,  # Pass target for visualization
+                    self.report_path  # Pass report_path for visualization
+                )
 
         Log.info('\n' + '='*60)
         Log.info('HapTest测试完成')
@@ -217,6 +232,30 @@ class HapTest(PerfTestCase):
             element_tree_path=element_tree_path,
             inspector_path=os.path.join(ui_dir, 'inspector_current.json'),
             app_package=self.app_package,
+            app_name=self.app_name,
+            current_bundle_name=current_bundle_name,
+        )
+    
+    def _get_next_ui_state(self) -> UIState:
+        """
+        获取执行操作后的UI状态
+        """
+        step_id = self.current_step
+        ui_dir = os.path.join(self.report_path, 'ui', f'step{step_id}')
+        os.makedirs(ui_dir, exist_ok=True)
+
+        # 从element_tree中提取当前bundleName
+        element_tree_path = os.path.join(ui_dir, 'element_tree_end_1.txt')
+        current_bundle_name = self._extract_bundle_name(element_tree_path)
+
+        # 创建UI状态对象
+        return UIState(
+            step_id=step_id,
+            screenshot_path=os.path.join(ui_dir, 'screenshot_end_1.png'),
+            element_tree_path=element_tree_path,
+            inspector_path=os.path.join(ui_dir, 'inspector_end.json'),
+            app_package=self.app_package,
+            app_name=self.app_name,
             current_bundle_name=current_bundle_name,
         )
 
