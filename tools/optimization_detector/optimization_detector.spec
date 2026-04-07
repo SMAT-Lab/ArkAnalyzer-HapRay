@@ -2,6 +2,7 @@
 from PyInstaller.utils.hooks import collect_all
 import os
 import platform
+import sys
 from pathlib import Path
 
 # 获取项目根目录
@@ -60,27 +61,24 @@ binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
 # 收集其他依赖
-# 收集 tensorflow-macos 和 tensorflow-metal (macOS 特定)
+# macOS：tensorflow-macos；tensorflow-metal 仅 Apple Silicon 可用，Intel 上打包会显著增大体积且无收益
 if platform.system() == 'Darwin':
-    # 收集 tensorflow-macos
     tmp_ret = collect_all('tensorflow_macos')
     datas += tmp_ret[0]
     binaries += tmp_ret[1]
     hiddenimports += tmp_ret[2]
-    
-    # 收集 tensorflow-metal
-    tmp_ret = collect_all('tensorflow_metal')
-    datas += tmp_ret[0]
-    binaries += tmp_ret[1]
-    hiddenimports += tmp_ret[2]
-    
-    # 添加 tensorflow-metal 的关键隐藏导入
-    hiddenimports += [
-        'tensorflow_metal',
-        'tensorflow_metal.python',
-        'tensorflow_metal.python.gpu',
-        'tensorflow_metal.python.gpu.device',
-    ]
+
+    if platform.machine() == 'arm64':
+        tmp_ret = collect_all('tensorflow_metal')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
+        hiddenimports += [
+            'tensorflow_metal',
+            'tensorflow_metal.python',
+            'tensorflow_metal.python.gpu',
+            'tensorflow_metal.python.gpu.device',
+        ]
 else:
     tmp_ret = collect_all('tensorflow')
     datas += tmp_ret[0]
@@ -93,10 +91,28 @@ datas += tmp_ret[0]
 binaries += tmp_ret[1]
 hiddenimports += tmp_ret[2]
 
+
+def _without_joblib_test(ds):
+    """collect_all('joblib') 会带上 joblib/test 下大量 .gz 等测试数据，运行时不需要，且会触发公证告警。"""
+    out = []
+    for entry in ds:
+        if isinstance(entry, tuple) and len(entry) >= 2:
+            dest = str(entry[1]).replace('\\', '/')
+            if 'joblib/test' in dest:
+                continue
+        out.append(entry)
+    return out
+
+
 tmp_ret = collect_all('joblib')
-datas += tmp_ret[0]
+datas += _without_joblib_test(tmp_ret[0])
 binaries += tmp_ret[1]
-hiddenimports += tmp_ret[2]
+def _is_joblib_test_submodule(name):
+    s = str(name)
+    return s == 'joblib.test' or s.startswith('joblib.test.')
+
+
+hiddenimports += [h for h in tmp_ret[2] if not _is_joblib_test_submodule(h)]
 
 # 不再收集 pkg_resources（已弃用，使用 importlib.metadata 和 importlib.resources 替代）
 # 如果某些依赖需要 pkg_resources，PyInstaller 会自动处理
@@ -165,6 +181,14 @@ hiddenimports += [
 ]
 
 runtime_hooks = []
+IS_WIN = sys.platform.startswith('win')
+IS_DARWIN = sys.platform == 'darwin'
+# macOS：UPX 压缩的 Mach-O 经 Developer ID 重签后公证常报「The signature of the binary is invalid」
+USE_UPX = IS_WIN
+# macOS：strip Mach-O 后再重签，公证常报 Python.framework signature invalid；Windows 不 strip PE
+STRIP_BINARIES = (not IS_WIN) and (not IS_DARWIN)
+# macOS：等价于 pyinstaller --codesign-identity；与 CI / Tauri 的 APPLE_SIGNING_IDENTITY 一致，未设置则不打签
+_CODESIGN_IDENTITY = (os.environ.get("APPLE_SIGNING_IDENTITY", "").strip() or None) if IS_DARWIN else None
 
 a = Analysis(
     ['cli.py'],
@@ -187,6 +211,9 @@ a = Analysis(
         'sphinx',
         'numpy.tests',
         'pandas.tests',
+        'scipy.tests',
+        'sklearn.tests',
+        'joblib.test',
         'pkg_resources',  # 排除已弃用的 pkg_resources，使用 importlib.metadata 和 importlib.resources 替代
     ],
     noarchive=False,
@@ -198,29 +225,19 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    exclude_binaries=True,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     name='opt-detector',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
+    strip=STRIP_BINARIES,
+    upx=USE_UPX,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
+    codesign_identity=_CODESIGN_IDENTITY,
     entitlements_file=None,
     runtime_tmpdir=None,
-    append_pkg=False,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='opt-detector',
 )

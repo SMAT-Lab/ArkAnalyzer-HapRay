@@ -15,7 +15,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import type { Step } from '../../core/perf/perf_analyzer';
 import type { GlobalConfig } from '../../config/types';
 
@@ -76,7 +76,7 @@ export abstract class AnalysisServiceBase {
      * 加载步骤信息
      */
     async loadSteps(basePath: string): Promise<Steps> {
-        const stepsJsonPath = path.join(basePath, 'hiperf', 'steps.json');
+        const stepsJsonPath = path.join(basePath, 'steps.json');
         return await this.loadJsonFile<Steps>(stepsJsonPath);
     }
 

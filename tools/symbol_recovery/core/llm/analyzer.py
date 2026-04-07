@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import signal
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +73,10 @@ class LLMFunctionAnalyzer:
         self.output_dir = Path(output_dir) if output_dir else config.get_output_dir()
         self.cache: dict[str, dict[str, Any]] = {}
         self.cache_file = llm_config['cache_file']
+
+        # 线程安全锁（供子类并发使用）
+        self._cache_lock = threading.Lock()
+        self._stats_lock = threading.Lock()
 
         # 设置 prompt 保存目录
         if self.save_prompts:

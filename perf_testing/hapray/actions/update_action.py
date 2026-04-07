@@ -21,6 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
@@ -32,7 +33,7 @@ class UpdateAction:
     """Handles report update actions for existing performance reports."""
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> ActionExecuteReturn:
         """Executes report update workflow."""
         parser = argparse.ArgumentParser(
             description='Update existing performance reports',
@@ -63,6 +64,26 @@ class UpdateAction:
             nargs='+',
             default=[],
             help='SIMPLE mode need perf paths (supports multiple files)',
+        )
+        parser.add_argument(
+            '--app-name',
+            default='',
+            help='SIMPLE mode optional app name',
+        )
+        parser.add_argument(
+            '--rom-version',
+            default='',
+            help='SIMPLE mode optional rom version',
+        )
+        parser.add_argument(
+            '--app-version',
+            default='',
+            help='SIMPLE mode optional app version',
+        )
+        parser.add_argument(
+            '--scene',
+            default='',
+            help='SIMPLE mode optional scene name',
         )
         parser.add_argument(
             '--traces',
@@ -108,6 +129,12 @@ class UpdateAction:
             metavar='HOMECHECK_DIR',
             help='Enable HapFlow pipeline and specify Homecheck root directory',
         )
+        parser.add_argument(
+            '--no-thread-analysis',
+            action='store_true',
+            default=False,
+            help='Disable redundant thread analysis (ThreadAnalyzer). By default thread analysis is enabled.',
+        )
         parsed_args = parser.parse_args(args)
 
         report_dir = os.path.abspath(parsed_args.report_dir)
@@ -116,12 +143,16 @@ class UpdateAction:
         Config.set('mode', parsed_args.mode)
         if not os.path.exists(report_dir) and Config.get('mode') == Mode.COMMUNITY:
             logging.error('Report directory not found: %s', report_dir)
-            return
+            return (1, '')
         if Config.get('mode') == Mode.SIMPLE:
             # 简单模式构造目录
             perf_paths = parsed_args.perfs
             trace_paths = parsed_args.traces
             pids = parsed_args.pids
+            app_name = parsed_args.app_name
+            app_version = parsed_args.app_version
+            rom_version = parsed_args.rom_version
+            scene = parsed_args.scene
 
             # if not perf_paths:
             #     logging.error('SIMPLE mode requires --perfs parameter')
@@ -136,7 +167,16 @@ class UpdateAction:
             timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
             report_dir = os.path.join(report_dir, timestamp)
             create_simple_mode_structure(
-                report_dir, perf_paths, trace_paths, package_name, pids=pids, steps_file_path=steps_file_path
+                report_dir,
+                perf_paths,
+                trace_paths,
+                package_name,
+                pids=pids,
+                steps_file_path=steps_file_path,
+                app_name=app_name,
+                app_version=app_version,
+                rom_version=rom_version,
+                scene=scene,
             )
         logging.info('Updating reports in: %s', report_dir)
         if so_dir:
@@ -146,7 +186,7 @@ class UpdateAction:
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
         if not testcase_dirs:
             logging.error('No valid test case reports found')
-            return
+            return (1, '')
 
         # Parse time ranges
         time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
@@ -164,6 +204,7 @@ class UpdateAction:
             export_comparison=parsed_args.export_comparison,
             symbol_statistic=parsed_args.symbol_statistic,
             time_range_strings=parsed_args.time_ranges,
+            enable_thread_analysis=not parsed_args.no_thread_analysis,
         )
 
         if parsed_args.hapflow:
@@ -174,6 +215,8 @@ class UpdateAction:
                 )
             except Exception as e:
                 logging.getLogger().exception('HapFlow pipeline failed: %s', e)
+
+        return (0, report_dir)
 
     @staticmethod
     def find_testcase_dirs(report_dir):
@@ -244,6 +287,7 @@ class UpdateAction:
         export_comparison: bool = False,
         symbol_statistic: str = None,
         time_range_strings: list[str] = None,
+        enable_thread_analysis: bool = True,
     ):
         """Processes reports using parallel execution.
 
@@ -255,6 +299,7 @@ class UpdateAction:
             export_comparison: Export comparison Excel for memory analysis
             symbol_statistic: Path to SymbolsStatistic.txt for symbol analysis (optional)
             time_range_strings: List of time range strings for symbol statistics (optional)
+            enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True.
         """
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
@@ -263,6 +308,7 @@ class UpdateAction:
                 export_comparison=export_comparison,
                 symbol_statistic=symbol_statistic,
                 time_range_strings=time_range_strings,
+                enable_thread_analysis=enable_thread_analysis,
             )
 
             for case_dir in testcase_dirs:

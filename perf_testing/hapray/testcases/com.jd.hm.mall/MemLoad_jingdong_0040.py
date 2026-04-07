@@ -39,7 +39,7 @@ class MemLoad_jingdong_0040(PerfTestCase):
 
         def step3():
             # 3.商品详情浏览：点击“HUAWEI Mate 70 Pro”（等待2s），上滑3次，下滑4次（间隔2s）
-            self.driver.touch(BY.text('HUAWEI Mate 70 Pro'), MatchPattern.STARTS_WITH, wait_time=2)
+            self.driver.touch(BY.text('HUAWEI Mate 70 Pro', MatchPattern.STARTS_WITH), wait_time=2)
             self.swipes_up(swip_num=3, sleep=2)
             self.swipes_down(swip_num=4, sleep=2)
 
@@ -58,8 +58,8 @@ class MemLoad_jingdong_0040(PerfTestCase):
         def step6():
             # 6.进入全部评价页面：向上滑动一次（等待2s），点击评价（等待2s），点击买家评价（等待2s）
             self.swipes_up(swip_num=1, sleep=2)
-            self.driver.touch(BY.text('评价'), wait_time=2)
-            self.driver.touch(BY.text('买家评价'), wait_time=2)
+            self.driver.touch(BY.text('大家评'), wait_time=2)
+            self.driver.touch(BY.text('买家评价', MatchPattern.STARTS_WITH), wait_time=2)
 
         def step7():
             # 7.评价页面浏览：上下滑动5次（间隔2s）

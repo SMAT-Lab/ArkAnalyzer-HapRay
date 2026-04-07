@@ -33,7 +33,7 @@ npm run lint
 ## Usage Guide
 
 ### Command Line Usage
-The tool provides seven main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, and `hilog` for hilog analysis.
+The tool provides eight main commands: `perf` for performance testing, `opt` for optimization detection, `static` for HAP static analysis, `update` for updating existing reports, `compare` for report comparison, `prepare` for simplified test execution, `hilog` for hilog analysis, and `gui-agent` for AI-powered phone automation.
 
 #### Performance Testing (`perf`)
 ```bash
@@ -120,39 +120,86 @@ python -m scripts.main prepare --run_testcases ResourceUsage_PerformanceDynamic_
 
 #### Optimization Detection (`opt`)
 ```bash
-python -m scripts.main opt -i <input> -o <output> [options]
+python hapray-gui/cmd.py opt -i <input> -o <output> [options]
 ```
+
+或者直接使用 opt-detector CLI：
+```bash
+cd tools/optimization_detector
+python cli.py -i <input> -o <output> [options]
+```
+
 Options:
 - `-i/--input <path>`: Directory/file containing binaries (.hap/.hsp/.apk/.so/.a)
 - `-o/--output <path>`: Output report path (default: binary_analysis_report.xlsx)
 - `-j/--jobs <N>`: Number of parallel jobs (default: 1)
-- `-r/--report_dir <path>`: Directory containing reports to analye invoked symbols (optional)
 - `--no-opt`: Disable optimization level (Ox) detection (default: enabled)
 - `--no-lto`: Disable LTO (Link-Time Optimization) detection (default: enabled)
+- `--verbose`: Show verbose logs
 
 **Default behavior**: Both Ox and LTO detection are enabled. Use `--no-opt` or `--no-lto` to disable them.
 
 Example:
 ```bash
 # Analyze binaries with 4 parallel jobs (Ox + LTO both enabled by default)
-python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -j4
+python hapray-gui/cmd.py opt -i build_output/ -o optimization_report.xlsx -j 4
 
 # Disable Ox detection, only run LTO detection
-python -m scripts.main opt -i build_output/ -o lto_only_report.xlsx --no-opt -j4
+python hapray-gui/cmd.py opt -i build_output/ -o lto_only_report.xlsx --no-opt -j 4
 
 # Disable LTO detection, only run Ox detection
-python -m scripts.main opt -i build_output/ -o ox_only_report.xlsx --no-lto -j4
-
-# Analyze binaries and analyze invoked symbols (Ox + LTO both enabled)
-python -m scripts.main opt -i build_output/ -o optimization_report.xlsx -r existing_reports/
+python hapray-gui/cmd.py opt -i build_output/ -o ox_only_report.xlsx --no-lto -j 4
 
 # Analyze APK file (Ox + LTO both enabled by default)
-python -m scripts.main opt -i app-release.apk -o apk_analysis_report.xlsx -j4
+python hapray-gui/cmd.py opt -i app-release.apk -o apk_analysis_report.xlsx -j 4
 
 # Analyze multiple APK files in a directory
-python -m scripts.main opt -i apk_files/ -o multi_apk_report.xlsx -j4
+python hapray-gui/cmd.py opt -i apk_files/ -o multi_apk_report.xlsx -j 4
+
+# Direct CLI usage (alternative method)
+cd tools/optimization_detector
+python cli.py -i build_output/ -o ../../optimization_report.xlsx -j 4
 ```
 For more detailed information about Optimization Detection, please refer to [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md)
+
+#### Thread Analysis (thread)
+线程分析（唤醒链 + 冗余线程/优化机会）有两种使用方式：
+
+**方式一：随报告管线自动运行（推荐）**  
+执行 `update` 生成或更新报告时，线程分析会作为内置 analyzer 自动执行，结果写入场景报告目录下的 `report/redundant_thread_analysis.json`，并汇总进 Excel 报告。
+```bash
+python -m scripts.main update --report_dir <report_directory> [--so_dir <so_directory>]
+```
+报告目录中需包含 `hiperf/stepN/pids.json`、`htrace/stepN/`、perf 数据等；线程分析会按每个 step 的 app PIDs 自动跑唤醒链与冗余分析。
+
+**方式二：独立 CLI（单 trace/perf DB + 指定 PIDs）**  
+若只有单个 trace 数据库（或 trace+perf 合一库）、且已知要分析的进程 PID，可直接跑线程分析脚本，无需完整 scene 目录：
+```bash
+cd standalone_tools/thread_analysis
+python thread_checker.py <trace_db_path> [perf_db_path] --app-pids <pid1> [pid2 ...] [options]
+```
+
+Options:
+- `trace_db_path`: Trace 数据库路径（必需）
+- `perf_db_path`: Perf 数据库路径（可选；若与 trace 同库可省略）
+- `--app-pids <pid1> [pid2 ...]`: 要分析的应用进程 PID 列表（必需）
+- `--output <path>`: 输出 JSON 路径（默认脚本目录下 thread_analysis.json）
+- `--time-range <START_TS> <END_TS>`: 时间范围（纳秒，可选）
+- `--skip-optimization`: 仅做唤醒链分析，不做冗余/优化分析
+- `--keep-all`: 输出中保留全部线程详情与完整 optimization_analysis
+- `--top-n <N>`: 控制台打印指令数前 N 个线程（默认 10）
+
+Example:
+```bash
+# 单库（trace 与 perf 在同一 DB）+ 单进程
+python thread_checker.py ../hiprofiler_data.db --app-pids 34542
+
+# 指定 trace 与 perf 两个 DB，多进程
+python thread_checker.py trace.db perf.db --app-pids 34542 37766 --output out/thread_report.json
+
+# 仅唤醒链，不做冗余优化分析
+python thread_checker.py trace.db perf.db --app-pids 34542 --skip-optimization
+```
 
 #### Static Analysis (`static`)
 ```bash
@@ -191,6 +238,7 @@ Options:
 - `--steps <path>`: Path to custom steps.json file (optional for SIMPLE mode)
 - `--time-ranges <range1> <range2> ...`: Time range filters in format "startTime-endTime" (nanoseconds), supports multiple ranges (optional)
 - `--hapflow <homecheck path>`: Run HapFlow post-processing using the exact Homecheck project root you provide (no auto-search).
+- `--no-thread-analysis`: Disable redundant thread analysis (ThreadAnalyzer). Thread analysis is **enabled by default**; use this flag to skip it (e.g. to speed up update when only other analyzers are needed).
 
 
 Example:
@@ -226,6 +274,137 @@ Example:
 ```bash
 # Specify output file
 python -m scripts.main compare --base_dir reports/base/ --compare_dir reports/compare/ --output my_compare.xlsx
+```
+
+#### GUI Agent Automation (`gui-agent`)
+```bash
+python -m scripts.main gui-agent [options]
+```
+Options:
+- `--apps <package1> [package2] ...`: Application package names (required, supports multiple packages)
+- `--scenes <scene1> [scene2] ...`: Multiple scenes to execute (optional, natural language descriptions). If not specified, scenes will be automatically loaded from config.yaml based on app category
+- `--glm-base-url <url>`: LLM API base URL (default: http://localhost:8000/v1, env: GLM_BASE_URL)
+- `--glm-model <name>`: Model name (default: autoglm-phone-9b, env: GLM_MODEL)
+- `--glm-api-key <key>`: API key for model authentication (env: GLM_API_KEY)
+- `--max-steps <N>`: Maximum steps per task (default: 20)
+- `--device-id <id>`: Device ID for multi-device setups
+- `-o/--output <path>`: Base path to save step data (default: current directory, creates timestamped reports subdirectory)
+
+Features:
+- **AI-powered automation**: Uses LLM to understand and execute natural language scenes
+- **Multi-app and multi-scene execution**: Support for testing multiple applications, each with multiple scenes
+- **Automatic scene categorization**: Automatically categorizes apps (ecommerce, finance, travel, video, etc.) and loads predefined scenes from config.yaml
+- **Step data collection**: Automatically collects UI data after each step (screenshots, element trees, perf/trace, hilog)
+- **Real-time analysis**: Parallel analysis process for performance analysis and report generation
+- **Automatic report organization**: Data is saved in `output/reports/TIMESTAMP/<app_package>/scene<ID>/` structure
+
+Environment Variables:
+- `GLM_BASE_URL`: Model API base URL (default: http://localhost:8000/v1)
+- `GLM_API_KEY`: API key for model authentication
+- `GLM_MODEL`: Model name (default: autoglm-phone-9b)
+
+**Using Third-Party Model Services**:
+
+If you don't want to deploy the model yourself, you can use the following third-party services that have our model deployed:
+
+**1. 智谱 BigModel (ZhipuAI BigModel)**
+
+- Documentation: https://docs.bigmodel.cn/cn/api/introduction
+- `--glm-base-url`: `https://open.bigmodel.cn/api/paas/v4`
+- `--glm-model`: `autoglm-phone`
+- `--glm-api-key`: Apply for your API Key on the 智谱 platform
+
+```bash
+python -m scripts.main gui-agent --app com.tencent.mm \
+  --glm-base-url "https://open.bigmodel.cn/api/paas/v4" \
+  --glm-model "autoglm-phone" \
+  --glm-api-key "your-zhipu-api-key" \
+  --output ./
+```
+
+**2. ModelScope (魔搭社区)**
+
+- Documentation: https://modelscope.cn/models/ZhipuAI/AutoGLM-Phone-9B
+- `--glm-base-url`: `https://api-inference.modelscope.cn/v1`
+- `--glm-model`: `ZhipuAI/AutoGLM-Phone-9B`
+- `--glm-api-key`: Apply for your API Key on the ModelScope platform
+
+```bash
+python -m scripts.main gui-agent --app com.tencent.mm \
+  --glm-base-url "https://api-inference.modelscope.cn/v1" \
+  --glm-model "ZhipuAI/AutoGLM-Phone-9B" \
+  --glm-api-key "your-modelscope-api-key" \
+  --output ./
+```
+
+**Basic Usage Examples**:
+```bash
+# Test single app with auto-loaded scenes (from config.yaml based on app category)
+python -m scripts.main gui-agent --app com.example.shopping --output ./
+
+# Test multiple apps
+python -m scripts.main gui-agent --app com.example.app1 com.example.app2 --output ./
+
+# Test with custom scenes
+python -m scripts.main gui-agent --app com.example.app \
+  --scenes "浏览首页，切换至少 3 个 Tab" "使用搜索功能搜索商品" --output ./
+
+# With custom model configuration
+python -m scripts.main gui-agent --app com.example.app \
+  --glm-base-url "http://your-server:8000/v1" \
+  --glm-model "your-model" \
+  --glm-api-key "your-api-key" \
+  --output ./
+
+# Using environment variables
+export GLM_BASE_URL="http://localhost:8000/v1"
+export GLM_API_KEY="your-api-key"
+export GLM_MODEL="autoglm-phone-9b"
+python -m scripts.main gui-agent --app com.example.app --output ./
+
+# Execute on specific device
+python -m scripts.main gui-agent --app com.example.app --device-id HX1234567890 --output ./
+
+# Limit execution steps
+python -m scripts.main gui-agent --app com.example.app --max-steps 10 --output ./
+```
+
+**Scene Configuration**:
+
+If you don't specify `--scenes`, the tool automatically categorizes apps based on package names and loads predefined scenes from `config.yaml`. Supported categories include:
+- `ecommerce`: E-commerce apps (taobao, tmall, jd, etc.)
+- `finance`: Finance apps (alipay, bank apps, etc.)
+- `travel`: Travel apps (amap, ctrip, etc.)
+- `video`: Video apps (douyin, kuaishou, bilibili, etc.)
+- `audio_reading`: Audio/reading apps (qqmusic, ximalaya, etc.)
+- `social`: Social apps (weibo, wechat, xiaohongshu, etc.)
+- `productivity`: Productivity tools (dingtalk, wps, etc.)
+- `news`: News apps
+- `photo_video_edit`: Photo/video editing apps
+- `education`: Education apps
+- `default`: Default scenes for other apps
+
+Scene configuration location: `perf_testing/hapray/core/config/config.yaml`
+Configuration node: `gui-agent.scenes.<category>`
+
+**Output Structure**:
+```
+output/
+└── reports/
+    └── YYYYMMDDHHMMSS/          # Timestamp directory
+        ├── <app_package_1>/
+        │   ├── scene1/
+        │   │   ├── steps.json          # Step information
+        │   │   ├── testInfo.json       # Test metadata
+        │   │   ├── hiperf/             # Performance data
+        │   │   ├── htrace/             # Trace data
+        │   │   └── report/              # Analysis reports
+        │   │       ├── hapray_report.html
+        │   │       ├── hapray_report.json
+        │   │       └── hapray_report.db
+        │   └── scene2/
+        └── <app_package_2>/
+            └── scene1/
 ```
 
 #### Hilog Analysis (`hilog`)
@@ -334,12 +513,15 @@ After removing quarantine attributes, you can run the executable:
 
 ### Dependencies
 - pip > 23.0.1
-- Python 3.9 ~ 3.12, 
+- Python version pinned in `.python-version` (currently **3.12**, managed by `uv`)
+- Node.js version pinned in `.nvmrc` / `package.json` engines (currently **24.x**, managed by `nvm`)
 - [Command Line Tools for HarmonyOS](https://developer.huawei.com/consumer/cn/download/) > 5.0.5
 
-> ⚠️ Please make sure that the default `python` command in your terminal points to a valid Python interpreter in the 3.9 ~ 3.12 range.
+> ⚠️ The project manages versions via `.nvmrc` and `.python-version`.
+> Please initialize the environment with the bootstrap scripts before running build/test commands.
 > You can verify this by running:
 > ```bash
+> node --version
 > python --version
 > ```
 
@@ -371,7 +553,7 @@ export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/defa
 ```
 ### MacOS Dependencies
 ```bash
-brew install git git-lfs python@3.11
+brew install git git-lfs python@3.12
 
 # Add Command Line Tools for HarmonyOS to PATH
 # export command_line_tools=[Command Line Tools for HarmonyOS] directory
@@ -383,26 +565,43 @@ export PATH=$PATH:$command_line_tools/tool/node/bin:$command_line_tools/sdk/defa
 # Initialize environment (only needed once)
 git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
+cd my-dev
+
+# Bootstrap Node.js + Python (nvm + uv)
+source ./bootstrap_env.sh
+
+# Install JS dependencies and build
 npm install
 npm run build
-# Activate the python virtual environment perf_testing/.venv
-source activate.sh
+# Activate the Python virtual environment (created under perf_testing by uv)
+cd perf_testing
+source .venv/bin/activate
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
 ```
 
 ### Windows Installation
-```bash
+```powershell
 # Initialize environment (only needed once)
 git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay
 cd ArkAnalyzer-HapRay/
+cd my-dev
+
+# Bootstrap Node.js + Python (nvm + uv)
+# Dot-source（. .\）与 bash 的 source 类似：在当前会话生效，无需再 nvm use
+. .\bootstrap_env.ps1
+
+# Install JS dependencies and build
 npm install
 npm run build
-# Command-Line(CMD) Alternative the python virtual environment perf_testing/.venv
-activate.bat
+# Activate virtual environment (PowerShell; venv lives under perf_testing)
+cd perf_testing
+.\.venv\Scripts\Activate.ps1
 # Configure test cases in config.yaml as needed. Comment out or delete cases you don't want to run.
 python -m scripts.main perf/opt/update [options]
 ```
+
+若只用 CMD，可运行 `bootstrap_env.bat`（会起子进程），装完后**新开**同一终端或再执行 `nvm use`。
 
 ## Detailed Explanation of the config.yaml configuration File in perf_testing:
 

@@ -58,3 +58,9 @@ perf_testing/hapray/haptest/*.md
 .env
 
 perf_testing/hapray/testcases/autoglm/
+=======
+# Desktop generated artifacts
+#desktop/src-tauri/Cargo.lock
+desktop/src-tauri/tools/
+
+>>>>>>> smat-gitcode/dev

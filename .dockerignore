@@ -1,0 +1,8 @@
+# 缩小 docker build 上下文（构建上下文为仓库根目录 my-dev/）
+.git
+**/node_modules
+**/.venv
+**/__pycache__
+desktop/src-tauri/target
+web/dist
+out

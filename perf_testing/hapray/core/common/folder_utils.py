@@ -26,7 +26,7 @@ from hapray.core.config.config import Config
 Log = platform_logger('FolderUtils')
 
 """
-扫描ResourceUsage_PerformanceDynamic_jingdong_0020_round0/hiperf
+扫描PerfLoad_jingdong_0020_round0/hiperf
 文件夹下是否每个step文件夹下都有perf.data
 
 """
@@ -42,7 +42,7 @@ def scan_folders(root_dir):
     hiperf_dir = root_dir_path / 'hiperf'
 
     # 读取 steps.json 获取步骤数量
-    steps_json = read_json_arrays_from_dir(str(hiperf_dir))
+    steps_json = read_json_arrays_from_dir(str(root_dir_path))
     if len(steps_json) == 0:
         return False
 

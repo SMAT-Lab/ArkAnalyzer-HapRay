@@ -17,6 +17,7 @@ import argparse
 import logging
 import os
 import shutil
+import sys
 import time
 import traceback
 from typing import Optional
@@ -24,6 +25,8 @@ from typing import Optional
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.path_utils import get_reports_root, get_runtime_root
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator
 
@@ -46,21 +49,21 @@ class HapTestAction:
     """Strategy-driven UI automation with performance capture"""
 
     @staticmethod
-    def execute(args) -> Optional[str]:
+    def execute(args) -> ActionExecuteReturn:
         """Execute HapTest automation
 
         Args:
             args: Command line arguments
 
         Returns:
-            Report path if successful, None otherwise
+            (exit_code, reports_path)
         """
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         if not check_env():
             logging.error(ENV_ERR_STR)
-            return None
+            return (1, '')
 
         parser = argparse.ArgumentParser(
             description='Strategy-driven UI automation with perf/trace capture', prog='ArkAnalyzer-HapRay haptest'
@@ -80,7 +83,9 @@ class HapTestAction:
 
         parser.add_argument('--app-name', type=str, required=True, help='Readable application name (e.g., "示例应用")')
 
-        parser.add_argument('--ability-name', type=str, default=None, help='Main ability name (optional, auto-detect if not specified)')
+        parser.add_argument(
+            '--ability-name', type=str, default=None, help='Main ability name (optional, auto-detect if not specified)'
+        )
 
         parser.add_argument(
             '--strategy',
@@ -115,9 +120,11 @@ class HapTestAction:
         if parsed.no_perf:
             Config.set('hiperf.disabled', True)
 
-        root_path = os.getcwd()
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        reports_path = os.path.join(root_path, 'reports', f'haptest_{parsed.app_package}_{timestamp}')
+        # 保持旧逻辑：输出仍在 reports/ 下（相对 cwd）
+        # macOS 下 get_reports_root() 会落到 ~/ArkAnalyzer-HapRay/reports，避免 cwd 只读
+        reports_root = str(get_reports_root())
+        reports_path = os.path.join(reports_root, f'haptest_{parsed.app_package}_{timestamp}')
         os.makedirs(reports_path, exist_ok=True)
 
         logging.info('=' * 60)
@@ -151,9 +158,9 @@ class HapTestAction:
             logging.info('HapTest Automation Completed Successfully')
             logging.info('Reports: %s', reports_path)
             logging.info('=' * 60)
-            return reports_path
+            return (0, reports_path)
         logging.error('HapTest Automation Failed')
-        return None
+        return (1, '')
 
 
 class HapTestRunner:
@@ -183,7 +190,11 @@ class HapTestRunner:
 
     def _create_test_case(self):
         """Dynamically create HapTest case file and JSON config"""
-        case_dir = os.path.join(os.path.dirname(__file__), '..', 'testcases', '__haptest_generated__')
+        # macOS 下仓库目录可能不可写；生成用例文件固定放到用户目录 runtime 下
+        if sys.platform == 'darwin':
+            case_dir = str(get_runtime_root() / 'testcases' / '__haptest_generated__')
+        else:
+            case_dir = os.path.join(os.path.dirname(__file__), '..', 'testcases', '__haptest_generated__')
         os.makedirs(case_dir, exist_ok=True)
 
         case_name = f'HapTest_{self.app_package.replace(".", "_")}'

@@ -17,6 +17,7 @@ import argparse
 import base64
 import logging
 import os
+import sys
 import time
 from typing import Optional
 
@@ -25,6 +26,8 @@ from hypium import UiDriver
 from hapray import VERSION
 from hapray.analyze.ui_analyzer import UIAnalyzer
 from hapray.core.collection.capture_ui import CaptureUI
+from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.path_utils import get_user_data_root
 
 
 class UIAction:
@@ -404,10 +407,10 @@ class UIAction:
             return False
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> ActionExecuteReturn:
         """执行UI分析工作流"""
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         parser = argparse.ArgumentParser(
             description='应用UI独立入口 - dump组件树、截屏、UI动画分析和HTML报告生成',
@@ -441,13 +444,16 @@ class UIAction:
 
         # 创建输出目录
         output_dir = os.path.abspath(parsed_args.output)
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            output_dir = str(get_user_data_root('ui_output') / os.path.basename(output_dir))
         os.makedirs(output_dir, exist_ok=True)
 
         # 创建UIAction实例并执行
         action = UIAction(output_dir, device_sn=parsed_args.device)
         success = action.run()
 
-        return output_dir if success else None
+        return (0, output_dir) if success else (1, '')
 
 
 if __name__ == '__main__':

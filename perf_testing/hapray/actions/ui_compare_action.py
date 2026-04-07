@@ -18,8 +18,11 @@ import base64
 import glob
 import logging
 import os
+import sys
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.ui_detector.ui_tree_comparator import UITreeComparator
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -73,7 +76,7 @@ class UICompareAction:
             return ''
 
     @staticmethod
-    def execute(args):
+    def execute(args) -> ActionExecuteReturn:
         """执行UI对比"""
         parser = argparse.ArgumentParser(
             description='UI组件树对比工具 - 对比两个报告的UI组件树',
@@ -97,10 +100,14 @@ class UICompareAction:
         # 验证目录
         if not os.path.exists(parsed_args.base_dir):
             logging.error(f'基准目录不存在: {parsed_args.base_dir}')
-            return None
+            return (1, '')
         if not os.path.exists(parsed_args.compare_dir):
             logging.error(f'对比目录不存在: {parsed_args.compare_dir}')
-            return None
+            return (1, '')
+
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            parsed_args.output = str(get_user_data_root('ui_compare_output') / os.path.basename(parsed_args.output))
 
         # 自动查找UI文件
         base_files = UICompareAction._find_ui_files(parsed_args.base_dir)
@@ -108,10 +115,10 @@ class UICompareAction:
 
         if not base_files:
             logging.error(f'基准目录未找到UI文件: {parsed_args.base_dir}')
-            return None
+            return (1, '')
         if not compare_files:
             logging.error(f'对比目录未找到UI文件: {parsed_args.compare_dir}')
-            return None
+            return (1, '')
 
         # 对比所有共同的step
         all_results = {}
@@ -120,7 +127,7 @@ class UICompareAction:
         common_steps = set(base_files.keys()) & set(compare_files.keys())
         if not common_steps:
             logging.error('两个报告没有共同的step')
-            return None
+            return (1, '')
 
         for step in sorted(common_steps):
             logging.info(f'正在对比 {step}...')
@@ -170,7 +177,7 @@ class UICompareAction:
         logging.info('所有对比完成')
         logging.info(f'HTML报告: {html_path}')
 
-        return all_results
+        return (0, os.path.abspath(parsed_args.output))
 
     @staticmethod
     def _generate_html_report(results: dict, output_path: str, base_dir: str, compare_dir: str):

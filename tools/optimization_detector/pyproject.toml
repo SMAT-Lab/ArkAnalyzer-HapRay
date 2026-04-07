@@ -29,10 +29,13 @@ classifiers = [
 dependencies = [
     "numpy==1.26.4",
     "pandas==2.3.3",
-    # TensorFlow 依赖：macOS 使用 tensorflow-macos，其他平台使用标准 tensorflow
-    "tensorflow==2.16.2; platform_system != 'Darwin'",
-    "tensorflow-macos==2.16.2; platform_system == 'Darwin'",
-    "tensorflow-metal>=1.0.0; platform_system == 'Darwin'",
+    # TensorFlow：Windows/Linux 及 macOS Intel 使用标准 tensorflow，
+    # macOS + arm64 使用 tensorflow-macos，macOS 上统一配合 tensorflow-metal 做加速
+    "tensorflow==2.16.2; (platform_system != 'Darwin') or (platform_system == 'Darwin' and platform_machine != 'arm64')",
+    "tensorflow-macos==2.16.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "tensorflow-metal>=1.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "tensorflow-io-gcs-filesystem==0.31.0; sys_platform == 'win32' and python_full_version < '3.12'",
+    "tensorflow-io-gcs-filesystem==0.37.1; sys_platform != 'win32' and python_full_version < '3.12'",
     "tqdm>=4.67.1",
     "pyelftools>=0.32",
     "arpy~=2.3.0",

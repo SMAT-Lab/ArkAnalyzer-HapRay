@@ -16,17 +16,19 @@ limitations under the License.
 import argparse
 import logging
 import os
-from typing import Optional
+import sys
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.path_utils import get_user_data_root
 
 
 class StaticAction:
     """Handles HAP static analysis actions."""
 
     @staticmethod
-    def execute(args) -> Optional[int]:
+    def execute(args) -> ActionExecuteReturn:
         """Executes HAP static analysis workflow."""
         parser = argparse.ArgumentParser(
             description='Static analysis for HAP packages - analyzing SO files and resources',
@@ -61,7 +63,11 @@ class StaticAction:
         # 验证输入文件
         if not os.path.exists(parsed_args.input):
             logging.error(f'Input file does not exist: {parsed_args.input}')
-            return 1
+            return (1, '')
+
+        # macOS 下避免 cwd 只读：无论是否显式传参，输出均落到用户目录下
+        if sys.platform == 'darwin':
+            parsed_args.output = str(get_user_data_root('static-output') / os.path.basename(parsed_args.output))
 
         # 构建命令参数
         cmd_args = [
@@ -93,9 +99,9 @@ class StaticAction:
 
         if success:
             logging.info('Static analysis completed successfully')
-            return 0
+            return (0, '')
         logging.error('Static analysis failed')
-        return 1
+        return (1, '')
 
     @staticmethod
     def get_help_text():

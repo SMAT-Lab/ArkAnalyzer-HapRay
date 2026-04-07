@@ -15,11 +15,25 @@
 
 import fs from 'fs';
 import path from 'path';
-import Logger, { LOG_MODULE_TYPE } from 'arkanalyzer/lib/utils/logger';
+import { execSync } from 'child_process';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 import { runCommand, runCommandSync } from '../../utils/exe_utils';
 import { getConfig } from '../../config';
 
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
+
+function findOnPath(executableName: string): string | null {
+    try {
+        if (process.platform === 'win32') {
+            const line = execSync(`where ${executableName}`, { encoding: 'utf-8' }).trim().split(/\r?\n/)[0];
+            return line && fs.existsSync(line) ? line : null;
+        }
+        const line = execSync(`which ${executableName}`, { encoding: 'utf-8' }).trim();
+        return line && fs.existsSync(line) ? line : null;
+    } catch {
+        return null;
+    }
+}
 
 function initTools(): string {
     let toolName = '';
@@ -34,7 +48,24 @@ function initTools(): string {
         throw new Error('os not support');
     }
 
-    let toolCmd = path.join(getConfig().extToolsPath, 'trace_streamer_binary', toolName);
+    const fromPath = findOnPath(toolName);
+    if (fromPath) {
+        if (process.platform === 'linux' || process.platform === 'darwin') {
+            runCommandSync('chmod', ['+x', fromPath]);
+        }
+        return fromPath;
+    }
+
+    const bundled = path.join(getConfig().extToolsPath, 'bin', toolName);
+    const legacyNested = path.join(getConfig().extToolsPath, 'bin', 'trace_streamer_binary', toolName);
+    const legacy = path.join(getConfig().extToolsPath, 'trace_streamer_binary', toolName);
+    let toolCmd = bundled;
+    if (!fs.existsSync(toolCmd) && fs.existsSync(legacyNested)) {
+        toolCmd = legacyNested;
+    }
+    if (!fs.existsSync(toolCmd) && fs.existsSync(legacy)) {
+        toolCmd = legacy;
+    }
     if (fs.existsSync(toolCmd)) {
         if (process.platform === 'linux' || process.platform === 'darwin') {
             runCommandSync('chmod', ['+x', toolCmd]);

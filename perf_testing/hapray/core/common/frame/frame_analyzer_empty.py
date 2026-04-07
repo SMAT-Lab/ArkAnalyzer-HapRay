@@ -15,6 +15,7 @@ limitations under the License.
 
 import logging
 import time
+import traceback
 from bisect import bisect_left
 from collections import defaultdict
 from typing import Optional
@@ -355,7 +356,7 @@ class EmptyFrameAnalyzer:
     def _calculate_frame_loads(self, trace_df: pd.DataFrame, perf_df: pd.DataFrame, timing_stats: dict) -> list:
         """阶段2.1：计算帧的浪费的进程级别的CPU指令数
 
-        对于每个空刷帧，计算其在[ts, ts+dur]时间范围内（扩展±1ms）的进程级别CPU浪费。
+        对于每个空刷帧，计算其在[ts, ts+dur]时间范围内的进程级别CPU浪费（不使用时间扩展）。
         进程级别意味着统计该进程所有线程的CPU指令数，不区分具体线程。
 
         注意：调用链分析（阶段2.2）会在此基础上对Top N帧进行详细分析。
@@ -633,12 +634,20 @@ class EmptyFrameAnalyzer:
     def _filter_false_positives(self, trace_df: pd.DataFrame, trace_conn) -> pd.DataFrame:
         """过滤假阳性帧（对所有flag=2帧进行过滤）
 
-        假阳性定义：flag=2的帧，但通过NativeWindow API成功提交了内容
+        假阳性定义：
+        1. NativeWindow API 假阳性：flag=2的帧，但通过NativeWindow API成功提交了内容
+        2. 重复vsync假阳性：flag=2的帧，但同一vsync+同一线程(itid)上存在flag=0或flag=1的帧，
+           说明该vsync实际上已经成功绘制，flag=2只是硬件重复发送vsync信号导致的
 
         检测方法：
+        规则1 - NativeWindow API:
         1. 预加载 NativeWindow API 事件（RequestBuffer, FlushBuffer等）
         2. 对每个 flag=2 帧，检查帧时间范围内是否有NativeWindow API提交事件
         3. 如果有，标记为假阳性并从DataFrame中过滤
+
+        规则2 - 重复vsync:
+        1. 查询frame_slice表，找出所有与flag=2帧共享vsync+itid但flag!=2的帧
+        2. 如果存在，说明该vsync信号已被正常处理，flag=2是硬件重复导致的假阳性
 
         Args:
             trace_df: 包含flag=2帧的DataFrame
@@ -650,6 +659,9 @@ class EmptyFrameAnalyzer:
         if trace_df.empty:
             return trace_df
 
+        original_count = len(trace_df)
+
+        # ========== 规则1：NativeWindow API 假阳性过滤 ==========
         # 计算时间范围
         # 注意：处理dur可能为NaN的情况，并确保类型为int
         min_ts = int(trace_df['ts'].min())
@@ -691,10 +703,8 @@ class EmptyFrameAnalyzer:
         for itid in nw_events_cache:
             nw_events_cache[itid].sort()
 
-        # logging.info(f'预加载NativeWindow API事件: {len(nw_records)}条记录, {len(nw_events_cache)}个线程')
-
-        # 过滤假阳性（使用DataFrame操作）
-        def is_false_positive(row):
+        # 过滤NativeWindow API假阳性
+        def is_nw_false_positive(row):
             try:
                 frame_itid = row['itid']
                 frame_start = row['ts']
@@ -707,21 +717,82 @@ class EmptyFrameAnalyzer:
                         return True
                 return False
             except Exception:
-                # 如果检查过程中出现异常，记录日志但不标记为假阳性（保守策略）
-                # logging.warning(f'假阳性检查异常: {e}, row={row.to_dict() if hasattr(row, "to_dict") else row}')
                 return False
 
-        # 标记假阳性
-        false_positive_mask = trace_df.apply(is_false_positive, axis=1)
-        false_positive_mask.sum()
+        nw_false_positive_mask = trace_df.apply(is_nw_false_positive, axis=1)
+        nw_fp_count = nw_false_positive_mask.sum()
+        trace_df = trace_df[~nw_false_positive_mask].copy()
 
-        # 过滤假阳性
-        return trace_df[~false_positive_mask].copy()
+        # ========== 规则2：重复vsync假阳性过滤 ==========
+        # 硬件可能对同一vsync信号重复发送2-3次，导致frame_slice中出现多条相同vsync的记录。
+        # 例如 vsync=1000 出现3行：flag=0(正常), flag=1(卡帧), flag=2(空刷)。
+        # 其中flag=2并非真正的空刷，而是重复vsync信号没有新内容可绘制。
+        # 检测方法：查询同vsync+同itid下是否存在flag!=2的帧（说明该vsync已正常绘制）。
+        dup_vsync_fp_count = 0
+        if not trace_df.empty and 'vsync' in trace_df.columns and 'itid' in trace_df.columns:
+            # 收集所有需要检查的(vsync, itid)组合
+            vsync_itid_pairs = set()
+            for _, row in trace_df.iterrows():
+                vsync_val = row.get('vsync')
+                itid_val = row.get('itid')
+                if vsync_val is not None and not pd.isna(vsync_val) and itid_val is not None and not pd.isna(itid_val):
+                    vsync_itid_pairs.add((int(vsync_val), int(itid_val)))
 
-        # logging.info(
-        # f'假阳性过滤: 过滤前={len(trace_df)}, 过滤后={len(filtered_df)}, '
-        # f'假阳性={false_positive_count} ({false_positive_count/len(trace_df)*100:.1f}%)'
-        # )
+            if vsync_itid_pairs:
+                # 批量查询：找出哪些(vsync, itid)组合在frame_slice中存在flag!=2的帧
+                # 使用分批查询避免SQL参数过多
+                dup_vsync_set = set()  # 存储有重复的(vsync, itid)组合
+                batch_size = 200
+                pairs_list = list(vsync_itid_pairs)
+
+                for i in range(0, len(pairs_list), batch_size):
+                    batch = pairs_list[i : i + batch_size]
+                    # 构建WHERE条件：(vsync = ? AND itid = ?) OR (vsync = ? AND itid = ?) ...
+                    conditions = ' OR '.join(['(fs.vsync = ? AND fs.itid = ?)'] * len(batch))
+                    params = []
+                    for vsync_val, itid_val in batch:
+                        params.extend([vsync_val, itid_val])
+
+                    dup_query = f"""
+                    SELECT DISTINCT fs.vsync, fs.itid
+                    FROM frame_slice fs
+                    WHERE ({conditions})
+                    AND fs.flag != 2
+                    AND fs.type = 0
+                    """
+                    try:
+                        cursor = trace_conn.cursor()
+                        cursor.execute(dup_query, params)
+                        for vsync_val, itid_val in cursor.fetchall():
+                            dup_vsync_set.add((int(vsync_val), int(itid_val)))
+                    except Exception as e:
+                        logging.warning(f'重复vsync查询失败: batch_size={len(batch)}, error={e}')
+
+                if dup_vsync_set:
+                    # 标记重复vsync假阳性
+                    def is_dup_vsync_false_positive(row):
+                        try:
+                            vsync_val = row.get('vsync')
+                            itid_val = row.get('itid')
+                            if vsync_val is None or pd.isna(vsync_val) or itid_val is None or pd.isna(itid_val):
+                                return False
+                            return (int(vsync_val), int(itid_val)) in dup_vsync_set
+                        except Exception:
+                            return False
+
+                    dup_vsync_mask = trace_df.apply(is_dup_vsync_false_positive, axis=1)
+                    dup_vsync_fp_count = dup_vsync_mask.sum()
+                    trace_df = trace_df[~dup_vsync_mask].copy()
+
+        # 记录过滤结果
+        total_fp_count = nw_fp_count + dup_vsync_fp_count
+        if total_fp_count > 0:
+            logging.info(
+                f'假阳性过滤: 过滤前={original_count}, 过滤后={len(trace_df)}, '
+                f'NativeWindow假阳性={nw_fp_count}, 重复vsync假阳性={dup_vsync_fp_count}'
+            )
+
+        return trace_df
 
     def _analyze_top_frames_wakeup_chain(self, frame_loads: list, trace_df: pd.DataFrame, trace_conn) -> None:
         """对Top N帧进行唤醒链分析，填充wakeup_threads字段
@@ -1821,16 +1892,14 @@ class EmptyFrameAnalyzer:
         if merged_time_ranges:
             recalc_start = time.time()
 
-            # 扩展合并后的时间范围（±1ms），与 frame_load 计算保持一致
-            extended_merged_ranges = []
-            for start_ts, end_ts in merged_time_ranges:
-                extended_start = start_ts - 1_000_000
-                extended_end = end_ts + 1_000_000
-                extended_merged_ranges.append((extended_start, extended_end))
+            # 注意：不使用时间扩展（±1ms），与 frame_load 计算保持一致
+            # 在 _calculate_all_frame_loads_batch 中已经移除了时间扩展，避免负载偏高
+            # 因此去重计算也应该使用原始时间范围，确保一致性
 
             # 优化：合并4次查询为1次，在应用层分组计算
             deduplicated_result = self.cache_manager.get_all_thread_loads_with_info_for_pids(
-                self.cache_manager.app_pids, time_ranges=extended_merged_ranges
+                self.cache_manager.app_pids,
+                time_ranges=merged_time_ranges,  # 使用原始时间范围，不扩展
             )
 
             deduplicated_empty_frame_load = deduplicated_result['total_load']
@@ -1841,7 +1910,7 @@ class EmptyFrameAnalyzer:
             recalc_time = time.time() - recalc_start
             timing_stats['recalc_deduplicated_loads'] = recalc_time
             logging.info(
-                f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(extended_merged_ranges)}个)'
+                f'去重负载重新计算耗时: {recalc_time:.3f}秒 (优化方法-1次查询, 时间范围: {len(merged_time_ranges)}个)'
             )
 
         # 保存原始 empty_frame_load 到 timing_stats（用于日志对比）
@@ -1874,16 +1943,85 @@ class EmptyFrameAnalyzer:
             except Exception:
                 pass
 
+        # === 统计空刷帧中的系统进程负载（用于结果JSON分析，不用于空刷率计算） ===
+        # 统计真实的系统进程负载，用于分析空刷帧中系统进程的CPU消耗情况
+        # 注意：此值不用于空刷率计算（不影响分母total_load），仅用于结果展示和分析
+        system_load_in_empty_frames = 0  # 空刷帧中的系统进程负载（初始化为0）
+
+        # 统计frame_loads中系统进程的负载
+        if deduplicated_empty_frame_load is not None:
+            # 使用去重后的值，需要从原始frame_loads中统计系统进程负载
+            original_sum = int(sum(f['frame_load'] for f in frame_loads)) if frame_loads else 0
+            if original_sum > 0:
+                deduplication_ratio = deduplicated_empty_frame_load / original_sum
+                for f in frame_loads:
+                    process_name = f.get('process_name', '')
+                    if process_name and is_system_thread(process_name, None):
+                        system_frame_load = f.get('frame_load', 0)
+                        # 按去重比例缩放系统进程负载
+                        system_load_in_empty_frames += int(system_frame_load * deduplication_ratio)
+        else:
+            # 未去重，直接累加
+            for f in frame_loads:
+                process_name = f.get('process_name', '')
+                if process_name and is_system_thread(process_name, None):
+                    system_load_in_empty_frames += f.get('frame_load', 0)
+
+        if system_load_in_empty_frames > 0:
+            logging.info(f'检测到空刷帧中包含系统进程负载: {system_load_in_empty_frames:,}')
+
+        # === 如果空刷帧中包含系统进程负载，需要将系统进程在整个trace的负载累加到分母 ===
+        # 否则会导致空刷率偏大（分母偏小）
+        system_load_in_total_trace = 0
+        if system_load_in_empty_frames > 0 and self.cache_manager and self.cache_manager.trace_conn:
+            try:
+                # 从frame_loads中收集系统进程名
+                system_process_names = set()
+                for f in frame_loads:
+                    process_name = f.get('process_name', '')
+                    if process_name and is_system_thread(process_name, None):
+                        system_process_names.add(process_name)
+
+                if system_process_names:
+                    # 查找系统进程的PID
+                    trace_cursor = self.cache_manager.trace_conn.cursor()
+                    placeholders = ','.join('?' * len(system_process_names))
+                    trace_cursor.execute(
+                        f"""
+                        SELECT DISTINCT p.pid
+                        FROM process p
+                        WHERE p.name IN ({placeholders})
+                        """,
+                        list(system_process_names),
+                    )
+                    system_pids = [row[0] for row in trace_cursor.fetchall() if row[0] is not None]
+
+                    if system_pids:
+                        # 计算系统进程在整个trace的负载
+                        system_load_in_total_trace = self.cache_manager.get_total_load_for_pids(system_pids)
+                        total_load += system_load_in_total_trace
+                        logging.info(
+                            f'检测到系统进程负载: 空刷帧中系统负载={system_load_in_empty_frames:,}, '
+                            f'系统进程={list(system_process_names)}, PIDs={system_pids}, '
+                            f'整个trace中系统负载={system_load_in_total_trace:,}, '
+                            f'更新后total_load={total_load:,}'
+                        )
+            except Exception as e:
+                logging.warning(f'计算系统进程负载失败: {e}')
+                traceback.print_exc()
+
         # === 使用公共模块构建基础结果 ===
         base_result = self.result_builder.build_result(
             frame_loads=frame_loads,
-            total_load=total_load,  # total_load 保持不变（整个trace的CPU）
+            total_load=total_load,
             detection_stats=detection_stats,  # 传递检测统计信息
             deduplicated_empty_frame_load=deduplicated_empty_frame_load,  # 传递去重后的 empty_frame_load
             deduplicated_main_thread_load=deduplicated_main_thread_load,  # 传递去重后的主线程负载
             deduplicated_background_thread_load=deduplicated_background_thread_load,  # 传递去重后的后台线程负载
             deduplicated_thread_loads=deduplicated_thread_loads,  # 传递去重后的所有线程负载
             tid_to_info=tid_to_info,  # 传递线程信息映射
+            system_load_in_empty_frames=system_load_in_empty_frames,  # 传递空刷帧中的系统进程负载（用于结果JSON分析）
+            system_load_in_total_trace=system_load_in_total_trace,  # 传递系统进程在整个trace的负载（已累加到total_load中）
         )
 
         # 注意：timing_stats 仅用于调试日志，不添加到最终结果中

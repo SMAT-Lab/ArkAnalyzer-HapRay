@@ -40,8 +40,9 @@ class PackPlugin {
                         if (!entry.isDirectory) {
                             const entryPath = entry.entryName;
                             const content = zip.readFile(entry);
-                            // 将文件添加到 tools/ 目录下
-                            archive.append(content, { name: `tools/${entryPath}` });
+                            // 与 dist/tools/bin 扁平布局一致：解压 zip 内 trace_streamer_binary/ 到 tools/bin/
+                            const flat = entryPath.replace(/^trace_streamer_binary[/\\]?/i, '');
+                            archive.append(content, { name: `tools/bin/${flat}` });
                         }
                     });
                 } catch (error) {
@@ -85,7 +86,6 @@ module.exports = {
                 { from: 'res', to: 'res' },
                 { from: 'plugin.json', to: 'plugin.json' },
                 { from: '../../node_modules/bjc/res', to: 'res'},
-                { from: '../../node_modules/arkanalyzer/config/', to: 'config' },
                 { from: 'README.md', to: 'README.md' },
                 {
                     from: 'src/core/elf/demangle-wasm.wasm',

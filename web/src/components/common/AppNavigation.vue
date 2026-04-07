@@ -2,7 +2,7 @@
   <div class="sidebar-navigation" :class="{ collapsed: isCollapsed }">
     <div class="logo-section" @click="goToHome">
       <!-- <h2 v-show="!isCollapsed" class="app-title">ArkAnalyzer</h2> -->
-      <h2 v-show="!isCollapsed" class="app-title">HapRay</h2>
+      <h2 v-show="!isCollapsed" class="app-title">ArkAnalyzer-HapRay</h2>
       <div v-show="isCollapsed" class="logo-icon">H</div>
     </div>
 
@@ -32,6 +32,15 @@
               <PieChart />
             </el-icon>
             <span>负载总览</span>
+          </el-menu-item>
+        </el-tooltip>
+
+        <el-tooltip effect="dark" content="分析总结" placement="right" :disabled="!isCollapsed">
+          <el-menu-item index="summary_overview">
+            <el-icon>
+              <DataBoard />
+            </el-icon>
+            <span>分析总结</span>
           </el-menu-item>
         </el-tooltip>
 
@@ -93,7 +102,14 @@
               <el-icon>
                 <VideoPlay />
               </el-icon>
-              <span>UI 动画分析</span>
+              <span>UI 分析</span>
+            </el-menu-item>
+
+            <el-menu-item v-if="getHasLogData(step.id)" :index="`hilog_step_${step.id}`" :title="step.step_name">
+              <el-icon>
+                <Document />
+              </el-icon>
+              <span>日志分析</span>
             </el-menu-item>
           </el-sub-menu>
         </el-sub-menu>
@@ -370,6 +386,18 @@ const checkPerfData = (stepId: number) => {
 // 获取步骤是否有Perf数据
 const getHasPerfData = (stepId: number): boolean => {
   return perfDataCache.value[stepId] || false;
+};
+
+// 获取步骤是否有日志分析数据（来自 summary）
+const getHasLogData = (stepId: number): boolean => {
+  const summary = jsonDataStore.summary as Array<{ step_id?: string; log?: Record<string, unknown> }> | undefined;
+  if (!summary || !Array.isArray(summary)) return false;
+  const getStepIndex = (stepIdStr: string) => {
+    const match = String(stepIdStr).match(/step(\d+)/);
+    return match ? Number(match[1]) : null;
+  };
+  const item = summary.find((s) => getStepIndex(s.step_id ?? '') === stepId);
+  return !!(item?.log && Object.keys(item.log).length > 0);
 };
 
 // 当步骤改变时，检查Memory数据

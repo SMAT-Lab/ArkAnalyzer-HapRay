@@ -4,20 +4,29 @@
   "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
   "version": "1.0.0",
   "author": "HapRay Team",
+  "tool_contract": {
+    "enabled": true,
+    "result_file": "hapray-tool-result.json",
+    "machine_json": false
+  },
   "execution": {
     "debug": {
       "cmd": ["node -r ts-node/register "],
       "script": "src/cli/index.ts"
     },
     "release": {
-      "cmd": ["node"],
-      "script": "hapray-sa-cmd.js"
+      "cmd": ["hapray-sa-cmd", "hapray-sa-cmd.exe"]
     }
   },
   "actions": {
     "static": {
       "name": "静态分析",
       "description": "HAP静态分析，分析HAP/ZIP文件或目录中的框架与资源",
+      "menu": {
+        "menu1": "应用分析",
+        "order": 2,
+        "icon": "📱"
+      },
       "action_mapping": {
         "type": "map",
         "command": ["hapray", "hap"]
@@ -39,18 +48,10 @@
           "help": "输出目录路径"
         },
         "jobs": {
-          "type": "str",
+          "type": "int",
           "label": "并发数量",
           "required": false,
-          "default": "auto",
           "help": "并发分析数量，默认为CPU核心数"
-        },
-        "include_details": {
-          "type": "bool",
-          "label": "包含详细信息",
-          "required": false,
-          "default": false,
-          "help": "是否包含详细信息"
         }
       }
     }

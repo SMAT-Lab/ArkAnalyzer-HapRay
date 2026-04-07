@@ -1,0 +1,427 @@
+//! CLI 模式 - 无 UI 命令行执行
+//!
+//! 用法: ArkAnalyzer-HapRay <action> [--param value]...
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use desktop_lib::{common, execution, plugins::load_plugins_with_log};
+
+// -----------------------------------------------------------------------------
+// 类型定义
+// -----------------------------------------------------------------------------
+
+/// 解析后的 CLI 运行参数
+struct CliRunRequest {
+    plugin_id: String,
+    action: String,
+    params: HashMap<String, serde_json::Value>,
+}
+
+// -----------------------------------------------------------------------------
+// 路径解析
+// -----------------------------------------------------------------------------
+
+fn plugins_dir_from_workspace() -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace = manifest.parent()?.parent()?;
+        [workspace.join("dist").join("tools"), workspace.join("tools")]
+            .into_iter()
+            .find(|p| p.exists())
+    }
+    #[cfg(not(debug_assertions))]
+    None
+}
+
+/// 检查目录是否包含至少一个有效插件（有 plugin.json 的子目录）
+fn plugins_dir_has_plugins(p: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(p) else {
+        return false;
+    };
+    entries.flatten().any(|e| {
+        let path = e.path();
+        path.is_dir() && path.join("plugin.json").exists()
+    })
+}
+
+/// deb 安装后 exe 在 /usr/bin，resources 通常在 /usr/lib/<identifier>/ 或 /usr/share/；此处与 tauri 的 resource_dir 约定一致。
+#[cfg(target_os = "linux")]
+fn plugins_dir_linux_system_candidates() -> Vec<PathBuf> {
+    [
+        PathBuf::from("/usr/lib/arkanalyzer-hapray/tools"),
+        PathBuf::from("/usr/share/arkanalyzer-hapray/tools"),
+        PathBuf::from("/usr/lib/ArkAnalyzer-HapRay/tools"),
+        PathBuf::from("/usr/share/ArkAnalyzer-HapRay/tools"),
+    ]
+    .to_vec()
+}
+
+fn plugins_dir_from_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe = exe.canonicalize().unwrap_or(exe);
+    eprintln!("[cli] exe: {}", exe.display());
+    let parent = exe.parent()?;
+    eprintln!("[cli] exe.parent: {}", parent.display());
+
+    // 候选顺序：与 exe 同目录的 tools 优先（dist/ArkAnalyzer-HapRay.exe -> dist/tools），再考虑上级目录
+    let candidates: Vec<PathBuf> = {
+        let mut v = Vec::new();
+        #[cfg(target_os = "linux")]
+        if parent == Path::new("/usr/bin") {
+            v.extend(plugins_dir_linux_system_candidates());
+        }
+        #[cfg(target_os = "macos")]
+        if let Some(contents) = parent.parent() {
+            v.push(contents.join("Resources").join("tools"));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            v.push(parent.join("tools")); // dist/xxx.exe -> dist/tools
+        }
+        v.extend([
+            parent.join("../Resources/tools"),
+            parent.join("../tools"),
+            parent.join("../../dist/tools"),
+            parent.join("../../../tools"), // dist/ArkAnalyzer-HapRay.app/Contents/MacOS -> dist/tools
+        ]);
+        #[cfg(target_os = "macos")]
+        v.push(parent.join("tools"));
+        v
+    };
+
+    for tools in &candidates {
+        if tools.exists() && plugins_dir_has_plugins(tools) {
+            return Some(tools.clone());
+        }
+    }
+
+    // 若所有候选都无有效插件，返回第一个存在的（兼容空目录场景）
+    for tools in &candidates {
+        if tools.exists() {
+            return Some(tools.clone());
+        }
+    }
+
+    None
+}
+
+fn find_plugins_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("HAPRAY_PLUGINS_DIR") {
+        let p = PathBuf::from(&dir);
+        if p.exists() && (plugins_dir_has_plugins(&p) || std::fs::read_dir(&p).is_ok()) {
+            return Some(p);
+        }
+    }
+    plugins_dir_from_workspace().or_else(plugins_dir_from_exe)
+}
+
+fn config_file_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".hapray-gui").join("config.json"))
+}
+
+/// 短参数信息：参数名 + 是否支持多值（multi_select）
+struct ShortParamInfo {
+    param_name: String,
+    multi_select: bool,
+}
+
+/// 从已加载的插件中提取短参数映射 (short -> param_info)
+fn short_option_mappings_from_plugins(
+    plugins: &[desktop_lib::plugins::PluginMetadata],
+    plugin_id: &str,
+    action: &str,
+) -> HashMap<String, ShortParamInfo> {
+    let mut mappings = HashMap::new();
+    let Some(meta) = plugins.iter().find(|p| p.id == plugin_id) else {
+        return mappings;
+    };
+    let Some(action_config) = meta.actions.get(action) else {
+        return mappings;
+    };
+    for (param_name, param_def) in &action_config.parameters {
+        if let Some(ref short) = param_def.short {
+            mappings.insert(
+                short.clone(),
+                ShortParamInfo {
+                    param_name: param_name.clone(),
+                    multi_select: param_def.multi_select,
+                },
+            );
+        }
+    }
+    mappings
+}
+
+/// 从已加载的插件中提取参数名 -> multi_select 映射（用于长参数 --format 等）
+fn param_multi_select_from_plugins(
+    plugins: &[desktop_lib::plugins::PluginMetadata],
+    plugin_id: &str,
+    action: &str,
+) -> HashMap<String, bool> {
+    let mut map = HashMap::new();
+    let Some(meta) = plugins.iter().find(|p| p.id == plugin_id) else {
+        return map;
+    };
+    let Some(action_config) = meta.actions.get(action) else {
+        return map;
+    };
+    for (param_name, param_def) in &action_config.parameters {
+        map.insert(param_name.clone(), param_def.multi_select);
+    }
+    map
+}
+
+// -----------------------------------------------------------------------------
+// 参数解析
+// -----------------------------------------------------------------------------
+
+fn parse_long_arg(
+    key: &str,
+    args: &[String],
+    i: &mut usize,
+    param_multi_select: &HashMap<String, bool>,
+) -> (String, serde_json::Value) {
+    if key.starts_with("no-") {
+        let param_key = key.trim_start_matches("no-").to_string();
+        (param_key, serde_json::json!(false))
+    } else if *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+        let multi_select = param_multi_select.get(key).copied().unwrap_or(false);
+        let mut values = Vec::new();
+        *i += 1;
+        values.push(args[*i].clone());
+        if multi_select {
+            while *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+                *i += 1;
+                values.push(args[*i].clone());
+            }
+        }
+        let value = if values.len() == 1 && !multi_select {
+            serde_json::json!(values[0].clone())
+        } else {
+            serde_json::json!(values)
+        };
+        (key.to_string(), value)
+    } else {
+        (key.to_string(), serde_json::json!(true))
+    }
+}
+
+/// 常见短参数 fallback（当 plugin.json 的 short 映射缺失时使用）
+fn common_short_fallback(short: &str) -> Option<(&'static str, bool)> {
+    match short {
+        "i" => Some(("input", false)),
+        "o" => Some(("output", false)),
+        _ => None,
+    }
+}
+
+fn parse_short_arg(
+    short: &str,
+    short_to_param: &HashMap<String, ShortParamInfo>,
+    args: &[String],
+    i: &mut usize,
+) -> (String, serde_json::Value) {
+    let (param_key, multi_select) = short_to_param
+        .get(short)
+        .map(|info| (info.param_name.clone(), info.multi_select))
+        .or_else(|| common_short_fallback(short).map(|(n, m)| (n.to_string(), m)))
+        .unwrap_or_else(|| (short.to_string(), false));
+
+    let value = if *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+        let mut values = Vec::new();
+        *i += 1;
+        values.push(args[*i].clone());
+        if multi_select {
+            while *i + 1 < args.len() && !args[*i + 1].starts_with('-') {
+                *i += 1;
+                values.push(args[*i].clone());
+            }
+        }
+        if values.len() == 1 && !multi_select {
+            serde_json::json!(values[0].clone())
+        } else {
+            serde_json::json!(values)
+        }
+    } else {
+        serde_json::json!(true)
+    };
+    (param_key, value)
+}
+
+fn parse_raw_args(
+    args: &[String],
+    short_to_param: &HashMap<String, ShortParamInfo>,
+    param_multi_select: &HashMap<String, bool>,
+) -> HashMap<String, serde_json::Value> {
+    let mut params = HashMap::new();
+    let mut i = 0;
+
+    while i < args.len() {
+        let arg = &args[i];
+
+        if arg.starts_with("--") {
+            let key = arg.trim_start_matches('-');
+            if !key.is_empty() {
+                let (k, v) = parse_long_arg(key, args, &mut i, param_multi_select);
+                params.insert(k, v);
+            }
+        } else if arg.starts_with('-')
+            && arg.len() == 2
+            && !arg.chars().nth(1).map_or(true, |c| c.is_ascii_digit())
+        {
+            let short = &arg[1..2];
+            let (k, v) = parse_short_arg(short, short_to_param, args, &mut i);
+            params.insert(k, v);
+        }
+        i += 1;
+    }
+    params
+}
+
+fn parse_cli_request(
+    plugins_dir: &Path,
+    raw_args: &[String],
+) -> Option<CliRunRequest> {
+    if raw_args.len() < 2 {
+        return None;
+    }
+    let action = raw_args[1].clone();
+    if action.starts_with('-') {
+        return None;
+    }
+
+    let plugins_path = plugins_dir.to_path_buf();
+    let (plugins, _log) = load_plugins_with_log(&plugins_path);
+    let registry: HashMap<String, String> = plugins
+        .iter()
+        .flat_map(|meta| meta.actions.keys().map(move |k| (k.clone(), meta.id.clone())))
+        .collect();
+    let plugin_id = registry.get(&action)?.clone();
+    let short_to_param = short_option_mappings_from_plugins(&plugins, &plugin_id, &action);
+    let param_multi_select = param_multi_select_from_plugins(&plugins, &plugin_id, &action);
+    let params = parse_raw_args(&raw_args[2..], &short_to_param, &param_multi_select);
+
+    Some(CliRunRequest {
+        plugin_id,
+        action,
+        params,
+    })
+}
+
+// -----------------------------------------------------------------------------
+// 插件配置
+// -----------------------------------------------------------------------------
+
+fn load_plugin_env_config(plugin_id: &str) -> Vec<(String, String)> {
+    config_file_path()
+        .and_then(|p| common::load_plugin_env_config(&p, plugin_id).ok())
+        .unwrap_or_default()
+}
+
+// -----------------------------------------------------------------------------
+// 工具执行
+// -----------------------------------------------------------------------------
+
+fn execute_tool(
+    plugins_dir: &Path,
+    request: &mut CliRunRequest,
+) -> Result<i32, String> {
+    eprintln!("[cli] plugins_dir: {}", plugins_dir.display());
+
+    let prepared =
+        execution::prepare_tool_command(plugins_dir, &request.plugin_id, &request.action, &mut request.params)?;
+
+    eprintln!("[cli] plugin_dir (cwd): {}", prepared.cwd.display());
+    eprintln!("[cli] resolved exe_path: {}", prepared.exe_path.display());
+    log_command(prepared.exe_path.to_str().unwrap_or(""), &prepared.args);
+
+    let mut cmd = Command::new(&prepared.exe_path);
+    for (k, v) in load_plugin_env_config(&request.plugin_id) {
+        eprintln!("[cli] env {}={}", k, v);
+        cmd.env(k, v);
+    }
+
+    // 默认在当前工作目录下执行子进程；若获取失败则退回插件目录 cwd
+    let status = cmd
+        .args(&prepared.args)
+        .current_dir(std::env::current_dir().unwrap_or_else(|_| prepared.cwd.clone()))
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("启动进程失败: {}", e))?
+        .wait()
+        .map_err(|e| format!("等待进程失败: {}", e))?;
+
+    Ok(status.code().unwrap_or(1))
+}
+
+fn log_command(exe: &str, args: &[String]) {
+    let args_str: Vec<String> = args
+        .iter()
+        .map(|a| {
+            if a.contains(' ') || a.contains('"') || a.is_empty() {
+                format!("\"{}\"", a.replace('\\', "\\\\").replace('"', "\\\""))
+            } else {
+                a.clone()
+            }
+        })
+        .collect();
+    eprintln!("$ {} {}", exe, args_str.join(" "));
+}
+
+// -----------------------------------------------------------------------------
+// 用户界面
+// -----------------------------------------------------------------------------
+
+const USAGE: &str = r#"用法: ArkAnalyzer-HapRay <action> [--param value]...
+示例: ArkAnalyzer-HapRay analyze --input ./path"#;
+
+fn print_usage() {
+    eprintln!("{}", USAGE);
+}
+
+fn exit_with_error(message: &str) -> ! {
+    eprintln!("错误: {}", message);
+    print_usage();
+    std::process::exit(1)
+}
+
+// -----------------------------------------------------------------------------
+// 入口
+// -----------------------------------------------------------------------------
+
+/// CLI 模式入口，解析参数并执行工具，执行完毕后退出进程
+pub fn run(args: &[String]) -> ! {
+    let plugins_dir = match find_plugins_dir() {
+        Some(d) => d,
+        None => {
+            eprintln!("错误: 未找到插件目录");
+            eprintln!("请确保 tools 目录存在于可执行文件附近，或设置环境变量 HAPRAY_PLUGINS_DIR 指向 tools 目录");
+            #[cfg(target_os = "linux")]
+            eprintln!("deb 安装后插件通常在 /usr/lib/arkanalyzer-hapray/tools 或 /usr/share/arkanalyzer-hapray/tools，若不存在可设置: export HAPRAY_PLUGINS_DIR=/path/to/tools");
+            print_usage();
+            std::process::exit(1);
+        }
+    };
+    eprintln!("[cli] plugins_dir: {}", plugins_dir.display());
+
+    let request = match parse_cli_request(&plugins_dir, args) {
+        Some(r) => r,
+        None => {
+            if args.len() > 1 && (args[1] == "-h" || args[1] == "--help") {
+                print_usage();
+                std::process::exit(0);
+            }
+            exit_with_error("无法解析命令行参数");
+        }
+    };
+
+    let mut request = request;
+    match execute_tool(&plugins_dir, &mut request) {
+        Ok(code) => std::process::exit(code),
+        Err(e) => exit_with_error(&e),
+    }
+}

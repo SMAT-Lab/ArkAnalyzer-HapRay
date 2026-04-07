@@ -49,10 +49,7 @@ def setup_haptest_logger(report_path: str, app_name: str):
     file_handler.setLevel(logging.DEBUG)
 
     # 创建格式化器
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%H:%M:%S'
-    )
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
     file_handler.setFormatter(formatter)
 
     # 为HapTest相关的logger添加文件处理器
@@ -64,7 +61,7 @@ def setup_haptest_logger(report_path: str, app_name: str):
 
     Log.info(f'HapTest日志已保存至: {haptest_log_file}')
     Log.info(f'应用: {app_name}')
-    Log.info('='*60)
+    Log.info('=' * 60)
 
 
 class HapTest(PerfTestCase):
@@ -77,7 +74,16 @@ class HapTest(PerfTestCase):
     3. 生成完整的执行路径和性能报告
     """
 
-    def __init__(self, tag: str, configs, app_package: str, app_name: str, ability_name: Optional[str] = None, strategy_type: str = 'depth_first', max_steps: int = 50):
+    def __init__(
+        self,
+        tag: str,
+        configs,
+        app_package: str,
+        app_name: str,
+        ability_name: Optional[str] = None,
+        strategy_type: str = 'depth_first',
+        max_steps: int = 50,
+    ):
         """
         初始化HapTest
 
@@ -130,8 +136,6 @@ class HapTest(PerfTestCase):
             self.bundle_info = {'entryModuleName': 'entry'}
             self.module_name = 'entry'
 
-
-
         # 创建必要的目录
         os.makedirs(os.path.join(self.report_path, 'hiperf'), exist_ok=True)
         os.makedirs(os.path.join(self.report_path, 'htrace'), exist_ok=True)
@@ -145,16 +149,16 @@ class HapTest(PerfTestCase):
         """主测试流程"""
         Log.info(f'开始HapTest自动化测试: {self.app_name}')
         Log.info(f'策略: {self.strategy.strategy_type}, 最大步数: {self.max_steps}')
-        Log.info('='*60)
+        Log.info('=' * 60)
 
         self.start_app(page_name=self._ability_name)
         self.driver.wait(3)
 
         while self.current_step < self.max_steps:
             self.current_step += 1
-            Log.info(f'\n{"="*60}')
+            Log.info(f'\n{"=" * 60}')
             Log.info(f'Step {self.current_step}/{self.max_steps}')
-            Log.info(f'{"="*60}')
+            Log.info(f'{"=" * 60}')
 
             # 先执行一次UI采集,获取当前状态
             ui_state = self._execute_ui_capture()
@@ -172,7 +176,7 @@ class HapTest(PerfTestCase):
             Log.info(f'未访问元素数: {len(unvisited)}')
             if unvisited:
                 # 只显示前3个元素
-                examples = [(e.get("text") or e.get("type") or e.get("id","unknown"))[:20]  for e in unvisited[:3]]
+                examples = [(e.get('text') or e.get('type') or e.get('id', 'unknown'))[:20] for e in unvisited[:3]]
                 Log.debug(f'未访问元素示例: {examples}')
 
             # 决策下一步操作
@@ -206,7 +210,7 @@ class HapTest(PerfTestCase):
 
         Log.info('\n' + '='*60)
         Log.info('HapTest测试完成')
-        Log.info('='*60)
+        Log.info('=' * 60)
         self._print_summary()
 
     def _execute_ui_capture(self) -> UIState:
@@ -219,18 +223,17 @@ class HapTest(PerfTestCase):
         os.makedirs(ui_dir, exist_ok=True)
 
         # 立即采集UI数据(只采集一次作为当前状态)
-        self._capture_ui.capture_ui(step_id, self.report_path, 'current')
+        page_info = self._capture_ui.capture_page(step_id, self.report_path, 0)
 
         # 从element_tree中提取当前bundleName
-        element_tree_path = os.path.join(ui_dir, 'element_tree_current_1.txt')
-        current_bundle_name = self._extract_bundle_name(element_tree_path)
+        current_bundle_name = self._extract_bundle_name(page_info['element_tree'])
 
         # 创建UI状态对象
         return UIState(
             step_id=step_id,
-            screenshot_path=os.path.join(ui_dir, 'screenshot_current_1.png'),
-            element_tree_path=element_tree_path,
-            inspector_path=os.path.join(ui_dir, 'inspector_current.json'),
+            screenshot_path=page_info['screenshot'],
+            element_tree_path=page_info['element_tree'],
+            inspector_path=page_info['inspector'],
             app_package=self.app_package,
             app_name=self.app_name,
             current_bundle_name=current_bundle_name,
@@ -273,10 +276,8 @@ class HapTest(PerfTestCase):
     def _format_action_info(self, action_type: str, target: Optional[dict]) -> str:
         """格式化操作信息用于日志"""
         if action_type == 'click' and target:
-
             target_str = json.dumps(target, indent=2, ensure_ascii=False)
-            Log.debug(f"完整target信息:\n{target_str}")
-
+            Log.debug(f'完整target信息:\n{target_str}')
 
             text = target.get('text', '')
             elem_type = target.get('type', '')
@@ -360,7 +361,7 @@ class HapTest(PerfTestCase):
         x = (left + right) // 2
         y = (top + bottom) // 2
         # self.touch_by_coordinates(x, y, wait_seconds=1)
-        self.driver.touch((x,y))
+        self.driver.touch((x, y))
         time.sleep(0.5)
 
     def _do_scroll(self, target: Optional[dict]):

@@ -27,8 +27,10 @@ from typing import Optional
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.folder_utils import delete_folder, scan_folders
+from hapray.core.common.path_utils import get_reports_root
 from hapray.core.config.config import Config
 from hapray.core.dsl.dsl_test_runner import DSLTestRunner
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
@@ -232,14 +234,14 @@ class PerfAction:
         return matched_cases
 
     @staticmethod
-    def execute(args) -> Optional[str]:
-        """Execute performance testing workflow"""
+    def execute(args) -> ActionExecuteReturn:
+        """Execute performance testing workflow. Returns (exit_code, reports_path)."""
         if '--multiprocessing-fork' in args:
-            return None
+            return (0, '')
 
         if not check_env():
             logging.error(ENV_ERR_STR)
-            return None
+            return (1, '')
 
         parser = argparse.ArgumentParser(
             description='Code-oriented Performance Analysis for OpenHarmony Apps', prog='ArkAnalyzer-HapRay perf'
@@ -301,9 +303,8 @@ class PerfAction:
         parsed_args = parser.parse_args(args)
         if parsed_args.hapflow:
             parsed_args.circles = True
-        root_path = os.getcwd()
         timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-        reports_path = os.path.join(root_path, 'reports', timestamp)
+        reports_path = os.path.join(str(get_reports_root()), timestamp)
         logging.info('Reports will be saved to: %s', reports_path)
 
         # Update configuration based on arguments
@@ -316,7 +317,7 @@ class PerfAction:
         if parsed_args.package_name:
             Config.set('package_name', parsed_args.package_name)
         if parsed_args.manual:
-            Config.set('run_testcases', ['PerformanceDynamic_Manual'])
+            Config.set('run_testcases', ['PerfLoad_Manual'])
         if parsed_args.ui_tech_stack:
             Config.set('run_testcases', ['PerfLoad_UIAnalyzer'])
 
@@ -331,7 +332,7 @@ class PerfAction:
             logging.error(
                 'Invalid configuration: All collection modes are disabled. Enable at least one of: perf, trace, or memory'
             )
-            return None
+            return (1, '')
 
         # Log collection mode
         modes = []
@@ -362,7 +363,7 @@ class PerfAction:
                 )
             except Exception as e:
                 logging.getLogger().exception('HapFlow pipeline failed: %s', e)
-        return reports_path
+        return (0, reports_path)
 
     def run(self):
         """Main execution flow for performance testing"""

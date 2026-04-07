@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="app-layout">
     <!-- 左侧导航 -->
     <AppNavigation :current-page="showPage" @page-change="changeContent" @collapse-change="handleCollapseChange" />
@@ -53,6 +53,7 @@
       <div class="content-body">
         <keep-alive>
           <CompareOverview v-if="showPage === 'perf_compare'" @navigate="changeContent" />
+          <SummaryOverview v-else-if="showPage === 'summary_overview'" @page-change="changeContent" />
           <PerfLoadOverview v-else-if="showPage === 'perf_load_overview'" @page-change="changeContent" />
           <PerfStepLoad v-else-if="showPage.startsWith('perf_step_')" :step-id="getStepId(showPage)" />
           <PerfFrameAnalysis v-else-if="showPage.startsWith('frame_step_')" :step="getFrameStepId(showPage)" />
@@ -60,6 +61,7 @@
           <FlameGraph v-else-if="showPage.startsWith('flame_step_')" :step="getFlameStepId(showPage)" />
           <NativeMemory v-else-if="showPage.startsWith('memory_step_')" :step-id="getMemoryStepId(showPage)" />
           <PerfUIAnimate v-else-if="showPage.startsWith('ui_animate_step_')" :step-id="getUIAnimateStepId(showPage)" />
+          <HilogAnalysis v-else-if="showPage.startsWith('hilog_step_')" :step-id="getHilogStepId(showPage)" />
           <PerfLoadAnalysis v-else-if="showPage === 'perf_load'" />
           <PerfFrameAnalysis v-else-if="showPage === 'perf_frame'" />
           <CompareOverview v-else-if="showPage === 'compare_overview'" @navigate="changeContent" />
@@ -130,9 +132,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import AppNavigation from '@/components/common/AppNavigation.vue';
 import PerfLoadOverview from '@/components/single-analysis/overview/PerfLoadOverview.vue';
+import SummaryOverview from '@/components/single-analysis/overview/SummaryOverview.vue';
 import PerfStepLoad from '@/components/single-analysis/step/load/PerfStepLoad.vue';
 import PerfLoadAnalysis from '@/components/single-analysis/step/load/PerfLoadAnalysis.vue';
 import PerfFrameAnalysis from '@/components/single-analysis/step/frame/PerfFrameAnalysis.vue';
@@ -151,12 +154,104 @@ import PerfMulti from '@/components/multi-version/PerfMulti.vue';
 import FlameGraph from '@/components/single-analysis/step/flame/FlameGraph.vue';
 import NativeMemory from '@/components/single-analysis/step/memory/NativeMemory.vue';
 import PerfUIAnimate from '@/components/single-analysis/step/ui-animate/PerfUIAnimate.vue';
+import HilogAnalysis from '@/components/single-analysis/step/hilog/HilogAnalysis.vue';
 import ComponentsDeps from '@/components/single-analysis/deps/ComponentsDeps.vue';
 import { useJsonDataStore } from '@/stores/jsonDataStore.ts';
 import { calculateEnergyConsumption } from '@/utils/calculateUtil.ts';
 
-const showPage = ref('perf_load_overview');
+const DEFAULT_PAGE = 'perf_load_overview';
+const showPage = ref(DEFAULT_PAGE);
 const isNavCollapsed = ref(false);
+
+/** 将 URL hash 路径解析为页面 id，例如 #/step/1 -> perf_step_1，解析失败返回 null */
+function parseHashToPage(hash: string): string | null {
+  const path = hash.replace(/^#\/?/, '').replace(/\/$/, '').trim();
+  const segments = path ? path.split('/').filter(Boolean) : [];
+  if (segments.length === 0) return DEFAULT_PAGE;
+  const first = segments[0];
+  if (first === 'welcome') return 'welcome';
+  if (first === 'overview') return 'perf_load_overview';
+  if (first === 'summary') return 'summary_overview';
+  if (first === 'compare') {
+    if (segments.length === 1) return 'compare_overview';
+    if (segments[1] === 'step' && segments[2] && segments[3]) {
+      const stepId = segments[2];
+      const typeMap: Record<string, string> = {
+        'load': 'compare_step_load_',
+        'detail': 'compare_step_detail_',
+        'new': 'compare_step_new_',
+        'top10': 'compare_step_top10_',
+        'fault-tree': 'compare_step_fault_tree_',
+        'ui': 'compare_step_ui_',
+      };
+      const prefix = typeMap[segments[3]];
+      if (prefix) return `${prefix}${stepId}`;
+    }
+    return null;
+  }
+  if (first === 'step' && segments[1]) {
+    const stepId = segments[1];
+    const type = segments[2];
+    // 必须指定类型，/step/x 无效，必须是 /step/x/perf 等
+    if (!type) return null;
+    const stepPrefix: Record<string, string> = {
+      'perf': 'perf_step_',
+      'frame': 'frame_step_',
+      'fault-tree': 'fault_tree_step_',
+      'flame': 'flame_step_',
+      'memory': 'memory_step_',
+      'ui': 'ui_animate_step_',
+      'hilog': 'hilog_step_',
+    };
+    const prefix = stepPrefix[type];
+    if (!prefix) return null;
+    return `${prefix}${stepId}`;
+  }
+  if (first === 'perf_compare') return 'perf_compare';
+  if (first === 'perf_multi') return 'perf_multi';
+  if (first === 'deps') return 'deps';
+  // 兼容旧格式：/perf_load、/perf_frame 等直接作为页面 id 的片段
+  if (path.indexOf('/') === -1) return path;
+  return null;
+}
+
+/** 将页面 id 转为 hash 路径，例如 perf_step_1 -> /step/1，用于写入 location.hash */
+function pageToHashPath(page: string): string {
+  if (page === 'welcome') return '/welcome';
+  if (page === 'perf_load_overview') return '/overview';
+  if (page === 'summary_overview') return '/summary';
+  if (page === 'compare_overview') return '/compare';
+  if (page === 'perf_compare') return '/perf_compare';
+  if (page === 'perf_multi') return '/perf_multi';
+  if (page === 'deps') return '/deps';
+  const perfStep = page.match(/^perf_step_(\d+)$/);
+  if (perfStep) return `/step/${perfStep[1]}/perf`;
+  const frameStep = page.match(/^frame_step_(\d+)$/);
+  if (frameStep) return `/step/${frameStep[1]}/frame`;
+  const faultStep = page.match(/^fault_tree_step_(\d+)$/);
+  if (faultStep) return `/step/${faultStep[1]}/fault-tree`;
+  const flameStep = page.match(/^flame_step_(\d+)$/);
+  if (flameStep) return `/step/${flameStep[1]}/flame`;
+  const memoryStep = page.match(/^memory_step_(\d+)$/);
+  if (memoryStep) return `/step/${memoryStep[1]}/memory`;
+  const uiStep = page.match(/^ui_animate_step_(\d+)$/);
+  if (uiStep) return `/step/${uiStep[1]}/ui`;
+  const hilogStep = page.match(/^hilog_step_(\d+)$/);
+  if (hilogStep) return `/step/${hilogStep[1]}/hilog`;
+  const compareLoad = page.match(/^compare_step_load_(\d+)$/);
+  if (compareLoad) return `/compare/step/${compareLoad[1]}/load`;
+  const compareDetail = page.match(/^compare_step_detail_(\d+)$/);
+  if (compareDetail) return `/compare/step/${compareDetail[1]}/detail`;
+  const compareNew = page.match(/^compare_step_new_(\d+)$/);
+  if (compareNew) return `/compare/step/${compareNew[1]}/new`;
+  const compareTop10 = page.match(/^compare_step_top10_(\d+)$/);
+  if (compareTop10) return `/compare/step/${compareTop10[1]}/top10`;
+  const compareFault = page.match(/^compare_step_fault_tree_(\d+)$/);
+  if (compareFault) return `/compare/step/${compareFault[1]}/fault-tree`;
+  const compareUi = page.match(/^compare_step_ui_(\d+)$/);
+  if (compareUi) return `/compare/step/${compareUi[1]}/ui`;
+  return `/${page}`;
+}
 
 // 获取存储实例
 const jsonDataStore = useJsonDataStore();
@@ -174,6 +269,12 @@ const testSteps = computed(() => {
 
 const changeContent = (page: string) => {
   showPage.value = page;
+  const path = pageToHashPath(page);
+  const newHash = path.startsWith('/') ? '#' + path : '#' + '/' + path;
+  if (location.hash !== newHash) {
+    const url = location.pathname + location.search + newHash;
+    history.replaceState(null, '', url);
+  }
   // 页面切换后滚动到顶部
   setTimeout(() => {
     const contentBody = document.querySelector('.content-body');
@@ -182,6 +283,20 @@ const changeContent = (page: string) => {
     }
   }, 100);
 };
+
+function applyHashToPage() {
+  const page = parseHashToPage(location.hash);
+  if (page) showPage.value = page;
+}
+
+onMounted(() => {
+  applyHashToPage();
+  window.addEventListener('hashchange', applyHashToPage);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('hashchange', applyHashToPage);
+});
 
 const handleCollapseChange = (collapsed: boolean) => {
   isNavCollapsed.value = collapsed;
@@ -193,6 +308,7 @@ const pageTitles: Record<string, string> = {
   'perf': '单版本负载分析',
   'perf_load': '负载分析',
   'perf_load_overview': '负载总览',
+  'summary_overview': '分析总结',
   'perf_frame': '帧分析',
   'compare_overview': '版本对比总览',
   'compare_ui': 'UI对比',
@@ -210,6 +326,7 @@ const pageTitles: Record<string, string> = {
 const breadcrumbMap: Record<string, string> = {
   'welcome': '首页',
   'perf_load_overview': '单版本分析 / 负载总览',
+  'summary_overview': '单版本分析 / 分析总结',
   'compare_overview': '版本对比 / 总览对比',
   'compare_ui': '版本对比 / UI对比',
   'compare_scene_load': '版本对比 / 场景负载对比',
@@ -260,6 +377,12 @@ const getMemoryStepId = (pageId: string): number => {
 // 从UI动画页面ID中提取步骤ID
 const getUIAnimateStepId = (pageId: string): number => {
   const match = pageId.match(/ui_animate_step_(\d+)/);
+  return match ? parseInt(match[1]) : 1;
+};
+
+// 从日志分析页面ID中提取步骤ID
+const getHilogStepId = (pageId: string): number => {
+  const match = pageId.match(/hilog_step_(\d+)/);
   return match ? parseInt(match[1]) : 1;
 };
 
@@ -357,16 +480,28 @@ const getMemoryStepPageBreadcrumb = (pageId: string): string => {
   return `单版本分析 / 步骤选择 / 步骤${stepId} / Memory分析`;
 };
 
-// 动态获取UI动画步骤页面标题
+// 动态获取UI分析步骤页面标题
 const getUIAnimateStepPageTitle = (pageId: string): string => {
   const stepId = getUIAnimateStepId(pageId);
-  return `步骤${stepId} UI 动画分析`;
+  return `步骤${stepId} UI 分析`;
 };
 
-// 动态获取UI动画步骤页面面包屑
+// 动态获取UI分析步骤页面面包屑
 const getUIAnimateStepPageBreadcrumb = (pageId: string): string => {
   const stepId = getUIAnimateStepId(pageId);
-  return `单版本分析 / 步骤选择 / 步骤${stepId} / UI 动画分析`;
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / UI 分析`;
+};
+
+// 动态获取日志分析步骤页面标题
+const getHilogStepPageTitle = (pageId: string): string => {
+  const stepId = getHilogStepId(pageId);
+  return `步骤${stepId} 日志分析`;
+};
+
+// 动态获取日志分析步骤页面面包屑
+const getHilogStepPageBreadcrumb = (pageId: string): string => {
+  const stepId = getHilogStepId(pageId);
+  return `单版本分析 / 步骤选择 / 步骤${stepId} / 日志分析`;
 };
 
 const getPageTitle = () => {
@@ -390,6 +525,9 @@ const getPageTitle = () => {
   }
   if (showPage.value.startsWith('ui_animate_step_')) {
     return getUIAnimateStepPageTitle(showPage.value);
+  }
+  if (showPage.value.startsWith('hilog_step_')) {
+    return getHilogStepPageTitle(showPage.value);
   }
   return pageTitles[showPage.value] || '未知页面';
 };
@@ -416,6 +554,9 @@ const getBreadcrumb = () => {
   if (showPage.value.startsWith('ui_animate_step_')) {
     return getUIAnimateStepPageBreadcrumb(showPage.value);
   }
+  if (showPage.value.startsWith('hilog_step_')) {
+    return getHilogStepPageBreadcrumb(showPage.value);
+  }
   return breadcrumbMap[showPage.value] || '首页';
 };
 
@@ -429,6 +570,7 @@ const shouldShowSteps = () => {
   // 在负载总览、负载分析、帧分析、火焰图分析等页面显示步骤
   const pagesWithSteps = [
     'perf_load_overview',
+    'summary_overview',
     'perf_load',
     'perf_frame',
     'perf_flame',
@@ -442,7 +584,8 @@ const shouldShowSteps = () => {
          showPage.value.startsWith('compare_step_') ||
          showPage.value.startsWith('flame_step_') ||
          showPage.value.startsWith('memory_step_') ||
-         showPage.value.startsWith('ui_animate_step_');
+         showPage.value.startsWith('ui_animate_step_') ||
+         showPage.value.startsWith('hilog_step_');
 };
 
 // 获取当前步骤信息（计算属性）
@@ -461,6 +604,10 @@ const currentStepInfo = computed(() => {
     currentStepId = getFlameStepId(showPage.value);
   } else if (showPage.value.startsWith('memory_step_')) {
     currentStepId = getMemoryStepId(showPage.value);
+  } else if (showPage.value.startsWith('ui_animate_step_')) {
+    currentStepId = getUIAnimateStepId(showPage.value);
+  } else if (showPage.value.startsWith('hilog_step_')) {
+    currentStepId = getHilogStepId(showPage.value);
   }
 
   if (currentStepId) {

@@ -84,7 +84,7 @@
 
 import * as assert from 'assert';
 import type { Buffer } from 'buffer';
-import { Logger, LOG_MODULE_TYPE } from 'arkanalyzer';
+import Logger, { LOG_MODULE_TYPE } from '../../utils/logger';
 const logger = Logger.getLogger(LOG_MODULE_TYPE.TOOL);
 
 /**

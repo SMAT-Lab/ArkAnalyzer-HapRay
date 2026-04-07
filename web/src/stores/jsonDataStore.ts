@@ -406,6 +406,40 @@ interface FaultTreeStepData {
 
 export type FaultTreeData = Record<string, FaultTreeStepData>;
 
+// 冗余线程分析：每步为 redundant_threads_summary 结构
+export interface RedundantThreadItem {
+  thread_name: string;
+  thread_name_variants?: string[];
+  type: string;
+  type_label: string;
+  total_thread_count?: number;
+  redundant_count: number;
+  redundant_instructions?: number;
+  redundant_instructions_ratio?: number;
+  estimated_memory_mb?: number;
+  redundancy_score?: number;
+  redundancy_level?: string;
+  leak_score?: number;
+  leak_level?: string;
+  waiting_ratio?: number;
+  wakeup_pattern?: string;
+  redundant_thread_ids?: number[];
+  callchain_sample?: unknown[];
+}
+
+export interface RedundantThreadStepData {
+  redundancy_types?: Record<string, string>;
+  total_redundant_thread_patterns: number;
+  total_redundant_threads: number;
+  total_cpu_instructions?: number;
+  total_redundant_instructions?: number;
+  redundant_instructions_ratio?: number;
+  redundant_threads: RedundantThreadItem[];
+  below_threshold_patterns?: unknown[];
+}
+
+export type RedundantThreadData = Record<string, RedundantThreadStepData>;
+
 interface TraceData {
   frames: FrameData;
   emptyFrame?: EmptyFrameData;
@@ -415,6 +449,7 @@ interface TraceData {
   frameLoads?: FrameLoadsData;
   vsyncAnomaly?: VSyncAnomalyData;
   faultTree?: FaultTreeData;
+  redundantThread?: Record<string, { redundant_threads_summary?: RedundantThreadStepData; summary?: unknown }>;
 }
 
 interface MoreData {
@@ -430,6 +465,36 @@ interface MoreData {
  */
 export type DataType = 'perf' | 'memory' | 'both';
 
+export interface SummaryItem {
+  step_id: string;
+  report_html_path?: string;
+  empty_frame?: {
+    count?: number;
+    percentage?: string;
+  };
+  tech_stack?: Record<string, number>;
+  log?: Record<string, unknown>;
+  component_reuse?: {
+    total_builds?: number;
+    recycled_builds?: number;
+    reusability_ratio?: number;
+    max_component?: string;
+  };
+  fault_tree?: Record<string, unknown>;
+  image_oversize?: {
+    total_images?: number;
+    exceed_count?: number;
+    total_excess_memory_mb?: number;
+  };
+  component_tree?: {
+    total_nodes?: number;
+    on_tree_nodes?: number;
+    off_tree_nodes?: number;
+    off_tree_ratio?: number;
+  };
+  redundant_thread?: RedundantThreadStepData;
+}
+
 export interface JSONData {
   version: string;
   type: number;
@@ -444,6 +509,8 @@ export interface JSONData {
     raw?: UIRawData; // UI 原始数据（用于前端实时对比）
   };
   dataType?: DataType; // 数据类型标记，用于前台判断显示哪些页面
+  summary?: SummaryItem[]; // 步骤级分析总结信息（由后端注入）
+  dbtoolsExcel?: { data: string; filename: string }; // gzip+base64 嵌入的 dbtools Excel
 }
 
 // ==================== 默认值生成函数 ====================
@@ -849,6 +916,42 @@ export function safeProcessFaultTreeData(data: FaultTreeData | null | undefined)
   return result;
 }
 
+/** 获取默认的冗余线程步骤数据 */
+export function getDefaultRedundantThreadStepData(): RedundantThreadStepData {
+  return {
+    total_redundant_thread_patterns: 0,
+    total_redundant_threads: 0,
+    redundant_threads: [],
+  };
+}
+
+/** 获取默认的冗余线程数据（空对象，无步骤时前端不展示） */
+export function getDefaultRedundantThreadData(): RedundantThreadData {
+  return {};
+}
+
+/**
+ * 安全处理冗余线程数据 - 从 trace.redundantThread 提取各步 redundant_threads_summary
+ * @param data 原始 redundantThread（每步为 { redundant_threads_summary, summary }）
+ * @returns 按步骤的冗余线程摘要数据
+ */
+export function safeProcessRedundantThreadData(
+  data: Record<string, { redundant_threads_summary?: RedundantThreadStepData; summary?: unknown }> | null | undefined
+): RedundantThreadData {
+  if (!data || typeof data !== 'object') return getDefaultRedundantThreadData();
+
+  const result: RedundantThreadData = {};
+  for (const [stepName, stepRaw] of Object.entries(data)) {
+    const summary = stepRaw?.redundant_threads_summary;
+    if (summary && typeof summary === 'object' && Array.isArray(summary.redundant_threads)) {
+      result[stepName] = summary;
+    } else {
+      result[stepName] = getDefaultRedundantThreadStepData();
+    }
+  }
+  return result;
+}
+
 // ==================== UI 动画数据类型 ====================
 
 // 图像动画区域
@@ -859,6 +962,7 @@ export interface ImageAnimationRegion {
     path: string;
     attributes: Record<string, unknown>;
     id: string;
+    url?: string; // Image节点URL（resource://、pixmapID等）
   };
   comparison_result?: {
     similarity_percentage: number;
@@ -878,6 +982,7 @@ export interface TreeAnimationRegion {
     path: string;
     attributes: Record<string, unknown>;
     id: string;
+    url?: string; // Image节点URL（resource://、pixmapID等）
   };
   is_animation: boolean;
   comparison_result?: Array<{
@@ -892,6 +997,7 @@ export interface TreeAnimationRegion {
 export interface ExceedingImageInfo {
   path: string;
   id: string;
+  url?: string; // Image节点URL（resource://、pixmapID等）
   bounds_rect: [number, number, number, number];
   frameRect: {
     width: number;
@@ -943,7 +1049,42 @@ export interface UIAnimatePhaseData {
   error?: string;
 }
 
+// 页面数据（新格式）
+export interface UIAnimatePageData {
+  description?: string;  // 页面描述名称（后端返回的字段名）
+  page_idx: number; // 页面索引（从1开始）
+  canvasNodeCnt: number; // CanvasNode节点数量
+  canvas_node_on_tree?: number; // 上树CanvasNode数量
+  canvas_node_off_tree?: number; // 未上树CanvasNode数量
+  on_tree_off_tree_detail?: {
+    on_tree_ids: string[];
+    off_tree_ids: string[];
+  };
+  image_size_analysis?: ImageSizeAnalysis & {
+    marked_image?: string; // base64编码的截图
+  };
+  animations?: {
+    image_animations?: {
+      animation_regions: ImageAnimationRegion[];
+      animation_count: number;
+    };
+    tree_animations?: {
+      animation_regions: TreeAnimationRegion[];
+      animation_count: number;
+    };
+    marked_images?: string[]; // base64编码的图片
+    marked_image?: string; // 第一张标记截图（用于显示）
+  };
+  gui_agent?: {
+    action?: string;
+    thinking?: string;
+    message?: string;
+  };
+  error?: string;
+}
+
 export interface UIAnimateStepData {
+  // 旧格式：start_phase和end_phase
   start_phase?: UIAnimatePhaseData;
   end_phase?: UIAnimatePhaseData;
   summary?: {
@@ -954,22 +1095,22 @@ export interface UIAnimateStepData {
     end_phase_tree_changes: number;
     has_animations: boolean;
   };
+  // 新格式：page列表（如果存在，优先使用此格式）
+  pages?: UIAnimatePageData[];
   error?: string;
 }
 
 export interface UIAnimateData {
-  [stepKey: string]: UIAnimateStepData; // step1, step2, etc.
+  [stepKey: string]: UIAnimateStepData | UIAnimatePageData[]; // step1, step2, etc. 支持旧格式或新格式（直接是数组）
 }
 
 // UI原始数据类型（用于对比）
 export interface UIRawStepData {
   screenshots: {
-    start: string[]; // base64编码的截图数组
-    end: string[];
+    [pageIdx: string]: string[]; // base64编码的截图数组，按page编号索引
   };
   trees: {
-    start: string[]; // 组件树文本数组
-    end: string[];
+    [pageIdx: string]: string[]; // 组件树文本数组，按page编号索引
   };
 }
 
@@ -1010,7 +1151,7 @@ export interface UIComponentDifference {
 
 // UI 对比数据类型
 export interface UIComparePairResult {
-  phase: 'start' | 'end';
+  phase: string; // page 编号（如 '0', '1', '2' 等）
   index: number;
   base_screenshot: string;
   compare_screenshot: string;
@@ -1050,6 +1191,7 @@ interface JsonDataState {
   version: string | null;
   basicInfo: BasicInfo | null;
   steps: Step[] | null;
+  summary: SummaryItem[] | null;
   compareBasicInfo: BasicInfo | null;
   perfData: PerfData | null;
   frameData: FrameData | null;
@@ -1061,12 +1203,14 @@ interface JsonDataState {
   frameLoadsData: FrameLoadsData | null;
   vsyncAnomalyData: VSyncAnomalyData | null;
   faultTreeData: FaultTreeData | null;
+  redundantThreadData: RedundantThreadData | null;
   compareFaultTreeData: FaultTreeData | null;
   baseMark: string | null;
   compareMark: string | null;
   flameGraph: Record<string, string> | null; // 按步骤组织的火焰图数据，每个步骤已单独压缩
   uiAnimateData: UIAnimateData | null; // UI 动画数据
   uiCompareData: Record<string, UICompareResult> | null; // UI 对比数据
+  dbtoolsExcel: { data: string; filename: string } | null; // gzip+base64 嵌入的 dbtools Excel
 }
 
 /**
@@ -1140,6 +1284,7 @@ export const useJsonDataStore = defineStore('config', {
     version: null,
     basicInfo: null,
     steps: null,
+    summary: null,
     compareBasicInfo: null,
     perfData: null,
     frameData: null,
@@ -1151,12 +1296,14 @@ export const useJsonDataStore = defineStore('config', {
     frameLoadsData: null,
     vsyncAnomalyData: null,
     faultTreeData: null,
+    redundantThreadData: null,
     compareFaultTreeData: null,
     baseMark: null,
     compareMark: null,
     flameGraph: null,
     uiAnimateData: null,
     uiCompareData: null,
+    dbtoolsExcel: null,
   }),
 
   actions: {
@@ -1256,8 +1403,8 @@ export const useJsonDataStore = defineStore('config', {
             console.error(`解压缩UI原始数据失败 ${stepKey}:`, error);
             // 解压缩失败时，返回空数据
             decompressed[stepKey] = {
-              screenshots: { start: [], end: [] },
-              trees: { start: [], end: [] },
+              screenshots: {},
+              trees: {},
             };
           }
         } else {
@@ -1314,7 +1461,9 @@ export const useJsonDataStore = defineStore('config', {
       this.version = jsonData.version;
       this.basicInfo = jsonData.basicInfo;
       this.steps = jsonData.steps;
+      this.summary = jsonData.summary || null;
       this.perfData = jsonData.perf || null;
+      this.dbtoolsExcel = jsonData.dbtoolsExcel || null;
       this.baseMark = window.baseMark;
       this.compareMark = window.compareMark;
 
@@ -1329,6 +1478,7 @@ export const useJsonDataStore = defineStore('config', {
           frameLoads: this.decompressTraceField(jsonData.trace.frameLoads),
           vsyncAnomaly: this.decompressTraceField(jsonData.trace.vsyncAnomaly),
           faultTree: jsonData.trace.faultTree,
+          redundantThread: jsonData.trace.redundantThread,
         };
 
         // Safely process all trace-related data
@@ -1340,6 +1490,7 @@ export const useJsonDataStore = defineStore('config', {
         this.frameLoadsData = safeProcessFrameLoadsData(decompressedTrace.frameLoads);
         this.vsyncAnomalyData = safeProcessVSyncAnomalyData(decompressedTrace.vsyncAnomaly);
         this.faultTreeData = safeProcessFaultTreeData(decompressedTrace.faultTree);
+        this.redundantThreadData = safeProcessRedundantThreadData(decompressedTrace.redundantThread);
       } else {
         // 当没有 trace 数据时，设置完整的默认结构
         this.frameData = getDefaultFrameData();
@@ -1350,6 +1501,7 @@ export const useJsonDataStore = defineStore('config', {
         this.frameLoadsData = getDefaultFrameLoadsData();
         this.vsyncAnomalyData = getDefaultVSyncAnomalyData();
         this.faultTreeData = getDefaultFaultTreeData();
+        this.redundantThreadData = getDefaultRedundantThreadData();
       }
       if (jsonData.more) {
         // Flame graph - Data organized by step, each step is separately compressed
@@ -1415,21 +1567,35 @@ export const useJsonDataStore = defineStore('config', {
           const compareStep = compareUIRaw[stepKey];
 
           // 检查是否有截图和组件树
-          if (!baseStep.screenshots?.end?.length || !baseStep.trees?.end?.length ||
-              !compareStep.screenshots?.end?.length || !compareStep.trees?.end?.length) {
-            console.log(`[compareUIData] ${stepKey}: 缺少截图或组件树数据`);
+          // 获取所有 page 编号（从 screenshots 和 trees 中提取）
+          const basePageIndices = new Set([
+            ...Object.keys(baseStep.screenshots || {}),
+            ...Object.keys(baseStep.trees || {}),
+          ]);
+          const comparePageIndices = new Set([
+            ...Object.keys(compareStep.screenshots || {}),
+            ...Object.keys(compareStep.trees || {}),
+          ]);
+          
+          // 找到共同的 page 编号
+          const commonPageIndices = Array.from(basePageIndices).filter(idx => comparePageIndices.has(idx));
+          
+          if (commonPageIndices.length === 0) {
+            console.log(`[compareUIData] ${stepKey}: 没有共同的 page 数据`);
             continue;
           }
 
-          // 对比start和end两个阶段的组件树（按截图对分组）
+          // 对比所有共同的 page
           const pairResults: UIComparePairResult[] = [];
 
-          // 对比start阶段和end阶段
-          for (const phase of ['start', 'end'] as const) {
-            const baseTrees = baseStep.trees[phase] || [];
-            const compareTrees = compareStep.trees[phase] || [];
-            const baseScreenshots = baseStep.screenshots[phase] || [];
-            const compareScreenshots = compareStep.screenshots[phase] || [];
+          // 按 page 编号排序
+          const sortedPageIndices = commonPageIndices.sort((a, b) => parseInt(a) - parseInt(b));
+
+          for (const pageIdx of sortedPageIndices) {
+            const baseTrees = baseStep.trees[pageIdx] || [];
+            const compareTrees = compareStep.trees[pageIdx] || [];
+            const baseScreenshots = baseStep.screenshots[pageIdx] || [];
+            const compareScreenshots = compareStep.screenshots[pageIdx] || [];
             const maxPairs = Math.min(baseTrees.length, compareTrees.length);
 
             for (let i = 0; i < maxPairs; i++) {
@@ -1448,7 +1614,7 @@ export const useJsonDataStore = defineStore('config', {
 
               pairResults.push({
                 index: i + 1,
-                phase: phase,
+                phase: pageIdx, // 使用 page 编号作为 phase
                 base_screenshot: baseScreenshots[i] || '',
                 compare_screenshot: compareScreenshots[i] || '',
                 diff_count: filteredDifferences.length,

@@ -19,12 +19,15 @@ import os
 import re
 import shutil
 import tempfile
+from datetime import datetime
 from typing import Optional
 
 from xdevice.__main__ import main_process
 
 from hapray import VERSION
+from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.common_utils import CommonUtils
+from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.config.config import Config
 from hapray.core.dsl.dsl_test_runner import DSLTestRunner
 
@@ -140,14 +143,14 @@ class PrepareAction:
         logging.info('Execution completed: %d/%d test cases succeeded', success_count, len(matched_cases))
 
     @staticmethod
-    def execute(args) -> bool:
+    def execute(args) -> ActionExecuteReturn:
         """Execute preparation testing workflow"""
         if '--multiprocessing-fork' in args:
-            return False
+            return (0, '')
 
         if not check_env():
             logging.error(ENV_ERR_STR)
-            return False
+            return (1, '')
 
         parser = argparse.ArgumentParser(
             description='Simplified Test Execution for Preparation', prog='ArkAnalyzer-HapRay prepare'
@@ -174,7 +177,11 @@ class PrepareAction:
         # Validate arguments
         if not parsed_args.run_testcases and not parsed_args.all_0000:
             logging.error('Must specify either --run_testcases or --all_0000')
-            return False
+            return (1, '')
+
+        # 本会话目录：供 tool-result 契约落盘（与临时用例输出目录分离）
+        session_dir = get_user_data_root('prepare') / datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        session_dir.mkdir(parents=True, exist_ok=True)
 
         # Update configuration based on arguments
         if parsed_args.run_testcases:
@@ -183,7 +190,7 @@ class PrepareAction:
         action = PrepareAction(device_sn=parsed_args.device)
         action.run(run_testcases=parsed_args.run_testcases, run_all_0000=parsed_args.all_0000)
 
-        return True
+        return (0, str(session_dir.resolve()))
 
 
 if __name__ == '__main__':

@@ -3,22 +3,19 @@ const path = require("path");
 const crypto = require("crypto");
 
 /**
- * 计算文件的 MD5 哈希值，支持符号链接
+ * 计算文件的 MD5 哈希值，支持符号链接（仅对最终为普通文件的路径）
  */
 function calculateFileHash(filePath) {
   try {
-    const stat = fs.lstatSync(filePath);
-    if (stat.isSymbolicLink()) {
-      // 对于符号链接，读取链接目标的内容
-      const targetPath = fs.readlinkSync(filePath);
-      const resolvedPath = path.resolve(path.dirname(filePath), targetPath);
-      const buffer = fs.readFileSync(resolvedPath);
-      return crypto.createHash("md5").update(buffer).digest("hex");
-    } else {
-      // 对于普通文件，直接读取内容
-      const buffer = fs.readFileSync(filePath);
-      return crypto.createHash("md5").update(buffer).digest("hex");
+    const lstat = fs.lstatSync(filePath);
+    if (lstat.isSymbolicLink()) {
+      const realStat = fs.statSync(filePath);
+      if (realStat.isDirectory()) {
+        throw new Error("路径为指向目录的符号链接，不应参与去重");
+      }
     }
+    const buffer = fs.readFileSync(filePath);
+    return crypto.createHash("md5").update(buffer).digest("hex");
   } catch (error) {
     throw new Error(`无法读取文件 ${filePath}: ${error.message}`);
   }
@@ -37,13 +34,28 @@ function getAllFiles(dirPath, arrayOfFiles = []) {
       try {
         const stat = fs.lstatSync(filePath); // 使用 lstat 而不是 stat 来获取符号链接本身的状态
 
-        if (stat.isDirectory()) {
+        // 指向目录的符号链接：lstat 下 isDirectory 为 false，需跟随后再递归，否则会误当作“文件”去 readFile 导致 EISDIR
+        if (stat.isSymbolicLink()) {
+          let realStat;
+          try {
+            realStat = fs.statSync(filePath);
+          } catch (e) {
+            console.warn(`无法跟随符号链接 ${filePath}:`, e.message);
+            return;
+          }
+          if (realStat.isDirectory()) {
+            if (!file.startsWith(".") && file !== "node_modules") {
+              getAllFiles(filePath, arrayOfFiles);
+            }
+          } else if (realStat.isFile() && realStat.size > 0) {
+            arrayOfFiles.push(filePath);
+          }
+        } else if (stat.isDirectory()) {
           // 跳过一些不需要处理的目录
           if (!file.startsWith(".") && file !== "node_modules") {
             getAllFiles(filePath, arrayOfFiles);
           }
-        } else if (stat.isFile() || stat.isSymbolicLink()) {
-          // 处理普通文件和符号链接，但跳过空文件（大小为0）
+        } else if (stat.isFile()) {
           if (stat.size > 0) {
             arrayOfFiles.push(filePath);
           }
@@ -169,41 +181,23 @@ function mergeDuplicateFiles(sourceDir) {
           // 获取目标文件的状态信息
           const targetStat = fs.lstatSync(targetFile);
 
-          // 统一使用硬链接处理所有文件（包括符号链接）
-
-          // 检查目标文件是否已经是源文件的硬链接
-          let targetIno;
+          // 保留符号链接（如 PyInstaller/TensorFlow 的 _pywrap_tensorflow_internal.so）：
+          // 若改为硬链接会丢失相对路径语义，失败时 copyFileSync 还会变成整文件拷贝。
           if (targetStat.isSymbolicLink()) {
-            // 对于符号链接，解析到实际文件并检查其inode
-            const targetLink = fs.readlinkSync(targetFile);
-            const resolvedTarget = path.resolve(path.dirname(targetFile), targetLink);
-            try {
-              const resolvedStat = fs.statSync(resolvedTarget);
-              targetIno = resolvedStat.ino;
-            } catch (error) {
-              // 如果解析失败，使用符号链接本身的inode
-              targetIno = targetStat.ino;
-            }
-          } else {
-            // 对于普通文件，直接使用其inode
-            targetIno = fs.statSync(targetFile).ino;
-          }
-
-          if (targetIno === sourceStat.ino) {
-            // 已经是同一个文件的硬链接
-            console.log(`[跳过] ${targetFile} 已是 ${sourceFile} 的硬链接`);
             continue;
           }
 
-          // 删除原文件（包括符号链接）并创建硬链接
-          const originalType = targetStat.isSymbolicLink() ? '符号链接' : '普通文件';
+          // 检查目标文件是否已经是源文件的硬链接（此处已排除符号链接）
+          const targetIno = fs.statSync(targetFile).ino;
+
+          if (targetIno === sourceStat.ino) {
+            // 已经是同一个文件的硬链接
+            continue;
+          }
+
+          // 删除原文件并创建硬链接
           fs.unlinkSync(targetFile);
           fs.linkSync(sourceFile, targetFile);
-          console.log(`[硬链接] 创建硬链接: ${targetFile}`);
-          console.log(`  └─ 原类型: ${originalType}`);
-          console.log(`  └─ 指向: ${sourceFile}`);
-          console.log(`  └─ 节省: ${fileSize} 字节`);
-          console.log(`  └─ inode: ${sourceStat.ino}`);
           linksCreated++;
           totalSaved += fileSize;
         } catch (error) {
@@ -233,12 +227,15 @@ function mergeDuplicateFiles(sourceDir) {
   );
 }
 
-// 执行合并
-const distDir = path.resolve(__dirname, "../dist");
-if (!fs.existsSync(distDir)) {
-  console.error(`错误: dist 目录不存在: ${distDir}`);
+// 执行合并，支持传入目标目录参数
+const targetDir = process.argv[2]
+  ? path.resolve(process.cwd(), process.argv[2])
+  : path.resolve(__dirname, "../dist");
+
+if (!fs.existsSync(targetDir)) {
+  console.error(`错误: 目录不存在: ${targetDir}`);
   process.exit(1);
 }
 
-console.log(`正在处理目录: ${distDir}\n`);
-mergeDuplicateFiles(distDir);
+console.log(`正在处理目录: ${targetDir}\n`);
+mergeDuplicateFiles(targetDir);
