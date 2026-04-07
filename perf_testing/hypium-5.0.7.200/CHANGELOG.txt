@@ -1,0 +1,42 @@
+5.0.7.200
+1. 支持BY.xpath控件查找方式(注意该方式查找的控件对象只支持部分操作接口, 如click/longClick/inputText/clearText)
+2. 新增支持步骤录屏，使用方式在user_config.xml中user_config标签里
+   增加配置<taskargs><screenrecorder>true</screenrecorder></taskargs>
+3、更新报告样式，删除details_report.html、passes_report.html、temp文件夹、script文件夹
+4、测试用例脚本日志与框架调度执行日志拆分，框架执行日志在报告根目录下的task_log.log, 测试用例日志在报告的log目录下
+   各个用例目录中的moudle_run.log中
+5、hilog的抓取从实时读取修改为拉取测试用例执行期间的hilog落盘日志
+
+5.0.7.100
+1. 适配上滑返回手势在新ROM版本上较高概率进入多任务问题
+2. go_home接口替换为按home键返回桌面
+3. UiTree查找控件增加日志
+
+5.0.6.100
+1. 返回桌面后等待一秒
+
+5.0.5.100
+1. 适配性能采集插件hypium_perf, 增加操作前hook机制
+2. 新增Launcher扩展模块, 支持模拟用户在桌面滑动查找应用启动以及进入多任务界面清理后台
+3. 更新设备端agent, 修复异常情况下创建driver失败后需要手动kill uitest的问题
+4. 修复driver.current_app获取当前应用在新版本上失效问题
+5. 【实验性】新增driver.UiTree模块，通过dump控件树后在PC端查找控件，支持相对路径和xpath
+
+5.0.4.100
+1. 修复start_app在应用包有多个mainAbility时日志打印异常
+2. 修复uitest版本号读取异常
+
+5.0.3.300
+1. 修复hdc短时无响应时概率无法恢复的问题
+2. 修复设备端agent和投屏插件存在冲突问题
+
+5.0.3.100
+1. 适配系统uitest --version打印额外字符导致框架无法启动
+2. UiDriver.connect扫描不到设备时，进行最多3次重试
+
+5.0.2.200
+1. 修复断连恢复后打印额外日志问题
+2. 修复toast监听接口启动异常
+3. 增加driver模式driver.close接口, 用于断连设备连接，清理端口
+4. 清理无效代码
+

@@ -32,6 +32,8 @@ dependencies = [
     "lxml",
     "opencv-python>=4.10.0",
     "opencv-contrib-python>=4.10.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
     "hypium>=6.0.7.210",
     "phone-agent>=0.1.1"
 ]

@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-.npmrc
 package-lock.json
 .DS_Store
 
@@ -17,18 +16,21 @@ dist
 temp_release_test/
 
 # Third-party and Generated Directories
-third-party/HapRayDep/
 third-party/trace_streamer_binary/
 third-party/xvm/
+third-party/Open-AutoGLM/
 perf_testing/hapray-toolbox/
 perf_testing/sa-cmd/
 perf_testing/.tox
 perf_testing/tmp_hypium/
 perf_testing/ts_tmp.perf.data
 third-party/HiSmartPerf_20250109/
-perf_testing/hypium-5.0.7.200/
+perf_testing/hypium-6.0.7.210/
 perf_testing/binary_analysis_report.xlsx
 perf_testing/files_results_cache/
+
+perf_testing/resource/
+perf_testing/hapray_perf_testing.egg-info
 
 # Log
 *.log
@@ -46,6 +48,7 @@ hapray-sa
 # Cache directories
 .cache/
 .npm-cache/
+__pycache__/
 
 # HapTest generated test cases
 perf_testing/hapray/testcases/__haptest_generated__/
@@ -54,6 +57,7 @@ perf_testing/hapray/testcases/__haptest_generated__/
 perf_testing/hapray/haptest/*.md
 !perf_testing/hapray/haptest/README.md
 
+<<<<<<< HEAD
 # Environment variables
 .env
 
