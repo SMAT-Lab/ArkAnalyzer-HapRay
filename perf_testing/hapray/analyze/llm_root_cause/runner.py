@@ -190,9 +190,18 @@ def _run_with_source_llm(
     """
     from .structured_output import parse_llm_output, render_to_markdown, render_fallback_markdown
 
-    if not code_snippets:
-        logging.info("No code snippets available for with_source mode; falling back to analyze mode.")
+    # Fall back to pure analyze only when there are neither code snippets nor
+    # any meaningful /proc evidence hints to reason from.
+    proc_hints = structured_evidence.get("proc_source_hints", [])
+    if not code_snippets and not proc_hints:
+        logging.info("No code snippets or evidence; falling back to analyze mode.")
         return _run_analyze_with_llm(config, language, context_text, structured_evidence, stream)
+
+    if not code_snippets:
+        logging.info(
+            "No code snippets for with_source mode; will reason from evidence only "
+            "(%d proc hints available).", len(proc_hints)
+        )
 
     domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker="empty-frame", context_signals=[])
     system_prompt = get_system_prompt(
