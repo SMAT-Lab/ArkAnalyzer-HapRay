@@ -1404,6 +1404,8 @@ class MissingSymbolFunctionAnalyzer:
                 # 第三步：将 LLM 分析结果合并到 results 中
                 logger.info('\nStep 3: Merging LLM analysis results...')
                 batch_results_map = {r.get('function_id', ''): r for r in batch_results}
+                # 建立 func_id → _prompt 的映射，供 prompts_json 使用
+                func_prompt_map = {fd.get('function_id', ''): fd.get('_prompt', '') for fd in functions_data}
                 logger.info(
                     f'批量分析返回了 {len(batch_results)} 个结果，function_id: {[r.get("function_id") for r in batch_results]}'
                 )
@@ -1412,6 +1414,8 @@ class MissingSymbolFunctionAnalyzer:
                 missing_results = []
                 for result in results:
                     func_id = f'func_{result["rank"]}'
+                    # 将该函数的 prompt 片段写回 result
+                    result['_prompt'] = func_prompt_map.get(func_id, '')
                     if func_id in batch_results_map:
                         batch_result = batch_results_map[func_id]
                         # 移除 function_id，保留其他字段

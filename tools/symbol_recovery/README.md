@@ -1,238 +1,98 @@
 # SymRecover - 二进制符号恢复工具
 
-## 项目简介
+从已剥离符号表的 SO 文件中恢复函数名，通过反汇编（Radare2/Capstone）和 LLM 推理推断函数功能。
 
-SymRecover（Symbol Recovery）是一个专业的二进制符号恢复工具，专注于恢复缺失的函数名并推断函数功能。通过反汇编分析（Radare2/Capstone）和 LLM 推理，该工具能够从二进制文件中恢复函数符号，特别适用于分析已剥离符号表的 SO 库文件。
+## 四种运行模式
 
-## 核心功能
+### 1. Perf 模式（默认）
 
-### 1. 多模式分析
-- **perf 数据模式**：从 `perf.data` 性能采样数据中提取缺失符号的偏移量，进行符号恢复
-- **Excel 偏移量模式**：从 Excel 文件读取函数偏移量，直接进行符号恢复
-- **KMP 分析模式**：专为 stripped Kotlin Multiplatform (KMP) `.so` 文件设计，恢复符号名的同时按 KMP 组件分类（KMP Runtime / Compose UI / Business / Skia/Skiko 等）
+从 `perf.data` 性能采样数据中提取缺失符号并恢复。
 
-### 2. 多维度统计
-- **调用次数（call_count）**：按函数调用频率统计
-- **指令数（event_count）**：按指令执行次数统计（默认）
+```bash
+# 基本用法
+python3 main.py --perf-data perf.data --so-dir /path/to/so/
 
-### 3. 智能分析
-- **双反汇编引擎**：优先使用 Radare2（自动函数识别），回退到 Capstone
-- **实例缓存优化**：同一 SO 文件复用 Radare2 实例，性能提升 10 倍+
-- **反编译支持**：支持多种反编译插件（r2dec/r2ghidra/pdq），自动按优先级选择
-- **精准字符串提取**：通过分析 ARM64 指令引用（`adrp`/`add`/`ldr`），精准提取函数相关的字符串常量，自动过滤错误消息和调试信息
-- **LLM 分析**：使用 GPT-5、Claude-Sonnet-4.5 等大模型分析函数功能和推断函数名
-- **开源库增强**：支持指定开源库名称（如 `--open-source-lib ffmpeg`），LLM 会利用对开源库的知识进行更准确的符号推断
-  - **SIMD 向量化识别**：自动识别函数中使用的 SIMD 向量化指令（ARM NEON/SVE），并在功能描述中说明向量化优化的用途
-  - **功能相关性分析**：结合开源库的典型功能和特性，说明函数在库中的作用和定位，以及与库中其他功能的关联性
-- **性能分析**：针对高指令数负载的热点函数，自动识别性能瓶颈、分析高指令数负载原因，并提供优化建议
-- **上下文信息增强**：自动提取函数边界信息（起始/结束地址、大小）、复杂度指标（基本块、控制流边、参数、局部变量）和调用堆栈信息
-- **批量分析**：支持批量 LLM 分析，一个 prompt 包含多个函数（默认 batch_size=3），显著提高效率
-- **Prompt 调试**：支持保存生成的 prompt 到文件，便于调试和分析
+# 指定输出目录（--output 是 --output-dir 的别名）
+python3 main.py --perf-data perf.data --so-dir so/ --output /data/my_result/
 
-### 4. 报告生成
-- **Excel 报告**：包含所有分析结果的详细 Excel 报告（自动列宽、文本换行）
-  - 函数功能描述：LLM 推断的函数功能说明
-  - **负载问题识别与优化建议**：客观识别函数所属的性能类型（计算热点 vs 潜在瓶颈）、高指令数负载原因和优化建议
-  - 函数名推断：LLM 推断的函数名（带 "Function: " 前缀）
-  - **调用链信息**：包含调用者（谁调用了这个函数）和被调用者（这个函数调用了哪些函数）的完整调用关系
-  - **字符串常量**：函数相关的字符串常量（如果存在）
-  - 函数元信息：函数边界、大小、复杂度指标等
-- **HTML 报告**：统一的交互式 HTML 报告，包含技术原理、Token 统计和时间统计
-  - **优化的表格显示**：支持横向滚动，适配不同屏幕尺寸
-  - **文件路径优化**：文件路径列自动截断显示，鼠标悬停可查看完整路径
-  - **列宽优化**：精简列数，优化列宽，提升可读性
-- **HTML 符号替换**：自动将推断的函数名替换到原始性能报告中
+# 常用选项
+python3 main.py --perf-data perf.data --so-dir so/ --top-n 50 --stat-method call_count
+python3 main.py --skip-step1   # 已有 perf.db 时跳过转换
+python3 main.py --only-step4 --html-input report.html  # 只做符号替换
+```
 
-## 快速开始
+流程：`perf.data` → Step 1: 转换为 `perf.db` → Step 3: LLM 分析 → Step 4: HTML 符号替换
 
-### 1. 安装依赖
+### 2. Excel 模式
+
+从 Excel 文件读取函数偏移量地址，对 SO 文件进行反汇编和分析。
+
+```bash
+# 单 SO
+python3 main.py --excel-file offsets.xlsx --so-file /path/to/lib.so
+
+# 多 SO（Excel 中含 SO 文件名列，自动分组）
+python3 main.py --excel-file offsets.xlsx --so-dir /path/to/so/
+
+# 不使用 LLM
+python3 main.py --excel-file offsets.xlsx --so-file lib.so --no-llm
+```
+
+### 3. KMP 模式
+
+针对 stripped Kotlin Multiplatform `.so` 文件，在恢复符号名的同时对函数按 KMP 组件分类。
+
+```bash
+# 通用模式（业务分类标签为 "Business Logic"）
+python3 main.py --kmp-mode --perf-db perf.db --so-file lib.so --top-n 50
+
+# 指定应用名（业务标签为 "Business (AppName)"）
+python3 main.py --kmp-mode --perf-db perf.db --so-file lib.so --kmp-app-name MyApp
+
+# 附加命名空间上下文（分类最准确）
+python3 main.py --kmp-mode --perf-db perf.db --so-file lib.so \
+    --kmp-app-name MyApp \
+    --context "libexample.so 是目标应用的KMP核心库，业务命名空间包含 kfun:com.example.*"
+```
+
+KMP 分类列输出：`KMP Runtime` / `androidx.compose.*` / `Business (AppName)` / `Skia/Skiko` / `Other`
+
+> KMP 模式强制使用 inclusive 口径（Total 列），与 perf 模式的 exclusive 口径不同。
+
+### 4. 内存模式
+
+从内存分析火焰图 HTML 文件中提取符号地址并恢复，支持批量处理多个 HTML 文件。
+
+```bash
+python3 main.py --memory-mode --html-dir /path/to/flamegraphs/ --so-dir /path/to/so/
+```
+
+输入 HTML 需包含 base64+gzip 编码的火焰图 JSON 数据（符号格式：`libxxx.so+0x1234`）。
+
+---
+
+## 安装
 
 ```bash
 uv venv .venv
 uv pip install --python ./.venv/bin/python -e .
-uv pip install --python ./.venv/bin/python -e .[dev]
 ```
 
-**额外依赖（可选但强烈推荐）：**
-- **Radare2**：用于高性能反汇编分析（性能提升 10 倍+）
-  - macOS/Linux: `brew install radare2` 或 `apt-get install radare2`
-  - Windows: 下载并安装到 `C:\radare2-5.9.4-w64\`
-  - 配置路径：代码会自动添加到 PATH
-  - Python 接口: `pip install r2pipe>=1.7.0`（已在 `pyproject.toml` 中）
+**可选但推荐：**
+- **Radare2**（性能提升 10 倍+）：`brew install radare2` 或 `apt-get install radare2`
+- **反编译插件**：`r2pm install r2dec`（轻量）或 `r2pm install r2ghidra`（高质量，需 Java）
 
-- **反编译插件**（可选，用于提高 LLM 分析质量）：
-  - **r2dec**（推荐，轻量快速）：`r2pm install r2dec`
-  - **r2ghidra**（高质量，需要 Java）：`r2pm install r2ghidra`
-  - 工具会自动按优先级尝试：r2dec → r2ghidra → pdq
-  - 如果未安装反编译插件，将仅使用反汇编代码
+## 配置 LLM
 
-### 2. 配置 LLM API Key（可选）
+在项目根目录创建 `.env` 文件，通过 `LLM_SERVICE_TYPE` 选择服务：
 
-如果需要使用 LLM 分析，在项目根目录创建 `.env` 文件：
-
-**默认使用 Poe API：**
-```
-POE_API_KEY=your_api_key_here
-```
-
-**切换其他服务：**
-
-可以通过环境变量 `LLM_SERVICE_TYPE` 切换服务类型：
-- `poe`（默认）：使用 Poe API，环境变量 `POE_API_KEY`
-- `openai`：使用 OpenAI API，环境变量 `OPENAI_API_KEY`
-- `claude`：使用 Claude API，环境变量 `ANTHROPIC_API_KEY`
-- `deepseek`：使用 DeepSeek API，环境变量 `DEEPSEEK_API_KEY`
-- `custom`：自定义服务，通过 `LLM_BASE_URL` 和 `LLM_API_KEY_ENV` 配置
-
-示例（使用 OpenAI）：
-```bash
-export LLM_SERVICE_TYPE=openai
-export OPENAI_API_KEY=your_openai_key
-```
-
-示例（使用 DeepSeek）：
-```bash
-export LLM_SERVICE_TYPE=deepseek
-export DEEPSEEK_API_KEY=your_deepseek_key
-```
-
-或在 `.env` 文件中：
-```
-LLM_SERVICE_TYPE=openai
-OPENAI_API_KEY=your_openai_key
-```
-
-或使用 DeepSeek：
-```
-LLM_SERVICE_TYPE=deepseek
-DEEPSEEK_API_KEY=your_deepseek_key
-```
-
-**配置说明：**
-- 所有 LLM 配置都在 `utils/config.py` 中集中管理
-- 支持通过环境变量覆盖配置（如 `LLM_TIMEOUT`、`LLM_BASE_URL` 等）
-- 详细配置见 `utils/config.py` 中的 `get_llm_config()` 函数
-
-### 3. 运行分析
-
-#### 方式一：perf 数据模式（推荐）
-
-```bash
-# 运行完整工作流（默认按 event_count 统计，分析前 100 个函数）
-python main.py --perf-data data/example_app/10.55.1/perf.data --so-dir data/example_app/10.55.1/so/
-
-# 指定分析数量和输出目录
-python main.py --perf-data perf.data --so-dir so/ --top-n 50 --output-dir output/
-
-# 按调用次数统计
-python main.py --stat-method call_count
-
-# 不使用 LLM（仅反汇编）
-python main.py --no-llm
-
-# 只使用 Capstone（不使用 Radare2）
-python main.py --use-capstone-only
-
-# 跳过反编译（仅使用反汇编，提升速度）
-python main.py --skip-decompilation
-
-# 保存生成的 prompt 到文件（用于调试）
-python main.py --save-prompts
-
-# 调整批量大小（适应 token 限制）
-python main.py --batch-size 3
-```
-
-#### 方式三：KMP 分析模式
-
-专为 Kotlin Multiplatform (KMP) `.so` 文件设计，在恢复函数名的基础上增加 **KMP 组件分类**列，输出结果区分 KMP Runtime、Compose UI、业务逻辑、Skia/Skiko 等组件来源。
-
-**基本用法（通用模式，适合任意 KMP 库）：**
-
-```bash
-python3 main.py \
-    --kmp-mode \
-    --perf-db perf.db \
-    --so-file libs/arm64/libexample.so \
-    --top-n 50
-```
-
-**指定应用名（业务分类标签更精确）：**
-
-```bash
-python3 main.py \
-    --kmp-mode \
-    --perf-db perf.db \
-    --so-file libs/arm64/libexample.so \
-    --kmp-app-name MyApp \
-    --top-n 50
-```
-
-**指定应用名 + 补充上下文（推荐，分类最准确）：**
-
-```bash
-python3 main.py \
-    --kmp-mode \
-    --perf-db perf.db \
-    --so-file libs/arm64/libexample.so \
-    --kmp-app-name MyApp \
-    --context "libexample.so 是目标应用的KMP核心库，业务命名空间包含 kfun:com.example.*" \
-    --top-n 50
-```
-
-**三种用法说明：**
-
-| 用法 | 适用场景 | 业务分类标签 |
-|------|---------|------------|
-| 不带 `--kmp-app-name` | 任意 KMP 库，不了解具体应用 | `Business Logic` |
-| 带 `--kmp-app-name` | 已知目标应用名 | `Business (AppName)` |
-| 带 `--kmp-app-name` + `--context` | 已知命名空间/组成比例（推荐） | `Business (AppName)`，分类更准确 |
-
-> **说明**：KMP 模式强制使用 `perf.db` 数据源（`--perf-db`）并按 inclusive 口径统计（Total 列），与普通 perf 模式的 exclusive 口径不同。
-
-#### 方式四：Excel 偏移量模式
-
-```bash
-# 基本用法
-python main.py --excel-file data/test.xlsx --so-file data/example_app/libs/arm64/libexample.so
-
-# 不使用 LLM
-python main.py --excel-file data/test.xlsx --so-file libxwebcore.so --no-llm
-
-# 指定输出目录
-python main.py --excel-file data/test.xlsx --so-file libxwebcore.so --output-dir output/
-```
-
-## 工作流程
-
-### perf 数据模式
-
-```
-perf.data 
-  → Step 1: 转换为 SQLite (perf.db)
-  → Step 2: 已移除（逻辑已集成到 Step 3）
-  → Step 3: LLM 分析恢复函数名和功能
-    ├─ 从 perf.db 读取缺失符号地址
-    ├─ 函数定位与切分（radare2）
-    ├─ 反汇编/反编译（radare2，可选）
-    ├─ 提取上下文信息（字符串、调用函数、调用堆栈）
-    ├─ 构建 LLM Prompt（支持批量）
-    ├─ LLM 分析推断函数名
-    └─ 生成 Excel 和 HTML 报告
-  → Step 4: HTML 符号替换（可选）
-```
-
-### Excel 偏移量模式
-
-```
-Excel 文件（包含偏移量）
-  → 读取偏移量
-  → 函数定位与切分（radare2）
-  → 反汇编/反编译（radare2，可选）
-  → 精准字符串提取
-  → LLM 分析（可选，支持批量）
-  → 生成 Excel 和 HTML 报告
-```
+| 服务 | 环境变量 |
+|------|---------|
+| `poe`（默认） | `POE_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `claude` | `ANTHROPIC_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
+| `custom` | `LLM_BASE_URL` + `LLM_API_KEY_ENV` |
 
 ## 主要参数
 
@@ -241,544 +101,86 @@ Excel 文件（包含偏移量）
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--top-n` | 分析前 N 个函数 | `100` |
-| `--output-dir` | 输出目录 | `output` |
-| `--no-llm` | 不使用 LLM 分析（仅反汇编） | `False` |
-| `--no-batch` | 不使用批量分析 | `False` |
-| `--batch-size` | 批量分析时每个 prompt 包含的函数数量 | `3` (建议 3-10) |
-| `--use-capstone-only` | 只使用 Capstone 反汇编（不使用 Radare2） | `False` |
-| `--skip-decompilation` | 跳过反编译步骤（仅使用反汇编，提升速度） | `False` |
-| `--save-prompts` | 保存每个函数生成的 prompt 到文件（用于调试） | `False` |
-| `--llm-model` | LLM 模型名称 | `GPT-5` |
-| `--context` | 自定义上下文信息（可选） | 自动推断 |
+| `--output-dir`（别名 `--output`） | 输出目录，所有分析结果、JSON 契约文件均写入此处 | `output/`（可选） |
+| `--no-llm` | 仅反汇编，不调用 LLM | `False` |
+| `--batch-size` | 每个 prompt 包含的函数数（>1 时启用批量分析） | 按服务自动选择 |
+| `--use-capstone-only` | 强制使用 Capstone，不使用 Radare2 | `False` |
+| `--skip-decompilation` | 跳过反编译，提升速度 | `False` |
+| `--save-prompts` | 保存生成的 prompt 到文件（调试用） | `False` |
+| `--open-source-lib` | 指定开源库（如 `ffmpeg`），提升 LLM 推断准确性 | 可选 |
+| `--context` | 自定义上下文信息 | 自动推断 |
+| `--llm-model` | LLM 模型名称 | 按服务默认 |
 
-### perf 数据模式参数
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--perf-data` | perf.data 文件路径 | `perf.data` |
-| `--perf-db` | perf.db 文件路径 | 自动生成在输出目录 |
-| `--so-dir` | SO 文件目录 | 如果未指定 `--so-file` 则必需 |
-| `--so-file` | 单个 SO 文件路径（可选） | 如果指定，只分析该文件的地址 |
-| `--stat-method` | 统计方式（call_count/event_count） | `event_count` |
-| `--open-source-lib` | 开源库名称（如 "ffmpeg", "openssl"） | 可选，用于提升基于开源库定制版本的符号恢复准确性。LLM 会识别 SIMD 向量化指令，并结合开源库功能特性进行相关性分析 |
-| `--skip-step1` | 跳过 Step 1（perf.data → perf.db） | `False` |
-| `--skip-step3` | 跳过 Step 3（LLM 分析） | `False` |
-| `--skip-step4` | 跳过 Step 4（HTML 符号替换） | `False` |
-| `--only-step1` | 只执行 Step 1 | `False` |
-| `--only-step3` | 只执行 Step 3 | `False` |
-| `--only-step4` | 只执行 Step 4 | `False` |
-| `--html-input` | HTML 输入文件路径或目录 | 自动查找 |
-
-### KMP 分析模式参数
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--kmp-mode` | 启用 KMP 分析模式 | `False` |
-| `--kmp-app-name` | 目标应用名称（如 `MyApp`），生成 `Business (AppName)` 分类标签；不传则使用通用 `Business Logic` | `""` |
-| `--perf-db` | perf.db 文件路径（KMP 模式必需） | - |
-| `--so-file` | KMP `.so` 文件路径（KMP 模式必需） | - |
-| `--context` | 补充该库的命名空间或组成信息，可提升边界函数的分类准确率 | 可选 |
-
-**KMP 分类输出列（Excel 报告中的 `KMP分类` 列）：**
-
-| 分类标签 | 含义 |
-|---------|------|
-| `KMP Runtime` | Kotlin/Native 运行时：GC、内存分配、帧管理、协程、CInterop 等 |
-| `androidx.compose.ui:ui` | Compose UI 渲染管线 |
-| `androidx.compose.foundation:foundation-layout` | Compose 布局容器 |
-| `androidx.compose.runtime:runtime` | Compose 重组机制 |
-| `androidx.compose.ui:ui-unit` | Compose 尺寸/单位 |
-| `Business (AppName)` / `Business Logic` | 应用业务逻辑（含 NAPI 业务桥接） |
-| `Skia/Skiko` | 2D 图形渲染（FreeType、HarfBuzz 等） |
-| `Other (3rd-party)` | 明确的第三方库（Ktor、jsoncpp 等） |
-| `Other` | 证据不足，无法确定 |
-
-### Excel 偏移量模式参数
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--excel-file` | Excel 文件路径（包含函数偏移量地址） | **必需** |
-| `--so-file` | SO 文件路径 | **必需** |
-
-### 工具契约（Agent / ArkAnalyzer-HapRay GUI）
+### perf 模式参数
 
 | 参数 | 说明 |
 |------|------|
-| `--result-file PATH` | 将 **`hapray-tool-result.json`**（HapRay tool-result v1）写入该路径；默认 **`<output-dir>/hapray-tool-result.json`**。桌面端 `plugin.json` 中 **`tool_contract`** 会注入该参数。 |
-| `--machine-json` | 契约文件**无法写入**时，将同一结构以**一行 JSON** 输出到 **stdout**；控制台日志走 **stderr**，避免与管道中的 JSON 混淆。 |
+| `--perf-data` | perf.data 文件路径（默认 `perf.data`） |
+| `--perf-db` | perf.db 文件路径（默认自动生成） |
+| `--so-dir` | SO 文件目录 |
+| `--so-file` | 单个 SO 文件路径 |
+| `--stat-method` | `event_count`（默认）或 `call_count` |
+| `--skip-step1/3/4` | 跳过对应步骤 |
+| `--only-step1/3/4` | 只执行对应步骤 |
+| `--html-input` | HTML 输入文件路径（Step 4 用） |
 
-**与业务产物的区别**：`--output-dir` 下为 Excel/HTML 等分析报告；契约文件描述**本次 CLI 运行**本身（成功与否、`exit_code`、`outputs.output_dir` 等），供 Agent、CI 与 ArkAnalyzer-HapRay 桌面解析，无需依赖人类可读日志。
+### KMP 模式参数
+
+| 参数 | 说明 |
+|------|------|
+| `--kmp-mode` | 启用 KMP 模式 |
+| `--kmp-app-name` | 应用名，生成 `Business (AppName)` 分类标签 |
+| `--perf-db` | perf.db 文件路径（必需） |
+| `--so-file` | KMP .so 文件路径（必需） |
+
+### 内存模式参数
+
+| 参数 | 说明 |
+|------|------|
+| `--memory-mode` | 启用内存模式 |
+| `--html-dir` | 火焰图 HTML 文件目录（必需） |
+| `--so-dir` | SO 文件目录（必需） |
+
+### 工具契约参数
+
+| 参数 | 说明 |
+|------|------|
+| `--result-file PATH` | 将 `hapray-tool-result.json` 写入该路径（默认 `<output-dir>/hapray-tool-result.json`） |
+| `--machine-json` | 契约文件无法写入时，在 stdout 输出一行 JSON |
 
 ## 输出文件
 
-### perf 数据模式输出
+**perf / KMP / 内存模式**（位于 `{output_dir}/`）：
+- `perf.db` — SQLite 数据库（Step 1）
+- `event_count_top{N}_analysis.xlsx` — 分析结果
+- `event_count_top{N}_report.html` — HTML 报告
+- `hiperf_report_with_inferred_symbols.html` — 替换符号后的 HTML（Step 4）
 
-所有输出文件位于 `{output_dir}` 目录（默认：`output/`）：
+**Excel 模式**（位于 `output/`）：
+- `excel_offset_analysis_{n}_functions.xlsx`
+- `excel_offset_analysis_{n}_functions_report.html`
 
-- `perf.db` - SQLite 数据库（Step 1 生成）
-- `event_count_top{N}_analysis.xlsx` - event_count top N 符号恢复结果（默认）
-- `event_count_top{N}_report.html` - event_count top N HTML 报告
-- `event_count_top{N}_time_stats.json` - 时间统计
-- `top{N}_missing_symbols_analysis.xlsx` - call_count top N 符号恢复结果（当使用 `--stat-method call_count` 时）
-- `top{N}_missing_symbols_report.html` - call_count top N HTML 报告
-- `hiperf_report_with_inferred_symbols.html` - 替换后的 HTML 报告（Step 4）
-
-### Excel 偏移量模式输出
-
-- `output/excel_offset_analysis_{n}_functions.xlsx` - Excel 分析报告
-- `output/excel_offset_analysis_{n}_functions_report.html` - HTML 分析报告
-- `output/excel_offset_analysis_{n}_functions_time_stats.json` - 时间统计
-
-### 缓存文件
-
-- `cache/llm_analysis_cache.json` - LLM 分析结果缓存（自动管理）
-- `cache/llm_token_stats.json` - Token 使用统计（自动更新）
-
-### Prompt 调试文件（使用 --save-prompts 时）
-
-- `{output_dir}/prompts/prompt_{offset}_{symbol}_{timestamp}.txt` - 单个函数的 prompt
-- `{output_dir}/prompts/prompt_batch_{batch_num}_{total_batches}_{timestamp}.txt` - 批量函数的 prompt
-
-## 技术特性
-
-### 1. 双反汇编引擎
-- **Radare2 优先**（默认）：自动函数识别、边界检测，使用 `aa` 轻量级分析替代 `aaa`
-- **实例缓存**：同一 SO 文件的多个函数复用同一个 Radare2 实例，性能提升 10 倍+
-- **Capstone 回退**：如果 Radare2 不可用或使用 `--use-capstone-only`，自动使用 Capstone 反汇编
-- **强制 Capstone**：使用 `--use-capstone-only` 参数可强制使用 Capstone（即使已安装 Radare2）
-
-### 2. 反编译支持（可选）
-- **多插件支持**：自动按优先级尝试 r2dec → r2ghidra → pdq
-- **r2dec**（推荐）：
-  - 轻量快速：JavaScript 实现，无需 Java
-  - 安装：`r2pm install r2dec`
-  - 适合批量分析，速度比 r2ghidra 快 2-5 倍
-- **r2ghidra**：
-  - 高质量反编译：基于 Ghidra 引擎，类型推断准确
-  - 安装：`r2pm install r2ghidra`（需要 Java 8+）
-  - 适合复杂函数分析，但速度较慢
-- **智能回退**：如果反编译失败，自动使用反汇编代码
-- **性能优化**：使用 `--skip-decompilation` 可跳过反编译以提升速度
-
-### 3. 精准字符串提取
-- 通过分析 ARM64 指令（`adrp`/`add`、`adr`、`ldr`）中的字符串引用
-- 精准提取函数相关的字符串常量，而不是扫描整个 `.rodata` 段
-- 支持 Radare2 的 `axtj` 交叉引用分析
-
-### 4. 批量 LLM 分析
-- 将多个函数合并到一个 prompt 中（默认 batch_size=3）
-- 显著减少 API 调用次数，提高分析效率
-- 自动处理 token 限制和 JSON 解析
-- 支持禁用批量分析（`--no-batch`）进行逐个函数分析
-
-### 5. Prompt 调试支持
-- 使用 `--save-prompts` 选项可保存所有生成的 prompt 到文件
-- 便于调试 LLM 分析过程，优化 prompt 设计
-- 支持单个函数和批量函数的 prompt 保存
-
-### 6. 智能缓存
-
-## 相关文档
-
-- **[ANALYSIS_FLOW.md](ANALYSIS_FLOW.md)**: 详细的分析流程说明，包括函数定位、反编译、上下文提取和 LLM 分析等步骤
-- **[SYMBOL_MATCHING_TECHNICAL_REPORT.md](SYMBOL_MATCHING_TECHNICAL_REPORT.md)**: 基于开源库指纹识别的符号恢复技术方案（未来规划）
-- LLM 分析结果自动缓存到 `cache/` 目录
-- 避免重复分析相同的函数代码，节省成本
-- Token 统计自动保存和累积
-
-### 7. 时间统计
-- 自动记录各分析步骤的执行时间
-- 在 HTML 报告和控制台中展示
-- 保存为 JSON 格式便于分析
-
-## 项目结构
-
-```
-soanalyzer/
-├── analyzers/                    # 分析器模块
-│   ├── perf_analyzer.py          # perf 数据分析（支持 call_count/event_count）
-│   ├── event_analyzer.py         # event_count 统计分析
-│   ├── excel_analyzer.py         # Excel 偏移量分析
-│   ├── r2_analyzer.py            # Radare2 反汇编分析器
-│   └── kmp_analyzer.py           # KMP 分析模式：注入 KMPBatchLLMAnalyzer
-├── llm/                          # LLM 模块
-│   ├── analyzer.py               # LLM 单函数分析器
-│   ├── batch_analyzer.py         # LLM 批量分析器
-│   ├── initializer.py            # LLM 初始化工具（API key 加载、分析器创建）
-│   └── kmp_batch_analyzer.py     # KMP 专用批量分析器（动态分类 prompt、kmp_category 提取）
-├── utils/                        # 工具模块
-│   ├── common.py                 # 通用工具（日志、反汇编器、HTML渲染等）
-│   ├── config.py                 # 配置常量
-│   ├── time_tracker.py           # 时间统计
-│   ├── string_extractor.py       # 字符串提取器
-│   ├── perf_converter.py         # perf.data → perf.db 转换器
-│   └── symbol_replacer.py        # HTML 符号替换
-├── bin/                          # 外部二进制工具
-│   └── trace_streamer_binary/    # perf.data 转换工具
-│       ├── trace_streamer_mac     # macOS 版本
-│       ├── trace_streamer_linux   # Linux 版本
-│       └── trace_streamer_windows.exe # Windows 版本
-├── cache/                        # 缓存目录
-│   ├── llm_analysis_cache.json   # LLM 分析缓存
-│   └── llm_token_stats.json      # Token 统计
-├── data/                         # 数据目录
-│   ├── example_app_1/            # 示例应用数据 1
-│   ├── example_app_2/            # 示例应用数据 2
-│   └── test.xlsx                 # 测试样例
-├── output/                       # 默认输出目录
-├── docs/                         # 文档
-│   └── CODE_DEPENDENCIES.md      # 代码依赖关系
-├── main.py                       # 主入口（唯一入口）
-├── pyproject.toml                # Python 依赖与项目元数据
-└── README.md                     # 项目文档
-```
-
-## 依赖要求
-
-### Python 依赖
-
-**核心依赖（必需）：**
-- Python 3.11+
-- `pyelftools>=0.29` - ELF 文件解析
-- `capstone>=5.0.0` - ARM64 反汇编（回退方案）
-- `pandas>=2.0.0` - 数据处理和 Excel 操作
-- `openpyxl>=3.1.0` - Excel 文件读写
-- `python-dotenv>=1.0.0` - 环境变量管理（.env 文件）
-- `openai>=1.0.0` - LLM API 调用（Poe API 兼容）
-
-**可选依赖（强烈推荐）：**
-- `r2pipe>=1.7.0` - Radare2 Python 接口（性能提升 10 倍+）
-
-安装所有依赖：
-```bash
-uv venv .venv
-uv pip install --python ./.venv/bin/python -e .
-uv pip install --python ./.venv/bin/python -e .[dev]
-```
-
-### 外部工具
-
-- **Radare2**（可选，强烈推荐）：用于高性能反汇编
-  - macOS: `brew install radare2`
-  - Linux: `apt-get install radare2` 或 `yum install radare2`
-  - Windows: 下载并安装到 `C:\radare2-5.9.4-w64\`
-  - 性能提升：10 倍+（从 `aaa` 完整分析改为 `aa` 轻量级分析 + 实例缓存）
-  - 如果未安装，会自动回退到 Capstone 反汇编
-
-- **trace_streamer**：用于 perf.data 转换
-  - 已包含在 `bin/trace_streamer_binary/` 目录
-  - 支持 macOS、Linux、Windows 三个平台
-  - 代码会自动检测并使用对应平台的版本
-
-## 使用示例
-
-### 示例 1：完整符号恢复流程（event_count 模式）
-
-```bash
-# 运行完整工作流，恢复前 100 个缺失符号（按 event_count）
-python3 main.py \
-    --perf-data data/example_app/10.55.1/perf.data \
-    --so-dir data/example_app/10.55.1/so/ \
-    --output-dir data/example_app/10.55.1/ \
-    --top-n 100 \
-    --html-input data/example_app/10.55.1/hiperf_report.html
-```
-
-### 示例 2：指定单个 SO 文件（perf 模式）
-
-```bash
-# 只分析指定 SO 文件的地址（适用于已知 SO 文件的情况）
-python3 main.py \
-    --perf-data perf.data \
-    --so-file libttffmpeg.so \
-    --output-dir output \
-    --top-n 100
-```
-
-### 示例 3：基于开源库的定制版本（提升准确性）
-
-```bash
-# 指定开源库名称，大模型会利用对开源库的知识进行更准确的符号推断
-# LLM 会自动识别 SIMD 向量化指令，并结合开源库功能特性进行相关性分析
-python3 main.py \
-    --perf-data perf.data \
-    --so-file libttffmpeg.so \
-    --open-source-lib ffmpeg \
-    --output-dir output \
-    --top-n 100
-```
-
-**开源库增强功能说明**：
-- **SIMD 向量化识别**：LLM 会自动检查反汇编代码中的 SIMD 向量化指令（ARM NEON/SVE），并在功能描述中说明向量化优化的用途（如批量数据处理、并行计算、矩阵运算等）
-- **功能相关性分析**：LLM 会结合开源库的典型功能和特性，说明函数在库中的作用和定位，以及与库中其他功能的关联性
-- **适用场景**：适用于分析基于开源库（如 FFmpeg、OpenSSL、libcurl 等）进行定制开发的 SO 文件
-
-### 示例 4：call_count 模式
-
-```bash
-python3 main.py \
-    --perf-data data/example_app/perf.data \
-    --so-dir data/example_app/so/ \
-    --stat-method call_count \
-    --top-n 50
-```
-
-### 示例 5：Excel 偏移量模式
-
-```bash
-# 从 Excel 文件读取偏移量进行符号恢复
-python main.py \
-    --excel-file data/test.xlsx \
-    --so-file data/example_app/libs/arm64/libexample.so
-```
-
-### 示例 4：仅反汇编（不使用 LLM）
-
-```bash
-# 快速反汇编分析，不调用 LLM
-python main.py --perf-data perf.data --so-dir so/ --no-llm
-```
-
-### 示例 5：调整批量大小
-
-```bash
-# 减小批量大小以避免 token 截断
-python main.py --batch-size 2
-
-# 禁用批量分析（逐个函数分析，更稳定但较慢）
-python main.py --no-batch
-```
-
-### 示例 6：强制使用 Capstone
-
-```bash
-# 只使用 Capstone 反汇编（不使用 Radare2）
-python main.py --use-capstone-only --perf-data perf.data --so-dir so/
-```
-
-### 示例 7：跳过反编译以提升速度
-
-```bash
-# 跳过反编译步骤，仅使用反汇编代码（速度更快）
-python main.py --skip-decompilation --perf-data perf.data --so-dir so/
-```
-
-### 示例 8：保存 Prompt 用于调试
-
-```bash
-# 保存所有生成的 prompt 到 output/prompts/ 目录
-python main.py --save-prompts --perf-data perf.data --so-dir so/
-```
-
-### 示例 9：KMP 分析模式
-
-```bash
-# 通用模式（不指定应用名，适合任意 KMP 库）
-python3 main.py \
-    --kmp-mode \
-    --perf-db data/example/perf.db \
-    --so-file libs/arm64/libexample.so \
-    --top-n 50 \
-    --output-dir output/kmp_analysis
-
-# 指定应用名模式（业务分类标签更精确）
-python3 main.py \
-    --kmp-mode \
-    --perf-db data/example/perf.db \
-    --so-file libs/arm64/libexample.so \
-    --kmp-app-name MyApp \
-    --top-n 50 \
-    --output-dir output/kmp_myapp
-
-# 附加命名空间上下文（推荐，分类最准确）
-python3 main.py \
-    --kmp-mode \
-    --perf-db data/example/perf.db \
-    --so-file libs/arm64/libexample.so \
-    --kmp-app-name MyApp \
-    --context "libexample.so 是目标应用的KMP核心库，业务命名空间包含 kfun:com.example.*" \
-    --top-n 50 \
-    --output-dir output/kmp_myapp_ctx
-```
+**缓存**（`cache/`）：
+- `llm_analysis_cache.json` — LLM 结果缓存
+- `llm_token_stats.json` — Token 用量统计
 
 ## 常见问题
 
-### Q: 如何跳过某个步骤？
-
-A: 使用 `--skip-step{N}` 参数：
-- `--skip-step1`：跳过 perf.data 转换（如果已有 perf.db）
-- `--skip-step3`：跳过 LLM 分析
-- `--skip-step4`：跳过 HTML 符号替换
-
-### Q: 批量分析的 batch_size 如何选择？
-
-A: 根据 LLM context 限制（128K tokens）：
-- **默认值**：3（稳定，避免 JSON 截断）
-- **推荐值**：3-5（稳定，避免 JSON 截断）
-- **最大值**：40-60（需要较小的函数）
-- **说明**：batch_size 过大会导致 LLM 响应被截断，出现 JSON 解析错误
-
-### Q: 如何强制使用 Capstone 而不是 Radare2？
-
-A: 使用 `--use-capstone-only` 参数：
-```bash
-python main.py --use-capstone-only --perf-data perf.data --so-dir so/
-```
-注意：Capstone 模式性能较慢（约慢 1.7 倍），但更稳定，无需外部工具。
-
-### Q: 为什么分析速度慢？
-
-A: 主要耗时在 Radare2/Capstone 反汇编和反编译。优化建议：
+**Q: 分析速度慢？**
 1. 安装 Radare2（性能提升 10 倍+）
-2. 确保 Radare2 实例缓存生效（看到 "♻️ 复用 radare2 分析器实例"）
-3. 使用批量 LLM 分析（默认开启）
-4. 使用 `--skip-decompilation` 跳过反编译（可显著提升速度）
-5. 安装 r2dec 反编译插件（比 r2ghidra 快 2-5 倍）：`r2pm install r2dec`
-6. 减少 `--top-n` 数量
+2. 使用 `--skip-decompilation`（速度提升 20-30%）
+3. 安装 `r2dec`（比 r2ghidra 快 2-5 倍）
+4. 减少 `--top-n`
 
-### Q: r2dec 和 r2ghidra 有什么区别？
+**Q: batch-size 如何选择？**
+推荐 3-10，过大会导致 LLM 响应截断。未指定时按服务自动选择（claude=10, openai=5, deepseek/poe=3）。
 
-A: 
-- **r2dec**：轻量快速（JavaScript），适合批量分析，反编译质量中等
-- **r2ghidra**：高质量反编译（基于 Ghidra），但较慢（需要 Java），适合复杂函数
-- 工具会自动按优先级选择：r2dec → r2ghidra → pdq
-- 推荐安装 r2dec：`r2pm install r2dec`
-
-### Q: 如何保存和调试生成的 prompt？
-
-A: 使用 `--save-prompts` 选项：
-```bash
-python main.py --save-prompts --perf-data perf.data --so-dir so/
-```
-Prompt 文件会保存在 `{output_dir}/prompts/` 目录下，包含完整的 prompt 内容和元信息。
-
-### Q: 如何清理缓存？
-
-A: 删除 `cache/` 目录下的文件：
+**Q: 如何清理缓存？**
 ```bash
 rm -rf cache/llm_analysis_cache.json cache/llm_token_stats.json
 ```
 
-### Q: 代码依赖关系在哪里？
+## 相关文档
 
-A: 请参考 `docs/CODE_DEPENDENCIES.md` 文档。
-
-## 性能优化
-
-### 1. Radare2 优化（已实现）
-- 从 `aaa` 改为 `aa`：初始化时间减少 10-15 倍
-- 实例缓存：同一 SO 文件复用实例，避免重复分析
-- 优先使用 `aflj` 读取已有函数信息
-
-### 2. 批量 LLM 分析（已实现）
-- 减少 API 调用次数：10 个函数仅需 4 次调用（batch_size=3，默认）
-- 总体性能提升：约 2-3 倍
-- 支持禁用批量分析（`--no-batch`）进行逐个函数分析
-
-### 3. 反编译优化
-- **r2dec**：轻量快速，适合批量分析（推荐）
-- **r2ghidra**：高质量但较慢，适合复杂函数
-- **跳过反编译**：使用 `--skip-decompilation` 可进一步提升速度
-
-### 4. 总体性能
-- **原始版本**（使用 `aaa`，无缓存）：174 秒 / 5 个函数
-- **优化版本**（使用 `aa` + 缓存 + 批量）：16 秒 / 5 个函数
-- **性能提升**：约 10.7 倍
-- **跳过反编译**：可再提升 20-30% 速度（但可能降低 LLM 分析质量）
-
-## 许可证
-
-本项目仅供学习和研究使用。
-
-## 更新日志
-
-### v4.7（当前版本）
-- **KMP 分析模式**：新增 `--kmp-mode` 专用分析模式
-  - 支持对 stripped Kotlin Multiplatform `.so` 进行 KMP 组件分类（KMP Runtime / Compose UI / Business / Skia/Skiko 等）
-  - 新增 `--kmp-app-name` 参数，指定应用名后业务分类标签更精确（`Business (AppName)`）
-  - 可配合 `--context` 注入命名空间信息，显著提升 NAPI 桥接函数的分类准确率
-  - Prompt 内置 `kfun:` 包名归属规则，LLM 能准确区分业务代码与运行时框架代码
-
-### v4.6
-- **HTML 报告优化**：
-  - 移除"字符串常量"和"置信度"列，简化表格显示
-  - 优化文件路径列宽度，使用省略号显示，鼠标悬停可查看完整路径
-  - 添加表格横向滚动支持，适配不同屏幕尺寸
-  - 优化表格列宽和布局，提升可读性
-- **Excel 报告增强**：
-  - 修复字符串常量为空的问题，改进字符串常量处理逻辑
-  - 新增"调用链信息"列，包含调用者和被调用者的完整调用关系
-  - 合并"调用的函数"和"调用链信息"列，避免重复信息
-  - 优化 Excel 列宽和文本换行设置
-
-### v4.5
-- **开源库增强功能**：
-  - **SIMD 向量化识别**：LLM 会自动识别函数中使用的 SIMD 向量化指令（ARM NEON/SVE），并在功能描述中说明向量化优化的用途
-  - **功能相关性分析**：结合开源库的典型功能和特性，说明函数在库中的作用和定位，以及与库中其他功能的关联性
-  - 适用于分析基于开源库（如 FFmpeg、OpenSSL、libcurl 等）进行定制开发的 SO 文件
-- **Prompt 优化**：
-  - 在开源库模式下，添加 SIMD 向量化指令识别指导
-  - 添加开源库功能相关性分析要求
-  - 更新 JSON 返回格式说明，包含 SIMD 和开源库相关性要求
-
-### v4.4
-- **性能分析功能**：新增性能瓶颈识别和优化建议功能
-  - LLM prompt 中添加性能分析指导，重点关注高指令数负载的原因
-  - 新增"负载问题识别与优化建议"列，与功能描述分开
-  - 要求 LLM 分析性能瓶颈、高指令数负载原因和优化建议
-- **上下文信息增强**：
-  - 添加函数边界信息（起始/结束地址、大小）
-  - 添加函数复杂度指标（基本块、控制流边、参数、局部变量）
-  - 添加 SO 文件信息
-  - 移除调用统计信息（call_count/event_count）从 prompt，仅用于排序
-- **字符串提取改进**：
-  - 添加字符串过滤功能，过滤错误消息和调试信息（如 "WeakRef: target must be an object"）
-  - 改进调试日志，说明找不到字符串的原因
-- **HTML 报告修复**：
-  - 修复 load_excel_data_for_report 函数，正确加载 performance_analysis 字段
-  - 添加 performance-analysis CSS 样式
-
-### v4.3
-- **Prompt 调试支持**：新增 `--save-prompts` 选项，可保存所有生成的 prompt 到文件
-- **反编译优化**：新增 `--skip-decompilation` 选项，可跳过反编译以提升速度
-- **反编译插件支持**：支持 r2dec/r2ghidra/pdq 多种反编译插件，自动按优先级选择
-- **性能优化**：优化反编译流程，支持智能回退机制
-- **文档完善**：更新 README，添加反编译组件说明和性能优化建议
-
-### v4.2
-- **LLM 配置集中化**：所有 LLM 配置集中到 `utils/config.py`，支持多种服务类型（poe/openai/claude/deepseek/custom）
-- **服务切换**：通过环境变量 `LLM_SERVICE_TYPE` 轻松切换不同的 LLM 服务
-- **DeepSeek 支持**：新增 DeepSeek API 支持，可通过 `LLM_SERVICE_TYPE=deepseek` 和 `DEEPSEEK_API_KEY` 使用
-- **文件重命名**：`llm/utils.py` → `llm/initializer.py`，避免与 `utils/` 目录和 `__init__.py` 混淆
-- **配置管理**：统一管理 API key 环境变量、Base URL、超时时间等配置
-
-### v4.1
-- **Capstone 模式**：添加 `--use-capstone-only` 参数，支持强制使用 Capstone
-- **默认模型**：LLM 默认模型改为 GPT-5
-- **批量大小**：默认 batch_size 调整为 3，更稳定
-- **依赖更新**：更新 `pyproject.toml`，明确核心和可选依赖
-- **文档完善**：更新 README，添加 Capstone 模式说明和安装指南
-
-### v4.0
-- **目录重构**：模块化组织（analyzers/、llm/、utils/）
-- **代码精简**：统一公共逻辑到 utils/，减少 700+ 行重复代码
-- **性能优化**：Radare2 实例缓存，性能提升 10 倍+
-- **批量优化**：batch_size 默认调整为 3，避免 JSON 截断
-- **HTML 统一**：所有模式共用同一 HTML 模板
-- **路径标准化**：数据、缓存、输出分离
-
-### v3.0
-- 统一输出目录，移除 reports 目录分离
-- 移除 Step 2（逻辑已集成到 Step 3）
-- 移除所有独立运行的 main() 函数，统一入口
-- 添加 config.py 配置模块，集中管理所有默认值
-- 添加 LLM 初始化工具，消除重复代码
-
-### v2.0
-- 添加 Excel 分析模式
-- 添加精准字符串提取功能
-- 添加批量 LLM 分析
-- 添加时间统计功能
-
-### v1.0
-- 初始版本
+- [ANALYSIS_FLOW.md](ANALYSIS_FLOW.md) — 详细分析流程
+- [MEMORY_MODE_USAGE.md](MEMORY_MODE_USAGE.md) — 内存模式说明
