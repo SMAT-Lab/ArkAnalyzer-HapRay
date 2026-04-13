@@ -99,6 +99,20 @@ key_functions:
     - "HandleOnAreaChange"
     - "VisibleAreaChange"
 
+# LLM 根因分析配置（root-cause action 使用）
+# 私有 API Key 请通过 --api-key 命令行参数或 LLM_API_KEY / ANTHROPIC_API_KEY 环境变量传入，
+# 避免将密钥提交到版本库。
+llm_root_cause:
+  llm:
+    provider: anthropic                   # anthropic | openai | auto
+    base_url: https://api.anthropic.com   # Anthropic 原生接口；OpenAI-compatible 改为 https://api.openai.com/v1
+    api_key: ""                           # 建议通过 LLM_API_KEY 环境变量或 --api-key 传入
+    model: claude-sonnet-4-5              # 推荐：claude-sonnet-4-5 / gpt-4o
+    max_tokens: 4096
+  analysis:
+    top_n_hotspots: 10      # 取 top N 空刷代表帧
+    language: zh            # 报告语言：zh / en
+
 gui-agent:
   scenes:
     ecommerce:
