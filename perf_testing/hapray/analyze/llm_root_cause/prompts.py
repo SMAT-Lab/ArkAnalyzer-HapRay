@@ -224,7 +224,6 @@ def build_user_prompt(
     extra_context: str = "",
     checker: str = "empty-frame",
     structured_evidence: dict[str, Any] | None = None,
-    # with_source 模式新增字段
     code_snippets: list[dict[str, Any]] | None = None,
     call_chains_text: str = "",
     mode: str = "analyze",
@@ -232,7 +231,7 @@ def build_user_prompt(
     """
     构建 user prompt。
 
-    mode="analyze"     : 传入结构化证据 JSON，LLM 独立推断根因
+    mode="analyze"     : 传入结构化证据 JSON（+ 可选代码片段），LLM 独立推断根因
     mode="with_source" : 传入代码片段 + 调用链 + 精简证据，LLM 阅读代码给出行级建议
     """
     if mode == "with_source":
@@ -245,6 +244,7 @@ def build_user_prompt(
     return _build_analyze_user_prompt(
         context_text=context_text,
         structured_evidence=structured_evidence,
+        code_snippets=code_snippets or [],
         extra_context=extra_context,
     )
 
@@ -252,9 +252,10 @@ def build_user_prompt(
 def _build_analyze_user_prompt(
     context_text: str,
     structured_evidence: dict[str, Any] | None,
+    code_snippets: list[dict[str, Any]] | None = None,
     extra_context: str = "",
 ) -> str:
-    """analyze 模式的 user prompt：传入完整结构化证据，LLM 独立推断。"""
+    """analyze 模式的 user prompt：传入完整结构化证据（+ 可选代码片段），LLM 独立推断。"""
     parts: list[str] = []
     parts.append("请分析以下空刷性能证据，推断根因并给出修复建议。\n")
 
@@ -262,17 +263,62 @@ def _build_analyze_user_prompt(
     parts.append(context_text)
 
     if structured_evidence:
-        # 传入完整结构化证据（proc_source_hints、wakeup chains、UI snapshot 等）
+        # 传入精简版结构化证据（省略 code_snippet 内容，避免重复且节省 token）
+        ev_clean = _strip_code_snippets_from_evidence(structured_evidence)
         parts.append("\n## 结构化证据\n")
         parts.append("```json")
-        parts.append(json.dumps(structured_evidence, ensure_ascii=False, indent=2))
+        parts.append(json.dumps(ev_clean, ensure_ascii=False, indent=2))
         parts.append("```")
+
+    # 如果有反编译代码，单独展示供 LLM 直接引用
+    if code_snippets:
+        parts.append("\n## 反编译代码片段（请在分析中直接引用相关代码行）\n")
+        for i, item in enumerate(code_snippets[:6], 1):
+            owner = item.get("owner_name", "unknown")
+            symbol = item.get("symbol_name", "unknown")
+            file_name = item.get("file", "unknown")
+            line_start = item.get("line_start", 0)
+            line_end = item.get("line_end", 0)
+            snippet = item.get("code_snippet") or ""
+            hits = item.get("evidence_hits", item.get("hit_count", 0))
+            parts.append(
+                f"### [{i}] {owner}.{symbol}  "
+                f"({file_name}:{line_start}-{line_end}, 命中次数={hits})\n"
+            )
+            if snippet.strip():
+                parts.append("```typescript")
+                parts.append(snippet.rstrip())
+                parts.append("```\n")
 
     if extra_context:
         parts.append(f"\n## 补充信息\n{extra_context}\n")
 
     parts.append("\n请输出 JSON 根因报告，不要输出其他内容。")
     return "\n".join(parts).strip() + "\n"
+
+
+def _strip_code_snippets_from_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
+    """
+    Return a shallow copy of evidence with code_snippet fields removed from
+    proc_source_hints.decompiled_candidates to avoid duplicating large code blocks
+    when they're already shown in a dedicated section.
+    """
+    import copy
+    ev = copy.copy(evidence)
+    hints = evidence.get("proc_source_hints")
+    if hints:
+        clean_hints = []
+        for h in hints:
+            h2 = copy.copy(h)
+            cands = h.get("decompiled_candidates")
+            if cands:
+                h2["decompiled_candidates"] = [
+                    {k: v for k, v in c.items() if k != "code_snippet"}
+                    for c in cands
+                ]
+            clean_hints.append(h2)
+        ev["proc_source_hints"] = clean_hints
+    return ev
 
 
 def _build_with_source_user_prompt(

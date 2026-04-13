@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -136,9 +137,10 @@ def _run_analyze_with_llm(
     context_text: str,
     structured_evidence: dict,
     stream: bool,
+    code_snippets: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """
-    analyze mode: LLM receives raw evidence and reasons independently.
+    analyze mode: LLM receives raw evidence (+ optional decompiled snippets) and reasons independently.
     Returns the rendered Markdown report, or None on failure.
     """
     from .structured_output import parse_llm_output, render_to_markdown, render_fallback_markdown
@@ -152,6 +154,7 @@ def _run_analyze_with_llm(
         checker="empty-frame",
         context_text=context_text,
         structured_evidence=structured_evidence,
+        code_snippets=code_snippets or [],
         mode="analyze",
     )
     try:
@@ -166,11 +169,80 @@ def _run_analyze_with_llm(
 
         result = parse_llm_output(raw_output)
         if result.parse_success:
+            if code_snippets:
+                _attach_code_snippets(result.suspects, code_snippets)
             return render_to_markdown(result)
         return render_fallback_markdown(result)
     except Exception as exc:
         logging.warning("LLM analyze mode failed: %s", exc)
         return None
+
+
+def _normalize_symbol(name: str) -> str:
+    """Normalize decompiled symbol names for matching.
+    e.g. '___0__aboutToAppear' → 'abouttoappear', 'AboutToAppear' → 'abouttoappear'
+    """
+    # strip ___N__ prefixes used in decompiled output
+    name = re.sub(r"^___\d+__", "", name)
+    return name.lower().replace("_", "")
+
+
+def _attach_code_snippets(
+    suspects: list,
+    code_snippets: list[dict[str, Any]],
+) -> None:
+    """
+    Attach decompiled code snippets to LLM-output suspects.
+
+    Matching strategy (in priority order):
+    1. Exact (file, line_start) — most reliable, decompiled line ranges are stable
+    2. Normalized owner + symbol — handles ___0__ prefix differences
+    3. Normalized owner only — last resort when symbol names diverge heavily
+    """
+    if not code_snippets:
+        return
+
+    # Build lookup tables
+    by_location: dict[tuple[str, int], str] = {}
+    by_owner_symbol: dict[tuple[str, str], str] = {}
+    by_owner: dict[str, str] = {}
+
+    for c in code_snippets:
+        snippet = c.get("code_snippet", "")
+        if not snippet:
+            continue
+        file_ = c.get("file", "")
+        line_start = int(c.get("line_start", 0) or 0)
+        owner = _normalize_symbol(c.get("owner_name", ""))
+        symbol = _normalize_symbol(c.get("symbol_name", ""))
+
+        if file_ and line_start:
+            by_location[(file_, line_start)] = snippet
+        if owner and symbol:
+            by_owner_symbol[(owner, symbol)] = snippet
+        if owner and owner not in by_owner:
+            by_owner[owner] = snippet
+
+    for s in suspects:
+        if s.code_snippet:
+            continue
+
+        # 1. file + line_start
+        loc_key = (s.file or "", int(s.line_start or 0))
+        if loc_key[1] > 0 and loc_key in by_location:
+            s.code_snippet = by_location[loc_key]
+            continue
+
+        # 2. owner + symbol (normalized)
+        owner_n = _normalize_symbol(s.owner)
+        symbol_n = _normalize_symbol(s.symbol)
+        if (owner_n, symbol_n) in by_owner_symbol:
+            s.code_snippet = by_owner_symbol[(owner_n, symbol_n)]
+            continue
+
+        # 3. owner only
+        if owner_n in by_owner:
+            s.code_snippet = by_owner[owner_n]
 
 
 def _run_with_source_llm(
@@ -230,14 +302,8 @@ def _run_with_source_llm(
         result = parse_llm_output(raw_output)
         if result.parse_success:
             attributions = structured_evidence.get("module_attributions", {}) or {}
-            snippet_map = {
-                f"{c.get('owner_name','')}.{c.get('symbol_name','')}": c.get("code_snippet", "")
-                for c in code_snippets
-            }
+            _attach_code_snippets(result.suspects, code_snippets)
             for s in result.suspects:
-                key = f"{s.owner}.{s.symbol}"
-                if not s.code_snippet and key in snippet_map:
-                    s.code_snippet = snippet_map[key]
                 attr = attributions.get(s.owner, {})
                 if attr:
                     s.module_package = attr.get("package", "")
@@ -365,6 +431,7 @@ def run_empty_frame_analysis(
                 context_text=enriched_context,
                 structured_evidence=structured_evidence,
                 stream=stream,
+                code_snippets=code_snippets if code_snippets else None,
             )
 
     if final_report is None:

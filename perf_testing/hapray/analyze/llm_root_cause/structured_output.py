@@ -254,11 +254,14 @@ def render_to_markdown(result: RootCauseResult) -> str:
                 lines.append(f"  {s.fix}")
                 lines.append(f"  ```")
             if s.code_snippet:
-                lines.append(f"- **代码片段**:")
-                lines.append("  ```typescript")
-                for code_line in s.code_snippet.split("\n"):
-                    lines.append(f"  {code_line}")
-                lines.append("  ```")
+                lines.append("")
+                lines.append("**分析源码（反编译）**：")
+                lines.append("")
+                lines.append("```typescript")
+                lines.append(s.code_snippet.rstrip())
+                lines.append("```")
+            else:
+                lines.append("- **源码**: *(反编译代码不可用，基于运行时证据推理)*")
             lines.append("")
 
     if result.caveats:
