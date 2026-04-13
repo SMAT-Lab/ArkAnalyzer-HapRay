@@ -188,7 +188,7 @@ python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index
 
-# code_review 模式（增强）：提供反编译源码后自动启用，LLM 阅读代码给出行级修复建议
+# with_source 模式（增强）：提供反编译源码后自动启用，LLM 阅读代码给出行级修复建议
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index \
@@ -207,8 +207,8 @@ vim llm_tokens.local.yaml   # 填入 api_key / base_url / model
 Options:
 - `--report-dir <path>`: HapRay 报告目录，含 `summary.json`、`trace_emptyFrame.json`（必填）
 - `--index-dir <path>`: 反编译代码索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），推荐提供
-- `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 code_review 模式
-- `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `code_review`（LLM 阅读反编译代码，行级修复建议）
+- `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 with_source 模式
+- `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `with_source`（LLM 阅读反编译代码，行级修复建议）
 - `--llm-tokens <path>`: 指定 LLM Token 文件路径（默认自动发现 `llm_tokens.local.yaml`）
 - `--api-key / --base-url / --model`: 单次覆盖，优先于所有配置文件
 - `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）

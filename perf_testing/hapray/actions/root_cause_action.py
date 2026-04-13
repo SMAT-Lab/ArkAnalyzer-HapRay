@@ -56,14 +56,15 @@ class RootCauseAction:
             '--decompiled-dir',
             default=None,
             help='Decompiled source tree directory (*.ts / *.callgraph.json). '
-                 'Enables code_review LLM mode when combined with --index-dir.',
+                 'Enables with_source LLM mode when combined with --index-dir.',
         )
         parser.add_argument(
             '--llm-mode',
             default='analyze',
-            choices=['analyze', 'code_review'],
-            help='LLM analysis mode: analyze (default, reasons from evidence) or '
-                 'code_review (reads decompiled code, requires --decompiled-dir)',
+            choices=['analyze', 'with_source'],
+            help='LLM analysis mode: analyze (default, reasons from evidence only) or '
+                 'with_source (reads decompiled source code for line-level fix recommendations, '
+                 'requires --decompiled-dir; auto-selected when --decompiled-dir is provided)',
         )
         parser.add_argument(
             '--config',

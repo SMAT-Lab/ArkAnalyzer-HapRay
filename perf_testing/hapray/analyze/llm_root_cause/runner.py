@@ -13,9 +13,9 @@ analyze (default)
     and reasons independently to produce a root cause report.
     Available whenever a HapRay report exists — no decompiled source required.
 
-code_review (enhanced)
+with_source (enhanced)
     LLM additionally receives decompiled code snippets and call graphs.
-    Produces line-level fix recommendations.
+    Produces line-level fix recommendations referencing actual code.
     Requires --decompiled-dir; automatically selected when decompiled_dir is provided.
 """
 
@@ -173,7 +173,7 @@ def _run_analyze_with_llm(
         return None
 
 
-def _run_code_review_with_llm(
+def _run_with_source_llm(
     config: dict,
     language: str,
     context_text: str,
@@ -184,19 +184,19 @@ def _run_code_review_with_llm(
     stream: bool,
 ) -> str | None:
     """
-    code_review mode: LLM reads decompiled code snippets and produces line-level fix recommendations.
+    with_source mode: LLM reads decompiled code snippets and produces line-level fix recommendations.
     Falls back to analyze mode if no code snippets are available.
     Returns the rendered Markdown report, or None on failure.
     """
     from .structured_output import parse_llm_output, render_to_markdown, render_fallback_markdown
 
     if not code_snippets:
-        logging.info("No code snippets available for code_review; falling back to analyze mode.")
+        logging.info("No code snippets available for with_source mode; falling back to analyze mode.")
         return _run_analyze_with_llm(config, language, context_text, structured_evidence, stream)
 
     domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker="empty-frame", context_signals=[])
     system_prompt = get_system_prompt(
-        language=language, checker="empty-frame", mode="code_review",
+        language=language, checker="empty-frame", mode="with_source",
         domain_knowledge=domain_knowledge,
     )
     user_prompt = build_user_prompt(
@@ -205,7 +205,7 @@ def _run_code_review_with_llm(
         structured_evidence=structured_evidence,
         code_snippets=code_snippets,
         call_chains_text=call_chains_text,
-        mode="code_review",
+        mode="with_source",
     )
 
     try:
@@ -237,7 +237,7 @@ def _run_code_review_with_llm(
             return render_to_markdown(result)
         return render_fallback_markdown(result)
     except Exception as exc:
-        logging.warning("LLM code_review mode failed: %s", exc)
+        logging.warning("LLM with_source mode failed: %s", exc)
         return None
 
 
@@ -262,9 +262,9 @@ def run_empty_frame_analysis(
         index_dir:      Optional path to a decompiled code index directory
                         (contains symbol_index.jsonl / ui_index.jsonl).
         decompiled_dir: Optional path to a decompiled source tree (*.ts / *.callgraph.json).
-                        When provided, automatically uses code_review mode.
-        llm_mode:       "analyze" (default) or "code_review".
-                        Ignored when decompiled_dir is provided (always code_review then).
+                        When provided, automatically uses with_source mode.
+        llm_mode:       "analyze" (default) or "with_source".
+                        Ignored when decompiled_dir is provided (always with_source then).
         stream:         If True, stream LLM tokens to stdout while generating.
         skip_llm:       If True, skip LLM entirely and output the evidence report only.
 
@@ -308,10 +308,10 @@ def run_empty_frame_analysis(
             if key not in main_keys:
                 code_snippets.append(extra)
                 main_keys.add(key)
-        effective_mode = "code_review"
-    elif llm_mode == "code_review":
+        effective_mode = "with_source"
+    elif llm_mode == "with_source":
         logging.warning(
-            "llm_mode=code_review requested but --decompiled-dir not provided; "
+            "llm_mode=with_source requested but --decompiled-dir not provided; "
             "falling back to analyze mode."
         )
         effective_mode = "analyze"
@@ -338,8 +338,8 @@ def run_empty_frame_analysis(
         if module_attribution_text:
             enriched_context = context_text + "\n\n" + module_attribution_text
 
-        if effective_mode == "code_review":
-            final_report = _run_code_review_with_llm(
+        if effective_mode == "with_source":
+            final_report = _run_with_source_llm(
                 config=llm_config,
                 language=language,
                 context_text=enriched_context,

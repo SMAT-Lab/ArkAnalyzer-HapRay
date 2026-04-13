@@ -56,7 +56,7 @@ HAP 包（一次性离线预处理）
     ║  │  输入：结构化证据 JSON（/proc 命中 + 唤醒链 + UI）   │    ║
     ║  │  LLM 独立推断根因 → 结构化 JSON → Markdown 报告     │    ║
     ║  ├─────────────────────────────────────────────────────┤    ║
-    ║  │  code_review 模式（需 --decompiled-dir）             │    ║
+    ║  │  with_source 模式（需 --decompiled-dir）             │    ║
     ║  │  输入：结构化证据 + 反编译代码片段 + 调用链          │    ║
     ║  │  LLM 阅读代码 → 行级修复建议 → Markdown 报告        │    ║
     ║  └─────────────────────────────────────────────────────┘    ║
@@ -104,7 +104,7 @@ HAP 包（一次性离线预处理）
 - 需要快速定位根因类别
 - 希望 LLM 从证据出发独立给出结论，不依赖预先生成的草稿
 
-### code_review 模式（增强）
+### with_source 模式（增强）
 
 **适用：** 提供 `--decompiled-dir`（自动检测，有反编译源码则自动切换此模式）。
 
@@ -119,8 +119,8 @@ HAP 包（一次性离线预处理）
 - 能判断 aboutToAppear 里的代码是否真的有问题
 
 **自动选择规则：**
-- 提供 `--decompiled-dir` → 自动使用 code_review 模式
-- 未提供 `--decompiled-dir` 但指定 `--llm-mode code_review` → 降级为 analyze 并打印警告
+- 提供 `--decompiled-dir` → 自动使用 with_source 模式
+- 未提供 `--decompiled-dir` 但指定 `--llm-mode with_source` → 降级为 analyze 并打印警告
 
 ---
 
@@ -148,7 +148,7 @@ HAP 包（一次性离线预处理）
     ↓
 LLM 接收结构化证据（JSON）
     ↓ 独立推断（analyze 模式）
-    ↓ 或阅读代码 + 推断（code_review 模式）
+    ↓ 或阅读代码 + 推断（with_source 模式）
     ↓
 结构化 JSON 输出（suspects / summary / caveats）
     → 渲染为 Markdown → root_cause.md
@@ -235,7 +235,7 @@ python scripts/main.py root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index
 
-# code_review 模式（增强）：LLM 阅读反编译代码，给出行级修复建议
+# with_source 模式（增强）：LLM 阅读反编译代码，给出行级修复建议
 python scripts/main.py root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index \
@@ -248,8 +248,8 @@ python scripts/main.py root-cause \
 |------|------|------|
 | `--report-dir` | ✅ | HapRay 报告目录（含 `summary.json`、`trace_emptyFrame.json`） |
 | `--index-dir` | 推荐 | 反编译索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），提高 /proc 命中的代码定位精度 |
-| `--decompiled-dir` | 可选 | 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 code_review 模式 |
-| `--llm-mode` | 可选 | `analyze`（默认）/ `code_review` |
+| `--decompiled-dir` | 可选 | 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 with_source 模式 |
+| `--llm-mode` | 可选 | `analyze`（默认）/ `with_source` |
 | `--llm-tokens` | 可选 | 指定 token 文件路径（优先于自动发现）|
 | `--api-key` | 可选 | 单次覆盖 API Key（优先于所有文件）|
 | `--base-url` | 可选 | 单次覆盖接口地址 |
@@ -291,7 +291,7 @@ python scripts/main.py root-cause \
   ```typescript
   // 具体修复代码（引用实际代码）
   ```
-- **代码片段**: （code_review 模式下附上反编译代码）
+- **代码片段**: （with_source 模式下附上反编译代码）
 
 ### [MED] #2  ...
 

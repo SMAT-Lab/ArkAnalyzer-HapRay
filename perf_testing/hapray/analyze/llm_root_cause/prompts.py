@@ -3,7 +3,7 @@ prompts.py
 
 LLM 提示词。支持两种模式：
   - analyze     : 默认模式，LLM 从原始证据独立推断根因（无需反编译代码）
-  - code_review : 增强模式，LLM 阅读反编译代码片段 + 调用链，给出行级修复建议
+  - with_source : 增强模式，LLM 阅读反编译代码片段 + 调用链，给出行级修复建议
 """
 
 from __future__ import annotations
@@ -107,7 +107,7 @@ Output valid JSON only (no other text):
 """
 
 
-# ── code_review 模式（增强，需反编译源码）────────────────────────────────────
+# ── with_source 模式（增强，需反编译源码）────────────────────────────────────
 
 _CODE_REVIEW_SYSTEM_PROMPT_ZH = """你是一名 HarmonyOS / ArkUI 性能专家，专精空刷（empty frame）根因分析。
 
@@ -172,7 +172,7 @@ def _analyze_system_prompt(language: str, domain_knowledge: str = "") -> str:
     return base
 
 
-def _code_review_system_prompt(language: str, domain_knowledge: str = "") -> str:
+def _with_source_system_prompt(language: str, domain_knowledge: str = "") -> str:
     base = _CODE_REVIEW_SYSTEM_PROMPT_ZH if language == "zh" else _CODE_REVIEW_SYSTEM_PROMPT_EN
     base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_SCHEMA_STR)
     if domain_knowledge and domain_knowledge.strip():
@@ -192,15 +192,14 @@ def get_system_prompt(
     """
     Parameters
     ----------
-    mode : "analyze" | "code_review"
+    mode : "analyze" | "with_source"
         - analyze     : 默认模式，LLM 从原始证据独立推断，输出结构化 JSON
-        - code_review : 增强模式，LLM 阅读反编译代码片段，给出行级修复建议
+        - with_source : 增强模式，LLM 阅读反编译代码片段，给出行级修复建议
     domain_knowledge : str
         从 knowledge/ 目录加载的先验知识文本，注入 system prompt。
-        仅 code_review 模式使用。
     """
-    if mode == "code_review":
-        return _code_review_system_prompt(language, domain_knowledge=domain_knowledge)
+    if mode == "with_source":
+        return _with_source_system_prompt(language, domain_knowledge=domain_knowledge)
     return _analyze_system_prompt(language, domain_knowledge=domain_knowledge)
 
 
@@ -209,7 +208,7 @@ def build_user_prompt(
     extra_context: str = "",
     checker: str = "empty-frame",
     structured_evidence: dict[str, Any] | None = None,
-    # code_review 模式新增字段
+    # with_source 模式新增字段
     code_snippets: list[dict[str, Any]] | None = None,
     call_chains_text: str = "",
     mode: str = "analyze",
@@ -218,10 +217,10 @@ def build_user_prompt(
     构建 user prompt。
 
     mode="analyze"     : 传入结构化证据 JSON，LLM 独立推断根因
-    mode="code_review" : 传入代码片段 + 调用链 + 精简证据，LLM 阅读代码给出行级建议
+    mode="with_source" : 传入代码片段 + 调用链 + 精简证据，LLM 阅读代码给出行级建议
     """
-    if mode == "code_review":
-        return _build_code_review_user_prompt(
+    if mode == "with_source":
+        return _build_with_source_user_prompt(
             context_text=context_text,
             code_snippets=code_snippets or [],
             call_chains_text=call_chains_text,
@@ -260,13 +259,13 @@ def _build_analyze_user_prompt(
     return "\n".join(parts).strip() + "\n"
 
 
-def _build_code_review_user_prompt(
+def _build_with_source_user_prompt(
     context_text: str,
     code_snippets: list[dict[str, Any]],
     call_chains_text: str,
     structured_evidence: dict[str, Any] | None,
 ) -> str:
-    """code_review 模式的 user prompt 构建。"""
+    """with_source 模式的 user prompt 构建。"""
     parts: list[str] = []
     parts.append("请分析以下空刷性能问题，输出结构化 JSON 根因报告。\n")
 
