@@ -211,9 +211,8 @@ class ExcelOffsetAnalyzer:
                                     break
                     if func_size:
                         break
-            except Exception:
-                # 符号表查找失败，使用默认大小
-                pass
+            except Exception as e:
+                logger.debug('符号表查找失败，使用默认大小: %s', e)
 
             # 计算相对偏移量
             relative_start = func_start - text_vaddr
