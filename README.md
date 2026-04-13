@@ -172,47 +172,47 @@ python -m scripts.main update --report_dir <report_directory> [--so_dir <so_dire
 
 #### LLM Root Cause Analysis (`root-cause`)
 
-对 HapRay 报告中检测到的**空刷（empty frame）问题**进行 LLM 驱动的根因定位，输出嫌疑源码、修复方向的 Markdown 报告。
+对 HapRay 报告中检测到的**空刷（empty frame）问题**进行 LLM 驱动的根因定位，输出嫌疑源码、触发链路、修复建议的 Markdown 报告。
 
 ```bash
 cd perf_testing
 
-# 仅生成确定性报告（无 LLM，适合验证调试）
+# 仅生成规则引擎证据报告（无 LLM，适合验证调试）
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index \
   --skip-llm
 
-# 含 LLM 润色（Token 自动从 llm_tokens.local.yaml 加载）
+# analyze 模式（默认）：LLM 从证据独立推断根因，输出嫌疑函数 + 修复建议
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index
 
-# code_review 模式（注入反编译代码片段，给出行级修复建议）
+# code_review 模式（增强）：提供反编译源码后自动启用，LLM 阅读代码给出行级修复建议
 python -m scripts.main root-cause \
   --report-dir <HapRay报告目录> \
   --index-dir <decompiled_dir>/index \
-  --decompiled-dir <decompiled_dir> \
-  --llm-mode code_review
+  --decompiled-dir <decompiled_dir>
 ```
 
 **配置 LLM Token（一次性）：**
 ```bash
 cd perf_testing/hapray/core/config
 cp llm_tokens.local.yaml.example llm_tokens.local.yaml
-# 编辑 llm_tokens.local.yaml，填入 api_key / base_url / model
-# 此文件已在 .gitignore 中，不会提交到版本库
+# ⚠️ 只编辑 llm_tokens.local.yaml，不要修改 .example 文件
+# .local.yaml 已在 .gitignore 中，不会提交到版本库
+vim llm_tokens.local.yaml   # 填入 api_key / base_url / model
 ```
 
 Options:
 - `--report-dir <path>`: HapRay 报告目录，含 `summary.json`、`trace_emptyFrame.json`（必填）
 - `--index-dir <path>`: 反编译代码索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），推荐提供
-- `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），`code_review` 模式必须提供
-- `--llm-mode <mode>`: `polish`（默认，润色报告）/ `code_review`（阅读代码给修复建议）
+- `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 code_review 模式
+- `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `code_review`（LLM 阅读反编译代码，行级修复建议）
 - `--llm-tokens <path>`: 指定 LLM Token 文件路径（默认自动发现 `llm_tokens.local.yaml`）
 - `--api-key / --base-url / --model`: 单次覆盖，优先于所有配置文件
-- `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）
-- `--skip-llm`: 跳过 LLM，只输出确定性报告
+- `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）
+- `--skip-llm`: 跳过 LLM，`root_cause.md` 内容与 `root_cause_evidence.md` 相同
 
 详细说明参见 [`skills/hapray/analysis/empty-frame-root-cause.md`](skills/hapray/analysis/empty-frame-root-cause.md)。
 

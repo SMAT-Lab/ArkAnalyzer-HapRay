@@ -14,6 +14,7 @@ _SOURCE_LOC_RE = re.compile(
     r"^(?P<symbol_name>.+?):\[url:(?P<meta>.*)\|(?P<source>src/main/(?:ets|js)/.+?):(?P<line>\d+):(?P<column>\d+)\]$"
 )
 
+# Generic system-UI names to filter out (not app-specific)
 _GENERIC_UI_NAMES = {
     "ArrayList",
     "BatteryComponent",
@@ -49,34 +50,27 @@ _JS_LOOP_SYMBOL_HINTS = (
 )
 
 _PAGE_NAME_RE = re.compile(r'"pageName":"([^"]+)"')
-_UI_RUNTIME_ANCHOR_NAMES = (
-    "JdHome",
-    "TopTabContainer",
-    "MainTabContainer",
-    "TnFloorView",
-    "HomeTnViewWrapper",
-    "RecommendProductListView",
-    "SecondFloorH5Container",
-    "WaterFlow",
-    "JDHybridPage",
+
+# Generic lifecycle / rendering entry points that are high-signal for empty frames
+_LIFECYCLE_SYMBOLS = (
+    "abouttoappear",
+    "initialrender",
+    "onpageshow",
+    "build",
+    "oncreate",
 )
 
-_UI_RUNTIME_PRIORITY = {
-    "JdHome": 120,
-    "HomeTnViewWrapper": 110,
-    "TnFloorView": 108,
-    "RecommendProductListView": 106,
-    "TopTabContainer": 104,
-    "MainTabContainer": 102,
-    "SecondFloorH5Container": 100,
-    "WaterFlow": 70,
-    "JDHybridPage": 70,
-}
-
-_UI_NOISY_RUNTIME_NAMES = {
-    "unknown",
-    "SearchTnContainerView",
-}
+# Generic penalty: known non-UI libraries unlikely to be the rendering root cause
+_PENALTY_KEYWORDS = (
+    "base-network",
+    "interceptor",
+    "requesttask",
+    "mobile_config",
+    "biometric",
+    "lottie",
+    "animationmanager",
+    "animationitem",
+)
 
 
 class EmptyFrameEvidenceExtractor:
@@ -102,15 +96,6 @@ class EmptyFrameEvidenceExtractor:
         representative_frames = [self._normalize_frame(item) for item in frames[: self.top_n] if isinstance(item, dict)]
         ui_snapshot_hints = self._extract_ui_snapshot_hints(step_id)
         proc_source_hints = self._collect_proc_source_hints(step_id, representative_frames)
-        signals = self._derive_signals(summary, dominant_threads, representative_frames, ui_snapshot_hints, proc_source_hints)
-        hypotheses = self._build_hypotheses(
-            summary,
-            dominant_threads,
-            representative_frames,
-            ui_snapshot_hints,
-            proc_source_hints,
-            signals,
-        )
         caveats = self._build_caveats(summary, representative_frames, ui_snapshot_hints, proc_source_hints)
 
         return {
@@ -137,8 +122,6 @@ class EmptyFrameEvidenceExtractor:
             "representative_frames": representative_frames,
             "ui_snapshot_hints": ui_snapshot_hints,
             "proc_source_hints": proc_source_hints,
-            "signals": signals,
-            "hypotheses": hypotheses,
             "caveats": caveats,
         }
 
@@ -398,7 +381,6 @@ class EmptyFrameEvidenceExtractor:
         counts: Counter[str] = Counter()
         sources: dict[str, set[str]] = defaultdict(set)
         page_names: Counter[str] = Counter()
-        runtime_anchors: Counter[str] = Counter()
 
         for path in sorted(ui_root.glob("element_tree_*.txt")) + sorted(ui_root.glob("inspector_*.json")):
             try:
@@ -408,72 +390,40 @@ class EmptyFrameEvidenceExtractor:
 
             for page_name in _PAGE_NAME_RE.findall(text):
                 page_name = page_name.strip()
-                if not page_name or page_name in _UI_NOISY_RUNTIME_NAMES:
+                if not page_name or page_name == "unknown":
                     continue
                 page_names[page_name] += 1
                 sources[page_name].add(path.name)
-                if page_name in _UI_RUNTIME_ANCHOR_NAMES:
-                    runtime_anchors[page_name] += 1
 
             for name in self._extract_ui_names(text):
-                if name in _UI_NOISY_RUNTIME_NAMES:
-                    continue
                 counts[name] += 1
                 sources[name].add(path.name)
-                if name in _UI_RUNTIME_ANCHOR_NAMES:
-                    runtime_anchors[name] += 1
 
         hints: list[dict[str, Any]] = []
         for name, count in page_names.most_common(5):
-            hints.append(
-                {
-                    "name": name,
-                    "kind": "page_runtime",
-                    "count": count,
-                    "tokens": self._camel_tokens(name),
-                    "sources": sorted(sources[name]),
-                    "runtime_anchor": name in _UI_RUNTIME_ANCHOR_NAMES,
-                    "priority": _UI_RUNTIME_PRIORITY.get(name, 90),
-                }
-            )
+            hints.append({
+                "name": name,
+                "kind": "page_runtime",
+                "count": count,
+                "tokens": self._camel_tokens(name),
+                "sources": sorted(sources[name]),
+            })
 
         min_count = 4
-        for name, count in counts.most_common(24):
+        for name, count in counts.most_common(20):
             if count < min_count:
                 continue
-            hints.append(
-                {
-                    "name": name,
-                    "kind": self._classify_ui_name(name),
-                    "count": count,
-                    "tokens": self._camel_tokens(name),
-                    "sources": sorted(sources[name]),
-                    "runtime_anchor": name in _UI_RUNTIME_ANCHOR_NAMES,
-                    "priority": _UI_RUNTIME_PRIORITY.get(name, 0),
-                }
-            )
-            if len(hints) >= 18:
+            hints.append({
+                "name": name,
+                "kind": self._classify_ui_name(name),
+                "count": count,
+                "tokens": self._camel_tokens(name),
+                "sources": sorted(sources[name]),
+            })
+            if len(hints) >= 16:
                 break
 
-        if runtime_anchors:
-            anchors = []
-            for name, count in runtime_anchors.most_common(len(_UI_RUNTIME_ANCHOR_NAMES)):
-                anchors.append(
-                    {
-                        "name": name,
-                        "kind": "page_runtime" if name == "JdHome" else self._classify_ui_name(name),
-                        "count": count,
-                        "tokens": self._camel_tokens(name),
-                        "sources": sorted(sources[name]),
-                        "runtime_anchor": True,
-                        "priority": _UI_RUNTIME_PRIORITY.get(name, 0),
-                    }
-                )
-            hints = self._merge_ui_hints(hints + anchors)
-        else:
-            hints = self._merge_ui_hints(hints)
-
-        return hints[:12]
+        return self._merge_ui_hints(hints)[:12]
 
     @staticmethod
     def _merge_ui_hints(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -488,28 +438,20 @@ class EmptyFrameEvidenceExtractor:
                     **item,
                     "count": int(item.get("count", 0) or 0),
                     "sources": list(item.get("sources", [])),
-                    "runtime_anchor": bool(item.get("runtime_anchor")),
-                    "priority": int(item.get("priority", 0) or 0),
                 }
                 order.append(name)
-                continue
+            else:
+                merged[name]["count"] = max(merged[name]["count"], int(item.get("count", 0) or 0))
+                merged[name]["sources"] = sorted(set(merged[name]["sources"]) | set(item.get("sources", [])))
+                if merged[name].get("kind") in {"unknown", "view", "component"} and item.get("kind"):
+                    merged[name]["kind"] = item["kind"]
 
-            merged[name]["count"] = max(int(merged[name].get("count", 0) or 0), int(item.get("count", 0) or 0))
-            merged[name]["sources"] = sorted(set(merged[name].get("sources", [])) | set(item.get("sources", [])))
-            merged[name]["runtime_anchor"] = bool(merged[name].get("runtime_anchor")) or bool(item.get("runtime_anchor"))
-            merged[name]["priority"] = max(int(merged[name].get("priority", 0) or 0), int(item.get("priority", 0) or 0))
-            if merged[name].get("kind") in {"unknown", "view", "component"} and item.get("kind"):
-                merged[name]["kind"] = item.get("kind")
-
-        ordered = [merged[name] for name in order]
-        ordered.sort(
-            key=lambda x: (
-                -int(x.get("priority", 0) or 0),
-                0 if x.get("kind") == "page_runtime" else 1 if x.get("runtime_anchor") else 2,
-                -int(x.get("count", 0) or 0),
-                x.get("name", ""),
-            )
-        )
+        ordered = [merged[n] for n in order]
+        ordered.sort(key=lambda x: (
+            0 if x.get("kind") == "page_runtime" else 1,
+            -int(x.get("count", 0) or 0),
+            x.get("name", ""),
+        ))
         return ordered
 
     def _extract_ui_names(self, text: str) -> list[str]:
@@ -619,32 +561,29 @@ class EmptyFrameEvidenceExtractor:
             score = self._score_proc_source_hint(
                 source_path=source_path,
                 owner_name=item["owner_name"],
-                packages=packages,
                 symbols=symbols,
                 direct_hit_count=item["direct_hit_count"],
                 perf_hit_count=item["perf_hit_count"],
                 hit_count=item["hit_count"],
                 frame_vsync_count=len(item["frame_vsyncs"]),
             )
-            hints.append(
-                {
-                    "owner_name": item["owner_name"],
-                    "source_path": source_path,
-                    "source_type": item["source_type"],
-                    "packages": packages,
-                    "symbols": symbols,
-                    "lines": sorted(item["lines"]),
-                    "frame_vsyncs": sorted(item["frame_vsyncs"]),
-                    "thread_names": sorted(item["thread_names"]),
-                    "via": sorted(item["via"]),
-                    "bundle_paths": sorted(item["bundle_paths"]),
-                    "hit_count": item["hit_count"],
-                    "direct_hit_count": item["direct_hit_count"],
-                    "perf_hit_count": item["perf_hit_count"],
-                    "min_delta_ns": item["min_delta_ns"],
-                    "score": score,
-                }
-            )
+            hints.append({
+                "owner_name": item["owner_name"],
+                "source_path": source_path,
+                "source_type": item["source_type"],
+                "packages": packages,
+                "symbols": symbols,
+                "lines": sorted(item["lines"]),
+                "frame_vsyncs": sorted(item["frame_vsyncs"]),
+                "thread_names": sorted(item["thread_names"]),
+                "via": sorted(item["via"]),
+                "bundle_paths": sorted(item["bundle_paths"]),
+                "hit_count": item["hit_count"],
+                "direct_hit_count": item["direct_hit_count"],
+                "perf_hit_count": item["perf_hit_count"],
+                "min_delta_ns": item["min_delta_ns"],
+                "score": score,
+            })
 
         return sorted(
             hints,
@@ -716,354 +655,51 @@ class EmptyFrameEvidenceExtractor:
                             if key in seen:
                                 continue
                             seen.add(key)
-                            frame_hits.append(
-                                {
-                                    **hit,
-                                    "via": "perf_nearby",
-                                    "thread_name": callchain.get("thread_name", "unknown"),
-                                    "thread_id": thread_id,
-                                    "sample_timestamp": timestamp,
-                                    "event_count": self._safe_int(event_count),
-                                    "delta_ns": delta_ns,
-                                    "callchain_id": self._safe_int(callchain_id),
-                                    "depth": self._safe_int(depth),
-                                    "db_line_number": self._safe_int(line_number),
-                                    "frame_vsync": frame.get("vsync"),
-                                    "frame_thread_name": frame.get("thread_name", "unknown"),
-                                }
-                            )
+                            frame_hits.append({
+                                **hit,
+                                "via": "perf_nearby",
+                                "thread_name": callchain.get("thread_name", "unknown"),
+                                "thread_id": thread_id,
+                                "sample_timestamp": timestamp,
+                                "event_count": self._safe_int(event_count),
+                                "delta_ns": delta_ns,
+                                "callchain_id": self._safe_int(callchain_id),
+                                "depth": self._safe_int(depth),
+                                "db_line_number": self._safe_int(line_number),
+                                "frame_vsync": frame.get("vsync"),
+                                "frame_thread_name": frame.get("thread_name", "unknown"),
+                            })
                 frame["perf_proc_source_hits"] = frame_hits[:20]
         finally:
             conn.close()
 
-    def _derive_signals(
-        self,
-        summary: dict[str, Any],
-        dominant_threads: list[dict[str, Any]],
-        representative_frames: list[dict[str, Any]],
-        ui_snapshot_hints: list[dict[str, Any]],
-        proc_source_hints: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        wakeup_names = {
-            item.get("thread_name", "")
-            for frame in representative_frames
-            for item in frame.get("wakeup_threads", [])
-            if isinstance(item, dict)
-        }
-        symbol_hints = [symbol for frame in representative_frames for symbol in frame.get("symbol_hints", [])]
-        ui_names = [item.get("name", "") for item in ui_snapshot_hints]
-        ui_names_lower = [name.lower() for name in ui_names]
-        proc_owner_names = [item.get("owner_name", "") for item in proc_source_hints]
-        proc_haystacks = [
-            " ".join(
-                [
-                    item.get("owner_name", ""),
-                    item.get("source_path", ""),
-                    " ".join(item.get("symbols", [])),
-                    " ".join(item.get("packages", [])),
-                ]
-            ).lower()
-            for item in proc_source_hints
-        ]
-
-        direct_only = self._safe_int(summary.get("detection_breakdown", {}).get("direct_only"))
-        total_empty = max(self._safe_int(summary.get("total_empty_frames")), 1)
-
-        return {
-            "dominant_main_thread": self._safe_float(summary.get("main_thread_percentage_in_empty_frame")) >= 45,
-            "has_taro_js": any(item.get("role") == "js_runtime" for item in dominant_threads),
-            "has_element_thread": any(item.get("role") == "element_runtime" for item in dominant_threads),
-            "has_vsync_loop": bool(
-                "OS_VSyncThread" in wakeup_names or any(any(hint in symbol for hint in _VSYNC_SYMBOL_HINTS) for symbol in symbol_hints)
-            ),
-            "has_uv_loop": any(any(hint in symbol for hint in _JS_LOOP_SYMBOL_HINTS) for symbol in symbol_hints),
-            "direct_detection_dominant": direct_only / total_empty >= 0.8,
-            "ui_has_web_or_hybrid": any(any(token in name for token in ("web", "hybrid")) for name in ui_names_lower),
-            "ui_has_list_or_product": any(any(token in name for token in ("list", "product", "search", "recommend")) for name in ui_names_lower),
-            "ui_has_map": any("map" in name for name in ui_names_lower),
-            "ui_has_home_runtime": any(name in ui_names for name in ("JdHome", "TopTabContainer", "MainTabContainer", "HomeTnViewWrapper", "TnFloorView", "RecommendProductListView")),
-            "has_proc_user_sources": bool(proc_source_hints),
-            "proc_owner_names": proc_owner_names,
-            "proc_has_list_or_product": any(
-                any(token in haystack for token in ("search", "list", "product", "skeleton", "card", "container", "recommend", "tn"))
-                for haystack in proc_haystacks
-            ),
-            "proc_has_web_or_hybrid": any(any(token in haystack for token in ("web", "hybrid")) for haystack in proc_haystacks),
-            "proc_has_animation": any(any(token in haystack for token in ("animation", "lottie", "skeleton")) for haystack in proc_haystacks),
-            "ui_names": ui_names,
-        }
-
-    def _build_hypotheses(
-        self,
-        summary: dict[str, Any],
-        dominant_threads: list[dict[str, Any]],
-        representative_frames: list[dict[str, Any]],
-        ui_snapshot_hints: list[dict[str, Any]],
-        proc_source_hints: list[dict[str, Any]],
-        signals: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        hypotheses: list[dict[str, Any]] = []
-        total_empty = self._safe_int(summary.get("total_empty_frames"))
-        empty_rate = round(self._safe_float(summary.get("empty_frame_percentage")), 2)
-        main_pct = round(self._safe_float(summary.get("main_thread_percentage_in_empty_frame")), 2)
-        breakdown = summary.get("detection_breakdown", {})
-        rs_stats = summary.get("rs_trace_stats", {})
-        top_ui_names = [item["name"] for item in ui_snapshot_hints[:8]]
-        list_ui_names = [name for name in top_ui_names if any(token in name.lower() for token in ("list", "product", "search", "recommend", "tn", "container"))]
-        web_ui_names = [name for name in top_ui_names if any(token in name.lower() for token in ("web", "hybrid"))]
-        map_ui_names = [name for name in top_ui_names if "map" in name.lower()]
-        home_ui_names = [
-            name
-            for name in top_ui_names
-            if any(
-                token in name.lower()
-                for token in ("home", "recommend", "tn", "tabcontainer", "waterflow", "secondfloor", "jdhome")
-            )
-        ]
-
-        proc_list_hits = self._select_proc_source_scope(
-            proc_source_hints, ("search", "list", "product", "skeleton", "card", "container")
-        )
-        proc_web_hits = self._select_proc_source_scope(proc_source_hints, ("web", "hybrid"))
-        proc_animation_hits = self._select_proc_source_scope(proc_source_hints, ("animation", "lottie", "skeleton"))
-        proc_general_hits = proc_source_hints[:5]
-        proc_owner_names = [item.get("owner_name", "") for item in proc_source_hints[:8] if item.get("owner_name")]
-        owner_pool = list(
-            dict.fromkeys(top_ui_names + proc_owner_names + ["WebviewPage", "CommodityListPage", "IndexHomePage", "MapPage"])
-        )
-
-        if signals.get("dominant_main_thread") or signals.get("has_taro_js") or signals.get("has_vsync_loop"):
-            evidence = [
-                f"空刷总数 {total_empty}，占比 {empty_rate}% ，严重度 {summary.get('severity_level', 'unknown')}。",
-                f"空刷负载中主线程占比 {main_pct}% 。",
-                f"检测拆分 direct_only={self._safe_int(breakdown.get('direct_only'))}、rs_traced_only={self._safe_int(breakdown.get('rs_traced_only'))}、both={self._safe_int(breakdown.get('both'))}。",
-            ]
-            if signals.get("has_taro_js"):
-                taro = next((item for item in dominant_threads if item.get("role") == "js_runtime"), None)
-                if taro:
-                    evidence.append(
-                        f"线程 {taro['thread_name']} 在空刷负载中占比 {taro['percentage']}%，说明 JS/Taro 事件循环持续参与。"
-                    )
-            if representative_frames:
-                first_frame = representative_frames[0]
-                chain_notes = [item.get("thread_name") for item in first_frame.get("wakeup_threads", []) if item.get("thread_name")]
-                if chain_notes:
-                    evidence.append(f"代表帧 VSync#{first_frame.get('vsync')} 的唤醒链包含 {' -> '.join(chain_notes)}。")
-                if first_frame.get("symbol_hints"):
-                    evidence.append(f"代表帧命中符号 {', '.join(first_frame['symbol_hints'][:4])}。")
-            if proc_general_hits:
-                evidence.append(
-                    "代表帧/邻近 perf sample 命中 /proc 用户态源码 "
-                    + "、".join(self._format_proc_hint_brief(item) for item in proc_general_hits[:3])
-                    + "。"
-                )
-
-            candidate_sources = self._limit_preserving_order(proc_list_hits + proc_animation_hits + proc_web_hits + proc_general_hits, 6)
-            if signals.get("ui_has_home_runtime") and home_ui_names:
-                evidence.append("UI dump 明确落在 " + "、".join(home_ui_names[:6]) + " 等首页/TN/推荐流组件上。")
-            hypotheses.append(
-                {
-                    "id": "js_vsync_loop",
-                    "title": "JS/Taro 驱动的持续刷新链导致主线程反复空刷",
-                    "priority": 1,
-                    "confidence": "high" if signals.get("has_taro_js") and signals.get("has_vsync_loop") else "medium",
-                    "evidence": evidence,
-                    "inference": (
-                        "空刷不是单次重计算，更像是 JS 事件循环与 VSync 请求链反复触发无效刷新；"
-                        "结合 UI dump，当前更像发生在首页 TN 容器链或推荐流复用链，而不是只看源码命名就断言为独立搜索页。"
-                    ),
-                    "candidate_source_scope": candidate_sources,
-                    "code_query": {
-                        "owner_keywords": owner_pool,
-                        "module_keywords": ["webview", "hybrid", "search", "product", "list", "commodity", "home", "map", "recommend", "tn"],
-                        "ui_keywords": ["LazyForEach", "WaterFlow", "List", "Scroll"],
-                        "symbol_keywords": ["aboutToAppear", "onPageShow", "initialRender", "build", "createContainer"],
-                    },
-                    "fix_direction": [
-                        "优先检查 /proc 命中的源码入口，确认这些回调在页面静止时是否仍持续更新状态。",
-                        "检查当前页面是否存在 timer/requestAnimationFrame/轮询任务在页面静止时仍持续触发。",
-                        "检查 JS->ArkUI 桥接回调是否在没有视觉变化时仍更新状态。",
-                    ],
-                }
-            )
-
-        if signals.get("ui_has_list_or_product") or signals.get("proc_has_list_or_product"):
-            evidence = [
-                f"UI 快照中出现 {', '.join(list_ui_names[:5]) or '列表/商品页组件'} 等列表相关页面/组件名。",
-                f"空刷样本中主线程空刷负载占比 {main_pct}%，说明渲染树侧持续被业务页面驱动。",
-            ]
-            if signals.get("ui_has_home_runtime") and home_ui_names:
-                evidence.append("当前 UI dump 同时出现 " + "、".join(home_ui_names[:6]) + "，说明这些列表/商品能力更可能挂在首页推荐流/TN 区域中。")
-            if signals.get("direct_detection_dominant"):
-                evidence.append("direct_only 占主导，说明多数空刷是直接观测到的无效刷新，而非仅靠 RS 反向追溯。")
-            if proc_list_hits:
-                evidence.append(
-                    "`/proc` 用户态源码命中 " + "、".join(self._format_proc_hint_brief(item) for item in proc_list_hits[:4]) + "。"
-                )
-            hypotheses.append(
-                {
-                    "id": "list_rebuild",
-                    "title": "列表页/瀑布流区域存在持续重建或数据抖动",
-                    "priority": 2,
-                    "confidence": "high" if proc_list_hits else "medium",
-                    "evidence": evidence,
-                    "inference": (
-                        "若 `SearchTnContainerView`、`ProductListView`、`SkeletonScreenView` 等源码在空刷代表帧附近反复出现，"
-                        "结合当前 UI dump，更像是首页推荐流、TN 容器或复用商品流里的容器创建、卡片构建、骨架屏动画或无差异数据写回导致的持续刷新。"
-                    ),
-                    "candidate_source_scope": proc_list_hits[:6],
-                    "code_query": {
-                        "owner_keywords": list(
-                            dict.fromkeys(
-                                list_ui_names
-                                + home_ui_names
-                                + [item.get("owner_name", "") for item in proc_list_hits]
-                                + ["CommodityListPage", "WaterFlowComponent", "SearchProductListPage", "RecommendProductListView", "HomeTnViewWrapper", "TnFloorView"]
-                            )
-                        ),
-                        "module_keywords": ["commodity", "product", "search", "list", "feed", "recommend", "skeleton", "home", "tn"],
-                        "ui_keywords": ["WaterFlow", "LazyForEach", "List", "Scroll", "ForEach"],
-                        "symbol_keywords": ["initialRender", "build", "aboutToAppear", "createContainer", "handleTnData"],
-                    },
-                    "fix_direction": [
-                        "检查列表数据源是否在无差异时重复赋值。",
-                        "检查瀑布流/懒加载列表 item、卡片容器、骨架屏是否因外层状态变化被整段重建。",
-                        "检查曝光、滚动、埋点回调是否把高频事件直接写回 UI 状态。",
-                    ],
-                }
-            )
-
-        if signals.get("ui_has_web_or_hybrid") or signals.get("has_uv_loop") or signals.get("proc_has_web_or_hybrid"):
-            evidence = [
-                f"UI 快照中出现 {', '.join(web_ui_names[:5]) or 'Web/Hybrid 组件'}。",
-                f"RS 反向追溯成功 {self._safe_int(rs_stats.get('traced_success_count'))}/{self._safe_int(rs_stats.get('total_skip_frames'))}，trace_accuracy={round(self._safe_float(rs_stats.get('trace_accuracy')), 2)}%。",
-            ]
-            if signals.get("has_uv_loop"):
-                evidence.append("代表帧 callchain 中出现 uv_run，表明页面中存在 libuv/JS 事件循环活动。")
-            if proc_web_hits:
-                evidence.append("`/proc` 用户态源码命中 " + "、".join(self._format_proc_hint_brief(item) for item in proc_web_hits[:3]) + "。")
-            hypotheses.append(
-                {
-                    "id": "webview_hybrid_refresh",
-                    "title": "Web/Hybrid 容器页面持续向 ArkUI 请求刷新",
-                    "priority": 3,
-                    "confidence": "medium",
-                    "evidence": evidence,
-                    "inference": (
-                        "若当前场景是 Web/Hybrid 容器，空刷更可能来自 H5/JS bridge、前端动画或页面轮询，"
-                        "而不是纯 ArkUI 静态页面。"
-                    ),
-                    "candidate_source_scope": proc_web_hits[:6],
-                    "code_query": {
-                        "owner_keywords": list(dict.fromkeys(web_ui_names + [item.get("owner_name", "") for item in proc_web_hits] + ["WebviewPage", "JDWebView", "JDHybridPage"])),
-                        "module_keywords": ["webview", "hybrid", "web"],
-                        "ui_keywords": [],
-                        "symbol_keywords": ["aboutToAppear", "onPageShow", "initialRender"],
-                    },
-                    "fix_direction": [
-                        "检查 WebView/Hybrid 页面进入后是否立即启动持续消息同步或轮询。",
-                        "检查前端动画、进度条、倒计时是否在页面静止时仍驱动桥接刷新。",
-                    ],
-                }
-            )
-
-        if signals.get("ui_has_map"):
-            hypotheses.append(
-                {
-                    "id": "map_refresh",
-                    "title": "地图/XComponent 页面存在持续位置或视野刷新",
-                    "priority": 4,
-                    "confidence": "medium",
-                    "evidence": [f"UI 快照中出现 {', '.join(map_ui_names[:5])} 等地图相关名称。"],
-                    "inference": "地图类页面常见问题是定位、标点刷新或相机状态同步持续触发无效渲染。",
-                    "candidate_source_scope": self._select_proc_source_scope(proc_source_hints, ("map", "location", "poi"))[:6],
-                    "code_query": {
-                        "owner_keywords": list(dict.fromkeys(map_ui_names + ["MapPage", "MapComponent"])),
-                        "module_keywords": ["map", "poi", "location"],
-                        "ui_keywords": ["XComponent"],
-                        "symbol_keywords": ["aboutToAppear", "initialRender"],
-                    },
-                    "fix_direction": [
-                        "检查地图 camera/marker 更新是否做了节流与 diff。",
-                        "检查定位或视野监听在页面静止时是否仍持续写状态。",
-                    ],
-                }
-            )
-
-        return hypotheses
-
-    def _select_proc_source_scope(
-        self,
-        proc_source_hints: list[dict[str, Any]],
-        tokens: tuple[str, ...],
-        limit: int = 6,
-    ) -> list[dict[str, Any]]:
-        matched = []
-        for item in proc_source_hints:
-            haystack = " ".join(
-                [
-                    item.get("owner_name", ""),
-                    item.get("source_path", ""),
-                    " ".join(item.get("symbols", [])),
-                    " ".join(item.get("packages", [])),
-                ]
-            ).lower()
-            if any(token in haystack for token in tokens):
-                matched.append(item)
-        return matched[:limit]
-
+    @staticmethod
     def _score_proc_source_hint(
-        self,
         source_path: str,
         owner_name: str,
-        packages: list[str],
         symbols: list[str],
         direct_hit_count: int,
         perf_hit_count: int,
         hit_count: int,
         frame_vsync_count: int,
     ) -> int:
-        haystack = " ".join([source_path, owner_name, " ".join(packages), " ".join(symbols)]).lower()
         score = direct_hit_count * 12 + perf_hit_count * 4 + hit_count * 2 + frame_vsync_count * 3
 
-        if any(token in haystack for token in ("hm-search", "search", "productlist", "product", "list", "skeleton", "container", "card")):
-            score += 20
-        if any(token in haystack for token in ("createcontainer", "handletndata", "itemcomponent", "initialrender", "gradienthighlightanimation")):
+        # Boost generic lifecycle/rendering entry points (high signal for empty frames)
+        symbols_lower = " ".join(symbols).lower()
+        if any(kw in symbols_lower for kw in _LIFECYCLE_SYMBOLS):
             score += 10
-        if any(token in haystack for token in ("lottie", "animationmanager", "animationitem")):
-            score -= 14
-        if any(token in haystack for token in ("base-network", "interceptor", "requesttask", "mobile_config", "biometric")):
-            score -= 10
+
+        # Penalty: known non-UI libraries
+        haystack = " ".join([source_path, owner_name, symbols_lower]).lower()
+        if any(kw in haystack for kw in _PENALTY_KEYWORDS):
+            score -= 12
+
+        # Slight penalty for pure JS files (lower signal than ArkTS)
         if source_path.endswith(".js"):
             score -= 2
+
         return score
-
-    @staticmethod
-    def _limit_preserving_order(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-        ordered = []
-        seen = set()
-        for item in items:
-            key = (item.get("source_path"), tuple(item.get("lines", [])), item.get("owner_name"))
-            if key in seen:
-                continue
-            seen.add(key)
-            ordered.append(item)
-            if len(ordered) >= limit:
-                break
-        return ordered
-
-    @staticmethod
-    def _format_proc_hint_brief(item: dict[str, Any]) -> str:
-        source_path = item.get("source_path", "")
-        path_obj = Path(source_path) if source_path else None
-        if path_obj and path_obj.name.lower() == "index.ts" and len(path_obj.parts) >= 2:
-            short_name = "/".join(path_obj.parts[-2:])
-        elif path_obj:
-            short_name = path_obj.name
-        else:
-            short_name = item.get("owner_name", "unknown")
-        lines = "/".join(str(line) for line in item.get("lines", [])[:3])
-        return f"{short_name}:{lines}" if lines else short_name
 
     def _build_caveats(
         self,
@@ -1078,9 +714,23 @@ class EmptyFrameEvidenceExtractor:
         if not ui_snapshot_hints:
             caveats.append("当前样本没有可用的 UI snapshot/inspector 命名线索，代码定位会更依赖反编译索引模糊匹配。")
         if not proc_source_hints:
-            caveats.append("当前样本未命中可用的 `/proc` 用户态源码符号，无法直接缩到具体 ArkTS/JS 源码行，只能依赖 UI 快照和索引规则。")
+            caveats.append("当前样本未命中可用的 /proc 用户态源码符号，无法直接缩到具体 ArkTS/JS 源码行，只能依赖 UI 快照和索引规则。")
         rs_accuracy = self._safe_float(summary.get("rs_trace_stats", {}).get("trace_accuracy"))
         if rs_accuracy and rs_accuracy < 80:
             caveats.append("RS 反向追溯精度不高，涉及 RS skip 的结论应视为补充证据而非唯一依据。")
         caveats.append("候选代码范围表示优先排查区域，不代表已确认唯一根因。")
         return caveats
+
+    @staticmethod
+    def _limit_preserving_order(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+        ordered = []
+        seen = set()
+        for item in items:
+            key = (item.get("source_path"), tuple(item.get("lines", [])), item.get("owner_name"))
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(item)
+            if len(ordered) >= limit:
+                break
+        return ordered

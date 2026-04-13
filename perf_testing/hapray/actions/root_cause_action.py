@@ -45,7 +45,7 @@ class RootCauseAction:
         parser.add_argument(
             '--output',
             default=None,
-            help='Output path for the root cause Markdown report (default: <report-dir>/root_cause.md)',
+            help='Output path for the root cause Markdown report (default: <report-dir>/root_cause.md). A companion <stem>_evidence.md is always written alongside it.',
         )
         parser.add_argument(
             '--index-dir',
@@ -60,9 +60,10 @@ class RootCauseAction:
         )
         parser.add_argument(
             '--llm-mode',
-            default='polish',
-            choices=['polish', 'code_review'],
-            help='LLM analysis mode: polish (default) or code_review',
+            default='analyze',
+            choices=['analyze', 'code_review'],
+            help='LLM analysis mode: analyze (default, reasons from evidence) or '
+                 'code_review (reads decompiled code, requires --decompiled-dir)',
         )
         parser.add_argument(
             '--config',
@@ -94,7 +95,7 @@ class RootCauseAction:
         parser.add_argument(
             '--skip-llm',
             action='store_true',
-            help='Skip LLM call; output deterministic report only',
+            help='Skip LLM call; root_cause.md will contain the evidence report only (same as root_cause_evidence.md)',
         )
         parser.add_argument(
             '--stream',

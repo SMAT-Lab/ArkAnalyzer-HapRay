@@ -5,10 +5,23 @@ LLM root cause analysis runner for HapRay empty frame reports.
 
 Public API:
     run_empty_frame_analysis(...)  - analyze a HapRay report directory
+
+Modes
+-----
+analyze (default)
+    LLM receives structured evidence (proc source hits, wakeup chains, UI snapshot)
+    and reasons independently to produce a root cause report.
+    Available whenever a HapRay report exists — no decompiled source required.
+
+code_review (enhanced)
+    LLM additionally receives decompiled code snippets and call graphs.
+    Produces line-level fix recommendations.
+    Requires --decompiled-dir; automatically selected when decompiled_dir is provided.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -21,7 +34,7 @@ from .empty_frame_evidence import EmptyFrameEvidenceExtractor
 from .knowledge_loader import load_knowledge
 from .llm_client import load_client_from_config
 from .prompts import build_user_prompt, get_system_prompt
-from .report_renderer import EmptyFrameReportRenderer
+from .report_renderer import EvidenceReportRenderer
 
 
 _KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
@@ -39,11 +52,16 @@ def _llm_is_configured(config: dict) -> bool:
 
 
 def _enrich_with_code_and_callgraph(
-    hypotheses: list[dict[str, Any]],
     evidence: dict[str, Any],
     decompiled_root: Path,
     index_dir: str | None = None,
-) -> tuple[list[dict[str, Any]], str, str]:
+) -> tuple[str, str]:
+    """
+    Enrich proc_source_hints with code snippets and call graph info.
+
+    Returns:
+        (call_chains_text, module_attribution_text)
+    """
     from .code_snippet_extractor import CodeSnippetExtractor
     from .callgraph_traverser import CallgraphTraverser
     from .code_index_lookup import get_module_attributions, format_module_attribution_text
@@ -53,7 +71,6 @@ def _enrich_with_code_and_callgraph(
     proc_hints = extractor.enrich_proc_source_hints(proc_hints)
     evidence["proc_source_hints"] = proc_hints
 
-    ui_extra: list[dict[str, Any]] = []
     if index_dir:
         ui_index_path = Path(index_dir) / "ui_index.jsonl"
         if ui_index_path.exists():
@@ -88,13 +105,10 @@ def _enrich_with_code_and_callgraph(
             evidence["module_attributions"] = attributions
             module_attribution_text = format_module_attribution_text(attributions)
 
-    return hypotheses, call_chains_text, module_attribution_text
+    return call_chains_text, module_attribution_text
 
 
-def _collect_code_snippets_for_prompt(
-    evidence: dict[str, Any],
-    hypotheses: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+def _collect_code_snippets_for_prompt(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     result: list[dict[str, Any]] = []
 
@@ -111,61 +125,34 @@ def _collect_code_snippets_for_prompt(
 
     for hint in evidence.get("proc_source_hints", []):
         _add_candidates(hint.get("decompiled_candidates") or [], hint.get("hit_count", 1))
-    for hyp in hypotheses:
-        _add_candidates(hyp.get("candidate_code_scope") or [])
 
     result.sort(key=lambda c: c.get("evidence_hits", 0), reverse=True)
     return result[:5]
 
 
-def _extract_context_signals(
-    structured_evidence: dict,
-    code_snippets: list[dict[str, Any]],
-) -> list[str]:
-    signals: list[str] = []
-    for h in structured_evidence.get("hypotheses", []):
-        hyp_type = h.get("type", "")
-        if hyp_type:
-            signals.append(hyp_type)
-        desc = h.get("description", "")
-        if desc:
-            signals.append(desc[:30])
-    for t in structured_evidence.get("dominant_threads", [])[:5]:
-        name = t.get("thread_name", "")
-        if name:
-            signals.append(name)
-    for hint in structured_evidence.get("ui_snapshot_hints", [])[:10]:
-        signals.append(str(hint))
-    for frame in structured_evidence.get("representative_frames", [])[:2]:
-        for sym in (frame.get("symbol_hints") or [])[:4]:
-            signals.append(sym)
-    for snippet in code_snippets[:6]:
-        owner = snippet.get("owner_name", "")
-        if owner:
-            signals.append(owner)
-    signals.extend(["空刷", "VSync", "ArkUI", "ForEach", "State"])
-    return signals
-
-
-def _maybe_polish_with_llm(
+def _run_analyze_with_llm(
     config: dict,
     language: str,
     context_text: str,
-    deterministic_report: str,
     structured_evidence: dict,
     stream: bool,
-    skip_llm: bool,
-) -> str:
-    if skip_llm or not _llm_is_configured(config):
-        return deterministic_report
+) -> str | None:
+    """
+    analyze mode: LLM receives raw evidence and reasons independently.
+    Returns the rendered Markdown report, or None on failure.
+    """
+    from .structured_output import parse_llm_output, render_to_markdown, render_fallback_markdown
 
-    system_prompt = get_system_prompt(language=language, checker="empty-frame", mode="polish")
+    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker="empty-frame", context_signals=[])
+    system_prompt = get_system_prompt(
+        language=language, checker="empty-frame", mode="analyze",
+        domain_knowledge=domain_knowledge,
+    )
     user_prompt = build_user_prompt(
         checker="empty-frame",
         context_text=context_text,
-        draft_report=deterministic_report,
         structured_evidence=structured_evidence,
-        mode="polish",
+        mode="analyze",
     )
     try:
         client = load_client_from_config(config)
@@ -173,10 +160,17 @@ def _maybe_polish_with_llm(
             parts: list[str] = []
             for token in client.chat_stream(system_prompt, user_prompt):
                 parts.append(token)
-            return "".join(parts)
-        return client.chat(system_prompt, user_prompt)
-    except Exception:
-        return deterministic_report
+            raw_output = "".join(parts)
+        else:
+            raw_output = client.chat(system_prompt, user_prompt)
+
+        result = parse_llm_output(raw_output)
+        if result.parse_success:
+            return render_to_markdown(result)
+        return render_fallback_markdown(result)
+    except Exception as exc:
+        logging.warning("LLM analyze mode failed: %s", exc)
+        return None
 
 
 def _run_code_review_with_llm(
@@ -186,25 +180,21 @@ def _run_code_review_with_llm(
     structured_evidence: dict,
     code_snippets: list[dict[str, Any]],
     call_chains_text: str,
-    deterministic_report: str,
+    evidence_report: str,
     stream: bool,
-    skip_llm: bool,
-) -> str:
+) -> str | None:
+    """
+    code_review mode: LLM reads decompiled code snippets and produces line-level fix recommendations.
+    Falls back to analyze mode if no code snippets are available.
+    Returns the rendered Markdown report, or None on failure.
+    """
     from .structured_output import parse_llm_output, render_to_markdown, render_fallback_markdown
 
-    if skip_llm or not _llm_is_configured(config):
-        return deterministic_report
-
     if not code_snippets:
-        return _maybe_polish_with_llm(
-            config, language, context_text, deterministic_report, structured_evidence, stream, skip_llm
-        )
+        logging.info("No code snippets available for code_review; falling back to analyze mode.")
+        return _run_analyze_with_llm(config, language, context_text, structured_evidence, stream)
 
-    context_signals = _extract_context_signals(structured_evidence, code_snippets)
-    domain_knowledge = load_knowledge(
-        _KNOWLEDGE_DIR, checker="empty-frame", context_signals=context_signals
-    )
-
+    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker="empty-frame", context_signals=[])
     system_prompt = get_system_prompt(
         language=language, checker="empty-frame", mode="code_review",
         domain_knowledge=domain_knowledge,
@@ -246,8 +236,9 @@ def _run_code_review_with_llm(
                     s.business_domain = attr.get("business_domain", "")
             return render_to_markdown(result)
         return render_fallback_markdown(result)
-    except Exception:
-        return deterministic_report
+    except Exception as exc:
+        logging.warning("LLM code_review mode failed: %s", exc)
+        return None
 
 
 def run_empty_frame_analysis(
@@ -256,7 +247,7 @@ def run_empty_frame_analysis(
     llm_config: dict,
     index_dir: str | None = None,
     decompiled_dir: str | None = None,
-    llm_mode: str = "polish",
+    llm_mode: str = "analyze",
     stream: bool = False,
     skip_llm: bool = False,
 ) -> str:
@@ -267,110 +258,118 @@ def run_empty_frame_analysis(
         report_dir:     Path to the HapRay step report directory (contains summary.json,
                         trace_emptyFrame.json, etc.).
         output_path:    Destination path for the final Markdown report (e.g. .../root_cause.md).
-        llm_config:     LLM and analysis configuration dict (same schema as the standalone
-                        config.yaml: keys ``llm`` and ``analysis``).
+        llm_config:     LLM and analysis configuration dict.
         index_dir:      Optional path to a decompiled code index directory
                         (contains symbol_index.jsonl / ui_index.jsonl).
         decompiled_dir: Optional path to a decompiled source tree (*.ts / *.callgraph.json).
-                        When provided together with index_dir, enables code_review LLM mode.
-        llm_mode:       "polish" (default) or "code_review".
+                        When provided, automatically uses code_review mode.
+        llm_mode:       "analyze" (default) or "code_review".
+                        Ignored when decompiled_dir is provided (always code_review then).
         stream:         If True, stream LLM tokens to stdout while generating.
-        skip_llm:       If True, skip LLM entirely and output the deterministic report.
+        skip_llm:       If True, skip LLM entirely and output the evidence report only.
 
     Returns:
-        The final report content as a string (also written to ``output_path``).
+        The final report content as a string (also written to output_path).
     """
     analysis_cfg = llm_config.get("analysis", {})
     language = analysis_cfg.get("language", "zh")
     top_n = analysis_cfg.get("top_n_hotspots", 10)
 
+    # 1. Build performance context summary
     builder = ContextBuilder(report_dir, top_n=top_n)
     ctx = builder.build()
     context_text = builder.to_prompt_text(ctx)
 
+    # 2. Extract raw evidence (facts only, no opinions)
     extractor = EmptyFrameEvidenceExtractor(report_dir, top_n=min(top_n, 5))
     evidence = extractor.build()
 
-    hypotheses = evidence.get("hypotheses", [])
+    # 3. Enrich /proc hints with decompiled candidates from index
     if index_dir:
         lookup = CodeIndexLookup(index_dir)
-        hypotheses = lookup.lookup_hypotheses(hypotheses)
         evidence["proc_source_hints"] = lookup.lookup_proc_sources(evidence.get("proc_source_hints", []))
 
+    # 4. Optionally enrich with code snippets and call graphs
+    code_snippets: list[dict[str, Any]] = []
     call_chains_text = ""
     module_attribution_text = ""
     effective_mode = llm_mode
 
     if decompiled_dir and Path(decompiled_dir).exists():
-        hypotheses, call_chains_text, module_attribution_text = _enrich_with_code_and_callgraph(
-            hypotheses, evidence, Path(decompiled_dir), index_dir=index_dir
+        call_chains_text, module_attribution_text = _enrich_with_code_and_callgraph(
+            evidence, Path(decompiled_dir), index_dir=index_dir
         )
-    elif effective_mode == "code_review" and index_dir:
-        inferred_root = Path(index_dir).parent
-        if any(inferred_root.glob("*.ts")) or any(inferred_root.glob("*.hts")):
-            hypotheses, call_chains_text, module_attribution_text = _enrich_with_code_and_callgraph(
-                hypotheses, evidence, inferred_root, index_dir=index_dir
-            )
-        else:
-            effective_mode = "polish"
+        code_snippets = _collect_code_snippets_for_prompt(evidence)
+        # Include UI extra snippets
+        ui_extra = evidence.get("ui_extra_snippets", [])
+        main_keys = {f"{c.get('file')}:{c.get('line_start')}" for c in code_snippets}
+        for extra in ui_extra:
+            key = f"{extra.get('file')}:{extra.get('line_start')}"
+            if key not in main_keys:
+                code_snippets.append(extra)
+                main_keys.add(key)
+        effective_mode = "code_review"
+    elif llm_mode == "code_review":
+        logging.warning(
+            "llm_mode=code_review requested but --decompiled-dir not provided; "
+            "falling back to analyze mode."
+        )
+        effective_mode = "analyze"
 
-    renderer = EmptyFrameReportRenderer()
-    deterministic_report = renderer.render(evidence, hypotheses)
-
+    # 5. Build structured evidence for LLM
     structured_evidence = {
         "overview": evidence.get("overview", {}),
         "dominant_threads": evidence.get("dominant_threads", []),
         "ui_snapshot_hints": evidence.get("ui_snapshot_hints", []),
         "proc_source_hints": evidence.get("proc_source_hints", []),
         "representative_frames": evidence.get("representative_frames", []),
-        "hypotheses": hypotheses,
         "caveats": evidence.get("caveats", []),
         "module_attributions": evidence.get("module_attributions", {}),
     }
 
-    if effective_mode == "code_review":
-        code_snippets_for_llm = _collect_code_snippets_for_prompt(evidence, hypotheses)
-        ui_extra = evidence.get("ui_extra_snippets", [])
-        main_keys = {f"{c.get('file')}:{c.get('line_start')}" for c in code_snippets_for_llm}
-        for extra in ui_extra:
-            key = f"{extra.get('file')}:{extra.get('line_start')}"
-            if key not in main_keys:
-                code_snippets_for_llm.append(extra)
-                main_keys.add(key)
+    # 6. Always generate the evidence report (debug artifact)
+    renderer = EvidenceReportRenderer()
+    evidence_report = renderer.render(evidence)
 
+    # 7. LLM analysis
+    final_report: str | None = None
+    if not skip_llm and _llm_is_configured(llm_config):
         enriched_context = context_text
         if module_attribution_text:
             enriched_context = context_text + "\n\n" + module_attribution_text
 
-        final_report = _run_code_review_with_llm(
-            config=llm_config,
-            language=language,
-            context_text=enriched_context,
-            structured_evidence=structured_evidence,
-            code_snippets=code_snippets_for_llm,
-            call_chains_text=call_chains_text,
-            deterministic_report=deterministic_report,
-            stream=stream,
-            skip_llm=skip_llm,
-        )
-    else:
-        final_report = _maybe_polish_with_llm(
-            config=llm_config,
-            language=language,
-            context_text=context_text,
-            deterministic_report=deterministic_report,
-            structured_evidence=structured_evidence,
-            stream=stream,
-            skip_llm=skip_llm,
-        )
+        if effective_mode == "code_review":
+            final_report = _run_code_review_with_llm(
+                config=llm_config,
+                language=language,
+                context_text=enriched_context,
+                structured_evidence=structured_evidence,
+                code_snippets=code_snippets,
+                call_chains_text=call_chains_text,
+                evidence_report=evidence_report,
+                stream=stream,
+            )
+        else:
+            final_report = _run_analyze_with_llm(
+                config=llm_config,
+                language=language,
+                context_text=enriched_context,
+                structured_evidence=structured_evidence,
+                stream=stream,
+            )
 
+    if final_report is None:
+        final_report = evidence_report  # fallback: show evidence if LLM skipped or failed
+
+    # 8. Write outputs
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    det_path = output.parent / (output.stem + "_deterministic.md")
-    det_path.write_text(deterministic_report, encoding="utf-8")
-
+    evidence_path = output.parent / (output.stem + "_evidence.md")
+    evidence_path.write_text(evidence_report, encoding="utf-8")
     output.write_text(final_report, encoding="utf-8")
+
+    logging.info("Root cause analysis complete: %s", output_path)
     return final_report
 
 
