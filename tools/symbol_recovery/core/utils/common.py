@@ -214,9 +214,11 @@ def format_function_name(function_name: str) -> str:
     return f'Function: {function_name}'
 
 
-def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺失符号函数分析报告'):
+def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺失符号函数分析报告',
+                       show_file_path=True, show_instruction_count=True):
     """渲染 HTML 报告内容"""
     use_event_count = any('event_count' in r and r.get('event_count', 0) > 0 for r in results)
+    use_call_count = any(r.get('call_count', 0) > 0 for r in results)
     use_kmp_category = any(r.get('kmp_category') for r in results)
 
     token_stats = None
@@ -379,21 +381,19 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
             max-width: 60px;
         }}
         .file-path {{
-            max-width: 250px;
-            min-width: 200px;
-            word-wrap: break-word;
-            word-break: break-all;
+            max-width: 140px;
+            min-width: 80px;
             overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
             font-size: 0.85em;
-            line-height: 1.3;
         }}
         .address {{
             font-family: 'Courier New', monospace;
             font-size: 0.85em;
             white-space: nowrap;
-            min-width: 200px;
-            max-width: 200px;
+            min-width: 260px;
+            max-width: 320px;
         }}
         .call-count {{
             text-align: right;
@@ -583,13 +583,16 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
             <thead>
                 <tr>
                     <th style="width: 60px;">排名</th>
-                    <th style="width: 250px;">文件路径</th>
-                    <th style="width: 150px;">地址</th>
 """
+    if show_file_path:
+        html += '                    <th style="width: 140px;">文件路径</th>\n'
+    html += '                    <th style="width: 260px;">地址</th>\n'
     if use_event_count:
         html += '                    <th style="width: 120px;">指令数</th>\n'
-    html += '                    <th style="width: 100px;">调用次数</th>\n'
-    html += '                    <th style="width: 120px;">函数指令数</th>\n'
+    if use_call_count:
+        html += '                    <th style="width: 100px;">调用次数</th>\n'
+    if show_instruction_count:
+        html += '                    <th style="width: 120px;">函数指令数</th>\n'
     if use_kmp_category:
         html += '                    <th style="width: 160px;">KMP 分类</th>\n'
     html += """                    <th style="width: 180px;">LLM 推断函数名</th>
@@ -604,13 +607,16 @@ def render_html_report(results, llm_analyzer=None, time_tracker=None, title='缺
         llm_result = result.get('llm_result') or {}
         html += f"""                <tr>
                     <td class="rank">{result.get('rank', '')}</td>
-                    <td class="file-path" title="{result.get('file_path', '')}">{result.get('file_path', '')}</td>
-                    <td class="address">{result.get('address', '')}</td>
 """
+        if show_file_path:
+            html += f'                    <td class="file-path" title="{result.get("file_path", "")}">{result.get("file_path", "")}</td>\n'
+        html += f'                    <td class="address">{result.get("address", "")}</td>\n'
         if use_event_count:
             html += f'                    <td class="call-count">{result.get("event_count", 0):,}</td>\n'
-        html += f'                    <td class="call-count">{result.get("call_count", 0):,}</td>\n'
-        html += f'                    <td class="call-count">{result.get("instruction_count", 0):,}</td>\n'
+        if use_call_count:
+            html += f'                    <td class="call-count">{result.get("call_count", 0):,}</td>\n'
+        if show_instruction_count:
+            html += f'                    <td class="call-count">{result.get("instruction_count", 0):,}</td>\n'
         if use_kmp_category:
             kmp_cat = result.get('kmp_category') or (llm_result.get('kmp_category') if llm_result else '') or ''
             html += f'                    <td class="functionality">{kmp_cat}</td>\n'

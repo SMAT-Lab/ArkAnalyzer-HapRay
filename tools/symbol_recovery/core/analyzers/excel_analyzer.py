@@ -12,6 +12,7 @@ from typing import Any, Optional
 import pandas as pd
 from elftools.elf.elffile import ELFFile
 
+from core.analyzers.r2_analyzer import R2FunctionAnalyzer
 from core.llm.initializer import init_llm_analyzer
 from core.utils import common as util
 from core.utils.config import (
@@ -65,6 +66,7 @@ class ExcelOffsetAnalyzer:
         self.llm_model = llm_model if llm_model is not None else DEFAULT_LLM_MODEL
         self.batch_size = batch_size if batch_size is not None else DEFAULT_BATCH_SIZE
         self.context = context  # 自定义上下文
+        self.skip_decompilation = skip_decompilation
 
         if not self.so_file.exists():
             raise FileNotFoundError(f'SO 文件不存在: {so_file}')
@@ -76,6 +78,16 @@ class ExcelOffsetAnalyzer:
 
         # 初始化字符串提取器（稍后设置 disassemble_func）
         self.string_extractor = None
+
+        # 初始化 r2ghidra 反编译器（仅在 LLM 模式且未禁用反编译时使用）
+        self.r2_analyzer: Optional[R2FunctionAnalyzer] = None
+        if use_llm and not skip_decompilation:
+            try:
+                self.r2_analyzer = R2FunctionAnalyzer(self.so_file, skip_decompilation=False)
+                logger.info(f'✅ r2 反编译器已初始化（r2ghidra）: {self.so_file.name}')
+            except Exception as e:
+                logger.warning(f'⚠️  r2 初始化失败，将仅使用反汇编: {e}')
+                self.r2_analyzer = None
 
         # 初始化 LLM 分析器
         self.llm_analyzer, self.use_llm, self.use_batch_llm = init_llm_analyzer(
@@ -91,21 +103,26 @@ class ExcelOffsetAnalyzer:
         """解析偏移量字符串（使用统一的 util.parse_offset）"""
         return util.parse_offset(offset_str)
 
-    def load_offsets_from_excel(self) -> list[dict[str, Any]]:
+    def load_offsets_from_excel(self, df: pd.DataFrame = None) -> list[dict[str, Any]]:
         """
         从 Excel 文件加载偏移量地址
+
+        Args:
+            df: 可选，预加载的 DataFrame（多 SO 模式下传入过滤后的子集）
 
         Returns:
             偏移量列表，每个元素包含 {'offset': int, 'row_data': dict}
         """
-        logger.info(f'\n📖 读取 Excel 文件: {self.excel_file}')
-
-        try:
-            df = pd.read_excel(self.excel_file, engine='openpyxl')
-            logger.info(f'✅ 成功读取 Excel 文件，共 {len(df)} 行')
-        except Exception as e:
-            logger.error('❌ 读取 Excel 文件失败: %s', e)
-            return []
+        if df is None:
+            logger.info(f'\n📖 读取 Excel 文件: {self.excel_file}')
+            try:
+                df = pd.read_excel(self.excel_file, engine='openpyxl')
+                logger.info(f'✅ 成功读取 Excel 文件，共 {len(df)} 行')
+            except Exception as e:
+                logger.error('❌ 读取 Excel 文件失败: %s', e)
+                return []
+        else:
+            logger.info(f'📋 使用预加载数据，共 {len(df)} 行')
 
         # 查找偏移量列（可能的列名）
         offset_column = None
@@ -194,9 +211,8 @@ class ExcelOffsetAnalyzer:
                                     break
                     if func_size:
                         break
-            except Exception:
-                # 符号表查找失败，使用默认大小
-                pass
+            except Exception as e:
+                logger.debug('符号表查找失败，使用默认大小: %s', e)
 
             # 计算相对偏移量
             relative_start = func_start - text_vaddr
@@ -297,6 +313,18 @@ class ExcelOffsetAnalyzer:
 
                 logger.info(f'✅ 反汇编成功，共 {len(instructions)} 条指令')
 
+                # 尝试 r2ghidra 反编译（仅在 LLM 模式且 r2_analyzer 可用时）
+                decompiled: Optional[str] = None
+                if self.r2_analyzer is not None:
+                    try:
+                        decompiled = self.r2_analyzer.decompile_function(offset)
+                        if decompiled:
+                            logger.info(f'✅ r2ghidra 反编译成功 ({len(decompiled.splitlines())} 行)')
+                        else:
+                            logger.debug('r2ghidra 反编译返回空，将仅使用反汇编')
+                    except Exception as e:
+                        logger.warning(f'⚠️  r2ghidra 反编译失败: {e}，将仅使用反汇编')
+
                 # 初始化字符串提取器（如果还没有初始化）
                 self._init_string_extractor()
 
@@ -343,6 +371,7 @@ class ExcelOffsetAnalyzer:
                             called_functions=[],
                             offset=offset,
                             context=context,
+                            decompiled=decompiled,
                         )
                         if llm_result:
                             logger.info('✅ LLM 分析完成')
@@ -351,6 +380,9 @@ class ExcelOffsetAnalyzer:
                     except Exception as e:
                         logger.warning('⚠️  LLM 分析失败: %s', e)
 
+                all_instructions = [
+                    f'{inst.address:x}: {inst.mnemonic} {inst.op_str}' for inst in instructions
+                ]
                 return {
                     'rank': rank,
                     'offset': f'0x{offset:x}',
@@ -360,13 +392,16 @@ class ExcelOffsetAnalyzer:
                     'strings': ', '.join(strings) if strings else '',
                     'llm_result': llm_result,
                     'function_name': llm_result.get('function_name', '') if llm_result else '',
-                    'function_description': llm_result.get('functionality', '')
-                    if llm_result
-                    else '',  # LLM 返回的是 'functionality'
+                    'function_description': llm_result.get('functionality', '') if llm_result else '',
+                    'performance_analysis': llm_result.get('performance_analysis', '') if llm_result else '',
                     'confidence': llm_result.get('confidence', '') if llm_result else '',
-                    'instructions': [
-                        f'{inst.address:x}: {inst.mnemonic} {inst.op_str}' for inst in instructions[:50]
-                    ],  # 只保存前50条
+                    'instructions': all_instructions[:50],  # Excel 报告只保留前50条
+                    # 结构化 JSON 输出所需字段
+                    '_all_instructions': all_instructions,
+                    '_strings': strings,
+                    '_context': context if self.use_llm else '',
+                    '_prompt': llm_result.get('_prompt', '') if llm_result else '',
+                    '_decompiled': decompiled or '',
                 }
         except Exception:
             logger.exception('❌ 分析偏移量 0x%s 失败', f'{offset:x}')
@@ -415,18 +450,19 @@ class ExcelOffsetAnalyzer:
         # 通用格式
         return f'这是一个 SO 库（{so_file_name}），来自 {self.so_file.parent.name} 目录。'
 
-    def analyze_all(self, progress_callback=None) -> list[dict[str, Any]]:
+    def analyze_all(self, progress_callback=None, df: pd.DataFrame = None) -> list[dict[str, Any]]:
         """
         分析所有偏移量
 
         Args:
             progress_callback: 进度回调函数
+            df: 可选，预加载的 DataFrame（多 SO 模式下传入过滤后的子集）
 
         Returns:
             分析结果列表
         """
         # 加载偏移量
-        offsets_data = self.load_offsets_from_excel()
+        offsets_data = self.load_offsets_from_excel(df=df)
         if not offsets_data:
             logger.error('❌ 没有找到有效的偏移量')
             return []
@@ -476,11 +512,13 @@ class ExcelOffsetAnalyzer:
         # 准备数据
         data = []
         for result in results:
+            so_name = Path(result['so_file']).name
             row = {
                 '排名': result['rank'],
+                '地址': f"{so_name}+{result['offset']}",
                 '偏移量': result['offset'],
                 'SO文件': result['so_file'],
-                '指令数': result['instruction_count'],
+                '函数指令数': result['instruction_count'],
                 '字符串常量': result['strings'],
             }
 
@@ -494,12 +532,14 @@ class ExcelOffsetAnalyzer:
                 ):
                     function_name = f'Function: {function_name}'
                 row['LLM推断函数名'] = function_name
-                row['函数功能描述'] = result.get('function_description', '')
-                row['置信度'] = result.get('confidence', '')
+                row['LLM功能描述'] = result.get('function_description', '')
+                row['负载问题识别与优化建议'] = result.get('performance_analysis', '')
+                row['LLM置信度'] = result.get('confidence', '')
             else:
                 row['LLM推断函数名'] = ''
-                row['函数功能描述'] = ''
-                row['置信度'] = ''
+                row['LLM功能描述'] = ''
+                row['负载问题识别与优化建议'] = ''
+                row['LLM置信度'] = ''
 
             # 添加原始 Excel 中的其他列
             if 'original_row' in result:
@@ -524,6 +564,77 @@ class ExcelOffsetAnalyzer:
 
         logger.info(f'✅ Excel 报告已保存: {output_file}')
         return str(output_file)
+
+    def save_json_outputs(
+        self,
+        results: list[dict[str, Any]],
+        output_dir: str,
+    ) -> tuple[str, str]:
+        """
+        将分析结果保存为两个结构化 JSON 文件：
+          - symbol_recovery_results.json : 符号恢复结果（函数名、描述、置信度等）
+          - symbol_recovery_prompts.json : 喂给 LLM 的输入（指令、字符串、context、prompt 文本）
+
+        Args:
+            results: analyze_all() 返回的结果列表
+            output_dir: 输出目录
+
+        Returns:
+            (results_json_path, prompts_json_path)
+        """
+        import json as _json
+        from pathlib import Path as _Path
+
+        out = _Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+
+        results_data = []
+        prompts_data = []
+
+        for r in results:
+            so_name = _Path(r['so_file']).name
+
+            results_data.append({
+                'rank': r.get('rank'),
+                'address': f"{so_name}+{r['offset']}",
+                'offset': r['offset'],
+                'so_file': so_name,
+                'instruction_count': r.get('instruction_count', 0),
+                'inferred_name': r.get('function_name', ''),
+                'description': r.get('function_description', ''),
+                'performance_analysis': r.get('performance_analysis', ''),
+                'confidence': r.get('confidence', ''),
+                'strings': r.get('_strings') or [],
+            })
+
+            prompts_data.append({
+                'rank': r.get('rank'),
+                'address': f"{so_name}+{r['offset']}",
+                'offset': r['offset'],
+                'so_file': so_name,
+                'instruction_count': r.get('instruction_count', 0),
+                'instructions': r.get('_all_instructions') or r.get('instructions') or [],
+                'decompiled': r.get('_decompiled', ''),
+                'strings': r.get('_strings') or [],
+                'context': r.get('_context', ''),
+                'prompt': r.get('_prompt', ''),
+            })
+
+        results_path = out / 'symbol_recovery_results.json'
+        prompts_path = out / 'symbol_recovery_prompts.json'
+
+        results_path.write_text(
+            _json.dumps(results_data, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        prompts_path.write_text(
+            _json.dumps(prompts_data, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+
+        logger.info(f'📄 Results JSON: {results_path}')
+        logger.info(f'📄 Prompts JSON: {prompts_path}')
+        return str(results_path), str(prompts_path)
 
     def generate_html_report(
         self,
@@ -558,14 +669,14 @@ class ExcelOffsetAnalyzer:
         for result in results:
             formatted_result = {
                 'rank': result['rank'],
-                'file_path': result['so_file'],
+                'file_path': '',
                 'address': f'{Path(result["so_file"]).name}+{result["offset"]}',
                 'offset': result['offset'],
                 'so_file': result['so_file'],
                 'instruction_count': result.get('instruction_count', 0),
                 'strings': result.get('strings', ''),
-                'call_count': result.get('call_count', 0),
-                'event_count': result.get('event_count', 0),
+                'call_count': 0,
+                'event_count': 0,
                 'llm_result': result.get('llm_result'),
                 'function_name': result.get('function_name', ''),
                 'function_description': result.get('function_description', ''),
@@ -578,6 +689,8 @@ class ExcelOffsetAnalyzer:
             llm_analyzer=self.llm_analyzer if self.use_llm else None,
             time_tracker=time_tracker,
             title='Excel 偏移量分析报告',
+            show_file_path=False,
+            show_instruction_count=False,
         )
         html_path = Path(html_file)
         html_path.parent.mkdir(parents=True, exist_ok=True)

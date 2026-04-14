@@ -92,6 +92,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
 
         # 添加每个函数的信息
         for idx, func_data in enumerate(functions_data, 1):
+            func_section_start = len(prompt_parts)
             prompt_parts.append(f'{"=" * 80}')
             prompt_parts.append(f'函数 {idx} (ID: {func_data.get("function_id", f"func_{idx}")})')
             prompt_parts.append(f'{"=" * 80}')
@@ -241,6 +242,8 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                         prompt_parts.append(callee_info)
 
             prompt_parts.append('')
+            # 记录该函数在批量 prompt 中的片段，供 prompts_json 使用
+            func_data['_prompt'] = '\n'.join(prompt_parts[func_section_start:])
 
         # 输出格式说明
         prompt_parts.append('=' * 80)
@@ -427,6 +430,9 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
                     cached_result['function_id'] = func_data['function_id']
                     batch_results.append(cached_result)
                     cached_batch.append(func_data)
+                    # 缓存命中时也为该函数生成 prompt 片段，供 prompts_json 使用
+                    if '_prompt' not in func_data:
+                        self._build_batch_prompt([func_data], context)
                     with self._stats_lock:
                         self.token_stats['cached_requests'] += 1
                         self.token_stats['total_requests'] += 1
