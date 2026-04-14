@@ -84,6 +84,13 @@ else:
     datas += tmp_ret[0]
     binaries += tmp_ret[1]
     hiddenimports += tmp_ret[2]
+    # Windows：环境已能 import tensorflow（tensorflow-intel 由 pip 随元包安装），但 PyInstaller 的 collect_all('tensorflow')
+    # 只收录「tensorflow」wheel 内文件，实现主体在「tensorflow_intel」分发中；不额外收集则冻结 exe 运行时报缺模块。
+    if sys.platform == 'win32':
+        tmp_ret = collect_all('tensorflow_intel')
+        datas += tmp_ret[0]
+        binaries += tmp_ret[1]
+        hiddenimports += tmp_ret[2]
 
 
 tmp_ret = collect_all('arpy')
