@@ -89,6 +89,12 @@ try:
 except Exception as e:
     print(f"Warning: collect_data_files('hypium') failed: {e}")
 
+# devicetest 的 uitest_agent *.so 等在 res/prototype/native（非 .py）；仅 collect_submodules 不会打入，frozen 下会缺文件导致 hdc push 失败
+try:
+    datas += collect_data_files('devicetest')
+except Exception as e:
+    print(f"Warning: collect_data_files('devicetest') failed: {e}")
+
 # xdevice 在启动时用 importlib.metadata.entry_points 加载 driver（如 DeviceTest→device_test）等插件；
 # 未打入 .dist-info 时 frozen 环境找不到 entry_points，报「驱动插件未安装」
 for _dist_name in ("xdevice", "xdevice-devicetest", "xdevice-ohos", "phone-agent"):
@@ -162,8 +168,8 @@ exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    a.zipfiles,
-    a.datas,
+    [],
+    exclude_binaries=True,
     name='perf-testing',
     debug=False,
     bootloader_ignore_signals=False,
@@ -177,4 +183,15 @@ exe = EXE(
     target_arch=None,
     codesign_identity=_CODESIGN_IDENTITY,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=STRIP_BINARIES,
+    upx=False,  # 禁用 UPX（Windows DLL / macOS Mach-O 与重签、公证）
+    upx_exclude=[],
+    name='perf-testing',
 )
