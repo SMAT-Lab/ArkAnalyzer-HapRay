@@ -30,6 +30,7 @@ from hapray.actions.haptest_action import HapTestAction
 from hapray.actions.hilog_action import HilogAction
 from hapray.actions.perf_action import PerfAction
 from hapray.actions.prepare_action import PrepareAction
+from hapray.actions.root_cause_action import RootCauseAction
 from hapray.actions.static_action import StaticAction
 from hapray.actions.ui_action import UIAction
 from hapray.actions.ui_compare_action import UICompareAction
@@ -156,6 +157,7 @@ class HapRayCmd:
             'hilog': HilogAction,
             'gui-agent': GuiAgentAction,
             'haptest': HapTestAction,
+            'root-cause': RootCauseAction,
         }
 
         parser = argparse.ArgumentParser(
@@ -171,7 +173,7 @@ class HapRayCmd:
             choices=list(actions.keys()),
             nargs='?',
             default='perf',
-            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis, haptest: strategy-driven UI automation with perf collection)',
+            help='Action to perform (perf: performance testing, static: HAP static analysis, update: update reports, compare: compare reports, prepare: simplified test execution, ui: UI analysis, ui-compare: UI tree comparison, hilog: hilog log analysis, haptest: strategy-driven UI automation with perf collection, root-cause: LLM-powered root cause analysis)',
         )
         # Parse action（使用已去掉 --machine-json 的 argv）
         action_args = []

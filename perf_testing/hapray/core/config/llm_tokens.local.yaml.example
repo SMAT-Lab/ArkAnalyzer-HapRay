@@ -1,0 +1,19 @@
+# LLM Token / 凭据本地配置模板
+#
+# 使用方法：
+#   cp llm_tokens.local.yaml.example llm_tokens.local.yaml
+#   填写 api_key，之后 hapray root-cause 自动加载，无需每次传 --api-key
+#
+# 此文件（llm_tokens.local.yaml）已在 .gitignore 中忽略，不会提交到版本库。
+# 也可通过 --llm-tokens <path> 指定任意位置的同格式文件。
+
+llm:
+  provider: anthropic                      # anthropic | openai | auto
+  base_url: https://api.anthropic.com      # DeepSeek: https://api.deepseek.com/v1
+  api_key: "sk-..."                        # 填入你的 API Token
+  model: claude-sonnet-4-5                 # 推荐：claude-sonnet-4-5 / gpt-4o / deepseek-chat
+  max_tokens: 4096
+
+analysis:
+  top_n_hotspots: 10    # 取 top N 空刷代表帧
+  language: zh          # 报告语言：zh / en

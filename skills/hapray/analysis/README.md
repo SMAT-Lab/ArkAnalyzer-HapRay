@@ -9,6 +9,7 @@
 | `scroll-jank` | [`scroll-jank-trace-analysis.md`](scroll-jank-trace-analysis.md) | 列表/首页 **上下滑动**、周期性卡顿、掉帧、从 `trace.db` 还原手势与 jank | `frame_slice`（`depth=0` 真实帧）、`callstack` 手势与 `HandleDragUpdate`、SQL/Python 脚本、Hitrace 标记速查 |
 | `high-load` | [`high-load-analysis.md`](high-load-analysis.md) | **已采集** perf/trace/log 等数据时，基于 **原始侧** 挖掘未知问题；**不用** `summary.json` 规则化摘要作主线 | 高负载特征、`trace.db`+`hiperf`+日志、可选与 HTML 对照、独立 `.md`「新发现」；**禁止**用 summary 替代原始挖掘 |
 | `symbol-recovery` | [`symbol-recovery-analysis.md`](symbol-recovery-analysis.md) | 报告或 **`perf.data`** 中热点为 **`libxxx.so+0x…`** / strip 后无可读符号、需还原函数名以定位瓶颈 | **SymRecover**（`tools/symbol_recovery`）、Radare2/r2dec、LLM 辅助；KMP/stripped SO、热点语义化 |
+| `empty-frame` | [`empty-frame-root-cause.md`](empty-frame-root-cause.md) | **空刷根因定位**、VSync 持续驱动无效刷新、列表/容器重建、Web/Hybrid 持续刷新、代码级修复建议 | 端到端流程（反编译→索引→证据提取→LLM）、核心模块说明、三路证据汇聚（/proc + UI dump + perf.db）、当前缺口与优化方向、运行命令与输出报告结构 |
 
 ## 新增子 Skill 时
 

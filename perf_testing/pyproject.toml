@@ -33,7 +33,8 @@ dependencies = [
     "opencv-python>=4.10.0",
     "opencv-contrib-python>=4.10.0",
     "hypium>=6.0.7.210",
-    "phone-agent>=0.1.1"
+    "phone-agent>=0.1.1",
+    "anthropic>=0.94.0",
 ]
 
 [project.scripts]
