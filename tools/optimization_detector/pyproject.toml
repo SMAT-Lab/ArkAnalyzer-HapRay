@@ -32,6 +32,9 @@ dependencies = [
     # TensorFlow：Windows/Linux 及 macOS Intel 使用标准 tensorflow，
     # macOS + arm64 使用 tensorflow-macos，macOS 上统一配合 tensorflow-metal 做加速
     "tensorflow==2.16.2; (platform_system != 'Darwin') or (platform_system == 'Darwin' and platform_machine != 'arm64')",
+    # Windows：官方 tensorflow wheel 仅为元包，实现由 tensorflow-intel 提供；跨平台 uv lock 若不显式声明，
+    # CI 上 uv sync 可能漏装 intel，导致 PyInstaller collect_all 打出的 opt 体积极小。
+    "tensorflow-intel==2.16.2; sys_platform == 'win32'",
     "tensorflow-macos==2.16.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tensorflow-metal>=1.0.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "tensorflow-io-gcs-filesystem==0.31.0; sys_platform == 'win32' and python_full_version < '3.12'",
@@ -58,6 +61,10 @@ opt-detector = "optimization_detector.cli:main"
 
 [project.urls]
 Homepage = "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
+
+# 锁定 Windows 环境参与解析，避免仅在 Linux/macOS 上 uv lock 时忽略 win 专用依赖（如 tensorflow-intel）。
+[tool.uv]
+required-environments = ["sys_platform == 'win32'"]
 
 [tool.setuptools.packages.find]
 where = ["."]
