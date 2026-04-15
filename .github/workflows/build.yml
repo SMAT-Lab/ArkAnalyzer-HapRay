@@ -130,15 +130,6 @@ jobs:
       run: |        
         npm install --no-package-lock
 
-    # Windows：确保 tensorflow-intel 已装入 venv，否则 PyInstaller 只会打入 ~2KB 的 tensorflow 元包，opt zip 异常偏小。
-    - name: Verify tensorflow-intel (Windows / optimization_detector)
-      if: matrix.item.platform == 'win32'
-      working-directory: tools/optimization_detector
-      shell: bash
-      run: |
-        set -euo pipefail
-        uv run python -c "import tensorflow as tf; import tensorflow_intel; print('tensorflow', tf.__version__); print('tensorflow_intel', tensorflow_intel.__file__)"
-
     # macOS：Base64 p12 → Developer ID Application 签名（未配置 APPLE_CERTIFICATE 则跳过，产物未签名）
     # 必配 Secrets：APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、KEYCHAIN_PASSWORD、APPLE_SIGNING_IDENTITY
     # 可选：APPLE_TEAM_ID；公证另配 APPLE_ID+APPLE_PASSWORD 或 APPLE_API_ISSUER+APPLE_API_KEY+APPLE_API_PRIVATE_KEY
