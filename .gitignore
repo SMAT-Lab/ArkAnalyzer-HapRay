@@ -65,3 +65,4 @@ perf_testing/hapray/haptest/*.md
 desktop/src-tauri/tools/
 
 perf_testing/hapray/testcases/__auto_generated__/
+perf_testing/hypium-5.0.7.200
