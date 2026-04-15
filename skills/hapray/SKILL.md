@@ -1,6 +1,6 @@
 ---
 name: hapray
-version: "1.5.2"
+version: "1.5.3"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
@@ -286,7 +286,7 @@ uv run python -m scripts.main --result-file /tmp/hapray-tool-result.json perf \
 ```markdown
 ---
 
-<p align="center"><small>报告由 <strong>HapRay Skill</strong> <code>1.5.2</code> 生成 · <a href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay">ArkAnalyzer-HapRay</a> · 报告生成时间 <code>2026-03-30T14:30:00+08:00</code></small></p>
+<p align="center"><small>报告由 <strong>HapRay Skill</strong> <code>1.5.3</code> 生成 · <a href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay">ArkAnalyzer-HapRay</a> · 报告生成时间 <code>2026-03-30T14:30:00+08:00</code></small></p>
 ```
 
 若环境不支持 HTML，可用单行斜体替代，信息字段需完整等价。
