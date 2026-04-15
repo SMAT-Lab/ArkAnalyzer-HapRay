@@ -67,6 +67,11 @@ KNOWN_PINYIN = {
 }
 
 
+def _py_str(s: str) -> str:
+    """Safely escape a string for embedding in Python code literals."""
+    return repr(s)
+
+
 def app_name_to_pinyin_id(app_name: str) -> str:
     """Convert Chinese app name to a simple pinyin-like identifier."""
     if app_name in KNOWN_PINYIN:
@@ -126,11 +131,25 @@ def _action_to_code(step: dict, src_w: int, src_h: int, indent: int = 12) -> str
         app = params.get('app', '')
         return f'{prefix}# 启动应用: {app}（已在前置准备中完成）'
 
-    elif action in ('Tap', 'Double Tap', 'Long Press'):
+    elif action in ('Tap',):
         element = params.get('element')
         if element and len(element) >= 2:
             x, y = convert_coordinates(element, src_w, src_h)
             return f'{prefix}self.touch_by_coordinates({x}, {y}, 2)'
+        return f'{prefix}# {action} (no coordinates)'
+
+    elif action == 'Double Tap':
+        element = params.get('element')
+        if element and len(element) >= 2:
+            x, y = convert_coordinates(element, src_w, src_h)
+            return f'{prefix}self.driver.double_click(BY.coords({x}, {y}))'
+        return f'{prefix}# {action} (no coordinates)'
+
+    elif action == 'Long Press':
+        element = params.get('element')
+        if element and len(element) >= 2:
+            x, y = convert_coordinates(element, src_w, src_h)
+            return f'{prefix}self.driver.long_click(BY.coords({x}, {y}))'
         return f'{prefix}# {action} (no coordinates)'
 
     elif action == 'Swipe':
@@ -150,12 +169,12 @@ def _action_to_code(step: dict, src_w: int, src_h: int, indent: int = 12) -> str
             else:
                 sx, sy = convert_coordinates(start, src_w, src_h)
                 ex, ey = convert_coordinates(end, src_w, src_h)
-                return f'{prefix}self.driver.touch(BY.coords({sx}, {sy}))  # short swipe to ({ex}, {ey})'
+                return f'{prefix}self.driver.drag(BY.coords({sx}, {sy}), BY.coords({ex}, {ey}))'
         return f'{prefix}# Swipe (no coordinates)'
 
     elif action == 'Type':
         text = params.get('text', '')
-        return f'{prefix}self.driver.input_text(BY.type(\'TextInput\'), \'{text}\')'
+        return f'{prefix}self.driver.input_text(BY.type(\'TextInput\'), {_py_str(text)})'
 
     elif action == 'Back':
         return f'{prefix}self.swipe_to_back(1)'
@@ -238,13 +257,13 @@ def generate_hapray_script(
             if s['action'] == 'Wait':
                 lines.append(f'        step{i}()  # {step_desc}')
             else:
-                lines.append(f"        self.execute_performance_step('{step_desc}', 10, step{i})")
+                lines.append(f'        self.execute_performance_step({_py_str(step_desc)}, 10, step{i})')
     else:
         lines.append('')
         lines.append('        def step1():')
         lines.append('            self.driver.wait(5)')
         lines.append('')
-        lines.append(f"        self.execute_performance_step('{app_name}-基础场景', 15, step1)")
+        lines.append(f"        self.execute_performance_step({_py_str(app_name + '-基础场景')}, 15, step1)")
 
     # --- Assemble full script ---
     script_lines = [
@@ -258,8 +277,8 @@ def generate_hapray_script(
         '        self.TAG = self.__class__.__name__',
         '        super().__init__(self.TAG, controllers)',
         '',
-        f"        self._app_package = '{bundle_name}'",
-        f"        self._app_name = '{app_name}'",
+        f"        self._app_package = {_py_str(bundle_name)}",
+        f"        self._app_name = {_py_str(app_name)}",
         f'        self.source_screen_width = {screen_width}',
         f'        self.source_screen_height = {screen_height}',
         '',
