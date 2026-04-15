@@ -42,6 +42,12 @@ class GuiAgentAction:
         if '--multiprocessing-fork' in args:
             return (0, '')
 
+        # Check for --convert mode early
+        if '--convert' in args:
+            idx = args.index('--convert')
+            convert_args = args[idx + 1:]  # skip the "gui-agent" and "convert" tokens
+            return GuiAgentAction._execute_convert(convert_args)
+
         parser = argparse.ArgumentParser(
             description='GUI Agent - AI-powered phone automation using LLM',
             prog='ArkAnalyzer-HapRay gui-agent',
@@ -158,3 +164,27 @@ class GuiAgentAction:
         # Execute scenes（返回码 + 报告根目录，供 hapray-tool-result.json 使用）
         code = execute_scenes(parsed_args.app_packages, parsed_args.scenes, config)
         return (code, reports_path)
+
+    @staticmethod
+    def _execute_convert(args) -> ActionExecuteReturn:
+        """Convert gui-agent output (pages.json) to HapRay PerfLoad test script."""
+        parser = argparse.ArgumentParser(
+            description='Convert gui-agent output to HapRay PerfLoad test script',
+            prog='ArkAnalyzer-HapRay gui-agent --convert',
+        )
+        parser.add_argument(
+            '--report-dir',
+            type=str,
+            required=True,
+            help='Path to the scene directory containing pages.json and testInfo.json',
+        )
+        parser.add_argument(
+            '--device-id',
+            type=str,
+            default=None,
+            help='Device ID for screen resolution detection (optional)',
+        )
+        parsed = parser.parse_args(args)
+
+        from hapray.actions.convert_action import convert_scene_to_script
+        return convert_scene_to_script(parsed.report_dir, device_id=parsed.device_id)

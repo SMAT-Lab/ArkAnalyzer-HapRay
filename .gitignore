@@ -57,14 +57,11 @@ perf_testing/hapray/testcases/__haptest_generated__/
 perf_testing/hapray/haptest/*.md
 !perf_testing/hapray/haptest/README.md
 
-<<<<<<< HEAD
 # Environment variables
 .env
 
-perf_testing/hapray/testcases/autoglm/
-=======
 # Desktop generated artifacts
 #desktop/src-tauri/Cargo.lock
 desktop/src-tauri/tools/
 
->>>>>>> smat-gitcode/dev
+perf_testing/hapray/testcases/__auto_generated__/
