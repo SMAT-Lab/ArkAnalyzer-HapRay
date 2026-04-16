@@ -304,6 +304,8 @@ Options:
 - `--max-steps <N>`: Maximum steps per task (default: 20)
 - `--device-id <id>`: Device ID for multi-device setups
 - `-o/--output <path>`: Base path to save step data (default: current directory, creates timestamped reports subdirectory)
+- `--convert`: Convert mode - convert gui-agent output (pages.json) to HapRay PerfLoad test script
+- `--report-dir <path>`: Path to the scene directory containing pages.json (required in convert mode)
 
 Features:
 - **AI-powered automation**: Uses LLM to understand and execute natural language scenes
@@ -312,6 +314,7 @@ Features:
 - **Step data collection**: Automatically collects UI data after each step (screenshots, element trees, perf/trace, hilog)
 - **Real-time analysis**: Parallel analysis process for performance analysis and report generation
 - **Automatic report organization**: Data is saved in `output/reports/TIMESTAMP/<app_package>/scene<ID>/` structure
+- **Convert to PerfLoad script**: Convert gui-agent execution output to reusable HapRay test scripts
 
 Environment Variables:
 - `GLM_BASE_URL`: Model API base URL (default: http://localhost:8000/v1)
@@ -382,6 +385,14 @@ python -m scripts.main gui-agent --app com.example.app --device-id HX1234567890 
 
 # Limit execution steps
 python -m scripts.main gui-agent --app com.example.app --max-steps 10 --output ./
+
+# Convert gui-agent output to HapRay PerfLoad test script
+python -m scripts.main gui-agent --convert --report-dir ./reports/20260408152721/com.jd.hm.mall/scene1
+
+# The generated script and its driver config JSON are saved to:
+#   hapray/testcases/__auto_generated__/PerfLoad_<pinyin>_<scene>_<timestamp>.py
+#   hapray/testcases/__auto_generated__/PerfLoad_<pinyin>_<scene>_<timestamp>.json
+# e.g. PerfLoad_jingdong_scene1_20260408152721.py
 ```
 
 **Scene Configuration**:
