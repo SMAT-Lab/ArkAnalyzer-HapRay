@@ -629,6 +629,38 @@ def convert_perf_data(args, perf_data_file: Path, perf_db_file: Optional[Path], 
     return Path(result)
 
 
+def _instructions_to_json_safe(all_insts) -> list[str]:
+    """将分析结果中的指令序列转为可 ``json.dumps`` 的字符串列表（Capstone ``CsInsn`` 等）。"""
+    if not all_insts:
+        return []
+    out: list[str] = []
+    for inst in all_insts:
+        if inst is None:
+            continue
+        if isinstance(inst, str):
+            out.append(inst)
+            continue
+        if isinstance(inst, (list, tuple)):
+            out.extend(_instructions_to_json_safe(inst))
+            continue
+        if isinstance(inst, dict):
+            try:
+                out.append(json.dumps(inst, ensure_ascii=False, default=str))
+            except TypeError:
+                out.append(str(inst))
+            continue
+        # Capstone CsInsn：有 mnemonic / op_str
+        if hasattr(inst, 'mnemonic') and hasattr(inst, 'op_str'):
+            mn = (getattr(inst, 'mnemonic', None) or '').strip()
+            op = (getattr(inst, 'op_str', None) or '').strip()
+            line = f'{mn} {op}'.strip() if op else mn
+            if line:
+                out.append(line)
+            continue
+        out.append(str(inst))
+    return out
+
+
 def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, str]:
     """
     将分析结果保存为两个结构化 JSON 文件（perf 模式和 excel 模式通用）：
@@ -679,7 +711,7 @@ def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, st
             'offset': offset,
             'so_file': so_name,
             'instruction_count': r.get('instruction_count', 0),
-            'instructions': all_insts,
+            'instructions': _instructions_to_json_safe(all_insts),
             'decompiled': r.get('_decompiled') or r.get('decompiled') or '',
             'strings': raw_strings,
             'context': r.get('_context', ''),
@@ -690,10 +722,10 @@ def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, st
     prompts_path = out / 'symbol_recovery_prompts.json'
 
     results_path.write_text(
-        json.dumps(results_data, ensure_ascii=False, indent=2), encoding='utf-8'
+        json.dumps(results_data, ensure_ascii=False, indent=2, default=str), encoding='utf-8'
     )
     prompts_path.write_text(
-        json.dumps(prompts_data, ensure_ascii=False, indent=2), encoding='utf-8'
+        json.dumps(prompts_data, ensure_ascii=False, indent=2, default=str), encoding='utf-8'
     )
 
     logger.info(f'📄 Results JSON: {results_path}')
@@ -1293,6 +1325,18 @@ def main():
     # 处理 Excel 模式
     if handle_excel_mode(args, output_dir):
         return
+
+    # 仅执行 Step4：不需要 perf.data / perf.db，直接做 HTML 符号替换
+    if args.only_step4:
+        html_replaced = run_html_symbol_replacement(args, output_dir)
+        outputs = {
+            'mode': 'only_step4',
+            'output_dir': str(output_dir),
+        }
+        if html_replaced:
+            outputs['html_replaced'] = str(html_replaced)
+            _exit_with_result(0, outputs=outputs, output_dir=output_dir)
+        _exit_with_result(1, outputs=outputs, error='html_symbol_replacement_failed', output_dir=output_dir)
 
     # 处理 perf 模式（默认）
     perf_data_file, perf_db_file, so_dir = resolve_perf_paths(args, output_dir)

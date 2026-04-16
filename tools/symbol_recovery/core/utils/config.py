@@ -326,6 +326,20 @@ class Config:
         return output_dir
 
 
+def is_llm_ready_for_symbol_recovery() -> bool:
+    """
+    判断当前环境是否具备调用大模型进行符号恢复的条件（与 LLMConfig 规则一致）。
+
+    需要：非空的 API Key，以及非空的 Base URL（显式 LLM_BASE_URL 或由 LLM_SERVICE_TYPE 得到默认 URL）。
+    """
+    cfg = LLMConfig()
+    api_key = cfg.load_api_key()
+    if not api_key or not str(api_key).strip():
+        return False
+    base = (cfg.base_url or '').strip()
+    return bool(base)
+
+
 # ============================================================================
 # 单例实例
 # ============================================================================
