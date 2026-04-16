@@ -3,6 +3,13 @@ node_modules/
 package-lock.json
 .DS_Store
 
+# Local private configs (API keys etc.)
+standalone_tools/llm_root_cause/config.yaml
+perf_testing/hapray/core/config/llm_tokens.local.yaml
+
+# LLM analysis output reports
+standalone_tools/llm_root_cause/results/
+
 # Virtual Environment
 .venv/
 
@@ -55,6 +62,39 @@ perf_testing/hapray/testcases/__haptest_generated__/
 
 # HapTest documentation (personal notes)
 perf_testing/hapray/haptest/GIT_GUIDE.md
+
+# HarmonyOS scraped docs
+docs/harmonyos_arkts_docs/
+
+# Personal notes (not for version control)
+docs/个人文档/
+
+# Standalone tools (local experiments)
+standalone_tools/
+
+# Test reports output
+test_reports/
+
+# Experimental results
+experimental_results/
+
+# Toolbox
+toolbox/
+
+# IDE configs
+.idea/
+.cursorignore
+.claude/
+
+# LTO demo test data
+lto_demo/
+
+# Python build artifacts
+perf_testing/*.egg-info/
+perf_testing/hypium-*/
+
+# Script outputs
+scripts/out/
 
 # Desktop generated artifacts
 #desktop/src-tauri/Cargo.lock

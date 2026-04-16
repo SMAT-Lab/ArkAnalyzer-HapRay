@@ -248,6 +248,7 @@ class LLMFunctionAnalyzer:
         call_count: Optional[int] = None,
         event_count: Optional[int] = None,
         so_file: Optional[str] = None,
+        decompiled: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         使用 LLM 分析反汇编代码并推断函数功能和函数名
@@ -269,7 +270,7 @@ class LLMFunctionAnalyzer:
         """
         # 检查缓存
         if self.enable_cache:
-            cache_key = self._get_cache_key(instructions, strings, symbol_name, called_functions, None)
+            cache_key = self._get_cache_key(instructions, strings, symbol_name, called_functions, decompiled)
             if cache_key in self.cache:
                 cached_entry = self.cache[cache_key]
                 # 处理新格式（包含元信息）和旧格式（直接是分析结果）
@@ -288,6 +289,13 @@ class LLMFunctionAnalyzer:
                 self.token_stats['cached_requests'] += 1
                 self.token_stats['total_requests'] += 1
                 logger.debug(f'Using cached result (total instructions: {len(instructions)})')
+                # 缓存命中时仍附上 prompt，供 prompts_json 捕获
+                if '_prompt' not in cached_result:
+                    cached_result['_prompt'] = self._build_prompt(
+                        instructions, strings, symbol_name, called_functions,
+                        offset, context, so_file=so_file,
+                        open_source_lib=self.open_source_lib,
+                    )
                 return cached_result
 
         # 构建提示词
@@ -304,6 +312,7 @@ class LLMFunctionAnalyzer:
             event_count=event_count,
             so_file=so_file,
             open_source_lib=self.open_source_lib,
+            decompiled=decompiled,
         )
 
         # 保存 prompt（如果启用）
@@ -385,6 +394,7 @@ class LLMFunctionAnalyzer:
 
             # 解析结果
             result = self._parse_llm_response(result_text)
+            result['_prompt'] = prompt
 
             # 保存到缓存（包含元信息）
             if self.enable_cache:
@@ -429,6 +439,7 @@ class LLMFunctionAnalyzer:
         event_count: Optional[int] = None,
         so_file: Optional[str] = None,
         open_source_lib: Optional[str] = None,
+        decompiled: Optional[str] = None,
     ) -> str:
         """构建 LLM 提示词"""
         prompt_parts = []
@@ -522,6 +533,14 @@ class LLMFunctionAnalyzer:
         # 如果函数很长，提示 LLM
         if len(instructions) > max_instructions:
             prompt_parts.append(f'  ... (共 {len(instructions)} 条指令，此处显示前 {max_instructions} 条)')
+
+        # 反编译代码（r2ghidra / Ghidra 伪 C 代码，质量更高时优先参考）
+        if decompiled:
+            prompt_parts.append('')
+            prompt_parts.append('反编译代码 (Ghidra 伪 C，请优先参考此代码推断函数功能和名称):')
+            prompt_parts.append('```c')
+            prompt_parts.append(decompiled)
+            prompt_parts.append('```')
 
         if strings:
             prompt_parts.append('')

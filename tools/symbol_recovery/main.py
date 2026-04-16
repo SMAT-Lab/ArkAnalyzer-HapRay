@@ -362,6 +362,73 @@ def resolve_perf_paths(args, output_dir: Path) -> tuple[Path, Optional[Path], Op
     return perf_data_file, perf_db_file, so_dir
 
 
+_SO_NAME_RE = re.compile(r'^([\w\-\.]+\.so[^\+]*)(?:\+0x[0-9a-fA-F]+)?$', re.IGNORECASE)
+
+
+def _detect_so_column(df) -> Optional[str]:
+    """检测 DataFrame 中的 SO 文件名列（支持多种列名格式）。
+
+    如果没有专门的文件名列，但地址列中的值形如 ``libfoo.so+0xABCD``，
+    则自动在 df 中添加一个 ``_so_name_`` 虚拟列并返回该列名。
+    """
+    # 优先找明确的文件名列
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(x in col_lower for x in ['文件名', 'so文件', 'sofile', 'filename', 'file_name', 'so_file']):
+            return col
+
+    # 其次检测地址列中是否内嵌了 SO 名，如 "libjdimage.so+0x203ea0"
+    addr_col = None
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(x in col_lower for x in ['地址', 'address', 'offset', '偏移']):
+            addr_col = col
+            break
+    if addr_col is None and len(df.columns) > 0:
+        addr_col = df.columns[0]
+
+    if addr_col is not None:
+        sample = df[addr_col].dropna().astype(str).head(20)
+        matched = sample[sample.str.contains(r'[\w\-\.]+\.so\+0x[0-9a-fA-F]+', case=False, regex=True)]
+        if len(matched) >= max(1, len(sample) // 2):
+            # 提取 SO 名写入虚拟列
+            df['_so_name_'] = df[addr_col].astype(str).str.extract(
+                r'^([\w\-\.]+\.so[^\+]*)\+', expand=False
+            )
+            return '_so_name_'
+
+    return None
+
+
+def _find_so_in_dir(so_name: str, so_dir: Path) -> Optional[Path]:
+    """在目录中查找 SO 文件（支持 arm64/ 等子目录）"""
+    direct = so_dir / so_name
+    if direct.exists():
+        return direct
+    for subdir in ['arm64', 'arm', 'x86_64', 'x86']:
+        candidate = so_dir / subdir / so_name
+        if candidate.exists():
+            return candidate
+    matches = list(so_dir.rglob(so_name))
+    return matches[0] if matches else None
+
+
+def _make_excel_analyzer(args, so_file: Path, excel_file: Path, output_dir: Path) -> ExcelOffsetAnalyzer:
+    """创建 ExcelOffsetAnalyzer 实例（统一参数）"""
+    return ExcelOffsetAnalyzer(
+        so_file=str(so_file),
+        excel_file=str(excel_file),
+        use_llm=not args.no_llm,
+        llm_model=args.llm_model,
+        batch_size=args.batch_size,
+        context=args.context,
+        save_prompts=args.save_prompts,
+        output_dir=str(output_dir),
+        skip_decompilation=args.skip_decompilation,
+        open_source_lib=args.open_source_lib,
+    )
+
+
 def handle_excel_mode(args, output_dir: Path) -> bool:
     if not args.excel_file:
         return False
@@ -374,47 +441,78 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     if not excel_file.exists():
         logger.error('❌ Error: Excel file does not exist: %s', excel_file)
         _exit_with_result(1, error='excel_file_not_found', output_dir=output_dir)
-        return False  # 不可达：_exit_with_result 会 sys.exit
-
-    so_file = resolve_excel_so_file(args, output_dir)
-    if not so_file.exists():
-        logger.error('❌ Error: SO file does not exist: %s', so_file)
-        _exit_with_result(1, error='so_file_not_found', output_dir=output_dir)
-        return False  # 不可达：_exit_with_result 会 sys.exit
-
-    logger.info(f'Input file: {excel_file}')
-    logger.info(f'SO file: {so_file}')
+        return False
 
     time_tracker = TimeTracker()
     time_tracker.start_step('Initialization', 'Loading configuration and initializing analyzer')
 
-    try:
-        analyzer = ExcelOffsetAnalyzer(
-            so_file=str(so_file),
-            excel_file=str(excel_file),
-            use_llm=not args.no_llm,
-            llm_model=args.llm_model,
-            batch_size=args.batch_size,
-            context=args.context,
-            save_prompts=args.save_prompts,
-            output_dir=str(output_dir),
-            skip_decompilation=args.skip_decompilation,
-            open_source_lib=args.open_source_lib,
-        )
-        time_tracker.end_step('初始化')
-    except Exception:
-        logger.exception('❌ Initialization failed')
-        _exit_with_result(1, error='excel_analyzer_init_failed', output_dir=output_dir)
-        return False  # 不可达：_exit_with_result 会 sys.exit
+    analyzer = None
+    results = []
 
-    time_tracker.start_step('Analyzing offsets', 'Disassembly and LLM analysis')
-    results = analyzer.analyze_all()
-    time_tracker.end_step(f'Completed analysis of {len(results)} functions')
+    # ── 多 SO 模式：--so-dir 且 Excel 中有 SO 文件名列 ──────────────────────
+    if not args.so_file and args.so_dir:
+        try:
+            import pandas as _pd
+            df_peek = _pd.read_excel(excel_file, engine='openpyxl')
+            so_col = _detect_so_column(df_peek)
+            if so_col:
+                logger.info(f'🔍 Multi-SO mode: column "{so_col}" specifies SO filenames')
+                so_dir = Path(args.so_dir)
+                so_groups = list(df_peek.groupby(so_col))
+                logger.info(f'   {len(so_groups)} SO file(s) found in Excel')
+                time_tracker.end_step('初始化')
+                time_tracker.start_step('Analyzing offsets (multi-SO)', 'Disassembly and LLM analysis for multiple SOs')
 
+                global_rank = 1
+                for idx, (so_name, group_df) in enumerate(so_groups, 1):
+                    so_file = _find_so_in_dir(str(so_name), so_dir)
+                    if so_file is None:
+                        logger.warning(f'⚠️  [{idx}/{len(so_groups)}] SO not found: {so_name}, skipping')
+                        continue
+                    logger.info(f'\n[{idx}/{len(so_groups)}] SO: {so_name} ({len(group_df)} addresses) → {so_file}')
+                    try:
+                        cur_analyzer = _make_excel_analyzer(args, so_file, excel_file, output_dir)
+                    except Exception:
+                        logger.exception(f'❌ Failed to init analyzer for {so_name}')
+                        continue
+                    group_results = cur_analyzer.analyze_all(df=group_df.reset_index(drop=True))
+                    for r in group_results:
+                        r['rank'] = global_rank
+                        global_rank += 1
+                        results.append(r)
+                    analyzer = cur_analyzer  # keep last successful analyzer for save/report
+                    logger.info(f'✅ {so_name}: {len(group_results)} functions analyzed')
+
+                time_tracker.end_step(f'Completed analysis of {len(results)} functions')
+        except Exception as e:
+            logger.warning(f'Multi-SO detection failed, falling back to single-SO: {e}')
+
+    # ── 单 SO 模式（默认）───────────────────────────────────────────────────
     if not results:
+        so_file = resolve_excel_so_file(args, output_dir)
+        if not so_file.exists():
+            logger.error('❌ Error: SO file does not exist: %s', so_file)
+            _exit_with_result(1, error='so_file_not_found', output_dir=output_dir)
+            return False
+
+        logger.info(f'Input file: {excel_file}')
+        logger.info(f'SO file: {so_file}')
+        try:
+            analyzer = _make_excel_analyzer(args, so_file, excel_file, output_dir)
+            time_tracker.end_step('初始化')
+        except Exception:
+            logger.exception('❌ Initialization failed')
+            _exit_with_result(1, error='excel_analyzer_init_failed', output_dir=output_dir)
+            return False
+
+        time_tracker.start_step('Analyzing offsets', 'Disassembly and LLM analysis')
+        results = analyzer.analyze_all()
+        time_tracker.end_step(f'Completed analysis of {len(results)} functions')
+
+    if not results or analyzer is None:
         logger.error('❌ No analysis results')
         _exit_with_result(1, error='excel_no_analysis_results', output_dir=output_dir)
-        return False  # 不可达：_exit_with_result 会 sys.exit
+        return False
 
     time_tracker.start_step('Saving results', 'Generating Excel and HTML reports')
     config.ensure_output_dir(output_dir)
@@ -427,6 +525,7 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
         str(output_dir / f'excel_offset_analysis_{len(results)}_functions_report.html'),
         time_tracker,
     )
+    results_json, prompts_json = analyzer.save_json_outputs(results, str(output_dir))
     time_tracker.end_step('Results saved')
 
     time_tracker.print_summary()
@@ -439,22 +538,42 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     logger.info(f'📊 Analysis results: {len(results)} functions')
     logger.info(f'📄 Excel report: {excel_file_output}')
     logger.info(f'📄 HTML report: {html_file}')
+    logger.info(f'📄 Results JSON: {results_json}')
+    logger.info(f'📄 Prompts JSON: {prompts_json}')
     logger.info(f'⏱️  Time statistics: {time_stats_file}')
 
     if analyzer.use_llm and analyzer.llm_analyzer:
         analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
         analyzer.llm_analyzer.print_token_stats()
-    _exit_with_result(
-        0,
-        outputs={
-            'mode': 'excel',
-            'output_dir': str(output_dir),
-            'excel_report': str(excel_file_output),
-            'html_report': str(html_file),
-            'time_stats': str(time_stats_file),
-        },
-        output_dir=output_dir,
-    )
+
+    # 如果提供了 --html-input，在 Excel 分析完成后自动执行 HTML 符号替换
+    html_replaced_output = None
+    html_input = detect_html_input(args)
+    if html_input and html_input.exists():
+        logger.info('\n' + '=' * 80)
+        logger.info('Bonus Step: HTML Symbol Replacement (using Excel analysis results)')
+        logger.info('=' * 80)
+        html_replaced = run_html_symbol_replacement(
+            args, output_dir, excel_file_override=Path(excel_file_output),
+            show_file_path=False, show_instruction_count=False,
+        )
+        if html_replaced:
+            html_replaced_output = str(html_replaced)
+            logger.info(f'📄 Replaced HTML report: {html_replaced_output}')
+
+    outputs = {
+        'mode': 'excel',
+        'output_dir': str(output_dir),
+        'excel_report': str(excel_file_output),
+        'html_report': str(html_file),
+        'results_json': results_json,
+        'prompts_json': prompts_json,
+        'time_stats': str(time_stats_file),
+    }
+    if html_replaced_output:
+        outputs['html_replaced'] = html_replaced_output
+
+    _exit_with_result(0, outputs=outputs, output_dir=output_dir)
     return False  # 不可达：_exit_with_result 会 sys.exit
 
 
@@ -508,6 +627,78 @@ def convert_perf_data(args, perf_data_file: Path, perf_db_file: Optional[Path], 
         _exit_with_result(1, error='perf_convert_failed', output_dir=output_dir)
 
     return Path(result)
+
+
+def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, str]:
+    """
+    将分析结果保存为两个结构化 JSON 文件（perf 模式和 excel 模式通用）：
+      - symbol_recovery_results.json : 符号恢复结果（函数名、描述、置信度等）
+      - symbol_recovery_prompts.json : 喂给 LLM 的输入（指令、反编译代码、prompt 文本）
+
+    兼容两种 result 格式：
+      - excel 模式：包含 _all_instructions / _strings / _context / _prompt / _decompiled
+      - perf  模式：包含 instructions / strings(str) / decompiled / llm_result._prompt
+    """
+    from pathlib import Path as _Path
+
+    out = _Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    results_data = []
+    prompts_data = []
+
+    for r in results:
+        so_name = _Path(r.get('so_file', '')).name
+        llm = r.get('llm_result') or {}
+        offset = r.get('offset', '')
+
+        # 指令列表：兼容两种格式
+        all_insts = r.get('_all_instructions') or r.get('instructions') or []
+
+        # 字符串列表：excel 模式是 list，perf 模式是逗号分隔字符串
+        raw_strings = r.get('_strings') or r.get('strings') or []
+        if isinstance(raw_strings, str):
+            raw_strings = [s.strip() for s in raw_strings.split(',') if s.strip()]
+
+        results_data.append({
+            'rank': r.get('rank'),
+            'address': f"{so_name}+{offset}",
+            'offset': offset,
+            'so_file': so_name,
+            'instruction_count': r.get('instruction_count', 0),
+            'inferred_name': llm.get('function_name', '') or '',
+            'description': llm.get('functionality', '') or '',
+            'performance_analysis': llm.get('performance_analysis', '') or '',
+            'confidence': llm.get('confidence', '') or '',
+            'strings': raw_strings,
+        })
+
+        prompts_data.append({
+            'rank': r.get('rank'),
+            'address': f"{so_name}+{offset}",
+            'offset': offset,
+            'so_file': so_name,
+            'instruction_count': r.get('instruction_count', 0),
+            'instructions': all_insts,
+            'decompiled': r.get('_decompiled') or r.get('decompiled') or '',
+            'strings': raw_strings,
+            'context': r.get('_context', ''),
+            'prompt': (llm.get('_prompt') or r.get('_prompt') or ''),
+        })
+
+    results_path = out / 'symbol_recovery_results.json'
+    prompts_path = out / 'symbol_recovery_prompts.json'
+
+    results_path.write_text(
+        json.dumps(results_data, ensure_ascii=False, indent=2), encoding='utf-8'
+    )
+    prompts_path.write_text(
+        json.dumps(prompts_data, ensure_ascii=False, indent=2), encoding='utf-8'
+    )
+
+    logger.info(f'📄 Results JSON: {results_path}')
+    logger.info(f'📄 Prompts JSON: {prompts_path}')
+    return str(results_path), str(prompts_path)
 
 
 def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path], output_dir: Path):
@@ -566,6 +757,7 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
     if results:
         time_tracker.start_step('Saving results', 'Generating Excel and HTML reports')
         output_file = analyzer.save_results(results, time_tracker=time_tracker, top_n=args.top_n)
+        save_analysis_json_outputs(results, output_dir)
         time_tracker.end_step('Results saved')
 
         logger.info(f'\n✅ Step 3 completed! Analyzed {len(results)} functions')
@@ -621,6 +813,7 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
             output_dir=output_dir,
             top_n=args.top_n,
         )
+        save_analysis_json_outputs(results, output_dir)
         time_tracker.end_step('Results saved')
 
         actual_result_count = len(results)
@@ -641,7 +834,8 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         logger.warning('\n⚠️  No functions were successfully analyzed')
 
 
-def run_html_symbol_replacement(args, output_dir: Path):
+def run_html_symbol_replacement(args, output_dir: Path, excel_file_override: Path = None,
+                                show_file_path: bool = True, show_instruction_count: bool = True):
     if args.skip_step4 or args.only_step1 or args.only_step3:
         return
 
@@ -649,7 +843,11 @@ def run_html_symbol_replacement(args, output_dir: Path):
     logger.info('Step 4: HTML Symbol Replacement')
     logger.info('=' * 80)
 
-    excel_file = detect_excel_file(args, output_dir)
+    if excel_file_override and excel_file_override.exists():
+        excel_file = excel_file_override
+        logger.info(f'Using provided Excel file: {excel_file}')
+    else:
+        excel_file = detect_excel_file(args, output_dir)
     if not excel_file or not excel_file.exists():
         logger.warning('⚠️  Excel file does not exist: %s', excel_file)
         logger.info('   Please run Step 3 first to generate analysis results')
@@ -715,6 +913,8 @@ def run_html_symbol_replacement(args, output_dir: Path):
         excel_file=str(excel_file) if excel_file else None,
         report_data=report_data,
         llm_analyzer=llm_analyzer,
+        show_file_path=show_file_path,
+        show_instruction_count=show_instruction_count,
     )
 
     # 生成新的 HTML 文件，而不是直接修改原文件
@@ -730,6 +930,7 @@ def run_html_symbol_replacement(args, output_dir: Path):
     logger.info(f'📄 Original file: {html_input} (unchanged)')
     logger.info(f'📄 New file: {html_output}')
     logger.info(f'   Replaced {len(replacement_info)} missing symbols')
+    return html_output
 
 
 def detect_excel_file(args, output_dir: Path) -> Optional[Path]:
@@ -1114,15 +1315,18 @@ def main():
         )
 
     run_llm_analysis(args, perf_db_file, so_dir, output_dir)
-    run_html_symbol_replacement(args, output_dir)
+    html_replaced = run_html_symbol_replacement(args, output_dir)
     summarize_outputs(args, output_dir)
+    perf_outputs = {
+        'mode': 'perf_pipeline',
+        'output_dir': str(output_dir),
+        'perf_db': str(perf_db_file) if perf_db_file else None,
+    }
+    if html_replaced:
+        perf_outputs['html_replaced'] = str(html_replaced)
     _exit_with_result(
         0,
-        outputs={
-            'mode': 'perf_pipeline',
-            'output_dir': str(output_dir),
-            'perf_db': str(perf_db_file) if perf_db_file else None,
-        },
+        outputs=perf_outputs,
         output_dir=output_dir,
     )
 

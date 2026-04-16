@@ -163,43 +163,58 @@ python cli.py -i build_output/ -o ../../optimization_report.xlsx -j 4
 For more detailed information about Optimization Detection, please refer to [so编译优化收益和配置指南](docs/so编译优化收益和配置指南.md)
 
 #### Thread Analysis (thread)
-线程分析（唤醒链 + 冗余线程/优化机会）有两种使用方式：
-
-**方式一：随报告管线自动运行（推荐）**  
-执行 `update` 生成或更新报告时，线程分析会作为内置 analyzer 自动执行，结果写入场景报告目录下的 `report/redundant_thread_analysis.json`，并汇总进 Excel 报告。
+线程分析（唤醒链 + 冗余线程/优化机会）随报告管线自动运行。执行 `update` 生成或更新报告时，线程分析会作为内置 analyzer 自动执行，结果写入场景报告目录下的 `report/redundant_thread_analysis.json`，并汇总进 Excel 报告。
 ```bash
 python -m scripts.main update --report_dir <report_directory> [--so_dir <so_directory>]
 ```
 报告目录中需包含 `hiperf/stepN/pids.json`、`htrace/stepN/`、perf 数据等；线程分析会按每个 step 的 app PIDs 自动跑唤醒链与冗余分析。
 
-**方式二：独立 CLI（单 trace/perf DB + 指定 PIDs）**  
-若只有单个 trace 数据库（或 trace+perf 合一库）、且已知要分析的进程 PID，可直接跑线程分析脚本，无需完整 scene 目录：
+
+#### LLM Root Cause Analysis (`root-cause`)
+
+对 HapRay 报告中检测到的**空刷（empty frame）问题**进行 LLM 驱动的根因定位，输出嫌疑源码、触发链路、修复建议的 Markdown 报告。
+
 ```bash
-cd standalone_tools/thread_analysis
-python thread_checker.py <trace_db_path> [perf_db_path] --app-pids <pid1> [pid2 ...] [options]
+cd perf_testing
+
+# 仅生成规则引擎证据报告（无 LLM，适合验证调试）
+python -m scripts.main root-cause \
+  --report-dir <HapRay报告目录> \
+  --index-dir <decompiled_dir>/index \
+  --skip-llm
+
+# analyze 模式（默认）：LLM 从证据独立推断根因，输出嫌疑函数 + 修复建议
+python -m scripts.main root-cause \
+  --report-dir <HapRay报告目录> \
+  --index-dir <decompiled_dir>/index
+
+# with_source 模式（增强）：提供反编译源码后自动启用，LLM 阅读代码给出行级修复建议
+python -m scripts.main root-cause \
+  --report-dir <HapRay报告目录> \
+  --index-dir <decompiled_dir>/index \
+  --decompiled-dir <decompiled_dir>
+```
+
+**配置 LLM Token（一次性）：**
+```bash
+cd perf_testing/hapray/core/config
+cp llm_tokens.local.yaml.example llm_tokens.local.yaml
+# ⚠️ 只编辑 llm_tokens.local.yaml，不要修改 .example 文件
+# .local.yaml 已在 .gitignore 中，不会提交到版本库
+vim llm_tokens.local.yaml   # 填入 api_key / base_url / model
 ```
 
 Options:
-- `trace_db_path`: Trace 数据库路径（必需）
-- `perf_db_path`: Perf 数据库路径（可选；若与 trace 同库可省略）
-- `--app-pids <pid1> [pid2 ...]`: 要分析的应用进程 PID 列表（必需）
-- `--output <path>`: 输出 JSON 路径（默认脚本目录下 thread_analysis.json）
-- `--time-range <START_TS> <END_TS>`: 时间范围（纳秒，可选）
-- `--skip-optimization`: 仅做唤醒链分析，不做冗余/优化分析
-- `--keep-all`: 输出中保留全部线程详情与完整 optimization_analysis
-- `--top-n <N>`: 控制台打印指令数前 N 个线程（默认 10）
+- `--report-dir <path>`: HapRay 报告目录，含 `summary.json`、`trace_emptyFrame.json`（必填）
+- `--index-dir <path>`: 反编译代码索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），推荐提供
+- `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 with_source 模式
+- `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `with_source`（LLM 阅读反编译代码，行级修复建议）
+- `--llm-tokens <path>`: 指定 LLM Token 文件路径（默认自动发现 `llm_tokens.local.yaml`）
+- `--api-key / --base-url / --model`: 单次覆盖，优先于所有配置文件
+- `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）
+- `--skip-llm`: 跳过 LLM，`root_cause.md` 内容与 `root_cause_evidence.md` 相同
 
-Example:
-```bash
-# 单库（trace 与 perf 在同一 DB）+ 单进程
-python thread_checker.py ../hiprofiler_data.db --app-pids 34542
-
-# 指定 trace 与 perf 两个 DB，多进程
-python thread_checker.py trace.db perf.db --app-pids 34542 37766 --output out/thread_report.json
-
-# 仅唤醒链，不做冗余优化分析
-python thread_checker.py trace.db perf.db --app-pids 34542 --skip-optimization
-```
+详细说明参见 [`skills/hapray/analysis/empty-frame-root-cause.md`](skills/hapray/analysis/empty-frame-root-cause.md)。
 
 #### Static Analysis (`static`)
 ```bash

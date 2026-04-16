@@ -80,8 +80,8 @@ def load_excel_data_for_report(excel_file):
         strings_value = row.get('字符串常量', '')
         strings_value = '' if pd.isna(strings_value) else str(strings_value)
 
-        # 处理指令数量（可能是 '指令数' 列）
-        instruction_count = row.get('指令数', 0)
+        # 处理指令数量（优先读 '函数指令数'，兼容旧列名 '指令数'）
+        instruction_count = row.get('函数指令数', row.get('指令数', 0))
         if pd.isna(instruction_count):
             instruction_count = 0
         else:
@@ -742,6 +742,8 @@ def add_disclaimer(
     excel_file=None,
     report_data=None,
     llm_analyzer=None,
+    show_file_path=True,
+    show_instruction_count=True,
 ):
     """在 HTML 中添加免责声明、参考链接和嵌入的报告
 
@@ -805,6 +807,8 @@ def add_disclaimer(
             llm_analyzer=llm_analyzer,
             time_tracker=None,
             title='缺失符号函数分析报告',
+            show_file_path=show_file_path,
+            show_instruction_count=show_instruction_count,
         )
         # 提取 body 内容
         body_match = re.search(r'<body[^>]*>(.*?)</body>', full_html, re.DOTALL | re.IGNORECASE)
@@ -941,3 +945,82 @@ def add_disclaimer(
         html_content += insertion_content
 
     return html_content
+
+
+def extract_event_counts_from_html(html_file: str) -> dict:
+    """从 hiperf HTML 的 recordSampleInfo 中提取每个符号地址的运行时 CPU 指令数
+
+    hiperf HTML 的 recordSampleInfo 记录了 raw-instruction-retired 事件的采样数据，
+    每个函数条目的 counts = [sample次数, self_event_count, total_event_count]。
+    本函数提取 counts[1]（self event_count，即直接归属于该函数的运行时指令数）。
+
+    Returns:
+        dict: {libname.so+0xoffset: event_count} 格式的映射
+    """
+    try:
+        with open(html_file, encoding='utf-8') as f:
+            html = f.read()
+    except Exception as e:
+        logger.warning(f'无法读取 HTML 文件: {e}')
+        return {}
+
+    # 解析压缩的 JSON 数据块
+    match = re.search(r'<script id="record_data"[^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
+    if not match:
+        match = re.search(r'<script[^>]*id=["\']record_bz_data["\'][^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
+    if not match:
+        logger.warning('HTML 中未找到 record_data 数据块')
+        return {}
+
+    raw = match.group(1).strip()
+    try:
+        decoded = base64.b64decode(raw)
+        if decoded[:2] == b'\x1f\x8b':
+            data = json.loads(gzip.decompress(decoded))
+        elif decoded[:2] in (b'x\x9c', b'x\xda', b'x\x01'):
+            data = json.loads(zlib.decompress(decoded))
+        else:
+            data = json.loads(decoded.decode('utf-8', errors='ignore'))
+    except Exception:
+        try:
+            data = json.loads(raw)
+        except Exception as e:
+            logger.warning(f'无法解析 HTML JSON 数据: {e}')
+            return {}
+
+    sym_map = data.get('SymbolMap', {})
+    rsi_list = data.get('recordSampleInfo', [])
+    if not rsi_list:
+        logger.warning('HTML 中未找到 recordSampleInfo')
+        return {}
+
+    # 构建 symbolKey -> total_event_count（counts[2]，即包含被调用函数的全量指令数）
+    # counts 格式: [sample次数, self_event_count, total_event_count]
+    # 使用 counts[2] 与 hiperf 火焰图展示的数值保持一致（total inclusive）
+    sym_event: dict = {}
+    for rsi in rsi_list:
+        for proc in rsi.get('processes', []):
+            for thread in proc.get('threads', []):
+                for lib in thread.get('libs', []):
+                    for func in lib.get('functions', []):
+                        sym_key = str(func['symbol'])
+                        counts = func.get('counts', [])
+                        if len(counts) >= 3 and counts[2] > 0:
+                            sym_event[sym_key] = sym_event.get(sym_key, 0) + counts[2]
+                        elif len(counts) >= 2 and counts[1] > 0:
+                            # fallback: 没有 counts[2] 时用 counts[1]
+                            sym_event[sym_key] = sym_event.get(sym_key, 0) + counts[1]
+
+    # 构建 libname.so+0xoffset -> event_count
+    addr_event: dict = {}
+    for k, v in sym_map.items():
+        if k not in sym_event:
+            continue
+        sym = v.get('symbol', '')
+        m = re.search(r'(lib[\w_]+\.so\+0x[0-9a-fA-F]+)', sym, re.IGNORECASE)
+        if m:
+            key = m.group(1)
+            addr_event[key] = addr_event.get(key, 0) + sym_event[k]
+
+    logger.info(f'从 HTML 中提取了 {len(addr_event)} 个符号的运行时指令数（event_count）')
+    return addr_event

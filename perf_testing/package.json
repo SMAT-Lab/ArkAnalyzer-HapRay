@@ -1,16 +1,16 @@
 {
   "name": "perf_testing",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "files": [
     "dist"
   ],
   "scripts": {
     "postinstall": "npm run setup",
     "setup": "node ../scripts/python_setup.js && node ./setup.js",
-    "build": "npm run build:onefile",
+    "build": "npm run build:onedir",
     "postbuild": "webpack --config webpack.config.js && node scripts/copy-testcases-to-dist.mjs",
-    "build:onefile": "uv run pyinstaller -y --distpath ../dist/tools/perf-testing main.spec",
-    "build:python": "npm run build:onefile",
+    "build:onedir": "uv run pyinstaller -y --distpath ../dist/tools main.spec",
+    "build:python": "npm run build:onedir",
     "lint": "uv run --group dev tox -e lint",
     "lint:fix": "uv run --group dev tox -e lint-fix",
     "test": "uv run --group dev pytest tests -v",

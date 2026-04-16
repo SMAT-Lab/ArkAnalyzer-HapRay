@@ -21,8 +21,13 @@ dependencies = [
 dev = [
     "ruff",
     "tox",
+    "pytest>=8.0",
     "pyinstaller==6.13.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 
 [project.scripts]
 symbol-recovery = "main:main"

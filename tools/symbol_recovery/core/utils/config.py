@@ -310,13 +310,7 @@ class Config:
         Returns:
             Path: 输出目录路径对象
         """
-        out = Path(custom_dir) if custom_dir else DEFAULT_OUTPUT_DIR
-        if sys.platform != 'darwin':
-            return out
-        # macOS 下无论是否显式传参，输出目录统一落到用户目录
-        root = Path.home() / 'ArkAnalyzer-HapRay' / 'symbol_recovery'
-        root.mkdir(parents=True, exist_ok=True)
-        return root / out.name
+        return Path(custom_dir) if custom_dir else DEFAULT_OUTPUT_DIR
 
     def ensure_output_dir(self, output_dir: Path) -> Path:
         """
