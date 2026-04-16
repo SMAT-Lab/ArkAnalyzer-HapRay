@@ -21,8 +21,9 @@ class PerfLoad_bilibili_0010(PerfTestCase):
         return self._app_name
 
     def process(self):
+        self.start_app()
         def step1():
-            self.start_app()
+            time.sleep(5)
 
         def step2():
             # b站首页上滑操作

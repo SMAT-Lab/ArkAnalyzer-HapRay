@@ -16,12 +16,27 @@ limitations under the License.
 import argparse
 import logging
 import os
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 from hapray import VERSION
 from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.symbol_recovery_bridge import (
+    ENV_SO_DIR,
+    ENV_SYMBOL_RECOVERY_EXE,
+    ENV_SYMBOL_RECOVERY_PYTHON,
+    ENV_SYMBOL_RECOVERY_ROOT,
+    check_symbol_recovery_llm_ready,
+    parse_output_root_from_env,
+    parse_stat_from_env,
+    parse_top_n_from_env,
+    resolve_effective_so_dir,
+    resolve_symbol_recovery_exe,
+    resolve_symbol_recovery_python,
+    resolve_symbol_recovery_root,
+    try_load_dotenv_for_llm,
+)
+from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
@@ -43,7 +58,10 @@ class UpdateAction:
             '-r',
             '--report_dir',
             required=True,
-            help='Directory containing reports to update',
+            help=(
+                '一次跑测输出根目录：其下每个用例为子目录且含 hiperf/（或该根下有一层时间戳等中间目录再为用例）。'
+                '不要填 perf-testing 的安装目录（如 dist）。'
+            ),
         )
         parser.add_argument('--so_dir', default=None, help='Directory for symbolicated .so files')
         parser.add_argument(
@@ -135,10 +153,57 @@ class UpdateAction:
             default=False,
             help='Disable redundant thread analysis (ThreadAnalyzer). By default thread analysis is enabled.',
         )
+        parser.add_argument(
+            '--symbol-recovery-top-n',
+            type=int,
+            default=None,
+            help=(
+                'Symbol recovery: top N hot functions (default 50; env HAPRAY_SYMBOL_RECOVERY_TOP_N). '
+                'Uses tools/symbol_recovery checkout: prefers venv entry ``symbol-recovery`` exe, then ``python main.py``; '
+                'override with HAPRAY_SYMBOL_RECOVERY_EXE or HAPRAY_SYMBOL_RECOVERY_PYTHON.'
+            ),
+        )
+        parser.add_argument(
+            '--symbol-recovery-stat',
+            choices=['event_count', 'call_count'],
+            default=None,
+            help='Symbol recovery stat method (default event_count; env HAPRAY_SYMBOL_RECOVERY_STAT)',
+        )
+        parser.add_argument(
+            '--symbol-recovery-output',
+            default=None,
+            help='Optional root dir for symbol recovery cache (env HAPRAY_SYMBOL_RECOVERY_OUTPUT)',
+        )
+        parser.add_argument(
+            '--symbol-recovery-context',
+            default=None,
+            help='Optional --context passed to symbol_recovery for LLM prompts',
+        )
+        parser.add_argument(
+            '--symbol-recovery-no-llm',
+            action='store_true',
+            default=False,
+            help='Disable integrated symbol recovery (even if LLM env is configured)',
+        )
+        parser.add_argument(
+            '--symbol-recovery-timeout',
+            type=int,
+            default=None,
+            help='Subprocess timeout in seconds for symbol recovery (default: no limit)',
+        )
         parsed_args = parser.parse_args(args)
 
+        try_load_dotenv_for_llm()
+
         report_dir = os.path.abspath(parsed_args.report_dir)
-        so_dir = os.path.abspath(parsed_args.so_dir) if parsed_args.so_dir else None
+        effective_so, so_source = resolve_effective_so_dir(parsed_args.so_dir)
+        if effective_so:
+            logging.info('Effective SO directory (%s): %s', so_source, effective_so)
+        elif parsed_args.so_dir or os.environ.get(ENV_SO_DIR, '').strip():
+            logging.warning(
+                'SO directory was requested via CLI or %s but path is missing or not a directory',
+                ENV_SO_DIR,
+            )
 
         Config.set('mode', parsed_args.mode)
         if not os.path.exists(report_dir) and Config.get('mode') == Mode.COMMUNITY:
@@ -179,13 +244,68 @@ class UpdateAction:
                 scene=scene,
             )
         logging.info('Updating reports in: %s', report_dir)
-        if so_dir:
-            logging.info('Using symbolicated .so files from: %s', so_dir)
-            Config.set('so_dir', so_dir)
+        # 每次 update 都显式刷新 so_dir，避免沿用同进程上一次执行遗留的值
+        Config.set('so_dir', effective_so or '')
+
+        llm_ready = check_symbol_recovery_llm_ready()
+        top_n = parse_top_n_from_env(parsed_args.symbol_recovery_top_n)
+        stat_method = parse_stat_from_env(parsed_args.symbol_recovery_stat)
+        output_root = parse_output_root_from_env(
+            parsed_args.symbol_recovery_output if parsed_args.symbol_recovery_output else None
+        )
+        Config.set('symbol_recovery_llm_ready', llm_ready)
+        Config.set('symbol_recovery_top_n', top_n)
+        Config.set('symbol_recovery_stat_method', stat_method)
+        Config.set('symbol_recovery_output_root', output_root or '')
+        Config.set('symbol_recovery_context', (parsed_args.symbol_recovery_context or '').strip())
+        Config.set('symbol_recovery_no_llm', bool(parsed_args.symbol_recovery_no_llm))
+        Config.set(
+            'symbol_recovery_timeout',
+            parsed_args.symbol_recovery_timeout if parsed_args.symbol_recovery_timeout is not None else 0,
+        )
+        if not parsed_args.symbol_recovery_no_llm:
+            if llm_ready and effective_so:
+                sr_root = resolve_symbol_recovery_root()
+                entry_exe = resolve_symbol_recovery_exe(sr_root) if sr_root else None
+                py_exe = None if entry_exe is not None else resolve_symbol_recovery_python()
+                launcher_ok = bool(entry_exe or py_exe)
+                if sr_root and launcher_ok:
+                    logging.info(
+                        'Integrated symbol recovery enabled (LLM ok, top_n=%s, stat=%s, root=%s, launcher=%s)',
+                        top_n,
+                        stat_method,
+                        sr_root,
+                        entry_exe or py_exe,
+                    )
+                else:
+                    if not sr_root:
+                        logging.warning(
+                            'Symbol recovery not runnable: set %s to the directory that contains '
+                            'symbol_recovery main.py (separate checkout; not bundled in perf-testing).',
+                            ENV_SYMBOL_RECOVERY_ROOT,
+                        )
+                    if sr_root and not launcher_ok:
+                        logging.warning(
+                            'Symbol recovery not runnable: no subprocess launcher under %s '
+                            '(``uv sync`` in that dir for venv/Scripts/symbol-recovery.exe, or place symbol-recovery.exe, '
+                            'or set %s / %s).',
+                            sr_root,
+                            ENV_SYMBOL_RECOVERY_EXE,
+                            ENV_SYMBOL_RECOVERY_PYTHON,
+                        )
+            elif llm_ready and not effective_so:
+                logging.info('LLM configured for symbol recovery but no SO dir (--so_dir or %s); skipping', ENV_SO_DIR)
+            elif effective_so and not llm_ready:
+                logging.info(
+                    'SO dir set but LLM env not ready for symbol recovery (need non-empty API key and base URL); '
+                    'skipping. If you use HapRay GUI settings, ensure ~/.hapray-gui/config.json has llm_api_key / '
+                    'llm_base_url (or set LLM_SERVICE_TYPE with matching service key), or export LLM_* / place .env '
+                    'next to perf-testing.'
+                )
 
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
         if not testcase_dirs:
-            logging.error('No valid test case reports found')
+            UpdateAction._log_no_testcase_dirs_help(report_dir)
             return (1, '')
 
         # Parse time ranges
@@ -225,23 +345,26 @@ class UpdateAction:
         A valid test case directory must have at least a 'hiperf' subdirectory.
         The 'htrace' subdirectory is optional (for perf-only mode).
         """
-        testcase_dirs = []
-        round_dir_pattern = re.compile(r'.*_round\d$')
+        return find_testcase_dirs_under_report_root(report_dir)
 
-        for entry in os.listdir(report_dir):
-            if round_dir_pattern.match(entry):
-                continue
-
-            full_path = os.path.join(report_dir, entry)
-            # Check if directory has hiperf (htrace is optional)
-            if os.path.isdir(full_path) and os.path.exists(os.path.join(full_path, 'hiperf')):
-                testcase_dirs.append(full_path)
-
-        # If no subdirectories found, check if report_dir itself is a test case directory
-        if not testcase_dirs and os.path.exists(os.path.join(report_dir, 'hiperf')):
-            testcase_dirs.append(report_dir)
-
-        return testcase_dirs
+    @staticmethod
+    def _log_no_testcase_dirs_help(report_dir: str) -> None:
+        logging.error('No valid test case reports found under: %s', report_dir)
+        logging.error(
+            '--report_dir 必须是「跑测结果」目录：其中每个用例文件夹下应有 hiperf/（内含 perf 数据）。'
+            '常见为 HapRay GUI 结果目录下的时间戳文件夹，例如与 hapray-tool-result.json 同级的目录；'
+            '不要选择 perf-testing.exe 所在的安装目录（如 .../dist 或 .../tools/perf-testing）。'
+        )
+        if os.path.isdir(report_dir):
+            try:
+                names = os.listdir(report_dir)
+            except OSError as e:
+                logging.error('Cannot list report_dir: %s', e)
+                return
+            preview = ', '.join(names[:15])
+            if len(names) > 15:
+                preview += ', ...'
+            logging.error('当前目录下条目（前若干项）: %s', preview or '(空)')
 
     @staticmethod
     def parse_time_ranges(time_range_strings: list[str]) -> list[dict]:
