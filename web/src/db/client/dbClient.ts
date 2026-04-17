@@ -21,6 +21,7 @@ export type SqlRow = Record<string, unknown>;
  * Request timeout in milliseconds
  */
 const REQUEST_TIMEOUT_MS = 30000;
+const INIT_REQUEST_TIMEOUT_MS = 180000;
 
 /**
  * ES module indicators
@@ -278,13 +279,14 @@ export class DbClient {
    * Setup request timeout
    */
   private setupRequestTimeout(id: string, type: WorkerMessageType, reject: (reason: unknown) => void): ReturnType<typeof setTimeout> {
+    const timeoutMs = type === 'init' ? INIT_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
     return setTimeout(() => {
       if (this.pendingRequests.has(id)) {
         console.error('[DbClient] Request timeout, id:', id, 'type:', type);
         this.pendingRequests.delete(id);
         reject(new Error('Request timeout'));
       }
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
   }
 
   /**
