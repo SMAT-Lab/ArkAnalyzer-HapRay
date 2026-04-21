@@ -93,6 +93,7 @@ interface QueryPayload {
 
 let SQL: SqlJsStatic | null = null;
 let db: Database | null = null;
+let wasmBlobUrl: string | null = null;
 
 /**
  * Initialize SQL.js
@@ -102,8 +103,13 @@ async function initSQL(wasmBase64?: string): Promise<void> {
   if (!SQL) {
     SQL = await initSqlJs({
       locateFile: (file: string) => {
-        if (file === 'sql-wasm.wasm' && wasmBase64) {
-          return createWasmBlobUrl(wasmBase64);
+        // Some sql.js builds pass filenames with prefixes/suffixes.
+        // As long as the request is for wasm and we have inline data, always use blob URL.
+        if (file.toLowerCase().includes('.wasm') && wasmBase64) {
+          if (!wasmBlobUrl) {
+            wasmBlobUrl = createWasmBlobUrl(wasmBase64);
+          }
+          return wasmBlobUrl;
         }
         return `https://sql.js.org/dist/${file}`;
       },
@@ -259,6 +265,10 @@ function handleClose(): void {
   if (db) {
     db.close();
     db = null;
+  }
+  if (wasmBlobUrl) {
+    URL.revokeObjectURL(wasmBlobUrl);
+    wasmBlobUrl = null;
   }
 }
 

@@ -17,23 +17,52 @@ import hashlib
 import json
 import logging
 import re
+import time
+from dataclasses import dataclass, field
 from typing import Optional
 
 Log = logging.getLogger('HapTest.State')
 
 
+@dataclass
+class StateStackEntry:
+    """Enhanced state stack entry with screenshot and LLM description"""
+    state_hash: str              # Keep for backward compatibility
+    screenshot_path: str         # Path to screenshot
+    description: str             # LLM-generated description (from traversal)
+    step_id: int                 # Step number
+    timestamp: float             # When added
+    visit_count: int = 1         # Visit counter
+    element_count: int = 0       # Number of elements
+    depth: int = 0               # Navigation depth
+
+
+@dataclass
+class StateComparisonResult:
+    """LLM comparison result"""
+    is_same_state: bool          # Semantically same?
+    confidence: float            # 0.0-1.0
+    reasoning: str               # LLM explanation
+    similarity_score: float      # 0.0-1.0
+    key_differences: list = field(default_factory=list)  # Differences found
+    used_fallback: bool = False  # Fallback used?
+    hash_match: bool = False     # Whether hashes matched
+
+
+@dataclass
+class TestContext:
+    """Test context for LLM prompts"""
+    app_package: str             # App being tested
+    app_name: str                # Human-readable name
+    target_depth: int            # Target exploration depth
+    current_depth: int           # Current depth
+    test_goal: str               # Test objective
+
+
 class UIState:
     """UI状态封装"""
 
-    def __init__(
-        self,
-        step_id: int,
-        screenshot_path: str,
-        element_tree_path: str,
-        inspector_path: str,
-        app_package: str = None,
-        current_bundle_name: str = None,
-    ):
+    def __init__(self, step_id: int, screenshot_path: str, element_tree_path: str, inspector_path: str, app_package: str = None, app_name: str = None,current_bundle_name: str = None):
         self.step_id = step_id
         self.screenshot_path = screenshot_path
         self.element_tree_path = element_tree_path
@@ -42,6 +71,7 @@ class UIState:
         self.current_bundle_name = current_bundle_name
         self._clickable_elements = None
         self._state_hash = None
+        self.app_name = app_name
 
     @property
     def clickable_elements(self) -> list:

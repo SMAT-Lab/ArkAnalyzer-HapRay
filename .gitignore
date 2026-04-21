@@ -60,8 +60,12 @@ __pycache__/
 # HapTest generated test cases
 perf_testing/hapray/testcases/__haptest_generated__/
 
-# HapTest documentation (personal notes)
-perf_testing/hapray/haptest/GIT_GUIDE.md
+# HapTest documentation (personal notes, except README)
+perf_testing/hapray/haptest/*.md
+!perf_testing/hapray/haptest/README.md
+
+# Environment variables
+.env
 
 # HarmonyOS scraped docs
 docs/harmonyos_arkts_docs/
@@ -100,3 +104,5 @@ scripts/out/
 #desktop/src-tauri/Cargo.lock
 desktop/src-tauri/tools/
 
+perf_testing/hapray/testcases/__auto_generated__/
+perf_testing/hypium-5.0.7.200

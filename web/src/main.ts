@@ -71,6 +71,32 @@ function decodeBase64(base64String: string): string {
 }
 
 /**
+ * Patches legacy embedded worker code at runtime.
+ * Some old bundles only match file === 'sql-wasm.wasm', which can fail on hashed wasm filenames.
+ */
+function patchLegacyWorkerCode(workerCode: string): string {
+    if (!workerCode) {
+        return workerCode;
+    }
+
+    // Match both readable source (file === 'sql-wasm.wasm')
+    // and minified bundles (a==="sql-wasm.wasm").
+    const strictMatcher = /([A-Za-z_$][\w$]*)\s*===\s*['"]sql-wasm\.wasm['"]/g;
+    if (!strictMatcher.test(workerCode)) {
+        return workerCode;
+    }
+
+    strictMatcher.lastIndex = 0;
+    let replacedCount = 0;
+    const patchedCode = workerCode.replace(strictMatcher, (_match, fileVar: string) => {
+        replacedCount += 1;
+        return `${fileVar}.toLowerCase().includes('.wasm')`;
+    });
+    console.warn(`[Main] Patched legacy worker locateFile wasm matcher at runtime (${replacedCount} replacement${replacedCount > 1 ? 's' : ''})`);
+    return patchedCode;
+}
+
+/**
  * Retrieves text content from a script tag with the specified ID
  * @param scriptId - The ID of the script tag to read from
  * @returns The text content of the script tag, or empty string if not found
@@ -105,7 +131,7 @@ function loadWorkerCode(): void {
         return;
     }
 
-    const decodedCode = decodeBase64(base64Code);
+    const decodedCode = patchLegacyWorkerCode(decodeBase64(base64Code));
     window.__dbWorkerCode = decodedCode;
     
     if (decodedCode) {

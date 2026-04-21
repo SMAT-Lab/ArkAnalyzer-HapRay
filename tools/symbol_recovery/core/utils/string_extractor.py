@@ -9,10 +9,15 @@ from typing import Optional
 
 from elftools.elf.elffile import ELFFile
 
-from core.utils import common as util
 from core.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _default_disassembler():
+    from core.utils import common as util  # noqa: PLC0415
+
+    return util.create_disassembler()
 
 # 需要过滤的字符串模式（错误消息、调试信息等）
 FILTERED_STRING_PATTERNS = [
@@ -72,7 +77,7 @@ class StringExtractor:
             md: Capstone 反汇编器实例（如果为 None，将创建新的）
         """
         self.disassemble_func = disassemble_func
-        self.md = md if md is not None else util.create_disassembler()
+        self.md = md if md is not None else _default_disassembler()
 
     def extract_strings_from_instructions(
         self, elf_file: ELFFile, instructions: list, vaddr: Optional[int] = None

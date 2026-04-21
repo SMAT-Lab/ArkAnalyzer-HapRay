@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from core.utils import common as util
 from core.utils.config import (
     DEFAULT_TOP_N,
     EVENT_COUNT_REPORT_PATTERN,
@@ -171,6 +170,13 @@ def replace_symbols_in_html(html_content, function_mapping):
     # 统计信息
     replaced_count = {'count': 0}
     replacement_info = []
+
+    def track_replacement(addr: str, fn: str) -> None:
+        if not addr or not fn:
+            return
+        if addr in {r['original'] for r in replacement_info}:
+            return
+        replacement_info.append({'original': addr, 'replaced': fn})
 
     # 提取地址部分（如 libxwebcore.so+0x50338a0 或 libtaobaoavsdk_bridge.so+0x1de430）
     def extract_address(full_path):
@@ -572,6 +578,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                     if '[反推，仅供参考]' in m.group(0):
                         return m.group(0)
                     replaced_count['count'] += 1
+                    track_replacement(addr, fn)
                     # 在替换后保留原始地址，便于追溯
                     return f'{m.group(1)}{m.group(2)}{fn} [反推，仅供参考] ({addr})'
 
@@ -586,6 +593,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                     if '[反推，仅供参考]' in m.group(0):
                         return m.group(0)
                     replaced_count['count'] += 1
+                    track_replacement(addr, fn)
                     # 在替换后保留原始地址，便于追溯
                     return f'{m.group(1)}{fn} [反推，仅供参考] ({addr}){m.group(3)}'
 
@@ -600,6 +608,7 @@ def replace_symbols_in_html(html_content, function_mapping):
                     if '[反推，仅供参考]' in m.group(2):
                         return m.group(0)
                     replaced_count['count'] += 1
+                    track_replacement(addr, fn)
                     # 在替换后保留原始地址，便于追溯
                     return f'{m.group(1)}{fn} [反推，仅供参考] ({addr})"'
 
@@ -801,7 +810,9 @@ def add_disclaimer(
     # 生成报告内容（优先使用 report_data，否则从文件读取）
     report_body_content = ''
     if report_data:
-        # 直接从数据生成报告内容
+        # 直接从数据生成报告内容（依赖 capstone 等，仅 HTML 导出路径加载）
+        from core.utils import common as util  # noqa: PLC0415
+
         full_html = util.render_html_report(
             report_data,
             llm_analyzer=llm_analyzer,
@@ -945,6 +956,26 @@ def add_disclaimer(
         html_content += insertion_content
 
     return html_content
+
+
+def apply_function_mapping_to_perf_json_text(json_text: str, function_mapping: dict) -> tuple[str, list]:
+    """
+    将地址→函数名映射应用到原始 perf.json 文本（与 hiperf 火焰图数据源一致）。
+
+    通过带 ``<script id="record_data">`` 的最小 HTML 外壳复用 ``replace_symbols_in_html`` 的替换逻辑。
+    """
+    safe = json_text.replace('</script>', '<\\/script>')
+    wrapper = (
+        '<!DOCTYPE html><html><body><script id="record_data" type="application/json">'
+        + safe
+        + '</script></body></html>'
+    )
+    out, info = replace_symbols_in_html(wrapper, function_mapping)
+    m = re.search(r'<script\s+id=["\']record_data["\'][^>]*>(.*?)</script>', out, re.DOTALL | re.IGNORECASE)
+    if not m:
+        return json_text, info
+    inner = m.group(1).replace('<\\/script>', '</script>')
+    return inner, info
 
 
 def extract_event_counts_from_html(html_file: str) -> dict:

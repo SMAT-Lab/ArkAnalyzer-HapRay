@@ -19,11 +19,21 @@ import logging
 import os
 import re
 import zlib
+from pathlib import Path
 from typing import Any, Optional
 
 from hapray.analyze import BaseAnalyzer
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.symbol_recovery_bridge import (
+    default_symbol_recovery_output_dir,
+    embed_symbol_recovery_report_into_hiperf_html,
+    maybe_generate_symbol_recovery_html_for_step,
+    maybe_run_symbol_recovery_for_step,
+    symbol_recovery_report_name,
+    symbol_recovery_replaced_html_name,
+    symbol_recovery_should_run,
+)
 from hapray.core.config.config import Config
 
 
@@ -36,8 +46,7 @@ class PerfAnalyzer(BaseAnalyzer):
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
     ) -> Optional[dict[str, Any]]:
         """Run performance analysis"""
-        flame_graph = self.generate_hiperf_report(perf_db_path)
-        # Execute only in step1
+        # step1 先跑 perf -i，再符号恢复写 perf.json，最后读入火焰图，避免读到过期 perf.json
         if step_dir == 'step1':
             args = ['perf', '-i', self.scene_dir]
             so_dir = Config.get('so_dir', None)
@@ -60,7 +69,90 @@ class PerfAnalyzer(BaseAnalyzer):
             logging.debug('Running perf analysis with command: %s', ' '.join(args))
             ExeUtils.execute_hapray_cmd(args)
 
-        return flame_graph
+        sr_applied = self._maybe_apply_symbol_recovery(step_dir, perf_db_path)
+
+        result = self.generate_hiperf_report(perf_db_path)
+        if sr_applied:
+            generated_html = self._maybe_generate_symbol_recovery_html(step_dir)
+            self._maybe_embed_symbol_recovery_report(step_dir, perf_db_path, generated_html)
+        return result
+
+    def _maybe_apply_symbol_recovery(self, step_dir: str, perf_db_path: str) -> bool:
+        """在生成火焰图数据前，可选运行符号恢复并写回 perf.json。"""
+        no_llm = bool(Config.get('symbol_recovery_no_llm', False))
+        llm_ready = bool(Config.get('symbol_recovery_llm_ready', False))
+        so_dir = (Config.get('so_dir', None) or '').strip()
+        if not symbol_recovery_should_run(
+            llm_ready=llm_ready,
+            effective_so_dir=so_dir or None,
+            perf_db_path=perf_db_path,
+            no_llm_override=no_llm,
+        ):
+            return False
+        top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
+        stat_method = (Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count').strip()
+        if stat_method not in ('event_count', 'call_count'):
+            stat_method = 'event_count'
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        timeout_raw = Config.get('symbol_recovery_timeout', 0)
+        try:
+            tval = float(timeout_raw) if timeout_raw else 0.0
+        except (TypeError, ValueError):
+            tval = 0.0
+        timeout_sec = tval if tval > 0 else None
+        extras: list[str] = []
+        ctx = (Config.get('symbol_recovery_context', '') or '').strip()
+        if ctx:
+            extras.extend(['--context', ctx])
+        ok = maybe_run_symbol_recovery_for_step(
+            self.scene_dir,
+            step_dir,
+            perf_db_path,
+            effective_so_dir=so_dir,
+            top_n=top_n,
+            stat_method=stat_method,
+            output_root=output_root,
+            subprocess_timeout_sec=timeout_sec,
+            extra_args=extras or None,
+        )
+        if not ok:
+            logging.warning(
+                'Integrated symbol recovery did not complete for scene=%s step=%s',
+                self.scene_dir,
+                step_dir,
+            )
+            return False
+        return True
+
+    def _maybe_embed_symbol_recovery_report(
+        self, step_dir: str, perf_db_path: str, generated_html: Optional[Path] = None
+    ) -> None:
+        """符号恢复成功后，将详细 HTML 嵌入 hiperf_report.html（iframe）。"""
+        top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
+        stat_method = (Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count').strip()
+        if stat_method not in ('event_count', 'call_count'):
+            stat_method = 'event_count'
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, output_root)
+        hiperf = Path(perf_db_path).parent / 'hiperf_report.html'
+        generated = generated_html or (hiperf.parent / symbol_recovery_replaced_html_name(hiperf.name))
+        detail = generated if generated.is_file() else out_dir / symbol_recovery_report_name(stat_method, top_n)
+        embed_symbol_recovery_report_into_hiperf_html(hiperf, detail)
+
+    def _maybe_generate_symbol_recovery_html(self, step_dir: str) -> Optional[Path]:
+        """在 update 生成新的 hiperf_report.html 后，再补跑 symbol_recovery Step4。"""
+        top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
+        stat_method = (Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count').strip()
+        if stat_method not in ('event_count', 'call_count'):
+            stat_method = 'event_count'
+        output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
+        return maybe_generate_symbol_recovery_html_for_step(
+            self.scene_dir,
+            step_dir,
+            top_n=top_n,
+            stat_method=stat_method,
+            output_root=output_root,
+        )
 
     @staticmethod
     def convert_kind_to_json() -> str:

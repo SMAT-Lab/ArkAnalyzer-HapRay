@@ -25,11 +25,12 @@ haptest/
 
 ### 2. ExplorationStrategy (探索策略)
 
-提供3种探索策略:
+提供4种探索策略:
 
 - **DepthFirstStrategy**: 深度优先,优先探索新控件
 - **BreadthFirstStrategy**: 广度优先,随机选择控件
 - **RandomStrategy**: 随机探索,完全随机操作
+- **LLMStrategy**: 基于大模型的智能探索,使用视觉语言模型分析UI并决策
 
 ### 3. HapTest (主测试类)
 
@@ -57,19 +58,25 @@ haptest/
 cd ArkAnalyzer-HapRay\perf_testing
 .\.venv\Scripts\activate
 
+# 连接设备
+hdc tconn 192.168.31.204:5555  
+
 # 或 (Linux/Mac)
 source activate.sh
 
 # 运行haptest (以京东为例)
-python -m scripts.main haptest \
-  --app-package com.jd.hm.mall \
-  --app-name "京东" \
-  --strategy depth_first \
-  --max-steps 20
+python -m scripts.main haptest --app-package com.jd.hm.mall --app-name "京东" --strategy depth_first --max-steps 20
+
+python -m scripts.main haptest --app-package com.taobao.taobao4hmos --app-name "淘宝" --strategy llm --max-steps 10
+
+python -m scripts.main haptest --app-package com.xunmeng.pinduoduo.hos --app-name "pdd" --ability-name EntryAbility --strategy llm --max-steps 10
 
 python -m scripts.main haptest --app-package com.example.deephierarchy --app-name "DH" --ability-name EntryAbility --strategy depth_first --max-steps 20 
 
-python -m scripts.main haptest --app-package com.example.areudead --app-name "AUD" --ability-name EntryAbility --strategy depth_first --max-steps 20 
+python -m scripts.main haptest --app-package com.example.areudead --app-name "AUD" --ability-name EntryAbility --strategy llm --max-steps 20 
+
+python -m scripts.main haptest --app-package com.huawei.hmos.files --app-name "FILE" --ability-name EntryAbility --strategy llm --max-steps 20 
+
 
 # 完整参数示例
 python -m scripts.main haptest \
@@ -137,6 +144,23 @@ python -m scripts.main perf --run_testcases MyHapTest
 | `depth_first` | 深度优先探索,系统性遍历 | 需要全面覆盖的场景 |
 | `breadth_first` | 广度优先,随机探索 | 快速发现问题 |
 | `random` | 完全随机 | 压力测试、模糊测试 |
+| `llm` | 基于大模型的智能决策 | 需要智能化探索,优先深度遍历 |
+
+#### LLM策略使用
+
+使用LLM策略需要配置环境变量:
+
+```bash
+# 创建 .env 文件
+OPENAI_API_KEY=your-api-key
+OPENAI_MODEL=gpt-4o
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# 运行测试
+python -m scripts.main haptest \n  --app-package com.example.app \n  --app-name "示例应用" \n  --strategy llm \n  --max-steps 30
+```
+
+详细配置请参考 `LLM_STRATEGY_GUIDE.md`
 
 ## 输出数据
 

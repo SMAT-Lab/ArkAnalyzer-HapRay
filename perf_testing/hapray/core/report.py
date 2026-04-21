@@ -33,6 +33,8 @@ from hapray.analyze import analyze_data
 from hapray.analyze.symbol_statistic_analyzer import SymbolStatisticAnalyzer
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
+from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
+from hapray.core.common.symbol_recovery_bridge import apply_symbol_recovery_manifest_to_scene_outputs
 from hapray.core.config.config import Config
 from hapray.mode.mode import Mode
 
@@ -446,6 +448,7 @@ class ReportData:
         flame_graph_path = os.path.join(report_dir, 'more_flame_graph.json')
         flame_graph_data = self._load_json_safe(flame_graph_path, default={})
         if flame_graph_data:
+            flame_graph_data = self._replace_flame_graph_with_symbol_recovery_html(scene_dir, flame_graph_data)
             self.result['more']['flame_graph'] = flame_graph_data
         elif required:
             logging.warning('Flame graph data not found at %s', flame_graph_path)
@@ -492,6 +495,24 @@ class ReportData:
         except Exception as e:
             logging.error('Error loading %s: %s', path, str(e))
             return default
+
+    @staticmethod
+    def _replace_flame_graph_with_symbol_recovery_html(scene_dir: str, flame_graph_data: dict) -> dict:
+        """若增强版火焰图 HTML 已生成，则在总报告中直接使用其完整内容。"""
+        if not isinstance(flame_graph_data, dict):
+            return flame_graph_data
+        updated = dict(flame_graph_data)
+        hiperf_dir = Path(scene_dir) / 'hiperf'
+        for step_key in list(updated.keys()):
+            detail_html = hiperf_dir / step_key / 'hiperf_report_with_inferred_symbols.html'
+            if not detail_html.is_file():
+                continue
+            try:
+                updated[step_key] = detail_html.read_text(encoding='utf-8', errors='replace')
+                logging.info('Using symbol-recovered flame graph html for %s: %s', step_key, detail_html)
+            except OSError as e:
+                logging.warning('Failed to read symbol-recovered flame graph html %s: %s', detail_html, e)
+        return updated
 
 
 class ReportGenerator:
@@ -592,6 +613,7 @@ class ReportGenerator:
             export_comparison=export_comparison,
             enable_thread_analysis=getattr(self, 'enable_thread_analysis', True),
         )
+        apply_symbol_recovery_manifest_to_scene_outputs(scene_dir)
 
         # Step 3: Generate step summary (summary.json & embed into main json)
         summary_list = self._generate_summary_json(scene_dir) or []
@@ -639,6 +661,7 @@ class ReportGenerator:
                 },
                 html_path=self.report_template_path,
                 output_path=output_path,
+                patch_flame_graph_full_html=True,
             )
 
             logging.info('HTML report created at %s', output_path)
@@ -713,23 +736,7 @@ class ReportGenerator:
         Returns:
             List of test case directory paths
         """
-        testcase_dirs = []
-        round_dir_pattern = re.compile(r'.*_round\d$')
-
-        for entry in os.listdir(report_dir):
-            if round_dir_pattern.match(entry):
-                continue
-
-            full_path = os.path.join(report_dir, entry)
-            # Check if directory has hiperf (htrace is optional)
-            if os.path.isdir(full_path) and os.path.exists(os.path.join(full_path, 'hiperf')):
-                testcase_dirs.append(full_path)
-
-        # If no subdirectories found, check if report_dir itself is a test case directory
-        if not testcase_dirs and os.path.exists(os.path.join(report_dir, 'hiperf')):
-            testcase_dirs.append(report_dir)
-
-        return testcase_dirs
+        return find_testcase_dirs_under_report_root(report_dir)
 
     @staticmethod
     def _find_dbtools_excel(report_dir: str) -> Optional[str]:
@@ -864,13 +871,19 @@ class ReportGenerator:
             return ''
 
     @staticmethod
-    def _inject_json_to_html(placeholders: dict[str, str], html_path: str, output_path: str) -> None:
+    def _inject_json_to_html(
+        placeholders: dict[str, str],
+        html_path: str,
+        output_path: str,
+        patch_flame_graph_full_html: bool = False,
+    ) -> None:
         """Inject data into an HTML template (support multiple placeholders)
 
         Args:
             placeholders: 占位符字典，key 为占位符字符串，value 为要替换的值
             html_path: HTML 模板文件路径
             output_path: 输出 HTML 文件路径
+            patch_flame_graph_full_html: 是否让打包模板支持直接消费完整 HTML 火焰图
         """
         # Validate path
         if not os.path.exists(html_path):
@@ -879,6 +892,9 @@ class ReportGenerator:
         # Load HTML template
         with open(html_path, encoding='utf-8') as f:
             html_content = f.read()
+
+        if patch_flame_graph_full_html:
+            html_content = ReportGenerator._patch_flame_graph_runtime_for_full_html(html_content)
 
         # Replace all placeholders
         for placeholder, value in placeholders.items():
@@ -889,6 +905,24 @@ class ReportGenerator:
             f.write(html_content)
 
         logging.debug('Injected %d placeholders into %s', len(placeholders), output_path)
+
+    @staticmethod
+    def _patch_flame_graph_runtime_for_full_html(html_content: str) -> str:
+        """让打包后的 FlameGraph 组件支持 step 数据直接为完整 HTML。"""
+        needle = (
+            'if(n.flameGraph&&n.flameGraph[l]){let u=n.flameGraph[l];return '
+            'typeof u=="string"&&!u.startsWith("{")&&(u=i(u)),UU+KU+u+r}else return UU+KU+r'
+        )
+        replacement = (
+            'if(n.flameGraph&&n.flameGraph[l]){let u=n.flameGraph[l];'
+            'if(typeof u=="string"){const d=u.trimStart();'
+            'd.startsWith("<!DOCTYPE")||d.startsWith("<html")?u=d:!d.startsWith("{")&&(u=i(u))}'
+            'return typeof u=="string"&&u.trimStart().startsWith("<")?u:UU+KU+u+r}else return UU+KU+r'
+        )
+        if needle in html_content:
+            return html_content.replace(needle, replacement, 1)
+        logging.warning('Flame graph runtime patch skipped: compiled snippet not found in report template')
+        return html_content
 
     @staticmethod
     def _load_json_safe(path: str, default):

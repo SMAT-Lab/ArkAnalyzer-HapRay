@@ -111,11 +111,19 @@ class ExeUtils:
             if os.path.exists(tools_dir):
                 return tools_dir
 
-        logging.warning(
-            f'Tools directory not found. project_root: {project_root}, frozen: {getattr(sys, "frozen", False)}'
-        )
         if require:
+            logger.warning(
+                'Tools directory not found. project_root: %s, frozen: %s',
+                project_root,
+                getattr(sys, 'frozen', False),
+            )
             raise FileNotFoundError(f'Tools directory not found. Checked: {", ".join(checked_paths)}')
+        logger.debug(
+            'Optional tools path not found (require=False). project_root: %s, frozen: %s, checked: %s',
+            project_root,
+            getattr(sys, 'frozen', False),
+            ', '.join(checked_paths),
+        )
         return None
 
     @staticmethod
