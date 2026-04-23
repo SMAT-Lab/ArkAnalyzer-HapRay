@@ -58,7 +58,7 @@ metadata:
 1. 本地存在 `ArkAnalyzer-HapRay` 仓库（可访问 `perf_testing/`）。  
 2. Python/`uv` 可用（用于运行 `uv run python -m scripts.main ...`）。  
 3. 真机链路可用（`hdc` 可执行且设备在线，若为真机场景）。  
-4. 目标场景所需门禁已满足（如 `GLM_API_KEY`、symbol-recovery API Key）。
+4. 目标场景所需门禁已满足（如 `GLM_API_KEY`、symbol-recovery 的在线 API 或离线编排方案）。
 
 ### 1) 仓库获取（必须包含 git clone）
 
@@ -224,8 +224,19 @@ uv run python -m scripts.main --help
 
 当意图涉及符号恢复：
 
-- 先检查 `tools/symbol_recovery/.env` 中 API Key。  
-- 若未配置，先按 `analysis/symbol-recovery-analysis.md` 的 Step 0 与用户确认 A/B 方案。  
+- 必须先按 `analysis/symbol-recovery-analysis.md` 的 Step 0 与用户确认运行路径，不得默认假设。  
+- 允许三种路径：
+  1. **在线直连 LLM**：检查 `tools/symbol_recovery/.env` 中 API Key。  
+  2. **离线编排（主 Agent）**：不要求本地 API Key，由主 Agent 负责“导出 prompt 任务 → 外部 LLM 调用 → 结果回填”。  
+  3. **无 LLM 快速模式**：`--no-llm`，仅反汇编与基础证据输出。  
+- 若用户未明确选择路径，必须停在门禁阶段并继续确认。
+
+当用户选择“离线编排（主 Agent）”时，主 Agent 负责以下编排职责：
+
+1. 调用 `symbol_recovery` 产出待分析任务（含 `function_id` 与 prompt/上下文）。  
+2. 将任务分发给外部模型通道（可由 GUI Agent、平台代理或人工调用）。  
+3. 对返回结果做结构校验（`function_id` 对齐、JSON 字段完整）。  
+4. 回填到 `symbol_recovery` 并触发最终报告更新（Excel/HTML/替换报告）。
 
 ## 执行主流程（统一版）
 

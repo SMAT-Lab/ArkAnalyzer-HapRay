@@ -82,6 +82,14 @@ test_reports/
 # Experimental results
 experimental_results/
 
+# Local workspace data directories
+ArkAnalyzer-HapRay-darwin-arm64-1.4.8/
+apps/
+data/
+docs/
+hapray
+haptest
+
 # Toolbox
 toolbox/
 
