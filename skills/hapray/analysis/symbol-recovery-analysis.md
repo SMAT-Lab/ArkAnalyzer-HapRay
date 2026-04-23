@@ -39,11 +39,27 @@ uv pip install --python ./.venv/bin/python -e .
 
 **强烈推荐安装（性能提升 10 倍+）：**
 
+macOS：
 ```bash
-brew install radare2          # macOS
+brew install radare2
 r2pm install r2dec            # 反编译插件（轻量快速，推荐优先）
 # r2pm install r2ghidra       # 更高质量，需 Java，复杂函数可选
 ```
+
+Windows：
+```powershell
+# 方式一：winget（推荐，Win 10 1709+）
+winget install radare2
+
+# 方式二：Chocolatey
+choco install radare2
+
+# 安装完成后在同一终端执行插件安装
+r2pm install r2dec
+# r2pm install r2ghidra
+```
+
+> Windows 下 `r2pm` 需要联网；若企业内网受限，可从 [radare2 GitHub Releases](https://github.com/radareorg/radare2/releases) 下载 `.zip` 解压后将 `bin/` 加入 `PATH`。
 
 ### 2.3 配置 LLM API Key（在线直连模式）
 
@@ -172,22 +188,50 @@ python3 main.py \
 ]
 ```
 
-每次处理 10 条左右，超过 30 条时分批完成并合并到同一文件。
+每次处理 10 条左右。任务数较多时，根据你的运行环境选择以下**两条路径之一**：
 
-**任务数 > 30 条：运行批处理脚本**
+---
+
+**路径 A — 在线模式**（有 API Key，终端直接批量调用）
+
+适用于：配置了 `tools/symbol_recovery/.env`，希望脚本自动跑完所有函数。
 
 ```bash
 cd <REPO_ROOT>/tools/symbol_recovery
-source .venv/bin/activate
-python3 scripts/run_step2.py \
+python3 scripts/run_step2.py openai \
     --tasks output/symbol_recovery_llm_tasks.json \
     --output output/llm_results.json
+# 可加 --resume（断点续传）、--model <名称>（覆盖 .env 模型）
 ```
 
-- 使用 `tools/symbol_recovery/.env` 中的 LLM 配置，无需额外参数
-- 支持 `--resume` 断点续传（中断后重跑自动跳过已完成条目）
-- 每条处理完成后立即写盘，进度实时可见
-- 可用 `--model <名称>` 覆盖 `.env` 中的模型
+- 依赖 `tools/symbol_recovery/.env` 中的 `api_key` / `base_url` / `model`
+- 旧写法 `python3 scripts/run_step2.py --tasks ... --output ...` 等价于此（向后兼容）
+
+---
+
+**路径 B — 离线编排模式**（Cursor / GUI Agent，不用或不想配 `.env`）
+
+适用于：在 Cursor 对话中让 Agent 模型做推断，推断本身**不调用外部 API**。
+
+```bash
+cd <REPO_ROOT>/tools/symbol_recovery
+# 1) 切批（每批 10 条）
+python3 scripts/run_step2.py split \
+    --tasks output/symbol_recovery_llm_tasks.json \
+    --output-dir output/agent_batches \
+    --batch-size 10
+```
+
+在 Cursor 中让 Agent **逐批读取** `output/agent_batches/batch_*_of_*.json`，按 `expected_schema` 产出 **`batch_*_results.json`**（与批编号对应，勿改 `function_id`）。
+
+```bash
+# 2) 合并 Agent 写回的结果
+python3 scripts/run_step2.py merge \
+    --output output/symbol_recovery_external_results.json \
+    "output/agent_batches/batch_*_results.json"
+```
+
+---
 
 **结果 JSON 要求：**
 - 必填字段：`function_id`（格式 `func_1`、`func_2`…）、`functionality`、`confidence`
