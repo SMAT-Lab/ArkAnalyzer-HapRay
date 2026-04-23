@@ -17,7 +17,7 @@ from core.llm.initializer import init_llm_analyzer
 from core.utils import common as util
 from core.utils.config import (
     DEFAULT_BATCH_SIZE,
-    DEFAULT_LLM_MODEL,
+
     EXCEL_ANALYSIS_PATTERN,
     EXCEL_REPORT_PATTERN,
     config,
@@ -63,7 +63,7 @@ class ExcelOffsetAnalyzer:
         self.so_file = Path(so_file)
         self.excel_file = Path(excel_file)
         self.use_llm = use_llm
-        self.llm_model = llm_model if llm_model is not None else DEFAULT_LLM_MODEL
+        self.llm_model = llm_model  # None 时由 init_llm_analyzer 从 LLMConfig 读取
         self.batch_size = batch_size if batch_size is not None else DEFAULT_BATCH_SIZE
         self.context = context  # 自定义上下文
         self.skip_decompilation = skip_decompilation
@@ -385,6 +385,7 @@ class ExcelOffsetAnalyzer:
                 ]
                 return {
                     'rank': rank,
+                    'address': f'{Path(self.so_file).name}+0x{offset:x}',
                     'offset': f'0x{offset:x}',
                     'offset_int': offset,
                     'so_file': str(self.so_file),

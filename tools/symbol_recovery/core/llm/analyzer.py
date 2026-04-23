@@ -97,12 +97,14 @@ class LLMFunctionAnalyzer:
             'requests': [],  # 每次请求的详细信息
         }
         self.token_stats_file = llm_config['token_stats_file']
+        self.trust_env = bool(llm_config.get('trust_env', False))
 
-        # 初始化 OpenAI 客户端
-        self.client = openai.OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url,
-        )
+        # 初始化 OpenAI 客户端（主客户端 + 可选回退客户端）
+        self.client = self._build_openai_client(self.trust_env)
+        self._fallback_client = None
+        if hasattr(openai, 'DefaultHttpxClient'):
+            # 当主配置失败时，自动尝试相反的 trust_env，降低代理/DNS 环境差异导致的失败概率
+            self._fallback_client = self._build_openai_client(not self.trust_env)
 
         # 加载缓存
         if self.enable_cache and self.cache_file.exists():
@@ -148,6 +150,44 @@ class LLMFunctionAnalyzer:
         except Exception:
             # 静默处理统计保存失败
             pass
+
+    def _build_openai_client(self, trust_env: bool):
+        """按 trust_env 构建 OpenAI 客户端。"""
+        client_kwargs = {
+            'api_key': self.api_key,
+            'base_url': self.base_url,
+        }
+        if hasattr(openai, 'DefaultHttpxClient'):
+            client_kwargs['http_client'] = openai.DefaultHttpxClient(trust_env=trust_env)
+        return openai.OpenAI(**client_kwargs)
+
+    @staticmethod
+    def _is_network_route_error(err: Exception) -> bool:
+        text = str(err).lower()
+        keywords = [
+            'proxyerror',
+            'connecterror',
+            'apiconnectionerror',
+            'name or service not known',
+            'nodename nor servname',
+            'connection error',
+            'temporary failure in name resolution',
+        ]
+        return any(k in text for k in keywords)
+
+    def _chat_completions_create(self, **kwargs):
+        """发送 chat.completions 请求；主客户端失败时按需回退到备用客户端。"""
+        try:
+            return self.client.chat.completions.create(**kwargs)
+        except Exception as primary_err:
+            if self._fallback_client and self._is_network_route_error(primary_err):
+                logger.warning(
+                    'Primary LLM route failed (trust_env=%s), retrying with trust_env=%s',
+                    self.trust_env,
+                    not self.trust_env,
+                )
+                return self._fallback_client.chat.completions.create(**kwargs)
+            raise
 
     def get_token_stats(self) -> dict[str, Any]:
         """获取 token 统计信息"""
@@ -335,7 +375,7 @@ class LLMFunctionAnalyzer:
 
             try:
                 # 调用 LLM
-                response = self.client.chat.completions.create(
+                response = self._chat_completions_create(
                     model=self.model,
                     messages=[
                         {

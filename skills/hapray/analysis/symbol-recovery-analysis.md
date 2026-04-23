@@ -45,7 +45,7 @@ r2pm install r2dec            # 反编译插件（轻量快速，推荐优先）
 # r2pm install r2ghidra       # 更高质量，需 Java，复杂函数可选
 ```
 
-### 2.3 配置 LLM API Key
+### 2.3 配置 LLM API Key（在线直连模式）
 
 复制 `.env.example` 为 `.env`，填入 API Key（以 DeepSeek 为例）：
 
@@ -56,49 +56,15 @@ DEEPSEEK_API_KEY=your_key
 
 支持的服务类型：`poe`（默认）、`openai`、`claude`、`deepseek`、`custom`。
 
-> **不配置 LLM 也可使用**：加 `--no-llm` 只做反汇编分析（无功能推断）。
+> **不配置本地 API Key 也可使用**：可选 `--no-llm` 快速模式，或由主 Agent 走离线编排模式（prompt 导出 + 外部 LLM + 回填）。
 
 ---
 
 ## 三、分析步骤
 
-### Step 0：前置——确认 LLM 配置（**必须先完成，再进行后续步骤**）
+### Step 0：前置——确认符号恢复运行路径（**必须先完成，再进行后续步骤**）
 
-在运行任何符号恢复命令前，**必须先**确认 `.env` 是否已配置 LLM API Key：
-
-```bash
-# 检查配置文件是否存在且含有效 Key
-cat <REPO_ROOT>/tools/symbol_recovery/.env 2>/dev/null | grep -E "API_KEY|SERVICE_TYPE"
-```
-
-**根据结果二选一**：
-
-| 情况 | 操作 |
-|------|------|
-| `.env` 已配置且含有效 API Key | 继续 Step 1，无需任何修改 |
-| `.env` 不存在或 API Key 为空 | **停止**，向用户展示下方选项，等待确认后再继续 |
-
-**当 `.env` 未配置时，必须向用户展示以下选项并等待回复**：
-
-> `.env` 中未检测到 LLM API Key，符号恢复有两种运行方式：
->
-> **方式 A（推荐）：配置 LLM，获得函数名推断与优化建议**
-> ```
-> cp tools/symbol_recovery/.env.example tools/symbol_recovery/.env
-> # 然后编辑 .env，填入以下任一服务的 Key：
-> # DeepSeek: LLM_SERVICE_TYPE=deepseek / DEEPSEEK_API_KEY=xxx
-> # OpenAI:   LLM_SERVICE_TYPE=openai  / OPENAI_API_KEY=xxx
-> # Claude:   LLM_SERVICE_TYPE=claude  / ANTHROPIC_API_KEY=xxx
-> ```
->
-> **方式 B：跳过 LLM，仅做反汇编分析（速度快，无函数名推断）**
-> ```
-> python3 main.py --no-llm --perf-data perf.data --so-dir so/
-> ```
->
-> 请选择方式 A 还是方式 B？
-
-**禁止**在用户未明确回复前，自行假设某种方式并继续执行。
+> 运行路径确认（在线直连 / 离线编排 / `--no-llm` 快速模式）由主 Skill `../SKILL.md` 的「symbol-recovery 门禁」统一执行，**必须先完成该门禁再继续 Step 1**。
 
 ### Step 1：识别缺失符号
 
@@ -168,6 +134,85 @@ python3 main.py \
     --kmp-app-name MyApp \
     --top-n 50
 ```
+
+**离线编排（主 Agent 模式，无需本地 API Key）：**
+
+当没有本地 LLM API Key，或由主 Agent 统一负责推断时，使用两步离线编排。
+
+*第一次调用——导出待分析任务：*
+
+```bash
+python3 main.py \
+    --perf-data path/to/perf.data \
+    --so-dir path/to/so/ \
+    --top-n 100 \
+    --output-dir output/ \
+    --prompt-only
+# 产出：output/symbol_recovery_llm_tasks.json
+```
+
+完成反汇编和字符串提取，**不调用 LLM、不读取 `.env`**。产出文件每条包含：`function_id`（`func_<rank>`）、`address`、`prompt`（含反汇编/字符串/反编译）、`expected_schema`。
+
+*第二步——主 Agent 处理任务（按任务数量选择方式）：*
+
+**任务数 ≤ 30 条：Agent 在对话中直接处理**
+
+读取 `output/symbol_recovery_llm_tasks.json`，逐条分析 `prompt` 字段（含 ARM64 反汇编、字符串常量、反编译代码），按以下格式写入 `output/llm_results.json`：
+
+```json
+[
+  {
+    "function_id": "func_1",
+    "functionality": "函数功能描述（中文，50-200 字）",
+    "function_name": "推断的英文函数名，无法确定填 null",
+    "performance_analysis": "性能问题与优化建议",
+    "confidence": "高 / 中 / 低",
+    "reasoning": "关键指令模式、字符串等推断依据"
+  }
+]
+```
+
+每次处理 10 条左右，超过 30 条时分批完成并合并到同一文件。
+
+**任务数 > 30 条：运行批处理脚本**
+
+```bash
+cd <REPO_ROOT>/tools/symbol_recovery
+source .venv/bin/activate
+python3 scripts/run_step2.py \
+    --tasks output/symbol_recovery_llm_tasks.json \
+    --output output/llm_results.json
+```
+
+- 使用 `tools/symbol_recovery/.env` 中的 LLM 配置，无需额外参数
+- 支持 `--resume` 断点续传（中断后重跑自动跳过已完成条目）
+- 每条处理完成后立即写盘，进度实时可见
+- 可用 `--model <名称>` 覆盖 `.env` 中的模型
+
+**结果 JSON 要求：**
+- 必填字段：`function_id`（格式 `func_1`、`func_2`…）、`functionality`、`confidence`
+- 可选字段：`function_name`（无法推断时填 `null`）、`performance_analysis`、`reasoning`
+- 也接受同义字段：`description` = `functionality`，`inferred_name` = `function_name`
+- 顶层格式：裸数组 `[...]` 或 `{"functions":[...]}` 均可
+
+*第二次调用——回填结果并生成报告：*
+
+```bash
+python3 main.py \
+    --perf-data path/to/perf.data \
+    --so-dir path/to/so/ \
+    --top-n 100 \
+    --output-dir output/ \
+    --skip-step1 --perf-db output/perf.db \
+    --import-llm-results /path/to/results.json
+# 产出：Excel 报告 + HTML 符号替换报告（与在线模式完全相同）
+```
+
+`--skip-step1 --perf-db output/perf.db` 复用第一次产出的 perf.db，避免重复转换。  
+`--import-llm-results` 自动设置 `--no-llm`，全程不调用本地 LLM。  
+回填匹配优先级：`function_id` > `rank` > `address`（三者任一均可）。
+
+**Excel 和 KMP 模式同样支持此两步流程**，分别替换为 `--excel-file`/`--so-file` 和 `--kmp-mode`/`--perf-db`/`--so-file`；Excel 和 KMP 的第二次调用无需 `--skip-step1`。
 
 **跳过 LLM（仅反汇编，速度最快）：**
 

@@ -36,6 +36,13 @@ python3 main.py --excel-file offsets.xlsx --so-dir /path/to/so/
 
 # 不使用 LLM
 python3 main.py --excel-file offsets.xlsx --so-file lib.so --no-llm
+
+# 离线编排：只导出 prompt 任务（不调用本地 API）
+python3 main.py --excel-file offsets.xlsx --so-file lib.so --prompt-only
+
+# 导入外部 LLM 结果并回填报告
+python3 main.py --excel-file offsets.xlsx --so-file lib.so \
+  --import-llm-results output/symbol_recovery_external_results.json
 ```
 
 ### 3. KMP 模式
@@ -92,7 +99,81 @@ uv pip install --python ./.venv/bin/python -e .
 | `openai` | `OPENAI_API_KEY` |
 | `claude` | `ANTHROPIC_API_KEY` |
 | `deepseek` | `DEEPSEEK_API_KEY` |
-| `custom` | `LLM_BASE_URL` + `LLM_API_KEY_ENV` |
+| `custom` | `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` |
+
+## 离线编排模式（无需本地 API Key）
+
+不想在本机配置 API Key，或希望由外部 LLM（如主 Agent）负责推断时，可使用两步离线编排：
+
+### 第一步：导出 LLM 任务
+
+```bash
+python3 main.py \
+    --perf-data perf.data --so-dir so/ \
+    --top-n 50 --output-dir output/ \
+    --prompt-only
+# 输出：output/symbol_recovery_llm_tasks.json
+```
+
+- 完成反汇编 + 字符串提取，**不调用任何 LLM**，不读取 `.env`
+- 产出 `symbol_recovery_llm_tasks.json`，每条任务包含：
+
+```json
+{
+  "function_id": "func_1",
+  "rank": 1,
+  "address": "libxxx.so+0x12b8b0",
+  "offset": "0x12b8b0",
+  "so_file": "libxxx.so",
+  "instruction_count": 500,
+  "prompt": "请分析以下 ARM64 反汇编函数……（含反汇编代码、字符串常量、反编译代码）",
+  "expected_schema": {
+    "functionality": "str",
+    "function_name": "str|null",
+    "performance_analysis": "str",
+    "confidence": "高|中|低",
+    "reasoning": "str"
+  }
+}
+```
+
+### 第二步：外部 LLM 处理，生成结果 JSON
+
+外部 LLM（主 Agent、批量 API、人工标注等）读取每条任务的 `prompt` 字段，按 `expected_schema` 返回结果，保存为：
+
+```json
+[
+  {
+    "function_id": "func_1",
+    "functionality": "AES T-table 加密轮变换，通过四张 256 项查找表……",
+    "function_name": "aes_encrypt_round",
+    "performance_analysis": "计算热点，建议评估 ARMv8 硬件 AES 加速……",
+    "confidence": "高",
+    "reasoning": "四路字节查表 + EOR 累加是 AES T-table 的强指纹"
+  }
+]
+```
+
+匹配键优先级：`function_id`（`func_<rank>`）> `rank` > `address`（三者任一均可）。  
+字段同义词：`functionality`/`description`、`function_name`/`inferred_name` 均被接受。  
+顶层格式：裸数组 `[...]` 或 `{"functions":[...]}` / `{"results":[...]}` / `{"tasks":[...]}` 均可。
+
+### 第三步：回填并生成报告
+
+```bash
+python3 main.py \
+    --perf-data perf.data --so-dir so/ \
+    --top-n 50 --output-dir output/ \
+    --skip-step1 --perf-db output/perf.db \
+    --import-llm-results /path/to/results.json
+# 输出：Excel 报告（含函数名、功能描述）+ HTML 符号替换报告
+```
+
+- `--skip-step1 --perf-db output/perf.db`：复用第一步已生成的 perf.db，跳过 perf.data 重转换
+- `--import-llm-results` 自动设置 `--no-llm`，全程不调用本地 LLM
+- 回填后生成与在线模式完全相同的 Excel / HTML 产物，`hapray-tool-result.json` 中含 `import_applied` / `import_unmatched` 计数
+
+> **Excel 模式**同样支持两步离线编排，替换 `--perf-data`/`--so-dir` 为 `--excel-file`/`--so-file`（或 `--so-dir`）；**KMP 模式**同样支持，替换为 `--kmp-mode --perf-db ... --so-file ...`。第二次调用均无需 `--skip-step1`。
 
 ## 主要参数
 
@@ -107,6 +188,8 @@ uv pip install --python ./.venv/bin/python -e .
 | `--use-capstone-only` | 强制使用 Capstone，不使用 Radare2 | `False` |
 | `--skip-decompilation` | 跳过反编译，提升速度 | `False` |
 | `--save-prompts` | 保存生成的 prompt 到文件（调试用） | `False` |
+| `--prompt-only` | 仅导出 LLM 任务（prompt），不直接调用模型 | `False` |
+| `--import-llm-results PATH` | 导入外部 LLM 结果 JSON 并回填分析报告 | 可选 |
 | `--open-source-lib` | 指定开源库（如 `ffmpeg`），提升 LLM 推断准确性 | 可选 |
 | `--context` | 自定义上下文信息 | 自动推断 |
 | `--llm-model` | LLM 模型名称 | 按服务默认 |
@@ -163,6 +246,9 @@ uv pip install --python ./.venv/bin/python -e .
 **缓存**（`cache/`）：
 - `llm_analysis_cache.json` — LLM 结果缓存
 - `llm_token_stats.json` — Token 用量统计
+
+**离线编排辅助文件**（位于 `{output_dir}/`）：
+- `symbol_recovery_llm_tasks.json` — 待外部模型处理的任务（含 function_id、prompt、地址元数据）
 
 ## 常见问题
 
