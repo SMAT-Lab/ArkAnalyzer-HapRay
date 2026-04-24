@@ -249,6 +249,17 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help='保存每个函数生成的 prompt 到文件（用于后续 debug）',
     )
     parser.add_argument(
+        '--prompt-only',
+        action='store_true',
+        help='离线模式：只导出 LLM 任务（prompt），不直接调用模型',
+    )
+    parser.add_argument(
+        '--import-llm-results',
+        type=str,
+        default=None,
+        help='导入外部 LLM 结果 JSON（按 rank/function_id/address 匹配）并回填报告',
+    )
+    parser.add_argument(
         '--skip-decompilation',
         action='store_true',
         help='跳过反编译步骤（仅使用反汇编代码，可显著提升速度但可能降低 LLM 分析质量）',
@@ -514,6 +525,14 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
         _exit_with_result(1, error='excel_no_analysis_results', output_dir=output_dir)
         return False
 
+    import_applied = 0
+    import_unmatched = 0
+    if args.import_llm_results:
+        import_file = Path(args.import_llm_results)
+        if not import_file.exists():
+            _exit_with_result(1, error='import_llm_results_not_found', output_dir=output_dir)
+        import_applied, import_unmatched = apply_external_llm_results(results, import_file)
+
     time_tracker.start_step('Saving results', 'Generating Excel and HTML reports')
     config.ensure_output_dir(output_dir)
     excel_file_output = analyzer.save_results(
@@ -526,6 +545,10 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
         time_tracker,
     )
     results_json, prompts_json = analyzer.save_json_outputs(results, str(output_dir))
+    llm_tasks_path = None
+    llm_task_count = 0
+    if args.prompt_only:
+        llm_tasks_path, llm_task_count = export_llm_tasks(results, output_dir)
     time_tracker.end_step('Results saved')
 
     time_tracker.print_summary()
@@ -549,7 +572,7 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
     # 如果提供了 --html-input，在 Excel 分析完成后自动执行 HTML 符号替换
     html_replaced_output = None
     html_input = detect_html_input(args)
-    if html_input and html_input.exists():
+    if (not args.prompt_only) and html_input and html_input.exists():
         logger.info('\n' + '=' * 80)
         logger.info('Bonus Step: HTML Symbol Replacement (using Excel analysis results)')
         logger.info('=' * 80)
@@ -569,7 +592,12 @@ def handle_excel_mode(args, output_dir: Path) -> bool:
         'results_json': results_json,
         'prompts_json': prompts_json,
         'time_stats': str(time_stats_file),
+        'import_applied': import_applied,
+        'import_unmatched': import_unmatched,
     }
+    if llm_tasks_path:
+        outputs['llm_tasks'] = llm_tasks_path
+        outputs['llm_task_count'] = llm_task_count
     if html_replaced_output:
         outputs['html_replaced'] = html_replaced_output
 
@@ -733,9 +761,154 @@ def save_analysis_json_outputs(results: list, output_dir: Path) -> tuple[str, st
     return str(results_path), str(prompts_path)
 
 
-def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path], output_dir: Path):
+def _compose_offline_prompt(
+    instructions: list[str], strings: list[str], decompiled: str, context: str, address: str
+) -> str:
+    lines = [
+        '请分析以下 ARM64 反汇编函数，推断函数功能和可能函数名。',
+        '',
+        '请返回 JSON 对象，字段必须包含：',
+        '- functionality: 中文功能描述（50-200字）',
+        '- function_name: 推断函数名（英文，可为 null）',
+        '- performance_analysis: 负载问题识别与优化建议（<=300字）',
+        '- confidence: 高/中/低',
+        '- reasoning: 推理过程（<=200字）',
+        '',
+        f'函数地址: {address}',
+    ]
+    if context:
+        lines.extend(['', '上下文信息:', context])
+    if strings:
+        lines.extend(['', '附近字符串常量:'] + [f'- {s}' for s in strings[:20]])
+    if decompiled:
+        lines.extend(['', '反编译代码（优先参考）:', '```c', decompiled, '```'])
+    if instructions:
+        lines.extend(['', '反汇编代码:'])
+        lines.extend([f'{idx:3d}. {inst}' for idx, inst in enumerate(instructions[:200], 1)])
+        if len(instructions) > 200:
+            lines.append(f'... (共 {len(instructions)} 条，仅展示前 200 条)')
+    return '\n'.join(lines)
+
+
+def export_llm_tasks(results: list, output_dir: Path) -> tuple[str, int]:
+    tasks = []
+    for r in results:
+        llm = r.get('llm_result') or {}
+        so_name = Path(r.get('so_file', '')).name
+        offset = r.get('offset', '')
+        address = r.get('address') or f'{so_name}+{offset}'
+        instructions = r.get('_all_instructions') or r.get('instructions') or []
+        raw_strings = r.get('_strings') or r.get('strings') or []
+        if isinstance(raw_strings, str):
+            raw_strings = [s.strip() for s in raw_strings.split(',') if s.strip()]
+        decompiled = r.get('_decompiled') or r.get('decompiled') or ''
+        context = r.get('_context') or ''
+        prompt = llm.get('_prompt') or r.get('_prompt') or ''
+        if not prompt:
+            prompt = _compose_offline_prompt(instructions, raw_strings, decompiled, context, address)
+
+        rank = r.get('rank')
+        function_id = f'func_{rank}' if rank is not None else ''
+        tasks.append(
+            {
+                'function_id': function_id,
+                'rank': rank,
+                'address': address,
+                'offset': offset,
+                'so_file': so_name,
+                'instruction_count': r.get('instruction_count', len(instructions)),
+                'prompt': prompt,
+                'expected_schema': {
+                    'functionality': 'str',
+                    'function_name': 'str|null',
+                    'performance_analysis': 'str',
+                    'confidence': '高|中|低',
+                    'reasoning': 'str',
+                },
+            }
+        )
+
+    out_file = output_dir / 'symbol_recovery_llm_tasks.json'
+    out_file.write_text(json.dumps(tasks, ensure_ascii=False, indent=2), encoding='utf-8')
+    logger.info(f'📄 LLM tasks exported: {out_file} ({len(tasks)} tasks)')
+    return str(out_file), len(tasks)
+
+
+def _parse_external_llm_entries(result_path: Path) -> list[dict]:
+    payload = json.loads(result_path.read_text(encoding='utf-8'))
+    if isinstance(payload, dict):
+        if isinstance(payload.get('functions'), list):
+            return payload['functions']
+        if isinstance(payload.get('results'), list):
+            return payload['results']
+        if isinstance(payload.get('tasks'), list):
+            return payload['tasks']
+        return [payload]
+    if isinstance(payload, list):
+        return payload
+    raise ValueError(f'Unsupported imported result format: {type(payload).__name__}')
+
+
+def _rank_from_function_id(function_id: str) -> Optional[int]:
+    if not function_id:
+        return None
+    match = re.match(r'^func_(\d+)$', str(function_id).strip())
+    return int(match.group(1)) if match else None
+
+
+def _normalize_addr(addr: str) -> str:
+    return str(addr or '').strip().lower()
+
+
+def apply_external_llm_results(results: list, result_file: Path) -> tuple[int, int]:
+    entries = _parse_external_llm_entries(result_file)
+    by_rank = {int(r.get('rank')): r for r in results if r.get('rank') is not None}
+    by_addr = {_normalize_addr(r.get('address')): r for r in results if r.get('address')}
+
+    applied = 0
+    unmatched = 0
+    for entry in entries:
+        target = None
+        rank = entry.get('rank')
+        if rank is not None:
+            try:
+                target = by_rank.get(int(rank))
+            except Exception:
+                target = None
+
+        if target is None:
+            fid_rank = _rank_from_function_id(str(entry.get('function_id', '')).strip())
+            if fid_rank is not None:
+                target = by_rank.get(fid_rank)
+
+        if target is None and entry.get('address'):
+            target = by_addr.get(_normalize_addr(entry.get('address')))
+
+        if target is None:
+            unmatched += 1
+            continue
+
+        llm_result = {
+            'functionality': entry.get('functionality') or entry.get('description') or '',
+            'function_name': entry.get('function_name') or entry.get('inferred_name'),
+            'performance_analysis': entry.get('performance_analysis') or '',
+            'confidence': entry.get('confidence') or '',
+            'reasoning': entry.get('reasoning') or '',
+        }
+        target['llm_result'] = llm_result
+        target['function_name'] = llm_result.get('function_name') or ''
+        target['function_description'] = llm_result.get('functionality') or ''
+        target['performance_analysis'] = llm_result.get('performance_analysis') or ''
+        target['confidence'] = llm_result.get('confidence') or ''
+        applied += 1
+
+    logger.info(f'✅ Imported external LLM results: applied={applied}, unmatched={unmatched}')
+    return applied, unmatched
+
+
+def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path], output_dir: Path) -> dict:
     if args.skip_step3 or args.only_step1:
-        return
+        return {}
 
     logger.info('\n' + '=' * 80)
     logger.info(f'Step 3: LLM Analysis of Hot Functions (by {args.stat_method})')
@@ -753,12 +926,11 @@ def run_llm_analysis(args, perf_db_file: Optional[Path], so_dir: Optional[Path],
     logger.info(f'Analyzing top {args.top_n} functions')
 
     if args.stat_method == 'call_count':
-        analyze_by_call_count(args, perf_db_file, so_dir, output_dir)
-    else:
-        analyze_by_event_count(args, perf_db_file, so_dir, output_dir)
+        return analyze_by_call_count(args, perf_db_file, so_dir, output_dir)
+    return analyze_by_event_count(args, perf_db_file, so_dir, output_dir)
 
 
-def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path):
+def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path) -> dict:
     if not perf_db_file or not perf_db_file.exists():
         logger.info(f'❌ Error: perf.db file does not exist: {perf_db_file if perf_db_file else "(not specified)"}')
         logger.info('   Please run Step 1 first')
@@ -787,10 +959,23 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
     time_tracker.end_step(f'Completed analysis of {len(results)} functions')
 
     if results:
+        import_applied = 0
+        import_unmatched = 0
+        if args.import_llm_results:
+            import_file = Path(args.import_llm_results)
+            if not import_file.exists():
+                _exit_with_result(1, error='import_llm_results_not_found', output_dir=output_dir)
+            import_applied, import_unmatched = apply_external_llm_results(results, import_file)
+
         time_tracker.start_step('Saving results', 'Generating Excel and HTML reports')
         output_file = analyzer.save_results(results, time_tracker=time_tracker, top_n=args.top_n)
-        save_analysis_json_outputs(results, output_dir)
+        results_json, prompts_json = save_analysis_json_outputs(results, output_dir)
         time_tracker.end_step('Results saved')
+
+        llm_tasks_path = None
+        llm_task_count = 0
+        if args.prompt_only:
+            llm_tasks_path, llm_task_count = export_llm_tasks(results, output_dir)
 
         logger.info(f'\n✅ Step 3 completed! Analyzed {len(results)} functions')
         logger.info(f'📄 Excel report: {output_file}')
@@ -803,11 +988,23 @@ def analyze_by_call_count(args, perf_db_file: Optional[Path], so_dir: Path, outp
         if analyzer.use_llm and analyzer.llm_analyzer:
             analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
             analyzer.llm_analyzer.print_token_stats()
+        return {
+            'analysis_count': len(results),
+            'excel_report': str(output_file),
+            'results_json': results_json,
+            'prompts_json': prompts_json,
+            'time_stats': str(time_stats_file),
+            'llm_tasks': llm_tasks_path,
+            'llm_task_count': llm_task_count,
+            'import_applied': import_applied,
+            'import_unmatched': import_unmatched,
+        }
     else:
         logger.warning('\n⚠️  No functions were successfully analyzed')
+        return {'analysis_count': 0}
 
 
-def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path):
+def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, output_dir: Path) -> dict:
     if not perf_db_file or not perf_db_file.exists():
         logger.error('❌ Error: perf.db file does not exist: %s', perf_db_file)
         logger.info('   Please run Step 1 first')
@@ -837,19 +1034,25 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
     time_tracker.end_step(f'完成分析 {len(results)} 个函数')
 
     if results:
+        import_applied = 0
+        import_unmatched = 0
+        if args.import_llm_results:
+            import_file = Path(args.import_llm_results)
+            if not import_file.exists():
+                _exit_with_result(1, error='import_llm_results_not_found', output_dir=output_dir)
+            import_applied, import_unmatched = apply_external_llm_results(results, import_file)
+
         time_tracker.start_step('Saving results', 'Generating Excel and HTML reports')
-        output_dir = config.get_output_dir(args.output_dir)
         output_file = analyzer.save_event_count_results(
             results,
             time_tracker=time_tracker,
             output_dir=output_dir,
             top_n=args.top_n,
         )
-        save_analysis_json_outputs(results, output_dir)
+        results_json, prompts_json = save_analysis_json_outputs(results, output_dir)
         time_tracker.end_step('Results saved')
 
         actual_result_count = len(results)
-        Path(output_file)
 
         logger.info(f'\n✅ Step 3 completed! Analyzed {actual_result_count} functions')
         logger.info(f'📄 Excel report: {output_file}')
@@ -862,8 +1065,24 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         if analyzer.use_llm and analyzer.llm_analyzer:
             analyzer.llm_analyzer.finalize()  # 保存所有缓存和统计
             analyzer.llm_analyzer.print_token_stats()
+        llm_tasks_path = None
+        llm_task_count = 0
+        if args.prompt_only:
+            llm_tasks_path, llm_task_count = export_llm_tasks(results, output_dir)
+        return {
+            'analysis_count': len(results),
+            'excel_report': str(output_file),
+            'results_json': results_json,
+            'prompts_json': prompts_json,
+            'time_stats': str(time_stats_file),
+            'llm_tasks': llm_tasks_path,
+            'llm_task_count': llm_task_count,
+            'import_applied': import_applied,
+            'import_unmatched': import_unmatched,
+        }
     else:
         logger.warning('\n⚠️  No functions were successfully analyzed')
+        return {'analysis_count': 0}
 
 
 def run_html_symbol_replacement(args, output_dir: Path, excel_file_override: Path = None,
@@ -970,12 +1189,12 @@ def detect_excel_file(args, output_dir: Path) -> Optional[Path]:
         search_patterns = [
             f'event_count_top{args.top_n}_analysis.xlsx'
             if args.stat_method == 'event_count'
-            else f'top{args.top_n}_missing_symbols_analysis.xlsx',
+            else f'call_count_top{args.top_n}_analysis.xlsx',
             'event_count_top*_analysis.xlsx'
             if args.stat_method == 'event_count'
-            else 'top*_missing_symbols_analysis.xlsx',
+            else 'call_count_top*_analysis.xlsx',
             'event_count_top*_analysis.xlsx',
-            'top*_missing_symbols_analysis.xlsx',
+            'call_count_top*_analysis.xlsx',
         ]
         for pattern in search_patterns:
             matching_files = list(output_dir.glob(pattern))
@@ -997,7 +1216,7 @@ def detect_excel_file(args, output_dir: Path) -> Optional[Path]:
         return output_dir / EVENT_COUNT_ANALYSIS_PATTERN.format(n=args.top_n)
 
     all_call_count_files = sorted(
-        output_dir.glob('top*_missing_symbols_analysis.xlsx'),
+        output_dir.glob('call_count_top*_analysis.xlsx'),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -1099,22 +1318,22 @@ def handle_memory_mode(args, output_dir: Path):
     # 验证参数
     if not args.html_dir:
         logger.error('❌ 错误: 内存模式需要指定 --html-dir 参数')
-        sys.exit(1)
+        _exit_with_result(1, error='memory_mode_missing_html_dir', output_dir=output_dir)
 
     html_dir = Path(args.html_dir)
     if not html_dir.exists():
         logger.error(f'❌ 错误: HTML 目录不存在: {html_dir}')
-        sys.exit(1)
+        _exit_with_result(1, error='memory_mode_html_dir_not_found', output_dir=output_dir)
 
     so_dir = args.so_dir
     if not so_dir:
         logger.error('❌ 错误: 内存模式需要指定 --so-dir 参数')
-        sys.exit(1)
+        _exit_with_result(1, error='memory_mode_missing_so_dir', output_dir=output_dir)
 
     so_dir = Path(so_dir)
     if not so_dir.exists():
         logger.error(f'❌ 错误: SO 目录不存在: {so_dir}')
-        sys.exit(1)
+        _exit_with_result(1, error='memory_mode_so_dir_not_found', output_dir=output_dir)
 
     # 创建内存模式分析器
     memory_analyzer = MemoryFlameGraphAnalyzer(
@@ -1147,7 +1366,7 @@ def handle_memory_mode(args, output_dir: Path):
     if not excel_file.exists():
         logger.error(f'❌ 错误: Excel 分析文件不存在: {excel_file}')
         logger.info('   请先完成符号恢复分析')
-        sys.exit(1)
+        _exit_with_result(1, error='memory_mode_excel_not_found', output_dir=output_dir)
 
     from core.utils.symbol_replacer import load_function_mapping, replace_symbols_in_html
 
@@ -1202,12 +1421,12 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
     perf_db_file = Path(args.perf_db) if args.perf_db else None
     if not perf_db_file or not perf_db_file.exists():
         logger.error('❌ KMP 模式需要通过 --perf-db 指定有效的 perf.db 文件')
-        sys.exit(1)
+        _exit_with_result(1, error='kmp_mode_perf_db_not_found', output_dir=output_dir)
 
     so_path = Path(args.so_file) if args.so_file else None
     if not so_path or not so_path.exists():
         logger.error('❌ KMP 模式需要通过 --so-file 指定 KMP .so 文件路径')
-        sys.exit(1)
+        _exit_with_result(1, error='kmp_mode_so_file_not_found', output_dir=output_dir)
 
     logger.info(f'perf.db : {perf_db_file}')
     logger.info(f'SO file : {so_path}')
@@ -1235,7 +1454,7 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
         )
     except Exception:
         logger.exception('❌ KMP analyzer initialization failed')
-        sys.exit(1)
+        _exit_with_result(1, error='kmp_analyzer_init_failed', output_dir=output_dir)
 
     time_tracker.end_step('Initialization completed')
 
@@ -1248,6 +1467,15 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
         logger.warning('⚠️  No results — check that the SO file has stripped symbols in perf.db')
         return True
 
+    # 离线回填：将外部 LLM 结果注入 results
+    import_applied = 0
+    import_unmatched = 0
+    if args.import_llm_results:
+        import_file = Path(args.import_llm_results)
+        if not import_file.exists():
+            _exit_with_result(1, error='import_llm_results_not_found', output_dir=output_dir)
+        import_applied, import_unmatched = apply_external_llm_results(results, import_file)
+
     # 保存 Excel（含 KMP分类 列）
     time_tracker.start_step('Saving results', 'Writing Excel with KMP classification')
     output_file = analyzer.save_kmp_results(
@@ -1258,16 +1486,26 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
     )
     time_tracker.end_step('Results saved')
 
+    # 离线导出：将待分析任务写出供外部 LLM 处理
+    llm_tasks_path = None
+    llm_task_count = 0
+    if args.prompt_only:
+        llm_tasks_path, llm_task_count = export_llm_tasks(results, output_dir)
+
     logger.info(f'\n✅ KMP Analysis completed! Analyzed {len(results)} functions')
     logger.info(f'📊 Excel report: {output_file}')
+    if args.import_llm_results:
+        logger.info(f'📥 Import: applied={import_applied}, unmatched={import_unmatched}')
+    if llm_tasks_path:
+        logger.info(f'📄 LLM tasks exported: {llm_tasks_path} ({llm_task_count} tasks)')
 
     if analyzer.use_llm and analyzer.llm_analyzer:
         analyzer.llm_analyzer.finalize()
         analyzer.llm_analyzer.print_token_stats()
 
-    # HTML 符号替换（如果提供了 --html-input）
+    # HTML 符号替换（--prompt-only 时跳过，与其他模式行为一致）
     html_input = detect_html_input(args)
-    if html_input and html_input.exists():
+    if (not args.prompt_only) and html_input and html_input.exists():
         logger.info('\n' + '=' * 80)
         logger.info('KMP Step 4: HTML symbol replacement with [Category] annotations')
         logger.info('=' * 80)
@@ -1309,6 +1547,15 @@ def main():
     args = parser.parse_args()
     _MACHINE_JSON = bool(getattr(args, 'machine_json', False))
     _RESULT_FILE = getattr(args, 'result_file', None)
+
+    if args.prompt_only and args.import_llm_results:
+        _exit_with_result(1, error='prompt_only_conflicts_with_import', output_dir=Path(args.output_dir or DEFAULT_OUTPUT_DIR))
+
+    # 离线导出/回填模式均不在本进程内调用 LLM
+    if args.prompt_only or args.import_llm_results:
+        args.no_llm = True
+    if args.prompt_only:
+        args.skip_step4 = True
 
     # 处理输出目录配置
     output_dir = config.ensure_output_dir(config.get_output_dir(args.output_dir))
@@ -1358,7 +1605,7 @@ def main():
             output_dir=output_dir,
         )
 
-    run_llm_analysis(args, perf_db_file, so_dir, output_dir)
+    llm_step_outputs = run_llm_analysis(args, perf_db_file, so_dir, output_dir)
     html_replaced = run_html_symbol_replacement(args, output_dir)
     summarize_outputs(args, output_dir)
     perf_outputs = {
@@ -1366,6 +1613,7 @@ def main():
         'output_dir': str(output_dir),
         'perf_db': str(perf_db_file) if perf_db_file else None,
     }
+    perf_outputs.update(llm_step_outputs or {})
     if html_replaced:
         perf_outputs['html_replaced'] = str(html_replaced)
     _exit_with_result(

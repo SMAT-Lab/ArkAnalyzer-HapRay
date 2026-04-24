@@ -556,7 +556,7 @@ class BatchLLMFunctionAnalyzer(LLMFunctionAnalyzer):
         delay = 5.0
         for attempt in range(max_retries):
             try:
-                return self.client.chat.completions.create(
+                return self._chat_completions_create(
                     model=self.model,
                     messages=[
                         {
