@@ -28,11 +28,11 @@ metadata:
 
 # HapRay 引导式工作流
 
-目标：让 Agent 以更短路径完成 **采集/执行 → 解析产物 → 子 Skill 深入分析 → 独立报告落盘**，并具备可恢复、可审计、可机读的执行闭环。
+目标：让 Agent 以更短路径完成 **下载最新二进制（失败回退源码）→ 采集/执行 → 解析产物 → 子 Skill 深入分析 → 独立报告落盘**，并具备可恢复、可审计、可机读的执行闭环。
 
 ## TL;DR（30 秒）
 
-1. 判定路径：先分清 `<REPO_ROOT>`（跑 CLI）与 `<PROJECT_ROOT>`（写报告）。  
+1. 判定路径：先分清 `<RUNTIME_ROOT>`（二进制运行目录）、`<REPO_ROOT>`（源码运行目录）与 `<PROJECT_ROOT>`（写报告）。  
 2. 先快诊后升级：默认 Quick，命中触发条件再升级 Full。  
 3. 跑命令：必须实际执行 `gui-agent/perf/opt/static` 之一（按意图）。  
 4. 读产物：从 `hapray-tool-result.json`（或 `--result-file`）取 `outputs.reports_path`。  
@@ -41,88 +41,166 @@ metadata:
 
 ## 术语与路径判定
 
-- `<REPO_ROOT>`：包含 `perf_testing/` 的 HapRay 克隆根目录，仅用于运行 CLI。  
+- `<RUNTIME_ROOT>`：HapRay 二进制解压目录（含可执行文件），用于二进制模式运行 CLI。  
+- `<REPO_ROOT>`：HapRay 源码克隆目录（包含 `perf_testing/`），用于源码回退模式运行 CLI。  
 - `<PROJECT_ROOT>`：当前 IDE 工作区根目录，默认用于存放独立分析 Markdown。  
 - `reports_path`：HapRay 工具采集产物目录（契约字段），**不是**独立分析报告目录。
 
-| 场景 | `<REPO_ROOT>` | `<PROJECT_ROOT>` | 独立报告默认目录 |
+| 场景 | `<RUNTIME_ROOT>` | `<PROJECT_ROOT>` | 独立报告默认目录 |
 |------|---------------|------------------|------------------|
-| 工作区只打开 HapRay 单仓 | HapRay 根 | 同上 | `<REPO_ROOT>/reports/` |
-| 外层项目 + 内层 HapRay 克隆 | 内层 HapRay 根 | 外层项目根 | `<PROJECT_ROOT>/reports/` |
+| 工作区只打开 HapRay 二进制目录 | 二进制根 | 同上 | `<RUNTIME_ROOT>/reports/` |
+| 外层项目 + 内层 HapRay 二进制目录 | 内层二进制根 | 外层项目根 | `<PROJECT_ROOT>/reports/` |
 | 用户指定输出路径 | 按实际 | 按实际 | 用户指定优先 |
 
 ## 环境前置条件（新增）
 
 在执行任何 HapRay 命令前，必须先完成以下检查：
 
-1. 本地存在 `ArkAnalyzer-HapRay` 仓库（可访问 `perf_testing/`）。  
-2. Python/`uv` 可用（用于运行 `uv run python -m scripts.main ...`）。  
-3. 真机链路可用（`hdc` 可执行且设备在线，若为真机场景）。  
-4. 目标场景所需门禁已满足（如 `GLM_API_KEY`、symbol-recovery API Key）。
+1. 本地可访问发布页：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases`。  
+2. 已确定当前平台与架构（Windows / Linux Ubuntu 22.04/24.04 x64 / macOS Intel / macOS Apple Silicon）。  
+3. 已下载并解压**最新 release**的对应平台二进制到 `<RUNTIME_ROOT>`，或在二进制不可用时已准备源码目录 `<REPO_ROOT>`。  
+4. 真机链路可用（`hdc` 可执行且设备在线，若为真机场景）。  
+5. 目标场景所需门禁已满足（如 `GLM_API_KEY`、symbol-recovery API Key）。
 
-### 1) 仓库获取（必须包含 git clone）
+### 1) 二进制获取（必须下载最新 release）
 
-若本地尚无 HapRay 仓库，先执行：
+默认从发布页下载：
+
+`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases`
+
+必须执行以下策略：
+
+1. 读取发布列表并定位“最新发布版本”（最新 tag / latest release）。  
+2. 按当前平台只选择一个匹配附件下载，禁止下载无关平台包。  
+3. 下载后解压到 `<RUNTIME_ROOT>`，并记录 `version`、`asset_name`、`download_url` 到执行轨迹。
+4. 若用户已显式提供 `releases/download/<tag>/<asset_name>` 直链，必须先按该直链直接下载与校验；仅在直链失败时再走“自动获取最新 tag + 自动拼接”流程。
+
+下载链接生成规则（必须遵循）：
+
+1. 发布详情页形态：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/<tag>`（示例：`.../releases/v1.5.3`）。  
+2. 资产下载直链形态：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/<tag>/<asset_name>`。  
+3. `tag` 必须来自“最新 release”的真实 tag（如 `v1.5.3`、`v1.5.4`），禁止写死版本。  
+4. `asset_name` 必须来自该 release 的真实附件名，禁止臆造。  
+5. 若已知 Windows 命名规则为 `ArkAnalyzer-HapRay-win32-x64-<version>.zip`，则可按模板拼接：
+   - `version = tag` 去掉前缀 `v`（例如 `v1.5.3 -> 1.5.3`）
+   - `asset_name = ArkAnalyzer-HapRay-win32-x64-<version>.zip`
+   - 示例直链：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.3/ArkAnalyzer-HapRay-win32-x64-1.5.3.zip`
+6. 拼接后必须做可达性校验（HTTP 200 或可成功下载）；失败时回退为“从 release 附件列表中按平台规则重新匹配”。
+7. 只要 `releases/download/<tag>/<asset_name>` 直链可达，即按匿名直链下载处理；下载流程不以“登录门禁”作为前置条件。
+
+### 自动推断下载直链（无用户直链时必须执行）
+
+当用户未提供具体下载 URL，禁止直接要求用户补全直链；必须先执行以下自动推断流程：
+
+1. **自动获取最新 tag（优先）**：优先访问 `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/latest`，跟随重定向并从最终 URL 解析 `vX.Y.Z`。  
+2. **获取 tag 失败回退**：读取 `.../releases` 页面并提取最新 `.../releases/vX.Y.Z`。  
+3. **平台候选名生成**：按平台规则生成 `asset_name` 候选集合（mac Intel 必须同时包含 `ArkAnalyzer-HapRay-darwin-x64-<version>.dmg` 与 `ArkAnalyzer-HapRay_<version>_x64.dmg`）。  
+4. **逐一连通性校验**：对每个候选构造 `.../releases/download/<tag>/<asset_name>`，必须使用 GET 发起请求并进行最小下载校验（禁止使用 HEAD）；以“可达且文件可读”为通过条件。  
+5. **唯一命中即采用**：若仅 1 个候选通过，直接下载并进入后续流程。  
+6. **多命中/零命中回退**：抓取 `.../releases/<tag>` 的附件链接再匹配平台关键字；仍无法唯一确定时，进入源码回退模式，并在执行轨迹记录该失败原因。  
+
+说明：必须先自动推断；若自动推断或下载校验失败，必须进入“源码回退模式”，而不是直接停止。
+
+### 1.1) 源码回退（当二进制不可下载或不可运行时必须执行）
+
+触发条件（满足任一项即触发）：
+
+1. 二进制下载失败（超时 / 404 / 校验失败 / 无法唯一匹配资产名）。  
+2. 二进制解压后 `hapray --help`（或 Windows `.\hapray.exe --help`）执行失败。  
+3. 二进制可执行但运行核心命令阶段出现明确的“不可运行/崩溃/缺依赖”错误。  
+
+回退步骤：
+
+1. 执行 `git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay.git`（已有目录则 `git pull` 更新）。  
+2. 进入 `<REPO_ROOT>/perf_testing`，优先执行 `uv sync`；失败可降级 `uv pip install -r requirements.txt`。  
+   - 建议在国内网络先配置 `uv` 镜像，避免默认源超时：  
+     - PowerShell：`$env:UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"`  
+     - Bash：`export UV_DEFAULT_INDEX=https://pypi.tsinghua.edu.cn/simple`  
+   - 若同时配置了 `PIP_INDEX_URL`，建议保持与 `UV_DEFAULT_INDEX` 一致，避免源不一致导致解析抖动。  
+3. 自检 `uv run python -m scripts.main --help`。  
+4. 后续采集命令改为源码方式执行：`uv run python -m scripts.main ...`。  
+5. 在执行轨迹中显式记录 `binary_failed_reason`、`fallback_mode=source`、`repo_commit`。
+
+Agent 执行规范 TL;DR（优先执行）：
+
+1. 若用户已提供 `releases/download/<tag>/<asset_name>` 直链，优先直接下载；否则自动获取最新 `tag`（失败则要求用户提供 `vX.Y.Z`）。  
+2. 识别当前平台与架构（Windows / Ubuntu22|24 x64 / macOS Intel|Apple Silicon）。  
+3. 按命名约定生成唯一 `asset_name`，构造 `releases/download/<tag>/<asset_name>` 直链。  
+4. 下载到本地后做最小完整性校验（存在、非空、可读）。下载阶段必须等待完成，最长等待 10 分钟。  
+5. 解压到 `<RUNTIME_ROOT>` 并执行 `hapray --help`（Windows 用 `hapray.exe --help`）。  
+6. 任一步失败必须显式报错并进入源码回退流程；禁止伪造“下载成功”。
+
+Agent 执行规范（标准 Skill 描述，替代脚本模板）：
+
+1. **确定版本/直链优先**：若用户提供了 `releases/download/<tag>/<asset_name>` 直链，必须优先使用该直链；仅在未提供直链时才自动获取最新 `tag`（格式 `vX.Y.Z`）。若自动获取失败，必须提示用户手动提供 `tag`，不得假设版本。  
+2. **识别平台**：识别 OS 与 CPU 架构（Windows/Linux/macOS，`x64` 或 `arm64`）。  
+3. **构造资产名**：按“平台选择规则”生成唯一候选 `asset_name`；若无法唯一确定，必须中止并要求人工确认。  
+4. **构造下载链接**：使用标准直链 `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/<tag>/<asset_name>`。  
+5. **执行下载**：将文件下载到本地临时目录或用户指定目录；必须阻塞等待下载结束，超时时间上限为 10 分钟。  
+6. **完整性校验**：校验文件存在且非空，并执行最小可读性检查（可列目录/可读取镜像信息）。  
+7. **解压与落位**：将二进制解压到 `<RUNTIME_ROOT>`，保持目录结构完整。  
+8. **可执行自检**：Windows 执行 `.\hapray.exe --help`，Linux/macOS 执行 `./hapray --help`；禁止执行系统 PATH 中的 `hapray`。  
+9. **失败策略（二进制优先 + 源码回退）**：下载或校验失败时，先输出失败原因，再自动回退源码流程；仅当源码流程也失败时才停止并要求用户人工介入。
+
+标准命名约定（用于自动拼接，需与 release 实际附件名一致）：
+
+- Windows x64：`ArkAnalyzer-HapRay-win32-x64-<version>.zip`
+- Linux Ubuntu 22.04 x64：`ArkAnalyzer-HapRay-linux-x64-ubuntu22.04-<version>.zip`
+- Linux Ubuntu 24.04 x64：`ArkAnalyzer-HapRay-linux-x64-ubuntu24.04-<version>.zip`
+- macOS Apple Silicon：`ArkAnalyzer-HapRay-darwin-arm64-<version>.dmg` 或 `ArkAnalyzer-HapRay_<version>_arm64.dmg`
+- macOS Intel：`ArkAnalyzer-HapRay-darwin-x64-<version>.dmg` 或 `ArkAnalyzer-HapRay_<version>_x64.dmg`
+
+其中 `<version>` = `tag` 去掉前缀 `v`（例如 `v1.5.3 -> 1.5.3`）。
+
+macOS Intel 直链示例（已验证可用）：
+
+- `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.3/ArkAnalyzer-HapRay_1.5.3_x64.dmg`
+
+平台识别建议（必须先识别再选包）：
+
+- Windows：`$env:OS` 或 `[System.Environment]::OSVersion.Platform`。  
+- Linux/macOS：`uname -s` 识别 `Linux` 或 `Darwin`，再用 `uname -m` 区分 `x86_64`（Intel/x64）和 `arm64`（ARM64/Apple Silicon）。
+- Linux 发行版：优先通过 `lsb_release -rs` 或 `/etc/os-release` 判断 Ubuntu 主版本（22.04 / 24.04）。
+
+平台选择规则（按附件文件名关键字匹配）：
+
+| 运行平台 | 必须匹配关键字（任一） | 禁止匹配 |
+|----------|------------------------|----------|
+| Windows x64 | `windows` / `win` + `x64` / `amd64` | `darwin` / `mac` / `arm64` |
+| Linux Ubuntu 22.04 x64 | `linux` + `x64` / `x86_64` / `amd64` + `ubuntu22.04` | `windows` / `darwin` / `mac` / `arm64` / `aarch64` / `ubuntu24.04` |
+| Linux Ubuntu 24.04 x64 | `linux` + `x64` / `x86_64` / `amd64` + `ubuntu24.04` | `windows` / `darwin` / `mac` / `arm64` / `aarch64` / `ubuntu22.04` |
+| macOS Intel | `darwin` / `macos` + `x64` / `x86_64` / `amd64` | `windows` / `arm64` / `aarch64` |
+| macOS Apple Silicon | `darwin` / `macos` + `arm64` / `aarch64` | `windows` / `x64` / `x86_64` |
+
+> 依据 `.github/workflows/build.yml`：Linux 仅构建 Ubuntu 22.04/24.04 的 x64 产物，不构建 Linux ARM64。
+
+Linux 选包执行步骤（必须全部满足）：
+
+1. 先识别系统：`uname -s` 必须为 `Linux`。  
+2. 再识别架构：`uname -m` 必须为 `x86_64`（非 `arm64`/`aarch64`）。  
+3. 识别 Ubuntu 版本：优先 `lsb_release -rs`，失败再读 `/etc/os-release`。  
+4. 当版本为 `22.04`：仅允许匹配 `linux + x64 + ubuntu22.04` 的附件名。  
+5. 当版本为 `24.04`：仅允许匹配 `linux + x64 + ubuntu24.04` 的附件名。  
+6. 若候选数不为 1（0 或 >1）：禁止下载，输出“版本匹配不唯一/无匹配”，并要求人工确认。  
+7. 下载后执行 `./hapray --help` 验证可执行，再进入采集与分析流程。
+
+### 2) `<RUNTIME_ROOT>` 判定（可执行检查）
+
+`<RUNTIME_ROOT>` 必须是包含 HapRay 可执行文件的目录。推荐在执行前做一次检查：
 
 ```bash
-git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay.git
+cd <RUNTIME_ROOT>
+./hapray --help
 ```
 
-随后进入仓库并确认目录：
+若为 Windows，使用：
 
-```bash
-cd ArkAnalyzer-HapRay
-ls perf_testing
+```powershell
+Set-Location <RUNTIME_ROOT>
+.\hapray.exe --help
 ```
 
-若 `perf_testing/` 不存在，禁止继续执行分析流程，应先修复仓库路径。
-
-下载代码后必须先构建前端报告模板资产（避免 `tools/web/report_template.html` 缺失）：
-
-```bash
-cd ArkAnalyzer-HapRay
-npm i && npm run build:quick
-```
-
-### 2) `<REPO_ROOT>` 判定（可执行检查）
-
-`<REPO_ROOT>` 必须是包含 `perf_testing/` 的目录。推荐在执行前做一次检查：
-
-```bash
-cd <REPO_ROOT>
-test -d perf_testing && echo "REPO_ROOT_OK" || echo "REPO_ROOT_INVALID"
-```
-
-输出 `REPO_ROOT_INVALID` 时，必须先纠正路径，再进入执行主流程。
-
-### 3) 首次环境安装（依赖闭环）
-
-首次使用建议在 `<REPO_ROOT>/perf_testing` 完成依赖安装：
-
-```bash
-cd <REPO_ROOT>/perf_testing
-uv sync
-```
-
-若项目未使用 `uv.lock` 或 `uv sync` 失败，可降级执行：
-
-```bash
-cd <REPO_ROOT>/perf_testing
-uv pip install -r requirements.txt
-```
-
-若 `requirements.txt` 不存在，应先按仓库当前文档完成依赖安装，再继续执行。
-
-### 4) 执行前最小自检（建议）
-
-在跑 `gui-agent/perf/opt/static` 前，建议执行一次：
-
-```bash
-cd <REPO_ROOT>/perf_testing
-uv run python -m scripts.main --help
-```
-
-若帮助命令无法运行，禁止继续采集流程，先修复 Python/依赖环境。
+帮助命令无法运行时，禁止继续二进制采集流程，必须切换到源码回退模式。
 
 ## 执行模式
 
@@ -229,9 +307,9 @@ uv run python -m scripts.main --help
 
 ## 执行主流程（统一版）
 
-1. 定位 `<REPO_ROOT>` 与 `<PROJECT_ROOT>`。  
+1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
-3. 在 `<REPO_ROOT>/perf_testing` 执行目标命令。  
+3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\hapray.exe`，Linux/macOS `./hapray`）；源码回退模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`。  
 4. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
 5. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
 6. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
@@ -239,6 +317,7 @@ uv run python -m scripts.main --help
 
 ## 异常与降级策略（Fail-Closed + 可交付）
 
+- 二进制下载失败（含超时/404/校验失败）或二进制不可运行：自动回退到源码下载与运行流程；源码流程失败后再停止并提示用户介入。  
 - `gui-agent` 不可用：在获得用户确认后降级到 `perf --run_testcases`，并记录“能力降级影响”。  
 - `result-file` 缺失或损坏：尝试读取默认 `hapray-tool-result.json`；仍失败则进入“仅执行证据报告”，禁止输出伪分析结论。  
 - 关键产物缺失（如无 `trace.db`）：对应子 Skill 标记 `已跳过（数据不足）`，并给最小补采命令。  
@@ -258,16 +337,16 @@ uv run python -m scripts.main --help
 ## 命令模板（最小可用）
 
 ```bash
-cd <REPO_ROOT>/perf_testing
-uv run python -m scripts.main --result-file /tmp/hapray-tool-result.json gui-agent \
+cd <RUNTIME_ROOT>
+./hapray --result-file /tmp/hapray-tool-result.json gui-agent \
   --apps com.ss.hm.ugc.aweme \
   --scenes "浏览视频推荐流，滑动多屏并进入播放页" \
   -o ./
 ```
 
 ```bash
-cd <REPO_ROOT>/perf_testing
-uv run python -m scripts.main --result-file /tmp/hapray-tool-result.json perf \
+cd <RUNTIME_ROOT>
+./hapray --result-file /tmp/hapray-tool-result.json perf \
   --run_testcases "PerfLoad_Douyin_0010" \
   --round 1
 ```
@@ -286,7 +365,7 @@ uv run python -m scripts.main --result-file /tmp/hapray-tool-result.json perf \
 ```markdown
 ---
 
-<p align="center"><small>报告由 <strong>HapRay Skill</strong> <code>1.5.3</code> 生成 · <a href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay">ArkAnalyzer-HapRay</a> · 报告生成时间 <code>2026-03-30T14:30:00+08:00</code></small></p>
+<p align="center"><small>报告由 <strong>HapRay Skill</strong> <code>1.5.4</code> 生成 · <a href="https://gitcode.com/SMAT/ArkAnalyzer-HapRay">ArkAnalyzer-HapRay</a> · 报告生成时间 <code>2026-03-30T14:30:00+08:00</code></small></p>
 ```
 
 若环境不支持 HTML，可用单行斜体替代，信息字段需完整等价。
@@ -297,6 +376,7 @@ uv run python -m scripts.main --result-file /tmp/hapray-tool-result.json perf \
 - 禁止用自动摘要替代对原始产物的验证。  
 - 禁止在门禁未通过时“伪交付”（例如 GLM 未配置却直接出完整采集结论）。  
 - 禁止虚构路径、时间戳、数值、热点函数。  
+- 禁止使用系统 PATH 中原有的 `hapray`（如 `hapray` / `which hapray` 指向旧版本）；必须使用 `<RUNTIME_ROOT>` 下本次下载的可执行文件。  
 
 ## 参考文档
 

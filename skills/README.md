@@ -21,11 +21,25 @@ skills/
 - **`hapray`**：主文件为工作流与 CLI；**`analysis/`** 内为可扩展的数据分析子文档，发布时须 **整目录** 复制。
 - **独立发布**时，对外交付物即为 `<skill-name>/` 整个文件夹（或下文所述的归档）。
 
+## HapRay 运行时交付建议（二进制优先 + 源码回退）
+
+对 `hapray` skill，推荐采用 **Release 二进制优先** 的运行方式；当二进制下载失败或二进制不可运行时，必须自动回退到源码方式。  
+该策略应以 **标准 Skill 描述** 方式表达（流程规则），由 AI 按规则自动执行，而不是依赖用户手工改脚本：
+
+- 发布地址：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases`
+- 运行策略：先下载**最新发布版本**并按平台选择对应二进制包（Windows / Linux Ubuntu 22.04/24.04 x64 / macOS Intel / macOS Apple Silicon）；失败时回退 `git clone` + `uv run python -m scripts.main`
+- 分析流程：使用二进制执行采集，基于 `reports_path` 与相关产物做子 Skill 分析并输出报告
+- 最小自动化闭环：`确定最新 tag -> 平台识别 -> 资产名匹配 -> 下载 -> 完整性校验 -> 可执行自检 -> 失败则源码回退`
+
+> 说明：`skills/` 目录本身仍可随仓库、独立仓库或 zip 分发；以上建议仅针对 HapRay 工具运行时获取方式。
+
 ## 独立发布方式
 
-### 1. 随 ArkAnalyzer-HapRay 仓库发布（推荐）
+### 1. 随 ArkAnalyzer-HapRay 仓库发布（Skill 分发推荐）
 
-Skill 与主仓库同版本迭代；用户只克隆仓库后，将某一 skill **复制或软链**到本机 Agent skills 目录即可。
+Skill 与主仓库同版本迭代；用户获取 skill 后，将某一 skill **复制或软链**到本机 Agent skills 目录即可。
+
+- 对 `hapray`：运行时优先从 Release 下载对应平台的最新二进制包；若下载失败或二进制不可运行，自动回退到源码下载并执行原有流程。
 
 - **Cursor（用户目录）**：复制到 `~/.cursor/skills/<skill-name>/`。
 - **Codex**：复制到 `$CODEX_HOME/skills/<skill-name>/`（默认 `~/.codex/skills`）。
