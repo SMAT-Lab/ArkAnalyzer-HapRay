@@ -309,12 +309,34 @@ Set-Location <RUNTIME_ROOT>
   3. **无 LLM 快速模式**：`--no-llm`，仅反汇编与基础证据输出。  
 - 若用户未明确选择路径，必须停在门禁阶段并继续确认。
 
+**`hapray update` 集成路径（与上述“三选一”并行，以代码为准）**：
+
+集成符号恢复由 `perf_testing/hapray/actions/update_action.py` + `perf_analyzer.py` 实现，**默认行为**为：
+
+1. **SO**：解析顺序为 `update --so_dir` → 环境变量 `HAPRAY_SO_DIR` → 若仍无有效目录，则在 **`hdc` 可用且设备在线** 时，按 `testInfo.json` 的 **`app_id`（包名）**：先 **`hdc shell bm dump -n <包名>`** 从安装信息 JSON 中取模块/安装路径，再在 `--report_dir/.symbol_recovery_libs/<bundle>/` 上对对应 **`libs` / `libs/arm64`** 做 **`file recv`**；若仍拿不到 `.so`，再用**仅靠包名字符串**的常见兜底路径（细节见 `analysis/symbol-recovery-analysis.md`）。**不靠 PID/ps 作为主拉取路径。**  
+2. **LLM**：在已配置 Key/Base URL 且未 `--symbol-recovery-no-llm`、非强制纯 agent 时，**先运行时探活**；探活失败（如 `402` 额度、鉴权、网络）则**自动进入 agent 模式**，后续在同一次 `update` 内走 **prompt-only** 或在线失败后再 **prompt-only**（见下「一次性完成」）。  
+3. **前提**：无论在线还是 agent，**都必须有可用 SO 目录**；自动拉库失败时日志会出现 `Failed to auto-download libs for bundle`，此时集成符号恢复整段**跳过**（不是 LLM 逻辑未生效），需用户补 `--so_dir` 或排查设备/路径。
+
+**一次性完成（强制）**：
+
+- 目标是“单次 `update` 内尽量闭环”：在 LLM 就绪且**探活通过**、非强制 agent 时，同一次 `update` 跑**完整** `symbol_recovery`（子进程内直连 LLM），避免故意拆成“先只导出 tasks、再第二次 update”。  
+- **探活失败**或 **离线 agent / prompt-only**：子进程先导出 `symbol_recovery_llm_tasks.json`，随后在**同一次 update**里执行真实 agent 推断并回填 import。默认会自动调用内置 `tools/symbol_recovery/scripts/run_step2.py openai --tasks ... --output ...`；`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD` 仅作为可选覆盖（支持 `{tasks}`、`{output}`、`{out_dir}`、`{scene}`）。  
+- 若默认命令或自定义命令未产出 `symbol_recovery_external_results.json`，本次应视为“未完成真实推断”，不得把地址占位回写当作符号恢复成功交付。
+
 当用户选择“离线编排（主 Agent）”时，主 Agent 负责以下编排职责：
 
 1. 调用 `symbol_recovery` 产出待分析任务（含 `function_id` 与 prompt/上下文）。  
 2. 将任务分发给外部模型通道（可由 GUI Agent、平台代理或人工调用）。  
-3. 对返回结果做结构校验（`function_id` 对齐、JSON 字段完整）。  
+3. 对返回结果做结构与内容规范校验（`function_id` 对齐、JSON 字段完整、命名与语言约束满足）。  
 4. 回填到 `symbol_recovery` 并触发最终报告更新（Excel/HTML/替换报告）。
+
+离线编排结果约束（写入 Skill，不在代码中硬校验）：
+
+- 每条结果都必须有 `function_name`，不得为空或 `null`。  
+- `function_name` 必须是语义化英文函数名，禁止携带地址/偏移后缀（如 `_f96fc`、`_0x1a2b`、`+0x1a2b`、`libxx.so+0x1a2b`）。  
+- `functionality` 必须为中文描述。  
+- `performance_analysis` 必须为中文描述。  
+- 若任一条不满足上述约束，必须在导入前由 Agent 先修正，不得把不合规结果直接回填。
 
 ## 执行主流程（统一版）
 
@@ -330,6 +352,7 @@ Set-Location <RUNTIME_ROOT>
 
 - 二进制下载失败（含超时/404/校验失败）或二进制不可运行：自动回退到源码下载与运行流程；源码流程失败后再停止并提示用户介入。  
 - `gui-agent` 不可用：在获得用户确认后降级到 `perf --run_testcases`，并记录“能力降级影响”。  
+- `symbol-recovery`：若已配置 LLM 环境但请求仍失败（额度/鉴权/网络），单次子进程内已尽力；若**未配置** LLM 环境，则必须走离线 tasks + 外部结果 JSON 回填，禁止把“仅导出 tasks”当作最终交付。  
 - `result-file` 缺失或损坏：尝试读取默认 `hapray-tool-result.json`；仍失败则进入“仅执行证据报告”，禁止输出伪分析结论。  
 - 关键产物缺失（如无 `trace.db`）：对应子 Skill 标记 `已跳过（数据不足）`，并给最小补采命令。  
 - 多命令场景：采集命令可失败不中断，但最终结论必须显式标注数据完备度（完整/部分/不足）。

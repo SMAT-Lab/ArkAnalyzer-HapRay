@@ -888,10 +888,13 @@ def apply_external_llm_results(results: list, result_file: Path) -> tuple[int, i
             unmatched += 1
             continue
 
+        function_name = str(entry.get('function_name') or entry.get('inferred_name') or '').strip()
+        functionality = str(entry.get('functionality') or entry.get('description') or '').strip()
+        performance_analysis = str(entry.get('performance_analysis') or '').strip()
         llm_result = {
-            'functionality': entry.get('functionality') or entry.get('description') or '',
-            'function_name': entry.get('function_name') or entry.get('inferred_name'),
-            'performance_analysis': entry.get('performance_analysis') or '',
+            'functionality': functionality,
+            'function_name': function_name,
+            'performance_analysis': performance_analysis,
             'confidence': entry.get('confidence') or '',
             'reasoning': entry.get('reasoning') or '',
         }

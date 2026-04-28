@@ -18,6 +18,8 @@ import json
 import logging
 import os
 import re
+import subprocess
+import sys
 import zlib
 from pathlib import Path
 from typing import Any, Optional
@@ -81,12 +83,17 @@ class PerfAnalyzer(BaseAnalyzer):
         """在生成火焰图数据前，可选运行符号恢复并写回 perf.json。"""
         no_llm = bool(Config.get('symbol_recovery_no_llm', False))
         llm_ready = bool(Config.get('symbol_recovery_llm_ready', False))
+        llm_env_configured = bool(Config.get('symbol_recovery_llm_env_configured', False))
+        llm_probe_ok = bool(Config.get('symbol_recovery_llm_probe_ok', True))
+        agent_mode = bool(Config.get('symbol_recovery_agent_mode', False))
+        import_results_tpl = (Config.get('symbol_recovery_import_results', '') or '').strip()
         so_dir = (Config.get('so_dir', None) or '').strip()
         if not symbol_recovery_should_run(
             llm_ready=llm_ready,
             effective_so_dir=so_dir or None,
             perf_db_path=perf_db_path,
             no_llm_override=no_llm,
+            agent_mode=agent_mode,
         ):
             return False
         top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
@@ -104,6 +111,32 @@ class PerfAnalyzer(BaseAnalyzer):
         ctx = (Config.get('symbol_recovery_context', '') or '').strip()
         if ctx:
             extras.extend(['--context', ctx])
+        import_results: Optional[str] = None
+        if import_results_tpl:
+            import_results = import_results_tpl.replace('{step}', step_dir)
+        out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, output_root)
+        if not import_results and agent_mode and not llm_ready:
+            # 单次 update 自动闭环：若已存在离线推断结果文件，则本次直接导入回填，避免再次手工执行 update
+            auto_candidates = [
+                out_dir / 'symbol_recovery_external_results.json',
+                out_dir / 'symbol_recovery_real_inference_results.json',
+            ]
+            for cand in auto_candidates:
+                if cand.is_file():
+                    import_results = str(cand)
+                    logging.info(
+                        'Auto-detected symbol recovery import results for scene=%s step=%s: %s',
+                        self.scene_dir,
+                        step_dir,
+                        cand,
+                    )
+                    break
+        # Agent 离线导出：未配置 Key/URL；或探活失败；或 LLM 未就绪 —— 避免额度/参数错误时仍硬跑在线直连直接失败
+        prompt_only = bool(
+            agent_mode
+            and not import_results
+            and (not llm_env_configured or not llm_probe_ok or not llm_ready)
+        )
         ok = maybe_run_symbol_recovery_for_step(
             self.scene_dir,
             step_dir,
@@ -114,7 +147,30 @@ class PerfAnalyzer(BaseAnalyzer):
             output_root=output_root,
             subprocess_timeout_sec=timeout_sec,
             extra_args=extras or None,
+            prompt_only=prompt_only,
+            import_llm_results=import_results,
         )
+        if not ok and not prompt_only and not import_results:
+            logging.warning(
+                'Integrated symbol recovery (online LLM) did not complete for scene=%s step=%s; '
+                'falling back to agent prompt-only export.',
+                self.scene_dir,
+                step_dir,
+            )
+            prompt_only = True
+            ok = maybe_run_symbol_recovery_for_step(
+                self.scene_dir,
+                step_dir,
+                perf_db_path,
+                effective_so_dir=so_dir,
+                top_n=top_n,
+                stat_method=stat_method,
+                output_root=output_root,
+                subprocess_timeout_sec=timeout_sec,
+                extra_args=extras or None,
+                prompt_only=True,
+                import_llm_results=None,
+            )
         if not ok:
             logging.warning(
                 'Integrated symbol recovery did not complete for scene=%s step=%s',
@@ -122,7 +178,110 @@ class PerfAnalyzer(BaseAnalyzer):
                 step_dir,
             )
             return False
+        if prompt_only and not import_results:
+            inferred_json = self._run_agent_inference_for_symbol_recovery(out_dir, timeout_sec=timeout_sec)
+            if not inferred_json:
+                logging.warning(
+                    'Prompt-only symbol recovery exported tasks but no real agent inference results were produced '
+                    'for scene=%s step=%s',
+                    self.scene_dir,
+                    step_dir,
+                )
+                return False
+            ok = maybe_run_symbol_recovery_for_step(
+                self.scene_dir,
+                step_dir,
+                perf_db_path,
+                effective_so_dir=so_dir,
+                top_n=top_n,
+                stat_method=stat_method,
+                output_root=output_root,
+                subprocess_timeout_sec=timeout_sec,
+                extra_args=extras or None,
+                prompt_only=False,
+                import_llm_results=inferred_json,
+            )
+            if not ok:
+                logging.warning(
+                    'Agent inference results import failed for scene=%s step=%s: %s',
+                    self.scene_dir,
+                    step_dir,
+                    inferred_json,
+                )
+                return False
+            logging.info(
+                'Integrated symbol recovery completed with real agent inference for scene=%s step=%s (%s)',
+                self.scene_dir,
+                step_dir,
+                inferred_json,
+            )
         return True
+
+    def _run_agent_inference_for_symbol_recovery(
+        self, out_dir: Path, *, timeout_sec: Optional[float]
+    ) -> Optional[str]:
+        """
+        执行 agent 推断命令：tasks -> external_results.json。
+
+        行为：
+        - 如果配置了 HAPRAY_SYMBOL_RECOVERY_AGENT_CMD，执行该命令并等待结果。
+        - 如果未配置，则**不执行默认命令**，返回 None，由主 Agent 在对话中处理。
+          主 Agent 应读取 tasks 文件，逐条推断后生成结果到 output_json，再继续流程。
+        """
+        tasks = out_dir / 'symbol_recovery_llm_tasks.json'
+        if not tasks.is_file():
+            return None
+        output_json = out_dir / 'symbol_recovery_external_results.json'
+        cmd_tpl = (os.environ.get('HAPRAY_SYMBOL_RECOVERY_AGENT_CMD') or '').strip()
+
+        # 方案A：未配置 agent 命令时，不自动执行，留待当前 Agent 手动处理
+        if not cmd_tpl:
+            logging.info(
+                'HAPRAY_SYMBOL_RECOVERY_AGENT_CMD not configured; skipping default agent runner. '
+                'Tasks exported to: %s. Please generate results to: %s and retry.',
+                tasks,
+                output_json,
+            )
+            return None
+
+        env = os.environ.copy()
+        env['HAPRAY_SR_TASKS'] = str(tasks)
+        env['HAPRAY_SR_OUTPUT'] = str(output_json)
+        env['HAPRAY_SR_OUTPUT_DIR'] = str(out_dir)
+        cmd = (
+            cmd_tpl.replace('{tasks}', str(tasks))
+            .replace('{output}', str(output_json))
+            .replace('{out_dir}', str(out_dir))
+            .replace('{scene}', self.scene_dir)
+        )
+        run_kwargs = dict(
+            args=cmd,
+            shell=True,
+            cwd=str(CommonUtils.get_project_root()),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=timeout_sec if timeout_sec and timeout_sec > 0 else None,
+            check=False,
+        )
+        try:
+            cp = subprocess.run(**run_kwargs)
+        except subprocess.TimeoutExpired:
+            logging.warning('Agent inference command timed out: %s', cmd)
+            return None
+        if cp.stdout:
+            logging.info(cp.stdout[:2000])
+        if cp.stderr:
+            logging.warning(cp.stderr[:2000])
+        if cp.returncode != 0:
+            logging.warning('Agent inference command failed with exit=%s: %s', cp.returncode, cmd)
+            return None
+        if not output_json.is_file():
+            logging.warning('Agent inference command succeeded but output missing: %s', output_json)
+            return None
+        return str(output_json)
 
     def _maybe_embed_symbol_recovery_report(
         self, step_dir: str, perf_db_path: str, generated_html: Optional[Path] = None

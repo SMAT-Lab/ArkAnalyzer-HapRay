@@ -180,13 +180,19 @@ python3 main.py \
   {
     "function_id": "func_1",
     "functionality": "函数功能描述（中文，50-200 字）",
-    "function_name": "推断的英文函数名，无法确定填 null",
-    "performance_analysis": "性能问题与优化建议",
+    "function_name": "推断的语义化英文函数名（必填，禁止包含地址偏移后缀）",
+    "performance_analysis": "性能问题与优化建议（中文）",
     "confidence": "高 / 中 / 低",
     "reasoning": "关键指令模式、字符串等推断依据"
   }
 ]
 ```
+
+**命名规范（强制）**
+- `function_name` 必须是语义化函数名，不得包含偏移信息。
+- 禁止：`foo_bar_f96fc`、`foo_bar_0x1a2b`、`foo_bar+0x1a2b`、`libxx.so+0x1a2b`。
+- 建议：`decodeFrame`、`buildRuntimeRequest`、`resolveJsBinding`。
+- 该约束由 Skill 流程强制执行：在离线编排产出结果 JSON 前必须人工/Agent 校验并修正；**工具导入阶段不负责自动去偏移后缀**。
 
 每次处理 10 条左右。任务数较多时，根据你的运行环境选择以下**两条路径之一**：
 
@@ -209,35 +215,32 @@ python3 scripts/run_step2.py openai \
 
 ---
 
-**路径 B — 离线编排模式**（Cursor / GUI Agent，不用或不想配 `.env`）
+**路径 B — 离线编排模式**（Cursor / GUI Agent，不用或不想配 `.env`，推荐）
 
 适用于：在 Cursor 对话中让 Agent 模型做推断，推断本身**不调用外部 API**。
 
-```bash
-cd <REPO_ROOT>/tools/symbol_recovery
-# 1) 切批（每批 10 条）
-python3 scripts/run_step2.py split \
-    --tasks output/symbol_recovery_llm_tasks.json \
-    --output-dir output/agent_batches \
-    --batch-size 10
-```
+**强制降级规则（必须遵守）**：
+- 在线直连 LLM 若出现额度不足、鉴权失败、网络/网关不可达、限流重试后仍失败，不得结束流程。  
+- 必须立即降级到本路径（离线编排），并继续完成回填。  
+- 目标是一次性闭环交付：在同一次任务中完成“导出 -> 推断 -> 导入 -> 报告更新”。
 
-在 Cursor 中让 Agent **逐批读取** `output/agent_batches/batch_*_of_*.json`，按 `expected_schema` 产出 **`batch_*_results.json`**（与批编号对应，勿改 `function_id`）。
+默认由 Skill 驱动在对话中完成，不要求额外编写临时脚本。推荐流程：
+1. 读取 `symbol_recovery_llm_tasks.json`（可按 10 条分批处理）。
+2. Agent 逐条基于 `prompt` 做真实推断，生成结果 JSON（保持 `function_id` 对齐）。
+3. 结果直接保存为 `symbol_recovery_external_results.json`（或任意路径），供 `--import-llm-results` 回填。
 
-```bash
-# 2) 合并 Agent 写回的结果
-python3 scripts/run_step2.py merge \
-    --output output/symbol_recovery_external_results.json \
-    "output/agent_batches/batch_*_results.json"
-```
+> `scripts/run_step2.py split/merge` 仅作为历史兼容选项；优先使用 Skill 对话流程完成离线编排。
 
 ---
 
 **结果 JSON 要求：**
 - 必填字段：`function_id`（格式 `func_1`、`func_2`…）、`functionality`、`confidence`
-- 可选字段：`function_name`（无法推断时填 `null`）、`performance_analysis`、`reasoning`
+- 必填字段补充约束：`function_name`、`performance_analysis` 也必须提供且不能为空
+- 可选字段：`reasoning`
 - 也接受同义字段：`description` = `functionality`，`inferred_name` = `function_name`
 - 顶层格式：裸数组 `[...]` 或 `{"functions":[...]}` 均可
+- `function_name` 必须是语义化英文函数名，禁止附带偏移后缀（如 `_f96fc` / `_0x1a2b` / `+0x1a2b` / `libxx.so+0x1a2b`）；必须在产出阶段即保证规范。
+- `functionality` 与 `performance_analysis` 必须为中文；不合规结果必须在导入前修正。
 
 *第二次调用——回填结果并生成报告：*
 
@@ -255,6 +258,24 @@ python3 main.py \
 `--skip-step1 --perf-db output/perf.db` 复用第一次产出的 perf.db，避免重复转换。  
 `--import-llm-results` 自动设置 `--no-llm`，全程不调用本地 LLM。  
 回填匹配优先级：`function_id` > `rank` > `address`（三者任一均可）。
+
+---
+
+### 与 `hapray update` 集成的默认行为（实现契约）
+
+以下与 `perf_testing/hapray/actions/update_action.py`、`perf_testing/hapray/analyze/perf_analyzer.py` 行为一致，供对照日志排查。
+
+| 步骤 | 行为 |
+|------|------|
+| **SO 目录** | 优先 `hapray update --so_dir <dir>`，其次环境变量 `HAPRAY_SO_DIR`。若仍无有效目录，且 **`hdc` 在 PATH、设备在线**：从 **`testInfo.json`** 读取 **`app_id`（包名）**，对每个包执行 **`hdc shell bm dump -n <包名>`**，从返回 JSON 中读取 **`modulePath` / `hapPath` / `bundleDataDir`** 等与安装相关的路径（见实现中的字段白名单），将每个基路径展开为 **`…/libs`、`…/libs/arm64`**（若路径指向 `.hap`/`.har` 则先取父目录）并 **`hdc file recv`** 到 `--report_dir/.symbol_recovery_libs/<bundle>/`；若仍无 `.so`，再用**仅由包名拼出的**常见路径兜底（如 `/data/storage/el1/bundle/<包名>/libs`、`/data/app/el1|el2/bundle/<包名>/libs(/arm64)`）。**不依赖进程 PID**（不以 `pidof`/`ps`/`pids.json` 为主路径）。 |
+| **自动拉库失败** | 日志中会出现 `Failed to auto-download libs for bundle: <app_id>`。此时 **`effective_so` 为空，集成符号恢复整段不会执行**（与 LLM 是否配置、是否探活失败无关）。处理方式：连接设备后重试、或显式传入 `--so_dir` / 设置 `HAPRAY_SO_DIR` 指向已含 `.so` 的目录。 |
+| **LLM** | 未 `--symbol-recovery-no-llm` 时：若 Key/Base URL 已配置且非强制 agent，则**先对 symbol_recovery 做运行时探活**；失败则自动 **fallback 到 agent 模式**（`llm_ready` 置假、`agent_mode` 置真，并记录 `symbol_recovery_llm_probe_ok`）。 |
+| **同一步骤内降级** | `PerfAnalyzer` 中：探活失败或 offline agent 路径下先执行 **`--prompt-only`** 导出 `symbol_recovery_llm_tasks.json`，然后在同次 update 内默认调用内置 `tools/symbol_recovery/scripts/run_step2.py openai --tasks ... --output ...` 生成 `symbol_recovery_external_results.json`，再立即 `--import-llm-results` 回填 `perf.json` 与 HTML。`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD` 仅作可选覆盖。若命令未产出结果，则本次判定为未完成真实推断，不进入“成功回填”。 |
+
+**与 `update` 集成时的一次性闭环要求**：
+- 在 LLM 就绪、**探活通过**且非强制 agent 时，`update` 在**同一次执行**中跑**完整** `symbol_recovery`（子进程内直连 LLM），避免为“先 prompt-only 再第二次 update”而故意拆步。  
+- **探活失败**（如 402/额度、URL/鉴权问题）或 **在线子进程失败/无有效映射** 时，**同一次** `update` 必须走 agent 命令链（导出 tasks -> agent 生成结果 -> import 回填），不得仅做占位写回。  
+- 若在线 LLM 不可用且默认/自定义 agent 命令均失败，本次 `update` 只能导出 tasks 并标记“未完成真实推断”，不应视作符号恢复成功。
 
 **Excel 和 KMP 模式同样支持此两步流程**，分别替换为 `--excel-file`/`--so-file` 和 `--kmp-mode`/`--perf-db`/`--so-file`；Excel 和 KMP 的第二次调用无需 `--skip-step1`。
 

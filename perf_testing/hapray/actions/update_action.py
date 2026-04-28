@@ -14,10 +14,15 @@ limitations under the License.
 """
 
 import argparse
+import json
 import logging
 import os
+import shutil
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Optional
 
 from hapray import VERSION
 from hapray.core.common.action_return import ActionExecuteReturn
@@ -27,9 +32,11 @@ from hapray.core.common.symbol_recovery_bridge import (
     ENV_SYMBOL_RECOVERY_PYTHON,
     ENV_SYMBOL_RECOVERY_ROOT,
     check_symbol_recovery_llm_ready,
+    llm_env_ready_for_symbol_recovery,
     parse_output_root_from_env,
     parse_stat_from_env,
     parse_top_n_from_env,
+    probe_symbol_recovery_llm_runtime,
     resolve_effective_so_dir,
     resolve_symbol_recovery_exe,
     resolve_symbol_recovery_python,
@@ -46,6 +53,269 @@ from hapray.mode.simple_mode import create_simple_mode_structure
 
 class UpdateAction:
     """Handles report update actions for existing performance reports."""
+
+    @staticmethod
+    def _read_bundle_name_from_testinfo(case_dir: str) -> str:
+        test_info = Path(case_dir) / 'testInfo.json'
+        if not test_info.is_file():
+            return ''
+        try:
+            raw = json.loads(test_info.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, json.JSONDecodeError):
+            return ''
+        if not isinstance(raw, dict):
+            return ''
+        return str(raw.get('app_id', '')).strip()
+
+    @staticmethod
+    def _collect_bundle_names(testcase_dirs: list[str]) -> list[str]:
+        names: list[str] = []
+        seen: set[str] = set()
+        for case_dir in testcase_dirs:
+            bundle = UpdateAction._read_bundle_name_from_testinfo(case_dir)
+            if not bundle:
+                continue
+            if bundle in seen:
+                continue
+            seen.add(bundle)
+            names.append(bundle)
+        return names
+
+    @staticmethod
+    def _looks_like_downloaded_libs(path: Path) -> bool:
+        try:
+            return any(path.rglob('*.so'))
+        except OSError:
+            return False
+
+    @staticmethod
+    def _run_hdc_cmd(args: list[str], timeout_sec: int = 20) -> tuple[bool, str]:
+        try:
+            completed = subprocess.run(
+                ['hdc', *args],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=timeout_sec,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return (False, str(e))
+        output = f'{completed.stdout or ""}\n{completed.stderr or ""}'.strip()
+        return (completed.returncode == 0, output)
+
+    @staticmethod
+    def _is_hdc_device_ready() -> bool:
+        if not shutil.which('hdc'):
+            return False
+        ok, out = UpdateAction._run_hdc_cmd(['list', 'targets'], timeout_sec=10)
+        if not ok:
+            return False
+        lines = [line.strip() for line in out.splitlines() if line.strip()]
+        return len(lines) > 0
+
+    @staticmethod
+    def _try_recv_remote_dir(remote_dir: str, local_dir: Path) -> bool:
+        local_dir.parent.mkdir(parents=True, exist_ok=True)
+        ok, out = UpdateAction._run_hdc_cmd(['file', 'recv', remote_dir, str(local_dir)], timeout_sec=90)
+        if not ok:
+            logging.debug('hdc recv failed: %s -> %s (%s)', remote_dir, local_dir, out)
+            return False
+        return UpdateAction._looks_like_downloaded_libs(local_dir)
+
+    @staticmethod
+    def _parse_json_from_shell_output(out: str) -> Optional[dict]:
+        """解析 bm dump 等命令输出中的 JSON（跳过前缀说明文字）。"""
+        if not out or not out.strip():
+            return None
+        i = out.find('{')
+        if i < 0:
+            return None
+        tail = out[i:]
+        try:
+            data = json.loads(tail)
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    # bm dump JSON 中常见「安装目录 / 模块根路径」字段（仅按包名查询，不依赖 pid）
+    _BM_PATH_KEYS = frozenset(
+        {
+            'modulePath',
+            'hapPath',
+            'moduleInstallPath',
+            'bundleDataDir',
+            'bundleDataPath',
+            'appDataDir',
+            'hapModulePath',
+        }
+    )
+
+    @staticmethod
+    def _collect_bm_install_paths(data: object, bundle_name: str) -> list[str]:
+        """从 bm dump -n <包名> 的 JSON 中收集与安装相关的目录路径。"""
+        bases: list[str] = []
+
+        def walk(obj: object) -> None:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if isinstance(v, str) and k in UpdateAction._BM_PATH_KEYS and v.startswith('/'):
+                        bases.append(v.rstrip('/'))
+                    else:
+                        walk(v)
+            elif isinstance(obj, list):
+                for x in obj:
+                    walk(x)
+
+        walk(data)
+        # 补充：JSON 中出现且包含该包名的 /data 路径（模块根、沙箱路径等）
+        extra: list[str] = []
+
+        def walk_bundle_strings(obj: object) -> None:
+            if len(extra) >= 24:
+                return
+            if isinstance(obj, dict):
+                for v in obj.values():
+                    walk_bundle_strings(v)
+            elif isinstance(obj, list):
+                for x in obj:
+                    walk_bundle_strings(x)
+            elif (
+                isinstance(obj, str)
+                and obj.startswith('/data/')
+                and bundle_name in obj
+                and obj.rstrip('/').count('/') >= 4
+            ):
+                p = obj.rstrip('/')
+                if p.endswith('.hap') or p.endswith('.har'):
+                    p = str(Path(p).parent)
+                if p not in extra:
+                    extra.append(p)
+
+        walk_bundle_strings(data)
+        merged: list[str] = []
+        seen: set[str] = set()
+        for p in bases + extra:
+            if p and p not in seen:
+                seen.add(p)
+                merged.append(p)
+        return merged
+
+    @staticmethod
+    def _paths_to_lib_recv_targets(base: str) -> list[tuple[str, Path]]:
+        """将 bm 给出的模块/安装根路径展开为可能存放 .so 的远端目录。"""
+        b = base.rstrip('/')
+        if not b.startswith('/'):
+            return []
+        if b.endswith('.hap') or b.endswith('.har'):
+            b = str(Path(b).parent)
+        triples: list[tuple[str, Path]] = []
+        for suffix, local_leaf in (
+            ('/libs', Path('')),
+            ('/libs/arm64', Path('arm64')),
+        ):
+            triples.append((b + suffix, local_leaf))
+        return triples
+
+    @staticmethod
+    def _static_paths_by_bundle_name(bundle_name: str) -> list[str]:
+        """无 bm 或为兜底时，仅用包名拼常见 bundle 目录（与系统集成约定有关）。"""
+        return [
+            f'/data/storage/el1/bundle/{bundle_name}/libs',
+            f'/data/storage/el1/bundle/{bundle_name}/libs/arm64',
+            f'/data/app/el1/bundle/{bundle_name}/libs',
+            f'/data/app/el1/bundle/{bundle_name}/libs/arm64',
+            f'/data/app/el2/bundle/{bundle_name}/libs',
+            f'/data/app/el2/bundle/{bundle_name}/libs/arm64',
+        ]
+
+    @staticmethod
+    def _recv_candidates_for_bundle(bundle_name: str, target_root: Path) -> list[tuple[str, Path]]:
+        """顺序：先 bm dump 按包名解析安装路径，再用包名字符串兜底路径。"""
+        ordered: list[tuple[str, Path]] = []
+        seen: set[tuple[str, str]] = set()
+
+        def add_pair(remote: str, local_leaf: Path) -> None:
+            key = (remote, str(local_leaf))
+            if key in seen:
+                return
+            seen.add(key)
+            local = target_root if not local_leaf.parts else target_root / local_leaf
+            ordered.append((remote, local))
+
+        ok, out = UpdateAction._run_hdc_cmd(['shell', 'bm', 'dump', '-n', bundle_name], timeout_sec=45)
+        if ok:
+            dump = UpdateAction._parse_json_from_shell_output(out)
+            if dump is None:
+                logging.warning(
+                    'bm dump -n %s produced no parseable JSON (first 200 chars): %s',
+                    bundle_name,
+                    out[:200].replace('\n', ' ') if out else '',
+                )
+            else:
+                bm_paths = UpdateAction._collect_bm_install_paths(dump, bundle_name)
+                logging.info(
+                    'bm dump -n %s: extracted %d path(s) by bundle name for .so recv',
+                    bundle_name,
+                    len(bm_paths),
+                )
+                for base in bm_paths:
+                    for remote, leaf in UpdateAction._paths_to_lib_recv_targets(base):
+                        add_pair(remote, leaf)
+        else:
+            logging.warning(
+                'bm dump -n %s failed (non-zero exit). stderr/stdout: %s',
+                bundle_name,
+                (out[:400] if out else '').replace('\n', ' '),
+            )
+
+        for remote in UpdateAction._static_paths_by_bundle_name(bundle_name):
+            add_pair(remote, Path(''))
+
+        return ordered
+
+    @staticmethod
+    def _download_libs_for_bundle(bundle_name: str, bundle_root: Path) -> Optional[Path]:
+        target = bundle_root / bundle_name
+        if UpdateAction._looks_like_downloaded_libs(target):
+            return target
+
+        for remote_dir, local_base in UpdateAction._recv_candidates_for_bundle(bundle_name, target):
+            if UpdateAction._try_recv_remote_dir(remote_dir, local_base):
+                return target
+        return None
+
+    @staticmethod
+    def _auto_prepare_so_dir(report_dir: str, testcase_dirs: list[str]) -> tuple[Optional[str], str]:
+        bundle_names = UpdateAction._collect_bundle_names(testcase_dirs)
+        if not bundle_names:
+            return (None, 'no_bundle_name')
+        if not UpdateAction._is_hdc_device_ready():
+            return (None, 'hdc_or_device_unavailable')
+
+        libs_root = Path(report_dir) / '.symbol_recovery_libs'
+        libs_root.mkdir(parents=True, exist_ok=True)
+        resolved: list[Path] = []
+        for bundle in bundle_names:
+            got = UpdateAction._download_libs_for_bundle(bundle, libs_root)
+            if got is not None:
+                resolved.append(got)
+                logging.info('Auto-downloaded libs for %s -> %s', bundle, got)
+            else:
+                logging.warning('Failed to auto-download libs for bundle: %s', bundle)
+        if not resolved:
+            return (None, 'libs_download_failed')
+        if len(resolved) == 1:
+            return (str(resolved[0].resolve()), 'auto_device_bundle')
+        return (str(libs_root.resolve()), 'auto_device_bundle_root')
+
+    @staticmethod
+    def _parse_bool_env(name: str, default: bool = False) -> bool:
+        raw = os.environ.get(name, '').strip().lower()
+        if not raw:
+            return default
+        return raw in {'1', 'true', 'yes', 'on'}
 
     @staticmethod
     def execute(args) -> ActionExecuteReturn:
@@ -191,12 +461,33 @@ class UpdateAction:
             default=None,
             help='Subprocess timeout in seconds for symbol recovery (default: no limit)',
         )
+        parser.add_argument(
+            '--symbol-recovery-agent-mode',
+            action='store_true',
+            default=False,
+            help='Enable offline/agent symbol recovery orchestration mode when direct LLM is unavailable',
+        )
+        parser.add_argument(
+            '--symbol-recovery-import-results',
+            default=None,
+            help='Optional external LLM result JSON for agent mode (supports {step} placeholder, e.g. /tmp/{step}.json)',
+        )
         parsed_args = parser.parse_args(args)
 
         try_load_dotenv_for_llm()
 
         report_dir = os.path.abspath(parsed_args.report_dir)
+        testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
+        if not testcase_dirs:
+            UpdateAction._log_no_testcase_dirs_help(report_dir)
+            return (1, '')
+
         effective_so, so_source = resolve_effective_so_dir(parsed_args.so_dir)
+        if not effective_so:
+            auto_so, auto_source = UpdateAction._auto_prepare_so_dir(report_dir, testcase_dirs)
+            if auto_so:
+                effective_so = auto_so
+                so_source = auto_source
         if effective_so:
             logging.info('Effective SO directory (%s): %s', so_source, effective_so)
         elif parsed_args.so_dir or os.environ.get(ENV_SO_DIR, '').strip():
@@ -248,30 +539,51 @@ class UpdateAction:
         Config.set('so_dir', effective_so or '')
 
         llm_ready = check_symbol_recovery_llm_ready()
+        llm_env_configured = llm_env_ready_for_symbol_recovery()
+        llm_probe_ok = True
+        env_agent_mode = UpdateAction._parse_bool_env('HAPRAY_SYMBOL_RECOVERY_AGENT_MODE', default=False)
+        agent_mode = bool(parsed_args.symbol_recovery_agent_mode or env_agent_mode or not llm_ready)
+        if llm_ready and not agent_mode:
+            sr_root_probe = resolve_symbol_recovery_root()
+            runtime_ok, runtime_reason = probe_symbol_recovery_llm_runtime(sr_root_probe, timeout_sec=12)
+            llm_probe_ok = runtime_ok
+            if not runtime_ok:
+                logging.warning(
+                    'LLM runtime probe failed before symbol recovery: %s; auto-fallback to agent mode for this update run.',
+                    runtime_reason,
+                )
+                llm_ready = False
+                agent_mode = True
         top_n = parse_top_n_from_env(parsed_args.symbol_recovery_top_n)
         stat_method = parse_stat_from_env(parsed_args.symbol_recovery_stat)
         output_root = parse_output_root_from_env(
             parsed_args.symbol_recovery_output if parsed_args.symbol_recovery_output else None
         )
         Config.set('symbol_recovery_llm_ready', llm_ready)
+        Config.set('symbol_recovery_llm_env_configured', llm_env_configured)
+        Config.set('symbol_recovery_llm_probe_ok', llm_probe_ok)
         Config.set('symbol_recovery_top_n', top_n)
         Config.set('symbol_recovery_stat_method', stat_method)
         Config.set('symbol_recovery_output_root', output_root or '')
         Config.set('symbol_recovery_context', (parsed_args.symbol_recovery_context or '').strip())
         Config.set('symbol_recovery_no_llm', bool(parsed_args.symbol_recovery_no_llm))
+        Config.set('symbol_recovery_agent_mode', agent_mode)
+        Config.set('symbol_recovery_import_results', (parsed_args.symbol_recovery_import_results or '').strip())
         Config.set(
             'symbol_recovery_timeout',
             parsed_args.symbol_recovery_timeout if parsed_args.symbol_recovery_timeout is not None else 0,
         )
         if not parsed_args.symbol_recovery_no_llm:
-            if llm_ready and effective_so:
+            if (llm_ready or agent_mode) and effective_so:
                 sr_root = resolve_symbol_recovery_root()
                 entry_exe = resolve_symbol_recovery_exe(sr_root) if sr_root else None
                 py_exe = None if entry_exe is not None else resolve_symbol_recovery_python()
                 launcher_ok = bool(entry_exe or py_exe)
                 if sr_root and launcher_ok:
                     logging.info(
-                        'Integrated symbol recovery enabled (LLM ok, top_n=%s, stat=%s, root=%s, launcher=%s)',
+                        'Integrated symbol recovery enabled (llm_ready=%s, agent_mode=%s, top_n=%s, stat=%s, root=%s, launcher=%s)',
+                        llm_ready,
+                        agent_mode,
                         top_n,
                         stat_method,
                         sr_root,
@@ -293,20 +605,24 @@ class UpdateAction:
                             ENV_SYMBOL_RECOVERY_EXE,
                             ENV_SYMBOL_RECOVERY_PYTHON,
                         )
-            elif llm_ready and not effective_so:
-                logging.info('LLM configured for symbol recovery but no SO dir (--so_dir or %s); skipping', ENV_SO_DIR)
-            elif effective_so and not llm_ready:
+            elif (llm_ready or agent_mode) and not effective_so:
                 logging.info(
-                    'SO dir set but LLM env not ready for symbol recovery (need non-empty API key and base URL); '
-                    'skipping. If you use HapRay GUI settings, ensure ~/.hapray-gui/config.json has llm_api_key / '
-                    'llm_base_url (or set LLM_SERVICE_TYPE with matching service key), or export LLM_* / place .env '
-                    'next to perf-testing.'
+                    'Symbol recovery preconditions unmet: no SO dir (CLI/env/auto-device). '
+                    'Skipping for this update run.'
                 )
-
-        testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
-        if not testcase_dirs:
-            UpdateAction._log_no_testcase_dirs_help(report_dir)
-            return (1, '')
+            elif effective_so and not llm_ready:
+                if llm_env_configured:
+                    logging.info(
+                        'SO dir set; LLM is not ready or runtime probe failed while API/base URL are configured. '
+                        'Symbol recovery uses agent prompt-only export this run; '
+                        'place symbol_recovery_external_results.json under .symbol_recovery/<step>/ and rerun update to import.',
+                    )
+                else:
+                    logging.info(
+                        'SO dir set but LLM API/base URL not configured; agent_mode=%s. '
+                        'Without offline import JSON under .symbol_recovery/<step>/, this run exports prompt tasks only.',
+                        agent_mode,
+                    )
 
         # Parse time ranges
         time_ranges = UpdateAction.parse_time_ranges(parsed_args.time_ranges)
