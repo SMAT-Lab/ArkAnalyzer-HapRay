@@ -33,6 +33,11 @@ skills/
 
 > 说明：`skills/` 目录本身仍可随仓库、独立仓库或 zip 分发；以上建议仅针对 HapRay 工具运行时获取方式。
 
+### `hapray`：`git clone` 后为什么常「全挂」？
+
+**Release 二进制包已含构建产物**，而 **仅从仓库检出源码不包含** `dist/tools/sa-cmd`、`symbol_recovery/.venv`。若 Agent/用户跳过构建直接跑 `perf` / `update` / `perf.data`→DB，会得到「转不了 DB、符号恢复失败、dbtools/负载拆解不可用」等现象。  
+这在 **`skills/hapray/SKILL.md`** 的 **[源码工作区硬门禁]**、及 **`skills/hapray/analysis/symbol-recovery-analysis.md` §〇** 中规定为 **MUST**；挂载 skill 时请确保模型能读到 **`description`/§〇/硬门禁**，不要只读到「二进制失败再回退」那一段。
+
 ## 独立发布方式
 
 ### 1. 随 ArkAnalyzer-HapRay 仓库发布（Skill 分发推荐）

@@ -18,6 +18,8 @@ import json
 import logging
 import os
 import re
+import shlex
+import subprocess
 import sys
 import zlib
 from pathlib import Path
@@ -32,6 +34,8 @@ from hapray.core.common.symbol_recovery_bridge import (
     embed_symbol_recovery_report_into_hiperf_html,
     maybe_generate_symbol_recovery_html_for_step,
     maybe_run_symbol_recovery_for_step,
+    resolve_symbol_recovery_python,
+    resolve_symbol_recovery_root,
     symbol_recovery_report_name,
     symbol_recovery_replaced_html_name,
     symbol_recovery_should_run,
@@ -485,8 +489,7 @@ class PerfAnalyzer(BaseAnalyzer):
         self, out_dir: Path, *, timeout_sec: Optional[float]
     ) -> Optional[str]:
         """
-        Agent 模式仅导出 tasks，不在 update 内执行外部推断命令。
-        当前对话 Agent 推断完成后，将结果写入 external_results.json，再由 update 导入回填。
+        在同一次 update 内执行 Agent 推断，产出 external_results.json 并用于后续导入回填。
         """
         tasks = out_dir / 'symbol_recovery_llm_tasks.json'
         if not tasks.is_file():
@@ -494,13 +497,71 @@ class PerfAnalyzer(BaseAnalyzer):
         output_json = out_dir / 'symbol_recovery_external_results.json'
         if output_json.is_file():
             return str(output_json)
-        logging.info(
-            'Agent mode tasks exported. Please infer in current agent conversation and write results to: %s '
-            '(tasks file: %s)',
-            output_json,
-            tasks,
-        )
-        return None
+        sr_root = resolve_symbol_recovery_root()
+        py_exe = resolve_symbol_recovery_python()
+        if sr_root is None or not (sr_root / 'scripts' / 'run_step2.py').is_file():
+            logging.warning('Agent inference skipped: symbol_recovery scripts/run_step2.py not found')
+            return None
+        if not py_exe:
+            logging.warning('Agent inference skipped: no python interpreter for symbol_recovery')
+            return None
+
+        env_cmd = (os.environ.get('HAPRAY_SYMBOL_RECOVERY_AGENT_CMD') or '').strip()
+        if env_cmd:
+            rendered = (
+                env_cmd.replace('{tasks}', str(tasks))
+                .replace('{output}', str(output_json))
+                .replace('{out_dir}', str(out_dir))
+                .replace('{scene}', self.scene_dir)
+            )
+            cmd = rendered
+            use_shell = True
+        else:
+            cmd = [
+                py_exe,
+                str(sr_root / 'scripts' / 'run_step2.py'),
+                'openai',
+                '--tasks',
+                str(tasks),
+                '--output',
+                str(output_json),
+            ]
+            use_shell = False
+
+        timeout = None
+        if timeout_sec and timeout_sec > 0:
+            timeout = max(60, int(timeout_sec))
+        cmd_show = cmd if isinstance(cmd, str) else ' '.join(shlex.quote(str(x)) for x in cmd)
+        logging.info('Running symbol_recovery agent inference command: %s', cmd_show)
+        try:
+            cp = subprocess.run(
+                cmd,
+                cwd=str(sr_root),
+                timeout=timeout,
+                check=False,
+                shell=use_shell,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                capture_output=True,
+            )
+        except subprocess.TimeoutExpired:
+            logging.warning('Agent inference command timed out')
+            return None
+        except OSError as e:
+            logging.warning('Agent inference command failed to start: %s', e)
+            return None
+        if cp.stdout:
+            logging.info(cp.stdout[:8000])
+        if cp.stderr:
+            logging.info(cp.stderr[:8000])
+        if cp.returncode != 0:
+            logging.warning('Agent inference command exited with code %s', cp.returncode)
+            return None
+        if not output_json.is_file():
+            logging.warning('Agent inference command completed but output missing: %s', output_json)
+            return None
+        return str(output_json)
 
     def _maybe_embed_symbol_recovery_report(
         self, step_dir: str, perf_db_path: str, generated_html: Optional[Path] = None

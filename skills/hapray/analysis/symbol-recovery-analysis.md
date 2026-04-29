@@ -5,6 +5,14 @@
 
 ---
 
+## 〇、源码克隆：先做主 Skill「硬门禁」（必读）
+
+从仓库 **新 `git clone` 且无本地构建产物** 时，`perf.data`→`perf.db`（SymRecover Step1）、集成 `hapray update` 符号恢复、`dbtools`/负载拆解等链路**会成片报错**——多数是 **`tools/static_analyzer` 未 `npm run build`、`tools/symbol_recovery` 未建 venv/装依赖**，不是本章分析步骤写错。
+
+**在读下文「何时需要」「安装依赖」之前**，必须先完成父级 **`skills/hapray/SKILL.md`** 中的 **[源码工作区硬门禁]**：**`perf_testing` 的 `uv sync`、`<REPO_ROOT>/dist/tools/sa-cmd/`、`symbol_recovery` 的 `main.py --help`**。未完成则不要判断为「LLM/API/设备」类问题。
+
+---
+
 ## 一、何时需要符号恢复
 
 性能分析报告（HTML / perf.data）中出现以下情况时，符号恢复能显著提升分析效率：
@@ -272,10 +280,15 @@ python3 main.py \
 | **LLM** | 未 `--symbol-recovery-no-llm` 时：若 Key/Base URL 已配置且非强制 agent，则**先对 symbol_recovery 做运行时探活**；失败则自动 **fallback 到 agent 模式**（`llm_ready` 置假、`agent_mode` 置真，并记录 `symbol_recovery_llm_probe_ok`）。 |
 | **同一步骤内降级** | `PerfAnalyzer` 中：探活失败或 offline agent 路径下先执行 **`--prompt-only`** 导出 `symbol_recovery_llm_tasks.json`，然后在同次 update 内默认调用内置 `tools/symbol_recovery/scripts/run_step2.py openai --tasks ... --output ...` 生成 `symbol_recovery_external_results.json`，再立即 `--import-llm-results` 回填 `perf.json` 与 HTML。`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD` 仅作可选覆盖。若命令未产出结果，则本次判定为未完成真实推断，不进入“成功回填”。 |
 
-**与 `update` 集成时的一次性闭环要求**：
-- 在 LLM 就绪、**探活通过**且非强制 agent 时，`update` 在**同一次执行**中跑**完整** `symbol_recovery`（子进程内直连 LLM），避免为“先 prompt-only 再第二次 update”而故意拆步。  
-- **探活失败**（如 402/额度、URL/鉴权问题）或 **在线子进程失败/无有效映射** 时，**同一次** `update` 必须走 agent 命令链（导出 tasks -> agent 生成结果 -> import 回填），不得仅做占位写回。  
-- 若在线 LLM 不可用且默认/自定义 agent 命令均失败，本次 `update` 只能导出 tasks 并标记“未完成真实推断”，不应视作符号恢复成功。
+**与 `update` 集成时的一次性闭环要求（默认 Agent，禁止二次回填）**：
+- 默认目标：`update` 在**同一次执行**中完成 `tasks -> symbol_recovery_external_results.json -> import`，不要求用户再跑第二次 `update`。  
+- 在线路径仅作为首选尝试；**探活失败**（如 402/额度、URL/鉴权问题）或 **在线子进程失败/无有效映射** 时，**同一次** `update` 立即走 agent 命令链（导出 tasks -> agent 生成结果 -> import 回填），不得停留在“只导出任务”。  
+- 若默认/自定义 agent 命令均失败，本次必须标记“未完成真实推断（失败）”，并输出阻塞原因与重试命令；不得以“无外填结果设定一致”表达为成功。
+
+**严禁半成品交付（强制）**：
+- 仅有 `symbol_recovery_llm_tasks.json` 时，结论必须是“符号恢复未完成”。  
+- 若 `symbol_recovery_replacements.json` 中仍出现 `auto_recovered_*`，视为占位替换，不能计为语义化恢复成功。  
+- 必须以产物四件套作为完成证据：`llm_tasks`、`external_results`、`replacements`、`hiperf_report_with_inferred_symbols.html`。
 
 **Excel 和 KMP 模式同样支持此两步流程**，分别替换为 `--excel-file`/`--so-file` 和 `--kmp-mode`/`--perf-db`/`--so-file`；Excel 和 KMP 的第二次调用无需 `--skip-step1`。
 

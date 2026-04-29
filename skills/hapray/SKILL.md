@@ -1,15 +1,16 @@
 ---
 name: hapray
-version: "1.5.3"
+version: "1.5.5"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
-  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：负责命令执行、路径判定、子 Skill 路由与落盘规范。深入分析规则统一由 analysis/*.md 提供。默认独立报告写入 `<PROJECT_ROOT>/reports/`。
+  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：命令执行、路径判定、analysis 路由、报告落盘。默认 `<PROJECT_ROOT>/reports/`。**新 clone 源码：未完成 `tools/static_analyzer` 构建则 `dist/tools/sa-cmd/` 无 `hapray-sa-cmd.exe`/`hapray-sa-cmd.js`，Python 会因找不到 hapray-sa-cmd 失败；未完成 `tools/symbol_recovery` 环境则 perf→db/符号恢复失败。必须先做正文「源码工作区硬门禁」再走 perf/update/dbools。**
 metadata:
   short-description: >-
-    Lean workflow for HapRay CLI execution, reports_path parsing, analysis routing, and markdown report output.
+    HapRay workflow: source clone requires static_analyzer build (hapray-sa-cmd under dist/tools/sa-cmd) + symbol_recovery venv before perf/update/dbools; then CLI, reports_path, analysis routing, markdown to reports/.
   zh-Hans: >-
-    精简版主流程：先执行 CLI，再按产物路由到 analysis 子 Skill 深入分析；默认写 `<PROJECT_ROOT>/reports/`，报告文末保留元信息与执行轨迹。
+    精简主流程：`perf_testing`/`update`/`dbtools`/符号恢复前必读「源码工作区硬门禁」(static_analyzer→hapray-sa-cmd、symbol_recovery→venv)。
+    再执行 CLI→读 reports_path→子 Skill→独立报告 `<PROJECT_ROOT>/reports/`。
   skill-paths:
     main: SKILL.md
     tool_result: hapray-tool-result.md
@@ -24,6 +25,10 @@ metadata:
     - perf-testing
     - gui-agent
     - hapray-tool-result
+    - hapray-sa-cmd
+    - static-analyzer
+    - source-repo-setup
+    - clone-first-build
 ---
 
 # HapRay 引导式工作流
@@ -32,12 +37,13 @@ metadata:
 
 ## TL;DR（30 秒）
 
-1. 判定路径：先分清 `<RUNTIME_ROOT>`（二进制运行目录）、`<REPO_ROOT>`（源码运行目录）与 `<PROJECT_ROOT>`（写报告）。  
-2. 先快诊后升级：默认 Quick，命中触发条件再升级 Full。  
-3. 跑命令：必须实际执行 `gui-agent/perf/opt/static` 之一（按意图）。  
-4. 读产物：从 `hapray-tool-result.json`（或 `--result-file`）取 `outputs.reports_path`。  
-5. 路由分析：按 `analysis/README.md` 逐项评估子 Skill；满足条件则执行，不满足写跳过原因。  
-6. 落盘报告：写到 `<PROJECT_ROOT>/reports/hapray-analysis-<YYYYMMDD>-<topic>.md`，正文固定结构 + 文末元信息与执行轨迹。
+1. **源码工作区（硬门禁）**：若当前是 `<REPO_ROOT>`（检出代码、存在 `perf_testing/`）：**先于任何** `perf` / `update` / **perf.data→perf.db（hiperf Step1）** / **负载拆解（dbtools）** / **symbol_recovery**，必须完成本节下方「源码工作区硬门禁」自检并通过；失败时**禁止**继续跑链路并写明缺哪一步。仅「已长期配置好的目录」≠ 新克隆可省略；二进制 release 与用户「单独 git clone」是两条线，**不得以「有 hapray 源码」代替已构建产物。**  
+2. 判定路径：先分清 `<RUNTIME_ROOT>`（二进制运行目录）、`<REPO_ROOT>`（源码运行目录）与 `<PROJECT_ROOT>`（写报告）。  
+3. 先快诊后升级：默认 Quick，命中触发条件再升级 Full。  
+4. 跑命令：必须实际执行 `gui-agent/perf/opt/static` 之一（按意图）。  
+5. 读产物：从 `hapray-tool-result.json`（或 `--result-file`）取 `outputs.reports_path`。  
+6. 路由分析：按 `analysis/README.md` 逐项评估子 Skill；满足条件则执行，不满足写跳过原因。  
+7. 落盘报告：写到 `<PROJECT_ROOT>/reports/hapray-analysis-<YYYYMMDD>-<topic>.md`，正文固定结构 + 文末元信息与执行轨迹。
 
 ## 术语与路径判定
 
@@ -51,6 +57,77 @@ metadata:
 | 工作区只打开 HapRay 二进制目录 | 二进制根 | 同上 | `<RUNTIME_ROOT>/reports/` |
 | 外层项目 + 内层 HapRay 二进制目录 | 内层二进制根 | 外层项目根 | `<PROJECT_ROOT>/reports/` |
 | 用户指定输出路径 | 按实际 | 按实际 | 用户指定优先 |
+
+## 源码工作区硬门禁（高于 Quick/Full，默认 MUST）
+
+### 为何「每次新下载源码必炸」？
+
+- **根因**：`git clone` 只拿到源码，不包含 `dist/` 内 `hapray-sa-cmd`、不包含 `tools/symbol_recovery/.venv`。未执行 **`tools/static_analyzer` 构建** → 负载拆解 / 依赖 SA 的路径会缺文件；未完成 **`tools/symbol_recovery` 环境与依赖** → `perf.data`→`perf.db`（SymRecover Step1）、`update` 集成的符号恢复子进程会直接失败。**这不是采集逻辑 Bug，而是环境未就绪。**
+- **为何 Skill「写了仍被跳过」**：旧版把步骤放在「二进制失败后的源码回退」章节，Agent 在用户**已持有源码仓库**时不会走「先下载二进制」分支，因而**根本不会执行**那段回退 checklist；必须把「源码模式」单独做成**第一道门禁**。另：若 Cursor 会话未挂载本 Skill、或未读 YAML `description`/本节，也会出现省略构建。**执行前必须自检本节，不能只依赖记忆的 TL;DR 第 4 步「跑命令」。**
+
+### 判定为源码模式（满足其一即可）
+
+- 工作区根（或确认的 `<REPO_ROOT>`）存在 `perf_testing/pyproject.toml` 或 `perf_testing/scripts/`（可执行 `python -m scripts.main`）；或  
+- 用户明确表态「刚从仓库 clone / 新目录 / 仅此机器仅此副本」。
+
+**只要进入源码模式，下一节「禁止行为」无条件生效**，与是否尝试过下载 release **无关**。
+
+### 禁止行为（未完成下方「最小自检清单」之前）
+
+不得执行包括但不限于：
+
+- `uv run python -m scripts.main perf ...`、`update`、`static`、`dbtools` 相关采集与报告链路；  
+- 依赖 **`dist/tools/sa-cmd/`**（`hapray-sa-cmd`）的步骤；  
+- **symbol_recovery**：`tools/symbol_recovery/main.py`（含 `--skip-step1`）、以及 `hapray update` 触发的符号恢复子进程。
+
+若用户坚持「我就要现在跑」，必须先输出**阻塞原因**：缺哪项构建/安装 + 本节对应命令。
+
+### 最小自检清单（按序执行并在执行轨迹中留证据）
+
+假定 `<REPO_ROOT>` = 检出根目录。
+
+1. **Python（perf_testing）**  
+   - `cd <REPO_ROOT>/perf_testing`，执行 **`uv sync`**（失败时再按项目文档降级 `pip install -r …`）。
+
+2. **static_analyzer（必选；否则 SA 管线、dbtools/拆解常不可用）**  
+   - Node：满足仓库根 `package.json` 的 **`engines`**（当前为 Node 24.x 范围）。  
+   - **Bun**：`tools/static_analyzer` 的 `npm run build` 实际调用 **Bun 构建脚本**，须已安装 `bun` 并在 PATH 可执行（`bun --version`）。  
+   - 命令：  
+     ```bash
+     cd <REPO_ROOT>/tools/static_analyzer && npm install && npm run build
+     ```  
+   - **验证（必须二选一以上存在）**：  
+     - `<REPO_ROOT>/dist/tools/sa-cmd/hapray-sa-cmd.js`，或 Windows 下的 `hapray-sa-cmd.exe`（具体以本地 `npm run build` 产出为准）。  
+     - **禁止**在看到 `dist/tools/sa-cmd/` 为空时继续宣称「环境问题已就绪」。
+
+3. **symbol_recovery（只要涉及 perf→db / 火焰图推断 / `update` 符号恢复就必须）**  
+   - ```bash
+     cd <REPO_ROOT>/tools/symbol_recovery && uv venv .venv && uv sync
+     ```
+     （或按该目录 `README`：`uv pip install -e .`；以 `uv.lock`/`pyproject` 为准。）  
+   - 验证：**虚拟环境 Python** `main.py --help` 可运行；.radare2 非硬门禁但强烈推荐（见 `analysis/symbol-recovery-analysis.md`）。
+
+4. **（可选）与发布包对齐：仓库根一键**  
+   - 若 README `Build` 节为「根目录 `npm install && npm run build`」，在完成子模块构建后可执行以生成完整 `dist/`，但以第 2 步 **tools/static_analyzer** 产出为硬性底线。
+
+自检全部 **PASS** 后，才允许进入下文「执行主流程」「子 Skill」「symbol-recovery 门禁」中的具体步骤。
+
+### 报错 / 日志关键词与本节映射（便于检索）
+
+若在**新克隆、未构建**时出现下列提示，含义均为「硬门禁未完成」，**不要让用户误以为是业务逻辑 Bug**：
+
+| 提示或现象 | 对应门禁 |
+|-----------|----------|
+| 找不到 **`hapray-sa-cmd.exe`** / **`hapray-sa-cmd`** / `ExeUtils.get_hapray_cmd_path` 失败、`sa-cmd` 目录为空 | **上面「最小自检清单」第 2 步**：`tools/static_analyzer` 执行 `npm install && npm run build`，产出在 `<REPO_ROOT>/dist/tools/sa-cmd/` |
+| **`perf.db` / Step1、`symbol_recovery`、`update` 符号恢复**报错、子进程退出 | **第 3 步**：`tools/symbol_recovery` 虚拟环境与依赖 |
+
+**为何会「Skill 里有约束却仍失败」**（常见原因，不是要再加一条玄学规则）：
+
+1. **会话未挂载本 Skill**：Cursor 不会自动让每个对话都读到 `skills/hapray/SKILL.md`；须复制到 **`~/.cursor/skills/hapray/`**，或在 Rules / 对话中用 **`@` 引用** `@skills/hapray/SKILL.md`（路径以仓库或用户目录为准）。  
+2. **只读了前半段**：旧习惯从「二进制下载」往下看，跳到「跑 perf」而未读「源码工作区硬门禁」（已置顶 TL;DR 第 1 条，但仍需 Agent 遵守）。  
+3. **metadata 简略**：若以 `short-description`/旧版 `zh-Hans` 为唯一摘要曾会漏掉硬门禁；已从 v1.5.5 起在 **`description`、`zh-Hans`、`tags`** 中写入 **hapray-sa-cmd / clone-first-build**，便于检索与规则匹配。
+
+---
 
 ## 环境前置条件（新增）
 
@@ -109,7 +186,7 @@ metadata:
 2. 二进制解压后 `hapray --help`（或 Windows `.\hapray.exe --help`）执行失败。  
 3. 二进制可执行但运行核心命令阶段出现明确的“不可运行/崩溃/缺依赖”错误。  
 
-回退步骤：
+回退步骤（与「源码工作区硬门禁」自检**同一套**：凡检出 `<REPO_ROOT>`，无论是否尝试过下载二进制，**都必须完成第 2–5 步**；不得仅因在「二进制失败」分支读到本节才构建）：
 
 1. 执行 `git clone https://gitcode.com/SMAT/ArkAnalyzer-HapRay.git`（已有目录则 `git pull` 更新）。  
 2. 进入 `<REPO_ROOT>/perf_testing`，优先执行 `uv sync`；失败可降级 `uv pip install -r requirements.txt`。  
@@ -250,7 +327,7 @@ Set-Location <RUNTIME_ROOT>
 
 按以下状态推进，并在对话与报告中打印阶段状态：
 
-1. `DISCOVER`：路径判定、设备与依赖检查。  
+1. `DISCOVER`：路径判定、设备与依赖检查；**若工作区为 `<REPO_ROOT>`，在此阶段完成「源码工作区硬门禁」自检**，缺构建产物不得进入 `EXECUTE`。  
 2. `EXECUTE`：执行 HapRay CLI 采集。  
 3. `PARSE`：读取 `result-file`，解析 `reports_path` 与关键字段。  
 4. `ANALYZE`：按子 Skill 路由做专题分析。  
@@ -275,6 +352,8 @@ Set-Location <RUNTIME_ROOT>
 
 ### MUST
 
+- **若为源码仓库（判定见「源码工作区硬门禁」），必须先完成该节最小自检清单（perf_testing、`dist/tools/sa-cmd`、symbol_recovery venv）并留证据**，再执行 `perf`/`update`/符号恢复链路；未完成时禁止谎称环境就绪。  
+- **符号恢复必须一次性闭环交付**：若进入符号恢复链路，必须在同一次 `update` 内完成 `tasks -> symbol_recovery_external_results.json -> import -> 替换产物`，禁止“做一半停一半”。  
 - 必须先实际执行 CLI，再给“原因与建议”。  
 - 必须输出阶段进度（命令前说明、命令后结果）。  
 - 必须读取 `reports_path` 并枚举真实产物路径，不得臆造。  
@@ -315,16 +394,18 @@ Set-Location <RUNTIME_ROOT>
 
 当意图涉及符号恢复：
 
+- **源码模式前置**：必须与「源码工作区硬门禁」一致——**已构建** `<REPO_ROOT>/dist/tools/sa-cmd/`（static_analyzer）、**已在** `<REPO_ROOT>/tools/symbol_recovery` 装好 venv 且 `main.py --help` 可通过；未完成则本条门禁为 **FAIL-CLOSED**（跳过 LLM/OpenAI 讨论，先做构建）。  
 - 必须先按 `analysis/symbol-recovery-analysis.md` 的 Step 0 与用户确认运行路径，不得默认假设。  
-- **源码回退模式检查**：若使用源码模式（非二进制），必须确认以下步骤已完成（详见上方"源码回退"第 4 步）：
+- **补充检查**（与非源码模式或细节一致时）：  
   1. `<REPO_ROOT>/tools/symbol_recovery` 已执行 `uv pip install -e .` 安装依赖
   2. radare2 已安装（`r2 -v` 可执行）
   3. 虚拟环境存在且 `main.py` 可正常导入 `core` 模块
-- 允许三种路径：
+- 默认路径（必须）：**主 Agent 一次性闭环**。即在同一次 `update` 中完成  
+  `导出 symbol_recovery_llm_tasks.json -> Agent 推断 -> 生成 symbol_recovery_external_results.json -> --import-llm-results 回填`。  
+- 可选路径（仅在用户明确指定时）：
   1. **在线直连 LLM**：检查 `tools/symbol_recovery/.env` 中 API Key。  
-  2. **离线编排（主 Agent）**：不要求本地 API Key，由主 Agent 负责“导出 prompt 任务 → 外部 LLM 调用 → 结果回填”。  
-  3. **无 LLM 快速模式**：`--no-llm`，仅反汇编与基础证据输出。  
-- 若用户未明确选择路径，必须停在门禁阶段并继续确认。
+  2. **无 LLM 快速模式**：`--no-llm`，仅反汇编与基础证据输出（用户明确接受“无语义化函数名回填”时才允许）。  
+- 若用户未明确指定“在线直连”或“no-llm”，则必须按默认路径执行，**不得停在 tasks 导出态**。
 
 **`hapray update` 集成路径（与上述“三选一”并行，以代码为准）**：
 
@@ -336,9 +417,18 @@ Set-Location <RUNTIME_ROOT>
 
 **一次性完成（强制）**：
 
-- 目标是“单次 `update` 内尽量闭环”：在 LLM 就绪且**探活通过**、非强制 agent 时，同一次 `update` 跑**完整** `symbol_recovery`（子进程内直连 LLM），避免故意拆成“先只导出 tasks、再第二次 update”。  
-- **探活失败**或 **离线 agent / prompt-only**：子进程先导出 `symbol_recovery_llm_tasks.json`，随后在**同一次 update**里执行真实 agent 推断并回填 import。默认会自动调用内置 `tools/symbol_recovery/scripts/run_step2.py openai --tasks ... --output ...`；`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD` 仅作为可选覆盖（支持 `{tasks}`、`{output}`、`{out_dir}`、`{scene}`）。  
-- 若默认命令或自定义命令未产出 `symbol_recovery_external_results.json`，本次应视为“未完成真实推断”，不得把地址占位回写当作符号恢复成功交付。
+- 目标是“单次 `update` 内闭环”：默认先尝试在线直连；一旦探活失败或在线执行失败，**立即同次切换 Agent**，完成 `tasks -> external_results -> import`，禁止要求用户二次执行 `update`/二次回填。  
+- **Agent 默认执行**：子进程导出 `symbol_recovery_llm_tasks.json` 后，必须在同一次 `update` 内执行真实 Agent 推断并生成 `symbol_recovery_external_results.json`。默认调用内置 `tools/symbol_recovery/scripts/run_step2.py openai --tasks ... --output ...`；`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD` 仅作覆盖（支持 `{tasks}`、`{output}`、`{out_dir}`、`{scene}`）。  
+- 若本次执行结束仍未产出可用 `symbol_recovery_external_results.json`，必须标记为“未完成真实推断（失败）”，不得输出“与无外填设定一致”之类成功语义；应给出阻塞原因与一次性重试命令。
+
+**交付验收门禁（必须全部满足，缺一即判失败）**：
+
+1. `reports/.../.symbol_recovery/<step>/symbol_recovery_llm_tasks.json` 存在。  
+2. 同目录存在 `symbol_recovery_external_results.json`，且包含非空 `function_name`。  
+3. `hiperf/<step>/symbol_recovery_replacements.json` 存在，且 `replaced` 不得是 `auto_recovered_*` 占位名。  
+4. `hiperf/<step>/hiperf_report_with_inferred_symbols.html` 存在。  
+
+若仅满足第 1 条（只有 tasks），必须明确结论为“**符号恢复未完成**”，禁止写“已完成更新流程/已完成符号恢复”。
 
 当用户选择“离线编排（主 Agent）”时，主 Agent 负责以下编排职责：
 
@@ -357,9 +447,9 @@ Set-Location <RUNTIME_ROOT>
 
 ## 执行主流程（统一版）
 
-1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。  
+1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」（`dist/tools/sa-cmd/`、symbol_recovery 可运行等），未完成则在此处 **STOP**，不得强行执行后续步骤。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
-3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\hapray.exe`，Linux/macOS `./hapray`）；源码回退模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`。  
+3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\hapray.exe`，Linux/macOS `./hapray`）；源码模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`（须在步骤 1 已满足硬门禁）。  
 4. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
 5. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
 6. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
