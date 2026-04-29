@@ -117,9 +117,22 @@ metadata:
      - PowerShell：`$env:UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"`  
      - Bash：`export UV_DEFAULT_INDEX=https://pypi.tsinghua.edu.cn/simple`  
    - 若同时配置了 `PIP_INDEX_URL`，建议保持与 `UV_DEFAULT_INDEX` 一致，避免源不一致导致解析抖动。  
-3. 自检 `uv run python -m scripts.main --help`。  
-4. 后续采集命令改为源码方式执行：`uv run python -m scripts.main ...`。  
-5. 在执行轨迹中显式记录 `binary_failed_reason`、`fallback_mode=source`、`repo_commit`。
+3. **构建 static_analyzer（必需）**：
+   - 进入 `<REPO_ROOT>/tools/static_analyzer`
+   - 安装依赖：`npm install`
+   - 执行构建：`npm run build`
+   - 验证：`ls ../../dist/tools/sa-cmd/` 目录存在且包含构建产物
+4. **安装 symbol_recovery 依赖（涉及符号恢复时必需）**：
+   - 进入 `<REPO_ROOT>/tools/symbol_recovery`
+   - 创建虚拟环境：`uv venv .venv`
+   - 安装依赖：`uv pip install --python ./.venv/bin/python -e .`（Linux/macOS）或 `uv pip install --python .\.venv\Scripts\python.exe -e .`（Windows）
+   - **安装 radare2（强烈推荐，性能提升 10 倍+）**：
+     - macOS：`brew install radare2 && r2pm install r2dec`
+     - Windows：`winget install radare2` 或 `choco install radare2`，然后 `r2pm install r2dec`
+   - 验证：`.venv/bin/python main.py --help`（或 `.venv\Scripts\python main.py --help`）
+5. 自检 `uv run python -m scripts.main --help`。  
+6. 后续采集命令改为源码方式执行：`uv run python -m scripts.main ...`。  
+7. 在执行轨迹中显式记录 `binary_failed_reason`、`fallback_mode=source`、`repo_commit`。
 
 Agent 执行规范 TL;DR（优先执行）：
 
@@ -303,6 +316,10 @@ Set-Location <RUNTIME_ROOT>
 当意图涉及符号恢复：
 
 - 必须先按 `analysis/symbol-recovery-analysis.md` 的 Step 0 与用户确认运行路径，不得默认假设。  
+- **源码回退模式检查**：若使用源码模式（非二进制），必须确认以下步骤已完成（详见上方"源码回退"第 4 步）：
+  1. `<REPO_ROOT>/tools/symbol_recovery` 已执行 `uv pip install -e .` 安装依赖
+  2. radare2 已安装（`r2 -v` 可执行）
+  3. 虚拟环境存在且 `main.py` 可正常导入 `core` 模块
 - 允许三种路径：
   1. **在线直连 LLM**：检查 `tools/symbol_recovery/.env` 中 API Key。  
   2. **离线编排（主 Agent）**：不要求本地 API Key，由主 Agent 负责“导出 prompt 任务 → 外部 LLM 调用 → 结果回填”。  

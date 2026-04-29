@@ -230,6 +230,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default='event_count',
         help='统计方式：call_count（调用次数）或 event_count（指令数）（默认: event_count）',
     )
+    parser.add_argument(
+        '--top-symbols-json',
+        type=str,
+        default=None,
+        help='负载拆解等指标导出的待恢复 TopN 符号列表（推荐）；不提供时仅用 perf.db inclusive SQL，与拆解不保一致',
+    )
     parser.add_argument('--no-llm', action='store_true', help='不使用 LLM 分析（仅反汇编）')
     parser.add_argument(
         '--batch-size',
@@ -891,6 +897,12 @@ def apply_external_llm_results(results: list, result_file: Path) -> tuple[int, i
         function_name = str(entry.get('function_name') or entry.get('inferred_name') or '').strip()
         functionality = str(entry.get('functionality') or entry.get('description') or '').strip()
         performance_analysis = str(entry.get('performance_analysis') or '').strip()
+
+        # 仅接受真实推断名：function_name 为空视为未完成推断，不参与回填替换
+        if not function_name:
+            unmatched += 1
+            continue
+
         llm_result = {
             'functionality': functionality,
             'function_name': function_name,
@@ -905,7 +917,7 @@ def apply_external_llm_results(results: list, result_file: Path) -> tuple[int, i
         target['confidence'] = llm_result.get('confidence') or ''
         applied += 1
 
-    logger.info(f'✅ Imported external LLM results: applied={applied}, unmatched={unmatched}')
+    logger.info('✅ Imported external LLM results: applied=%s, unmatched=%s', applied, unmatched)
     return applied, unmatched
 
 
@@ -1029,6 +1041,7 @@ def analyze_by_event_count(args, perf_db_file: Optional[Path], so_dir: Path, out
         output_dir=str(output_dir),
         skip_decompilation=args.skip_decompilation,
         open_source_lib=args.open_source_lib,
+        top_symbols_json=args.top_symbols_json,
     )
     time_tracker.end_step('Initialization completed')
 

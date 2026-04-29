@@ -18,12 +18,12 @@ import json
 import logging
 import os
 import re
-import subprocess
 import sys
 import zlib
 from pathlib import Path
 from typing import Any, Optional
 
+import pandas as pd
 from hapray.analyze import BaseAnalyzer
 from hapray.core.common.common_utils import CommonUtils
 from hapray.core.common.exe_utils import ExeUtils
@@ -97,9 +97,9 @@ class PerfAnalyzer(BaseAnalyzer):
         ):
             return False
         top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
-        stat_method = (Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count').strip()
-        if stat_method not in ('event_count', 'call_count'):
-            stat_method = 'event_count'
+        # update 集成路径：导出 load_decomposition_top_symbols.json（ecol 等拆解）并 --top-symbols-json；
+        # 不用 perf.db 单 SQL 冒充拆解口径。
+        stat_method = 'event_count'
         output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
         timeout_raw = Config.get('symbol_recovery_timeout', 0)
         try:
@@ -115,22 +115,15 @@ class PerfAnalyzer(BaseAnalyzer):
         if import_results_tpl:
             import_results = import_results_tpl.replace('{step}', step_dir)
         out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, output_root)
-        if not import_results and agent_mode and not llm_ready:
-            # 单次 update 自动闭环：若已存在离线推断结果文件，则本次直接导入回填，避免再次手工执行 update
-            auto_candidates = [
-                out_dir / 'symbol_recovery_external_results.json',
-                out_dir / 'symbol_recovery_real_inference_results.json',
-            ]
-            for cand in auto_candidates:
-                if cand.is_file():
-                    import_results = str(cand)
-                    logging.info(
-                        'Auto-detected symbol recovery import results for scene=%s step=%s: %s',
-                        self.scene_dir,
-                        step_dir,
-                        cand,
-                    )
-                    break
+        top_symbols_json = self._dump_load_decomposition_top_symbols(
+            step_dir,
+            perf_db_path,
+            out_dir,
+            so_dir=so_dir or None,
+            top_n=top_n,
+        )
+        if top_symbols_json:
+            extras.extend(['--top-symbols-json', str(top_symbols_json)])
         # Agent 离线导出：未配置 Key/URL；或探活失败；或 LLM 未就绪 —— 避免额度/参数错误时仍硬跑在线直连直接失败
         prompt_only = bool(
             agent_mode
@@ -209,6 +202,16 @@ class PerfAnalyzer(BaseAnalyzer):
                     inferred_json,
                 )
                 return False
+            recovered_cnt = self._count_recovered_function_names(out_dir)
+            if recovered_cnt <= 0:
+                logging.warning(
+                    'Agent inference import produced no valid function names for scene=%s step=%s; '
+                    'skip symbol replacement to avoid stale/placeholder outputs',
+                    self.scene_dir,
+                    step_dir,
+                )
+                self._cleanup_stale_symbol_recovery_outputs(step_dir, output_root)
+                return False
             logging.info(
                 'Integrated symbol recovery completed with real agent inference for scene=%s step=%s (%s)',
                 self.scene_dir,
@@ -217,71 +220,287 @@ class PerfAnalyzer(BaseAnalyzer):
             )
         return True
 
+    @staticmethod
+    def _count_recovered_function_names(out_dir: Path) -> int:
+        """统计本轮 symbol_recovery_results.json 中有效推断名数量。"""
+        result_path = out_dir / 'symbol_recovery_results.json'
+        if not result_path.is_file():
+            return 0
+        try:
+            payload = json.loads(result_path.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, json.JSONDecodeError):
+            return 0
+        if isinstance(payload, dict):
+            items = payload.get('functions') or payload.get('results') or payload.get('tasks') or []
+        elif isinstance(payload, list):
+            items = payload
+        else:
+            items = []
+        cnt = 0
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            fn = str(it.get('function_name') or it.get('inferred_name') or '').strip()
+            if fn:
+                cnt += 1
+        return cnt
+
+    def _cleanup_stale_symbol_recovery_outputs(self, step_dir: str, output_root: Optional[str]) -> None:
+        """当本轮无有效推断时，清理可能遗留的旧替换产物，避免误判成功。"""
+        out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, output_root)
+        candidates = [
+            out_dir / 'symbol_recovery_external_results.json',
+            Path(self.scene_dir) / 'hiperf' / step_dir / 'symbol_recovery_replacements.json',
+            Path(self.scene_dir) / 'hiperf' / step_dir / 'hiperf_report_with_inferred_symbols.html',
+        ]
+        for p in candidates:
+            try:
+                if p.is_file():
+                    p.unlink()
+            except OSError:
+                continue
+
+    def _dump_load_decomposition_top_symbols(
+        self, step_dir: str, perf_db_path: str, out_dir: Path, *, so_dir: Optional[str], top_n: int
+    ) -> Optional[Path]:
+        """从负载拆解数据（perf.json 的 counts[1]）提取待恢复 TopN 符号并落盘。"""
+        from_excel = self._extract_top_symbols_from_load_excel(so_dir=so_dir, top_n=top_n)
+        if from_excel:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / 'load_decomposition_top_symbols.json'
+            payload = {'step': step_dir, 'top_n': top_n, 'symbols': from_excel, 'source': 'ecol_load_perf'}
+            try:
+                out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+                logging.info('Dumped load-decomposition top symbols from excel: %s (%d)', out_path, len(from_excel))
+                return out_path
+            except OSError:
+                return None
+
+        perf_json = Path(perf_db_path).parent / 'perf.json'
+        if not perf_json.is_file():
+            return None
+        try:
+            data = json.loads(perf_json.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, json.JSONDecodeError):
+            return None
+        symbol_map = data.get('SymbolMap') or {}
+        file_list = data.get('symbolsFileList') or []
+        recs = data.get('recordSampleInfo') or []
+        if not isinstance(symbol_map, dict) or not isinstance(file_list, list) or not isinstance(recs, list):
+            return None
+
+        allowed_so_names = self._collect_allowed_so_names(so_dir)
+        agg: dict[str, dict[str, object]] = {}
+        for ev in recs:
+            for proc in ev.get('processes', []) if isinstance(ev, dict) else []:
+                for th in proc.get('threads', []) if isinstance(proc, dict) else []:
+                    for lib in th.get('libs', []) if isinstance(th, dict) else []:
+                        for fn in lib.get('functions', []) if isinstance(lib, dict) else []:
+                            if not isinstance(fn, dict):
+                                continue
+                            sid = str(fn.get('symbol'))
+                            s_info = symbol_map.get(sid) or {}
+                            if not isinstance(s_info, dict):
+                                continue
+                            symbol = str(s_info.get('symbol') or '').strip()
+                            if not self._is_offset_symbol(symbol):
+                                continue
+                            so_name, normalized_address = self._normalize_offset_symbol(symbol)
+                            if not normalized_address:
+                                continue
+                            if allowed_so_names and so_name not in allowed_so_names:
+                                continue
+                            file_idx = s_info.get('file')
+                            file_path = ''
+                            if isinstance(file_idx, int) and 0 <= file_idx < len(file_list):
+                                file_path = str(file_list[file_idx] or '')
+                            if self._is_system_symbol(symbol, file_path):
+                                continue
+                            counts = fn.get('counts') or []
+                            self_cost = int(counts[1]) if isinstance(counts, list) and len(counts) > 1 and counts[1] else 0
+                            if self_cost <= 0:
+                                continue
+                            key = f'{file_path}::{normalized_address}'
+                            if key not in agg:
+                                agg[key] = {
+                                    'file_path': file_path,
+                                    'address': normalized_address,
+                                    'so_name': so_name,
+                                    'event_count': 0,
+                                    'call_count': 0,
+                                }
+                            agg[key]['event_count'] = int(agg[key]['event_count']) + self_cost
+                            agg[key]['call_count'] = int(agg[key]['call_count']) + 1
+        ranked = sorted(agg.values(), key=lambda x: int(x.get('event_count') or 0), reverse=True)[:top_n]
+        if not ranked:
+            return None
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / 'load_decomposition_top_symbols.json'
+        payload = {'step': step_dir, 'top_n': top_n, 'symbols': ranked}
+        try:
+            out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+            logging.info('Dumped load-decomposition top symbols: %s (%d)', out_path, len(ranked))
+            return out_path
+        except OSError:
+            return None
+
+    @staticmethod
+    def _is_offset_symbol(symbol: str) -> bool:
+        """仅保留需要恢复的偏移地址符号（如 libxxx.so+0x1234）。"""
+        if not symbol:
+            return False
+        return re.search(r'\+0x[0-9a-fA-F]+$', symbol) is not None
+
+    @staticmethod
+    def _normalize_offset_symbol(symbol: str) -> tuple[str, str]:
+        """标准化地址为 libxxx.so+0x...，并返回 so_name。"""
+        m = re.search(r'([^/\\\\]+\.so)\+(0x[0-9a-fA-F]+)$', symbol)
+        if not m:
+            return '', ''
+        so_name = m.group(1)
+        offset = m.group(2).lower()
+        return so_name, f'{so_name}+{offset}'
+
+    @staticmethod
+    def _collect_allowed_so_names(so_dir: Optional[str]) -> set[str]:
+        """收集 so_dir 下可恢复库名，用于过滤系统库噪音。"""
+        if not so_dir:
+            return set()
+        root = Path(so_dir)
+        if not root.exists():
+            return set()
+        if root.is_file() and root.suffix == '.so':
+            return {root.name}
+        names: set[str] = set()
+        try:
+            for p in root.rglob('*.so'):
+                names.add(p.name)
+        except OSError:
+            return set()
+        return names
+
+    @staticmethod
+    def _is_system_symbol(symbol: str, file_path: str) -> bool:
+        """系统 SO 不参与恢复（设备上不可导出）。"""
+        s = (symbol or '').lower()
+        fp = (file_path or '').lower()
+        system_prefixes = (
+            '/system/',
+            '/vendor/',
+            '/apex/',
+            '/chip_prod/',
+            '/lib/',
+            '/lib64/',
+        )
+        if any(fp.startswith(p) for p in system_prefixes):
+            return True
+        if any(p in s for p in ('/system/', '/vendor/', '/apex/')):
+            return True
+        return False
+
+    def _extract_top_symbols_from_load_excel(self, *, so_dir: Optional[str], top_n: int) -> list[dict]:
+        """优先从负载拆解导出的 ecol_load_perf_*.xlsx 提取 TopN 符号。"""
+        report_dir = Path(self.scene_dir) / 'report'
+        if not report_dir.is_dir():
+            return []
+        excels = sorted(report_dir.glob('ecol_load_perf_*.xlsx'), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not excels:
+            return []
+        excel_path = excels[0]
+        try:
+            df = pd.read_excel(excel_path, sheet_name='ecol_load_hiperf_detail')
+        except Exception:
+            return []
+        if df is None or df.empty:
+            return []
+        cols = [str(c) for c in df.columns]
+        symbol_col = next((c for c in cols if 'Symbol' in c or 'symbol' in c.lower()), None)
+        if not symbol_col:
+            return []
+        load_candidates = [
+            c
+            for c in cols
+            if (('指令' in c) or ('instruction' in c.lower()))
+            and ('Total' not in c and 'total' not in c.lower())
+        ]
+        if not load_candidates:
+            return []
+        # 优先使用“符号级指令数”列（通常列名最短，如“指令数/ָ����”），避免误选进程/线程总量列
+        load_col = sorted(load_candidates, key=lambda x: len(str(x).strip()))[0]
+
+        agg: dict[str, dict[str, object]] = {}
+        for _, row in df.iterrows():
+            if self._is_sys_sdk_row(row):
+                continue
+            symbol = str(row.get(symbol_col) or '').strip()
+            if not self._is_offset_symbol(symbol):
+                continue
+            so_name, normalized_address = self._normalize_offset_symbol(symbol)
+            if not normalized_address:
+                continue
+            file_path = str(row.get('文件') or row.get('file') or '').strip()
+            if self._is_system_symbol(symbol, file_path):
+                continue
+            try:
+                event_count = int(float(row.get(load_col) or 0))
+            except (TypeError, ValueError):
+                event_count = 0
+            if event_count <= 0:
+                continue
+            if normalized_address not in agg:
+                agg[normalized_address] = {
+                    'file_path': file_path,
+                    'address': normalized_address,
+                    'so_name': so_name,
+                    'event_count': 0,
+                    'call_count': 0,
+                }
+            agg[normalized_address]['event_count'] = int(agg[normalized_address]['event_count']) + event_count
+            agg[normalized_address]['call_count'] = int(agg[normalized_address]['call_count']) + 1
+        ranked = sorted(agg.values(), key=lambda x: int(x.get('event_count') or 0), reverse=True)[:top_n]
+        return ranked
+
+    @staticmethod
+    def _is_sys_sdk_row(row: pd.Series) -> bool:
+        """按分类过滤系统 SO：SYS_SDK 统一视为系统库，不参与恢复。"""
+        try:
+            # 精确列优先（不同导表可能字段名不同）
+            for key in ('category_name', 'categoryName', 'so_category', 'component_category'):
+                if key in row and str(row.get(key) or '').strip().upper() == 'SYS_SDK':
+                    return True
+            for key in ('category', 'component_category_id'):
+                if key in row:
+                    val = str(row.get(key) or '').strip()
+                    if val == '4':  # ComponentCategory.SYS_SDK
+                        return True
+            # 兜底：行内任一字段出现 SYS_SDK 文本
+            for v in row.values:
+                if isinstance(v, str) and 'SYS_SDK' in v.upper():
+                    return True
+        except Exception:
+            return False
+        return False
+
     def _run_agent_inference_for_symbol_recovery(
         self, out_dir: Path, *, timeout_sec: Optional[float]
     ) -> Optional[str]:
         """
-        执行 agent 推断命令：tasks -> external_results.json。
-
-        行为：
-        - 如果配置了 HAPRAY_SYMBOL_RECOVERY_AGENT_CMD，执行该命令并等待结果。
-        - 如果未配置，则**不执行默认命令**，返回 None，由主 Agent 在对话中处理。
-          主 Agent 应读取 tasks 文件，逐条推断后生成结果到 output_json，再继续流程。
+        Agent 模式仅导出 tasks，不在 update 内执行外部推断命令。
+        当前对话 Agent 推断完成后，将结果写入 external_results.json，再由 update 导入回填。
         """
         tasks = out_dir / 'symbol_recovery_llm_tasks.json'
         if not tasks.is_file():
             return None
         output_json = out_dir / 'symbol_recovery_external_results.json'
-        cmd_tpl = (os.environ.get('HAPRAY_SYMBOL_RECOVERY_AGENT_CMD') or '').strip()
-
-        # 方案A：未配置 agent 命令时，不自动执行，留待当前 Agent 手动处理
-        if not cmd_tpl:
-            logging.info(
-                'HAPRAY_SYMBOL_RECOVERY_AGENT_CMD not configured; skipping default agent runner. '
-                'Tasks exported to: %s. Please generate results to: %s and retry.',
-                tasks,
-                output_json,
-            )
-            return None
-
-        env = os.environ.copy()
-        env['HAPRAY_SR_TASKS'] = str(tasks)
-        env['HAPRAY_SR_OUTPUT'] = str(output_json)
-        env['HAPRAY_SR_OUTPUT_DIR'] = str(out_dir)
-        cmd = (
-            cmd_tpl.replace('{tasks}', str(tasks))
-            .replace('{output}', str(output_json))
-            .replace('{out_dir}', str(out_dir))
-            .replace('{scene}', self.scene_dir)
+        if output_json.is_file():
+            return str(output_json)
+        logging.info(
+            'Agent mode tasks exported. Please infer in current agent conversation and write results to: %s '
+            '(tasks file: %s)',
+            output_json,
+            tasks,
         )
-        run_kwargs = dict(
-            args=cmd,
-            shell=True,
-            cwd=str(CommonUtils.get_project_root()),
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=timeout_sec if timeout_sec and timeout_sec > 0 else None,
-            check=False,
-        )
-        try:
-            cp = subprocess.run(**run_kwargs)
-        except subprocess.TimeoutExpired:
-            logging.warning('Agent inference command timed out: %s', cmd)
-            return None
-        if cp.stdout:
-            logging.info(cp.stdout[:2000])
-        if cp.stderr:
-            logging.warning(cp.stderr[:2000])
-        if cp.returncode != 0:
-            logging.warning('Agent inference command failed with exit=%s: %s', cp.returncode, cmd)
-            return None
-        if not output_json.is_file():
-            logging.warning('Agent inference command succeeded but output missing: %s', output_json)
-            return None
-        return str(output_json)
+        return None
 
     def _maybe_embed_symbol_recovery_report(
         self, step_dir: str, perf_db_path: str, generated_html: Optional[Path] = None
