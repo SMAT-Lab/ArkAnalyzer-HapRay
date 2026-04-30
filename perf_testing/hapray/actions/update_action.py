@@ -33,6 +33,8 @@ from hapray.core.common.symbol_recovery_bridge import (
     ENV_SYMBOL_RECOVERY_ROOT,
     check_symbol_recovery_llm_ready,
     llm_env_ready_for_symbol_recovery,
+    maybe_run_symbol_recovery_for_step,
+    maybe_generate_symbol_recovery_html_for_step,
     parse_output_root_from_env,
     parse_stat_from_env,
     parse_top_n_from_env,
@@ -718,6 +720,305 @@ class UpdateAction:
         return time_ranges
 
     @staticmethod
+    def _is_valid_symbol_recovery_result(item: dict) -> bool:
+        """检查单个 symbol_recovery_results.json 条目是否有效。
+
+        无效结果的标志：
+        - inferred_name/function_name 为 null、空字符串或 auto_recovered_ 占位符
+        - description/functionality 为 '未知' 或空字符串
+        """
+        if not isinstance(item, dict):
+            return False
+
+        # 获取函数名（兼容两种字段名）
+        function_name = item.get('inferred_name') or item.get('function_name', '')
+        functionality = item.get('description') or item.get('functionality', '')
+
+        # 函数名必须为有效字符串
+        if not function_name:
+            return False
+        if str(function_name).lower() in ('null', 'none', 'unknown', '未知'):
+            return False
+        if str(function_name).startswith('auto_recovered_'):
+            return False
+
+        # 功能描述不能是默认值
+        if not functionality or str(functionality) in ('未知', 'null', 'None', ''):
+            return False
+
+        return True
+
+    @staticmethod
+    def _cleanup_symbol_recovery_error_outputs(
+        scene_dir: str,
+        step_dir: str,
+        stat_method: str,
+        top_n: int,
+    ) -> None:
+        """清理 LLM 失败时可能产生的错误产物，避免错误结果被写入 perf.json。
+
+        需要删除的文件：
+        - event_count_topN_analysis.xlsx / call_count_topN_analysis.xlsx
+        - symbol_recovery_results.json（如果含错误结果或为空标记）
+        - symbol_recovery_external_results.json（如果含错误结果）
+        """
+        from hapray.core.common.symbol_recovery_bridge import (
+            default_symbol_recovery_output_dir,
+            symbol_recovery_excel_name,
+        )
+
+        out_dir = default_symbol_recovery_output_dir(scene_dir, step_dir, None)
+        excel_path = out_dir / symbol_recovery_excel_name(stat_method, top_n)
+        results_json = out_dir / 'symbol_recovery_results.json'
+        external_results_json = out_dir / 'symbol_recovery_external_results.json'
+
+        try:
+            if excel_path.exists():
+                excel_path.unlink()
+                logging.info('Cleaned up error Excel: %s', excel_path)
+        except OSError as e:
+            logging.debug('Failed to cleanup Excel %s: %s', excel_path, e)
+
+        # 清理 symbol_recovery_results.json
+        try:
+            if results_json.exists():
+                should_delete = False
+                invalid_reason = ''
+                try:
+                    data = json.loads(results_json.read_text(encoding='utf-8', errors='replace'))
+
+                    # 检查是否是字典格式（包含 _warning 字段的标记文件）
+                    if isinstance(data, dict):
+                        if data.get('_warning') or data.get('valid_results') == 0:
+                            should_delete = True
+                            invalid_reason = 'marked as failed by symbol_recovery'
+
+                    # 检查是否是列表格式
+                    elif isinstance(data, list):
+                        if len(data) == 0:
+                            # 空列表
+                            should_delete = True
+                            invalid_reason = 'empty results list'
+                        else:
+                            # 检查是否所有结果都无效
+                            valid_count = 0
+                            for item in data:
+                                if UpdateAction._is_valid_symbol_recovery_result(item):
+                                    valid_count += 1
+
+                            if valid_count == 0:
+                                should_delete = True
+                                invalid_reason = 'all results are invalid (null function names or unknown functionality)'
+                            elif valid_count < len(data):
+                                # 部分无效，记录日志但仍保留（由后续处理决定）
+                                logging.debug(
+                                    'Results JSON has %d/%d valid entries, keeping for partial recovery',
+                                    valid_count, len(data)
+                                )
+
+                    else:
+                        # 未知格式
+                        should_delete = True
+                        invalid_reason = 'unknown format'
+
+                except (json.JSONDecodeError, OSError) as e:
+                    # 解析失败也删除
+                    should_delete = True
+                    invalid_reason = f'parse error: {e}'
+
+                if should_delete:
+                    results_json.unlink()
+                    logging.info('Cleaned up error results JSON (%s): %s', invalid_reason, results_json)
+
+        except OSError as e:
+            logging.debug('Failed to cleanup results JSON %s: %s', results_json, e)
+
+        # 清理 symbol_recovery_external_results.json
+        try:
+            if external_results_json.exists():
+                should_delete = False
+                try:
+                    data = json.loads(external_results_json.read_text(encoding='utf-8', errors='replace'))
+                    has_placeholder = False
+                    all_null = True
+
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict):
+                                fn = str(item.get('function_name', ''))
+                                if fn.startswith('auto_recovered_'):
+                                    has_placeholder = True
+                                    break
+                                # 检查是否所有 function_name 都是 null/空
+                                if fn and fn.lower() not in ('null', 'none', ''):
+                                    all_null = False
+
+                    # 如果包含占位符或所有 function_name 都是 null，删除
+                    if has_placeholder or (isinstance(data, list) and len(data) > 0 and all_null):
+                        should_delete = True
+                        logging.info('Cleaned up error external results JSON with placeholders: %s', external_results_json)
+
+                except (json.JSONDecodeError, OSError):
+                    should_delete = True
+                    logging.info('Cleaned up invalid external results JSON: %s', external_results_json)
+
+                if should_delete:
+                    external_results_json.unlink()
+        except OSError as e:
+            logging.debug('Failed to cleanup external results JSON %s: %s', external_results_json, e)
+
+    @staticmethod
+    def _check_symbol_recovery_results_valid(
+        scene_dir: str,
+        step_dir: str,
+    ) -> bool:
+        """检查符号恢复结果是否有效（不包含 auto_recovered_* 占位符）。"""
+        step_hiperf = Path(scene_dir) / 'hiperf' / step_dir
+        manifest_path = step_hiperf / 'symbol_recovery_replacements.json'
+
+        if not manifest_path.exists():
+            return False
+
+        try:
+            data = json.loads(manifest_path.read_text(encoding='utf-8', errors='replace'))
+            if not isinstance(data, list):
+                return False
+
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                replaced = str(item.get('replaced', ''))
+                # 检查是否包含占位符
+                if 'auto_recovered_' in replaced:
+                    logging.warning('Found auto_recovered placeholder in replacements: %s', replaced)
+                    return False
+            return True
+        except (json.JSONDecodeError, OSError) as e:
+            logging.debug('Failed to check replacements validity: %s', e)
+            return False
+
+    @staticmethod
+    def _run_symbol_recovery_for_case(
+        case_dir: str,
+        effective_so: Optional[str],
+        top_n: int,
+        stat_method: str,
+        agent_mode: bool = False,
+        llm_env_configured: bool = False,
+    ):
+        """为单个用例目录执行符号恢复。
+
+        遍历 case_dir 下的所有 step 目录，对每个包含 perf.db 的 step 执行符号恢复。
+
+        执行策略：
+        1. 如果配置了 LLM 环境且不是强制 agent 模式，先尝试 LLM 模式
+        2. 如果 LLM 模式失败或无效，自动回退到 Agent 模式
+        3. 如果 Agent 模式也失败，才标记为失败
+        """
+        if not effective_so:
+            logging.debug('Skipping symbol recovery for %s: no effective SO directory', case_dir)
+            return
+
+        case_path = Path(case_dir)
+        if not case_path.is_dir():
+            return
+
+        # 查找所有 step 目录下的 perf.db
+        for step_dir in case_path.iterdir():
+            if not step_dir.is_dir():
+                continue
+            # 检查是否是 step 目录 (step1, step2, ...)
+            if not step_dir.name.startswith('step'):
+                continue
+
+            hiperf_dir = step_dir / 'hiperf'
+            if not hiperf_dir.is_dir():
+                continue
+
+            perf_db = hiperf_dir / 'perf.db'
+            if not perf_db.is_file():
+                continue
+
+            logging.info('Running symbol recovery for %s/%s', case_dir, step_dir.name)
+
+            # 判断是否应该先尝试 LLM 模式
+            # 条件：LLM 环境已配置 AND (不是强制 agent 模式 OR agent_mode 为 False)
+            should_try_llm_first = llm_env_configured and not agent_mode
+
+            llm_success = False
+            agent_success = False
+
+            # 第一步：尝试 LLM 模式（如果配置了 LLM）
+            if should_try_llm_first:
+                logging.info('Attempting LLM mode for symbol recovery (llm_env_configured=%s)', llm_env_configured)
+                try:
+                    llm_success = maybe_run_symbol_recovery_for_step(
+                        scene_dir=str(case_dir),
+                        step_dir=step_dir.name,
+                        perf_db_path=str(perf_db),
+                        effective_so_dir=effective_so,
+                        top_n=top_n,
+                        stat_method=stat_method,
+                        output_root=None,
+                        extra_args=None,
+                        prompt_only=False,
+                    )
+                    if llm_success:
+                        # 验证结果是否有效（不包含占位符）
+                        if UpdateAction._check_symbol_recovery_results_valid(str(case_dir), step_dir.name):
+                            logging.info('LLM symbol recovery completed and validated for %s/%s', case_dir, step_dir.name)
+                            continue  # 成功且有效，跳到下一个 step
+                        else:
+                            logging.warning('LLM symbol recovery produced invalid results (placeholders detected), will fallback to agent mode')
+                            llm_success = False
+                            # 清理错误产物
+                            UpdateAction._cleanup_symbol_recovery_error_outputs(
+                                str(case_dir), step_dir.name, stat_method, top_n
+                            )
+                    else:
+                        logging.warning('LLM symbol recovery failed for %s/%s, will fallback to agent mode', case_dir, step_dir.name)
+                except Exception as e:
+                    logging.exception('Error in LLM symbol recovery for %s/%s: %s', case_dir, step_dir.name, str(e))
+                    llm_success = False
+
+            # 第二步：如果 LLM 失败或未配置，尝试 Agent 模式
+            # 条件：LLM 未配置 或 LLM 失败 或 强制 agent 模式
+            should_try_agent = not llm_env_configured or not llm_success or agent_mode
+
+            if should_try_agent:
+                logging.info('Attempting Agent mode for symbol recovery (llm_env_configured=%s, llm_success=%s, agent_mode=%s)',
+                            llm_env_configured, llm_success, agent_mode)
+                try:
+                    agent_success = maybe_run_symbol_recovery_for_step(
+                        scene_dir=str(case_dir),
+                        step_dir=step_dir.name,
+                        perf_db_path=str(perf_db),
+                        effective_so_dir=effective_so,
+                        top_n=top_n,
+                        stat_method=stat_method,
+                        output_root=None,
+                        extra_args=['--prompt-only'],
+                        prompt_only=True,
+                    )
+                    if agent_success:
+                        logging.info('Agent mode symbol recovery (prompt-only) completed for %s/%s', case_dir, step_dir.name)
+                        # Agent 模式只导出 tasks，需要后续执行 Agent 推断并回填
+                        # 这里记录状态，但暂不标记为最终成功
+                    else:
+                        logging.error('Agent mode symbol recovery failed for %s/%s', case_dir, step_dir.name)
+                except Exception as e:
+                    logging.exception('Error in Agent symbol recovery for %s/%s: %s', case_dir, step_dir.name, str(e))
+                    agent_success = False
+
+            # 最终状态记录
+            if llm_success:
+                logging.info('Symbol recovery completed (LLM mode) for %s/%s', case_dir, step_dir.name)
+            elif agent_success:
+                logging.info('Symbol recovery exported tasks (Agent mode) for %s/%s - requires external inference', case_dir, step_dir.name)
+            else:
+                logging.error('Symbol recovery failed (both LLM and Agent modes) for %s/%s', case_dir, step_dir.name)
+
+    @staticmethod
     def process_reports(
         testcase_dirs,
         report_dir,
@@ -740,6 +1041,26 @@ class UpdateAction:
             time_range_strings: List of time range strings for symbol statistics (optional)
             enable_thread_analysis: Enable redundant thread analysis (ThreadAnalyzer). Default True.
         """
+        # 从 Config 获取符号恢复配置（在 execute 中设置）
+        effective_so = Config.get('so_dir', '') or None
+        top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
+        stat_method = Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count'
+        agent_mode = bool(Config.get('symbol_recovery_agent_mode', False))
+        no_llm = bool(Config.get('symbol_recovery_no_llm', False))
+        llm_env_configured = bool(Config.get('symbol_recovery_llm_env_configured', False))
+
+        # 检查是否应该执行符号恢复
+        should_run_symbol_recovery = (
+            not no_llm  # 不是 --no-llm 模式
+            and effective_so  # 有有效的 SO 目录
+        )
+
+        if should_run_symbol_recovery:
+            logging.info(
+                'Symbol recovery will be executed for all test cases (so_dir=%s, top_n=%s, stat=%s, agent_mode=%s)',
+                effective_so, top_n, stat_method, agent_mode
+            )
+
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
             report_generator = ReportGenerator(
@@ -767,6 +1088,27 @@ class UpdateAction:
                         logging.error('Report update failed')
                 except Exception as e:
                     logging.error('Error updating report: %s', str(e))
+
+        # 在所有报告更新完成后，执行符号恢复
+        # 符号恢复需要在 report 生成之后执行，因为它需要 report 中的产物
+        if should_run_symbol_recovery:
+            logging.info('=' * 80)
+            logging.info('Starting symbol recovery for all test cases')
+            logging.info('=' * 80)
+
+            for case_dir in testcase_dirs:
+                UpdateAction._run_symbol_recovery_for_case(
+                    case_dir=case_dir,
+                    effective_so=effective_so,
+                    top_n=top_n,
+                    stat_method=stat_method,
+                    agent_mode=agent_mode,
+                    llm_env_configured=llm_env_configured,
+                )
+
+            logging.info('=' * 80)
+            logging.info('Symbol recovery completed for all test cases')
+            logging.info('=' * 80)
 
         # Generate summary report
         logging.info('Generating summary Excel report')

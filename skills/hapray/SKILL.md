@@ -4,13 +4,13 @@ version: "1.5.5"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
-  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：命令执行、路径判定、analysis 路由、报告落盘。默认 `<PROJECT_ROOT>/reports/`。**新 clone 源码：未完成 `tools/static_analyzer` 构建则 `dist/tools/sa-cmd/` 无 `hapray-sa-cmd.exe`/`hapray-sa-cmd.js`，Python 会因找不到 hapray-sa-cmd 失败；未完成 `tools/symbol_recovery` 环境则 perf→db/符号恢复失败。必须先做正文「源码工作区硬门禁」再走 perf/update/dbools。**
+  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：命令执行、路径判定、analysis 路由、报告落盘。默认 `<PROJECT_ROOT>/reports/`。**新 clone 源码：未完成 `web` 构建（vite）则报告模板资源缺失；未完成 `tools/static_analyzer` 构建则 `dist/tools/sa-cmd/` 无 `hapray-sa-cmd`；未执行 `npm run prebuild` 则 `dist/tools/bin/` 无 trace_streamer；未完成 `tools/symbol_recovery` 环境则符号恢复失败。必须先做正文「源码工作区硬门禁」再走 perf/update/dbools。update 执行符号恢复时，若 LLM 失败则强制切换到 Agent 模式完成火焰图替换，禁止直接结束。**
 metadata:
   short-description: >-
-    HapRay workflow: source clone requires static_analyzer build (hapray-sa-cmd under dist/tools/sa-cmd) + symbol_recovery venv before perf/update/dbools; then CLI, reports_path, analysis routing, markdown to reports/.
+    HapRay workflow: source clone requires web build + static_analyzer build + symbol_recovery venv before perf/update/dbools. LLM symbol-recovery failure must fallback to agent mode to complete flame graph replacement, never stop at tasks-only state.
   zh-Hans: >-
-    精简主流程：`perf_testing`/`update`/`dbtools`/符号恢复前必读「源码工作区硬门禁」(static_analyzer→hapray-sa-cmd、symbol_recovery→venv)。
-    再执行 CLI→读 reports_path→子 Skill→独立报告 `<PROJECT_ROOT>/reports/`。
+    精简主流程：`perf_testing`/`update`/`dbtools`/符号恢复前必读「源码工作区硬门禁」。
+    update 符号恢复时 LLM 失败强制切 Agent 模式完成火焰图替换，禁止停在 tasks-only 状态。再执行 CLI→读 reports_path→子 Skill→独立报告 `<PROJECT_ROOT>/reports/`。
   skill-paths:
     main: SKILL.md
     tool_result: hapray-tool-result.md
@@ -29,6 +29,8 @@ metadata:
     - static-analyzer
     - source-repo-setup
     - clone-first-build
+    - symbol-recovery-llm-fallback-agent
+    - llm-failure-must-agent-mode
 ---
 
 # HapRay 引导式工作流
@@ -44,6 +46,11 @@ metadata:
 5. 读产物：从 `hapray-tool-result.json`（或 `--result-file`）取 `outputs.reports_path`。  
 6. 路由分析：按 `analysis/README.md` 逐项评估子 Skill；满足条件则执行，不满足写跳过原因。  
 7. 落盘报告：写到 `<PROJECT_ROOT>/reports/hapray-analysis-<YYYYMMDD>-<topic>.md`，正文固定结构 + 文末元信息与执行轨迹。
+
+> **🚨 关键强制要求（新增）**：
+> - `perf` 采集后**必须**执行 `update` 进行符号恢复
+> - **禁止**在 `update` 中使用 `--no-llm` 参数（除非用户**明确**要求跳过符号恢复）
+> - LLM 失败时**必须**自动切换到 Agent 模式完成，禁止直接结束
 
 ## 术语与路径判定
 
@@ -62,7 +69,7 @@ metadata:
 
 ### 为何「每次新下载源码必炸」？
 
-- **根因**：`git clone` 只拿到源码，不包含 `dist/` 内 `hapray-sa-cmd`、不包含 `tools/symbol_recovery/.venv`。未执行 **`tools/static_analyzer` 构建** → 负载拆解 / 依赖 SA 的路径会缺文件；未完成 **`tools/symbol_recovery` 环境与依赖** → `perf.data`→`perf.db`（SymRecover Step1）、`update` 集成的符号恢复子进程会直接失败。**这不是采集逻辑 Bug，而是环境未就绪。**
+- **根因**：`git clone` 只拿到源码，不包含 `web/dist/` 构建产物、`dist/tools/sa-cmd/` 静态分析器、`tools/bin/` 下的 trace_streamer、以及 `tools/symbol_recovery/.venv`。任何一项缺失都会导致后续步骤失败。**这不是采集逻辑 Bug，而是环境未就绪。**
 - **为何 Skill「写了仍被跳过」**：旧版把步骤放在「二进制失败后的源码回退」章节，Agent 在用户**已持有源码仓库**时不会走「先下载二进制」分支，因而**根本不会执行**那段回退 checklist；必须把「源码模式」单独做成**第一道门禁**。另：若 Cursor 会话未挂载本 Skill、或未读 YAML `description`/本节，也会出现省略构建。**执行前必须自检本节，不能只依赖记忆的 TL;DR 第 4 步「跑命令」。**
 
 ### 判定为源码模式（满足其一即可）
@@ -72,60 +79,465 @@ metadata:
 
 **只要进入源码模式，下一节「禁止行为」无条件生效**，与是否尝试过下载 release **无关**。
 
-### 禁止行为（未完成下方「最小自检清单」之前）
+### 禁止行为（未完成下方「完整构建清单」之前）
 
 不得执行包括但不限于：
 
 - `uv run python -m scripts.main perf ...`、`update`、`static`、`dbtools` 相关采集与报告链路；  
-- 依赖 **`dist/tools/sa-cmd/`**（`hapray-sa-cmd`）的步骤；  
+- 依赖 **`web/dist/`** 或 **`perf_testing/resource/web/`**（报告模板资源）的任何报告生成步骤；  
+- 依赖 **`dist/tools/sa-cmd/`**（`hapray-sa-cmd`）的静态分析步骤；  
 - **symbol_recovery**：`tools/symbol_recovery/main.py`（含 `--skip-step1`）、以及 `hapray update` 触发的符号恢复子进程。
 
 若用户坚持「我就要现在跑」，必须先输出**阻塞原因**：缺哪项构建/安装 + 本节对应命令。
 
-### 最小自检清单（按序执行并在执行轨迹中留证据）
+---
 
-假定 `<REPO_ROOT>` = 检出根目录。
+### 完整构建清单（7步，必须全部完成）
 
-1. **Python（perf_testing）**  
-   - `cd <REPO_ROOT>/perf_testing`，执行 **`uv sync`**（失败时再按项目文档降级 `pip install -r …`）。
+| 步骤 | 模块 | 性质 | 构建命令 | 验证方法 |
+|:----:|------|:----:|----------|----------|
+| 1 | **perf_testing Python** | 必选 | `cd perf_testing && uv sync` | `python -m scripts.main --help` 正常输出 |
+| 2 | **web** | 必选 | `cd web && npm install && npm run build` | `web/dist/index.html`、`report_template.html`、`hiperf_report_template.html` 均存在 |
+| 3 | **static_analyzer** | 必选 | `cd tools/static_analyzer && npm install && npm run build` | `dist/tools/sa-cmd/hapray-sa-cmd.js` 或 `.exe` 存在 |
+| 4 | **trace_streamer** | 必选 | 执行 `npm run prebuild` 解压 `third-party/trace_streamer_binary.zip` | `dist/tools/bin/trace_streamer_* --version` 可执行 |
+| 5 | **symbol_recovery** | 条件必选 | `cd tools/symbol_recovery && uv venv .venv && uv sync` | `.venv/bin/python main.py --help` 可运行 |
+| 6 | hilogtool | 可选 | 从 release 复制到 `tools/bin/` | `tools/bin/hilogtool --help` 可执行 |
+| 7 | opt_detector | 可选 | 从 release 复制到 `tools/opt_detector/` | `tools/opt_detector/opt-detector --help` 可执行 |
 
-2. **static_analyzer（必选；否则 SA 管线、dbtools/拆解常不可用）**  
-   - Node：满足仓库根 `package.json` 的 **`engines`**（当前为 Node 24.x 范围）。  
-   - **Bun**：`tools/static_analyzer` 的 `npm run build` 实际调用 **Bun 构建脚本**，须已安装 `bun` 并在 PATH 可执行（`bun --version`）。  
-   - 命令：  
-     ```bash
-     cd <REPO_ROOT>/tools/static_analyzer && npm install && npm run build
-     ```  
-   - **验证（必须二选一以上存在）**：  
-     - `<REPO_ROOT>/dist/tools/sa-cmd/hapray-sa-cmd.js`，或 Windows 下的 `hapray-sa-cmd.exe`（具体以本地 `npm run build` 产出为准）。  
-     - **禁止**在看到 `dist/tools/sa-cmd/` 为空时继续宣称「环境问题已就绪」。
+> **条件必选说明**：symbol_recovery（第5步）仅在涉及 `perf.data→perf.db` 转换、火焰图符号推断或 `update` 符号恢复时才必须。若不涉及可跳过，但相关功能将不可用。
 
-3. **symbol_recovery（只要涉及 perf→db / 火焰图推断 / `update` 符号恢复就必须）**  
-   - ```bash
-     cd <REPO_ROOT>/tools/symbol_recovery && uv venv .venv && uv sync
-     ```
-     （或按该目录 `README`：`uv pip install -e .`；以 `uv.lock`/`pyproject` 为准。）  
-   - 验证：**虚拟环境 Python** `main.py --help` 可运行；.radare2 非硬门禁但强烈推荐（见 `analysis/symbol-recovery-analysis.md`）。
+---
 
-4. **（可选）与发布包对齐：仓库根一键**  
-   - 若 README `Build` 节为「根目录 `npm install && npm run build`」，在完成子模块构建后可执行以生成完整 `dist/`，但以第 2 步 **tools/static_analyzer** 产出为硬性底线。
+### 详细执行步骤
 
-自检全部 **PASS** 后，才允许进入下文「执行主流程」「子 Skill」「symbol-recovery 门禁」中的具体步骤。
+#### 第1步：Python 环境（perf_testing）
 
-### 报错 / 日志关键词与本节映射（便于检索）
+```bash
+cd <REPO_ROOT>/perf_testing
+uv sync
+```
 
-若在**新克隆、未构建**时出现下列提示，含义均为「硬门禁未完成」，**不要让用户误以为是业务逻辑 Bug**：
+- 失败时降级：`pip install -r requirements.txt`
+- 国内网络建议先配置 uv 镜像：
+  - PowerShell: `$env:UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"`
+  - Bash: `export UV_DEFAULT_INDEX=https://pypi.tsinghua.edu.cn/simple`
 
-| 提示或现象 | 对应门禁 |
-|-----------|----------|
-| 找不到 **`hapray-sa-cmd.exe`** / **`hapray-sa-cmd`** / `ExeUtils.get_hapray_cmd_path` 失败、`sa-cmd` 目录为空 | **上面「最小自检清单」第 2 步**：`tools/static_analyzer` 执行 `npm install && npm run build`，产出在 `<REPO_ROOT>/dist/tools/sa-cmd/` |
-| **`perf.db` / Step1、`symbol_recovery`、`update` 符号恢复**报错、子进程退出 | **第 3 步**：`tools/symbol_recovery` 虚拟环境与依赖 |
+**验证**：
+```bash
+uv run python -m scripts.main --help
+```
 
-**为何会「Skill 里有约束却仍失败」**（常见原因，不是要再加一条玄学规则）：
+#### 第2步：Web 构建（报告界面资源）
 
-1. **会话未挂载本 Skill**：Cursor 不会自动让每个对话都读到 `skills/hapray/SKILL.md`；须复制到 **`~/.cursor/skills/hapray/`**，或在 Rules / 对话中用 **`@` 引用** `@skills/hapray/SKILL.md`（路径以仓库或用户目录为准）。  
-2. **只读了前半段**：旧习惯从「二进制下载」往下看，跳到「跑 perf」而未读「源码工作区硬门禁」（已置顶 TL;DR 第 1 条，但仍需 Agent 遵守）。  
-3. **metadata 简略**：若以 `short-description`/旧版 `zh-Hans` 为唯一摘要曾会漏掉硬门禁；已从 v1.5.5 起在 **`description`、`zh-Hans`、`tags`** 中写入 **hapray-sa-cmd / clone-first-build**，便于检索与规则匹配。
+```bash
+cd <REPO_ROOT>/web
+npm install
+npm run build
+```
+
+**构建流程**：
+1. `npm run build` 执行 `vite build` 生成 `web/dist/index.html`
+2. `postbuild` 钩子自动复制到 `perf_testing/resource/web/report_template.html`
+
+**验证（必须同时满足，3个文件）**：
+```bash
+# Linux/macOS
+test -f web/dist/index.html && echo "✓ web/dist/index.html"
+test -f perf_testing/resource/web/report_template.html && echo "✓ report_template.html"
+test -f perf_testing/resource/web/hiperf_report_template.html && echo "✓ hiperf_report_template.html"
+
+# PowerShell
+Test-Path web/dist/index.html
+Test-Path perf_testing/resource/web/report_template.html
+Test-Path perf_testing/resource/web/hiperf_report_template.html
+```
+
+**⚠️ 警告**：不要直接复制模板文件，必须通过 `npm run build` 生成正确的 Vite 构建产物。`hiperf_report_template.html` 是火焰图报告专用模板，缺失会导致火焰图报告生成失败。
+
+#### 第3步：Static Analyzer（静态分析器）
+
+**前置要求**：
+- Node.js：满足仓库根 `package.json` 的 `engines`（当前 Node 24.x 范围）
+- Bun：`tools/static_analyzer` 的构建需要 Bun，执行 `bun --version` 验证已安装
+
+```bash
+cd <REPO_ROOT>/tools/static_analyzer
+npm install
+npm run build
+```
+
+**验证**：
+```bash
+# Linux/macOS
+test -f dist/tools/sa-cmd/hapray-sa-cmd.js && echo "✓ hapray-sa-cmd.js"
+
+# Windows
+Test-Path dist/tools/sa-cmd/hapray-sa-cmd.exe
+```
+
+#### 第4步：Trace Streamer（htrace→db 转换工具）
+
+**前置说明**：trace_streamer 二进制文件位于源码 `third-party/trace_streamer_binary.zip` 中，**不需要从 release 下载**。
+
+**构建方式**（二选一）：
+
+**方式 A（推荐）**：执行根目录 prebuild 脚本
+```bash
+cd <REPO_ROOT>
+npm run prebuild
+# 会自动解压 third-party/trace_streamer_binary.zip 到 dist/tools/bin/
+```
+
+**方式 B**：直接解压（如果只需要 trace_streamer）
+```bash
+cd <REPO_ROOT>
+# Windows PowerShell
+Expand-Archive -Path third-party/trace_streamer_binary.zip -DestinationPath dist/tools/bin/trace_streamer_binary
+# 然后将当前平台对应的文件从 dist/tools/bin/trace_streamer_binary/ 移动到 dist/tools/bin/
+
+# Linux/macOS
+unzip third-party/trace_streamer_binary.zip -d dist/tools/bin/
+# 然后清理其他平台文件，只保留当前平台的可执行文件
+```
+
+**验证**：
+```bash
+dist/tools/bin/trace_streamer_windows.exe --version
+# Linux: dist/tools/bin/trace_streamer_linux --version
+# macOS: dist/tools/bin/trace_streamer_mac --version
+```
+
+#### 第5步：Symbol Recovery（符号恢复，条件必选）
+
+```bash
+cd <REPO_ROOT>/tools/symbol_recovery
+uv venv .venv
+uv sync
+# 或：uv pip install -e .
+```
+
+**可选但强烈推荐**：安装 radare2（性能提升 10 倍+）
+- macOS: `brew install radare2 && r2pm install r2dec`
+- Windows: `winget install radare2` 或 `choco install radare2`，然后 `r2pm install r2dec`
+
+**验证**：
+```bash
+# Linux/macOS
+.venv/bin/python main.py --help
+
+# Windows
+.venv/Scripts/python main.py --help
+```
+
+#### 第6-7步：可选工具
+
+从 release 二进制包复制到对应目录即可：
+- **hilogtool** → `tools/bin/hilogtool`（或 `hilogtool.exe`）
+- **opt_detector** → `tools/opt_detector/opt-detector`
+
+---
+
+### 快速验证脚本
+
+在 `<REPO_ROOT>` 根目录执行以下验证：
+
+**Linux/macOS Bash 验证脚本**：
+```bash
+#!/bin/bash
+echo "=== HapRay 源码模式构建验证 ==="
+echo ""
+
+# 1. Python 环境
+cd perf_testing
+if uv run python -m scripts.main --help >/dev/null 2>&1; then
+    echo "✓ 第1步: perf_testing Python 环境"
+else
+    echo "✗ 第1步: perf_testing Python 环境缺失，执行: cd perf_testing && uv sync"
+fi
+cd ..
+
+# 2. Web 构建（3个文件必须同时存在）
+if [ -f web/dist/index.html ] && [ -f perf_testing/resource/web/report_template.html ] && [ -f perf_testing/resource/web/hiperf_report_template.html ]; then
+    echo "✓ 第2步: Web 构建产物（3/3）"
+else
+    echo "✗ 第2步: Web 构建产物缺失，执行: cd web && npm install && npm run build"
+    [ -f web/dist/index.html ] || echo "  - 缺失: web/dist/index.html"
+    [ -f perf_testing/resource/web/report_template.html ] || echo "  - 缺失: perf_testing/resource/web/report_template.html"
+    [ -f perf_testing/resource/web/hiperf_report_template.html ] || echo "  - 缺失: perf_testing/resource/web/hiperf_report_template.html"
+fi
+
+# 3. Static Analyzer
+if [ -f dist/tools/sa-cmd/hapray-sa-cmd.js ] || [ -f dist/tools/sa-cmd/hapray-sa-cmd.exe ]; then
+    echo "✓ 第3步: static_analyzer 构建产物"
+else
+    echo "✗ 第3步: static_analyzer 构建产物缺失，执行: cd tools/static_analyzer && npm install && npm run build"
+fi
+
+# 4. Trace Streamer
+if ls dist/tools/bin/trace_streamer_* >/dev/null 2>&1; then
+    echo "✓ 第4步: trace_streamer 可执行文件"
+else
+    echo "✗ 第4步: trace_streamer 缺失，执行: npm run prebuild"
+fi
+
+# 5. Symbol Recovery（条件必选）
+if [ -f tools/symbol_recovery/.venv/bin/python ] && \
+   tools/symbol_recovery/.venv/bin/python tools/symbol_recovery/main.py --help >/dev/null 2>&1; then
+    echo "✓ 第5步: symbol_recovery 虚拟环境"
+else
+    echo "⚠ 第5步: symbol_recovery 虚拟环境缺失（条件必选，涉及符号恢复时需要）"
+    echo "   执行: cd tools/symbol_recovery && uv venv .venv && uv sync"
+fi
+
+echo ""
+echo "=== 验证完成 ==="
+echo "所有 ✓ 通过后方可执行 perf/update/static 等命令"
+```
+
+**Windows PowerShell 验证脚本**：
+```powershell
+Write-Host "=== HapRay 源码模式构建验证 ===" -ForegroundColor Cyan
+Write-Host ""
+
+# 1. Python 环境
+Set-Location perf_testing
+$pythonCheck = uv run python -m scripts.main --help 2>$null
+Set-Location ..
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "✓ 第1步: perf_testing Python 环境" -ForegroundColor Green
+} else {
+    Write-Host "✗ 第1步: perf_testing Python 环境缺失" -ForegroundColor Red
+    Write-Host "   执行: cd perf_testing && uv sync" -ForegroundColor Yellow
+}
+
+# 2. Web 构建（3个文件必须同时存在）
+$webFiles = @(
+    "web/dist/index.html",
+    "perf_testing/resource/web/report_template.html",
+    "perf_testing/resource/web/hiperf_report_template.html"
+)
+$webAllExist = $webFiles | ForEach-Object { Test-Path $_ } | Where-Object { $_ -eq $false } | Measure-Object
+if ($webAllExist.Count -eq 0) {
+    Write-Host "✓ 第2步: Web 构建产物（3/3）" -ForegroundColor Green
+} else {
+    Write-Host "✗ 第2步: Web 构建产物缺失" -ForegroundColor Red
+    Write-Host "   执行: cd web && npm install && npm run build" -ForegroundColor Yellow
+    foreach ($file in $webFiles) {
+        if (!(Test-Path $file)) {
+            Write-Host "   - 缺失: $file" -ForegroundColor Yellow
+        }
+    }
+}
+
+# 3. Static Analyzer
+if ((Test-Path dist/tools/sa-cmd/hapray-sa-cmd.js) -or (Test-Path dist/tools/sa-cmd/hapray-sa-cmd.exe)) {
+    Write-Host "✓ 第3步: static_analyzer 构建产物" -ForegroundColor Green
+} else {
+    Write-Host "✗ 第3步: static_analyzer 构建产物缺失" -ForegroundColor Red
+    Write-Host "   执行: cd tools/static_analyzer && npm install && npm run build" -ForegroundColor Yellow
+}
+
+# 4. Trace Streamer
+if (Get-ChildItem dist/tools/bin/trace_streamer_* -ErrorAction SilentlyContinue) {
+    Write-Host "✓ 第4步: trace_streamer 可执行文件" -ForegroundColor Green
+} else {
+    Write-Host "✗ 第4步: trace_streamer 缺失" -ForegroundColor Red
+    Write-Host "   执行: npm run prebuild" -ForegroundColor Yellow
+}
+
+# 5. Symbol Recovery
+$srPython = "tools/symbol_recovery/.venv/Scripts/python.exe"
+if ((Test-Path $srPython) -and (& $srPython tools/symbol_recovery/main.py --help 2>$null)) {
+    Write-Host "✓ 第5步: symbol_recovery 虚拟环境" -ForegroundColor Green
+} else {
+    Write-Host "⚠ 第5步: symbol_recovery 虚拟环境缺失（条件必选）" -ForegroundColor Yellow
+    Write-Host "   执行: cd tools/symbol_recovery && uv venv .venv && uv sync" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "=== 验证完成 ===" -ForegroundColor Cyan
+Write-Host "所有 ✓ 通过后方可执行 perf/update/static 等命令" -ForegroundColor White
+```
+
+---
+
+### 完整执行流程（含符号恢复）
+
+**⚠️ 重要：perf 采集后必须执行 update 进行符号恢复**，否则火焰图将只显示地址（`libxxx.so+0x1234`）而非函数名。
+
+#### 标准工作流（两步必须都执行）
+
+```bash
+# 第1步：perf 采集（仅生成原始报告，无符号恢复）
+cd <REPO_ROOT>/perf_testing
+uv run python -m scripts.main perf \
+  --run_testcases "PerfLoad_Douyin_0010" \
+  --round 1 \
+  -o ./reports
+
+# 第2步：update 进行符号恢复（必须执行，火焰图符号化关键步骤）
+uv run python -m scripts.main update \
+  --report_dir ./reports/<timestamp> \
+  --so_dir <可选：符号库目录>
+```
+
+#### 为什么必须执行 update？
+
+| 步骤 | 产出 | 火焰图符号状态 |
+|------|------|----------------|
+| `perf` 采集 | `hiperf_report.html`、原始火焰图 | ❌ 仅有地址（`libxxx.so+0x1234`） |
+| `update` 符号恢复 | 增强版火焰图（`hiperf_report_with_inferred_symbols.html`） | ✅ 显示推断函数名 |
+
+**不执行 update 的后果**：
+- 火焰图显示 `libxxx.so+0x1234` 等原始地址，无法定位具体函数
+- 无法识别热点函数的语义含义
+- 性能优化缺少关键函数级信息
+
+#### update 命令关键参数
+
+```bash
+uv run python -m scripts.main update \
+  --report_dir <REPORT_DIR>          # 必填：perf 采集输出目录（含 hiperf/ 子目录）
+  --so_dir <SO_DIR>                  # 可选：符号库目录（含 .so 文件的目录）
+  --symbol-recovery-agent-mode       # 可选：强制使用离线 Agent 模式（跳过在线 LLM 探活）
+```
+
+**⚠️ 禁止使用的参数（除非用户明确要求）**：
+- ❌ `--symbol-recovery-no-llm`：**绝对禁止**使用，这会完全跳过符号恢复，导致火焰图无函数名
+- ❌ `--no-llm`：**绝对禁止**使用，同上
+
+**正确的心态**：
+- 默认执行 `update` **不加任何 LLM 相关参数**，让系统自动处理（先探活 LLM，失败自动切 Agent）
+- 只有用户**明确说"不需要符号恢复"**时，才考虑使用 `--symbol-recovery-no-llm`
+
+**SO 目录获取方式**（三选一）：
+
+1. **自动拉取**（推荐）：update 自动检测设备在线时，通过 `hdc shell bm dump -n <包名>` 获取安装路径，再 `hdc file recv` 拉取符号库
+2. **手动指定**：`--so_dir <本地 .so 文件目录>`
+3. **环境变量**：`export HAPRAY_SO_DIR=<本地 .so 文件目录>`
+
+#### 包名获取方式（必须通过设备查询，禁止臆造）
+
+**⚠️ 重要**：包名必须从连接的设备上查询获取，禁止随意编造。
+
+**查询设备应用列表命令**：
+
+```bash
+# 列出设备上所有第三方应用（推荐）
+hdc shell bm dump -a | grep -E "^(  |bundleName)" | head -50
+
+# 或列出所有系统+第三方应用
+hdc shell bm dump -a
+
+# 模糊搜索特定应用（如抖音）
+hdc shell bm dump -a | grep -i "douyin\|抖音\|aweme"
+```
+
+**包名确认流程**：
+
+| 步骤 | 命令 | 目的 |
+|------|------|------|
+| 1 | `hdc list targets` | 确认设备已连接 |
+| 2 | `hdc shell bm dump -a \| grep <关键词>` | 搜索目标应用 |
+| 3 | `hdc shell bm dump -n <包名>` | 验证包名存在并查看安装路径 |
+| 4 | 记录正确包名 | 用于 perf 采集的 `--apps` 参数 |
+
+**常见错误**：
+- ❌ 编造包名如 `com.example.app`（不存在会导致采集失败）
+- ❌ 使用旧包名（应用更新后可能变更）
+- ❌ 大小写错误（包名区分大小写）
+
+**正确示例**：
+```bash
+# 查询抖音包名
+$ hdc shell bm dump -a | grep -i aweme
+  bundleName: com.ss.hm.ugc.aweme
+
+# 验证包名存在
+$ hdc shell bm dump -n com.ss.hm.ugc.aweme
+{"bundleName":"com.ss.hm.ugc.aweme",...}
+
+# 使用正确包名执行 perf
+uv run python -m scripts.main perf \
+  --run_testcases "PerfLoad_Douyin_0010" \
+  --apps com.ss.hm.ugc.aweme
+```
+
+#### 符号恢复交付验收（必须检查）
+
+update 执行完成后，必须验证以下产物存在：
+
+| 产物文件 | 路径 | 说明 |
+|----------|------|------|
+| `symbol_recovery_llm_tasks.json` | `reports/<timestamp>/.symbol_recovery/<step>/` | LLM 任务清单（Step1 导出） |
+| `symbol_recovery_external_results.json` | 同上 | LLM 推断结果（Step2 产出） |
+| `symbol_recovery_replacements.json` | `reports/<timestamp>/hiperf/<step>/` | 符号替换映射表 |
+| `hiperf_report_with_inferred_symbols.html` | `reports/<timestamp>/hiperf/<step>/` | **增强版火焰图（最终交付物）** |
+
+> 若 `hiperf_report_with_inferred_symbols.html` 不存在，说明符号恢复未完成，火焰图仍显示原始地址。
+
+#### ⚠️ LLM 失败时强制走 Agent 模式（禁止结束）
+
+**自动降级策略（必须执行）**：
+
+update 执行时会自动探测 LLM 可用性（探活），按以下优先级处理：
+
+| 场景 | 自动行为 | 必须产出 |
+|------|----------|----------|
+| LLM 探活通过 → 在线执行成功 | 使用在线 LLM 完成符号推断 | `symbol_recovery_external_results.json` + 增强火焰图 |
+| LLM 探活失败（402/鉴权/网络） | **强制自动切换到 Agent 模式** | `symbol_recovery_llm_tasks.json` → 外部推断 → `symbol_recovery_external_results.json` |
+| 在线执行中途失败 | **强制同次切换到 Agent 模式** | 同上 |
+| Agent 模式也失败 | 标记为失败，给出重试命令 | 明确结论"符号恢复失败" |
+
+**🚨 关键修复要求（LLM 失败时的正确处理）**：
+
+**问题**：LLM 失败后可能已生成包含错误结果的 Excel，直接切换到 Agent 模式会导致错误结果被写入 perf.json。
+
+**强制修复策略**：
+1. **检测 LLM 失败**：检查 `symbol_recovery` 子进程输出，如果包含 `auto_recovered_*` 占位符或 LLM 错误，判定为失败
+2. **清理错误产物**：**必须删除**以下文件（如果存在）：
+   - `.symbol_recovery/<step>/event_count_topN_analysis.xlsx`
+   - `.symbol_recovery/<step>/call_count_topN_analysis.xlsx`
+   - `.symbol_recovery/<step>/symbol_recovery_external_results.json`（如果含错误结果）
+3. **重新执行 Agent 模式**：清理后重新调用 `symbol_recovery`，使用 `--prompt-only` 导出 tasks，然后执行 Agent 推断，最后 `--import-llm-results` 回填
+4. **验证结果正确性**：检查 `symbol_recovery_replacements.json` 中的 `replaced` 字段，确保**不包含** `auto_recovered_*` 占位符
+
+**禁止行为（MUST NOT）**：
+- ❌ LLM 失败时直接结束，不尝试 Agent 模式
+- ❌ **不清理错误产物就直接切换到 Agent 模式**（会导致错误结果被写入 perf.json）
+- ❌ 仅导出 `tasks` 文件就声称"完成"
+- ❌ 不生成有效的 `symbol_recovery_external_results.json`（含真实函数名，非占位符）就结束 update
+- ❌ 允许 `auto_recovered_*` 占位符写入最终火焰图
+
+**强制检查点**：update 执行后必须验证：
+1. `hiperf_report_with_inferred_symbols.html` 存在
+2. `symbol_recovery_replacements.json` 中**无** `auto_recovered_*` 占位符
+3. 火焰图中的函数名是**语义化名称**（如 `Function: processVideoFrame`），而非地址（`libxxx.so+0x1234`）或占位符（`auto_recovered_f96fc`）
+
+若检查失败，必须重新执行符号恢复流程。
+
+---
+
+### 常见失败场景速查表
+
+| 报错信息 | 缺少的构建步骤 | 修复命令 |
+|----------|---------------|----------|
+| `report_template.html` 或 `hiperf_report_template.html` 或 `web/dist/index.html` 不存在 | 第2步 web 未构建 | `cd web && npm install && npm run build` |
+| `hapray-sa-cmd not found` / `ExeUtils.get_hapray_cmd_path` 失败 | 第3步 static_analyzer 未构建 | `cd tools/static_analyzer && npm install && npm run build` |
+| `trace_streamer not found` / `ExeUtils.get_trace_streamer_path` 失败 | 第4步 trace_streamer 未解压 | 执行 `npm run prebuild` 解压 `third-party/trace_streamer_binary.zip` |
+| `symbol_recovery 子进程退出` / `perf.db` 生成失败 | 第5步 symbol_recovery 未配置 | `cd tools/symbol_recovery && uv venv .venv && uv sync` |
+| `hilogtool not found` | 第6步 hilogtool 未复制（可选） | 从 release 复制 `tools/bin/hilogtool` |
+| 静态分析命令 `static` 失败 | 第3步 static_analyzer 缺失 | 见上 |
+
+---
+
+### 自检执行规范（MUST）
+
+1. **进入源码模式必须执行全部7步验证**，不可假设「以前配置过」或「应该没问题」
+2. **每步必须有验证证据**，在对话中输出验证结果（✓ 或 ✗）
+3. **任一必备步骤（1-4，以及涉及时的5）为 ✗ 时，必须 STOP**，禁止继续执行 perf/update/static 等命令
+4. **可选步骤（6-7）为 ✗ 时，可降级继续**，但需告知用户哪些功能将不可用
+5. **全部通过后，在报告中记录构建状态**，包括版本信息和验证时间
 
 ---
 
@@ -183,7 +595,7 @@ metadata:
 触发条件（满足任一项即触发）：
 
 1. 二进制下载失败（超时 / 404 / 校验失败 / 无法唯一匹配资产名）。  
-2. 二进制解压后 `hapray --help`（或 Windows `.\hapray.exe --help`）执行失败。  
+2. 二进制解压后 `hapray --help`（或 Windows `."."./hapray.exe --help`）执行失败。  
 3. 二进制可执行但运行核心命令阶段出现明确的“不可运行/崩溃/缺依赖”错误。  
 
 回退步骤（与「源码工作区硬门禁」自检**同一套**：凡检出 `<REPO_ROOT>`，无论是否尝试过下载二进制，**都必须完成第 2–5 步**；不得仅因在「二进制失败」分支读到本节才构建）：
@@ -202,11 +614,11 @@ metadata:
 4. **安装 symbol_recovery 依赖（涉及符号恢复时必需）**：
    - 进入 `<REPO_ROOT>/tools/symbol_recovery`
    - 创建虚拟环境：`uv venv .venv`
-   - 安装依赖：`uv pip install --python ./.venv/bin/python -e .`（Linux/macOS）或 `uv pip install --python .\.venv\Scripts\python.exe -e .`（Windows）
+   - 安装依赖：`uv pip install --python ./.venv/bin/python -e .`（Linux/macOS）或 `uv pip install --python ./.venv/Scripts/python.exe -e .`（Windows）
    - **安装 radare2（强烈推荐，性能提升 10 倍+）**：
      - macOS：`brew install radare2 && r2pm install r2dec`
      - Windows：`winget install radare2` 或 `choco install radare2`，然后 `r2pm install r2dec`
-   - 验证：`.venv/bin/python main.py --help`（或 `.venv\Scripts\python main.py --help`）
+   - 验证：`.venv/bin/python main.py --help`（或 `.venv/Scripts/python main.py --help`）
 5. 自检 `uv run python -m scripts.main --help`。  
 6. 后续采集命令改为源码方式执行：`uv run python -m scripts.main ...`。  
 7. 在执行轨迹中显式记录 `binary_failed_reason`、`fallback_mode=source`、`repo_commit`。
@@ -229,7 +641,7 @@ Agent 执行规范（标准 Skill 描述，替代脚本模板）：
 5. **执行下载**：将文件下载到本地临时目录或用户指定目录；必须阻塞等待下载结束，超时时间上限为 10 分钟。  
 6. **完整性校验**：校验文件存在且非空，并执行最小可读性检查（可列目录/可读取镜像信息）。  
 7. **解压与落位**：将二进制解压到 `<RUNTIME_ROOT>`，保持目录结构完整。  
-8. **可执行自检**：Windows 执行 `.\hapray.exe --help`，Linux/macOS 执行 `./hapray --help`；禁止执行系统 PATH 中的 `hapray`。  
+8. **可执行自检**：Windows 执行 `.\"./hapray.exe --help`，Linux/macOS 执行 `./hapray --help`；禁止执行系统 PATH 中的 `hapray`。  
 9. **失败策略（二进制优先 + 源码回退）**：下载或校验失败时，先输出失败原因，再自动回退源码流程；仅当源码流程也失败时才停止并要求用户人工介入。
 
 标准命名约定（用于自动拼接，需与 release 实际附件名一致）：
@@ -287,7 +699,7 @@ cd <RUNTIME_ROOT>
 
 ```powershell
 Set-Location <RUNTIME_ROOT>
-.\hapray.exe --help
+.\"./hapray.exe --help
 ```
 
 帮助命令无法运行时，禁止继续二进制采集流程，必须切换到源码回退模式。
@@ -352,8 +764,9 @@ Set-Location <RUNTIME_ROOT>
 
 ### MUST
 
-- **若为源码仓库（判定见「源码工作区硬门禁」），必须先完成该节最小自检清单（perf_testing、`dist/tools/sa-cmd`、symbol_recovery venv）并留证据**，再执行 `perf`/`update`/符号恢复链路；未完成时禁止谎称环境就绪。  
+- **若为源码仓库（判定见「源码工作区硬门禁」），必须先完成该节最小自检清单（perf_testing、web 构建、`dist/tools/sa-cmd`、trace_streamer、symbol_recovery venv）并留证据**，再执行 `perf`/`update`/符号恢复链路；未完成时禁止谎称环境就绪。  
 - **符号恢复必须一次性闭环交付**：若进入符号恢复链路，必须在同一次 `update` 内完成 `tasks -> symbol_recovery_external_results.json -> import -> 替换产物`，禁止“做一半停一半”。  
+- **🚨 LLM 失败时必须强制切换到 Agent 模式（最强制要求）**：update 执行符号恢复时，若 LLM 探活失败（402/鉴权/网络）或在线执行中途失败，**必须立即同次切换到 Agent 模式**，继续完成 `tasks -> external_results -> import -> 火焰图替换`，禁止直接结束或仅停留在 tasks 导出状态。这是硬性要求，不得因“LLM 不可用”就结束 update。  
 - 必须先实际执行 CLI，再给“原因与建议”。  
 - 必须输出阶段进度（命令前说明、命令后结果）。  
 - 必须读取 `reports_path` 并枚举真实产物路径，不得臆造。  
@@ -447,13 +860,14 @@ Set-Location <RUNTIME_ROOT>
 
 ## 执行主流程（统一版）
 
-1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」（`dist/tools/sa-cmd/`、symbol_recovery 可运行等），未完成则在此处 **STOP**，不得强行执行后续步骤。  
+1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」（web 构建产物、`dist/tools/sa-cmd/`、trace_streamer、symbol_recovery 可运行等），未完成则在此处 **STOP**，不得强行执行后续步骤。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
-3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\hapray.exe`，Linux/macOS `./hapray`）；源码模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`（须在步骤 1 已满足硬门禁）。  
-4. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
-5. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
-6. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
-7. 生成并更新独立报告（默认 `<PROJECT_ROOT>/reports/`）。
+3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\"./hapray.exe`，Linux/macOS `./hapray`）；源码模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`（须在步骤 1 已满足硬门禁）。  
+4. **perf 采集后必须执行 update**：`uv run python -m scripts.main update --report_dir <perf输出目录>`，**禁止**使用 `--no-llm` 参数。  
+5. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
+6. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
+7. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
+8. 生成并更新独立报告（默认 `<PROJECT_ROOT>/reports/`）。
 
 ## 异常与降级策略（Fail-Closed + 可交付）
 
@@ -477,6 +891,23 @@ Set-Location <RUNTIME_ROOT>
 
 ## 命令模板（最小可用）
 
+### 完整工作流（perf + update，推荐）
+
+```bash
+# 第1步：perf 采集（生成原始报告）
+cd <RUNTIME_ROOT>
+./hapray --result-file /tmp/hapray-tool-result.json perf \
+  --run_testcases "PerfLoad_Douyin_0010" \
+  --round 1 \
+  -o ./reports
+
+# 第2步：update 符号恢复（必须执行，生成增强火焰图）
+./hapray --result-file /tmp/hapray-tool-result.json update \
+  --report_dir ./reports/<timestamp>
+```
+
+### gui-agent 模式
+
 ```bash
 cd <RUNTIME_ROOT>
 ./hapray --result-file /tmp/hapray-tool-result.json gui-agent \
@@ -485,14 +916,11 @@ cd <RUNTIME_ROOT>
   -o ./
 ```
 
-```bash
-cd <RUNTIME_ROOT>
-./hapray --result-file /tmp/hapray-tool-result.json perf \
-  --run_testcases "PerfLoad_Douyin_0010" \
-  --round 1
-```
+### 注意事项
 
-`--round` 建议：冒烟 `1`；对比评估 `3` 或 `5`。若未显式传参，以 CLI 当前默认值为准。
+- `--round` 建议：冒烟 `1`；对比评估 `3` 或 `5`
+- **update 必须执行**：`perf` 后必须执行 `update`，否则火焰图无符号
+- **禁止 `--no-llm`**：update 时**绝对禁止**加 `--no-llm`，这会跳过符号恢复
 
 ## 独立分析报告规范
 
