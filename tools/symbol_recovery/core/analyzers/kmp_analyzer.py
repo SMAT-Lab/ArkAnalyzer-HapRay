@@ -33,7 +33,6 @@ class KMPAnalyzer(EventCountAnalyzer):
     def __init__(self, *args, app_name: str = '', **kwargs):
         super().__init__(*args, **kwargs)
         # KMP 模式使用 inclusive 口径（Total 列），统计调用链中任意位置出现目标 SO 的样本
-        self._self_cost_only = False
         # 将默认的 BatchLLMFunctionAnalyzer 替换为 KMP 专用版本
         if self.use_llm and self.use_batch_llm and self.llm_analyzer is not None:
             old = self.llm_analyzer

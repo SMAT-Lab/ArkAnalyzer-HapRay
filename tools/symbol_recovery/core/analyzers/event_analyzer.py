@@ -6,6 +6,7 @@
 """
 
 import gc
+import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -51,6 +52,7 @@ class EventCountAnalyzer:
         output_dir=None,
         skip_decompilation=False,
         open_source_lib=None,
+        top_symbols_json=None,
     ):
         """
         初始化分析器
@@ -66,6 +68,7 @@ class EventCountAnalyzer:
             save_prompts: 是否保存生成的 prompt 到文件
             output_dir: 输出目录，用于保存 prompt 文件
             skip_decompilation: 是否跳过反编译（默认 False，启用反编译可提高 LLM 分析质量但较慢）
+            top_symbols_json: 负载拆解等指标导出的待恢复符号列表；未提供时对 perf.db 用 inclusive SQL 选 TopN（与拆解表不保一致）
         """
         self.perf_db_file = Path(perf_db_file)
         self.so_dir = Path(so_dir)
@@ -75,8 +78,7 @@ class EventCountAnalyzer:
         self.context = context
         self.use_capstone_only = use_capstone_only
         self.skip_decompilation = skip_decompilation
-        # 子类可设为 True 以使用自消耗口径（leaf=MAX depth，与 hiperf counts[1] 一致）
-        self._self_cost_only: bool = False
+        self._top_symbols_json = Path(top_symbols_json) if top_symbols_json else None
 
         if not self.perf_db_file.exists():
             raise FileNotFoundError(f'perf.db 不存在: {perf_db_file}')
@@ -85,6 +87,8 @@ class EventCountAnalyzer:
             raise FileNotFoundError(f'SO 文件或目录不存在: {so_dir}')
         if self.so_dir.is_file() and not self.so_dir.suffix == '.so':
             raise ValueError(f'指定的文件不是 SO 文件: {so_dir}')
+        if self._top_symbols_json and not self._top_symbols_json.exists():
+            raise FileNotFoundError(f'top_symbols_json 不存在: {self._top_symbols_json}')
 
         # 初始化 LLM 分析器（公共工具）
         self.llm_analyzer, self.use_llm, self.use_batch_llm = init_llm_analyzer(
@@ -221,18 +225,10 @@ class EventCountAnalyzer:
         top_n = DEFAULT_TOP_N
         return {k: v for k, v in sorted_items[:top_n]}
 
-    def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None, target_so_name=None, self_cost_only=False):
-        """按 event_count 求和统计 topN
+    def _get_event_count_top100(self, cursor, file_id_to_path, name_to_data, top_n=None, target_so_name=None):
+        """按 perf.db event_count 做 inclusive TopN。
 
-        Args:
-            cursor: 数据库游标
-            file_id_to_path: 文件ID到路径的映射
-            name_to_data: 名称ID到地址数据的映射
-            top_n: 返回前N个结果
-            target_so_name: 目标SO文件名（如果指定，只统计该SO文件的函数）
-            self_cost_only: 若为 True，只统计调用栈叶节点（MAX depth）属于目标 SO 的样本
-                            （自消耗口径，与 hiperf counts[1] / analyze_so_perf.py 一致）；
-                            否则统计调用链中任意位置出现目标 SO 的样本（inclusive 口径，counts[2]）。
+        与负载拆解/ecol、hiperf 叶节点等指标不是同一语义；对齐拆解表必须使用 top_symbols_json。
         """
         if top_n is None:
             top_n = DEFAULT_TOP_N
@@ -251,57 +247,33 @@ class EventCountAnalyzer:
 
             if matching_file_ids:
                 placeholders = ','.join('?' * len(matching_file_ids))
-                if self_cost_only:
-                    # 自消耗口径：仅统计调用栈叶节点（MAX depth）属于目标 SO 的样本
-                    # 与 analyze_so_perf.py query_top_symbols 及 hiperf counts[1] 一致
-                    query = f"""
-                        SELECT pc.file_id, pc.name,
-                               SUM(ps.event_count) AS total_event_count,
-                               COUNT(*) AS call_count,
-                               pc.ip, pc.depth
-                        FROM perf_sample ps
-                        JOIN (
-                            SELECT callchain_id, MAX(depth) AS max_depth
-                            FROM perf_callchain
-                            GROUP BY callchain_id
-                        ) AS leaf ON leaf.callchain_id = ps.callchain_id
-                        JOIN perf_callchain pc
-                            ON pc.callchain_id = leaf.callchain_id
-                            AND pc.depth = leaf.max_depth
-                            AND pc.symbol_id = -1
-                            AND pc.file_id IN ({placeholders})
-                        GROUP BY pc.file_id, pc.name
-                    """
-                    cursor.execute(query, matching_file_ids)
-                else:
-                    # Inclusive 口径：DISTINCT (callchain_id, file_id, name) 去重
-                    # 同一样本中同一地址无论出现几帧只计一次 event_count（counts[2]）
-                    query = f"""
-                        SELECT fn.file_id, fn.name,
-                               SUM(ps.event_count) AS total_event_count,
-                               COUNT(*) AS call_count,
-                               pc_rep.ip, pc_rep.depth
-                        FROM perf_sample ps
-                        JOIN (
-                            SELECT DISTINCT callchain_id, file_id, name
-                            FROM perf_callchain
-                            WHERE symbol_id = -1 AND file_id IN ({placeholders})
-                        ) AS fn ON fn.callchain_id = ps.callchain_id
-                        LEFT JOIN (
-                            SELECT file_id, name, MIN(ip) AS ip, MIN(depth) AS depth
-                            FROM perf_callchain
-                            WHERE symbol_id = -1 AND file_id IN ({placeholders})
-                            GROUP BY file_id, name
-                        ) AS pc_rep ON pc_rep.file_id = fn.file_id AND pc_rep.name = fn.name
-                        GROUP BY fn.file_id, fn.name
-                    """
-                    cursor.execute(query, matching_file_ids + matching_file_ids)
+                # Inclusive：调用链上出现未解析帧即参与统计（DISTINCT callchain,file,name）
+                query = f"""
+                    SELECT fn.file_id, fn.name,
+                           SUM(ps.event_count) AS total_event_count,
+                           COUNT(*) AS call_count,
+                           pc_rep.ip, pc_rep.depth
+                    FROM perf_sample ps
+                    JOIN (
+                        SELECT DISTINCT callchain_id, file_id, name
+                        FROM perf_callchain
+                        WHERE symbol_id = -1 AND file_id IN ({placeholders})
+                    ) AS fn ON fn.callchain_id = ps.callchain_id
+                    LEFT JOIN (
+                        SELECT file_id, name, MIN(ip) AS ip, MIN(depth) AS depth
+                        FROM perf_callchain
+                        WHERE symbol_id = -1 AND file_id IN ({placeholders})
+                        GROUP BY file_id, name
+                    ) AS pc_rep ON pc_rep.file_id = fn.file_id AND pc_rep.name = fn.name
+                    GROUP BY fn.file_id, fn.name
+                """
+                cursor.execute(query, matching_file_ids + matching_file_ids)
                 all_rows = cursor.fetchall()
             else:
                 # 如果没有匹配的 file_id，返回空结果
                 all_rows = []
         else:
-            # 没有指定 target_so_name，全库 DISTINCT 去重查询（不支持 self_cost_only）
+            # 全库 inclusive TopN（无 target_so_name）
             cursor.execute("""
                 SELECT fn.file_id, fn.name,
                        SUM(ps.event_count) AS total_event_count,
@@ -497,22 +469,30 @@ class EventCountAnalyzer:
                 logger.info(f'[ERROR] Failed to load address data mappings: {e}')
                 raise
 
-            # 2. 按 event_count 求和统计 topN
+            # 2. 按 event_count 求和统计 topN（可优先使用负载拆解导出的 TopN）
             logger.info(f'\nStep 2: Statistics by event_count sum top{top_n}...')
             try:
-                # 如果 so_dir 是文件（通过 --so-file 指定），只统计该SO文件的函数
-                target_so_name = None
-                if self.so_dir and self.so_dir.is_file():
-                    target_so_name = self.so_dir.name
-                    logger.info(f'Filtering by SO file: {target_so_name}')
+                if self._top_symbols_json:
+                    event_count_top = self._load_top_from_json(file_id_to_path, name_to_data, top_n)
+                    logger.info(
+                        '[OK] Loaded %d addresses from load-decomposition top symbols: %s',
+                        len(event_count_top),
+                        self._top_symbols_json,
+                    )
+                else:
+                    # 如果 so_dir 是文件（通过 --so-file 指定），只统计该SO文件的函数
+                    target_so_name = None
+                    if self.so_dir and self.so_dir.is_file():
+                        target_so_name = self.so_dir.name
+                        logger.info(f'Filtering by SO file: {target_so_name}')
 
-                # Get all data before closing connection
-                event_count_top = self._get_event_count_top100(
-                    cursor, file_id_to_path, name_to_data, top_n, target_so_name,
-                    self_cost_only=self._self_cost_only,
-                )
-                cost_mode = 'self-cost' if self._self_cost_only else 'inclusive'
-                logger.info(f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n}, {cost_mode})')
+                    event_count_top = self._get_event_count_top100(
+                        cursor, file_id_to_path, name_to_data, top_n, target_so_name,
+                    )
+                    logger.info(
+                        f'[OK] Found {len(event_count_top)} addresses (event_count top{top_n}, inclusive; '
+                        '与负载拆解对齐请使用 top_symbols_json)'
+                    )
             except Exception:
                 logger.exception('[ERROR] Failed to calculate event_count statistics')
                 raise
@@ -717,6 +697,44 @@ class EventCountAnalyzer:
                 except Exception as e:
                     logger.info(f'[WARN] Error closing database connection: {e}')
                     pass
+
+    def _load_top_from_json(self, file_id_to_path, name_to_data, top_n):
+        """从负载拆解导出的 top symbols JSON 加载待恢复地址。"""
+        payload = json.loads(self._top_symbols_json.read_text(encoding='utf-8', errors='replace'))
+        items = payload.get('symbols') if isinstance(payload, dict) else payload
+        if not isinstance(items, list):
+            return {}
+        out = {}
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            address = str(row.get('address') or '').strip()
+            if not address:
+                continue
+            file_path = str(row.get('file_path') or '').strip()
+            key = (file_path, address)
+            out[key] = {
+                'file_path': file_path,
+                'address': address,
+                'file_id': int(row.get('file_id') or -1),
+                'name_id': int(row.get('name_id') or -1),
+                'ip': int(row.get('ip') or 0),
+                'depth': int(row.get('depth') or 0),
+                'event_count': int(row.get('event_count') or 0),
+                'call_count': int(row.get('call_count') or 0),
+            }
+            if out[key]['file_id'] < 0 and file_path:
+                for fid, fpath in file_id_to_path.items():
+                    if fpath == file_path:
+                        out[key]['file_id'] = fid
+                        break
+            if out[key]['name_id'] < 0 and address:
+                for nid, name in name_to_data.items():
+                    if name == address:
+                        out[key]['name_id'] = nid
+                        break
+        sorted_items = sorted(out.items(), key=lambda x: x[1]['event_count'], reverse=True)[:top_n]
+        return {k: v for k, v in sorted_items}
 
     def save_event_count_results(self, results, time_tracker=None, output_dir=None, top_n=None):
         """保存 event_count 分析结果

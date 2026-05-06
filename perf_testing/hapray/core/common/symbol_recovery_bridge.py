@@ -156,6 +156,64 @@ def check_symbol_recovery_llm_ready() -> bool:
     return llm_env_ready_for_symbol_recovery()
 
 
+def _resolve_llm_model_name() -> str:
+    model = (os.environ.get('LLM_MODEL') or '').strip()
+    if model:
+        return model
+    st = os.environ.get('LLM_SERVICE_TYPE', '').strip().lower()
+    if st == 'deepseek':
+        return (os.environ.get('DEEPSEEK_MODEL') or '').strip() or 'deepseek-chat'
+    if st == 'openai':
+        return (os.environ.get('OPENAI_MODEL') or '').strip() or 'gpt-4o-mini'
+    if st == 'claude':
+        return (os.environ.get('CLAUDE_MODEL') or '').strip() or 'claude-3-5-sonnet-latest'
+    if st == 'poe':
+        return (os.environ.get('POE_MODEL') or '').strip() or 'GPT-4o-Mini'
+    return 'GPT-5'
+
+
+def probe_symbol_recovery_llm_runtime(sr_root: Optional[Path], timeout_sec: int = 12) -> tuple[bool, str]:
+    """运行时探活 LLM：用于提前识别余额不足/鉴权失败，避免 update 跑完整轮后才发现全空结果。"""
+    if not llm_env_ready_for_symbol_recovery():
+        return (False, 'LLM env not ready (api/base_url missing)')
+    py_exe = resolve_symbol_recovery_python()
+    if py_exe is None:
+        return (True, 'runtime probe skipped: symbol_recovery python not found')
+    api, base = _resolved_llm_api_key_and_base_url()
+    model = _resolve_llm_model_name()
+    # 使用 symbol_recovery 同一套 Python 环境进行最小请求探活
+    probe_code = (
+        'import os\n'
+        'from openai import OpenAI\n'
+        f'client=OpenAI(api_key={api!r}, base_url={base!r})\n'
+        f'model={model!r}\n'
+        "client.chat.completions.create("
+        "model=model,messages=[{'role':'user','content':'ping'}],max_tokens=1,temperature=0)\n"
+        "print('OK')\n"
+    )
+    try:
+        cp = subprocess.run(
+            [str(py_exe), '-c', probe_code],
+            cwd=str(sr_root) if sr_root else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(3, int(timeout_sec)),
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return (False, f'LLM runtime probe timeout after {timeout_sec}s')
+    except OSError as e:
+        return (False, f'LLM runtime probe failed to start: {e}')
+    if cp.returncode == 0:
+        return (True, 'ok')
+    err = (cp.stderr or cp.stdout or '').strip()
+    err = err[-500:] if len(err) > 500 else err
+    return (False, f'LLM runtime probe failed (rc={cp.returncode}): {err}')
+
+
 def _symbol_recovery_root_candidates(perf_root: Path) -> list[Path]:
     """
     在无需显式配置时，按相对布局探测 ``.../tools/symbol_recovery``。
@@ -739,6 +797,8 @@ def build_symbol_recovery_argv(
     top_n: int,
     stat_method: str,
     extra_args: Optional[list[str]] = None,
+    prompt_only: bool = False,
+    import_llm_results: Optional[str] = None,
 ) -> list[str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     tail = [
@@ -765,6 +825,10 @@ def build_symbol_recovery_argv(
         raise ValueError('entry_exe and python_exe cannot both be unset')
     if extra_args:
         cmd.extend(extra_args)
+    if prompt_only:
+        cmd.append('--prompt-only')
+    if import_llm_results:
+        cmd.extend(['--import-llm-results', import_llm_results])
     return cmd
 
 
@@ -880,6 +944,8 @@ def maybe_run_symbol_recovery_for_step(
     output_root: Optional[str],
     subprocess_timeout_sec: Optional[float] = None,
     extra_args: Optional[list[str]] = None,
+    prompt_only: bool = False,
+    import_llm_results: Optional[str] = None,
 ) -> bool:
     sr_root = resolve_symbol_recovery_root()
     if not sr_root:
@@ -926,10 +992,21 @@ def maybe_run_symbol_recovery_for_step(
         top_n=top_n,
         stat_method=stat_method,
         extra_args=extra_args,
+        prompt_only=prompt_only,
+        import_llm_results=import_llm_results,
     )
     rc = run_symbol_recovery_subprocess(argv, cwd=sr_root, timeout_sec=subprocess_timeout_sec)
     if rc != 0:
         return False
+
+    if prompt_only:
+        tasks_path = out_dir / 'symbol_recovery_llm_tasks.json'
+        if tasks_path.is_file():
+            logger.info('Symbol recovery prompt tasks exported: %s', tasks_path)
+            return True
+        logger.warning('Symbol recovery prompt-only mode succeeded but tasks file missing: %s', tasks_path)
+        return False
+
     excel = out_dir / symbol_recovery_excel_name(stat_method, top_n)
     perf_json = step_hiperf / 'perf.json'
     return load_mapping_and_apply_perf_json(sr_root, excel, perf_json)
@@ -1011,8 +1088,11 @@ def symbol_recovery_should_run(
     effective_so_dir: Optional[str],
     perf_db_path: str,
     no_llm_override: bool,
+    agent_mode: bool = False,
 ) -> bool:
-    if no_llm_override or not llm_ready:
+    if no_llm_override:
+        return False
+    if not llm_ready and not agent_mode:
         return False
     if not effective_so_dir:
         return False
