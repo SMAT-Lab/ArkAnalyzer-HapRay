@@ -50,7 +50,11 @@ from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
 from hapray.mode.mode import Mode
-from hapray.mode.simple_mode import create_simple_mode_structure
+from hapray.mode.simple_mode import (
+    create_simple_mode_structure,
+    restore_perf_json_from_flame_html,
+    update_load_excel_with_recovered_symbols,
+)
 
 
 class UpdateAction:
@@ -474,11 +478,68 @@ class UpdateAction:
             default=None,
             help='Optional external LLM result JSON for agent mode (supports {step} placeholder, e.g. /tmp/{step}.json)',
         )
+        parser.add_argument(
+            '--flame-html',
+            default=None,
+            help='SIMPLE mode: optional existing hiperf_report.html to extract perf.json from, '
+            'bypassing perf -i for flame graph data preparation',
+        )
         parsed_args = parser.parse_args(args)
 
         try_load_dotenv_for_llm()
 
+        Config.set('mode', parsed_args.mode)
         report_dir = os.path.abspath(parsed_args.report_dir)
+
+        # SIMPLE mode: 必须先创建目录结构，然后才能查找 testcase_dirs
+        if Config.get('mode') == Mode.SIMPLE:
+            perf_paths = parsed_args.perfs
+            trace_paths = parsed_args.traces
+            pids = parsed_args.pids
+            app_name = parsed_args.app_name
+            app_version = parsed_args.app_version
+            rom_version = parsed_args.rom_version
+            scene = parsed_args.scene
+            package_name = parsed_args.package_name
+            steps_file_path = parsed_args.steps
+
+            timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+            report_dir = os.path.join(report_dir, timestamp)
+            create_simple_mode_structure(
+                report_dir,
+                perf_paths,
+                trace_paths,
+                package_name,
+                pids=pids,
+                steps_file_path=steps_file_path,
+                app_name=app_name,
+                app_version=app_version,
+                rom_version=rom_version,
+                scene=scene,
+            )
+            logging.info('SIMPLE mode: created report structure at %s', report_dir)
+
+            # SIMPLE mode: 如果提供了外部火焰图 HTML，提取 perf.json 替代 perf -i
+            if parsed_args.flame_html:
+                flame_html_abs = os.path.abspath(parsed_args.flame_html)
+                if os.path.isfile(flame_html_abs):
+                    logging.info('Restoring perf.json from external flame HTML: %s', flame_html_abs)
+                    if restore_perf_json_from_flame_html(report_dir, flame_html_abs):
+                        logging.info('perf.json restored from flame HTML successfully')
+                        Config.set('perf_json_restored', True)
+                    else:
+                        logging.warning('Failed to restore perf.json from flame HTML')
+                else:
+                    logging.warning('Flame HTML file not found: %s', flame_html_abs)
+
+            # SIMPLE mode auto-detect: 当未提供 --flame-html 时，自动检测原始 hiperf_report.html
+            if not Config.get('perf_json_restored', False):
+                UpdateAction._auto_restore_from_original_html(report_dir, perf_paths)
+
+            # SIMPLE mode fallback: 如果 perf.json 仍不存在，尝试从 perf.db 生成
+            UpdateAction._try_generate_perf_json_from_db(report_dir)
+
+        # 现在才能在 report_dir 下找到有效的 testcase 目录
         testcase_dirs = UpdateAction.find_testcase_dirs(report_dir)
         if not testcase_dirs:
             UpdateAction._log_no_testcase_dirs_help(report_dir)
@@ -498,45 +559,6 @@ class UpdateAction:
                 ENV_SO_DIR,
             )
 
-        Config.set('mode', parsed_args.mode)
-        if not os.path.exists(report_dir) and Config.get('mode') == Mode.COMMUNITY:
-            logging.error('Report directory not found: %s', report_dir)
-            return (1, '')
-        if Config.get('mode') == Mode.SIMPLE:
-            # 简单模式构造目录
-            perf_paths = parsed_args.perfs
-            trace_paths = parsed_args.traces
-            pids = parsed_args.pids
-            app_name = parsed_args.app_name
-            app_version = parsed_args.app_version
-            rom_version = parsed_args.rom_version
-            scene = parsed_args.scene
-
-            # if not perf_paths:
-            #     logging.error('SIMPLE mode requires --perfs parameter')
-            #     return
-
-            # if not parsed_args.package_name:
-            #     logging.error('SIMPLE mode requires --package_name parameter')
-            #     return
-
-            package_name = parsed_args.package_name
-            steps_file_path = parsed_args.steps
-            timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-            report_dir = os.path.join(report_dir, timestamp)
-            create_simple_mode_structure(
-                report_dir,
-                perf_paths,
-                trace_paths,
-                package_name,
-                pids=pids,
-                steps_file_path=steps_file_path,
-                app_name=app_name,
-                app_version=app_version,
-                rom_version=rom_version,
-                scene=scene,
-            )
-        logging.info('Updating reports in: %s', report_dir)
         # 每次 update 都显式刷新 so_dir，避免沿用同进程上一次执行遗留的值
         Config.set('so_dir', effective_so or '')
 
@@ -544,10 +566,10 @@ class UpdateAction:
         llm_env_configured = llm_env_ready_for_symbol_recovery()
         llm_probe_ok = True
         env_agent_mode = UpdateAction._parse_bool_env('HAPRAY_SYMBOL_RECOVERY_AGENT_MODE', default=False)
-        agent_mode = bool(parsed_args.symbol_recovery_agent_mode or env_agent_mode or not llm_ready)
+        agent_mode = bool(parsed_args.symbol_recovery_agent_mode or env_agent_mode)
         if llm_ready and not agent_mode:
             sr_root_probe = resolve_symbol_recovery_root()
-            runtime_ok, runtime_reason = probe_symbol_recovery_llm_runtime(sr_root_probe, timeout_sec=12)
+            runtime_ok, runtime_reason = probe_symbol_recovery_llm_runtime(sr_root_probe, timeout_sec=5)
             llm_probe_ok = runtime_ok
             if not runtime_ok:
                 logging.warning(
@@ -718,6 +740,63 @@ class UpdateAction:
                 continue
 
         return time_ranges
+
+    @staticmethod
+    def _try_generate_perf_json_from_db(report_dir: str) -> None:
+        """SIMPLE mode fallback: 对缺少 perf.json 的 step, 尝试从 perf.db 直接生成。
+
+        当 perf -i (hapray-sa-cmd) 不可用时，此方法尝试通过导入编译模块
+        flamegraph_generator.generate_perf_json_from_db 来生成 perf.json。
+        """
+        hiperf_root = Path(report_dir) / 'hiperf'
+        if not hiperf_root.is_dir():
+            return
+
+        for step_dir in sorted(hiperf_root.glob('step*/')):
+            perf_json = step_dir / 'perf.json'
+            if perf_json.is_file():
+                continue  # 已有 perf.json，跳过
+            perf_db = step_dir / 'perf.db'
+            if not perf_db.is_file():
+                continue  # 无 perf.db，跳过
+            try:
+                from hapray.mode.flamegraph_generator import generate_perf_json_from_db
+            except ImportError:
+                logging.debug(
+                    'flamegraph_generator.generate_perf_json_from_db not available '
+                    '(compiled module may not have this export); skipping perf.json generation'
+                )
+                return  # 模块不可用，后续 step 也不用尝试了
+
+            logging.info('Generating perf.json from perf.db (fallback) for %s', step_dir)
+            try:
+                ok = generate_perf_json_from_db(
+                    str(perf_db),
+                    str(perf_json),
+                    '',  # package_name — only used for filtering, empty = no filter
+                )
+                if ok:
+                    logging.info('perf.json generated from perf.db: %s', perf_json)
+                else:
+                    logging.warning('Failed to generate perf.json from perf.db: %s', perf_db)
+            except Exception as e:
+                logging.error('Error generating perf.json from perf.db %s: %s', perf_db, e)
+
+    @staticmethod
+    def _auto_restore_from_original_html(report_dir: str, perf_paths: list) -> bool:
+        restored = False
+        for perf_path in perf_paths:
+            perf_dir = os.path.dirname(os.path.abspath(perf_path))
+            original_html = os.path.join(perf_dir, 'hiperf_report.html')
+            if not os.path.isfile(original_html):
+                continue
+            logging.info('Auto-detected original flame HTML alongside perf.data: %s', original_html)
+            if restore_perf_json_from_flame_html(report_dir, original_html):
+                logging.info('perf.json restored from original flame HTML, skipping perf -i')
+                Config.set('perf_json_restored', True)
+                restored = True
+                break
+        return restored
 
     @staticmethod
     def _is_valid_symbol_recovery_result(item: dict) -> bool:
@@ -1109,6 +1188,15 @@ class UpdateAction:
             logging.info('=' * 80)
             logging.info('Symbol recovery completed for all test cases')
             logging.info('=' * 80)
+
+            # 符号恢复完成后,更新负载分析 Excel 中的符号名
+            logging.info('Updating load analysis Excel with recovered symbols...')
+            for case_dir in testcase_dirs:
+                try:
+                    if update_load_excel_with_recovered_symbols(case_dir):
+                        logging.info('Load analysis Excel updated for %s', case_dir)
+                except Exception as e:
+                    logging.error('Failed to update load analysis Excel for %s: %s', case_dir, e)
 
         # Generate summary report
         logging.info('Generating summary Excel report')

@@ -1,10 +1,15 @@
+import base64
 import glob
+import gzip
 import json
 import logging
 import os
 import re
 import shutil
 import sqlite3
+import zlib
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
@@ -255,6 +260,9 @@ def _process_perf_file(perf_path, hiperf_step_dir, target_db_files, package_name
     # 复制ps_ef.txt文件
     _copy_ps_ef_file(perf_path, hiperf_step_dir)
 
+    # 如果perf文件同目录下存在原始的 hiperf_report.html，复制到step目录
+    _copy_hiperf_html_file(perf_path, hiperf_step_dir)
+
     # 创建pids.json
     logging.info('-' * 60)
     logging.info('准备创建 pids.json')
@@ -365,6 +373,42 @@ def _copy_ps_ef_file(perf_path, hiperf_step_dir):
         logging.info('Copied %s to %s', source_ps_ef_file, target_ps_ef_file)
 
 
+def _copy_hiperf_html_file(perf_path: str, hiperf_step_dir: str) -> Optional[str]:
+    """如果perf文件同目录下存在原始的hiperf_report.html，复制到step目录。
+
+    火焰图HTML由hiperf工具在数据采集阶段生成，包含完整的符号数据（1077+库）。
+    update命令应直接复用此原始HTML，而不是通过perf -i重新生成（仅产生12个库的缩略数据）。
+
+    Args:
+        perf_path: 原始perf.data文件路径
+        hiperf_step_dir: 目标step目录
+
+    Returns:
+        复制后的HTML文件路径，未找到则返回None
+    """
+    perf_dir = os.path.dirname(perf_path)
+    source_html = os.path.join(perf_dir, 'hiperf_report.html')
+    if os.path.isfile(source_html):
+        target_html = os.path.join(hiperf_step_dir, 'hiperf_report.html')
+        # Strip any previously-embedded symbol recovery panel (from prior runs)
+        with open(source_html, 'rb') as f:
+            data = f.read()
+        _SR_EMBED_MARKER = b'<!-- hapray-symbol-recovery-embedded -->'
+        idx = data.find(_SR_EMBED_MARKER)
+        if idx != -1:
+            close_body = data.rfind(b'</body>')
+            if close_body != -1 and idx < close_body:
+                data = data[:idx] + data[close_body:]
+            else:
+                data = data[:idx]
+        with open(target_html, 'wb') as f:
+            f.write(data)
+        logging.info('✓ 复制原始的 hiperf_report.html: %s -> %s', source_html, target_html)
+        return target_html
+    logging.debug('未找到原始的 hiperf_report.html: %s', source_html)
+    return None
+
+
 def _create_pids_json(current_db_file, hiperf_step_dir, package_name, pids):
     """创建pids.json文件"""
     logging.info('开始创建 pids.json...')
@@ -433,3 +477,290 @@ def _move_log_folder_if_exists(report_dir: str):
 
     except Exception as e:
         logging.error('移动log文件夹失败: %s', str(e))
+
+
+def _decode_record_data(raw: str) -> Optional[str]:
+    """解码 record_data 内容，支持黄区（纯 JSON）和蓝区（base64+gzip/zlib）。
+
+    黄区：raw 以 { 或 [ 开头 → 直接作为 JSON 返回。
+    蓝区：raw 是 base64 编码 → 按 magic bytes 区分 gzip/zlib 解压。
+
+    Args:
+        raw: record_data 原始字符串
+
+    Returns:
+        解码后的 JSON 字符串，失败返回 None
+    """
+    stripped = raw.strip()
+    if not stripped:
+        return None
+
+    # 黄区：纯 JSON
+    if stripped.startswith('{') or stripped.startswith('['):
+        return stripped
+
+    # 蓝区：base64 编码 + 可能压缩
+    try:
+        decoded = base64.b64decode(stripped)
+    except Exception as e:
+        logging.warning('record_data is not valid base64: %s', e)
+        return None
+
+    # 通过 magic bytes 判断压缩格式
+    if decoded[:2] == b'\x1f\x8b':  # gzip
+        try:
+            return gzip.decompress(decoded).decode('utf-8')
+        except Exception as e:
+            logging.warning('gzip decompress failed: %s', e)
+            return None
+    elif decoded[:2] in (b'x\x9c', b'x\xda', b'x\x01'):  # zlib
+        try:
+            return zlib.decompress(decoded).decode('utf-8')
+        except Exception as e:
+            logging.warning('zlib decompress failed: %s', e)
+            return None
+    else:
+        # 无压缩，直接尝试 UTF-8 解码
+        try:
+            return decoded.decode('utf-8')
+        except Exception as e:
+            logging.warning('base64 decoded data is not valid UTF-8: %s', e)
+            return None
+
+
+def extract_perf_json_from_flame_html(html_path: str) -> Optional[str]:
+    """从已有的 hiperf_report.html 中提取嵌入式 perf.json 数据。
+
+    支持两种格式的火焰图 HTML：
+    - 黄区：record_data 中直接存放纯 JSON
+    - 蓝区：record_data 中存放 base64(gzip/zlib(perf.json))
+
+    Args:
+        html_path: hiperf_report.html 文件路径
+
+    Returns:
+        perf.json 原始 JSON 字符串，提取失败返回 None
+    """
+    html_path = Path(html_path)
+    if not html_path.is_file():
+        logging.error('Flame HTML file not found: %s', html_path)
+        return None
+
+    try:
+        html = html_path.read_text(encoding='utf-8', errors='replace')
+    except OSError as e:
+        logging.error('Failed to read flame HTML %s: %s', html_path, e)
+        return None
+
+    # 匹配 record_data script 标签（兼容 type="json" 和 type="application/gzip+json;base64"）
+    m = re.search(
+        r'<script\s+id="record_data"[^>]*>\s*(.+?)\s*</script>',
+        html,
+        re.DOTALL,
+    )
+    if not m:
+        logging.error('No record_data found in flame HTML: %s', html_path)
+        return None
+
+    raw = m.group(1).strip()
+    if not raw:
+        logging.error('Empty record_data in flame HTML: %s', html_path)
+        return None
+
+    json_str = _decode_record_data(raw)
+    if json_str is None:
+        logging.error('Failed to decode record_data from %s', html_path)
+        return None
+
+    # 验证是有效的 JSON
+    try:
+        json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logging.error('Decoded record_data is not valid JSON from %s: %s', html_path, e)
+        return None
+
+    logging.info(
+        'Extracted perf.json from flame HTML: %s (%.1f KB, mode=%s)',
+        html_path,
+        len(json_str) / 1024,
+        '黄区(plain JSON)' if raw.startswith('{') or raw.startswith('[') else '蓝区(compressed)',
+    )
+    return json_str
+
+
+def restore_perf_json_from_flame_html(report_dir: str, html_path: str) -> bool:
+    """从外部 hiperf_report.html 提取 perf.json 并写回 report 目录。
+
+    遍历 report_dir 下的所有 hiperf/stepN/ 目录，对第一个缺少 perf.json
+    的 step 写入提取的数据。
+
+    Args:
+        report_dir: 报告根目录（包含 hiperf/ 子目录）
+        html_path: 外部 hiperf_report.html 文件路径
+
+    Returns:
+        是否成功写入
+    """
+    json_str = extract_perf_json_from_flame_html(html_path)
+    if json_str is None:
+        return False
+
+    # 找第一个缺少 perf.json 的 step 目录
+    hiperf_root = Path(report_dir) / 'hiperf'
+    if not hiperf_root.is_dir():
+        logging.error('No hiperf directory under report_dir: %s', report_dir)
+        return False
+
+    step_dirs = sorted(hiperf_root.glob('step*/'))
+    if not step_dirs:
+        logging.error('No step directories under %s', hiperf_root)
+        return False
+
+    # 写入所有 step（通常只有一个 step，但支持多 step）
+    written = False
+    for step_dir in step_dirs:
+        perf_json_path = step_dir / 'perf.json'
+        # 如果 perf.json 已存在则跳过（已有数据，可能是 perf -i 产生）
+        if perf_json_path.is_file():
+            logging.info('perf.json already exists at %s, skip overwrite', perf_json_path)
+            continue
+        try:
+            perf_json_path.write_text(json_str, encoding='utf-8')
+            logging.info('Restored perf.json from flame HTML -> %s', perf_json_path)
+            written = True
+        except OSError as e:
+            logging.error('Failed to write perf.json to %s: %s', perf_json_path, e)
+
+    if not written:
+        # 所有 step 都已存在 perf.json，写入第一个 step
+        first_step = step_dirs[0]
+        perf_json_path = first_step / 'perf.json'
+        try:
+            perf_json_path.write_text(json_str, encoding='utf-8')
+            logging.info('All steps already have perf.json; overwrote first step: %s', perf_json_path)
+            written = True
+        except OSError as e:
+            logging.error('Failed to write perf.json to %s: %s', perf_json_path, e)
+
+    return written
+
+
+def update_load_excel_with_recovered_symbols(case_dir: str) -> bool:
+    """符号恢复后，更新负载分析 Excel 中的偏移符号为恢复后的函数名。
+
+    读取 hiperf/stepN/symbol_recovery_replacements.json 中的映射，
+    应用到 report/ecol_load_perf_*.xlsx 以及 .symbol_recovery/stepN/*_analysis.xlsx 的符号列。
+
+    Args:
+        case_dir: 用例目录（包含 report/ 和 hiperf/ 子目录）
+
+    Returns:
+        是否成功更新了至少一个 Excel
+    """
+    # 收集所有 step 的 replacements
+    replacements: dict[str, str] = {}
+    case_path = Path(case_dir)
+    for step_dir in sorted(case_path.glob('hiperf/step*/')):
+        manifest = step_dir / 'symbol_recovery_replacements.json'
+        if not manifest.is_file():
+            continue
+        try:
+            data = json.loads(manifest.read_text(encoding='utf-8', errors='replace'))
+            if not isinstance(data, list):
+                continue
+            for entry in data:
+                if isinstance(entry, dict):
+                    orig = str(entry.get('original', '')).strip()
+                    repl = str(entry.get('replaced', '')).strip()
+                    if orig and repl:
+                        replacements[orig] = repl
+        except (OSError, json.JSONDecodeError) as e:
+            logging.debug('Failed to read replacements %s: %s', manifest, e)
+
+    if not replacements:
+        logging.info('No symbol recovery replacements found for %s', case_dir)
+        return False
+
+    # 收集所有候选 Excel：report/ecol_load_perf_*.xlsx + .symbol_recovery/stepN/*.xlsx
+    excels: list[Path] = []
+    report_dir = case_path / 'report'
+    if report_dir.is_dir():
+        excels.extend(sorted(report_dir.glob('ecol_load_perf_*.xlsx')))
+    for sr_step_dir in sorted(case_path.glob('.symbol_recovery/step*/')):
+        excels.extend(sorted(sr_step_dir.glob('*.xlsx')))
+
+    if not excels:
+        logging.info('No load analysis Excel files found for %s', case_dir)
+        return False
+
+    updated_any = False
+    for excel_path in excels:
+        try:
+            df = pd.read_excel(str(excel_path), sheet_name=None)
+            # 尝试在有符号列的 sheet 中查找并替换
+            for sheet_name, sheet_df in df.items():
+                cols = [str(c) for c in sheet_df.columns]
+                # 优先找地址/符号列（中英文），回退找函数名列
+                symbol_col = next(
+                    (c for c in cols if 'Symbol' in c or 'symbol' in c.lower()
+                     or '地址' in c or 'address' in c.lower()
+                     or '函数名' in c or 'function' in c.lower()),
+                    None,
+                )
+                if not symbol_col:
+                    continue
+
+                orig_count = 0
+                replaced_count = 0
+                for idx in sheet_df.index:
+                    val = str(sheet_df.at[idx, symbol_col]).strip()
+                    if val in replacements:
+                        sheet_df.at[idx, symbol_col] = replacements[val]
+                        replaced_count += 1
+                        orig_count += 1
+
+                if replaced_count > 0:
+                    logging.info(
+                        'Replaced %d symbols in sheet %s of %s',
+                        replaced_count, sheet_name, excel_path.name,
+                    )
+                else:
+                    # 尝试匹配规范化后的地址
+                    for idx in sheet_df.index:
+                        val = str(sheet_df.at[idx, symbol_col]).strip()
+                        # 尝试 libxxx.so+0x1234 -> libxxx.so+0x1234 匹配
+                        normalized = _normalize_excel_symbol(val)
+                        if normalized in replacements:
+                            sheet_df.at[idx, symbol_col] = replacements[normalized]
+                            replaced_count += 1
+                    if replaced_count > 0:
+                        logging.info(
+                            'Replaced %d symbols (normalized match) in sheet %s of %s',
+                            replaced_count, sheet_name, excel_path.name,
+                        )
+
+            # 写回 Excel
+            if replaced_count > 0:
+                with pd.ExcelWriter(str(excel_path), engine='openpyxl') as writer:
+                    for sheet_name, sheet_df in df.items():
+                        sheet_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                logging.info('Updated load analysis Excel with recovered symbols: %s', excel_path)
+                updated_any = True
+
+        except Exception as e:
+            logging.error('Failed to update Excel %s: %s', excel_path, e)
+
+    return updated_any
+
+
+def _normalize_excel_symbol(val: str) -> str:
+    """标准化 Excel 中的符号格式，使其能与替换映射匹配。"""
+    val = val.strip()
+    # 已经是 normalized 格式: libxxx.so+0x1234
+    if re.match(r'^[^/\\]+\.so\+0x[0-9a-fA-F]+$', val):
+        return val
+    # 尝试从完整路径中提取
+    m = re.search(r'([^/\\]+\.so)\+?(0x[0-9a-fA-F]+)$', val)
+    if m:
+        return f'{m.group(1)}+{m.group(2).lower()}'
+    return val
