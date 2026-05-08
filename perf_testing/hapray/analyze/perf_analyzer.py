@@ -42,6 +42,7 @@ from hapray.core.common.symbol_recovery_bridge import (
     symbol_recovery_should_run,
 )
 from hapray.core.config.config import Config
+from hapray.mode.mode import Mode
 
 
 _SR_EMBED_MARKER = b'<!-- hapray-symbol-recovery-embedded -->'
@@ -68,10 +69,45 @@ class PerfAnalyzer(BaseAnalyzer):
         self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
     ) -> Optional[dict[str, Any]]:
         """Run performance analysis"""
+        if Config.get('mode') == Mode.COMMUNITY:
+            return self._community_analyze_impl(step_dir, trace_db_path, perf_db_path, app_pids)
+        return self._simple_analyze_impl(step_dir, trace_db_path, perf_db_path, app_pids)
+
+    def _community_analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
+        """COMMUNITY mode (0): original pure path, unchanged."""
+        if step_dir == 'step1':
+            args = ['perf', '-i', self.scene_dir]
+            so_dir = Config.get('so_dir', None)
+            if so_dir:
+                args.extend(['-s', os.path.abspath(so_dir)])
+            kind = self.convert_kind_to_json()
+            if len(kind) > 0:
+                args.extend(['-k', kind])
+            if self.time_ranges:
+                time_range_strings = []
+                for tr in self.time_ranges:
+                    time_range_str = f'{tr["startTime"]}-{tr["endTime"]}'
+                    time_range_strings.append(time_range_str)
+                args.extend(['--time-ranges'] + time_range_strings)
+                logging.info('Adding time ranges to perf command: %s', time_range_strings)
+            logging.debug('Running perf analysis with command: %s', ' '.join(args))
+            ExeUtils.execute_hapray_cmd(args)
+
+        sr_applied = self._maybe_apply_symbol_recovery(step_dir, perf_db_path)
+        result = self.generate_hiperf_report(perf_db_path)
+        if sr_applied:
+            generated_html = self._maybe_generate_symbol_recovery_html(step_dir)
+            self._maybe_embed_symbol_recovery_report(step_dir, perf_db_path, generated_html)
+        return result
+
+    def _simple_analyze_impl(
+        self, step_dir: str, trace_db_path: str, perf_db_path: str, app_pids: list
+    ) -> Optional[dict[str, Any]]:
+        """SIMPLE mode (1): with perf_json_restored & backup/restore support."""
         perf_json_restored = bool(Config.get('perf_json_restored', False))
 
-        # step1 perf -i: 始终运行以生成 perf.json 及负载分析 Excel 等必要产物。
-        # 如果已有从原始火焰图恢复的 perf.json/HTML，执行前先备份，跑完再恢复。
         if step_dir == 'step1':
             _saved_html = _saved_perf_json = None
             if perf_json_restored:
@@ -87,12 +123,9 @@ class PerfAnalyzer(BaseAnalyzer):
             so_dir = Config.get('so_dir', None)
             if so_dir:
                 args.extend(['-s', os.path.abspath(so_dir)])
-
             kind = self.convert_kind_to_json()
             if len(kind) > 0:
                 args.extend(['-k', kind])
-
-            # Add time ranges if provided
             if self.time_ranges:
                 time_range_strings = []
                 for tr in self.time_ranges:
@@ -104,7 +137,6 @@ class PerfAnalyzer(BaseAnalyzer):
             logging.debug('Running perf analysis with command: %s', ' '.join(args))
             ExeUtils.execute_hapray_cmd(args)
 
-            # perf -i 已生成负载分析 Excel，恢复原始 perf.json/HTML
             if perf_json_restored:
                 step_path = Path(os.path.dirname(perf_db_path))
                 if _saved_html is not None:
@@ -629,11 +661,10 @@ class PerfAnalyzer(BaseAnalyzer):
     def _maybe_embed_symbol_recovery_report(
         self, step_dir: str, perf_db_path: str, generated_html: Optional[Path] = None
     ) -> None:
-        """符号恢复成功后，将独立分析报告嵌入 hiperf_report.html（iframe）。
+        """符号恢复成功后，将符号恢复报告嵌入 hiperf_report.html（iframe）。
 
-        仅当存在独立分析报告（如 event_count_top50_report.html）时才嵌入。
-        增强火焰图（hiperf_report_with_inferred_symbols.html）本身已是完整页面，
-        包含火焰图和详细分析 tab，将其作为 iframe 嵌入会造成重复显示。
+        COMMUNITY mode: 优先嵌入增强版火焰图 HTML，回退到独立分析报告。
+        SIMPLE mode:    增强版 HTML 已是完整页面，只嵌入独立分析报告不做重复嵌入。
         """
         top_n = int(Config.get('symbol_recovery_top_n', 50) or 50)
         stat_method = (Config.get('symbol_recovery_stat_method', 'event_count') or 'event_count').strip()
@@ -642,16 +673,24 @@ class PerfAnalyzer(BaseAnalyzer):
         output_root = (Config.get('symbol_recovery_output_root', '') or '').strip() or None
         out_dir = default_symbol_recovery_output_dir(self.scene_dir, step_dir, output_root)
         hiperf = Path(perf_db_path).parent / 'hiperf_report.html'
-        analysis_report = out_dir / symbol_recovery_report_name(stat_method, top_n)
-        if analysis_report.is_file():
-            embed_symbol_recovery_report_into_hiperf_html(hiperf, analysis_report)
+
+        if Config.get('mode') == Mode.COMMUNITY:
+            # COMMUNITY mode: 原始行为，优先嵌入增强版 HTML
+            generated = generated_html or (hiperf.parent / symbol_recovery_replaced_html_name(hiperf.name))
+            detail = generated if generated.is_file() else out_dir / symbol_recovery_report_name(stat_method, top_n)
+            embed_symbol_recovery_report_into_hiperf_html(hiperf, detail)
         else:
-            logging.info(
-                'Standalone analysis report not found (%s), skip embedding. '
-                'Enhanced HTML %s is already a complete replacement.',
-                analysis_report,
-                generated_html or (hiperf.parent / symbol_recovery_replaced_html_name(hiperf.name)),
-            )
+            # SIMPLE mode: 增强 HTML 已是完整替代品，只嵌入独立分析报告
+            analysis_report = out_dir / symbol_recovery_report_name(stat_method, top_n)
+            if analysis_report.is_file():
+                embed_symbol_recovery_report_into_hiperf_html(hiperf, analysis_report)
+            else:
+                logging.info(
+                    'Standalone analysis report not found (%s), skip embedding. '
+                    'Enhanced HTML %s is already a complete replacement.',
+                    analysis_report,
+                    generated_html or (hiperf.parent / symbol_recovery_replaced_html_name(hiperf.name)),
+                )
 
     def _maybe_generate_symbol_recovery_html(self, step_dir: str) -> Optional[Path]:
         """在 update 生成新的 hiperf_report.html 后，再补跑 symbol_recovery Step4。"""
