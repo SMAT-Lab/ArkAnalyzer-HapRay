@@ -9,7 +9,7 @@
 
 从仓库 **新 `git clone` 且无本地构建产物** 时，`perf.data`→`perf.db`（SymRecover Step1）、集成 `hapray update` 符号恢复、`dbtools`/负载拆解等链路**会成片报错**——多数是 **`tools/static_analyzer` 未 `npm run build`、`tools/symbol_recovery` 未建 venv/装依赖**，不是本章分析步骤写错。
 
-**在读下文「何时需要」「安装依赖」之前**，必须先完成父级 **`skills/hapray/SKILL.md`** 中的 **[源码工作区硬门禁]**：**`perf_testing` 的 `uv sync`、`<REPO_ROOT>/dist/tools/sa-cmd/`、`symbol_recovery` 的 `main.py --help`**。未完成则不要判断为「LLM/API/设备」类问题。
+**在读下文「何时需要」「安装依赖」之前**，必须先完成父级 **`skills/hapray/SKILL.md`** 中的 **[源码工作区硬门禁]**：**`perf_testing` 的 `uv sync`、`<REPO_ROOT>/dist/tools/sa-cmd/`、`symbol_recovery` 的 `main.py --help` + radare2 + 反编译插件（r2dec/r2ghidra）**。未完成则不要判断为「LLM/API/设备」类问题。
 
 ---
 
@@ -45,7 +45,9 @@ uv venv .venv
 uv pip install --python ./.venv/bin/python -e .
 ```
 
-**强烈推荐安装（性能提升 10 倍+）：**
+**安装 radare2 + 反编译插件（必选，硬门禁要求）：**
+
+反编译质量直接影响 LLM 推断准确率，性能提升 10 倍以上。
 
 macOS：
 ```bash
