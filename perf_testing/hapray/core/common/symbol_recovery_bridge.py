@@ -347,24 +347,38 @@ def resolve_symbol_recovery_exe(sr_root: Path) -> Optional[Path]:
     return None
 
 
+def _symbol_recovery_python_launch_path(exe: Path) -> Optional[str]:
+    """返回用于 subprocess 启动的解释器路径。
+
+    对 ``venv/.venv`` 下的 ``python`` **禁止**使用 ``Path.resolve()``：在 macOS/Linux 上该文件常为指向
+    系统/Homebrew Python 的符号链接，``resolve()`` 会跟随到基础解释器，导致 **丢失 pyvenv 隔离**，
+    ``site-packages`` 中已安装的 ``openai`` 等依赖不可见（表现为 ``ModuleNotFoundError: openai``）。
+    ``expanduser().absolute()`` 得到绝对路径且不解析符号链接，启动时仍按 venv 布局加载依赖。
+    """
+    try:
+        p = exe.expanduser().absolute()
+    except OSError:
+        return None
+    return str(p) if p.is_file() else None
+
+
 def resolve_symbol_recovery_python() -> Optional[str]:
     explicit = os.environ.get(ENV_SYMBOL_RECOVERY_PYTHON, '').strip()
     if explicit:
         p = Path(explicit).expanduser()
-        if p.is_file():
-            return str(p.resolve())
+        chosen = _symbol_recovery_python_launch_path(p)
+        if chosen:
+            return chosen
         logger.warning('%s is not a file: %s', ENV_SYMBOL_RECOVERY_PYTHON, explicit)
         return None
 
     sr_root = resolve_symbol_recovery_root()
     if sr_root:
         for cand in _symbol_recovery_venv_python_candidates(sr_root):
-            try:
-                resolved = str(cand.resolve())
-            except OSError:
-                continue
-            logger.info('Symbol recovery: using interpreter from symbol_recovery venv: %s', resolved)
-            return resolved
+            chosen = _symbol_recovery_python_launch_path(cand)
+            if chosen:
+                logger.info('Symbol recovery: using interpreter from symbol_recovery venv: %s', chosen)
+                return chosen
 
     if not getattr(sys, 'frozen', False):
         return sys.executable
