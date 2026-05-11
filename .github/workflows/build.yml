@@ -150,10 +150,14 @@ jobs:
             ;;
         esac
         if [ "$R2_OK" = true ]; then
-          r2 -v
-          # Windows 上 r2pm 可能卡住或不可用，仅在 Linux/macOS 上安装插件
-          if [ "${{ matrix.item.platform }}" != "win32" ] && command -v r2pm &>/dev/null; then
-            r2pm install r2dec || r2pm install r2ghidra || echo "WARNING: no decompiler plugin installed"
+          # Windows 上 r2 -v 可能卡住，使用 --help 替代验证安装
+          if [ "${{ matrix.item.platform }}" = "win32" ]; then
+            r2 --help >/dev/null 2>&1 && echo "radare2 installed successfully" || echo "radare2 verification failed"
+          else
+            r2 -v
+            if command -v r2pm &>/dev/null; then
+              r2pm install r2dec || r2pm install r2ghidra || echo "WARNING: no decompiler plugin installed"
+            fi
           fi
         else
           echo "WARNING: radare2 not installed, decompilation plugin unavailable in release"
