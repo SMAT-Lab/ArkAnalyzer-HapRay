@@ -89,12 +89,12 @@ class UIEventWrapper(ABC):
 
     def swipes_up(self, swip_num: int, sleep: int, timeout=300):
         for _ in range(swip_num):
-            self._swipe(630, 1904, 630, 954, timeout)
+            self._swipe(630, 1904, 630, 1050, timeout)
             time.sleep(sleep)
 
     def swipes_down(self, swip_num: int, sleep: int, timeout=300):
         for _ in range(swip_num):
-            self._swipe(630, 954, 630, 1904, timeout)
+            self._swipe(630, 1050, 630, 1904, timeout)
             time.sleep(sleep)
 
     def swipes_left(self, swip_num: int, sleep: int, timeout=300):
