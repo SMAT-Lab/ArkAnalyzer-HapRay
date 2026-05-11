@@ -353,3 +353,11 @@ function unzipToPerfTestingResource(zipFile, subfolder) {
 }
 unzipToPerfTestingResource('xvm.zip', 'xvm');
 copyFile('third-party/report.html', 'perf_testing/resource/web/hiperf_report_template.html');
+
+// 将 radare2 + 反编译插件（r2dec/r2ghidra）打包到 dist/tools/bin/r2/
+// 仅在 r2 已安装时生效，跳过不阻塞构建
+try {
+  require('./bundle_radare2');
+} catch (e) {
+  console.warn('[prebuild] bundle_radare2 skipped:', e.message);
+}

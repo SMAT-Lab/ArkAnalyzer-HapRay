@@ -6,6 +6,7 @@
 import os
 import shutil
 import sqlite3
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -68,26 +69,112 @@ except ImportError:
     logger.warning('r2_function_analyzer module unavailable, will use capstone for disassembly and LLM analysis')
 
 
+def _find_bundled_r2() -> Optional[str]:
+    """在打包 release 的 dist/tools/bin/r2/ 下查找捆绑的 r2 二进制。"""
+    r2_candidates = ['r2', 'r2.exe', 'r2.bat', 'r2_real', 'r2_real.exe', 'radare2', 'radare2.exe']
+
+    # 1. PyInstaller frozen 应用：r2 打包在 sys._MEIPASS/r2/ 下
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        meipass = Path(sys._MEIPASS)
+        for name in r2_candidates:
+            candidate = meipass / 'r2' / name
+            if candidate.is_file():
+                return str(candidate)
+
+    # 2. 从本文件位置逐级向上，检查 dist/tools/bin/r2/ 目录（源码调试 / 非 frozen）
+    script_dir = Path(__file__).resolve().parent
+    current = script_dir
+    for _ in range(12):
+        r2_dir = current / 'dist' / 'tools' / 'bin' / 'r2'
+        if r2_dir.is_dir():
+            for name in r2_candidates:
+                candidate = r2_dir / name
+                if candidate.is_file():
+                    return str(candidate)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    # 3. 检查相对于工作目录的路径（打包 release 的 tools/bin/r2/）
+    for rel in ['../bin', '../../tools/bin', 'tools/bin']:
+        base = Path.cwd() / rel / 'r2'
+        if base.is_dir():
+            for name in r2_candidates:
+                candidate = base / name
+                if candidate.is_file():
+                    return str(candidate)
+    return None
+
+
+def _ensure_bundled_plugins(bundled_path: str) -> None:
+    """将捆绑的反编译插件从 dist/tools/bin/r2/plugins/ 安装到用户 r2 插件目录。"""
+    plugins_src = Path(bundled_path).parent / 'plugins'
+    if not plugins_src.is_dir():
+        return
+    # 确定用户 r2 插件目录
+    if sys.platform == 'win32':
+        user_plugin_dir = Path(os.environ.get('APPDATA', '')) / 'radare2' / 'plugins'
+    else:
+        xdg = os.environ.get('XDG_DATA_HOME', '')
+        if xdg:
+            user_plugin_dir = Path(xdg) / 'radare2' / 'plugins'
+        else:
+            user_plugin_dir = Path.home() / '.local' / 'share' / 'radare2' / 'plugins'
+    if not user_plugin_dir:
+        return
+    user_plugin_dir.mkdir(parents=True, exist_ok=True)
+    installed = 0
+    for item in os.listdir(str(plugins_src)):
+        src = plugins_src / item
+        if not src.is_file():
+            continue
+        dst = user_plugin_dir / item
+        if dst.exists():
+            continue
+        try:
+            shutil.copy2(str(src), str(dst))
+            installed += 1
+        except OSError:
+            pass
+    if installed:
+        logger.debug(f'Installed {installed} bundled r2 plugin(s) to {user_plugin_dir}')
+
+
 def _check_r2_actually_available():
     """
-    检测 radare2 是否真的可用（不仅仅是模块是否可导入）
-    通过检查 r2 命令是否在 PATH 中来判断
-
-    Returns:
-        bool: 如果 radare2 可用返回 True，否则返回 False
+    检测 radare2 是否真的可用。
+    优先检查打包在 dist/tools/bin/r2/ 下的捆绑二进制，其次检查 PATH。
     """
     if not R2_AVAILABLE:
         return False
 
     try:
-        # 检查 r2 命令是否在 PATH 中
+        # 1. 检查捆绑路径
+        bundled = _find_bundled_r2()
+        if bundled:
+            logger.debug(f'Found bundled radare2: {bundled}')
+            # 将捆绑路径所在目录加入 PATH，供 r2pipe 查找 radare2.exe（Windows）/ radare2（Unix）
+            bundle_dir = str(Path(bundled).parent.resolve())
+            path_entries = os.environ.get('PATH', '').split(os.pathsep)
+            if bundle_dir not in path_entries:
+                os.environ['PATH'] = bundle_dir + os.pathsep + os.environ.get('PATH', '')
+                logger.debug(f'Added r2 bundle dir to PATH: {bundle_dir}')
+            # 设置 R2_PLUGINS 指向 bundle 下的 plugins/ 目录，让 r2 加载反编译插件（r2ghidra/r2dec）
+            plugins_dir = str(Path(bundled).parent.resolve() / 'plugins')
+            if os.path.isdir(plugins_dir):
+                os.environ.setdefault('R2_PLUGINS', plugins_dir)
+                logger.debug(f'Set R2_PLUGINS={plugins_dir}')
+            # 也将插件复制到用户插件目录（兜底）
+            _ensure_bundled_plugins(bundled)
+            return True
+
+        # 2. 检查 PATH
         r2_path = shutil.which('r2')
         if r2_path:
             logger.debug(f'Found radare2 command: {r2_path}')
             return True
 
-        # 如果找不到 r2 命令，说明 radare2 不可用
-        logger.debug('radare2 command not found (r2 not in PATH)')
+        logger.debug('radare2 not found (not in PATH and no bundled copy)')
         return False
     except Exception as e:
         logger.debug(f'Error checking radare2 availability: {e}')
