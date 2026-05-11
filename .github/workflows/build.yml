@@ -151,7 +151,8 @@ jobs:
         esac
         if [ "$R2_OK" = true ]; then
           r2 -v
-          if command -v r2pm &>/dev/null; then
+          # Windows 上 r2pm 可能卡住或不可用，仅在 Linux/macOS 上安装插件
+          if [ "${{ matrix.item.platform }}" != "win32" ] && command -v r2pm &>/dev/null; then
             r2pm install r2dec || r2pm install r2ghidra || echo "WARNING: no decompiler plugin installed"
           fi
         else
