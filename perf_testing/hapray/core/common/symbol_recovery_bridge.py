@@ -259,6 +259,11 @@ def resolve_symbol_recovery_root() -> Optional[Path]:
         root = Path(raw).expanduser().resolve()
         if (root / 'main.py').is_file():
             return root
+        # 也允许指向只含 symbol-recovery.exe 的目录（打包二进制场景）
+        if getattr(sys, 'frozen', False):
+            if _frozen_sr_exe_in_dir(root):
+                logger.debug('Resolved symbol recovery root (frozen, env var, exe-only): %s', root)
+                return root
         logger.warning('%s is set but main.py not found under: %s', ENV_SYMBOL_RECOVERY_ROOT, root)
         return None
 
@@ -268,12 +273,46 @@ def resolve_symbol_recovery_root() -> Optional[Path]:
             logger.debug('Resolved symbol recovery root (relative search): %s', cand)
             return cand
 
+    # Frozen 二进制：从 perf-testing.exe 所在目录逐级向上查找 symbol-recovery.exe
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent.resolve()
+        for base in (exe_dir, *exe_dir.parents):
+            # 情况 1：<base>/symbol-recovery.exe 同级文件
+            if _frozen_sr_exe_in_dir(base):
+                logger.debug('Resolved symbol recovery root (frozen, same dir): %s', base)
+                return base
+            # 情况 2：<base>/symbol-recovery/ 或 <base>/symbol_recovery/ 子目录
+            for sr_dir_name in ('symbol-recovery', 'symbol_recovery'):
+                sr_dir = (base / sr_dir_name).resolve()
+                if _frozen_sr_exe_in_dir(sr_dir):
+                    logger.debug('Resolved symbol recovery root (frozen, %s/ subdir): %s', sr_dir_name, sr_dir)
+                    return sr_dir
+                # 情况 3：<base>/tools/symbol-recovery/ 或 <base>/tools/symbol_recovery/
+                sr_dir = (base / 'tools' / sr_dir_name).resolve()
+                if _frozen_sr_exe_in_dir(sr_dir):
+                    logger.debug('Resolved symbol recovery root (frozen, tools/%s/): %s', sr_dir_name, sr_dir)
+                    return sr_dir
+            if base.parent == base:  # 文件系统根目录，停止
+                break
+        logger.debug(
+            'Frozen mode: symbol-recovery.exe not found (searched from %s upward)',
+            exe_dir,
+        )
+
     logger.debug(
         'Symbol recovery root not found under perf_root=%s (set %s or place tools/symbol_recovery on an ancestor path)',
         perf_root,
         ENV_SYMBOL_RECOVERY_ROOT,
     )
     return None
+
+
+def _frozen_sr_exe_in_dir(directory: Path) -> bool:
+    """检查目录下是否存在 symbol-recovery 可执行文件（打包二进制场景，跨平台）。"""
+    for name in ('symbol-recovery.exe', 'symbol_recovery.exe', 'SymRecover.exe', 'symbol-recovery', 'symbol_recovery'):
+        if (directory / name).is_file():
+            return True
+    return False
 
 
 def _symbol_recovery_venv_python_candidates(sr_root: Path) -> list[Path]:
@@ -876,13 +915,13 @@ def build_symbol_recovery_html_argv(
     raise ValueError('entry_exe and python_exe cannot both be unset')
 
 
-def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Path, timeout_sec: Optional[float] = None) -> int:
+def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Optional[Path], timeout_sec: Optional[float] = None) -> int:
     logger.info('Symbol recovery subprocess: %s', ' '.join(argv))
     env = os.environ.copy()
     try:
         completed = subprocess.run(
             argv,
-            cwd=str(cwd),
+            cwd=str(cwd) if cwd else None,
             env=env,
             timeout=timeout_sec,
             check=False,
