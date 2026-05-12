@@ -108,7 +108,7 @@ _ohos_pkg = os.path.join(sysconfig.get_path("purelib"), "ohos")
 if os.path.isdir(_ohos_pkg):
     datas.append((_ohos_pkg, "ohos"))
 else:
-    print("Warning: site-packages/ohos 不存在，无法整包收集 ohos")
+    print('Warning: site-packages/ohos missing; cannot bundle ohos package')
 
 # 初始化 binaries 列表
 binaries = []
