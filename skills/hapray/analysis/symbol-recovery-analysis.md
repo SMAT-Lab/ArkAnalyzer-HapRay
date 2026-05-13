@@ -214,14 +214,15 @@ python3 main.py \
 
 ```bash
 cd <REPO_ROOT>/tools/symbol_recovery
-python3 scripts/run_step2.py openai \
-    --tasks output/symbol_recovery_llm_tasks.json \
-    --output output/llm_results.json
-# 可加 --resume（断点续传）、--model <名称>（覆盖 .env 模型）
+python main.py --step2-openai \
+    --step2-tasks output/symbol_recovery_llm_tasks.json \
+    --step2-output output/llm_results.json
+# 可加 --step2-resume（断点续传）、--step2-model <名称>（覆盖 .env 模型）
 ```
 
 - 依赖 `tools/symbol_recovery/.env` 中的 `api_key` / `base_url` / `model`
-- 旧写法 `python3 scripts/run_step2.py --tasks ... --output ...` 等价于此（向后兼容）
+- 打包后使用：`symbol-recovery --step2-openai --step2-tasks ... --step2-output ...`（与上式等价）
+- `scripts/run_step2.py` 仅为历史兼容 CLI，**不要**写入 HapRay 集成路径；新文档以 `main.py --step2-*` 为准
 
 ---
 
@@ -239,7 +240,7 @@ python3 scripts/run_step2.py openai \
 2. Agent 逐条基于 `prompt` 做真实推断，生成结果 JSON（保持 `function_id` 对齐）。
 3. 结果直接保存为 `symbol_recovery_external_results.json`（或任意路径），供 `--import-llm-results` 回填。
 
-> `scripts/run_step2.py split/merge` 仅作为历史兼容选项；优先使用 Skill 对话流程完成离线编排。
+> 手工 **切批 / 合并** 请使用 `python main.py --step2-split ...`、`python main.py --step2-merge ...`（见 `main.py --help`）。`scripts/run_step2.py` 仅为历史兼容入口，**不要**作为集成或文档中的推荐路径。
 
 ---
 
@@ -280,7 +281,7 @@ python3 main.py \
 | **SO 目录** | 优先 `hapray update --so_dir <dir>`，其次环境变量 `HAPRAY_SO_DIR`。若仍无有效目录，且 **`hdc` 在 PATH、设备在线**：从 **`testInfo.json`** 读取 **`app_id`（包名）**，对每个包执行 **`hdc shell bm dump -n <包名>`**，从返回 JSON 中读取 **`modulePath` / `hapPath` / `bundleDataDir`** 等与安装相关的路径（见实现中的字段白名单），将每个基路径展开为 **`…/libs`、`…/libs/arm64`**（若路径指向 `.hap`/`.har` 则先取父目录）并 **`hdc file recv`** 到 `--report_dir/.symbol_recovery_libs/<bundle>/`；若仍无 `.so`，再用**仅由包名拼出的**常见路径兜底（如 `/data/storage/el1/bundle/<包名>/libs`、`/data/app/el1|el2/bundle/<包名>/libs(/arm64)`）。**不依赖进程 PID**（不以 `pidof`/`ps`/`pids.json` 为主路径）。 |
 | **自动拉库失败** | 日志中会出现 `Failed to auto-download libs for bundle: <app_id>`。此时 **`effective_so` 为空，集成符号恢复整段不会执行**（与 LLM 是否配置、是否探活失败无关）。处理方式：连接设备后重试、或显式传入 `--so_dir` / 设置 `HAPRAY_SO_DIR` 指向已含 `.so` 的目录。 |
 | **LLM** | 未 `--symbol-recovery-no-llm` 时：若 Key/Base URL 已配置且非强制 agent，则**先对 symbol_recovery 做运行时探活**；失败则自动 **fallback 到 agent 模式**（`llm_ready` 置假、`agent_mode` 置真，并记录 `symbol_recovery_llm_probe_ok`）。 |
-| **同一步骤内降级** | `PerfAnalyzer` 中：探活失败或 offline agent 路径下先执行 **`--prompt-only`** 导出 `symbol_recovery_llm_tasks.json`，然后在同次 update 内默认调用内置 `tools/symbol_recovery/scripts/run_step2.py openai --tasks ... --output ...` 生成 `symbol_recovery_external_results.json`，再立即 `--import-llm-results` 回填 `perf.json` 与 HTML。`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD` 仅作可选覆盖。若命令未产出结果，则本次判定为未完成真实推断，不进入“成功回填”。 |
+| **同一步骤内降级** | `PerfAnalyzer` 中：走 agent 编排时先 **`--prompt-only`** 导出 `symbol_recovery_llm_tasks.json`，然后在同次 `update` 内通过 **`symbol_recovery` 启动器**子进程执行 **`main.py --step2-openai --step2-tasks … --step2-output …`**（`core.utils.step2_agent`，**禁止**调用 `scripts/run_step2.py`）；已配置时优先 **`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD`**（`{tasks}`、`{output}`、`{out_dir}`、`{scene}`）。若无启动器且存在可导入源码树，才回退同进程 Step2。若 Step2 未产出有效 `symbol_recovery_external_results.json`，则本次判定为未完成真实推断。随后 **`--import-llm-results`** 回填 `perf.json` 与报告。 |
 
 **与 `update` 集成时的一次性闭环要求（默认 Agent，禁止二次回填）**：
 - 默认目标：`update` 在**同一次执行**中完成 `tasks -> symbol_recovery_external_results.json -> import`，不要求用户再跑第二次 `update`。  

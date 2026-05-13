@@ -18,7 +18,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import subprocess
 import sys
 import zlib
@@ -35,8 +34,8 @@ from hapray.core.common.symbol_recovery_bridge import (
     maybe_generate_symbol_recovery_html_for_step,
     maybe_run_symbol_recovery_for_step,
     probe_symbol_recovery_llm_runtime,
-    resolve_symbol_recovery_python,
     resolve_symbol_recovery_root,
+    run_symbol_recovery_agent_step2,
     symbol_recovery_report_name,
     symbol_recovery_replaced_html_name,
     symbol_recovery_should_run,
@@ -208,24 +207,25 @@ class PerfAnalyzer(BaseAnalyzer):
         )
         if top_symbols_json:
             extras.extend(['--top-symbols-json', str(top_symbols_json)])
-        # === LLM pre-check: fail fast instead of waiting for timeout ===
-        # If LLM is configured and agent mode is not forced, quickly verify the LLM is actually
-        # usable (has quota, responds). If not, fall back to agent mode which uses a different
-        # LLM provider/configuration to complete symbol recovery.
-        if llm_ready and not no_llm and not agent_mode and not import_results:
-            sr_root = resolve_symbol_recovery_root()
-            probe_ok, probe_msg = probe_symbol_recovery_llm_runtime(sr_root, timeout_sec=5)
-            if probe_ok:
-                logging.info('Symbol recovery LLM pre-check passed, using online LLM mode')
-            else:
-                logging.warning(
-                    'Symbol recovery LLM pre-check failed: %s. '
-                    'Auto-fallback to agent mode (alternative LLM) for symbol recovery.',
-                    probe_msg,
-                )
-                agent_mode = True
+        # 与 update 一致：优先使用「环境就绪 + 探测通过」的在线 LLM；否则走 Agent 编排（导出任务 + 导入）。
+        # 未走 update 设置 Config 时，在本地补做一次探测。
+        use_online_llm = bool(llm_ready and not no_llm and not agent_mode and not import_results)
+        if use_online_llm:
+            probe_cfg = Config.get('symbol_recovery_llm_probe_ok', None)
+            if probe_cfg is None or probe_cfg == '':
+                sr_probe = resolve_symbol_recovery_root()
+                probe_ok, probe_msg = probe_symbol_recovery_llm_runtime(sr_probe, timeout_sec=5)
+                if not probe_ok:
+                    logging.warning(
+                        'Symbol recovery LLM pre-check failed: %s. Using agent mode for this step.',
+                        probe_msg,
+                    )
+                    use_online_llm = False
+            elif not bool(probe_cfg):
+                logging.warning('Symbol recovery LLM probe_ok is false in config; using agent mode for this step.')
+                use_online_llm = False
 
-        prompt_only = bool(agent_mode and not import_results)
+        prompt_only = bool(not use_online_llm and not import_results)
         ok = maybe_run_symbol_recovery_for_step(
             self.scene_dir,
             step_dir,
@@ -239,27 +239,6 @@ class PerfAnalyzer(BaseAnalyzer):
             prompt_only=prompt_only,
             import_llm_results=import_results,
         )
-        if not ok and not prompt_only and not import_results:
-            logging.warning(
-                'Integrated symbol recovery (online LLM) did not complete for scene=%s step=%s; '
-                'falling back to agent prompt-only export.',
-                self.scene_dir,
-                step_dir,
-            )
-            prompt_only = True
-            ok = maybe_run_symbol_recovery_for_step(
-                self.scene_dir,
-                step_dir,
-                perf_db_path,
-                effective_so_dir=so_dir,
-                top_n=top_n,
-                stat_method=stat_method,
-                output_root=output_root,
-                subprocess_timeout_sec=timeout_sec,
-                extra_args=extras or None,
-                prompt_only=True,
-                import_llm_results=None,
-            )
         if not ok:
             logging.warning(
                 'Integrated symbol recovery did not complete for scene=%s step=%s',
@@ -268,10 +247,10 @@ class PerfAnalyzer(BaseAnalyzer):
             )
             return False
         if prompt_only and not import_results:
-            # Agent mode: the pre-check above already determined the primary LLM is not usable
-            # (or agent mode was explicitly requested). Run agent inference directly without
-            # re-probing to avoid wasting time — agent inference uses the alternative LLM
-            # provider configured for symbol recovery.
+            logging.info(
+                '符号恢复 Agent 路径：若在 Cursor 中由当前对话 Agent 推断，请先确认所用模型（可询问「你是什么模型」）；'
+                '或设置环境变量 HAPRAY_SYMBOL_RECOVERY_AGENT_CMD；否则使用 symbol_recovery 内联 OpenAI 兼容 API（依赖 .env / 环境变量）。'
+            )
             inferred_json = self._run_agent_inference_for_symbol_recovery(out_dir, timeout_sec=timeout_sec)
             if not inferred_json:
                 logging.warning(
@@ -593,12 +572,8 @@ class PerfAnalyzer(BaseAnalyzer):
         if output_json.is_file():
             return str(output_json)
         sr_root = resolve_symbol_recovery_root()
-        py_exe = resolve_symbol_recovery_python()
-        if sr_root is None or not (sr_root / 'scripts' / 'run_step2.py').is_file():
-            logging.warning('Agent inference skipped: symbol_recovery scripts/run_step2.py not found')
-            return None
-        if not py_exe:
-            logging.warning('Agent inference skipped: no python interpreter for symbol_recovery')
+        if sr_root is None:
+            logging.warning('Agent inference skipped: symbol recovery root not found')
             return None
 
         env_cmd = (os.environ.get('HAPRAY_SYMBOL_RECOVERY_AGENT_CMD') or '').strip()
@@ -611,50 +586,51 @@ class PerfAnalyzer(BaseAnalyzer):
             )
             cmd = rendered
             use_shell = True
-        else:
-            cmd = [
-                py_exe,
-                str(sr_root / 'scripts' / 'run_step2.py'),
-                'openai',
-                '--tasks',
-                str(tasks),
-                '--output',
-                str(output_json),
-            ]
-            use_shell = False
+            timeout = None
+            if timeout_sec and timeout_sec > 0:
+                timeout = max(60, int(timeout_sec))
+            logging.info('Running symbol_recovery agent inference command: %s', cmd)
+            try:
+                cp = subprocess.run(
+                    cmd,
+                    cwd=str(sr_root),
+                    timeout=timeout,
+                    check=False,
+                    shell=use_shell,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    capture_output=True,
+                )
+            except subprocess.TimeoutExpired:
+                logging.warning('Agent inference command timed out')
+                return None
+            except OSError as e:
+                logging.warning('Agent inference command failed to start: %s', e)
+                return None
+            if cp.stdout:
+                logging.info(cp.stdout[:8000])
+            if cp.stderr:
+                logging.info(cp.stderr[:8000])
+            if cp.returncode != 0:
+                logging.warning('Agent inference command exited with code %s', cp.returncode)
+                return None
+            if not output_json.is_file():
+                logging.warning('Agent inference command completed but output missing: %s', output_json)
+                return None
+            return str(output_json)
 
-        timeout = None
-        if timeout_sec and timeout_sec > 0:
-            timeout = max(60, int(timeout_sec))
-        cmd_show = cmd if isinstance(cmd, str) else ' '.join(shlex.quote(str(x)) for x in cmd)
-        logging.info('Running symbol_recovery agent inference command: %s', cmd_show)
-        try:
-            cp = subprocess.run(
-                cmd,
-                cwd=str(sr_root),
-                timeout=timeout,
-                check=False,
-                shell=use_shell,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                capture_output=True,
-            )
-        except subprocess.TimeoutExpired:
-            logging.warning('Agent inference command timed out')
-            return None
-        except OSError as e:
-            logging.warning('Agent inference command failed to start: %s', e)
-            return None
-        if cp.stdout:
-            logging.info(cp.stdout[:8000])
-        if cp.stderr:
-            logging.info(cp.stderr[:8000])
-        if cp.returncode != 0:
-            logging.warning('Agent inference command exited with code %s', cp.returncode)
-            return None
-        if not output_json.is_file():
-            logging.warning('Agent inference command completed but output missing: %s', output_json)
+        tmo = max(60, int(timeout_sec)) if timeout_sec and timeout_sec > 0 else None
+        if not run_symbol_recovery_agent_step2(
+            sr_root,
+            tasks,
+            output_json,
+            timeout_sec=tmo,
+            delay=0.5,
+            resume=False,
+            model=None,
+        ):
+            logging.warning('Agent inference Step2 did not produce: %s', output_json)
             return None
         return str(output_json)
 

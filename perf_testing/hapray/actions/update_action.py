@@ -578,6 +578,12 @@ class UpdateAction:
                 )
                 llm_ready = False
                 agent_mode = True
+        if not parsed_args.symbol_recovery_no_llm and effective_so and not llm_ready and not agent_mode:
+            agent_mode = True
+            logging.info(
+                '未配置可用 LLM（缺少 API/base URL 或探测未通过），自动启用符号恢复 Agent 模式：'
+                '将导出任务后由内联 step2、环境命令或手动导入结果完成推断。'
+            )
         top_n = parse_top_n_from_env(parsed_args.symbol_recovery_top_n)
         stat_method = parse_stat_from_env(parsed_args.symbol_recovery_stat)
         output_root = parse_output_root_from_env(
