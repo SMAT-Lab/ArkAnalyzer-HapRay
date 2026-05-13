@@ -16,7 +16,6 @@ limitations under the License.
 import argparse
 import logging
 import os
-import shutil
 import sys
 import time
 import traceback
@@ -26,24 +25,9 @@ from xdevice.__main__ import main_process
 
 from hapray import VERSION
 from hapray.core.common.action_return import ActionExecuteReturn
-from hapray.core.common.path_utils import get_reports_root, get_runtime_root
+from hapray.core.common.path_utils import HARMONY_CLI_ENV_HINT, get_reports_root, get_runtime_root, harmony_cli_check
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator
-
-ENV_ERR_STR = """
-The hdc or node command is not in PATH.
-Please Download Command Line Tools for HarmonyOS(https://developer.huawei.com/consumer/cn/download/),
-then add the following directories to PATH.
-    $command_line_tools/tool/node/ (for Windows)
-    $command_line_tools/tool/node/bin (for Mac/Linux)
-    $command_line_tools/sdk/default/openharmony/toolchains (for ALL)
-"""
-
-
-def check_env() -> bool:
-    """Verify required commands are in PATH"""
-    return bool(shutil.which('hdc') and shutil.which('node'))
-
 
 class HapTestAction:
     """Strategy-driven UI automation with performance capture"""
@@ -61,8 +45,9 @@ class HapTestAction:
         if '--multiprocessing-fork' in args:
             return (0, '')
 
-        if not check_env():
-            logging.error(ENV_ERR_STR)
+        ok, detail = harmony_cli_check()
+        if not ok:
+            logging.error('%s%s', detail, HARMONY_CLI_ENV_HINT)
             return (1, '')
 
         parser = argparse.ArgumentParser(

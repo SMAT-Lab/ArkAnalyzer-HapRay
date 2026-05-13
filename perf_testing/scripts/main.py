@@ -37,7 +37,7 @@ from hapray.actions.ui_compare_action import UICompareAction
 from hapray.actions.update_action import UpdateAction
 from hapray.core.common.action_return import is_valid_action_execute_return
 from hapray.core.common.machine_output import finish_perf_testing_contract
-from hapray.core.common.path_utils import get_log_file_path, get_runtime_root
+from hapray.core.common.path_utils import ensure_harmony_cli_on_path, get_log_file_path, get_runtime_root
 
 
 def _ensure_writable_cwd():
@@ -144,6 +144,8 @@ class HapRayCmd:
 
         # 先确保 cwd 在一个可写目录（仅 macOS 生效），避免依赖内部使用 ./tmp_xxx 时报只读错误
         _ensure_writable_cwd()
+        # App 内 perf-testing：须把包内 tools/bin 置于 PATH 最前（见 path_utils 注释，避免仍命中系统 hdc）
+        ensure_harmony_cli_on_path()
         configure_logging('HapRay.log', machine_json=machine_json)
 
         actions = {

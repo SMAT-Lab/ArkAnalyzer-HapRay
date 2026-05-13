@@ -39,6 +39,202 @@ from hapray.core.config.config import Config
 from hapray.mode.mode import Mode
 
 
+def _hiperf_step_sort_key(step_dir_name: str) -> int:
+    m = re.match(r'^step(\d+)$', step_dir_name, re.IGNORECASE)
+    return int(m.group(1)) if m else 0
+
+
+def _merge_har_into(acc: dict[str, int], har_obj: object) -> None:
+    if har_obj is None:
+        return
+    if isinstance(har_obj, list):
+        for it in har_obj:
+            if not isinstance(it, dict):
+                continue
+            name = it.get('name')
+            if name is None:
+                continue
+            acc[str(name)] = acc.get(str(name), 0) + int(it.get('count', 0))
+        return
+    if isinstance(har_obj, dict):
+        for name, v in har_obj.items():
+            if isinstance(v, dict):
+                acc[str(name)] = acc.get(str(name), 0) + int(v.get('count', 0))
+            elif isinstance(v, (int, float)):
+                acc[str(name)] = acc.get(str(name), 0) + int(v)
+
+
+def _har_acc_to_list(acc: dict[str, int]) -> list[dict[str, Any]]:
+    if not acc:
+        return []
+    return [{'name': k, 'count': v} for k, v in sorted(acc.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def _read_json_file(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+
+
+def _testinfo_meta(scene_dir: str) -> dict[str, Any]:
+    meta: dict[str, Any] = {}
+    ti_path = Path(scene_dir) / 'testInfo.json'
+    if not ti_path.is_file():
+        return meta
+    data = _read_json_file(ti_path)
+    if not isinstance(data, dict):
+        return meta
+    rom = data.get('rom_version') or data.get('os_version') or ''
+    dev = data.get('device')
+    if not rom and isinstance(dev, dict):
+        rom = dev.get('version', '')
+    meta['rom_version'] = str(rom or '')
+    meta['app_id'] = str(data.get('app_id', ''))
+    meta['app_name'] = str(data.get('app_name', ''))
+    meta['app_version'] = str(data.get('app_version', ''))
+    meta['scene'] = str(data.get('scene', os.path.basename(scene_dir)))
+    ts = data.get('timestamp', 0)
+    meta['timestamp'] = int(ts) if isinstance(ts, (int, float)) else 0
+    return meta
+
+
+def _aggregate_one_from_steps_and_meta(
+    meta: dict[str, Any], steps_out: list[dict], har_acc: dict[str, int], perf_data_paths: list[str], perf_db_paths: list[str]
+) -> list[dict[str, Any]]:
+    aggregate: dict[str, Any] = {
+        'rom_version': meta.get('rom_version', ''),
+        'app_id': meta.get('app_id', ''),
+        'app_name': meta.get('app_name', ''),
+        'app_version': meta.get('app_version', ''),
+        'scene': meta.get('scene', ''),
+        'timestamp': int(meta.get('timestamp', 0) or 0),
+        'perfDataPath': perf_data_paths,
+        'perfDbPath': perf_db_paths,
+        'htracePath': [],
+        'steps': steps_out,
+        'har': _har_acc_to_list(har_acc),
+    }
+    return [aggregate]
+
+
+def _wrap_single_step_dict_as_aggregate(scene_dir: str, step: dict) -> list[dict[str, Any]]:
+    """单步 hiperf_info（顶层无 steps 数组）包成 ReportData 期望的 [aggregate]。"""
+    meta = _testinfo_meta(scene_dir)
+    if not meta.get('scene'):
+        meta['scene'] = os.path.basename(scene_dir)
+    har_acc: dict[str, int] = {}
+    _merge_har_into(har_acc, step.get('har'))
+    perf_data_paths: list[str] = []
+    perf_db_paths: list[str] = []
+    pdp = step.get('perf_data_path')
+    if isinstance(pdp, str) and pdp:
+        perf_data_paths.append(pdp)
+        if pdp.endswith('.data'):
+            perf_db_paths.append(pdp[:-5] + '.db')
+    return _aggregate_one_from_steps_and_meta(meta, [step], har_acc, perf_data_paths, perf_db_paths)
+
+
+def _build_aggregate_hiperf_info_from_steps(scene_dir: str) -> Optional[list[Any]]:
+    """从 hiperf/stepN/hiperf_info.json 合成与旧版一致的聚合列表（单元素）。"""
+    hiperf = Path(scene_dir) / 'hiperf'
+    if not hiperf.is_dir():
+        return None
+    step_paths = sorted(
+        hiperf.glob('step*/hiperf_info.json'),
+        key=lambda p: _hiperf_step_sort_key(p.parent.name),
+    )
+    if not step_paths:
+        return None
+
+    meta = _testinfo_meta(scene_dir)
+    if not meta.get('scene'):
+        meta['scene'] = os.path.basename(scene_dir)
+
+    steps_out: list[dict] = []
+    har_acc: dict[str, int] = {}
+    perf_data_paths: list[str] = []
+    perf_db_paths: list[str] = []
+
+    for sp in step_paths:
+        raw = _read_json_file(sp)
+        if raw is None:
+            continue
+        if isinstance(raw, list):
+            if len(raw) != 1:
+                continue
+            raw = raw[0]
+        if not isinstance(raw, dict):
+            continue
+        inner_steps = raw.get('steps')
+        if isinstance(inner_steps, list) and inner_steps:
+            for k in ('rom_version', 'app_id', 'app_name', 'app_version', 'scene', 'timestamp'):
+                if k not in meta and raw.get(k) is not None and str(raw.get(k, '')) != '':
+                    meta[k] = raw[k]
+            return [raw]
+
+        steps_out.append(raw)
+        _merge_har_into(har_acc, raw.get('har'))
+        pdp = raw.get('perf_data_path')
+        if isinstance(pdp, str) and pdp:
+            perf_data_paths.append(pdp)
+            if pdp.endswith('.data'):
+                perf_db_paths.append(pdp[:-5] + '.db')
+
+    if not steps_out:
+        return None
+
+    return _aggregate_one_from_steps_and_meta(meta, steps_out, har_acc, perf_data_paths, perf_db_paths)
+
+
+def materialize_hiperf_info_for_scene(scene_dir: str) -> None:
+    """
+    保证 scene_dir/hiperf/hiperf_info.json 存在且为「列表包一层」的聚合结构。
+
+    新链路常见仅有 hiperf/step*/hiperf_info.json（单步分析产物），ReportData / summary.json
+    仍读根路径 hiperf_info.json，导致 perf 数据全空。此处按需合成或把单 dict 规范成 [aggregate]。
+    """
+    root = Path(scene_dir) / 'hiperf' / 'hiperf_info.json'
+    if root.is_file():
+        data = _read_json_file(root)
+        if isinstance(data, list) and len(data) > 0:
+            return
+        if isinstance(data, dict) and data:
+            inner = data.get('steps')
+            if isinstance(inner, list) and inner:
+                try:
+                    root.write_text(json.dumps([data], ensure_ascii=False, indent=2), encoding='utf-8')
+                    logging.info('Normalized hiperf_info.json from aggregate dict to list at %s', root)
+                except OSError as e:
+                    logging.warning('Failed to normalize hiperf_info.json: %s', e)
+                return
+            built_from_steps = _build_aggregate_hiperf_info_from_steps(scene_dir)
+            if built_from_steps:
+                try:
+                    root.write_text(json.dumps(built_from_steps, ensure_ascii=False, indent=2), encoding='utf-8')
+                    logging.info('Rebuilt hiperf_info.json at %s from step*/hiperf_info.json (replacing invalid root)', root)
+                except OSError as e:
+                    logging.warning('Failed to write aggregate hiperf_info.json: %s', e)
+                return
+            wrapped = _wrap_single_step_dict_as_aggregate(scene_dir, data)
+            try:
+                root.write_text(json.dumps(wrapped, ensure_ascii=False, indent=2), encoding='utf-8')
+                logging.info('Normalized single-step hiperf_info.json into aggregate list at %s', root)
+            except OSError as e:
+                logging.warning('Failed to normalize single-step hiperf_info.json: %s', e)
+            return
+
+    built = _build_aggregate_hiperf_info_from_steps(scene_dir)
+    if not built:
+        return
+    try:
+        root.parent.mkdir(parents=True, exist_ok=True)
+        root.write_text(json.dumps(built, ensure_ascii=False, indent=2), encoding='utf-8')
+        logging.info('Materialized aggregate hiperf_info.json at %s (from step*/hiperf_info.json)', root)
+    except OSError as e:
+        logging.warning('Failed to write aggregate hiperf_info.json: %s', e)
+
+
 class DataType(enum.Enum):
     JSON = 0
     BASE64_GZIP_JSON = 1
@@ -74,6 +270,7 @@ class ReportData:
         data = cls(scene_dir, result)
         steps_path = os.path.join(scene_dir, 'steps.json')
         data._load_steps_data(steps_path)
+        materialize_hiperf_info_for_scene(scene_dir)
         # 当perf.data不存在时，hiperf_info.json可能不存在，设为非必需
         data.load_perf_data(perf_data_path, required=False)
         data.load_trace_data(scene_dir)
@@ -600,6 +797,8 @@ class ReportGenerator:
                 except Exception as e:
                     logging.warning(f'Failed to copy steps.json from hipef directory: {e}')
 
+        materialize_hiperf_info_for_scene(scene_dir)
+
         # Step 1: Select round (only for new reports)
         if not skip_round_selection and not self._select_round(scene_dirs, scene_dir):
             logging.error('Round selection failed, aborting report generation')
@@ -969,6 +1168,8 @@ class ReportGenerator:
             if not steps_data:
                 logging.warning('No steps data found in scene_dir: %s, skipping summary.json generation', steps_path)
                 return None
+
+            materialize_hiperf_info_for_scene(scene_dir)
 
             # Load empty frame data
             empty_frame_path = os.path.join(report_dir, 'trace_emptyFrame.json')
