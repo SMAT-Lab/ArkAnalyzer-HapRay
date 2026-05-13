@@ -6,8 +6,8 @@ you may not use this file except in compliance with the License.
 
 from __future__ import annotations
 
-import csv
 import base64
+import csv
 import json
 import logging
 import os
@@ -187,7 +187,7 @@ def probe_symbol_recovery_llm_runtime(sr_root: Optional[Path], timeout_sec: int 
         'from openai import OpenAI\n'
         f'client=OpenAI(api_key={api!r}, base_url={base!r})\n'
         f'model={model!r}\n'
-        "client.chat.completions.create("
+        'client.chat.completions.create('
         "model=model,messages=[{'role':'user','content':'ping'}],max_tokens=1,temperature=0)\n"
         "print('OK')\n"
     )
@@ -915,6 +915,32 @@ def build_symbol_recovery_html_argv(
     raise ValueError('entry_exe and python_exe cannot both be unset')
 
 
+def build_symbol_recovery_apply_mapping_argv(
+    *,
+    sr_root: Path,
+    entry_exe: Optional[Path],
+    python_exe: Optional[str],
+    excel_path: Path,
+    perf_json_path: Path,
+) -> list[str]:
+    """构建 ``--apply-excel-to-perf-json`` 子进程命令（源码树或独立 symbol-recovery 可执行文件）。"""
+    tail = [
+        '--apply-excel-to-perf-json',
+        '--symbol-mapping-excel',
+        str(excel_path),
+        '--perf-json',
+        str(perf_json_path),
+    ]
+    if entry_exe is not None:
+        return [str(entry_exe), *tail]
+    if python_exe:
+        main_py = sr_root / 'main.py'
+        if not main_py.is_file():
+            raise ValueError(f'symbol_recovery main.py not found under {sr_root}')
+        return [python_exe, str(main_py), *tail]
+    raise ValueError('entry_exe and python_exe cannot both be unset for apply-excel-to-perf-json')
+
+
 def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Optional[Path], timeout_sec: Optional[float] = None) -> int:
     logger.info('Symbol recovery subprocess: %s', ' '.join(argv))
     env = os.environ.copy()
@@ -942,42 +968,195 @@ def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Optional[Path], time
     return int(completed.returncode)
 
 
-def load_mapping_and_apply_perf_json(sr_root: Path, excel_path: Path, perf_json_path: Path) -> bool:
+def _build_symbol_recovery_step2_openai_argv(
+    sr_root: Path,
+    tasks_path: Path,
+    output_path: Path,
+) -> Optional[list[str]]:
+    """构建 ``main.py --step2-openai …`` 的 argv（跨平台）。
+
+    使用与主流程相同的解析规则：``resolve_symbol_recovery_exe``（Windows 上常见 ``*.exe``，
+    Linux/macOS 上为无后缀可执行文件名，见 ``_frozen_sr_exe_in_dir``），否则 ``python main.py``。
+    """
+    entry = resolve_symbol_recovery_exe(sr_root)
+    main_py = sr_root / 'main.py'
+    py = resolve_symbol_recovery_python()
+    tail = [
+        '--step2-openai',
+        '--step2-tasks',
+        str(tasks_path),
+        '--step2-output',
+        str(output_path),
+    ]
+    if entry is not None:
+        return [str(entry), *tail]
+    if py and main_py.is_file():
+        return [py, str(main_py), *tail]
+    return None
+
+
+def run_symbol_recovery_agent_step2(
+    sr_root: Path,
+    tasks_path: Path,
+    output_path: Path,
+    *,
+    timeout_sec: Optional[float] = None,
+    delay: float = 0.5,
+    resume: bool = False,
+    model: Optional[str] = None,
+) -> bool:
+    """Agent 编排的 Step2：优先 **子进程** 调符号恢复入口（与 OS 无关，由 bridge 解析具体文件名）。
+
+    **不能**指望把对方打成 PyInstaller **one-file** 后还在本进程 ``import`` 其内嵌代码；那种布局应走子进程。
+    仅当找不到任何子进程启动器、且 ``sr_root`` 上存在可导入的 ``core/``（源码树或 onedir）时，才回退
+    :func:`run_symbol_recovery_step2_openai` 同进程导入。
+    """
+    argv = _build_symbol_recovery_step2_openai_argv(sr_root, Path(tasks_path), Path(output_path))
+    if argv is not None:
+        rc = run_symbol_recovery_subprocess(argv, cwd=sr_root, timeout_sec=timeout_sec)
+        if rc == 0 and Path(output_path).is_file():
+            return True
+        logger.warning('Symbol recovery Step2 subprocess exited rc=%s (no in-process fallback after launcher use)', rc)
+        return False
+    logger.info(
+        'Symbol recovery Step2: no launcher (exe/script + main.py); trying in-process import '
+        '(needs importable ``tools/symbol_recovery`` tree with ``core/``).',
+    )
+    return run_symbol_recovery_step2_openai(
+        sr_root, Path(tasks_path), Path(output_path), delay=delay, resume=resume, model=model
+    )
+
+
+def run_symbol_recovery_step2_openai(
+    sr_root: Path,
+    tasks_path: Path,
+    output_path: Path,
+    *,
+    delay: float = 0.5,
+    resume: bool = False,
+    model: Optional[str] = None,
+) -> bool:
+    """同进程导入 ``core.utils.step2_agent`` 执行 Step2（仅当 ``sr_root`` 含可导入源码/包时可用）。
+
+    对方仅为 **one-file** 可执行文件、旁无 ``core/`` 目录时，本路径会失败；请使用
+    :func:`run_symbol_recovery_agent_step2` 走子进程。
+    """
     _ensure_symbol_recovery_on_syspath(sr_root)
     try:
-        from core.utils.symbol_replacer import apply_function_mapping_to_perf_json_text, load_function_mapping
+        from core.utils.step2_agent import run_openai_symbol_recovery_tasks
     except Exception:
-        logger.exception('Failed to import symbol_replacer')
+        logger.exception('Symbol recovery step2: failed to import core.utils.step2_agent')
         return False
+    try:
+        run_openai_symbol_recovery_tasks(
+            Path(tasks_path),
+            Path(output_path),
+            model=model,
+            delay=delay,
+            resume=resume,
+            sr_root=sr_root,
+        )
+    except Exception:
+        logger.exception('Symbol recovery step2: OpenAI-compatible inference failed')
+        return False
+    return Path(output_path).is_file()
+
+
+def run_symbol_recovery_step2_split_tasks(
+    sr_root: Path,
+    tasks_path: Path,
+    output_dir: Path,
+    *,
+    batch_size: int = 10,
+) -> bool:
+    """将 ``symbol_recovery_llm_tasks.json`` 切分为多批（与 ``main.py --step2-split`` / ``core.utils.step2_agent`` 一致）。"""
+    _ensure_symbol_recovery_on_syspath(sr_root)
+    try:
+        from core.utils.step2_agent import split_symbol_recovery_tasks
+    except Exception:
+        logger.exception('Symbol recovery step2: failed to import split_symbol_recovery_tasks')
+        return False
+    try:
+        split_symbol_recovery_tasks(Path(tasks_path), Path(output_dir), int(batch_size))
+    except Exception:
+        logger.exception('Symbol recovery step2: split failed')
+        return False
+    return True
+
+
+def run_symbol_recovery_step2_merge_results(
+    sr_root: Path,
+    output_path: Path,
+    result_files: list[str],
+) -> bool:
+    """合并多份 Agent 结果 JSON（与 ``main.py --step2-merge`` / ``core.utils.step2_agent`` 一致）。"""
+    _ensure_symbol_recovery_on_syspath(sr_root)
+    try:
+        from core.utils.step2_agent import merge_symbol_recovery_agent_results
+    except Exception:
+        logger.exception('Symbol recovery step2: failed to import merge_symbol_recovery_agent_results')
+        return False
+    try:
+        n = merge_symbol_recovery_agent_results(Path(output_path), list(result_files))
+    except Exception:
+        logger.exception('Symbol recovery step2: merge failed')
+        return False
+    return n > 0
+
+
+def _run_symbol_recovery_apply_mapping_subprocess(
+    sr_root: Path,
+    excel_path: Path,
+    perf_json_path: Path,
+) -> bool:
+    entry_exe = resolve_symbol_recovery_exe(sr_root)
+    py_exe: Optional[str] = None
+    if entry_exe is None:
+        py_exe = resolve_symbol_recovery_python()
+        if not py_exe:
+            logger.error(
+                'Symbol recovery apply mapping: no launcher (set %s / %s or place symbol-recovery next to perf-testing)',
+                ENV_SYMBOL_RECOVERY_EXE,
+                ENV_SYMBOL_RECOVERY_PYTHON,
+            )
+            return False
+    try:
+        argv = build_symbol_recovery_apply_mapping_argv(
+            sr_root=sr_root,
+            entry_exe=entry_exe,
+            python_exe=py_exe,
+            excel_path=excel_path,
+            perf_json_path=perf_json_path,
+        )
+    except ValueError as e:
+        logger.error('%s', e)
+        return False
+    rc = run_symbol_recovery_subprocess(argv, cwd=sr_root)
+    if rc != 0:
+        logger.warning('Symbol recovery apply-excel subprocess exited with code %s', rc)
+    return rc == 0
+
+
+def load_mapping_and_apply_perf_json(sr_root: Path, excel_path: Path, perf_json_path: Path) -> bool:
+    """将 Excel 映射写回 perf.json：优先同进程 import；不可用时（仅 exe 分体包等）走子进程。"""
     if not excel_path.is_file():
         logger.warning('Symbol recovery Excel not found: %s', excel_path)
         return False
     if not perf_json_path.is_file():
         logger.warning('perf.json not found: %s', perf_json_path)
         return False
+
+    _ensure_symbol_recovery_on_syspath(sr_root)
     try:
-        mapping = load_function_mapping(excel_path)
+        from core.utils.symbol_replacer import apply_excel_mapping_to_perf_json_file
     except Exception:
-        logger.exception('Failed to load function mapping from %s', excel_path)
-        return False
-    if not mapping:
-        logger.warning('Empty function mapping from %s', excel_path)
-        return False
+        logger.info('Symbol replacer not importable from %s; apply mapping via subprocess', sr_root)
+        return _run_symbol_recovery_apply_mapping_subprocess(sr_root, excel_path, perf_json_path)
     try:
-        raw = perf_json_path.read_text(encoding='utf-8', errors='replace')
-        existing_rows = _collect_existing_replacements_from_perf_json_text(raw)
-        new_text, replacement_info = apply_function_mapping_to_perf_json_text(raw, mapping)
-        merged_by_addr: dict[str, str] = {r['original']: r['replaced'] for r in existing_rows}
-        for r in replacement_info:
-            merged_by_addr[r['original']] = r['replaced']
-        merged_rows = [{'original': k, 'replaced': v} for k, v in sorted(merged_by_addr.items())]
-        perf_json_path.write_text(new_text, encoding='utf-8')
-        _save_replacement_manifest(perf_json_path.parent, merged_rows)
+        return bool(apply_excel_mapping_to_perf_json_file(excel_path, perf_json_path))
     except Exception:
-        logger.exception('Failed to apply mapping to %s', perf_json_path)
-        return False
-    logger.info('Applied symbol recovery mapping to %s', perf_json_path)
-    return True
+        logger.exception('In-process symbol mapping failed; retrying via subprocess')
+        return _run_symbol_recovery_apply_mapping_subprocess(sr_root, excel_path, perf_json_path)
 
 
 def default_symbol_recovery_output_dir(scene_dir: str, step_dir: str, output_root: Optional[str]) -> Path:

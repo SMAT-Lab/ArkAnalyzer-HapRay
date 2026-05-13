@@ -13,7 +13,7 @@
     "desktop"
   ],
   "scripts": {
-    "prebuild": "node scripts/prebuild.js",
+    "prebuild": "node scripts/ensure_radare2.js && node scripts/prebuild.js",
     "build": "npm run prebuild && npm run build --ws",
     "build:quick": "npm run prebuild && npm run build --workspace web --workspace tools/static_analyzer --workspace perf_testing",
     "release": "node scripts/release.js",

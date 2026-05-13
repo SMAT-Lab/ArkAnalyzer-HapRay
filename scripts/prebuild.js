@@ -355,9 +355,10 @@ unzipToPerfTestingResource('xvm.zip', 'xvm');
 copyFile('third-party/report.html', 'perf_testing/resource/web/hiperf_report_template.html');
 
 // 将 radare2 + 反编译插件（r2dec/r2ghidra）打包到 dist/tools/bin/r2/
-// 仅在 r2 已安装时生效，跳过不阻塞构建
+// 仅在 r2 已安装时生效，跳过不阻塞构建（npm prebuild 会先跑 ensure_radare2.js）
 try {
-  require('./bundle_radare2');
+  const { bundleRadare2 } = require('./bundle_radare2');
+  bundleRadare2();
 } catch (e) {
   console.warn('[prebuild] bundle_radare2 skipped:', e.message);
 }
