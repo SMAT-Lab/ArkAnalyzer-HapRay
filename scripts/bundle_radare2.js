@@ -218,9 +218,21 @@ function bundleRadare2() {
   const pluginsDir = path.join(BUNDLE_DIR, 'plugins');
   fs.mkdirSync(pluginsDir, { recursive: true });
 
-  const r2Version = r2Query(r2Path, ['-v'])?.split(/\r?\n/)[0] ?? null;
-  const pluginDir = r2Query(r2Path, ['-H', 'R2_PLUGINS']);
-  const libDir = r2Query(r2Path, ['-H', 'R2_LIBDIR']);
+  // Windows：勿对 radare2.exe 执行 -v/-H（与 .github/workflows/build.yml 一致）。
+  // 在 Git Bash / 无 TTY 的 runner 上 r2 可能调 stty 等导致长时间挂起；execFileSync 亦无超时。
+  let r2Version = null;
+  let pluginDir = null;
+  let libDir = null;
+  if (isWin && winBinDir) {
+    const guessLib = path.resolve(winBinDir, '..', 'lib');
+    const guessPlugins = path.join(guessLib, 'plugins');
+    if (fs.existsSync(guessPlugins)) pluginDir = guessPlugins;
+    if (fs.existsSync(guessLib)) libDir = guessLib;
+  } else {
+    r2Version = r2Query(r2Path, ['-v'])?.split(/\r?\n/)[0] ?? null;
+    pluginDir = r2Query(r2Path, ['-H', 'R2_PLUGINS']);
+    libDir = r2Query(r2Path, ['-H', 'R2_LIBDIR']);
+  }
 
   console.log(`[bundle_radare2] Version: ${r2Version || '(unknown)'}`);
   console.log(`[bundle_radare2] R2_PLUGINS: ${pluginDir || '(unknown)'}`);
