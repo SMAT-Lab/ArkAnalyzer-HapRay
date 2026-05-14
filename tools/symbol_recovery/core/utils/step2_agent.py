@@ -9,7 +9,48 @@ import time
 from argparse import Namespace
 from glob import glob
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TextIO
+
+_STDIO_REPLACE_ERRORS_APPLIED = False
+
+
+def _ensure_stdio_replace_errors() -> None:
+    """避免 Step2 在 Windows 窄控制台编码下因 emoji/中文等触发 UnicodeEncodeError。"""
+    global _STDIO_REPLACE_ERRORS_APPLIED
+    if _STDIO_REPLACE_ERRORS_APPLIED:
+        return
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
+        recon = getattr(stream, 'reconfigure', None)
+        if recon is None:
+            continue
+        try:
+            recon(errors='replace')
+        except (OSError, TypeError, ValueError, AttributeError):
+            continue
+    _STDIO_REPLACE_ERRORS_APPLIED = True
+
+
+def _step2_print(*args: object, sep: str = ' ', end: str = '\n', flush: bool = False, file: Optional[TextIO] = None) -> None:
+    """Step2 专用 stdout/stderr 输出：优先让控制台用 replace，失败则按字节写入。"""
+    _ensure_stdio_replace_errors()
+    out = file if file is not None else sys.stdout
+    if out is None:
+        return
+    line = sep.join(str(a) for a in args) + end
+    try:
+        print(*args, sep=sep, end=end, flush=flush, file=out)
+    except UnicodeEncodeError:
+        enc = getattr(out, 'encoding', None) or 'utf-8'
+        data = line.encode(enc, errors='replace')
+        buf = getattr(out, 'buffer', None)
+        if buf is not None:
+            buf.write(data)
+            if flush:
+                buf.flush()
+        else:
+            out.write(line.encode(enc, errors='replace').decode(enc, errors='replace'))
 
 
 def func_id_key(fid: str) -> tuple[int, str]:
@@ -54,7 +95,7 @@ def merge_symbol_recovery_agent_results(output_path: Path, result_files: list[st
         elif isinstance(raw, dict):
             merged.extend(raw.get('functions') or raw.get('results') or raw.get('tasks') or [])
         else:
-            print(f'⚠️  跳过无法解析的文件：{p}')
+            _step2_print(f'⚠️  跳过无法解析的文件：{p}')
 
     merged.sort(key=lambda r: func_id_key(str(r.get('function_id', ''))))
     out = Path(output_path)
@@ -201,22 +242,22 @@ def cmd_split(args: Namespace) -> None:
     bc = meta['batch_count']
     bs = meta['batch_size']
     out_dir = Path(args.output_dir)
-    print(f'📋 总任务 {n} 条 → 切成 {bc} 批（每批最多 {bs} 条）')
-    print(f'📂 输出目录：{out_dir.resolve()}')
-    print()
-    print('切分等价命令（推荐，在 symbol_recovery 根目录）：')
-    print(
+    _step2_print(f'📋 总任务 {n} 条 → 切成 {bc} 批（每批最多 {bs} 条）')
+    _step2_print(f'📂 输出目录：{out_dir.resolve()}')
+    _step2_print()
+    _step2_print('切分等价命令（推荐，在 symbol_recovery 根目录）：')
+    _step2_print(
         f'  python main.py --step2-split --step2-tasks {args.tasks} '
         f'--step2-split-out-dir {args.output_dir} --step2-split-batch-size {int(args.batch_size)}'
     )
-    print()
-    print('下一步（在 Cursor 对话中交给 Agent，使用当前对话模型，而非 .env）：')
-    print(f'  - 依次读取 {out_dir}/batch_*_of_*.json（任务切片，勿改 function_id）')
-    print('  - 对每条任务按 prompt / expected_schema 推断，收集为 JSON 数组')
-    print(f'  - 将对应批的结果写入同目录，例如 batch_001_of_004_results.json（与输入批编号一致）')
-    print()
-    print('合并命令示例（在 symbol_recovery 根目录，勿使用 scripts/run_step2.py）：')
-    print(
+    _step2_print()
+    _step2_print('下一步（在 Cursor 对话中交给 Agent，使用当前对话模型，而非 .env）：')
+    _step2_print(f'  - 依次读取 {out_dir}/batch_*_of_*.json（任务切片，勿改 function_id）')
+    _step2_print('  - 对每条任务按 prompt / expected_schema 推断，收集为 JSON 数组')
+    _step2_print(f'  - 将对应批的结果写入同目录，例如 batch_001_of_004_results.json（与输入批编号一致）')
+    _step2_print()
+    _step2_print('合并命令示例（在 symbol_recovery 根目录，勿使用 scripts/run_step2.py）：')
+    _step2_print(
         '  python main.py --step2-merge --step2-merge-output symbol_recovery_external_results.json \\\n'
         f'    --step2-merge-input "{out_dir}/batch_*_results.json"'
     )
@@ -226,7 +267,7 @@ def cmd_merge(args: Namespace) -> None:
     out = Path(args.output)
     cnt = merge_symbol_recovery_agent_results(out, list(args.result_files))
     if cnt <= 0:
-        print('❌ 未找到任何结果文件，请检查 merge 参数中的 glob/路径')
+        _step2_print('❌ 未找到任何结果文件，请检查 merge 参数中的 glob/路径')
         sys.exit(1)
     merged = json.loads(out.read_text(encoding='utf-8'))
     paths: list[Path] = []
@@ -234,8 +275,8 @@ def cmd_merge(args: Namespace) -> None:
         paths.extend(glob(p, recursive=False))
     paths = sorted({Path(p).resolve() for p in paths if Path(p).is_file()})
     ids = {r.get('function_id') for r in merged if isinstance(r, dict) and r.get('function_id')}
-    print(f'✅ 合并 {len(paths)} 个文件 → {len(merged)} 条记录（唯一 function_id: {len(ids)}）')
-    print(f'📄 {out.resolve()}')
+    _step2_print(f'✅ 合并 {len(paths)} 个文件 → {len(merged)} 条记录（唯一 function_id: {len(ids)}）')
+    _step2_print(f'📄 {out.resolve()}')
 
 
 def cmd_openai(args: Namespace) -> None:
@@ -250,6 +291,6 @@ def cmd_openai(args: Namespace) -> None:
             sr_root=sr_root,
         )
     except Exception as e:
-        print(f'❌ {e}')
+        _step2_print(f'❌ {e}')
         sys.exit(1)
-    print(f'✅ 完成！成功推断 {ok}/{total} 条 → {Path(args.output).resolve()}')
+    _step2_print(f'✅ 完成！成功推断 {ok}/{total} 条 → {Path(args.output).resolve()}')

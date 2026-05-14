@@ -9,7 +9,7 @@
 
 从仓库 **新 `git clone` 且无本地构建产物** 时，`perf.data`→`perf.db`（SymRecover Step1）、集成 `hapray update` 符号恢复、`dbtools`/负载拆解等链路**会成片报错**——多数是 **`tools/static_analyzer` 未 `npm run build`、`tools/symbol_recovery` 未建 venv/装依赖**，不是本章分析步骤写错。
 
-**在读下文「何时需要」「安装依赖」之前**，必须先完成父级 **`skills/hapray/SKILL.md`** 中的 **[源码工作区硬门禁]**：**`perf_testing` 的 `uv sync`、`<REPO_ROOT>/dist/tools/sa-cmd/`、`symbol_recovery` 的 `main.py --help` + radare2 + 反编译插件（r2dec/r2ghidra）**。未完成则不要判断为「LLM/API/设备」类问题。
+**在读下文「何时需要」「安装依赖」之前**，必须先完成父级 **`skills/hapray/SKILL.md`** 中的 **[源码工作区硬门禁]** 中与符号恢复相关的 **硬部分**：**`perf_testing` 的 `uv sync`、`<REPO_ROOT>/dist/tools/sa-cmd/`、`symbol_recovery` 的 venv 且 `main.py --help` 可通过**。**radare2 与 r2dec/r2ghidra 为建议项**，未装不要误判为「LLM/API/设备」类根因，也**不**阻塞后续排查与命令执行。
 
 ---
 
@@ -45,9 +45,9 @@ uv venv .venv
 uv pip install --python ./.venv/bin/python -e .
 ```
 
-**安装 radare2 + 反编译插件（必选，硬门禁要求）：**
+**安装 radare2 + 反编译插件（建议，非硬门禁）：**
 
-反编译质量直接影响 LLM 推断准确率，性能提升 10 倍以上。
+能装则装；反编译质量高时更利于 LLM 推断，**装不上或跳过不阻塞** `perf` / `update` / 本章分析流程，但需在报告中注明能力降级。
 
 macOS：
 ```bash
@@ -69,7 +69,7 @@ r2pm install r2dec
 # r2pm install r2ghidra
 ```
 
-> Windows 下 `r2pm` 需要联网；若企业内网受限，可从 [radare2 GitHub Releases](https://github.com/radareorg/radare2/releases) 下载 `.zip` 解压后将 `bin/` 加入 `PATH`。
+> **国内网络（安装 radare2 / r2pm 时，非硬门禁）**：`r2pm` 与手动下载 [radare2 GitHub Releases](https://github.com/radareorg/radare2/releases) **常直连 `github.com`**。若 **明显卡顿或约 2～3 分钟仍几乎无进度，禁止死等**，可换路径或**跳过 r2 栈**（不阻塞主流程）：**①** 优先 `brew` / `winget` / `choco`；**②** 策略允许时，为 Git 配置 **`https://github.com/` 的镜像或加速前缀**（`git config --global url."<前缀>".insteadOf "https://github.com/"`）后再 `r2pm install`；**③** 企业/国内镜像的官方 **zip 离线** 解压，`bin/` 加 `PATH`；**④** macOS 可先配 **清华、中科大等 Homebrew 镜像** 再 `brew install radare2`。企业内网出不了 GitHub 时可不装，继续走 venv + `main.py` 硬门禁即可。
 
 ### 2.3 配置 LLM API Key（在线直连模式）
 
