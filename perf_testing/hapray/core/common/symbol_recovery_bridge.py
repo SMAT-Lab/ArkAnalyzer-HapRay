@@ -838,6 +838,10 @@ def embed_symbol_recovery_report_into_hiperf_html(
     return True
 
 
+# 子进程 argv 中的长选项必须与 tools/symbol_recovery/main.py#create_argument_parser 保持一致。
+# 契约定稿：cd tools/symbol_recovery && uv run --extra dev pytest tests/test_cli_contract.py
+
+
 def build_symbol_recovery_argv(
     *,
     sr_root: Path,

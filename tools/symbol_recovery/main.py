@@ -146,6 +146,14 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
   # 内存模式（指定分析数量）
   python3 main.py --memory-mode --html-dir /path/to/flamegraphs --so-dir /path/to/so/directory --top-n 100
+
+  # Step2 OpenAI 兼容 API（与 HapRay perf_testing 子进程 argv 一致）
+  python3 main.py --step2-openai --step2-tasks out/symbol_recovery_llm_tasks.json \\
+      --step2-output out/symbol_recovery_external_results.json
+
+  # 将符号恢复 Excel 写回 perf.json（与 HapRay bridge 分体 exe 子进程一致）
+  python3 main.py --apply-excel-to-perf-json --symbol-mapping-excel out/event_count_top50_analysis.xlsx \\
+      --perf-json scene/step1/hiperf/perf.json
         """,
     )
 
@@ -319,6 +327,53 @@ def create_argument_parser() -> argparse.ArgumentParser:
         '--machine-json',
         action='store_true',
         help='无法写入契约文件时，在 stdout 输出一行 JSON；日志走 stderr（兜底）',
+    )
+
+    # Step2 离线/Agent 编排（与 perf_testing bridge 的 symbol-recovery --step2-* 对齐）
+    parser.add_argument(
+        '--step2-openai',
+        action='store_true',
+        help='仅执行 Step2：用 .env/环境变量中的 OpenAI 兼容 API 处理 symbol_recovery_llm_tasks.json',
+    )
+    parser.add_argument('--step2-split', action='store_true', help='将任务 JSON 切分为多批（供外部 Agent 推断）')
+    parser.add_argument('--step2-merge', action='store_true', help='合并多份 Agent 产出的结果 JSON')
+    parser.add_argument('--step2-tasks', type=str, default=None, help='任务 JSON 路径（step2-openai / step2-split）')
+    parser.add_argument(
+        '--step2-output',
+        type=str,
+        default=None,
+        help='step2-openai 输出路径（通常为 symbol_recovery_external_results.json）',
+    )
+    parser.add_argument('--step2-split-out-dir', type=str, default=None, help='step2-split 输出目录')
+    parser.add_argument('--step2-split-batch-size', type=int, default=10, help='step2-split 每批条数（默认 10）')
+    parser.add_argument('--step2-merge-output', type=str, default=None, help='step2-merge 合并输出文件路径')
+    parser.add_argument(
+        '--step2-merge-input',
+        action='append',
+        default=None,
+        help='step2-merge 输入（可重复；支持 glob）',
+    )
+    parser.add_argument('--step2-model', type=str, default=None, help='step2-openai 覆盖模型名')
+    parser.add_argument('--step2-delay', type=float, default=0.5, help='step2-openai 请求间隔秒（默认 0.5）')
+    parser.add_argument('--step2-resume', action='store_true', help='step2-openai：断点续写已有输出 JSON')
+
+    # 将符号恢复 Excel 映射写回 perf.json（与 perf_testing symbol_recovery_bridge 子进程 argv 一致）
+    parser.add_argument(
+        '--apply-excel-to-perf-json',
+        action='store_true',
+        help='仅执行：从符号恢复 Excel 读取地址→函数名映射，写回 perf.json，并生成 symbol_recovery_replacements.json/csv',
+    )
+    parser.add_argument(
+        '--symbol-mapping-excel',
+        type=str,
+        default=None,
+        help='与 --apply-excel-to-perf-json 配合：符号映射 Excel 路径',
+    )
+    parser.add_argument(
+        '--perf-json',
+        type=str,
+        default=None,
+        help='与 --apply-excel-to-perf-json 配合：待更新的 perf.json 路径',
     )
     return parser
 
@@ -1556,6 +1611,64 @@ def handle_kmp_mode(args, output_dir: Path) -> bool:
     return True
 
 
+def _run_apply_excel_cli(args: argparse.Namespace) -> None:
+    """将符号恢复 Excel 写回 perf.json：与 perf_testing symbol_recovery_bridge 子进程 argv 一致。"""
+    from core.utils.symbol_replacer import apply_excel_mapping_to_perf_json_file
+
+    if not args.symbol_mapping_excel or not args.perf_json:
+        logger.error('❌ --apply-excel-to-perf-json 需要同时提供 --symbol-mapping-excel 与 --perf-json')
+        sys.exit(2)
+    perf_path = Path(args.perf_json)
+    perf_path.parent.mkdir(parents=True, exist_ok=True)
+    setup_logging(perf_path.parent, machine_json=_MACHINE_JSON)
+    ok = apply_excel_mapping_to_perf_json_file(Path(args.symbol_mapping_excel), perf_path)
+    sys.exit(0 if ok else 1)
+
+
+def _run_step2_cli(args: argparse.Namespace) -> None:
+    """HapRay 集成的 Step2 子命令：与 perf_testing symbol_recovery_bridge 子进程 argv 一致。"""
+    from argparse import Namespace
+
+    from core.utils.step2_agent import cmd_merge, cmd_openai, cmd_split
+
+    step2_modes = int(bool(args.step2_openai)) + int(bool(args.step2_split)) + int(bool(args.step2_merge))
+    if step2_modes > 1:
+        logger.error('❌ Step2 子模式三选一：请勿同时指定 --step2-openai、--step2-split、--step2-merge')
+        sys.exit(2)
+
+    if args.step2_openai:
+        if not args.step2_tasks or not args.step2_output:
+            logger.error('❌ --step2-openai 需要同时提供 --step2-tasks 与 --step2-output')
+            sys.exit(2)
+        ns = Namespace(
+            tasks=args.step2_tasks,
+            output=args.step2_output,
+            model=args.step2_model,
+            delay=float(args.step2_delay) if args.step2_delay is not None else 0.5,
+            resume=bool(args.step2_resume),
+        )
+        cmd_openai(ns)
+        sys.exit(0)
+    if args.step2_split:
+        if not args.step2_tasks or not args.step2_split_out_dir:
+            logger.error('❌ --step2-split 需要同时提供 --step2-tasks 与 --step2-split-out-dir')
+            sys.exit(2)
+        ns = Namespace(
+            tasks=args.step2_tasks,
+            output_dir=args.step2_split_out_dir,
+            batch_size=int(args.step2_split_batch_size or 10),
+        )
+        cmd_split(ns)
+        sys.exit(0)
+    if args.step2_merge:
+        if not args.step2_merge_output or not args.step2_merge_input:
+            logger.error('❌ --step2-merge 需要 --step2-merge-output 且至少一条 --step2-merge-input')
+            sys.exit(2)
+        ns = Namespace(output=args.step2_merge_output, result_files=list(args.step2_merge_input))
+        cmd_merge(ns)
+        sys.exit(0)
+
+
 def main():
     global _MACHINE_JSON, _RESULT_FILE
     _ensure_writable_cwd()
@@ -1563,6 +1676,16 @@ def main():
     args = parser.parse_args()
     _MACHINE_JSON = bool(getattr(args, 'machine_json', False))
     _RESULT_FILE = getattr(args, 'result_file', None)
+
+    util_step2 = bool(args.step2_openai or args.step2_split or args.step2_merge)
+    util_apply = bool(args.apply_excel_to_perf_json)
+    if util_step2 and util_apply:
+        logger.error('❌ 请勿同时使用 Step2（--step2-*）与 --apply-excel-to-perf-json')
+        sys.exit(2)
+    if util_step2:
+        _run_step2_cli(args)
+    if util_apply:
+        _run_apply_excel_cli(args)
 
     if args.prompt_only and args.import_llm_results:
         _exit_with_result(1, error='prompt_only_conflicts_with_import', output_dir=Path(args.output_dir or DEFAULT_OUTPUT_DIR))

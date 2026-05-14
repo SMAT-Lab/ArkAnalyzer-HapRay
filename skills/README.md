@@ -26,11 +26,11 @@ skills/
 对 `hapray` skill，推荐采用 **Release 二进制优先** 的运行方式；当二进制下载失败或二进制不可运行时，必须自动回退到源码方式。  
 该策略应以 **标准 Skill 描述** 方式表达（流程规则），由 AI 按规则自动执行，而不是依赖用户手工改脚本：
 
-- 发布地址：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases`
-- 运行策略：先下载**最新发布版本**并按平台选择对应二进制包（Windows / Linux Ubuntu 22.04/24.04 x64 / macOS Intel / macOS Apple Silicon）；失败时回退 `git clone` + `uv run python -m scripts.main`
+- **制品 URL 形态**：仅允许 `…/releases/download/<tag>/<asset_name>` 直链下载（或用户给出的等价整链）；**禁止**打开 GitCode 发布列表/详情页或 `releases/latest` 做「自动查最新」。
+- 运行策略：按 `skills/hapray/SKILL.md` §1.0 确定 `tag`（用户整链 / `HAPRAY_RELEASE_TAG` / Skill YAML `version`）与 `BASE`（`HAPRAY_RELEASES_DOWNLOAD_BASE` / 内置备用根），再按平台拼候选 `asset_name` 并 GET 校验下载（Windows / Linux Ubuntu 22.04/24.04 x64 / macOS Intel / macOS Apple Silicon）；失败时回退 `git clone` + `uv run python -m scripts.main`
 - 分析流程：使用二进制执行采集，基于 `reports_path` 与相关产物做子 Skill 分析并输出报告
-- 最小自动化闭环：`确定最新 tag -> 平台识别 -> 资产名匹配 -> 下载 -> 完整性校验 -> 可执行自检 -> 失败则源码回退`
-- **GitCode 不可达时**：优先使用用户直链、环境变量 `HAPRAY_RELEASES_DOWNLOAD_BASE` 或 `skills/hapray/SKILL.md` §1.0 表内备用根拼接 `releases/download/<tag>/<asset>`，见该节；不得依赖必须打开 GitCode 网页。
+- 最小自动化闭环：`直链/锚定 tag -> 平台识别 -> 候选资产名 GET -> 下载 -> 完整性校验 -> 可执行自检 -> 失败则源码回退`
+- **镜像**：优先用户直链、`HAPRAY_RELEASES_DOWNLOAD_BASE` 或 `skills/hapray/SKILL.md` §1.0 表内备用根；全程不依赖浏览器打开发布页。
 
 > 说明：`skills/` 目录本身仍可随仓库、独立仓库或 zip 分发；以上建议仅针对 HapRay 工具运行时获取方式。
 
@@ -45,7 +45,7 @@ skills/
 
 Skill 与主仓库同版本迭代；用户获取 skill 后，将某一 skill **复制或软链**到本机 Agent skills 目录即可。
 
-- 对 `hapray`：运行时优先从 Release 下载对应平台的最新二进制包；若下载失败或二进制不可运行，自动回退到源码下载并执行原有流程。
+- 对 `hapray`：运行时仅通过 **releases/download 直链**（见 `SKILL.md` §1.0–§1.1）获取对应平台二进制包；若下载失败或二进制不可运行，自动回退到源码下载并执行原有流程。
 
 - **Cursor（用户目录）**：复制到 `~/.cursor/skills/<skill-name>/`。
 - **Codex**：复制到 `$CODEX_HOME/skills/<skill-name>/`（默认 `~/.codex/skills`）。
@@ -77,11 +77,11 @@ git push <remote-skill-url> publish-hapray:main
 ## 版本与兼容性
 
 - Skill 正文中的 **环境版本**（Node、Python）以主仓库根目录 **`.nvmrc`、`.python-version`、`package.json` 的 `engines`** 为准；Skill 内勿写死易过期的小版本号，可写「见仓库锚点文件」。
-- **`hapray/SKILL.md` YAML `version`**：与当前对外 **GitCode Release 锚定 tag**（如 `v1.5.4`）对齐，用于「不可解析 latest」时的直链回退；发新版 Release 后须同步改该字段及正文示例直链。
+- **`hapray/SKILL.md` YAML `version`**：与当前对外 **GitCode Release 锚定 tag**（如 `v1.5.4`）对齐，作为 **默认直链 tag**（不再依赖发布页/latest）；发新版 Release 后须同步改该字段及正文示例直链。非锚定版本由用户提供整链或环境变量 `HAPRAY_RELEASE_TAG`。
 
 ## 维护清单（发布前）
 
 - [ ] `SKILL.md` 的 `description` 含足够触发词（HapRay、鸿蒙性能、perf、HAP、SO/LTO 等）。
-- [ ] `hapray/SKILL.md` 顶部 `version` 与 GitCode 当前 Release tag 一致；下载示例 URL 已核对。
+- [ ] `hapray/SKILL.md` 顶部 `version` 与 GitCode 当前 Release tag 一致；正文 **releases/download** 示例直链已核对（不要求维护「发布页」流程）。
 - [ ] 命令与 `README.md`、`docs/使用说明.md` 一致；契约参数见 `docs/工具契约式输入输出方案.md`。
 - [ ] 若 CLI 有破坏性变更，同步更新本目录下对应 skill。
