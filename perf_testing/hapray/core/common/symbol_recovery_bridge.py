@@ -6,8 +6,8 @@ you may not use this file except in compliance with the License.
 
 from __future__ import annotations
 
-import csv
 import base64
+import csv
 import json
 import logging
 import os
@@ -156,6 +156,64 @@ def check_symbol_recovery_llm_ready() -> bool:
     return llm_env_ready_for_symbol_recovery()
 
 
+def _resolve_llm_model_name() -> str:
+    model = (os.environ.get('LLM_MODEL') or '').strip()
+    if model:
+        return model
+    st = os.environ.get('LLM_SERVICE_TYPE', '').strip().lower()
+    if st == 'deepseek':
+        return (os.environ.get('DEEPSEEK_MODEL') or '').strip() or 'deepseek-chat'
+    if st == 'openai':
+        return (os.environ.get('OPENAI_MODEL') or '').strip() or 'gpt-4o-mini'
+    if st == 'claude':
+        return (os.environ.get('CLAUDE_MODEL') or '').strip() or 'claude-3-5-sonnet-latest'
+    if st == 'poe':
+        return (os.environ.get('POE_MODEL') or '').strip() or 'GPT-4o-Mini'
+    return 'GPT-5'
+
+
+def probe_symbol_recovery_llm_runtime(sr_root: Optional[Path], timeout_sec: int = 12) -> tuple[bool, str]:
+    """运行时探活 LLM：用于提前识别余额不足/鉴权失败，避免 update 跑完整轮后才发现全空结果。"""
+    if not llm_env_ready_for_symbol_recovery():
+        return (False, 'LLM env not ready (api/base_url missing)')
+    py_exe = resolve_symbol_recovery_python()
+    if py_exe is None:
+        return (True, 'runtime probe skipped: symbol_recovery python not found')
+    api, base = _resolved_llm_api_key_and_base_url()
+    model = _resolve_llm_model_name()
+    # 使用 symbol_recovery 同一套 Python 环境进行最小请求探活
+    probe_code = (
+        'import os\n'
+        'from openai import OpenAI\n'
+        f'client=OpenAI(api_key={api!r}, base_url={base!r})\n'
+        f'model={model!r}\n'
+        'client.chat.completions.create('
+        "model=model,messages=[{'role':'user','content':'ping'}],max_tokens=1,temperature=0)\n"
+        "print('OK')\n"
+    )
+    try:
+        cp = subprocess.run(
+            [str(py_exe), '-c', probe_code],
+            cwd=str(sr_root) if sr_root else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(3, int(timeout_sec)),
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return (False, f'LLM runtime probe timeout after {timeout_sec}s')
+    except OSError as e:
+        return (False, f'LLM runtime probe failed to start: {e}')
+    if cp.returncode == 0:
+        return (True, 'ok')
+    err = (cp.stderr or cp.stdout or '').strip()
+    err = err[-500:] if len(err) > 500 else err
+    return (False, f'LLM runtime probe failed (rc={cp.returncode}): {err}')
+
+
 def _symbol_recovery_root_candidates(perf_root: Path) -> list[Path]:
     """
     在无需显式配置时，按相对布局探测 ``.../tools/symbol_recovery``。
@@ -201,6 +259,11 @@ def resolve_symbol_recovery_root() -> Optional[Path]:
         root = Path(raw).expanduser().resolve()
         if (root / 'main.py').is_file():
             return root
+        # 也允许指向只含 symbol-recovery.exe 的目录（打包二进制场景）
+        if getattr(sys, 'frozen', False):
+            if _frozen_sr_exe_in_dir(root):
+                logger.debug('Resolved symbol recovery root (frozen, env var, exe-only): %s', root)
+                return root
         logger.warning('%s is set but main.py not found under: %s', ENV_SYMBOL_RECOVERY_ROOT, root)
         return None
 
@@ -210,12 +273,46 @@ def resolve_symbol_recovery_root() -> Optional[Path]:
             logger.debug('Resolved symbol recovery root (relative search): %s', cand)
             return cand
 
+    # Frozen 二进制：从 perf-testing.exe 所在目录逐级向上查找 symbol-recovery.exe
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent.resolve()
+        for base in (exe_dir, *exe_dir.parents):
+            # 情况 1：<base>/symbol-recovery.exe 同级文件
+            if _frozen_sr_exe_in_dir(base):
+                logger.debug('Resolved symbol recovery root (frozen, same dir): %s', base)
+                return base
+            # 情况 2：<base>/symbol-recovery/ 或 <base>/symbol_recovery/ 子目录
+            for sr_dir_name in ('symbol-recovery', 'symbol_recovery'):
+                sr_dir = (base / sr_dir_name).resolve()
+                if _frozen_sr_exe_in_dir(sr_dir):
+                    logger.debug('Resolved symbol recovery root (frozen, %s/ subdir): %s', sr_dir_name, sr_dir)
+                    return sr_dir
+                # 情况 3：<base>/tools/symbol-recovery/ 或 <base>/tools/symbol_recovery/
+                sr_dir = (base / 'tools' / sr_dir_name).resolve()
+                if _frozen_sr_exe_in_dir(sr_dir):
+                    logger.debug('Resolved symbol recovery root (frozen, tools/%s/): %s', sr_dir_name, sr_dir)
+                    return sr_dir
+            if base.parent == base:  # 文件系统根目录，停止
+                break
+        logger.debug(
+            'Frozen mode: symbol-recovery.exe not found (searched from %s upward)',
+            exe_dir,
+        )
+
     logger.debug(
         'Symbol recovery root not found under perf_root=%s (set %s or place tools/symbol_recovery on an ancestor path)',
         perf_root,
         ENV_SYMBOL_RECOVERY_ROOT,
     )
     return None
+
+
+def _frozen_sr_exe_in_dir(directory: Path) -> bool:
+    """检查目录下是否存在 symbol-recovery 可执行文件（打包二进制场景，跨平台）。"""
+    for name in ('symbol-recovery.exe', 'symbol_recovery.exe', 'SymRecover.exe', 'symbol-recovery', 'symbol_recovery'):
+        if (directory / name).is_file():
+            return True
+    return False
 
 
 def _symbol_recovery_venv_python_candidates(sr_root: Path) -> list[Path]:
@@ -289,24 +386,38 @@ def resolve_symbol_recovery_exe(sr_root: Path) -> Optional[Path]:
     return None
 
 
+def _symbol_recovery_python_launch_path(exe: Path) -> Optional[str]:
+    """返回用于 subprocess 启动的解释器路径。
+
+    对 ``venv/.venv`` 下的 ``python`` **禁止**使用 ``Path.resolve()``：在 macOS/Linux 上该文件常为指向
+    系统/Homebrew Python 的符号链接，``resolve()`` 会跟随到基础解释器，导致 **丢失 pyvenv 隔离**，
+    ``site-packages`` 中已安装的 ``openai`` 等依赖不可见（表现为 ``ModuleNotFoundError: openai``）。
+    ``expanduser().absolute()`` 得到绝对路径且不解析符号链接，启动时仍按 venv 布局加载依赖。
+    """
+    try:
+        p = exe.expanduser().absolute()
+    except OSError:
+        return None
+    return str(p) if p.is_file() else None
+
+
 def resolve_symbol_recovery_python() -> Optional[str]:
     explicit = os.environ.get(ENV_SYMBOL_RECOVERY_PYTHON, '').strip()
     if explicit:
         p = Path(explicit).expanduser()
-        if p.is_file():
-            return str(p.resolve())
+        chosen = _symbol_recovery_python_launch_path(p)
+        if chosen:
+            return chosen
         logger.warning('%s is not a file: %s', ENV_SYMBOL_RECOVERY_PYTHON, explicit)
         return None
 
     sr_root = resolve_symbol_recovery_root()
     if sr_root:
         for cand in _symbol_recovery_venv_python_candidates(sr_root):
-            try:
-                resolved = str(cand.resolve())
-            except OSError:
-                continue
-            logger.info('Symbol recovery: using interpreter from symbol_recovery venv: %s', resolved)
-            return resolved
+            chosen = _symbol_recovery_python_launch_path(cand)
+            if chosen:
+                logger.info('Symbol recovery: using interpreter from symbol_recovery venv: %s', chosen)
+                return chosen
 
     if not getattr(sys, 'frozen', False):
         return sys.executable
@@ -727,6 +838,10 @@ def embed_symbol_recovery_report_into_hiperf_html(
     return True
 
 
+# 子进程 argv 中的长选项必须与 tools/symbol_recovery/main.py#create_argument_parser 保持一致。
+# 契约定稿：cd tools/symbol_recovery && uv run --extra dev pytest tests/test_cli_contract.py
+
+
 def build_symbol_recovery_argv(
     *,
     sr_root: Path,
@@ -739,6 +854,8 @@ def build_symbol_recovery_argv(
     top_n: int,
     stat_method: str,
     extra_args: Optional[list[str]] = None,
+    prompt_only: bool = False,
+    import_llm_results: Optional[str] = None,
 ) -> list[str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     tail = [
@@ -765,6 +882,10 @@ def build_symbol_recovery_argv(
         raise ValueError('entry_exe and python_exe cannot both be unset')
     if extra_args:
         cmd.extend(extra_args)
+    if prompt_only:
+        cmd.append('--prompt-only')
+    if import_llm_results:
+        cmd.extend(['--import-llm-results', import_llm_results])
     return cmd
 
 
@@ -798,13 +919,39 @@ def build_symbol_recovery_html_argv(
     raise ValueError('entry_exe and python_exe cannot both be unset')
 
 
-def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Path, timeout_sec: Optional[float] = None) -> int:
+def build_symbol_recovery_apply_mapping_argv(
+    *,
+    sr_root: Path,
+    entry_exe: Optional[Path],
+    python_exe: Optional[str],
+    excel_path: Path,
+    perf_json_path: Path,
+) -> list[str]:
+    """构建 ``--apply-excel-to-perf-json`` 子进程命令（源码树或独立 symbol-recovery 可执行文件）。"""
+    tail = [
+        '--apply-excel-to-perf-json',
+        '--symbol-mapping-excel',
+        str(excel_path),
+        '--perf-json',
+        str(perf_json_path),
+    ]
+    if entry_exe is not None:
+        return [str(entry_exe), *tail]
+    if python_exe:
+        main_py = sr_root / 'main.py'
+        if not main_py.is_file():
+            raise ValueError(f'symbol_recovery main.py not found under {sr_root}')
+        return [python_exe, str(main_py), *tail]
+    raise ValueError('entry_exe and python_exe cannot both be unset for apply-excel-to-perf-json')
+
+
+def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Optional[Path], timeout_sec: Optional[float] = None) -> int:
     logger.info('Symbol recovery subprocess: %s', ' '.join(argv))
     env = os.environ.copy()
     try:
         completed = subprocess.run(
             argv,
-            cwd=str(cwd),
+            cwd=str(cwd) if cwd else None,
             env=env,
             timeout=timeout_sec,
             check=False,
@@ -825,42 +972,195 @@ def run_symbol_recovery_subprocess(argv: list[str], *, cwd: Path, timeout_sec: O
     return int(completed.returncode)
 
 
-def load_mapping_and_apply_perf_json(sr_root: Path, excel_path: Path, perf_json_path: Path) -> bool:
+def _build_symbol_recovery_step2_openai_argv(
+    sr_root: Path,
+    tasks_path: Path,
+    output_path: Path,
+) -> Optional[list[str]]:
+    """构建 ``main.py --step2-openai …`` 的 argv（跨平台）。
+
+    使用与主流程相同的解析规则：``resolve_symbol_recovery_exe``（Windows 上常见 ``*.exe``，
+    Linux/macOS 上为无后缀可执行文件名，见 ``_frozen_sr_exe_in_dir``），否则 ``python main.py``。
+    """
+    entry = resolve_symbol_recovery_exe(sr_root)
+    main_py = sr_root / 'main.py'
+    py = resolve_symbol_recovery_python()
+    tail = [
+        '--step2-openai',
+        '--step2-tasks',
+        str(tasks_path),
+        '--step2-output',
+        str(output_path),
+    ]
+    if entry is not None:
+        return [str(entry), *tail]
+    if py and main_py.is_file():
+        return [py, str(main_py), *tail]
+    return None
+
+
+def run_symbol_recovery_agent_step2(
+    sr_root: Path,
+    tasks_path: Path,
+    output_path: Path,
+    *,
+    timeout_sec: Optional[float] = None,
+    delay: float = 0.5,
+    resume: bool = False,
+    model: Optional[str] = None,
+) -> bool:
+    """Agent 编排的 Step2：优先 **子进程** 调符号恢复入口（与 OS 无关，由 bridge 解析具体文件名）。
+
+    **不能**指望把对方打成 PyInstaller **one-file** 后还在本进程 ``import`` 其内嵌代码；那种布局应走子进程。
+    仅当找不到任何子进程启动器、且 ``sr_root`` 上存在可导入的 ``core/``（源码树或 onedir）时，才回退
+    :func:`run_symbol_recovery_step2_openai` 同进程导入。
+    """
+    argv = _build_symbol_recovery_step2_openai_argv(sr_root, Path(tasks_path), Path(output_path))
+    if argv is not None:
+        rc = run_symbol_recovery_subprocess(argv, cwd=sr_root, timeout_sec=timeout_sec)
+        if rc == 0 and Path(output_path).is_file():
+            return True
+        logger.warning('Symbol recovery Step2 subprocess exited rc=%s (no in-process fallback after launcher use)', rc)
+        return False
+    logger.info(
+        'Symbol recovery Step2: no launcher (exe/script + main.py); trying in-process import '
+        '(needs importable ``tools/symbol_recovery`` tree with ``core/``).',
+    )
+    return run_symbol_recovery_step2_openai(
+        sr_root, Path(tasks_path), Path(output_path), delay=delay, resume=resume, model=model
+    )
+
+
+def run_symbol_recovery_step2_openai(
+    sr_root: Path,
+    tasks_path: Path,
+    output_path: Path,
+    *,
+    delay: float = 0.5,
+    resume: bool = False,
+    model: Optional[str] = None,
+) -> bool:
+    """同进程导入 ``core.utils.step2_agent`` 执行 Step2（仅当 ``sr_root`` 含可导入源码/包时可用）。
+
+    对方仅为 **one-file** 可执行文件、旁无 ``core/`` 目录时，本路径会失败；请使用
+    :func:`run_symbol_recovery_agent_step2` 走子进程。
+    """
     _ensure_symbol_recovery_on_syspath(sr_root)
     try:
-        from core.utils.symbol_replacer import apply_function_mapping_to_perf_json_text, load_function_mapping
+        from core.utils.step2_agent import run_openai_symbol_recovery_tasks
     except Exception:
-        logger.exception('Failed to import symbol_replacer')
+        logger.exception('Symbol recovery step2: failed to import core.utils.step2_agent')
         return False
+    try:
+        run_openai_symbol_recovery_tasks(
+            Path(tasks_path),
+            Path(output_path),
+            model=model,
+            delay=delay,
+            resume=resume,
+            sr_root=sr_root,
+        )
+    except Exception:
+        logger.exception('Symbol recovery step2: OpenAI-compatible inference failed')
+        return False
+    return Path(output_path).is_file()
+
+
+def run_symbol_recovery_step2_split_tasks(
+    sr_root: Path,
+    tasks_path: Path,
+    output_dir: Path,
+    *,
+    batch_size: int = 10,
+) -> bool:
+    """将 ``symbol_recovery_llm_tasks.json`` 切分为多批（与 ``main.py --step2-split`` / ``core.utils.step2_agent`` 一致）。"""
+    _ensure_symbol_recovery_on_syspath(sr_root)
+    try:
+        from core.utils.step2_agent import split_symbol_recovery_tasks
+    except Exception:
+        logger.exception('Symbol recovery step2: failed to import split_symbol_recovery_tasks')
+        return False
+    try:
+        split_symbol_recovery_tasks(Path(tasks_path), Path(output_dir), int(batch_size))
+    except Exception:
+        logger.exception('Symbol recovery step2: split failed')
+        return False
+    return True
+
+
+def run_symbol_recovery_step2_merge_results(
+    sr_root: Path,
+    output_path: Path,
+    result_files: list[str],
+) -> bool:
+    """合并多份 Agent 结果 JSON（与 ``main.py --step2-merge`` / ``core.utils.step2_agent`` 一致）。"""
+    _ensure_symbol_recovery_on_syspath(sr_root)
+    try:
+        from core.utils.step2_agent import merge_symbol_recovery_agent_results
+    except Exception:
+        logger.exception('Symbol recovery step2: failed to import merge_symbol_recovery_agent_results')
+        return False
+    try:
+        n = merge_symbol_recovery_agent_results(Path(output_path), list(result_files))
+    except Exception:
+        logger.exception('Symbol recovery step2: merge failed')
+        return False
+    return n > 0
+
+
+def _run_symbol_recovery_apply_mapping_subprocess(
+    sr_root: Path,
+    excel_path: Path,
+    perf_json_path: Path,
+) -> bool:
+    entry_exe = resolve_symbol_recovery_exe(sr_root)
+    py_exe: Optional[str] = None
+    if entry_exe is None:
+        py_exe = resolve_symbol_recovery_python()
+        if not py_exe:
+            logger.error(
+                'Symbol recovery apply mapping: no launcher (set %s / %s or place symbol-recovery next to perf-testing)',
+                ENV_SYMBOL_RECOVERY_EXE,
+                ENV_SYMBOL_RECOVERY_PYTHON,
+            )
+            return False
+    try:
+        argv = build_symbol_recovery_apply_mapping_argv(
+            sr_root=sr_root,
+            entry_exe=entry_exe,
+            python_exe=py_exe,
+            excel_path=excel_path,
+            perf_json_path=perf_json_path,
+        )
+    except ValueError as e:
+        logger.error('%s', e)
+        return False
+    rc = run_symbol_recovery_subprocess(argv, cwd=sr_root)
+    if rc != 0:
+        logger.warning('Symbol recovery apply-excel subprocess exited with code %s', rc)
+    return rc == 0
+
+
+def load_mapping_and_apply_perf_json(sr_root: Path, excel_path: Path, perf_json_path: Path) -> bool:
+    """将 Excel 映射写回 perf.json：优先同进程 import；不可用时（仅 exe 分体包等）走子进程。"""
     if not excel_path.is_file():
         logger.warning('Symbol recovery Excel not found: %s', excel_path)
         return False
     if not perf_json_path.is_file():
         logger.warning('perf.json not found: %s', perf_json_path)
         return False
+
+    _ensure_symbol_recovery_on_syspath(sr_root)
     try:
-        mapping = load_function_mapping(excel_path)
+        from core.utils.symbol_replacer import apply_excel_mapping_to_perf_json_file
     except Exception:
-        logger.exception('Failed to load function mapping from %s', excel_path)
-        return False
-    if not mapping:
-        logger.warning('Empty function mapping from %s', excel_path)
-        return False
+        logger.info('Symbol replacer not importable from %s; apply mapping via subprocess', sr_root)
+        return _run_symbol_recovery_apply_mapping_subprocess(sr_root, excel_path, perf_json_path)
     try:
-        raw = perf_json_path.read_text(encoding='utf-8', errors='replace')
-        existing_rows = _collect_existing_replacements_from_perf_json_text(raw)
-        new_text, replacement_info = apply_function_mapping_to_perf_json_text(raw, mapping)
-        merged_by_addr: dict[str, str] = {r['original']: r['replaced'] for r in existing_rows}
-        for r in replacement_info:
-            merged_by_addr[r['original']] = r['replaced']
-        merged_rows = [{'original': k, 'replaced': v} for k, v in sorted(merged_by_addr.items())]
-        perf_json_path.write_text(new_text, encoding='utf-8')
-        _save_replacement_manifest(perf_json_path.parent, merged_rows)
+        return bool(apply_excel_mapping_to_perf_json_file(excel_path, perf_json_path))
     except Exception:
-        logger.exception('Failed to apply mapping to %s', perf_json_path)
-        return False
-    logger.info('Applied symbol recovery mapping to %s', perf_json_path)
-    return True
+        logger.exception('In-process symbol mapping failed; retrying via subprocess')
+        return _run_symbol_recovery_apply_mapping_subprocess(sr_root, excel_path, perf_json_path)
 
 
 def default_symbol_recovery_output_dir(scene_dir: str, step_dir: str, output_root: Optional[str]) -> Path:
@@ -880,6 +1180,8 @@ def maybe_run_symbol_recovery_for_step(
     output_root: Optional[str],
     subprocess_timeout_sec: Optional[float] = None,
     extra_args: Optional[list[str]] = None,
+    prompt_only: bool = False,
+    import_llm_results: Optional[str] = None,
 ) -> bool:
     sr_root = resolve_symbol_recovery_root()
     if not sr_root:
@@ -926,10 +1228,21 @@ def maybe_run_symbol_recovery_for_step(
         top_n=top_n,
         stat_method=stat_method,
         extra_args=extra_args,
+        prompt_only=prompt_only,
+        import_llm_results=import_llm_results,
     )
     rc = run_symbol_recovery_subprocess(argv, cwd=sr_root, timeout_sec=subprocess_timeout_sec)
     if rc != 0:
         return False
+
+    if prompt_only:
+        tasks_path = out_dir / 'symbol_recovery_llm_tasks.json'
+        if tasks_path.is_file():
+            logger.info('Symbol recovery prompt tasks exported: %s', tasks_path)
+            return True
+        logger.warning('Symbol recovery prompt-only mode succeeded but tasks file missing: %s', tasks_path)
+        return False
+
     excel = out_dir / symbol_recovery_excel_name(stat_method, top_n)
     perf_json = step_hiperf / 'perf.json'
     return load_mapping_and_apply_perf_json(sr_root, excel, perf_json)
@@ -1011,8 +1324,11 @@ def symbol_recovery_should_run(
     effective_so_dir: Optional[str],
     perf_db_path: str,
     no_llm_override: bool,
+    agent_mode: bool = False,
 ) -> bool:
-    if no_llm_override or not llm_ready:
+    if no_llm_override:
+        return False
+    if not llm_ready and not agent_mode:
         return False
     if not effective_so_dir:
         return False

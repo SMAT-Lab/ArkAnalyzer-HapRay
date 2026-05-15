@@ -5,6 +5,14 @@
 
 ---
 
+## 〇、源码克隆：先做主 Skill「硬门禁」（必读）
+
+从仓库 **新 `git clone` 且无本地构建产物** 时，`perf.data`→`perf.db`（SymRecover Step1）、集成 `hapray update` 符号恢复、`dbtools`/负载拆解等链路**会成片报错**——多数是 **`tools/static_analyzer` 未 `npm run build`、`tools/symbol_recovery` 未建 venv/装依赖**，不是本章分析步骤写错。
+
+**在读下文「何时需要」「安装依赖」之前**，必须先完成父级 **`skills/hapray/SKILL.md`** 中的 **[源码工作区硬门禁]** 中与符号恢复相关的 **硬部分**：**`perf_testing` 的 `uv sync`、`<REPO_ROOT>/dist/tools/sa-cmd/`、`symbol_recovery` 的 venv 且 `main.py --help` 可通过**。**radare2 与 r2dec/r2ghidra 为建议项**，未装不要误判为「LLM/API/设备」类根因，也**不**阻塞后续排查与命令执行。
+
+---
+
 ## 一、何时需要符号恢复
 
 性能分析报告（HTML / perf.data）中出现以下情况时，符号恢复能显著提升分析效率：
@@ -37,15 +45,33 @@ uv venv .venv
 uv pip install --python ./.venv/bin/python -e .
 ```
 
-**强烈推荐安装（性能提升 10 倍+）：**
+**安装 radare2 + 反编译插件（建议，非硬门禁）：**
 
+能装则装；反编译质量高时更利于 LLM 推断，**装不上或跳过不阻塞** `perf` / `update` / 本章分析流程，但需在报告中注明能力降级。
+
+macOS：
 ```bash
-brew install radare2          # macOS
+brew install radare2
 r2pm install r2dec            # 反编译插件（轻量快速，推荐优先）
 # r2pm install r2ghidra       # 更高质量，需 Java，复杂函数可选
 ```
 
-### 2.3 配置 LLM API Key
+Windows：
+```powershell
+# 方式一：winget（推荐，Win 10 1709+）
+winget install radare2
+
+# 方式二：Chocolatey
+choco install radare2
+
+# 安装完成后在同一终端执行插件安装
+r2pm install r2dec
+# r2pm install r2ghidra
+```
+
+> **国内网络（安装 radare2 / r2pm 时，非硬门禁）**：`r2pm` 与手动下载 [radare2 GitHub Releases](https://github.com/radareorg/radare2/releases) **常直连 `github.com`**。若 **明显卡顿或约 2～3 分钟仍几乎无进度，禁止死等**，可换路径或**跳过 r2 栈**（不阻塞主流程）：**①** 优先 `brew` / `winget` / `choco`；**②** 策略允许时，为 Git 配置 **`https://github.com/` 的镜像或加速前缀**（`git config --global url."<前缀>".insteadOf "https://github.com/"`）后再 `r2pm install`；**③** 企业/国内镜像的官方 **zip 离线** 解压，`bin/` 加 `PATH`；**④** macOS 可先配 **清华、中科大等 Homebrew 镜像** 再 `brew install radare2`。企业内网出不了 GitHub 时可不装，继续走 venv + `main.py` 硬门禁即可。
+
+### 2.3 配置 LLM API Key（在线直连模式）
 
 复制 `.env.example` 为 `.env`，填入 API Key（以 DeepSeek 为例）：
 
@@ -56,49 +82,15 @@ DEEPSEEK_API_KEY=your_key
 
 支持的服务类型：`poe`（默认）、`openai`、`claude`、`deepseek`、`custom`。
 
-> **不配置 LLM 也可使用**：加 `--no-llm` 只做反汇编分析（无功能推断）。
+> **不配置本地 API Key 也可使用**：可选 `--no-llm` 快速模式，或由主 Agent 走离线编排模式（prompt 导出 + 外部 LLM + 回填）。
 
 ---
 
 ## 三、分析步骤
 
-### Step 0：前置——确认 LLM 配置（**必须先完成，再进行后续步骤**）
+### Step 0：前置——确认符号恢复运行路径（**必须先完成，再进行后续步骤**）
 
-在运行任何符号恢复命令前，**必须先**确认 `.env` 是否已配置 LLM API Key：
-
-```bash
-# 检查配置文件是否存在且含有效 Key
-cat <REPO_ROOT>/tools/symbol_recovery/.env 2>/dev/null | grep -E "API_KEY|SERVICE_TYPE"
-```
-
-**根据结果二选一**：
-
-| 情况 | 操作 |
-|------|------|
-| `.env` 已配置且含有效 API Key | 继续 Step 1，无需任何修改 |
-| `.env` 不存在或 API Key 为空 | **停止**，向用户展示下方选项，等待确认后再继续 |
-
-**当 `.env` 未配置时，必须向用户展示以下选项并等待回复**：
-
-> `.env` 中未检测到 LLM API Key，符号恢复有两种运行方式：
->
-> **方式 A（推荐）：配置 LLM，获得函数名推断与优化建议**
-> ```
-> cp tools/symbol_recovery/.env.example tools/symbol_recovery/.env
-> # 然后编辑 .env，填入以下任一服务的 Key：
-> # DeepSeek: LLM_SERVICE_TYPE=deepseek / DEEPSEEK_API_KEY=xxx
-> # OpenAI:   LLM_SERVICE_TYPE=openai  / OPENAI_API_KEY=xxx
-> # Claude:   LLM_SERVICE_TYPE=claude  / ANTHROPIC_API_KEY=xxx
-> ```
->
-> **方式 B：跳过 LLM，仅做反汇编分析（速度快，无函数名推断）**
-> ```
-> python3 main.py --no-llm --perf-data perf.data --so-dir so/
-> ```
->
-> 请选择方式 A 还是方式 B？
-
-**禁止**在用户未明确回复前，自行假设某种方式并继续执行。
+> 运行路径确认（在线直连 / 离线编排 / `--no-llm` 快速模式）由主 Skill `../SKILL.md` 的「symbol-recovery 门禁」统一执行，**必须先完成该门禁再继续 Step 1**。
 
 ### Step 1：识别缺失符号
 
@@ -168,6 +160,140 @@ python3 main.py \
     --kmp-app-name MyApp \
     --top-n 50
 ```
+
+**离线编排（主 Agent 模式，无需本地 API Key）：**
+
+当没有本地 LLM API Key，或由主 Agent 统一负责推断时，使用两步离线编排。
+
+*第一次调用——导出待分析任务：*
+
+```bash
+python3 main.py \
+    --perf-data path/to/perf.data \
+    --so-dir path/to/so/ \
+    --top-n 100 \
+    --output-dir output/ \
+    --prompt-only
+# 产出：output/symbol_recovery_llm_tasks.json
+```
+
+完成反汇编和字符串提取，**不调用 LLM、不读取 `.env`**。产出文件每条包含：`function_id`（`func_<rank>`）、`address`、`prompt`（含反汇编/字符串/反编译）、`expected_schema`。
+
+*第二步——主 Agent 处理任务（按任务数量选择方式）：*
+
+**任务数 ≤ 30 条：Agent 在对话中直接处理**
+
+读取 `output/symbol_recovery_llm_tasks.json`，逐条分析 `prompt` 字段（含 ARM64 反汇编、字符串常量、反编译代码），按以下格式写入 `output/llm_results.json`：
+
+```json
+[
+  {
+    "function_id": "func_1",
+    "functionality": "函数功能描述（中文，50-200 字）",
+    "function_name": "推断的语义化英文函数名（必填，禁止包含地址偏移后缀）",
+    "performance_analysis": "性能问题与优化建议（中文）",
+    "confidence": "高 / 中 / 低",
+    "reasoning": "关键指令模式、字符串等推断依据"
+  }
+]
+```
+
+**命名规范（强制）**
+- `function_name` 必须是语义化函数名，不得包含偏移信息。
+- 禁止：`foo_bar_f96fc`、`foo_bar_0x1a2b`、`foo_bar+0x1a2b`、`libxx.so+0x1a2b`。
+- 建议：`decodeFrame`、`buildRuntimeRequest`、`resolveJsBinding`。
+- 该约束由 Skill 流程强制执行：在离线编排产出结果 JSON 前必须人工/Agent 校验并修正；**工具导入阶段不负责自动去偏移后缀**。
+
+每次处理 10 条左右。任务数较多时，根据你的运行环境选择以下**两条路径之一**：
+
+---
+
+**路径 A — 在线模式**（有 API Key，终端直接批量调用）
+
+适用于：配置了 `tools/symbol_recovery/.env`，希望脚本自动跑完所有函数。
+
+```bash
+cd <REPO_ROOT>/tools/symbol_recovery
+python main.py --step2-openai \
+    --step2-tasks output/symbol_recovery_llm_tasks.json \
+    --step2-output output/llm_results.json
+# 可加 --step2-resume（断点续传）、--step2-model <名称>（覆盖 .env 模型）
+```
+
+- 依赖 `tools/symbol_recovery/.env` 中的 `api_key` / `base_url` / `model`
+- 打包后使用：`symbol-recovery --step2-openai --step2-tasks ... --step2-output ...`（与上式等价）
+- `scripts/run_step2.py` 仅为历史兼容 CLI，**不要**写入 HapRay 集成路径；新文档以 `main.py --step2-*` 为准
+
+---
+
+**路径 B — 离线编排模式**（Cursor / GUI Agent，不用或不想配 `.env`，推荐）
+
+适用于：在 Cursor 对话中让 Agent 模型做推断，推断本身**不调用外部 API**。
+
+**强制降级规则（必须遵守）**：
+- 在线直连 LLM 若出现额度不足、鉴权失败、网络/网关不可达、限流重试后仍失败，不得结束流程。  
+- 必须立即降级到本路径（离线编排），并继续完成回填。  
+- 目标是一次性闭环交付：在同一次任务中完成“导出 -> 推断 -> 导入 -> 报告更新”。
+
+默认由 Skill 驱动在对话中完成，不要求额外编写临时脚本。推荐流程：
+1. 读取 `symbol_recovery_llm_tasks.json`（可按 10 条分批处理）。
+2. Agent 逐条基于 `prompt` 做真实推断，生成结果 JSON（保持 `function_id` 对齐）。
+3. 结果直接保存为 `symbol_recovery_external_results.json`（或任意路径），供 `--import-llm-results` 回填。
+
+> 手工 **切批 / 合并** 请使用 `python main.py --step2-split ...`、`python main.py --step2-merge ...`（见 `main.py --help`）。`scripts/run_step2.py` 仅为历史兼容入口，**不要**作为集成或文档中的推荐路径。
+
+---
+
+**结果 JSON 要求：**
+- 必填字段：`function_id`（格式 `func_1`、`func_2`…）、`functionality`、`confidence`
+- 必填字段补充约束：`function_name`、`performance_analysis` 也必须提供且不能为空
+- 可选字段：`reasoning`
+- 也接受同义字段：`description` = `functionality`，`inferred_name` = `function_name`
+- 顶层格式：裸数组 `[...]` 或 `{"functions":[...]}` 均可
+- `function_name` 必须是语义化英文函数名，禁止附带偏移后缀（如 `_f96fc` / `_0x1a2b` / `+0x1a2b` / `libxx.so+0x1a2b`）；必须在产出阶段即保证规范。
+- `functionality` 与 `performance_analysis` 必须为中文；不合规结果必须在导入前修正。
+
+*第二次调用——回填结果并生成报告：*
+
+```bash
+python3 main.py \
+    --perf-data path/to/perf.data \
+    --so-dir path/to/so/ \
+    --top-n 100 \
+    --output-dir output/ \
+    --skip-step1 --perf-db output/perf.db \
+    --import-llm-results /path/to/results.json
+# 产出：Excel 报告 + HTML 符号替换报告（与在线模式完全相同）
+```
+
+`--skip-step1 --perf-db output/perf.db` 复用第一次产出的 perf.db，避免重复转换。  
+`--import-llm-results` 自动设置 `--no-llm`，全程不调用本地 LLM。  
+回填匹配优先级：`function_id` > `rank` > `address`（三者任一均可）。
+
+---
+
+### 与 `hapray update` 集成的默认行为（实现契约）
+
+以下与 `perf_testing/hapray/actions/update_action.py`、`perf_testing/hapray/analyze/perf_analyzer.py` 行为一致，供对照日志排查。
+
+| 步骤 | 行为 |
+|------|------|
+| **SO 目录** | 优先 `hapray update --so_dir <dir>`，其次环境变量 `HAPRAY_SO_DIR`。若仍无有效目录，且 **`hdc` 在 PATH、设备在线**：从 **`testInfo.json`** 读取 **`app_id`（包名）**，对每个包执行 **`hdc shell bm dump -n <包名>`**，从返回 JSON 中读取 **`modulePath` / `hapPath` / `bundleDataDir`** 等与安装相关的路径（见实现中的字段白名单），将每个基路径展开为 **`…/libs`、`…/libs/arm64`**（若路径指向 `.hap`/`.har` 则先取父目录）并 **`hdc file recv`** 到 `--report_dir/.symbol_recovery_libs/<bundle>/`；若仍无 `.so`，再用**仅由包名拼出的**常见路径兜底（如 `/data/storage/el1/bundle/<包名>/libs`、`/data/app/el1|el2/bundle/<包名>/libs(/arm64)`）。**不依赖进程 PID**（不以 `pidof`/`ps`/`pids.json` 为主路径）。 |
+| **自动拉库失败** | 日志中会出现 `Failed to auto-download libs for bundle: <app_id>`。此时 **`effective_so` 为空，集成符号恢复整段不会执行**（与 LLM 是否配置、是否探活失败无关）。处理方式：连接设备后重试、或显式传入 `--so_dir` / 设置 `HAPRAY_SO_DIR` 指向已含 `.so` 的目录。 |
+| **LLM** | 未 `--symbol-recovery-no-llm` 时：若 Key/Base URL 已配置且非强制 agent，则**先对 symbol_recovery 做运行时探活**；失败则自动 **fallback 到 agent 模式**（`llm_ready` 置假、`agent_mode` 置真，并记录 `symbol_recovery_llm_probe_ok`）。 |
+| **同一步骤内降级** | `PerfAnalyzer` 中：走 agent 编排时先 **`--prompt-only`** 导出 `symbol_recovery_llm_tasks.json`，然后在同次 `update` 内通过 **`symbol_recovery` 启动器**子进程执行 **`main.py --step2-openai --step2-tasks … --step2-output …`**（`core.utils.step2_agent`，**禁止**调用 `scripts/run_step2.py`）；已配置时优先 **`HAPRAY_SYMBOL_RECOVERY_AGENT_CMD`**（`{tasks}`、`{output}`、`{out_dir}`、`{scene}`）。若无启动器且存在可导入源码树，才回退同进程 Step2。若 Step2 未产出有效 `symbol_recovery_external_results.json`，则本次判定为未完成真实推断。随后 **`--import-llm-results`** 回填 `perf.json` 与报告。 |
+
+**与 `update` 集成时的一次性闭环要求（默认 Agent，禁止二次回填）**：
+- 默认目标：`update` 在**同一次执行**中完成 `tasks -> symbol_recovery_external_results.json -> import`，不要求用户再跑第二次 `update`。  
+- 在线路径仅作为首选尝试；**探活失败**（如 402/额度、URL/鉴权问题）或 **在线子进程失败/无有效映射** 时，**同一次** `update` 立即走 agent 命令链（导出 tasks -> agent 生成结果 -> import 回填），不得停留在“只导出任务”。  
+- 若默认/自定义 agent 命令均失败，本次必须标记“未完成真实推断（失败）”，并输出阻塞原因与重试命令；不得以“无外填结果设定一致”表达为成功。
+
+**严禁半成品交付（强制）**：
+- 仅有 `symbol_recovery_llm_tasks.json` 时，结论必须是“符号恢复未完成”。  
+- 若 `symbol_recovery_replacements.json` 中仍出现 `auto_recovered_*`，视为占位替换，不能计为语义化恢复成功。  
+- 必须以产物四件套作为完成证据：`llm_tasks`、`external_results`、`replacements`、`hiperf_report_with_inferred_symbols.html`。
+
+**Excel 和 KMP 模式同样支持此两步流程**，分别替换为 `--excel-file`/`--so-file` 和 `--kmp-mode`/`--perf-db`/`--so-file`；Excel 和 KMP 的第二次调用无需 `--skip-step1`。
 
 **跳过 LLM（仅反汇编，速度最快）：**
 

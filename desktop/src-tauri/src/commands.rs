@@ -862,7 +862,8 @@ fn hdc_bundled_candidates() -> Vec<PathBuf> {
 }
 
 /// 解析 hdc 可执行文件路径。注意：**从启动台打开的 GUI 不会读取 ~/.zshrc**，在 .zshrc 里改 PATH 对 App 无效。
-/// 顺序：`HAPRAY_HDC_PATH` → PATH（`which hdc`）→ 打包目录 `tools/bin/hdc` → 常见 SDK 路径 → 命令名 `hdc`。
+/// 顺序：`HAPRAY_HDC_PATH` → 打包目录 `tools/bin/hdc` → PATH（`which hdc`）→ 常见 SDK 路径 → 命令名 `hdc`。
+/// 打包路径优先于 PATH，避免本机已装 SDK 时仍误用系统 `hdc`、忽略随包分发的版本。
 /// 对绝对路径设置 cwd 为可执行文件所在目录，便于加载同目录下 `libusb_shared` 等动态库。
 fn resolve_hdc_executable() -> PathBuf {
     let mut tried: Vec<String> = Vec::new();
@@ -878,16 +879,16 @@ fn resolve_hdc_executable() -> PathBuf {
         ));
     }
 
-    match which::which("hdc") {
-        Ok(p) => return p,
-        Err(e) => tried.push(format!("which hdc: {}", e)),
-    }
-
     for cand in hdc_bundled_candidates() {
         if cand.is_file() {
             return cand;
         }
         tried.push(format!("打包/相对路径: {:?}", cand));
+    }
+
+    match which::which("hdc") {
+        Ok(p) => return p,
+        Err(e) => tried.push(format!("which hdc: {}", e)),
     }
 
     let mut sdk_candidates: Vec<PathBuf> = Vec::new();

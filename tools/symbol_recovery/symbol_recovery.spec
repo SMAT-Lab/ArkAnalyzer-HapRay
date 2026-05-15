@@ -6,6 +6,38 @@ import sys
 datas = [('core/utils', 'core/utils'), ('core/analyzers', 'core/analyzers'), ('core/llm', 'core/llm')]
 binaries = []
 hiddenimports = ['core.utils', 'core.analyzers', 'core.llm']
+
+# 打包 radare2 二进制 + 反编译插件（r2dec/r2ghidra），由 _find_bundled_r2 在 sys._MEIPASS/r2/ 下查找
+_r2_bundle = os.path.join(os.path.dirname(SPEC), '..', '..', 'dist', 'tools', 'bin', 'r2')
+if os.path.isdir(_r2_bundle):
+    for root, _dirs, files in os.walk(_r2_bundle):
+        for f in files:
+            src = os.path.join(root, f)
+            # dst 使用父目录的相对路径，PyInstaller 会自动追加 basename → 得到 r2/r2.exe, r2/plugins/r2dec.dll 等
+            dst = os.path.relpath(os.path.dirname(src), os.path.dirname(_r2_bundle))
+            datas.append((src, dst.replace('\\', '/')))
+    print(f'[symbol_recovery.spec] bundled r2 into frozen app ({_r2_bundle})')
+    # r2 的 dir.plugins 硬编码为 <binary>/../lib/plugins/
+    # 二进制在 sys._MEIPASS/r2/radare2.exe，所以插件应在 sys._MEIPASS/lib/plugins/
+    # 如构建机器安装了反编译插件（r2dec/r2ghidra），会自动打包
+    _lib_plugins = os.path.normpath(os.path.join(_r2_bundle, '..', 'lib', 'plugins'))
+    if os.path.isdir(_lib_plugins):
+        for root, _dirs, files in os.walk(_lib_plugins):
+            for f in files:
+                src = os.path.join(root, f)
+                datas.append((src, 'lib/plugins'))
+        print(f'[symbol_recovery.spec] bundled r2 decompiler plugins ({_lib_plugins})')
+    # 同时检查 r2/plugins/ (bundle_radare2.js 把插件放在 r2/plugins/)
+    # r2 的 dir.plugins 硬编码为 <binary>/../lib/plugins/，所以目标路径固定为 lib/plugins/
+    _r2_plugins = os.path.join(_r2_bundle, 'plugins')
+    if os.path.isdir(_r2_plugins):
+        for f in os.listdir(_r2_plugins):
+            src = os.path.join(_r2_plugins, f)
+            if os.path.isfile(src):
+                datas.append((src, 'lib/plugins'))
+        print(f'[symbol_recovery.spec] mapped r2/plugins/ to lib/plugins/ ({_r2_plugins})')
+else:
+    print(f'[symbol_recovery.spec] WARN: r2 bundle dir not found ({_r2_bundle}), skipping r2')
 IS_WIN = sys.platform.startswith('win')
 IS_DARWIN = sys.platform == 'darwin'
 # macOS：UPX + Mach-O 重签会导致公证报 Python 等 signature invalid（与 perf_testing 一致仅 Windows 用 UPX）

@@ -70,6 +70,7 @@ ENV_KEY_LLM_CACHE_DIR = 'LLM_CACHE_DIR'
 ENV_KEY_LLM_BATCH_SIZE = 'LLM_BATCH_SIZE'           # 可手动覆盖服务默认值
 ENV_KEY_LLM_REQUEST_DELAY = 'LLM_REQUEST_DELAY'    # 可手动覆盖服务默认值
 ENV_KEY_LLM_MAX_CONCURRENT = 'LLM_MAX_CONCURRENT'  # 并发批次数，1 = 串行
+ENV_KEY_LLM_TRUST_ENV = 'LLM_TRUST_ENV'            # 是否信任系统代理环境变量（httpx trust_env）
 
 # 服务类型 → API Key 环境变量名映射
 _LLM_SERVICE_TYPE = os.getenv('LLM_SERVICE_TYPE', '').lower()
@@ -146,14 +147,16 @@ class LLMConfig:
 
     def _get_cache_dir(self) -> Path:
         """获取缓存目录"""
-        cache_dir = os.getenv(ENV_KEY_LLM_CACHE_DIR, DEFAULT_CACHE_DIR)
-        cache_path = Path(cache_dir)
-        if sys.platform != 'darwin':
-            return cache_path
-        # macOS 下统一落到用户目录，避免只读目录写入失败
-        root = Path.home() / 'ArkAnalyzer-HapRay' / 'symbol_recovery' / 'cache'
-        root.mkdir(parents=True, exist_ok=True)
-        return root / cache_path.name
+        env_val = os.getenv(ENV_KEY_LLM_CACHE_DIR)
+        if env_val:
+            # 用户显式指定时，直接使用（不重定向）
+            return Path(env_val)
+        if sys.platform == 'darwin':
+            # macOS .app 环境下 cwd 可能只读，统一落到用户目录
+            root = Path.home() / 'ArkAnalyzer-HapRay' / 'symbol_recovery' / 'cache'
+            root.mkdir(parents=True, exist_ok=True)
+            return root
+        return Path(DEFAULT_CACHE_DIR)
 
     def get_model(self) -> str:
         """获取 LLM 模型名称，按服务类型自动选择对应的环境变量。"""
@@ -216,6 +219,11 @@ class LLMConfig:
             return _LLM_SERVICE_PERF_PARAMS[_LLM_SERVICE_TYPE][2]
         return 1
 
+    def get_trust_env(self) -> bool:
+        """是否信任系统代理环境变量。默认 False，避免被 IDE/系统代理劫持导致 403。"""
+        env_val = os.getenv(ENV_KEY_LLM_TRUST_ENV, 'false').strip().lower()
+        return env_val in {'1', 'true', 'yes', 'on'}
+
     def get_config_dict(self) -> dict[str, Any]:
         """
         获取完整的 LLM 配置字典
@@ -234,6 +242,7 @@ class LLMConfig:
             'batch_size': self.get_batch_size(),
             'request_delay': self.get_request_delay(),
             'max_concurrent': self.get_max_concurrent(),
+            'trust_env': self.get_trust_env(),
         }
 
     @property

@@ -127,8 +127,61 @@ jobs:
       uses: astral-sh/setup-uv@v5
 
     - name: Install dependencies
-      run: |        
+      run: |
         npm install --no-package-lock
+
+    # 安装 radare2 + 反编译插件（r2dec），打包进 release 供符号恢复使用
+    # timeout-minutes：防止 choco/brew/apt/r2pm 或 r2 在无 TTY 下永久阻塞（整 job 默认可达数小时）
+    - name: Install radare2 + r2dec
+      shell: bash
+      continue-on-error: true  # radare2 安装失败不阻塞构建（无 r2 时回退到 capstone）
+      timeout-minutes: 30
+      run: |
+        set -euo pipefail
+        # r2pm 可能因网络/源卡住；Linux 有 GNU timeout，macOS 常见无 timeout 由本 step 的 timeout-minutes 兜底
+        run_with_timeout() {
+          local secs=$1
+          shift
+          if command -v timeout >/dev/null 2>&1; then
+            timeout "$secs" "$@"
+          elif command -v gtimeout >/dev/null 2>&1; then
+            gtimeout "$secs" "$@"
+          else
+            "$@"
+          fi
+        }
+        R2_OK=false
+        case "${{ matrix.item.platform }}" in
+          linux)
+            sudo apt-get update -qq && sudo apt-get install -y -qq radare2 && R2_OK=true
+            ;;
+          darwin)
+            brew install radare2 && R2_OK=true
+            ;;
+          win32)
+            choco install radare2 -y --no-progress 2>/dev/null && R2_OK=true || \
+              echo "choco radare2 安装失败"
+            ;;
+        esac
+        if [ "$R2_OK" = true ]; then
+          # Windows：勿执行 r2（-v/--help 在 Git Bash 无 TTY 下可能调 stty 并长时间挂起）。
+          # Chocolatey 已成功则 shim 已就绪，仅校验 PATH 即可。
+          if [ "${{ matrix.item.platform }}" = "win32" ]; then
+            if command -v r2 >/dev/null 2>&1; then
+              echo "radare2 installed successfully (PATH: $(command -v r2))"
+            else
+              echo "radare2 verification failed (r2 not on PATH)"
+            fi
+          else
+            r2 -v
+            if command -v r2pm &>/dev/null; then
+              run_with_timeout 900 sh -c 'r2pm install r2dec || r2pm install r2ghidra' || \
+                echo "WARNING: no decompiler plugin installed (timeout or install failed)"
+            fi
+          fi
+        else
+          echo "WARNING: radare2 not installed, decompilation plugin unavailable in release"
+        fi
 
     # macOS：Base64 p12 → Developer ID Application 签名（未配置 APPLE_CERTIFICATE 则跳过，产物未签名）
     # 必配 Secrets：APPLE_CERTIFICATE、APPLE_CERTIFICATE_PASSWORD、KEYCHAIN_PASSWORD、APPLE_SIGNING_IDENTITY

@@ -108,7 +108,7 @@ _ohos_pkg = os.path.join(sysconfig.get_path("purelib"), "ohos")
 if os.path.isdir(_ohos_pkg):
     datas.append((_ohos_pkg, "ohos"))
 else:
-    print("Warning: site-packages/ohos 不存在，无法整包收集 ohos")
+    print('Warning: site-packages/ohos missing; cannot bundle ohos package')
 
 # 初始化 binaries 列表
 binaries = []
@@ -130,6 +130,19 @@ try:
     binaries.extend(collect_dynamic_libs('PIL'))
 except Exception as e:
     print(f"Warning: Could not collect PIL/Pillow dynamic libs: {e}")
+
+# llm_root_cause 子包（空刷 LLM 根因分析）：内联调用（execute 方法内 lazy import），
+# PyInstaller 静态分析无法自动发现，必须通过 collect_submodules 显式收集。
+try:
+    venv_packages.extend(collect_submodules('hapray.analyze.llm_root_cause'))
+except Exception as e:
+    print(f"Warning: collect_submodules('hapray.analyze.llm_root_cause') failed: {e}")
+
+# llm_root_cause/knowledge/ 下的 .md 知识库文件，运行时由 knowledge_loader.py 读取
+try:
+    datas += collect_data_files('hapray.analyze.llm_root_cause', include_py_files=False)
+except Exception as e:
+    print(f"Warning: collect_data_files('hapray.analyze.llm_root_cause') failed: {e}")
 
 # 不再把整份 site-packages 目录作为 datas 全量拷贝：会与 Analysis 已收集的依赖重复，
 # 在 x86_64 上尤其会把 numpy/pandas 等 wheel 再拷一份，体积可接近翻倍。

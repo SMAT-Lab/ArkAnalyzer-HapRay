@@ -410,10 +410,11 @@ class R2FunctionAnalyzer:
 
             # 尝试使用不同的反编译插件（按优先级）
             # r2ghidra 产出质量最高（显示 tpidr_el0、内存屏障等语义），优先使用
+            # pdc 是 r2 内置的伪反编译器，无需额外安装插件
             decompilers = [
-                ('pdg', 'r2ghidra'),  # Ghidra 反编译器（质量最高）
-                ('pdd', 'r2dec'),  # r2dec 反编译器
-                ('pdq', 'pdq'),  # 快速反编译器
+                ('pdg', 'r2ghidra'),  # Ghidra 反编译器（质量最高，需 r2pm -ci r2ghidra）
+                ('pdd', 'r2dec'),  # r2dec 反编译器（需 r2pm -ci r2dec）
+                ('pdc', 'pdc'),  # r2 内置伪反编译器（无需插件，始终可用）
             ]
 
             for cmd, name in decompilers:

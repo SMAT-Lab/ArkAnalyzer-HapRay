@@ -4,6 +4,7 @@
 """
 
 import base64
+import csv
 import gzip
 import json
 import re
@@ -956,6 +957,82 @@ def add_disclaimer(
         html_content += insertion_content
 
     return html_content
+
+
+_RE_EXISTING_INFERRED_PERF = re.compile(
+    r'(?P<replaced>[^"\\]+?)\s*\[反推，仅供参考\]\s*\((?P<original>lib[\w_]+\.so\+0x[0-9a-fA-F]+)\)',
+    re.IGNORECASE,
+)
+
+
+def collect_existing_replacements_from_perf_json_text(json_text: str) -> list[dict[str, str]]:
+    """二次 update 时从已有 perf.json 回收「地址 → 反推名」（与 HapRay bridge 逻辑一致）。"""
+    merged: dict[str, str] = {}
+    for m in _RE_EXISTING_INFERRED_PERF.finditer(json_text):
+        orig = m['original']
+        rep = m['replaced'].strip()
+        if orig and rep:
+            merged[orig] = rep
+    return [{'original': k, 'replaced': v} for k, v in sorted(merged.items())]
+
+
+def save_symbol_recovery_replacement_manifest(step_hiperf_dir: Path, rows: list[dict[str, str]]) -> None:
+    """在 hiperf 目录写入替换清单（JSON + CSV）。"""
+    try:
+        step_hiperf_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    jpath = step_hiperf_dir / 'symbol_recovery_replacements.json'
+    cpath = step_hiperf_dir / 'symbol_recovery_replacements.csv'
+    try:
+        jpath.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding='utf-8')
+    except OSError:
+        logger.warning('Symbol recovery: failed to write %s', jpath)
+    try:
+        with cpath.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['original', 'replaced'])
+            w.writeheader()
+            for row in rows:
+                w.writerow({'original': row.get('original', ''), 'replaced': row.get('replaced', '')})
+    except OSError:
+        logger.warning('Symbol recovery: failed to write %s', cpath)
+
+
+def apply_excel_mapping_to_perf_json_file(excel_path: Path, perf_json_path: Path) -> bool:
+    """将符号恢复 Excel 映射写回 perf.json，并写入替换清单。
+
+    供 ``main.py --apply-excel-to-perf-json`` 与 HapRay ``symbol_recovery_bridge`` 同进程调用；
+    分体二进制场景下由 bridge 通过子进程再次调用本工具保证行为一致。
+    """
+    if not excel_path.is_file():
+        logger.warning('Symbol recovery Excel not found: %s', excel_path)
+        return False
+    if not perf_json_path.is_file():
+        logger.warning('perf.json not found: %s', perf_json_path)
+        return False
+    try:
+        mapping = load_function_mapping(excel_path)
+    except Exception:
+        logger.exception('Failed to load function mapping from %s', excel_path)
+        return False
+    if not mapping:
+        logger.warning('Empty function mapping from %s', excel_path)
+        return False
+    try:
+        raw = perf_json_path.read_text(encoding='utf-8', errors='replace')
+        existing_rows = collect_existing_replacements_from_perf_json_text(raw)
+        new_text, replacement_info = apply_function_mapping_to_perf_json_text(raw, mapping)
+        merged_by_addr: dict[str, str] = {r['original']: r['replaced'] for r in existing_rows}
+        for r in replacement_info:
+            merged_by_addr[r['original']] = r['replaced']
+        merged_rows = [{'original': k, 'replaced': v} for k, v in sorted(merged_by_addr.items())]
+        perf_json_path.write_text(new_text, encoding='utf-8')
+        save_symbol_recovery_replacement_manifest(perf_json_path.parent, merged_rows)
+    except Exception:
+        logger.exception('Failed to apply mapping to %s', perf_json_path)
+        return False
+    logger.info('Applied symbol recovery mapping to %s', perf_json_path)
+    return True
 
 
 def apply_function_mapping_to_perf_json_text(json_text: str, function_mapping: dict) -> tuple[str, list]:
