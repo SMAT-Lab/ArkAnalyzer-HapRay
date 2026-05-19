@@ -171,53 +171,39 @@ python scripts/main.py build-index --input <decompiled_dir>
 # 输出：<decompiled_dir>/index/ 目录下的 4 个文件
 ```
 
-### 前置（一次性）：配置 LLM Token
+### 前置（一次性）：Agent 编排 / LLM
 
-推荐使用本地 token 文件，**不需要每次传 `--api-key`，也更安全**（不会出现在 shell 历史）。
+`hapray root-cause` 与 `tools/symbol_recovery` 保持一致，默认使用 Agent 离线编排：工具导出 `<output_stem>_agent_task.json`，由当前 Cursor/default Agent 或 `HAPRAY_ROOT_CAUSE_AGENT_CMD` 处理后写回 `<output_stem>_agent_result.json`。这条路径不要求 HapRay 进程持有 API key。
 
-**方式一（推荐）：默认位置自动加载**
-
-```bash
-cd perf_testing/hapray/core/config
-cp llm_tokens.local.yaml.example llm_tokens.local.yaml
-# ⚠️ 只编辑 llm_tokens.local.yaml，不要修改 .example 文件
-# .example 是提交到 git 的模板，.local.yaml 才是 gitignored 的真实凭据文件
-vim llm_tokens.local.yaml   # 填入 api_key / base_url / model
-```
-
-`hapray root-cause` 启动时自动发现该文件，无需任何额外参数。
-
-**方式二：指定任意位置的 token 文件**
+推荐使用默认 Agent 编排；如需自动接入外部 agent 命令：
 
 ```bash
-python scripts/main.py root-cause \
-  --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index \
-  --llm-tokens /path/to/my_llm_tokens.yaml
+HAPRAY_ROOT_CAUSE_AGENT_CMD="<your-agent-command> --task {task} --output {output}"
 ```
 
-**方式三：每次直接传参（一次性使用）**
+本地直连 API 是兼容路径，需要显式开启：
 
 ```bash
-python scripts/main.py root-cause \
-  --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index \
-  --api-key sk-... \
-  --base-url https://api.deepseek.com/v1 \
-  --model deepseek-chat
+HAPRAY_ROOT_CAUSE_EXECUTION=api
+LLM_SERVICE_TYPE=poe          # poe | openai | claude | deepseek
+LLM_API_KEY=<统一配置的agent api key>
+LLM_BASE_URL=https://api.poe.com/v1
+LLM_MODEL=GPT-5
 ```
 
-`llm_tokens.local.yaml` 已在 `.gitignore` 中，**不会提交到版本库**。  
+服务专属变量也可用，例如 `POE_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`，以及 `POE_MODEL`、`OPENAI_MODEL`、`CLAUDE_MODEL`、`DEEPSEEK_MODEL`。
+
+如果不设置 `HAPRAY_ROOT_CAUSE_EXECUTION=api`，即使存在 `LLM_API_KEY`，也优先走 Agent 编排。`auto` 模式表示有 key 时走 API、否则走 Agent。
+
 配置加载优先级（从高到低）：
 
 | 优先级 | 来源 | 说明 |
 |--------|------|------|
-| 1 | `--config <file>` | 完整配置替换（最高优先） |
-| 2 | `--api-key` / `--base-url` / `--model` | 单次 CLI 覆盖，优先于任何文件 |
-| 3 | `--llm-tokens <file>` | 显式指定的 token 文件 |
-| 4 | `llm_tokens.local.yaml` | 自动发现（`hapray/core/config/` 目录，gitignored）|
-| 5 | `config.yaml` `llm_root_cause:` 节 | 跟踪的默认值（`api_key` 留空）|
-| 6 | 环境变量 `LLM_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | 最终兜底 |
+| 1 | Agent 编排 | 默认主路径，导出 task/result JSON，适合 skills/Cursor |
+| 2 | `HAPRAY_ROOT_CAUSE_EXECUTION=api` | 显式开启本地直连 API |
+| 3 | `.env` / 环境变量 | API 模式下读取统一 LLM 配置 |
+| 4 | `--api-key` / `--base-url` / `--model` | 旧版单次 CLI 覆盖，兼容保留 |
+| 5 | `--config` / `--llm-tokens` | 旧版配置入口，兼容保留 |
 
 ### 每次分析（`hapray root-cause`）
 
@@ -250,13 +236,14 @@ python scripts/main.py root-cause \
 | `--index-dir` | 推荐 | 反编译索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），提高 /proc 命中的代码定位精度 |
 | `--decompiled-dir` | 可选 | 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 with_source 模式 |
 | `--llm-mode` | 可选 | `analyze`（默认）/ `with_source` |
-| `--llm-tokens` | 可选 | 指定 token 文件路径（优先于自动发现）|
-| `--api-key` | 可选 | 单次覆盖 API Key（优先于所有文件）|
-| `--base-url` | 可选 | 单次覆盖接口地址 |
-| `--model` | 可选 | 单次覆盖模型名 |
+| `--llm-tokens` | 可选 | 旧版 token 文件入口，推荐使用 `.env` / 环境变量 |
+| `--api-key` | 可选 | 旧版单次覆盖入口，推荐使用 `LLM_API_KEY` |
+| `--base-url` | 可选 | 旧版单次覆盖入口，推荐使用 `LLM_BASE_URL` |
+| `--model` | 可选 | 旧版单次覆盖入口，推荐使用 `LLM_MODEL` |
 | `--config` | 可选 | 完整配置文件（最高优先级，替换所有默认值）|
 | `--output` | 可选 | 自定义输出路径，默认 `<report-dir>/root_cause.md` |
 | `--skip-llm` | 可选 | 跳过 LLM，只输出规则引擎证据报告 |
+| `HAPRAY_ROOT_CAUSE_EXECUTION` | 可选 | `agent`（默认）/ `api` / `auto` |
 
 ### 输出
 

@@ -21,9 +21,11 @@ with_source (enhanced)
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -33,23 +35,13 @@ from .code_index_lookup import CodeIndexLookup
 from .context_builder import ContextBuilder
 from .empty_frame_evidence import EmptyFrameEvidenceExtractor
 from .knowledge_loader import load_knowledge
-from .llm_client import load_client_from_config
+from .llm_client import is_llm_configured, load_client_from_config
 from .prompts import build_user_prompt, get_system_prompt
 from .report_renderer import EvidenceReportRenderer
+from .structured_output import OUTPUT_SCHEMA_STR
 
 
 _KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
-
-
-def _llm_is_configured(config: dict) -> bool:
-    llm_cfg = config.get("llm", {})
-    api_key = llm_cfg.get("api_key", "")
-    if not api_key:
-        return False
-    if isinstance(api_key, str) and api_key.startswith("${") and api_key.endswith("}"):
-        env_name = api_key[2:-1]
-        return bool(os.environ.get(env_name))
-    return bool(str(api_key).strip())
 
 
 def _enrich_with_code_and_callgraph(
@@ -176,6 +168,192 @@ def _run_analyze_with_llm(
     except Exception as exc:
         logging.warning("LLM analyze mode failed: %s", exc)
         return None
+
+
+def _apply_module_attributions(suspects: list, structured_evidence: dict) -> None:
+    attributions = structured_evidence.get("module_attributions", {}) or {}
+    for s in suspects:
+        attr = attributions.get(s.owner, {})
+        if attr:
+            s.module_package = attr.get("package", "")
+            s.module_version = attr.get("version", "")
+            s.business_domain = attr.get("business_domain", "")
+
+
+def _build_agent_prompts(
+    language: str,
+    context_text: str,
+    structured_evidence: dict,
+    mode: str,
+    code_snippets: list[dict[str, Any]],
+    call_chains_text: str,
+) -> tuple[str, str]:
+    domain_knowledge = load_knowledge(_KNOWLEDGE_DIR, checker="empty-frame", context_signals=[])
+    system_prompt = get_system_prompt(
+        language=language,
+        checker="empty-frame",
+        mode=mode,
+        domain_knowledge=domain_knowledge,
+    )
+    user_prompt = build_user_prompt(
+        checker="empty-frame",
+        context_text=context_text,
+        structured_evidence=structured_evidence,
+        code_snippets=code_snippets,
+        call_chains_text=call_chains_text,
+        mode=mode,
+    )
+    return system_prompt, user_prompt
+
+
+def _write_agent_task(
+    output_path: Path,
+    language: str,
+    mode: str,
+    system_prompt: str,
+    user_prompt: str,
+) -> Path:
+    task_path = output_path.parent / f"{output_path.stem}_agent_task.json"
+    task = {
+        "task_type": "hapray_root_cause",
+        "checker": "empty-frame",
+        "mode": mode,
+        "language": language,
+        "instructions": [
+            "Read system_prompt and user_prompt.",
+            "Use the current Cursor/default agent model, not local API tokens.",
+            "Return valid JSON only, matching expected_schema_json.",
+            "Write the JSON result to the requested agent result path if running through HAPRAY_ROOT_CAUSE_AGENT_CMD.",
+        ],
+        "expected_schema_json": json.loads(OUTPUT_SCHEMA_STR),
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+    }
+    task_path.write_text(json.dumps(task, ensure_ascii=False, indent=2), encoding="utf-8")
+    return task_path
+
+
+def _run_agent_command(task_path: Path, result_path: Path, report_path: Path) -> bool:
+    env_cmd = (os.environ.get("HAPRAY_ROOT_CAUSE_AGENT_CMD") or "").strip()
+    if not env_cmd:
+        return False
+    rendered = (
+        env_cmd.replace("{task}", str(task_path))
+        .replace("{tasks}", str(task_path))
+        .replace("{output}", str(result_path))
+        .replace("{result}", str(result_path))
+        .replace("{report}", str(report_path))
+        .replace("{out_dir}", str(report_path.parent))
+    )
+    logging.info("Running root-cause agent command: %s", rendered)
+    try:
+        cp = subprocess.run(
+            rendered,
+            cwd=str(report_path.parent),
+            check=False,
+            shell=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+        )
+    except OSError as exc:
+        logging.warning("Root-cause agent command failed to start: %s", exc)
+        return False
+    if cp.stdout:
+        logging.info(cp.stdout[:8000])
+    if cp.stderr:
+        logging.info(cp.stderr[:8000])
+    if cp.returncode != 0:
+        logging.warning("Root-cause agent command exited with code %s", cp.returncode)
+        return False
+    return result_path.is_file()
+
+
+def _render_agent_result(
+    result_path: Path,
+    structured_evidence: dict,
+    code_snippets: list[dict[str, Any]],
+) -> str | None:
+    if not result_path.is_file():
+        return None
+    from .structured_output import parse_llm_output, render_fallback_markdown, render_to_markdown
+
+    raw_output = result_path.read_text(encoding="utf-8", errors="ignore")
+    result = parse_llm_output(raw_output)
+    if result.parse_success:
+        _attach_code_snippets(result.suspects, code_snippets)
+        _apply_module_attributions(result.suspects, structured_evidence)
+        return render_to_markdown(result)
+    return render_fallback_markdown(result)
+
+
+def _render_agent_pending_report(task_path: Path, result_path: Path, evidence_report: str) -> str:
+    return (
+        "# Root Cause Analysis Pending Agent Inference\n\n"
+        "未检测到本地 LLM API Key，因此未走 OpenAI-compatible API。"
+        "已按符号恢复的离线编排方式导出 Agent 任务，请使用当前 Cursor/default Agent 处理。\n\n"
+        "## Agent Task\n\n"
+        f"- 任务文件: `{task_path}`\n"
+        f"- 期望结果文件: `{result_path}`\n\n"
+        "## How To Use\n\n"
+        "1. 让当前 Agent 读取任务文件中的 `system_prompt` 和 `user_prompt`。\n"
+        "2. 按 `expected_schema_json` 输出合法 JSON。\n"
+        "3. 将 JSON 写入期望结果文件。\n"
+        "4. 重新运行 `hapray root-cause`，或配置 `HAPRAY_ROOT_CAUSE_AGENT_CMD` 自动生成结果。\n\n"
+        "可选自动命令环境变量：\n\n"
+        "```bash\n"
+        "HAPRAY_ROOT_CAUSE_AGENT_CMD=\"<your-agent-command> --task {task} --output {output}\"\n"
+        "```\n\n"
+        "## Evidence Report\n\n"
+        f"{evidence_report}"
+    )
+
+
+def _run_agent_fallback(
+    output_path: Path,
+    language: str,
+    context_text: str,
+    structured_evidence: dict,
+    mode: str,
+    code_snippets: list[dict[str, Any]],
+    call_chains_text: str,
+    evidence_report: str,
+) -> str:
+    system_prompt, user_prompt = _build_agent_prompts(
+        language=language,
+        context_text=context_text,
+        structured_evidence=structured_evidence,
+        mode=mode,
+        code_snippets=code_snippets,
+        call_chains_text=call_chains_text,
+    )
+    task_path = _write_agent_task(output_path, language, mode, system_prompt, user_prompt)
+    result_path = output_path.parent / f"{output_path.stem}_agent_result.json"
+
+    if _run_agent_command(task_path, result_path, output_path):
+        rendered = _render_agent_result(result_path, structured_evidence, code_snippets)
+        if rendered:
+            return rendered
+
+    rendered = _render_agent_result(result_path, structured_evidence, code_snippets)
+    if rendered:
+        return rendered
+    return _render_agent_pending_report(task_path, result_path, evidence_report)
+
+
+def _root_cause_execution_mode(llm_config: dict) -> str:
+    """Return root-cause execution mode: agent (default), api, or auto."""
+    raw = (
+        os.environ.get("HAPRAY_ROOT_CAUSE_EXECUTION")
+        or llm_config.get("analysis", {}).get("execution_mode")
+        or "agent"
+    )
+    mode = str(raw).strip().lower()
+    if mode not in {"agent", "api", "auto"}:
+        logging.warning("Unknown root-cause execution mode %r; using agent", raw)
+        return "agent"
+    return mode
 
 
 def _normalize_symbol(name: str) -> str:
@@ -406,36 +584,82 @@ def run_empty_frame_analysis(
     renderer = EvidenceReportRenderer()
     evidence_report = renderer.render(evidence)
 
-    # 7. LLM analysis
+    # 7. Agent / LLM analysis
     final_report: str | None = None
-    if not skip_llm and _llm_is_configured(llm_config):
-        enriched_context = context_text
-        if module_attribution_text:
-            enriched_context = context_text + "\n\n" + module_attribution_text
+    enriched_context = context_text
+    if module_attribution_text:
+        enriched_context = context_text + "\n\n" + module_attribution_text
 
-        if effective_mode == "with_source":
-            final_report = _run_with_source_llm(
-                config=llm_config,
+    if not skip_llm:
+        execution_mode = _root_cause_execution_mode(llm_config)
+
+        # Default path: agent orchestration.  This matches symbol_recovery and
+        # keeps Cursor/skills as the primary LLM execution surface.  The local
+        # API path is opt-in via HAPRAY_ROOT_CAUSE_EXECUTION=api or config.
+        if execution_mode == "agent":
+            logging.info("Root-cause execution mode: agent orchestration")
+            final_report = _run_agent_fallback(
+                output_path=Path(output_path),
                 language=language,
                 context_text=enriched_context,
                 structured_evidence=structured_evidence,
+                mode=effective_mode,
                 code_snippets=code_snippets,
                 call_chains_text=call_chains_text,
                 evidence_report=evidence_report,
-                stream=stream,
             )
+        elif is_llm_configured(llm_config):
+            logging.info("Root-cause execution mode: local OpenAI-compatible API")
+            if effective_mode == "with_source":
+                final_report = _run_with_source_llm(
+                    config=llm_config,
+                    language=language,
+                    context_text=enriched_context,
+                    structured_evidence=structured_evidence,
+                    code_snippets=code_snippets,
+                    call_chains_text=call_chains_text,
+                    evidence_report=evidence_report,
+                    stream=stream,
+                )
+            else:
+                final_report = _run_analyze_with_llm(
+                    config=llm_config,
+                    language=language,
+                    context_text=enriched_context,
+                    structured_evidence=structured_evidence,
+                    stream=stream,
+                    code_snippets=code_snippets if code_snippets else None,
+                )
+            if execution_mode == "auto" and final_report is None:
+                logging.info("Local API failed in auto mode; falling back to agent orchestration")
+                final_report = _run_agent_fallback(
+                    output_path=Path(output_path),
+                    language=language,
+                    context_text=enriched_context,
+                    structured_evidence=structured_evidence,
+                    mode=effective_mode,
+                    code_snippets=code_snippets,
+                    call_chains_text=call_chains_text,
+                    evidence_report=evidence_report,
+                )
         else:
-            final_report = _run_analyze_with_llm(
-                config=llm_config,
+            logging.info(
+                "No local LLM API key configured; exporting root-cause Agent task "
+                "(symbol_recovery-style fallback)."
+            )
+            final_report = _run_agent_fallback(
+                output_path=Path(output_path),
                 language=language,
                 context_text=enriched_context,
                 structured_evidence=structured_evidence,
-                stream=stream,
-                code_snippets=code_snippets if code_snippets else None,
+                mode=effective_mode,
+                code_snippets=code_snippets,
+                call_chains_text=call_chains_text,
+                evidence_report=evidence_report,
             )
 
     if final_report is None:
-        final_report = evidence_report  # fallback: show evidence if LLM skipped or failed
+        final_report = evidence_report  # explicit --skip-llm or failed remote/API path
 
     # 8. Write outputs
     output = Path(output_path)

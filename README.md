@@ -195,22 +195,37 @@ python -m scripts.main root-cause \
   --decompiled-dir <decompiled_dir>
 ```
 
-**配置 LLM Token（一次性）：**
+**Agent 编排（默认，和 symbol recovery/skills 保持一致）：**
+
+`root-cause` 默认不要求 HapRay 进程持有 API key，而是导出 `<output_stem>_agent_task.json`，
+由当前 Cursor/default Agent 或 `HAPRAY_ROOT_CAUSE_AGENT_CMD` 处理后写回 `<output_stem>_agent_result.json`。
+
+如需自动接入外部 agent 命令：
+
 ```bash
-cd perf_testing/hapray/core/config
-cp llm_tokens.local.yaml.example llm_tokens.local.yaml
-# ⚠️ 只编辑 llm_tokens.local.yaml，不要修改 .example 文件
-# .local.yaml 已在 .gitignore 中，不会提交到版本库
-vim llm_tokens.local.yaml   # 填入 api_key / base_url / model
+HAPRAY_ROOT_CAUSE_AGENT_CMD="<your-agent-command> --task {task} --output {output}"
 ```
+
+**本地直连 API（可选兼容路径）：**
+```bash
+# 任选其一：写入系统环境变量，或在仓库/运行目录放 .env
+HAPRAY_ROOT_CAUSE_EXECUTION=api
+LLM_SERVICE_TYPE=poe          # poe | openai | claude | deepseek
+LLM_API_KEY=<统一配置的agent api key>
+LLM_BASE_URL=https://api.poe.com/v1
+LLM_MODEL=GPT-5
+```
+
+如果不设置 `HAPRAY_ROOT_CAUSE_EXECUTION=api`，即使存在 `LLM_API_KEY`，也优先走 Agent 编排。
 
 Options:
 - `--report-dir <path>`: HapRay 报告目录，含 `summary.json`、`trace_emptyFrame.json`（必填）
 - `--index-dir <path>`: 反编译代码索引目录（`symbol_index.jsonl` / `ui_index.jsonl`），推荐提供
 - `--decompiled-dir <path>`: 反编译源码目录（`*.ts` / `*.callgraph.json`），提供后自动切换 with_source 模式
 - `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `with_source`（LLM 阅读反编译代码，行级修复建议）
-- `--llm-tokens <path>`: 指定 LLM Token 文件路径（默认自动发现 `llm_tokens.local.yaml`）
-- `--api-key / --base-url / --model`: 单次覆盖，优先于所有配置文件
+- `--llm-tokens <path>`: 旧版兼容入口；推荐使用统一 `.env` / 环境变量
+- `--api-key / --base-url / --model`: 旧版单次覆盖入口；推荐使用统一 `.env` / 环境变量
+- `HAPRAY_ROOT_CAUSE_EXECUTION`: `agent`（默认）/ `api` / `auto`
 - `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）
 - `--skip-llm`: 跳过 LLM，`root_cause.md` 内容与 `root_cause_evidence.md` 相同
 
