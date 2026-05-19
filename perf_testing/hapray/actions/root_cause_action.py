@@ -21,6 +21,36 @@ from pathlib import Path
 
 from hapray.core.common.action_return import ActionExecuteReturn
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+except Exception:
+    pass
+
+
+_LLM_SERVICE_TYPE = os.getenv('LLM_SERVICE_TYPE', '').lower()
+_LLM_API_KEY_ENV_MAP = {
+    'poe': 'POE_API_KEY',
+    'openai': 'OPENAI_API_KEY',
+    'claude': 'ANTHROPIC_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+}
+_LLM_BASE_URL_MAP = {
+    'poe': 'https://api.poe.com/v1',
+    'openai': 'https://api.openai.com/v1',
+    'claude': 'https://api.anthropic.com/v1',
+    'deepseek': 'https://api.deepseek.com/v1',
+}
+_LLM_MODEL_ENV_MAP = {
+    'poe': 'POE_MODEL',
+    'openai': 'OPENAI_MODEL',
+    'claude': 'CLAUDE_MODEL',
+    'deepseek': 'DEEPSEEK_MODEL',
+}
+
 
 class RootCauseAction:
     """LLM-powered root cause analysis for HapRay performance reports."""
@@ -75,23 +105,23 @@ class RootCauseAction:
             '--llm-tokens',
             default=None,
             dest='llm_tokens',
-            help='Path to an LLM token/credentials YAML (llm: api_key / base_url / model). '
-                 'Auto-discovered at hapray/core/config/llm_tokens.local.yaml when not specified.',
+            help='Deprecated legacy token YAML. Prefer shared env/.env variables: '
+                 'LLM_SERVICE_TYPE, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL.',
         )
         parser.add_argument(
             '--api-key',
             default=None,
-            help='LLM API key — one-off override, takes precedence over config files.',
+            help='Deprecated one-off override. Prefer LLM_API_KEY or service-specific env variables.',
         )
         parser.add_argument(
             '--base-url',
             default=None,
-            help='LLM base URL — one-off override.',
+            help='Deprecated one-off override. Prefer LLM_BASE_URL.',
         )
         parser.add_argument(
             '--model',
             default=None,
-            help='LLM model name — one-off override.',
+            help='Deprecated one-off override. Prefer LLM_MODEL or service-specific model env variables.',
         )
         parser.add_argument(
             '--skip-llm',
@@ -156,14 +186,18 @@ class RootCauseAction:
 
     @staticmethod
     def _load_config(parsed) -> dict | None:
-        """Build the LLM config dict with the following priority (highest first):
+        """Build the LLM config dict.
 
-        1. --config <file>       complete config replacement (all sections)
-        2. --api-key / --base-url / --model   explicit one-off CLI overrides
-        3. --llm-tokens <file>   explicit token/credentials file
-        4. llm_tokens.local.yaml auto-discovered beside config.yaml (gitignored)
-        5. config.yaml llm_root_cause: section   tracked defaults
-        6. LLM_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY   env-var fallback
+        Mirrors tools/symbol_recovery:
+        - .env is loaded automatically
+        - shared environment variables are the preferred source
+        - missing API key is not fatal here; runner will skip LLM gracefully
+
+        Priority:
+        1. --api-key / --base-url / --model legacy one-off overrides
+        2. LLM_* / service-specific environment variables
+        3. --config or config.yaml llm_root_cause defaults
+        4. --llm-tokens legacy YAML overlay
         """
         import yaml
 
@@ -184,7 +218,9 @@ class RootCauseAction:
         # Base: hapray config.yaml defaults
         config = RootCauseAction._config_from_hapray()
 
-        # Merge token/credentials file (explicit path or auto-discovered)
+        # Merge token/credentials file only when explicitly requested.  We no
+        # longer auto-discover local token YAML; symbol_recovery-style env/.env
+        # configuration is the unified path.
         tokens_cfg = RootCauseAction._load_tokens_file(getattr(parsed, 'llm_tokens', None))
         if tokens_cfg:
             for section, values in tokens_cfg.items():
@@ -197,31 +233,59 @@ class RootCauseAction:
 
     @staticmethod
     def _apply_cli_and_env(config: dict, parsed) -> dict:
-        """Apply --api-key / --base-url / --model overrides and env-var fallback."""
+        """Apply shared env/.env config, then legacy CLI overrides."""
+        llm_cfg = config.setdefault('llm', {})
+
+        env_key = RootCauseAction._load_env_api_key()
+        env_base_url = os.environ.get('LLM_BASE_URL') or _LLM_BASE_URL_MAP.get(_LLM_SERVICE_TYPE)
+        env_model = RootCauseAction._load_env_model()
+
+        if env_key:
+            llm_cfg['api_key'] = env_key
+        if env_base_url:
+            llm_cfg['base_url'] = env_base_url
+        if env_model:
+            llm_cfg['model'] = env_model
+        if _LLM_SERVICE_TYPE:
+            # Keep the same OpenAI-compatible integration surface as symbol_recovery
+            llm_cfg['provider'] = 'openai'
+
+        # Legacy explicit CLI overrides still win when used.
         if parsed.api_key:
-            config.setdefault('llm', {})['api_key'] = parsed.api_key
+            llm_cfg['api_key'] = parsed.api_key
         if parsed.base_url:
-            config.setdefault('llm', {})['base_url'] = parsed.base_url
+            llm_cfg['base_url'] = parsed.base_url
         if parsed.model:
-            config.setdefault('llm', {})['model'] = parsed.model
-
-        if not config.get('llm', {}).get('api_key'):
-            env_key = (
-                os.environ.get('LLM_API_KEY')
-                or os.environ.get('ANTHROPIC_API_KEY')
-                or os.environ.get('OPENAI_API_KEY')
-            )
-            if env_key:
-                config.setdefault('llm', {})['api_key'] = env_key
-
+            llm_cfg['model'] = parsed.model
         return config
+
+    @staticmethod
+    def _load_env_api_key() -> str:
+        env_key = os.environ.get('LLM_API_KEY')
+        if env_key:
+            return env_key
+        service_key_name = _LLM_API_KEY_ENV_MAP.get(_LLM_SERVICE_TYPE)
+        if service_key_name:
+            return os.environ.get(service_key_name, '')
+        return ''
+
+    @staticmethod
+    def _load_env_model() -> str:
+        env_model = os.environ.get('LLM_MODEL')
+        if env_model:
+            return env_model
+        service_model_name = _LLM_MODEL_ENV_MAP.get(_LLM_SERVICE_TYPE)
+        if service_model_name:
+            return os.environ.get(service_model_name, '')
+        return ''
 
     @staticmethod
     def _load_tokens_file(explicit_path: str | None) -> dict | None:
         """Load LLM token/credentials YAML.
 
         If explicit_path is given, load that file (error if missing).
-        Otherwise auto-discover llm_tokens.local.yaml beside config.yaml.
+        Otherwise return None; root-cause now follows symbol_recovery and uses
+        shared env/.env variables instead of auto-discovered token files.
         """
         import yaml
 
@@ -239,19 +303,7 @@ class RootCauseAction:
                 logging.warning('Failed to read LLM tokens file %s: %s', tokens_path, exc)
                 return None
 
-        # Auto-discover beside config.yaml
-        config_dir = Path(__file__).parent.parent / 'core' / 'config'
-        auto_path = config_dir / 'llm_tokens.local.yaml'
-        if not auto_path.exists():
-            return None
-        try:
-            with open(auto_path, encoding='utf-8') as f:
-                data = yaml.safe_load(f) or {}
-            logging.info('Auto-loaded LLM tokens: %s', auto_path)
-            return data
-        except Exception as exc:
-            logging.warning('Failed to read auto-discovered LLM tokens %s: %s', auto_path, exc)
-            return None
+        return None
 
     @staticmethod
     def _config_from_hapray() -> dict:

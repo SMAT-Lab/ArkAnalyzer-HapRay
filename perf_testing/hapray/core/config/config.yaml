@@ -100,15 +100,23 @@ key_functions:
     - "VisibleAreaChange"
 
 # LLM 根因分析配置（root-cause action 使用）
-# 私有 API Key 请通过 --api-key 命令行参数或 LLM_API_KEY / ANTHROPIC_API_KEY 环境变量传入，
-# 避免将密钥提交到版本库。
+# 与 tools/symbol_recovery 保持一致：默认从 .env / 环境变量读取 LLM 配置。
+# 推荐统一设置：
+#   LLM_SERVICE_TYPE=poe|openai|claude|deepseek
+#   LLM_API_KEY=...
+#   LLM_BASE_URL=...（可选）
+#   LLM_MODEL=...（可选）
+# 未配置 API Key 时，root-cause 会进入 Agent 编排模式，导出 *_agent_task.json；
+# 可通过 HAPRAY_ROOT_CAUSE_AGENT_CMD 自动接入外部/default agent。
 llm_root_cause:
   llm:
-    provider: anthropic                   # anthropic | openai | auto
-    base_url: https://api.anthropic.com   # Anthropic 原生接口；OpenAI-compatible 改为 https://api.openai.com/v1
-    api_key: ""                           # 建议通过 LLM_API_KEY 环境变量或 --api-key 传入
-    model: claude-sonnet-4-5              # 推荐：claude-sonnet-4-5 / gpt-4o
+    provider: auto                         # 默认由 LLM_SERVICE_TYPE / LLM_BASE_URL 推断
+    base_url: ""                           # 默认从 LLM_BASE_URL 或服务类型映射读取
+    api_key: ""                            # 默认从 LLM_API_KEY 或服务专属环境变量读取
+    model: GPT-5                           # 可由 LLM_MODEL / POE_MODEL / OPENAI_MODEL 等覆盖
     max_tokens: 4096
+    timeout: 30
+    trust_env: false
   analysis:
     top_n_hotspots: 10      # 取 top N 空刷代表帧
     language: zh            # 报告语言：zh / en
