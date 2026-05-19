@@ -106,8 +106,9 @@ key_functions:
 #   LLM_API_KEY=...
 #   LLM_BASE_URL=...（可选）
 #   LLM_MODEL=...（可选）
-# 未配置 API Key 时，root-cause 会进入 Agent 编排模式，导出 *_agent_task.json；
-# 可通过 HAPRAY_ROOT_CAUSE_AGENT_CMD 自动接入外部/default agent。
+# 默认优先 Agent 离线编排，导出 *_agent_task.json；可通过
+# HAPRAY_ROOT_CAUSE_AGENT_CMD 自动接入外部/default agent。
+# 如确需本地直连 API，显式设置 HAPRAY_ROOT_CAUSE_EXECUTION=api。
 llm_root_cause:
   llm:
     provider: auto                         # 默认由 LLM_SERVICE_TYPE / LLM_BASE_URL 推断
@@ -118,6 +119,7 @@ llm_root_cause:
     timeout: 30
     trust_env: false
   analysis:
+    execution_mode: agent   # agent(默认) / api(显式本地直连) / auto(有 key 时 API，否则 agent)
     top_n_hotspots: 10      # 取 top N 空刷代表帧
     language: zh            # 报告语言：zh / en
 

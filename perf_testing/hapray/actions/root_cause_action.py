@@ -190,14 +190,17 @@ class RootCauseAction:
 
         Mirrors tools/symbol_recovery:
         - .env is loaded automatically
-        - shared environment variables are the preferred source
-        - missing API key is not fatal here; runner will skip LLM gracefully
+        - Agent orchestration is the default execution path
+        - shared environment variables are used by the opt-in local API path
+        - missing API key is not fatal here; runner will export an Agent task
 
         Priority:
-        1. --api-key / --base-url / --model legacy one-off overrides
-        2. LLM_* / service-specific environment variables
-        3. --config or config.yaml llm_root_cause defaults
-        4. --llm-tokens legacy YAML overlay
+        1. HAPRAY_ROOT_CAUSE_EXECUTION=agent (default) drives Agent task export
+        2. HAPRAY_ROOT_CAUSE_EXECUTION=api enables local API execution
+        3. --api-key / --base-url / --model legacy one-off overrides
+        4. LLM_* / service-specific environment variables
+        5. --config or config.yaml llm_root_cause defaults
+        6. --llm-tokens legacy YAML overlay
         """
         import yaml
 

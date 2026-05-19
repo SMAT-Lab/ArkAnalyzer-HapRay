@@ -171,13 +171,20 @@ python scripts/main.py build-index --input <decompiled_dir>
 # 输出：<decompiled_dir>/index/ 目录下的 4 个文件
 ```
 
-### 前置（一次性）：配置 LLM
+### 前置（一次性）：Agent 编排 / LLM
 
-`hapray root-cause` 与 `tools/symbol_recovery` 使用同一套 LLM 配置方式：自动加载 `.env`，并从环境变量读取服务类型、API Key、Base URL 和模型名。不需要每次在命令行传 `--api-key`。
+`hapray root-cause` 与 `tools/symbol_recovery` 保持一致，默认使用 Agent 离线编排：工具导出 `<output_stem>_agent_task.json`，由当前 Cursor/default Agent 或 `HAPRAY_ROOT_CAUSE_AGENT_CMD` 处理后写回 `<output_stem>_agent_result.json`。这条路径不要求 HapRay 进程持有 API key。
 
-推荐配置：
+推荐使用默认 Agent 编排；如需自动接入外部 agent 命令：
 
 ```bash
+HAPRAY_ROOT_CAUSE_AGENT_CMD="<your-agent-command> --task {task} --output {output}"
+```
+
+本地直连 API 是兼容路径，需要显式开启：
+
+```bash
+HAPRAY_ROOT_CAUSE_EXECUTION=api
 LLM_SERVICE_TYPE=poe          # poe | openai | claude | deepseek
 LLM_API_KEY=<统一配置的agent api key>
 LLM_BASE_URL=https://api.poe.com/v1
@@ -186,19 +193,17 @@ LLM_MODEL=GPT-5
 
 服务专属变量也可用，例如 `POE_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`，以及 `POE_MODEL`、`OPENAI_MODEL`、`CLAUDE_MODEL`、`DEEPSEEK_MODEL`。
 
-未配置 API Key 时不会报错中断，`root-cause` 会进入和 symbol recovery 一致的 Agent 编排模式：
-生成 `<output_stem>_agent_task.json`，供当前 Cursor/default Agent 读取 prompt 并产出 JSON。若配置了
-`HAPRAY_ROOT_CAUSE_AGENT_CMD`，会自动执行该命令（占位符：`{task}`、`{output}`、`{report}`、`{out_dir}`）。
+如果不设置 `HAPRAY_ROOT_CAUSE_EXECUTION=api`，即使存在 `LLM_API_KEY`，也优先走 Agent 编排。`auto` 模式表示有 key 时走 API、否则走 Agent。
 
 配置加载优先级（从高到低）：
 
 | 优先级 | 来源 | 说明 |
 |--------|------|------|
-| 1 | `--api-key` / `--base-url` / `--model` | 旧版单次 CLI 覆盖，兼容保留 |
-| 2 | `.env` / 环境变量 | 推荐路径，与 symbol recovery 一致 |
-| 3 | `--config <file>` | 完整配置替换 |
-| 4 | `--llm-tokens <file>` | 旧版 token YAML，兼容保留，不再自动发现 |
-| 5 | `config.yaml` `llm_root_cause:` 节 | 跟踪的默认值 |
+| 1 | Agent 编排 | 默认主路径，导出 task/result JSON，适合 skills/Cursor |
+| 2 | `HAPRAY_ROOT_CAUSE_EXECUTION=api` | 显式开启本地直连 API |
+| 3 | `.env` / 环境变量 | API 模式下读取统一 LLM 配置 |
+| 4 | `--api-key` / `--base-url` / `--model` | 旧版单次 CLI 覆盖，兼容保留 |
+| 5 | `--config` / `--llm-tokens` | 旧版配置入口，兼容保留 |
 
 ### 每次分析（`hapray root-cause`）
 
@@ -238,6 +243,7 @@ python scripts/main.py root-cause \
 | `--config` | 可选 | 完整配置文件（最高优先级，替换所有默认值）|
 | `--output` | 可选 | 自定义输出路径，默认 `<report-dir>/root_cause.md` |
 | `--skip-llm` | 可选 | 跳过 LLM，只输出规则引擎证据报告 |
+| `HAPRAY_ROOT_CAUSE_EXECUTION` | 可选 | `agent`（默认）/ `api` / `auto` |
 
 ### 输出
 

@@ -195,18 +195,28 @@ python -m scripts.main root-cause \
   --decompiled-dir <decompiled_dir>
 ```
 
-**配置 LLM（一次性，和 symbol recovery 保持一致）：**
+**Agent 编排（默认，和 symbol recovery/skills 保持一致）：**
+
+`root-cause` 默认不要求 HapRay 进程持有 API key，而是导出 `<output_stem>_agent_task.json`，
+由当前 Cursor/default Agent 或 `HAPRAY_ROOT_CAUSE_AGENT_CMD` 处理后写回 `<output_stem>_agent_result.json`。
+
+如需自动接入外部 agent 命令：
+
+```bash
+HAPRAY_ROOT_CAUSE_AGENT_CMD="<your-agent-command> --task {task} --output {output}"
+```
+
+**本地直连 API（可选兼容路径）：**
 ```bash
 # 任选其一：写入系统环境变量，或在仓库/运行目录放 .env
+HAPRAY_ROOT_CAUSE_EXECUTION=api
 LLM_SERVICE_TYPE=poe          # poe | openai | claude | deepseek
 LLM_API_KEY=<统一配置的agent api key>
 LLM_BASE_URL=https://api.poe.com/v1
 LLM_MODEL=GPT-5
 ```
 
-未配置 API Key 时，`root-cause` 不会直接降级为 evidence，而是进入和 symbol recovery 一致的 Agent 编排模式：
-生成 `<output_stem>_agent_task.json`，供当前 Cursor/default Agent 读取 prompt 并产出 JSON。若配置了
-`HAPRAY_ROOT_CAUSE_AGENT_CMD`，会自动执行该命令（占位符：`{task}`、`{output}`、`{report}`、`{out_dir}`）。
+如果不设置 `HAPRAY_ROOT_CAUSE_EXECUTION=api`，即使存在 `LLM_API_KEY`，也优先走 Agent 编排。
 
 Options:
 - `--report-dir <path>`: HapRay 报告目录，含 `summary.json`、`trace_emptyFrame.json`（必填）
@@ -215,6 +225,7 @@ Options:
 - `--llm-mode <mode>`: `analyze`（默认，LLM 从证据独立推断）/ `with_source`（LLM 阅读反编译代码，行级修复建议）
 - `--llm-tokens <path>`: 旧版兼容入口；推荐使用统一 `.env` / 环境变量
 - `--api-key / --base-url / --model`: 旧版单次覆盖入口；推荐使用统一 `.env` / 环境变量
+- `HAPRAY_ROOT_CAUSE_EXECUTION`: `agent`（默认）/ `api` / `auto`
 - `--output <path>`: 自定义输出路径（默认 `<report-dir>/root_cause.md`）；同目录下固定生成 `_evidence.md`（规则引擎原始证据）
 - `--skip-llm`: 跳过 LLM，`root_cause.md` 内容与 `root_cause_evidence.md` 相同
 

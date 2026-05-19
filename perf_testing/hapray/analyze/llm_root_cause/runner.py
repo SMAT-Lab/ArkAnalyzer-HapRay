@@ -342,6 +342,20 @@ def _run_agent_fallback(
     return _render_agent_pending_report(task_path, result_path, evidence_report)
 
 
+def _root_cause_execution_mode(llm_config: dict) -> str:
+    """Return root-cause execution mode: agent (default), api, or auto."""
+    raw = (
+        os.environ.get("HAPRAY_ROOT_CAUSE_EXECUTION")
+        or llm_config.get("analysis", {}).get("execution_mode")
+        or "agent"
+    )
+    mode = str(raw).strip().lower()
+    if mode not in {"agent", "api", "auto"}:
+        logging.warning("Unknown root-cause execution mode %r; using agent", raw)
+        return "agent"
+    return mode
+
+
 def _normalize_symbol(name: str) -> str:
     """Normalize decompiled symbol names for matching.
     e.g. '___0__aboutToAppear' → 'abouttoappear', 'AboutToAppear' → 'abouttoappear'
@@ -570,48 +584,79 @@ def run_empty_frame_analysis(
     renderer = EvidenceReportRenderer()
     evidence_report = renderer.render(evidence)
 
-    # 7. LLM / Agent analysis
+    # 7. Agent / LLM analysis
     final_report: str | None = None
     enriched_context = context_text
     if module_attribution_text:
         enriched_context = context_text + "\n\n" + module_attribution_text
 
-    if not skip_llm and is_llm_configured(llm_config):
-        if effective_mode == "with_source":
-            final_report = _run_with_source_llm(
-                config=llm_config,
+    if not skip_llm:
+        execution_mode = _root_cause_execution_mode(llm_config)
+
+        # Default path: agent orchestration.  This matches symbol_recovery and
+        # keeps Cursor/skills as the primary LLM execution surface.  The local
+        # API path is opt-in via HAPRAY_ROOT_CAUSE_EXECUTION=api or config.
+        if execution_mode == "agent":
+            logging.info("Root-cause execution mode: agent orchestration")
+            final_report = _run_agent_fallback(
+                output_path=Path(output_path),
                 language=language,
                 context_text=enriched_context,
                 structured_evidence=structured_evidence,
+                mode=effective_mode,
                 code_snippets=code_snippets,
                 call_chains_text=call_chains_text,
                 evidence_report=evidence_report,
-                stream=stream,
             )
+        elif is_llm_configured(llm_config):
+            logging.info("Root-cause execution mode: local OpenAI-compatible API")
+            if effective_mode == "with_source":
+                final_report = _run_with_source_llm(
+                    config=llm_config,
+                    language=language,
+                    context_text=enriched_context,
+                    structured_evidence=structured_evidence,
+                    code_snippets=code_snippets,
+                    call_chains_text=call_chains_text,
+                    evidence_report=evidence_report,
+                    stream=stream,
+                )
+            else:
+                final_report = _run_analyze_with_llm(
+                    config=llm_config,
+                    language=language,
+                    context_text=enriched_context,
+                    structured_evidence=structured_evidence,
+                    stream=stream,
+                    code_snippets=code_snippets if code_snippets else None,
+                )
+            if execution_mode == "auto" and final_report is None:
+                logging.info("Local API failed in auto mode; falling back to agent orchestration")
+                final_report = _run_agent_fallback(
+                    output_path=Path(output_path),
+                    language=language,
+                    context_text=enriched_context,
+                    structured_evidence=structured_evidence,
+                    mode=effective_mode,
+                    code_snippets=code_snippets,
+                    call_chains_text=call_chains_text,
+                    evidence_report=evidence_report,
+                )
         else:
-            final_report = _run_analyze_with_llm(
-                config=llm_config,
+            logging.info(
+                "No local LLM API key configured; exporting root-cause Agent task "
+                "(symbol_recovery-style fallback)."
+            )
+            final_report = _run_agent_fallback(
+                output_path=Path(output_path),
                 language=language,
                 context_text=enriched_context,
                 structured_evidence=structured_evidence,
-                stream=stream,
-                code_snippets=code_snippets if code_snippets else None,
+                mode=effective_mode,
+                code_snippets=code_snippets,
+                call_chains_text=call_chains_text,
+                evidence_report=evidence_report,
             )
-    elif not skip_llm:
-        logging.info(
-            "No local LLM API key configured; exporting root-cause Agent task "
-            "(symbol_recovery-style fallback)."
-        )
-        final_report = _run_agent_fallback(
-            output_path=Path(output_path),
-            language=language,
-            context_text=enriched_context,
-            structured_evidence=structured_evidence,
-            mode=effective_mode,
-            code_snippets=code_snippets,
-            call_chains_text=call_chains_text,
-            evidence_report=evidence_report,
-        )
 
     if final_report is None:
         final_report = evidence_report  # explicit --skip-llm or failed remote/API path
