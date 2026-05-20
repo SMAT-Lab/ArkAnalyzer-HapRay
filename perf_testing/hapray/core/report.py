@@ -854,7 +854,14 @@ class ReportGenerator:
             logging.error('Invalid hapray_report.json (expected object): %s', json_path)
             return False
         try:
+            from hapray.core.common.root_cause_integration import (
+                embed_root_cause_into_hapray_html,
+                merge_root_cause_into_result,
+            )
+
+            merge_root_cause_into_result(scene_dir, result)
             self._create_html_report(scene_dir, result)
+            embed_root_cause_into_hapray_html(scene_dir)
             logging.info('Refreshed hapray_report.html after symbol recovery: %s', scene_dir)
             return True
         except Exception as e:

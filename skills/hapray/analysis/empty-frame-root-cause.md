@@ -1,6 +1,68 @@
 # 空刷根因分析子 Skill
 
-适用场景：HapRay 检测到**空刷（empty frame）** 问题后，使用 `hapray root-cause` 命令做根因定位与代码级修复建议。该命令已集成到 `perf_testing/hapray/analyze/llm_root_cause/` 包，与其他 hapray 子命令风格统一。
+适用场景：HapRay 检测到**空刷（empty frame）** 问题后，使用 `hapray root-cause` 或 **`update` 集成路径** 做根因定位与代码级修复建议。实现位于 `perf_testing/hapray/analyze/llm_root_cause/`，与 `hapray update` 共用 **Agent 优先** 编排（与符号恢复一致）。
+
+> **Agent 必读**：`update` 默认会在符号恢复后自动跑 root-cause。若产出 `root_cause_agent_task.json` 且报告含 “Pending Agent Inference”，当前对话 Agent **必须**读取任务 JSON、按 `expected_schema_json` 写 `root_cause_agent_result.json`，再重跑 `update` 或 `root-cause`，禁止只读 tasks 就结束。
+
+---
+
+## 〇、与 `update` 集成（推荐路径）
+
+`perf` → **`update`** 时（源码：`update_action.py` + `root_cause_integration.py`），在存在 `trace_emptyFrame.json` 时默认尝试 root-cause。
+
+### 〇.1 执行前交互：HAP/应用包路径（MUST）
+
+从手机拉 HAP **经常失败**。Agent 在跑 `update` **之前**必须先向用户确认 **root-cause 输入目录**（与主 Skill 中 SO 路径一并确认）。工具会 **自动识别** 用户提供的是 **反编译源码** 还是 **HAP 包**：
+
+| 识别结果 | 目录特征 | 行为 |
+|----------|----------|------|
+| **源码** (`input_kind=source`) | `decompiled/` 下大量 `*.ts`、`symbol_index.jsonl`，或 `src/main/ets` | 直接 **with_source** 分析；**跳过** HAP 反编译 |
+| **HAP** (`input_kind=hap`) | 仅含 `*.hap`（无可用源码树） | 配置 `HAPRAY_HAP_DECOMPILER_CMD` 后反编译 HAP，再建索引 |
+| 未提供路径 | — | 尝试 `hdc` 拉 HAP；失败则跳过 root-cause |
+
+| 用户提供 | 行为 |
+|----------|------|
+| `--app-packages-dir <路径>` 或 `HAPRAY_APP_PACKAGES_DIR` | 按上表识别并处理，**不**再从设备拉取 |
+| 未提供 | 尝试设备拉 HAP |
+| 未提供且拉取失败 | **跳过** 集成 root-cause |
+
+**对话必问（可与 SO 路径同条消息）**：
+
+```text
+请提供 root-cause 输入目录（二选一，会自动识别）：
+  A) 反编译/源码树（推荐）：含 *.ts 或 decompiled/index，例如 D:/src/decompiled/taobao_main/
+  B) 仅 HAP 包：例如 D:/artifacts/myapp/hap/*.hap
+若暂无，将尝试从手机拉 HAP；拉取失败则跳过空刷根因分析。
+```
+
+**update 示例**：
+
+```bash
+uv run python -m scripts.main update \
+  --report_dir ./reports/<timestamp> \
+  --so_dir "D:/local/libs/arm64" \
+  --app-packages-dir "D:/local/decompiled_or_hap"
+```
+
+### 〇.2 集成流水线
+
+| 阶段 | 行为 |
+|------|------|
+| 输入准备 | 用户 `--app-packages-dir` **优先**；自动识别 **源码 vs HAP** |
+| 源码路径 | 已有 `*.ts` → 建/复用 `decompiled/index/`，**with_source**，不跑 HAP 反编译 |
+| 仅 HAP | `HAPRAY_HAP_DECOMPILER_CMD` 反编译后建索引；无反编译器则 **analyze** 模式 |
+| 符号恢复 | 需有效 `--so_dir`（用户路径优先，否则设备拉 `.so`）；无 SO 则跳过 |
+| root-cause | 需有效 HAP 目录；读 `<用例>/report/`，默认 **Agent** |
+| 总报告 | `hapray_report.json` → `more.root_cause`；`hapray_report.html` 嵌入根因面板 |
+
+**跳过**：`update --no-root-cause` 或 `HAPRAY_UPDATE_NO_ROOT_CAUSE=1`；或无 HAP 时自动跳过  
+**仅证据**：`update --root-cause-skip-llm`（等同 `root-cause --skip-llm`）
+
+**验收（update 后）**：
+
+- `<用例>/report/root_cause.md` 存在（非仅 Pending 占位）
+- `<report_dir>/.app_packages/<包名>/hap/*.hap` 或已有 `decompiled/index/symbol_index.jsonl`
+- `hapray_report.html` 含 `hapray-root-cause-panel` 或 JSON 含 `more.root_cause`
 
 ---
 
@@ -205,27 +267,46 @@ LLM_MODEL=GPT-5
 | 4 | `--api-key` / `--base-url` / `--model` | 旧版单次 CLI 覆盖，兼容保留 |
 | 5 | `--config` / `--llm-tokens` | 旧版配置入口，兼容保留 |
 
-### 每次分析（`hapray root-cause`）
+### 每次分析（`hapray root-cause` 或 update 已集成）
+
+**`--report-dir` 须指向含 `trace_emptyFrame.json` 的目录**，一般为 **`<用例>/report`**（不是用例根目录）。
 
 ```bash
 cd perf_testing
 
-# 仅生成规则引擎证据报告（无 LLM，适合验证和调试）
-python scripts/main.py root-cause \
-  --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index \
+# 推荐：perf 后一次 update（先向用户确认 --so_dir 与 --app-packages-dir）
+uv run python -m scripts.main update \
+  --report_dir <report_dir> \
+  --so_dir <本地_so目录> \
+  --app-packages-dir <本地_hap或_app_packages目录>
+
+# 仅生成规则引擎证据（无 LLM/Agent 推断）
+uv run python -m scripts.main root-cause \
+  --report-dir <用例>/report \
+  --index-dir <report_dir>/.app_packages/<包名>/decompiled/index \
   --skip-llm
 
-# analyze 模式（默认）：LLM 从证据独立推断根因，无需反编译源码
+# 默认 Agent 编排（无本地 API 时导出 root_cause_agent_task.json）
 python scripts/main.py root-cause \
-  --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index
+  --report-dir <用例>/report \
+  --index-dir <report_dir>/.app_packages/<包名>/decompiled/index
 
-# with_source 模式（增强）：LLM 阅读反编译代码，给出行级修复建议
+# with_source（有 decompiled 目录时 update 会自动选用）
 python scripts/main.py root-cause \
-  --report-dir <HapRay报告目录> \
-  --index-dir <decompiled_dir>/index \
-  --decompiled-dir <decompiled_dir>
+  --report-dir <用例>/report \
+  --index-dir <report_dir>/.app_packages/<包名>/decompiled/index \
+  --decompiled-dir <report_dir>/.app_packages/<包名>/decompiled
+
+# 显式本地 API（须 HAPRAY_ROOT_CAUSE_EXECUTION=api + LLM_* 环境变量）
+export HAPRAY_ROOT_CAUSE_EXECUTION=api
+python scripts/main.py root-cause --report-dir <用例>/report ...
+```
+
+**Agent 环境变量**（与符号恢复对称）：
+
+```bash
+export HAPRAY_ROOT_CAUSE_AGENT_CMD="<your-agent-cmd> --task {task} --output {output}"
+# 占位符：{task} {tasks} {output} {result} {report} {out_dir}
 ```
 
 **参数说明：**

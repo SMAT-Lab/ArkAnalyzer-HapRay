@@ -51,7 +51,15 @@ from hapray.core.common.symbol_recovery_bridge import (
     run_symbol_recovery_agent_step2,
     try_load_dotenv_for_llm,
 )
+from hapray.core.common.device_app_packages import (
+    app_packages_ready_for_root_cause,
+    bundle_packages_dir,
+    download_app_packages_for_bundle,
+    prepare_app_packages_for_report,
+    resolve_user_app_packages_source,
+)
 from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
+from hapray.core.common.root_cause_integration import run_root_cause_for_case
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
@@ -134,7 +142,16 @@ class UpdateAction:
         if not ok:
             logging.debug('hdc recv failed: %s -> %s (%s)', remote_dir, local_dir, out)
             return False
-        return UpdateAction._looks_like_downloaded_libs(local_dir)
+        return UpdateAction._looks_like_downloaded_libs(local_dir) or any(local_dir.rglob('*'))
+
+    @staticmethod
+    def _try_recv_remote_file(remote_file: str, local_file: Path) -> bool:
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        ok, out = UpdateAction._run_hdc_cmd(['file', 'recv', remote_file, str(local_file)], timeout_sec=120)
+        if not ok:
+            logging.debug('hdc recv file failed: %s -> %s (%s)', remote_file, local_file, out)
+            return False
+        return local_file.is_file() and local_file.stat().st_size > 0
 
     @staticmethod
     def _parse_json_from_shell_output(out: str) -> Optional[dict]:
@@ -299,8 +316,23 @@ class UpdateAction:
         return None
 
     @staticmethod
-    def _auto_prepare_so_dir(report_dir: str, testcase_dirs: list[str]) -> tuple[Optional[str], str]:
-        bundle_names = UpdateAction._collect_bundle_names(testcase_dirs)
+    def _download_app_package_for_bundle(bundle_name: str, report_dir: str) -> Optional[Path]:
+        """拉取 HAP 与安装目录树，供 root-cause 反编译/索引。"""
+        return download_app_packages_for_bundle(
+            bundle_name,
+            report_dir,
+            run_hdc_cmd=UpdateAction._run_hdc_cmd,
+            looks_like_libs=UpdateAction._looks_like_downloaded_libs,
+            try_recv_dir=UpdateAction._try_recv_remote_dir,
+            try_recv_file=UpdateAction._try_recv_remote_file,
+        )
+
+    @staticmethod
+    def _auto_download_so_libs_only(
+        report_dir: str,
+        bundle_names: list[str],
+    ) -> tuple[Optional[str], str]:
+        """仅从设备拉取 .so/libs（不拉 HAP；HAP 由 ``prepare_app_packages_for_report`` 单独处理）。"""
         if not bundle_names:
             return (None, 'no_bundle_name')
         if not UpdateAction._is_hdc_device_ready():
@@ -314,6 +346,11 @@ class UpdateAction:
             if got is not None:
                 resolved.append(got)
                 logging.info('Auto-downloaded libs for %s -> %s', bundle, got)
+                continue
+            pkg_dir = bundle_packages_dir(report_dir, bundle)
+            if (pkg_dir / 'bundle').is_dir():
+                resolved.append(pkg_dir / 'bundle')
+                logging.info('Using bundle tree as SO search root for %s -> %s', bundle, pkg_dir / 'bundle')
             else:
                 logging.warning('Failed to auto-download libs for bundle: %s', bundle)
         if not resolved:
@@ -345,7 +382,20 @@ class UpdateAction:
                 '不要填 perf-testing 的安装目录（如 dist）。'
             ),
         )
-        parser.add_argument('--so_dir', default=None, help='Directory for symbolicated .so files')
+        parser.add_argument(
+            '--so_dir',
+            default=None,
+            help='Directory containing app .so files for symbol recovery (skips device SO pull when set). Env: HAPRAY_SO_DIR',
+        )
+        parser.add_argument(
+            '--app-packages-dir',
+            default=None,
+            help=(
+                'Local root-cause input directory (skips device pull when set). '
+                'Auto-detects: decompiled/*.ts or src/main/ets → source analysis (with_source); '
+                '*.hap only → HAP decompile path. Env: HAPRAY_APP_PACKAGES_DIR'
+            ),
+        )
         parser.add_argument(
             '-v',
             '--version',
@@ -502,6 +552,18 @@ class UpdateAction:
             help='SIMPLE mode: optional existing hiperf_report.html to extract perf.json from, '
             'bypassing perf -i for flame graph data preparation',
         )
+        parser.add_argument(
+            '--no-root-cause',
+            action='store_true',
+            default=False,
+            help='Skip integrated empty-frame root-cause analysis after update',
+        )
+        parser.add_argument(
+            '--root-cause-skip-llm',
+            action='store_true',
+            default=False,
+            help='Root-cause: export evidence/agent task only (no local LLM API call)',
+        )
         parsed_args = parser.parse_args(args)
 
         try_load_dotenv_for_llm()
@@ -563,19 +625,56 @@ class UpdateAction:
             UpdateAction._log_no_testcase_dirs_help(report_dir)
             return (1, '')
 
+        bundle_names = UpdateAction._collect_bundle_names(testcase_dirs)
+
+        user_app_src = resolve_user_app_packages_source(parsed_args.app_packages_dir)
+        if user_app_src:
+            logging.info('User app-packages directory (skip device HAP pull): %s', user_app_src)
+        pkgs_by_bundle, app_pkg_source = prepare_app_packages_for_report(
+            report_dir,
+            bundle_names,
+            user_app_src,
+            device_downloader=UpdateAction._download_app_package_for_bundle,
+        )
+        if pkgs_by_bundle:
+            logging.info(
+                'App packages ready for %d bundle(s) (source=%s): %s',
+                len(pkgs_by_bundle),
+                app_pkg_source,
+                ', '.join(sorted(pkgs_by_bundle)),
+            )
+        elif bundle_names and not parsed_args.no_root_cause:
+            logging.warning(
+                'No HAP/app packages available (user path missing/invalid and device pull failed). '
+                'Provide --app-packages-dir or HAPRAY_APP_PACKAGES_DIR, or connect device with hdc. '
+                'Integrated root-cause will be skipped for this run.'
+            )
+        Config.set('app_packages_source', app_pkg_source)
+        Config.set('app_packages_by_bundle', {k: str(v) for k, v in pkgs_by_bundle.items()})
+
         effective_so, so_source = resolve_effective_so_dir(parsed_args.so_dir)
-        if not effective_so:
-            auto_so, auto_source = UpdateAction._auto_prepare_so_dir(report_dir, testcase_dirs)
-            if auto_so:
-                effective_so = auto_so
-                so_source = auto_source
         if effective_so:
-            logging.info('Effective SO directory (%s): %s', so_source, effective_so)
+            logging.info('Using user SO directory (%s), skip device .so pull: %s', so_source, effective_so)
         elif parsed_args.so_dir or os.environ.get(ENV_SO_DIR, '').strip():
             logging.warning(
                 'SO directory was requested via CLI or %s but path is missing or not a directory',
                 ENV_SO_DIR,
             )
+        elif not bundle_names:
+            logging.info('No bundle name in testInfo.json; cannot auto-download .so from device')
+        else:
+            auto_so, auto_source = UpdateAction._auto_download_so_libs_only(report_dir, bundle_names)
+            if auto_so:
+                effective_so = auto_so
+                so_source = auto_source
+                logging.info('Effective SO directory from device (%s): %s', so_source, effective_so)
+            else:
+                logging.warning(
+                    'No .so directory available (user path not set and device pull failed). '
+                    'Provide --so_dir or HAPRAY_SO_DIR with local libs. Symbol recovery will be skipped.'
+                )
+        if effective_so:
+            logging.info('Effective SO directory (%s): %s', so_source, effective_so)
 
         # 每次 update 都显式刷新 so_dir，避免沿用同进程上一次执行遗留的值
         Config.set('so_dir', effective_so or '')
@@ -635,6 +734,16 @@ class UpdateAction:
             'symbol_recovery_timeout',
             parsed_args.symbol_recovery_timeout if parsed_args.symbol_recovery_timeout is not None else 0,
         )
+        root_cause_enabled = not parsed_args.no_root_cause and not UpdateAction._parse_bool_env(
+            'HAPRAY_UPDATE_NO_ROOT_CAUSE', default=False
+        )
+        if root_cause_enabled and bundle_names and app_pkg_source == 'none':
+            logging.warning(
+                'Disabling integrated root-cause: no HAP/app packages (see --app-packages-dir / device pull).'
+            )
+            root_cause_enabled = False
+        Config.set('root_cause_enabled', root_cause_enabled)
+        Config.set('root_cause_skip_llm', bool(parsed_args.root_cause_skip_llm))
         if not parsed_args.symbol_recovery_no_llm:
             if (llm_ready or agent_mode) and effective_so:
                 sr_root = resolve_symbol_recovery_root()
@@ -1510,6 +1619,47 @@ class UpdateAction:
                 except Exception as e:
                     logging.error('Failed to refresh hapray_report.html for %s: %s', case_dir, e)
 
+        if bool(Config.get('root_cause_enabled', False)):
+            logging.info('=' * 80)
+            logging.info('Starting root-cause analysis for all test cases')
+            logging.info('=' * 80)
+            skip_rc_llm = bool(Config.get('root_cause_skip_llm', False))
+            for case_dir in testcase_dirs:
+                bundle = UpdateAction._read_bundle_name_from_testinfo(case_dir)
+                if not bundle:
+                    logging.info('Root-cause skipped for %s: no bundle name in testInfo.json', case_dir)
+                    continue
+                if not app_packages_ready_for_root_cause(report_dir, bundle):
+                    logging.info(
+                        'Root-cause skipped for %s: no HAP/app packages for bundle %s '
+                        '(use --app-packages-dir or device pull)',
+                        case_dir,
+                        bundle,
+                    )
+                    continue
+                try:
+                    if run_root_cause_for_case(
+                        case_dir,
+                        report_dir,
+                        bundle,
+                        skip_llm=skip_rc_llm,
+                    ):
+                        logging.info('Root-cause completed for %s', case_dir)
+                    else:
+                        logging.warning('Root-cause did not produce report for %s', case_dir)
+                except Exception as e:
+                    logging.error('Root-cause failed for %s: %s', case_dir, e)
+            logging.info('Refreshing composite report to embed root-cause results...')
+            for case_dir in testcase_dirs:
+                try:
+                    report_generator.refresh_hapray_report_after_symbol_recovery(case_dir)
+                except Exception as e:
+                    logging.error('Failed to refresh report after root-cause for %s: %s', case_dir, e)
+            logging.info('=' * 80)
+            logging.info('Root-cause pass completed')
+            logging.info('=' * 80)
+
+        if should_run_symbol_recovery:
             # 符号恢复完成后,更新负载分析 Excel 中的符号名
             logging.info('Updating load analysis Excel with recovered symbols...')
             for case_dir in testcase_dirs:

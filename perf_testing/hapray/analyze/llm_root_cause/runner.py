@@ -233,6 +233,58 @@ def _write_agent_task(
     return task_path
 
 
+def _run_inprocess_agent_inference(
+    task_path: Path,
+    result_path: Path,
+    llm_config: dict,
+) -> bool:
+    """Agent 编排：读取 task JSON，经 OpenAI-compatible API 推断并写入 result（与符号恢复 Step2 同层）。"""
+    if not task_path.is_file():
+        return False
+    try:
+        task = json.loads(task_path.read_text(encoding='utf-8', errors='replace'))
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.warning('Failed to read root-cause agent task %s: %s', task_path, exc)
+        return False
+    system_prompt = str(task.get('system_prompt') or '')
+    user_prompt = str(task.get('user_prompt') or '')
+    if not system_prompt.strip() or not user_prompt.strip():
+        logging.warning('Root-cause agent task missing prompts: %s', task_path)
+        return False
+    if not is_llm_configured(llm_config):
+        logging.info(
+            'In-process root-cause agent skipped: no LLM API key '
+            '(set LLM_API_KEY or HAPRAY_ROOT_CAUSE_AGENT_CMD)'
+        )
+        return False
+    try:
+        client = load_client_from_config(llm_config)
+        raw_output = client.chat(system_prompt, user_prompt)
+    except Exception as exc:
+        logging.warning('In-process root-cause agent LLM call failed: %s', exc)
+        return False
+    if not (raw_output or '').strip():
+        logging.warning('In-process root-cause agent returned empty output')
+        return False
+    from .structured_output import parse_llm_output
+
+    parsed = parse_llm_output(raw_output)
+    if parsed.parse_success:
+        payload = {
+            'summary': parsed.summary,
+            'suspects': [s.to_dict() for s in parsed.suspects],
+            'caveats': parsed.caveats,
+            'needs_more_data': parsed.needs_more_data,
+        }
+        result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    else:
+        result_path.write_text(raw_output.strip(), encoding='utf-8')
+    if not result_path.is_file():
+        return False
+    logging.info('Root-cause agent result written: %s', result_path)
+    return True
+
+
 def _run_agent_command(task_path: Path, result_path: Path, report_path: Path) -> bool:
     env_cmd = (os.environ.get("HAPRAY_ROOT_CAUSE_AGENT_CMD") or "").strip()
     if not env_cmd:
@@ -319,6 +371,7 @@ def _run_agent_fallback(
     code_snippets: list[dict[str, Any]],
     call_chains_text: str,
     evidence_report: str,
+    llm_config: dict | None = None,
 ) -> str:
     system_prompt, user_prompt = _build_agent_prompts(
         language=language,
@@ -330,8 +383,16 @@ def _run_agent_fallback(
     )
     task_path = _write_agent_task(output_path, language, mode, system_prompt, user_prompt)
     result_path = output_path.parent / f"{output_path.stem}_agent_result.json"
+    cfg = llm_config or {}
+
+    logging.info('Root-cause agent task exported: %s', task_path)
 
     if _run_agent_command(task_path, result_path, output_path):
+        rendered = _render_agent_result(result_path, structured_evidence, code_snippets)
+        if rendered:
+            return rendered
+
+    if _run_inprocess_agent_inference(task_path, result_path, cfg):
         rendered = _render_agent_result(result_path, structured_evidence, code_snippets)
         if rendered:
             return rendered
@@ -339,6 +400,10 @@ def _run_agent_fallback(
     rendered = _render_agent_result(result_path, structured_evidence, code_snippets)
     if rendered:
         return rendered
+    logging.warning(
+        'Root-cause agent inference incomplete; pending manual/Cursor agent. '
+        'Configure HAPRAY_ROOT_CAUSE_AGENT_CMD or LLM_API_KEY.'
+    )
     return _render_agent_pending_report(task_path, result_path, evidence_report)
 
 
@@ -607,6 +672,7 @@ def run_empty_frame_analysis(
                 code_snippets=code_snippets,
                 call_chains_text=call_chains_text,
                 evidence_report=evidence_report,
+                llm_config=llm_config,
             )
         elif is_llm_configured(llm_config):
             logging.info("Root-cause execution mode: local OpenAI-compatible API")
@@ -641,6 +707,7 @@ def run_empty_frame_analysis(
                     code_snippets=code_snippets,
                     call_chains_text=call_chains_text,
                     evidence_report=evidence_report,
+                    llm_config=llm_config,
                 )
         else:
             logging.info(
@@ -656,6 +723,7 @@ def run_empty_frame_analysis(
                 code_snippets=code_snippets,
                 call_chains_text=call_chains_text,
                 evidence_report=evidence_report,
+                llm_config=llm_config,
             )
 
     if final_report is None:
@@ -671,6 +739,21 @@ def run_empty_frame_analysis(
 
     logging.info("Root cause analysis complete: %s", output_path)
     return final_report
+
+
+def apply_agent_result_to_report(report_dir: str | Path) -> bool:
+    """若已有 ``root_cause_agent_result.json``，渲染并覆盖 ``root_cause.md``。"""
+    report_sub = Path(report_dir)
+    output_md = report_sub / 'root_cause.md'
+    result_path = report_sub / 'root_cause_agent_result.json'
+    if not result_path.is_file():
+        return False
+    rendered = _render_agent_result(result_path, {}, [])
+    if not rendered:
+        return False
+    output_md.write_text(rendered, encoding='utf-8')
+    logging.info('Root-cause report refreshed from agent result: %s', output_md)
+    return True
 
 
 def load_llm_config(config_path: str | Path) -> dict:

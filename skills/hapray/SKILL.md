@@ -4,14 +4,12 @@ version: "1.5.4"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
-  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：命令执行、路径判定、analysis 路由、报告落盘。默认 `<PROJECT_ROOT>/reports/`。**运行前须先判定「源码仓库 <REPO_ROOT>」与「二进制发布包 <RUNTIME_ROOT>」二选一**：源码轨须完成正文「源码工作区硬门禁」（web/vite、static_analyzer、prebuild、symbol_recovery venv 等）；二进制轨不要求本地构建，但须满足发布包内资源完整及符号恢复可发现性（分体包时配置 `HAPRAY_SYMBOL_RECOVERY_*` 或约定目录布局）。update 符号恢复若 LLM 失败则强制切 Agent 模式完成火焰图替换，禁止直接结束。**
+  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：命令执行、路径判定、analysis 路由、报告落盘。默认 `<PROJECT_ROOT>/reports/`。**运行前须先判定「源码仓库 <REPO_ROOT>」与「二进制发布包 <RUNTIME_ROOT>」二选一**：源码轨须完成正文「源码工作区硬门禁」（web/vite、static_analyzer、prebuild、symbol_recovery venv 等）；二进制轨不要求本地构建，但须满足发布包内资源完整及符号恢复可发现性（分体包时配置 `HAPRAY_SYMBOL_RECOVERY_*` 或约定目录布局）。**update 默认 Agent 符号恢复**（`--symbol-recovery-llm-mode` 才先走在线 LLM）；**集成空刷 root-cause**（默认开启，`--no-root-cause` 可跳过）。**执行 update 前须交互确认两条本地路径**（`.so` 目录、`HAP/应用包` 目录）；用户提供则跳过 hdc 拉取，未提供再尝试设备，两者皆无则跳过符号恢复与 root-cause。**
 metadata:
   short-description: >-
-    HapRay workflow: branch source-repo (7-step hard gate) vs binary release (layout + HAPRAY_SYMBOL_RECOVERY_*).
-    LLM symbol-recovery failure must fallback to agent mode; apply-excel may use subprocess when core/ not importable.
+    HapRay workflow: source-repo gate vs binary release; update prompts for local SO/HAP paths before optional hdc pull; skips symbol-recovery and root-cause when both unavailable.
   zh-Hans: >-
-    精简主流程：先分叉源码轨（硬门禁）与二进制轨（发布包布局/环境变量）；再执行 perf/update/dbtools。
-    update 符号恢复 LLM 失败强制 Agent 模式。CLI→reports_path→子 Skill→`<PROJECT_ROOT>/reports/`。
+    精简主流程：源码/二进制分叉 → perf/update（符号恢复 Agent 默认 + root-cause 集成）→ 子 Skill 深入分析 → 独立报告落盘。
   skill-paths:
     main: SKILL.md
     tool_result: hapray-tool-result.md
@@ -32,6 +30,9 @@ metadata:
     - clone-first-build
     - symbol-recovery-llm-fallback-agent
     - llm-failure-must-agent-mode
+    - root-cause-agent-mode
+    - update-integrated-root-cause
+    - app-packages-hap-download
 ---
 
 # HapRay 引导式工作流
@@ -51,10 +52,48 @@ metadata:
 6. 路由分析：按 `analysis/README.md` 逐项评估子 Skill；满足条件则执行，不满足写跳过原因。  
 7. 落盘报告：写到 `<PROJECT_ROOT>/reports/hapray-analysis-<YYYYMMDD>-<topic>.md`，正文固定结构 + 文末元信息与执行轨迹。
 
-> **🚨 关键强制要求（新增）**：
-> - `perf` 采集后**必须**执行 `update` 进行符号恢复
-> - **禁止**在 `update` 中使用 `--no-llm` 参数（除非用户**明确**要求跳过符号恢复）
-> - LLM 失败时**必须**自动切换到 Agent 模式完成，禁止直接结束
+> **🚨 关键强制要求**：
+> - `perf` 采集后**必须**执行 `update`（符号恢复 + 可选 root-cause 集成）
+> - **禁止**在 `update` 中使用 `--symbol-recovery-no-llm`（除非用户**明确**要求跳过符号恢复）
+> - 符号恢复**默认 Agent 模式**；仅 `--symbol-recovery-llm-mode` 时先走在线 LLM，失败仍回退 Agent
+> - **root-cause 默认开启**（空刷根因）；用 `--no-root-cause` 跳过；Agent 编排与符号恢复一致（`HAPRAY_ROOT_CAUSE_AGENT_CMD`）
+> - **update 前交互（MUST）**：向用户确认 **SO 目录**（`--so_dir` / `HAPRAY_SO_DIR`）与 **HAP/应用包目录**（`--app-packages-dir` / `HAPRAY_APP_PACKAGES_DIR`）；**已提供则禁止 hdc 拉取**；未提供再试设备；**两者皆无则跳过符号恢复与 root-cause**（勿伪称完成）
+
+## update 前交互：SO 与 HAP 路径（MUST）
+
+在运行 `perf` 后的 **`update` 之前**，Agent **必须先与用户确认**下列两条本地路径（设备上拉取 `.so`/HAP **经常失败**，优先使用用户自备目录）：
+
+| 用途 | 用户需提供 | CLI | 环境变量 |
+|------|------------|-----|----------|
+| 符号恢复（strip `.so`） | 含 `*.so` 的文件夹（如 `libs/arm64`） | `--so_dir <路径>` | `HAPRAY_SO_DIR` |
+| 空刷 root-cause | **反编译源码**（`*.ts` / `decompiled/` / `src/main/ets`）或 **仅 HAP**（`*.hap`） | `--app-packages-dir <路径>` | `HAPRAY_APP_PACKAGES_DIR` |
+
+**决策顺序（与 `update_action.py` 一致）**：
+
+1. **用户已提供路径** → 直接使用，**不再** `hdc file recv` 拉 SO 或 HAP。
+2. **用户未提供** → 尝试从在线设备拉取（需 `hdc` + `bm dump`）；SO → `.symbol_recovery_libs/`，HAP → `.app_packages/<包名>/`。
+3. **用户未提供且设备拉取失败** → **跳过符号恢复**（无 `--so_dir` 有效目录）与 **跳过集成 root-cause**（无 HAP）；继续其余 report 分析，并在对话/独立报告中写明跳过原因。
+
+**Agent 对话模板（执行 update 前必问）**：
+
+```text
+即将对 <report_dir> 执行 update（符号恢复 + 空刷 root-cause）。
+请确认是否已准备好以下本地路径（推荐提前从设备拷贝或 CI 产物获取）：
+1) SO 目录（符号恢复）：例如 D:/artifacts/taobao/libs/arm64
+2) root-cause 输入目录（自动识别源码 vs HAP）：
+   - 源码/反编译树（推荐）：含 *.ts 或 decompiled/index，例如 D:/artifacts/taobao/decompiled/
+   - 仅 HAP 包：例如 D:/artifacts/taobao/hap/
+若暂无路径可回复「跳过」或仅提供其中一项；未提供的路径将尝试从手机拉取，拉取失败则跳过对应步骤。
+```
+
+**update 示例（用户提供路径，不拉设备）**：
+
+```bash
+uv run python -m scripts.main update \
+  --report_dir ./reports/<timestamp> \
+  --so_dir "D:/local/libs/arm64" \
+  --app-packages-dir "D:/local/hap_or_app_packages"
+```
 
 ## 术语与路径判定
 
@@ -472,24 +511,57 @@ uv run python -m scripts.main update \
 
 ```bash
 uv run python -m scripts.main update \
-  --report_dir <REPORT_DIR>          # 必填：perf 采集输出目录（含 hiperf/ 子目录）
-  --so_dir <SO_DIR>                  # 可选：符号库目录（含 .so 文件的目录）
-  --symbol-recovery-agent-mode       # 可选：强制使用离线 Agent 模式（跳过在线 LLM 探活）
+  --report_dir <REPORT_DIR>              # 必填：perf 采集输出目录（含 hiperf/ 子目录）
+  --so_dir <SO_DIR>                      # 推荐：本地 .so 目录（提供则跳过设备 SO 拉取）
+  --app-packages-dir <HAP_DIR>           # 推荐：本地 HAP/应用包目录（提供则跳过设备 HAP 拉取）
+  --symbol-recovery-llm-mode             # 可选：先走在线 LLM 符号恢复（默认不走）
+  --no-root-cause                        # 可选：跳过集成空刷 root-cause
+  --root-cause-skip-llm                  # 可选：root-cause 仅导出证据/Agent 任务
 ```
 
-**⚠️ 禁止使用的参数（除非用户明确要求）**：
-- ❌ `--symbol-recovery-no-llm`：**绝对禁止**使用，这会完全跳过符号恢复，导致火焰图无函数名
-- ❌ `--no-llm`：**绝对禁止**使用，同上
+**符号恢复（默认 Agent，与代码一致）**：
+- **默认**：`agent_mode=true`，直接走 Agent 编排（导出 tasks → Step2/外部 Agent → import → Step4 增强火焰图）
+- **仅当需要在线 LLM**：加 `--symbol-recovery-llm-mode` 或 `HAPRAY_SYMBOL_RECOVERY_LLM_MODE=1`；探活/执行失败仍回退 Agent
+- ❌ **禁止**无故使用 `--symbol-recovery-no-llm`（除非用户明确跳过符号恢复）
 
-**正确的心态**：
-- 默认执行 `update` **不加任何 LLM 相关参数**，让系统自动处理（先探活 LLM，失败自动切 Agent）
-- 只有用户**明确说"不需要符号恢复"**时，才考虑使用 `--symbol-recovery-no-llm`
+**root-cause（默认开启）**：
+- update 在符号恢复与总报告刷新后，对含 `report/trace_emptyFrame.json` 的用例自动执行 `hapray root-cause` 等价逻辑（默认 **Agent**，见 `analysis/empty-frame-root-cause.md`）
+- 跳过：`--no-root-cause` 或 `HAPRAY_UPDATE_NO_ROOT_CAUSE=1`
+- 结果写入：`<用例>/report/root_cause.md`，并合并进 `hapray_report.json` 的 `more.root_cause` 与 `hapray_report.html` 嵌入面板
 
-**SO 目录获取方式**（三选一）：
+**设备侧产物拉取（仅当用户未提供对应路径时尝试；需 hdc + 在线设备，易失败）**：
 
-1. **自动拉取**（推荐）：update 自动检测设备在线时，通过 `hdc shell bm dump -n <包名>` 获取安装路径，再 `hdc file recv` 拉取符号库
-2. **手动指定**：`--so_dir <本地 .so 文件目录>`
-3. **环境变量**：`export HAPRAY_SO_DIR=<本地 .so 文件目录>`
+| 内容 | 本地路径 | 用途 | 用户提供时 |
+|------|----------|------|------------|
+| `.so` / `libs` | `--report_dir/.symbol_recovery_libs/<包名>/` | 符号恢复 | `--so_dir` / `HAPRAY_SO_DIR` → **不拉** |
+| **HAP 文件** | `--report_dir/.app_packages/<包名>/hap/*.hap` | root-cause 反编译输入 | `--app-packages-dir` / `HAPRAY_APP_PACKAGES_DIR` → **不拉** |
+| **安装目录树**（尽力） | `.app_packages/<包名>/bundle/` | 完整包资源 | 同上 |
+| 清单 | `.app_packages/<包名>/app_packages_manifest.json` | 记录路径、反编译/索引目录 | 同上 |
+
+**拉取/路径皆不可用时的行为**：无有效 SO → 跳过符号恢复；无 HAP → 自动关闭集成 root-cause（等价于本 run 加 `--no-root-cause` 效果，但无需用户手改参数）。
+
+可选反编译（配置后 update 自动执行）：
+
+```bash
+# 占位符：{hap} {output} {bundle} {out_dir}
+export HAPRAY_HAP_DECOMPILER_CMD='python /path/to/decompiler.py --input {hap} --output {output}'
+```
+
+反编译成功后索引位于 `.app_packages/<包名>/decompiled/index/`，root-cause 自动使用 **with_source** 模式。
+
+**SO 目录获取方式**（优先级）：
+
+1. **用户本地路径（推荐）**：`--so_dir` 或 `HAPRAY_SO_DIR`（Agent 在 update 前交互索取）
+2. **报告内已有**：`.symbol_recovery_libs/` 或 `.app_packages/<包名>/bundle/` 中已有 `.so`
+3. **设备自动拉取（兜底）**：仅当未提供 `--so_dir` 且设备在线时，`hdc file recv` libs
+
+**root-cause 输入获取方式**（优先级；**自动识别源码 vs HAP**）：
+
+1. **用户本地路径（推荐）**：`--app-packages-dir` 或 `HAPRAY_APP_PACKAGES_DIR`
+   - 识别为 **源码/反编译树**（`*.ts`、`decompiled/`、`src/main/ets`）→ 直接 **with_source** 分析，**不**反编译 HAP
+   - 识别为 **仅 HAP**（`*.hap`）→ 走 HAP 反编译 + 索引（需 `HAPRAY_HAP_DECOMPILER_CMD`）
+2. **报告内已有**：`.app_packages/<包名>/decompiled/` 或 `hap/*.hap`
+3. **设备自动拉取（兜底）**：仅当未提供路径且设备在线时拉 HAP（拉取结果按 HAP 路径处理）
 
 #### 包名获取方式（必须通过设备查询，禁止臆造）
 
@@ -548,21 +620,26 @@ update 执行完成后，必须验证以下产物存在：
 | `symbol_recovery_external_results.json` | 同上 | LLM 推断结果（Step2 产出） |
 | `symbol_recovery_replacements.json` | `reports/<timestamp>/hiperf/<step>/` | 符号替换映射表 |
 | `hiperf_report_with_inferred_symbols.html` | `reports/<timestamp>/hiperf/<step>/` | **增强版火焰图（最终交付物）** |
+| `root_cause.md` | `<用例>/report/` | **空刷根因分析主报告**（update 集成，默认 Agent） |
+| `root_cause_evidence.md` | 同上 | 规则引擎证据（调试） |
+| `root_cause_agent_task.json` | 同上 | Agent 待处理任务（无 API 时） |
+| `hapray_report.json` → `more.root_cause` | `<用例>/report/` | 总报告 JSON 内嵌根因 Markdown |
 
-> 若 `hiperf_report_with_inferred_symbols.html` 不存在，说明符号恢复未完成，火焰图仍显示原始地址。
+> 若 `hiperf_report_with_inferred_symbols.html` 不存在，说明符号恢复未完成，火焰图仍显示原始地址。  
+> 若存在空刷数据但无 `root_cause.md`，检查是否误加 `--no-root-cause` 或 `trace_emptyFrame.json` 缺失。
 
-#### ⚠️ LLM 失败时强制走 Agent 模式（禁止结束）
+#### ⚠️ 符号恢复：默认 Agent；LLM 仅按需（`--symbol-recovery-llm-mode`）
 
 **自动降级策略（必须执行）**：
 
-update 执行时会自动探测 LLM 可用性（探活），按以下优先级处理：
+update 符号恢复按以下优先级处理（**默认不走在线 LLM**）：
 
 | 场景 | 自动行为 | 必须产出 |
 |------|----------|----------|
-| LLM 探活通过 → 在线执行成功 | 使用在线 LLM 完成符号推断 | `symbol_recovery_external_results.json` + 增强火焰图 |
-| LLM 探活失败（402/鉴权/网络） | **强制自动切换到 Agent 模式** | `symbol_recovery_llm_tasks.json` → 外部推断 → `symbol_recovery_external_results.json` |
-| 在线执行中途失败 | **强制同次切换到 Agent 模式** | 同上 |
-| Agent 模式也失败 | 标记为失败，给出重试命令 | 明确结论"符号恢复失败" |
+| **默认**（未加 `--symbol-recovery-llm-mode`） | **直接 Agent 模式** | tasks → 推断 → external_results → 增强火焰图 |
+| 显式 `--symbol-recovery-llm-mode` 且探活通过 | 先在线 LLM | 成功则增强火焰图；失败回退 Agent |
+| LLM 探活/执行失败 | **同次切换 Agent** | 同上 |
+| Agent 也失败 | 标记失败并给重试命令 | 不得伪称完成 |
 
 **🚨 关键修复要求（LLM 失败时的正确处理）**：
 
@@ -872,6 +949,7 @@ Set-Location <RUNTIME_ROOT>
 - 出现内存持续增长、频繁 GC、温控/掉频迹象。
 - 日志命中高风险关键词（ANR、watchdog、fatal、crash、binder timeout）。
 - 用户明确要求“根因定位 / 深度分析 / 优化路线图 / 版本对比”。
+- 存在 `trace_emptyFrame.json` 或空刷相关指标异常（应加载 `empty-frame-root-cause` 子 Skill）。
 
 若未命中：输出 Quick 结论 + 下一轮建议，不强制执行 Full。
 
@@ -897,8 +975,9 @@ Set-Location <RUNTIME_ROOT>
 | 有 `trace.db` 且涉及滑动/掉帧/手势 | `analysis/scroll-jank-trace-analysis.md` | 帧规则以该文档为唯一权威（含 `depth=0` 规则） |
 | 深挖高负载/未知瓶颈/多源交叉/新发现 | `analysis/high-load-analysis.md` | 以原始侧为主，不以 `summary.json` 为主线 |
 | `libxxx.so+0x...` 缺失符号或提及符号恢复 | `analysis/symbol-recovery-analysis.md` | 按该文档执行符号恢复与验证 |
+| 存在 `trace_emptyFrame.json` / 空刷 / VSync 无效刷新 / 根因定位 | `analysis/empty-frame-root-cause.md` | **必读**；update 已集成时读产物 + Agent 闭环；独立跑用 `hapray root-cause` |
 
-推荐评估顺序：`scroll-jank` → `high-load` → `symbol-recovery`（以 `analysis/README.md` 最新索引为准）。
+推荐评估顺序：`scroll-jank` → `high-load` → `symbol-recovery` → **`empty-frame`（root-cause）**（以 `analysis/README.md` 最新索引为准）。
 
 ## 强制约束（MUST / SHOULD / MAY）
 
@@ -906,7 +985,8 @@ Set-Location <RUNTIME_ROOT>
 
 - **若为源码仓库（判定见「源码工作区硬门禁」），必须先完成该节最小自检清单（perf_testing、web 构建、`dist/tools/sa-cmd`、trace_streamer、**symbol_recovery 的 venv + `main.py --help`**）并留证据**，再执行 `perf`/`update`/符号恢复链路；**radare2 / r2dec / r2ghidra 未装不构成未完成硬门禁**。未完成硬门禁时禁止谎称环境就绪。  
 - **符号恢复必须一次性闭环交付**：若进入符号恢复链路，必须在同一次 `update` 内完成 `tasks -> symbol_recovery_external_results.json -> import -> 替换产物`，禁止“做一半停一半”。  
-- **🚨 LLM 失败时必须强制切换到 Agent 模式（最强制要求）**：update 执行符号恢复时，若 LLM 探活失败（402/鉴权/网络）或在线执行中途失败，**必须立即同次切换到 Agent 模式**，继续完成 `tasks -> external_results -> import -> 火焰图替换`，禁止直接结束或仅停留在 tasks 导出状态。这是硬性要求，不得因“LLM 不可用”就结束 update。  
+- **符号恢复默认 Agent**：不得因未配置在线 LLM 就跳过符号恢复；`--symbol-recovery-llm-mode` 失败时**必须**同次切 Agent 完成闭环。  
+- **root-cause 默认执行**：update 后检查 `report/root_cause.md`；若仅 `root_cause_agent_task.json` 无结果，主 Agent **必须**按任务 JSON 完成推断并写 `root_cause_agent_result.json` 后重跑 update 或单独 `root-cause`。  
 - 必须先实际执行 CLI，再给“原因与建议”。  
 - 必须输出阶段进度（命令前说明、命令后结果）。  
 - 必须读取 `reports_path` 并枚举真实产物路径，不得臆造。  
@@ -964,8 +1044,10 @@ Set-Location <RUNTIME_ROOT>
 集成符号恢复由 `perf_testing/hapray/actions/update_action.py` + `perf_analyzer.py` 实现，**默认行为**为：
 
 1. **SO**：解析顺序为 `update --so_dir` → 环境变量 `HAPRAY_SO_DIR` → 若仍无有效目录，则在 **`hdc` 可用且设备在线** 时，按 `testInfo.json` 的 **`app_id`（包名）**：先 **`hdc shell bm dump -n <包名>`** 从安装信息 JSON 中取模块/安装路径，再在 `--report_dir/.symbol_recovery_libs/<bundle>/` 上对对应 **`libs` / `libs/arm64`** 做 **`file recv`**；若仍拿不到 `.so`，再用**仅靠包名字符串**的常见兜底路径（细节见 `analysis/symbol-recovery-analysis.md`）。**不靠 PID/ps 作为主拉取路径。**  
-2. **LLM**：在已配置 Key/Base URL 且未 `--symbol-recovery-no-llm`、非强制纯 agent 时，**先运行时探活**；探活失败（如 `402` 额度、鉴权、网络）或环境未配置可用 LLM 时，**进入 agent 编排**（导出 tasks → 推断 → import，见 `perf_analyzer` / `symbol_recovery_bridge` 实现）。  
-3. **前提**：无论在线还是 agent，**都必须有可用 SO 目录**；自动拉库失败时日志会出现 `Failed to auto-download libs for bundle`，此时集成符号恢复整段**跳过**（不是 LLM 逻辑未生效），需用户补 `--so_dir` 或排查设备/路径。
+2. **符号恢复模式**：**默认 Agent**；仅 `--symbol-recovery-llm-mode` 时先 LLM 探活+在线执行，失败回退 Agent（见 `update_action` / `symbol_recovery_bridge`）。  
+3. **应用包**：设备在线时同步拉 HAP 到 `.app_packages/<包名>/`，供 root-cause 反编译（可选 `HAPRAY_HAP_DECOMPILER_CMD`）。  
+4. **root-cause**：默认在 update 末段执行（`--no-root-cause` 可跳过），结果写入 `report/root_cause.md` 与总报告 `more.root_cause`。  
+5. **前提**：符号恢复须有可用 SO 目录；自动拉库失败时符号恢复跳过。root-cause 须 `report/trace_emptyFrame.json`（由 analyze 阶段产出）。
 
 **一次性完成（强制）**：
 
@@ -1002,7 +1084,7 @@ Set-Location <RUNTIME_ROOT>
 1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」（web 构建产物、`dist/tools/sa-cmd/`、trace_streamer、**symbol_recovery 的 venv + `main.py --help`** 等）；**radare2 / 反编译插件未装不构成 STOP**。未完成硬门禁则在此处 **STOP**，不得强行执行后续步骤。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
 3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\"./hapray.exe`，Linux/macOS `./hapray`）；源码模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`（须在步骤 1 已满足硬门禁）。  
-4. **perf 采集后必须执行 update**：`uv run python -m scripts.main update --report_dir <perf输出目录>`，**禁止**使用 `--no-llm` 参数。  
+4. **perf 采集后必须执行 update**：`uv run python -m scripts.main update --report_dir <perf输出目录>`；**禁止**无故 `--symbol-recovery-no-llm`；**默认**含符号恢复（Agent）+ root-cause（可用 `--no-root-cause` 跳过）。  
 5. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
 6. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
 7. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
@@ -1040,9 +1122,20 @@ cd <RUNTIME_ROOT>
   --round 1 \
   -o ./reports
 
-# 第2步：update 符号恢复（必须执行，生成增强火焰图）
+# 第2步：update（符号恢复 Agent 默认 + root-cause 默认 + 自动拉 libs/HAP）
 ./hapray --result-file /tmp/hapray-tool-result.json update \
   --report_dir ./reports/<timestamp>
+# 可选：--no-root-cause | --root-cause-skip-llm | --symbol-recovery-llm-mode
+```
+
+### 单独 root-cause（补跑）
+
+```bash
+cd <REPO_ROOT>/perf_testing
+uv run python -m scripts.main root-cause \
+  --report-dir <用例>/report \
+  --index-dir <report_dir>/.app_packages/<包名>/decompiled/index \
+  --decompiled-dir <report_dir>/.app_packages/<包名>/decompiled
 ```
 
 ### gui-agent 模式
@@ -1058,8 +1151,8 @@ cd <RUNTIME_ROOT>
 ### 注意事项
 
 - `--round` 建议：冒烟 `1`；对比评估 `3` 或 `5`
-- **update 必须执行**：`perf` 后必须执行 `update`，否则火焰图无符号
-- **禁止 `--no-llm`**：update 时**绝对禁止**加 `--no-llm`，这会跳过符号恢复
+- **update 必须执行**：`perf` 后必须执行 `update`，否则火焰图无符号、无集成 root-cause
+- **禁止无故 `--symbol-recovery-no-llm`**：会跳过符号恢复
 
 ## 独立分析报告规范
 
@@ -1094,3 +1187,4 @@ cd <RUNTIME_ROOT>
 - `analysis/scroll-jank-trace-analysis.md`  
 - `analysis/high-load-analysis.md`  
 - `analysis/symbol-recovery-analysis.md`
+- `analysis/empty-frame-root-cause.md`
