@@ -11,8 +11,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .formatting import nonempty_thread_name, wakeup_chain_labels
 from .structured_output import OUTPUT_SCHEMA_STR
-
 
 # ── analyze 模式（默认，从证据推断根因）─────────────────────────────────────
 
@@ -345,13 +345,15 @@ def _build_with_source_user_prompt(
             "empty_rate": overview.get("empty_frame_percentage"),
             "severity": overview.get("severity_level"),
             "main_thread_pct": overview.get("main_thread_percentage_in_empty_frame"),
-            "top_threads": [t.get("thread_name") for t in dominant],
+            "top_threads": [
+                name for t in dominant if (name := nonempty_thread_name(t.get("thread_name")))
+            ],
         }
         if frames:
-            compact["top_frame_wakeup"] = [
-                w.get("thread_name")
-                for w in (frames[0].get("wakeup_threads") or [])[:4]
-            ]
+            compact["top_frame_wakeup"] = wakeup_chain_labels(
+                frames[0].get("wakeup_threads"),
+                limit=4,
+            )
             compact["top_frame_symbols"] = frames[0].get("symbol_hints", [])[:4]
         if proc_hints:
             compact["proc_source_hits"] = [

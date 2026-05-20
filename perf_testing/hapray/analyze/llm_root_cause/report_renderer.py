@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .formatting import thread_label, wakeup_chain_labels
+
 
 class EvidenceReportRenderer:
     """将规则引擎提取的原始证据渲染为可读 Markdown，不含任何推断或观点。"""
@@ -49,7 +51,7 @@ class EvidenceReportRenderer:
             lines.append("## 主要线程")
             for t in dominant_threads[:5]:
                 lines.append(
-                    f"- `{t.get('thread_name', 'unknown')}` "
+                    f"- `{thread_label(t.get('thread_name'))}` "
                     f"[{t.get('role', 'unknown')}] "
                     f"空刷负载占比 {t.get('percentage', 0)}%"
                 )
@@ -93,12 +95,10 @@ class EvidenceReportRenderer:
             for i, frame in enumerate(representative_frames[:3], 1):
                 lines.append(
                     f"### Frame {i}: VSync#{frame.get('vsync')} | "
-                    f"thread={frame.get('thread_name', 'unknown')} | "
+                    f"thread={thread_label(frame.get('thread_name'))} | "
                     f"dur={frame.get('dur_ms', 0)}ms"
                 )
-                wakeup = " → ".join(
-                    w.get("thread_name", "?") for w in frame.get("wakeup_threads", [])[:5]
-                )
+                wakeup = ' → '.join(wakeup_chain_labels(frame.get('wakeup_threads')))
                 if wakeup:
                     lines.append(f"- 唤醒链: {wakeup}")
                 syms = frame.get("symbol_hints", [])
