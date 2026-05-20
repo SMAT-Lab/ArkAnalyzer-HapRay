@@ -100,12 +100,14 @@ class RootCauseResult:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any], raw: str = "") -> "RootCauseResult":
+        if _looks_like_json_schema(d):
+            return cls(raw_llm_text=raw, parse_success=False)
         suspects = [
             SuspectRecord.from_dict(s)
             for s in (d.get("suspects") or [])
             if isinstance(s, dict)
         ]
-        return cls(
+        result = cls(
             summary=str(d.get("summary") or ""),
             suspects=suspects,
             caveats=list(d.get("caveats") or []),
@@ -113,6 +115,9 @@ class RootCauseResult:
             raw_llm_text=raw,
             parse_success=True,
         )
+        if not result_has_content(result):
+            result.parse_success = False
+        return result
 
 
 # ── JSON Schema（注入 prompt 用）────────────────────────────────────────
@@ -167,6 +172,50 @@ OUTPUT_JSON_SCHEMA = {
 }
 
 OUTPUT_SCHEMA_STR = json.dumps(OUTPUT_JSON_SCHEMA, ensure_ascii=False, indent=2)
+
+# 注入 prompt 的必须是「数据示例」，不能是 JSON Schema 元数据（否则模型会照抄 type/properties 结构）。
+OUTPUT_EXAMPLE_DICT: dict[str, Any] = {
+    'summary': '一句话摘要：最值得修复的嫌疑函数与原因',
+    'suspects': [
+        {
+            'rank': 1,
+            'file': 'src/main/ets/example/DetailPrefetchService.ts',
+            'line_start': 207,
+            'line_end': 207,
+            'owner': 'DetailPrefetchService',
+            'symbol': 'anonymous',
+            'confidence': 'high',
+            'root_cause': '1-2 句根因描述',
+            'problematic_lines': ['引用实际代码行或逻辑'],
+            'fix': '具体修复建议（可含伪代码）',
+            'trigger_chain': 'VSync → FlushMessages → DetailPrefetchService.anonymous',
+        },
+    ],
+    'caveats': ['需人工验证的结论'],
+    'needs_more_data': ['可选：补采哪些数据可提高置信度'],
+}
+OUTPUT_EXAMPLE_STR = json.dumps(OUTPUT_EXAMPLE_DICT, ensure_ascii=False, indent=2)
+
+
+def _looks_like_json_schema(d: dict[str, Any]) -> bool:
+    """模型误把 JSON Schema 当作输出体时，顶层含 type/properties 且无 summary。"""
+    if not isinstance(d, dict):
+        return False
+    if 'summary' in d or 'suspects' in d:
+        return False
+    return d.get('type') == 'object' and isinstance(d.get('properties'), dict)
+
+
+def result_has_content(result: 'RootCauseResult') -> bool:
+    """解析成功但 summary/suspects 皆空时视为无效（常见于 prompt 示例错误）。"""
+    if not result.parse_success:
+        return False
+    if (result.summary or '').strip():
+        return True
+    return any(
+        (s.root_cause or '').strip() or (s.owner or '').strip() or (s.symbol or '').strip()
+        for s in result.suspects
+    )
 
 
 # ── 解析 ──────────────────────────────────────────────────────────────────

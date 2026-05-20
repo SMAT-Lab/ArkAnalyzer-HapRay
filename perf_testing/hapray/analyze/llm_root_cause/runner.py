@@ -37,6 +37,7 @@ from .empty_frame_evidence import EmptyFrameEvidenceExtractor
 from .knowledge_loader import load_knowledge
 from .llm_client import is_llm_configured, load_client_from_config
 from .prompts import build_user_prompt, get_system_prompt
+from .proc_source_match import pick_aligned_candidates, source_path_aligned
 from .report_renderer import EvidenceReportRenderer
 from .structured_output import OUTPUT_SCHEMA_STR
 
@@ -101,25 +102,70 @@ def _enrich_with_code_and_callgraph(
     return call_chains_text, module_attribution_text
 
 
+def _load_decompiled_stats(decompiled_dir: Path, index_dir: str | None) -> dict[str, Any]:
+    """Load index/stats.json plus shallow dir listing for evidence scope notices."""
+    stats_path = Path(index_dir or decompiled_dir / "index") / "stats.json"
+    stats: dict[str, Any] = {}
+    if stats_path.is_file():
+        try:
+            stats = json.loads(stats_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            stats = {}
+    top_dirs = sorted(
+        p.name
+        for p in decompiled_dir.iterdir()
+        if p.is_dir() and p.name != "index"
+    )
+    stats.setdefault("input_root", str(decompiled_dir))
+    stats["top_level_dirs"] = top_dirs
+    return stats
+
+
 def _collect_code_snippets_for_prompt(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     result: list[dict[str, Any]] = []
 
-    def _add_candidates(cands: list[dict[str, Any]], hits: int = 0) -> None:
-        for c in cands:
-            if not c.get("code_snippet"):
+    def _add_candidates(
+        cands: list[dict[str, Any]],
+        hits: int = 0,
+        *,
+        hint: dict[str, Any] | None = None,
+    ) -> None:
+        ordered = list(cands)
+        if hint is not None:
+            ordered.sort(
+                key=lambda c: (0 if source_path_aligned(c.get('file', ''), hint.get('source_path', '')) else 1),
+            )
+        for c in ordered:
+            if not c.get('code_snippet'):
                 continue
             key = f"{c.get('file')}:{c.get('line_start')}"
             if key in seen:
                 continue
             seen.add(key)
-            c["evidence_hits"] = hits
-            result.append(c)
+            entry = dict(c)
+            entry['evidence_hits'] = hits
+            if hint is not None:
+                entry['owner_name'] = entry.get('owner_name') or hint.get('owner_name', '')
+                entry['symbol_name'] = entry.get('symbol_name') or (
+                    (hint.get('symbols') or [''])[0]
+                )
+            result.append(entry)
 
-    for hint in evidence.get("proc_source_hints", []):
-        _add_candidates(hint.get("decompiled_candidates") or [], hint.get("hit_count", 1))
+    for hint in evidence.get('proc_source_hints', []):
+        direct = hint.get('direct_decompiled_snippet')
+        if isinstance(direct, dict) and direct.get('code_snippet'):
+            _add_candidates([direct], hint.get('hit_count', 1), hint=hint)
+        _add_candidates(
+            pick_aligned_candidates(hint, hint.get('decompiled_candidates') or []),
+            hint.get('hit_count', 1),
+            hint=hint,
+        )
 
-    result.sort(key=lambda c: c.get("evidence_hits", 0), reverse=True)
+    result.sort(
+        key=lambda c: (c.get('evidence_hits', 0), 1 if c.get('owner_name') else 0),
+        reverse=True,
+    )
     return result[:5]
 
 
@@ -222,7 +268,8 @@ def _write_agent_task(
         "instructions": [
             "Read system_prompt and user_prompt.",
             "Use the current Cursor/default agent model, not local API tokens.",
-            "Return valid JSON only, matching expected_schema_json.",
+            "Return a JSON *data object* with summary and suspects (see system_prompt example), "
+            "NOT a JSON Schema with type/properties.",
             "Write the JSON result to the requested agent result path if running through HAPRAY_ROOT_CAUSE_AGENT_CMD.",
         ],
         "expected_schema_json": json.loads(OUTPUT_SCHEMA_STR),
@@ -266,21 +313,25 @@ def _run_inprocess_agent_inference(
     if not (raw_output or '').strip():
         logging.warning('In-process root-cause agent returned empty output')
         return False
-    from .structured_output import parse_llm_output
+    from .structured_output import parse_llm_output, result_has_content
 
     parsed = parse_llm_output(raw_output)
-    if parsed.parse_success:
-        payload = {
-            'summary': parsed.summary,
-            'suspects': [s.to_dict() for s in parsed.suspects],
-            'caveats': parsed.caveats,
-            'needs_more_data': parsed.needs_more_data,
-        }
-        result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    else:
-        result_path.write_text(raw_output.strip(), encoding='utf-8')
-    if not result_path.is_file():
+    if not parsed.parse_success or not result_has_content(parsed):
+        preview = (raw_output or '').strip()[:500]
+        logging.warning(
+            'In-process root-cause agent: invalid or empty structured output '
+            '(parse_success=%s, preview=%r)',
+            parsed.parse_success,
+            preview,
+        )
         return False
+    payload = {
+        'summary': parsed.summary,
+        'suspects': [s.to_dict() for s in parsed.suspects],
+        'caveats': parsed.caveats,
+        'needs_more_data': parsed.needs_more_data,
+    }
+    result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
     logging.info('Root-cause agent result written: %s', result_path)
     return True
 
@@ -331,9 +382,11 @@ def _render_agent_result(
         return None
     from .structured_output import parse_llm_output, render_fallback_markdown, render_to_markdown
 
+    from .structured_output import result_has_content
+
     raw_output = result_path.read_text(encoding="utf-8", errors="ignore")
     result = parse_llm_output(raw_output)
-    if result.parse_success:
+    if result.parse_success and result_has_content(result):
         _attach_code_snippets(result.suspects, code_snippets)
         _apply_module_attributions(result.suspects, structured_evidence)
         return render_to_markdown(result)
@@ -614,8 +667,10 @@ def run_empty_frame_analysis(
     effective_mode = llm_mode
 
     if decompiled_dir and Path(decompiled_dir).exists():
+        decomp_path = Path(decompiled_dir)
+        evidence["decompiled_stats"] = _load_decompiled_stats(decomp_path, index_dir)
         call_chains_text, module_attribution_text = _enrich_with_code_and_callgraph(
-            evidence, Path(decompiled_dir), index_dir=index_dir
+            evidence, decomp_path, index_dir=index_dir
         )
         code_snippets = _collect_code_snippets_for_prompt(evidence)
         # Include UI extra snippets

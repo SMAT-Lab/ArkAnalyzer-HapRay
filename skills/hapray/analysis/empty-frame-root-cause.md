@@ -10,9 +10,11 @@
 
 `perf` → **`update`** 时（源码：`update_action.py` + `root_cause_integration.py`），在存在 `trace_emptyFrame.json` 时默认尝试 root-cause。
 
-### 〇.1 执行前交互：HAP/应用包路径（MUST）
+### 〇.1 执行前交互：双路径（MUST，会话开头）
 
-从手机拉 HAP **经常失败**。Agent 在跑 `update` **之前**必须先向用户确认 **root-cause 输入目录**（与主 Skill 中 SO 路径一并确认）。工具会 **自动识别** 用户提供的是 **反编译源码** 还是 **HAP 包**：
+**与主 Skill `../SKILL.md` §0 相同**：须在 **本会话第一次执行任何 HapRay CLI 之前**（含 `perf`，不仅是 `update`）发出必问模板并 **等待用户回复**；禁止未询问就开跑命令。
+
+从手机拉 SO/HAP **经常失败**。须与 SO 路径 **同一条对话** 向用户确认 **root-cause 输入目录**。工具会 **自动识别** 用户提供的是 **反编译源码** 还是 **HAP 包**：
 
 | 识别结果 | 目录特征 | 行为 |
 |----------|----------|------|
@@ -26,14 +28,7 @@
 | 未提供 | 尝试设备拉 HAP |
 | 未提供且拉取失败 | **跳过** 集成 root-cause |
 
-**对话必问（可与 SO 路径同条消息）**：
-
-```text
-请提供 root-cause 输入目录（二选一，会自动识别）：
-  A) 反编译/源码树（推荐）：含 *.ts 或 decompiled/index，例如 D:/src/decompiled/taobao_main/
-  B) 仅 HAP 包：例如 D:/artifacts/myapp/hap/*.hap
-若暂无，将尝试从手机拉 HAP；拉取失败则跳过空刷根因分析。
-```
+**对话必问**：使用主 Skill **§0 必问模板**（含 SO + root-cause 两项）；勿仅在子 Skill 内单独问 root-cause 而跳过 SO。
 
 **update 示例**：
 

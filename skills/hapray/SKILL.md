@@ -4,12 +4,12 @@ version: "1.5.4"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
-  HapRay (ArkAnalyzer-HapRay) 精简主 Skill：命令执行、路径判定、analysis 路由、报告落盘。默认 `<PROJECT_ROOT>/reports/`。**运行前须先判定「源码仓库 <REPO_ROOT>」与「二进制发布包 <RUNTIME_ROOT>」二选一**：源码轨须完成正文「源码工作区硬门禁」（web/vite、static_analyzer、prebuild、symbol_recovery venv 等）；二进制轨不要求本地构建，但须满足发布包内资源完整及符号恢复可发现性（分体包时配置 `HAPRAY_SYMBOL_RECOVERY_*` 或约定目录布局）。**update 默认 Agent 符号恢复**（`--symbol-recovery-llm-mode` 才先走在线 LLM）；**集成空刷 root-cause**（默认开启，`--no-root-cause` 可跳过）。**执行 update 前须交互确认两条本地路径**（`.so` 目录、`HAP/应用包` 目录）；用户提供则跳过 hdc 拉取，未提供再尝试设备，两者皆无则跳过符号恢复与 root-cause。**
+  HapRay (ArkAnalyzer-HapRay) 精简主 Skill。**会话开头 STOP**：凡将跑 perf/update/符号恢复/root-cause，须先向用户索取 SO 目录与 root-cause 输入目录（源码或 HAP），收到明确回复前禁止执行任何 HapRay CLI。再判定源码轨/二进制轨与硬门禁。update 默认 Agent 符号恢复 + 集成 root-cause；用户提供路径则跳过 hdc 拉取。
 metadata:
   short-description: >-
-    HapRay workflow: source-repo gate vs binary release; update prompts for local SO/HAP paths before optional hdc pull; skips symbol-recovery and root-cause when both unavailable.
+    HapRay workflow: STOP at session start to ask user for SO and root-cause input paths before any CLI; then source/binary gate; perf/update with optional hdc fallback.
   zh-Hans: >-
-    精简主流程：源码/二进制分叉 → perf/update（符号恢复 Agent 默认 + root-cause 集成）→ 子 Skill 深入分析 → 独立报告落盘。
+    会话开头阻塞询问双路径 → 源码/二进制门禁 → perf/update → 子 Skill 分析 → 报告落盘。未回复路径前禁止跑命令。
   skill-paths:
     main: SKILL.md
     tool_result: hapray-tool-result.md
@@ -33,21 +33,80 @@ metadata:
     - root-cause-agent-mode
     - update-integrated-root-cause
     - app-packages-hap-download
+    - must-ask-user-so-and-root-cause-paths-first
+    - block-cli-until-paths-confirmed
 ---
 
 # HapRay 引导式工作流
 
 目标：让 Agent 以更短路径完成 **按直链获取二进制发布包（失败回退源码）→ 采集/执行 → 解析产物 → 子 Skill 深入分析 → 独立报告落盘**，并具备可恢复、可审计、可机读的执行闭环。
 
+## §0 会话开头阻塞门禁：双路径确认（最高优先级，默认 MUST）
+
+> **为何 Agent「从不交互」**：若只把询问写在「update 之前」，模型常在用户一说「跑 perf」后就直接执行 CLI，永远走不到 update 前那一段。**本节要求：在本会话第一次即将执行任何 HapRay CLI 之前就必须 STOP 并向用户提问，且须等待用户下一条回复。**
+
+### 何时触发（满足任一即触发，且尚未在本会话完成过 §0 确认）
+
+- 用户要跑 **`perf`**、**`update`**、**`perf`→`update` 全流程**、**`gui-agent`**（且后续会做 update）、**`root-cause`**，或分析已有报告且需要 **符号恢复 / 空刷根-cause**；
+- 用户说「分析性能」「跑一遍 hapray」「生成报告」等，且按本 Skill 会进入上述命令。
+
+### Agent 必须执行（不可省略）
+
+1. **STOP**：**禁止**在本步骤完成前执行 `perf` / `update` / `gui-agent` / `static` / `root-cause` 等任何 HapRay CLI（含后台命令）。
+2. **输出下方「必问模板」全文**（可替换 `<包名>` / 示例路径，但须保留两项路径 + 三种回复方式）。
+3. **等待用户下一条消息**：用户给出路径、`跳过`、或 `从设备拉取` 后，方可进入 §0 记录与后续 TL;DR 步骤。
+4. **记录到执行轨迹**（对话或独立报告）：`so_dir_user`、`app_packages_dir_user`、`path_prompt_done=true`。
+
+### 视为「用户已答复」的判定（满足其一即可进入后续 CLI）
+
+| 用户表述 | Agent 记录 |
+|----------|------------|
+| 给出 **SO 目录** 绝对/相对路径 | `so_dir_user=<路径>`，update 时加 `--so_dir` |
+| 给出 **root-cause 输入** 路径（源码树或 HAP 目录） | `app_packages_dir_user=<路径>`，update 时加 `--app-packages-dir` |
+| 「跳过 SO」「不要符号恢复」 | 不填 SO；update 可加 `--symbol-recovery-no-llm`（须用户明确） |
+| 「跳过 root-cause」「不要根因」 | `--no-root-cause` |
+| 「都从手机拉」「设备拉取」 | 两路径留空，允许后续 hdc 兜底 |
+| 消息中已含 `--so_dir` / `--app-packages-dir` 或 `HAPRAY_SO_DIR` / `HAPRAY_APP_PACKAGES_DIR` | 直接采用，仍可向用户复述确认 |
+
+### 必问模板（会话开头原样发出，禁止只写进报告不发给用户）
+
+```text
+在开始跑 HapRay（perf / update / 符号恢复 / 空刷根因）之前，需要先确认两个本地目录（从手机拉取 SO/HAP 经常失败，建议提前备好）：
+
+1) SO 目录（符号恢复用，目录内应有 *.so）
+   例：D:/artifacts/<应用名>/libs/arm64
+   → 回复路径，或回复「跳过 SO」
+
+2) root-cause 输入目录（工具会自动识别，二选一即可）
+   · 反编译/源码树（推荐）：含 *.ts 或 decompiled/index/
+   · 仅 HAP 包：含 *.hap 的文件夹
+   例：D:/artifacts/<应用名>/decompiled/ 或 D:/artifacts/<应用名>/hap/
+   → 回复路径，或回复「跳过 root-cause」
+
+也可回复「全部从设备拉取」尝试 hdc（可能失败则自动跳过对应步骤）。
+
+请直接回复上述路径（可只给其中一项）。收到后我再开始执行命令。
+```
+
+### 禁止行为（§0 违反 = 流程失败）
+
+- ❌ 未发必问模板就执行 `perf` / `update`
+- ❌ 在用户**下一条消息**之前自行假设路径、默认从设备拉取并开跑
+- ❌ 把「路径询问」只写在独立分析报告里而不在对话中向用户提问
+- ❌ 用户仅说「继续」但从未给路径时，仍应用臆造路径执行 update
+
+---
+
 ## TL;DR（30 秒）
 
+0. **§0 双路径确认（先于一切 CLI）**：见上一节；**未向用户提问并收到答复前，禁止执行步骤 4 及之后任何命令**。  
 1. **先判定运行轨（二选一，勿混用）**：  
    - **源码轨 `<REPO_ROOT>`**：存在 `perf_testing/pyproject.toml` 等 → **仅适用**下方「源码工作区硬门禁」；**先于任何** `perf` / `update` / dbtools / 符号恢复跑通 7 步构建自检（第 5 步 **硬门禁**为 `symbol_recovery` 的 venv + `main.py --help`；**radare2 / r2dec / r2ghidra 为建议项**，未装不阻塞）。  
    - **二进制轨 `<RUNTIME_ROOT>`**：以 release 解压目录运行 `hapray`/`perf-testing` 可执行文件 → **不适用**源码 7 步本地构建；改走正文「二进制发布包模式」中的资源检查、**符号恢复与主程序的发现关系**（分体包必配环境变量或约定目录）。  
    两条线不得以「有源码」代替「发布包已带齐模板/trace_streamer」或反之。  
 2. 判定路径：先分清 `<RUNTIME_ROOT>`（二进制运行目录）、`<REPO_ROOT>`（源码运行目录）与 `<PROJECT_ROOT>`（写报告）。  
 3. 先快诊后升级：默认 Quick，命中触发条件再升级 Full。  
-4. 跑命令：必须实际执行 `gui-agent/perf/opt/static` 之一（按意图）。  
+4. 跑命令：必须实际执行 `gui-agent/perf/opt/static` 之一（按意图）；**update 须带 §0 确认后的** `--so_dir` / `--app-packages-dir`（若用户已提供）。  
 5. 读产物：从 `hapray-tool-result.json`（或 `--result-file`）取 `outputs.reports_path`。  
 6. 路由分析：按 `analysis/README.md` 逐项评估子 Skill；满足条件则执行，不满足写跳过原因。  
 7. 落盘报告：写到 `<PROJECT_ROOT>/reports/hapray-analysis-<YYYYMMDD>-<topic>.md`，正文固定结构 + 文末元信息与执行轨迹。
@@ -57,11 +116,12 @@ metadata:
 > - **禁止**在 `update` 中使用 `--symbol-recovery-no-llm`（除非用户**明确**要求跳过符号恢复）
 > - 符号恢复**默认 Agent 模式**；仅 `--symbol-recovery-llm-mode` 时先走在线 LLM，失败仍回退 Agent
 > - **root-cause 默认开启**（空刷根因）；用 `--no-root-cause` 跳过；Agent 编排与符号恢复一致（`HAPRAY_ROOT_CAUSE_AGENT_CMD`）
-> - **update 前交互（MUST）**：向用户确认 **SO 目录**（`--so_dir` / `HAPRAY_SO_DIR`）与 **HAP/应用包目录**（`--app-packages-dir` / `HAPRAY_APP_PACKAGES_DIR`）；**已提供则禁止 hdc 拉取**；未提供再试设备；**两者皆无则跳过符号恢复与 root-cause**（勿伪称完成）
+> - **§0 双路径（MUST）**：**会话开头**向用户索取 SO + root-cause 输入路径，**收到回复前禁止任何 CLI**（见 §0）；非仅在 update 前才问
+> - **路径用法**：用户已提供 → update 带 `--so_dir` / `--app-packages-dir`，**禁止 hdc 拉取**；未提供 → 设备兜底；皆无 → 跳过符号恢复与 root-cause
 
-## update 前交互：SO 与 HAP 路径（MUST）
+## 双路径参数说明（§0 确认后写入 update 命令）
 
-在运行 `perf` 后的 **`update` 之前**，Agent **必须先与用户确认**下列两条本地路径（设备上拉取 `.so`/HAP **经常失败**，优先使用用户自备目录）：
+下列路径应在 **§0 必问模板** 中向用户索取（**不要**等到 perf 跑完才在内心「补问」而不发消息）：
 
 | 用途 | 用户需提供 | CLI | 环境变量 |
 |------|------------|-----|----------|
@@ -74,19 +134,9 @@ metadata:
 2. **用户未提供** → 尝试从在线设备拉取（需 `hdc` + `bm dump`）；SO → `.symbol_recovery_libs/`，HAP → `.app_packages/<包名>/`。
 3. **用户未提供且设备拉取失败** → **跳过符号恢复**（无 `--so_dir` 有效目录）与 **跳过集成 root-cause**（无 HAP）；继续其余 report 分析，并在对话/独立报告中写明跳过原因。
 
-**Agent 对话模板（执行 update 前必问）**：
+> 必问话术以 **§0 必问模板** 为准（会话开头发出）。若用户先跑完 `perf` 才补路径，仍须先完成 §0 式确认再执行 `update`。
 
-```text
-即将对 <report_dir> 执行 update（符号恢复 + 空刷 root-cause）。
-请确认是否已准备好以下本地路径（推荐提前从设备拷贝或 CI 产物获取）：
-1) SO 目录（符号恢复）：例如 D:/artifacts/taobao/libs/arm64
-2) root-cause 输入目录（自动识别源码 vs HAP）：
-   - 源码/反编译树（推荐）：含 *.ts 或 decompiled/index，例如 D:/artifacts/taobao/decompiled/
-   - 仅 HAP 包：例如 D:/artifacts/taobao/hap/
-若暂无路径可回复「跳过」或仅提供其中一项；未提供的路径将尝试从手机拉取，拉取失败则跳过对应步骤。
-```
-
-**update 示例（用户提供路径，不拉设备）**：
+**update 示例（§0 已确认路径，不拉设备）**：
 
 ```bash
 uv run python -m scripts.main update \
@@ -957,11 +1007,12 @@ Set-Location <RUNTIME_ROOT>
 
 按以下状态推进，并在对话与报告中打印阶段状态：
 
-1. `DISCOVER`：路径判定、设备与依赖检查；**若工作区为 `<REPO_ROOT>`（源码轨）**，在此阶段完成「源码工作区硬门禁」自检；**若为 `<RUNTIME_ROOT>`（二进制轨）**，在此阶段完成「二进制发布包模式」最小自检（含符号恢复可发现性）。缺关键产物不得进入 `EXECUTE`。  
-2. `EXECUTE`：执行 HapRay CLI 采集。  
-3. `PARSE`：读取 `result-file`，解析 `reports_path` 与关键字段。  
-4. `ANALYZE`：按子 Skill 路由做专题分析。  
-5. `REPORT`：更新或写入独立报告并附元信息。
+1. `PATH_PROMPT`（**§0，阻塞**）：向用户发出双路径必问模板，**等待用户回复**；记录 `so_dir_user` / `app_packages_dir_user`。未完成 **禁止** 进入 `DISCOVER`/`EXECUTE`。  
+2. `DISCOVER`：路径判定、设备与依赖检查；**若工作区为 `<REPO_ROOT>`（源码轨）**，完成「源码工作区硬门禁」自检；**若为 `<RUNTIME_ROOT>`（二进制轨）**，完成「二进制发布包模式」最小自检。缺关键产物不得进入 `EXECUTE`。  
+3. `EXECUTE`：执行 HapRay CLI 采集（`update` 携带 §0 确认的路径参数）。  
+4. `PARSE`：读取 `result-file`，解析 `reports_path` 与关键字段。  
+5. `ANALYZE`：按子 Skill 路由做专题分析。  
+6. `REPORT`：更新或写入独立报告并附元信息。
 
 每个阶段输出：`状态(成功/失败/降级)`、`证据`、`下一动作`。  
 若阶段失败，默认进入“可降级继续”而非整任务终止（除路径错误或用户取消）。
@@ -983,6 +1034,7 @@ Set-Location <RUNTIME_ROOT>
 
 ### MUST
 
+- **§0 双路径（最高优先级）**：凡本 Skill 驱动的 `perf`/`update`/`root-cause`/符号恢复链路，**会话第一条实质性回复**必须是 §0 必问模板（除非用户同条消息已给出两路径或明确「跳过/设备拉取」）。**在用户下一条消息回复路径之前，禁止执行任何 HapRay CLI。**  
 - **若为源码仓库（判定见「源码工作区硬门禁」），必须先完成该节最小自检清单（perf_testing、web 构建、`dist/tools/sa-cmd`、trace_streamer、**symbol_recovery 的 venv + `main.py --help`**）并留证据**，再执行 `perf`/`update`/符号恢复链路；**radare2 / r2dec / r2ghidra 未装不构成未完成硬门禁**。未完成硬门禁时禁止谎称环境就绪。  
 - **符号恢复必须一次性闭环交付**：若进入符号恢复链路，必须在同一次 `update` 内完成 `tasks -> symbol_recovery_external_results.json -> import -> 替换产物`，禁止“做一半停一半”。  
 - **符号恢复默认 Agent**：不得因未配置在线 LLM 就跳过符号恢复；`--symbol-recovery-llm-mode` 失败时**必须**同次切 Agent 完成闭环。  
@@ -1008,7 +1060,11 @@ Set-Location <RUNTIME_ROOT>
 - 用户明确只要某单一子专题时，可收窄范围。  
 - 用户明确只要摘要时，可降低分析深度，但需写明未执行项。
 
-## 前置门禁（两条）
+## 前置门禁（三条）
+
+### 0) 双路径确认门禁（§0，高于 gui-agent / 源码构建）
+
+与正文 **§0** 相同：**先于一切 CLI**。未完成则 **FAIL-CLOSED**，不得进入 `perf`/`update`。
 
 ### 1) `gui-agent` 门禁（GLM）
 
@@ -1045,9 +1101,9 @@ Set-Location <RUNTIME_ROOT>
 
 1. **SO**：解析顺序为 `update --so_dir` → 环境变量 `HAPRAY_SO_DIR` → 若仍无有效目录，则在 **`hdc` 可用且设备在线** 时，按 `testInfo.json` 的 **`app_id`（包名）**：先 **`hdc shell bm dump -n <包名>`** 从安装信息 JSON 中取模块/安装路径，再在 `--report_dir/.symbol_recovery_libs/<bundle>/` 上对对应 **`libs` / `libs/arm64`** 做 **`file recv`**；若仍拿不到 `.so`，再用**仅靠包名字符串**的常见兜底路径（细节见 `analysis/symbol-recovery-analysis.md`）。**不靠 PID/ps 作为主拉取路径。**  
 2. **符号恢复模式**：**默认 Agent**；仅 `--symbol-recovery-llm-mode` 时先 LLM 探活+在线执行，失败回退 Agent（见 `update_action` / `symbol_recovery_bridge`）。  
-3. **应用包**：设备在线时同步拉 HAP 到 `.app_packages/<包名>/`，供 root-cause 反编译（可选 `HAPRAY_HAP_DECOMPILER_CMD`）。  
+3. **应用包 / root-cause 输入**：优先 §0 用户 `--app-packages-dir`（自动识别源码 vs HAP）；未提供且设备在线时才拉 HAP；源码树 **不** 走 HAP 反编译。  
 4. **root-cause**：默认在 update 末段执行（`--no-root-cause` 可跳过），结果写入 `report/root_cause.md` 与总报告 `more.root_cause`。  
-5. **前提**：符号恢复须有可用 SO 目录；自动拉库失败时符号恢复跳过。root-cause 须 `report/trace_emptyFrame.json`（由 analyze 阶段产出）。
+5. **前提**：符号恢复须有 SO（§0 或拉取）；无则跳过。root-cause 须有 §0 输入或拉取成功；无则跳过。须 `trace_emptyFrame.json`。
 
 **一次性完成（强制）**：
 
@@ -1081,10 +1137,11 @@ Set-Location <RUNTIME_ROOT>
 
 ## 执行主流程（统一版）
 
-1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」（web 构建产物、`dist/tools/sa-cmd/`、trace_streamer、**symbol_recovery 的 venv + `main.py --help`** 等）；**radare2 / 反编译插件未装不构成 STOP**。未完成硬门禁则在此处 **STOP**，不得强行执行后续步骤。  
+0. **§0 双路径确认**：发出必问模板并 **等待用户回复**；记录路径。未完成 **STOP**（见 §0）。  
+1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」；未完成则 **STOP**。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
-3. 按运行模式执行命令：二进制模式在 `<RUNTIME_ROOT>` 执行（Windows `.\"./hapray.exe`，Linux/macOS `./hapray`）；源码模式在 `<REPO_ROOT>/perf_testing` 执行 `uv run python -m scripts.main ...`（须在步骤 1 已满足硬门禁）。  
-4. **perf 采集后必须执行 update**：`uv run python -m scripts.main update --report_dir <perf输出目录>`；**禁止**无故 `--symbol-recovery-no-llm`；**默认**含符号恢复（Agent）+ root-cause（可用 `--no-root-cause` 跳过）。  
+3. 按运行模式执行命令（**仅 §0 完成后**）：二进制轨 / 源码轨 CLI。  
+4. **perf 后必须 update**：携带 §0 确认的 `--so_dir`、`--app-packages-dir`（及用户要求的 `--no-root-cause` 等）。  
 5. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
 6. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
 7. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
@@ -1114,17 +1171,21 @@ Set-Location <RUNTIME_ROOT>
 
 ### 完整工作流（perf + update，推荐）
 
+> **§0**：先向用户发出双路径必问模板并 **等待回复**，再执行下方命令。
+
 ```bash
-# 第1步：perf 采集（生成原始报告）
+# 第1步：perf 采集（§0 已完成）
 cd <RUNTIME_ROOT>
 ./hapray --result-file /tmp/hapray-tool-result.json perf \
   --run_testcases "PerfLoad_Douyin_0010" \
   --round 1 \
   -o ./reports
 
-# 第2步：update（符号恢复 Agent 默认 + root-cause 默认 + 自动拉 libs/HAP）
+# 第2步：update（携带 §0 确认的路径；未提供则 hdc 兜底）
 ./hapray --result-file /tmp/hapray-tool-result.json update \
-  --report_dir ./reports/<timestamp>
+  --report_dir ./reports/<timestamp> \
+  --so_dir "<§0_SO路径>" \
+  --app-packages-dir "<§0_root-cause输入路径>"
 # 可选：--no-root-cause | --root-cause-skip-llm | --symbol-recovery-llm-mode
 ```
 
@@ -1173,6 +1234,7 @@ cd <RUNTIME_ROOT>
 
 ## 明确禁止
 
+- **禁止跳过 §0**：未在对话中向用户索取双路径、未等用户回复就执行 `perf`/`update`。  
 - 禁止只给通用建议而不执行 CLI（除非用户明确声明不跑工具）。  
 - 禁止用自动摘要替代对原始产物的验证。  
 - 禁止在门禁未通过时“伪交付”（例如 GLM 未配置却直接出完整采集结论）。  

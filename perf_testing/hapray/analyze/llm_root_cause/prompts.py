@@ -12,7 +12,8 @@ import json
 from typing import Any
 
 from .formatting import nonempty_thread_name, wakeup_chain_labels
-from .structured_output import OUTPUT_SCHEMA_STR
+from .proc_source_match import source_path_aligned
+from .structured_output import OUTPUT_EXAMPLE_STR
 
 # ── analyze 模式（默认，从证据推断根因）─────────────────────────────────────
 
@@ -181,7 +182,7 @@ Output valid JSON only:
 
 def _analyze_system_prompt(language: str, domain_knowledge: str = "") -> str:
     base = _ANALYZE_SYSTEM_PROMPT_ZH if language == "zh" else _ANALYZE_SYSTEM_PROMPT_EN
-    base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_SCHEMA_STR)
+    base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_EXAMPLE_STR)
     if domain_knowledge and domain_knowledge.strip():
         section_title = "## 领域先验知识\n\n以下是人工积累的分析经验，请在推断根因时参考：\n\n"
         base = base.rstrip() + "\n\n" + section_title + domain_knowledge.strip() + "\n"
@@ -190,7 +191,7 @@ def _analyze_system_prompt(language: str, domain_knowledge: str = "") -> str:
 
 def _with_source_system_prompt(language: str, domain_knowledge: str = "") -> str:
     base = _CODE_REVIEW_SYSTEM_PROMPT_ZH if language == "zh" else _CODE_REVIEW_SYSTEM_PROMPT_EN
-    base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_SCHEMA_STR)
+    base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_EXAMPLE_STR)
     if domain_knowledge and domain_knowledge.strip():
         section_title = "## 领域先验知识\n\n以下是人工积累的分析经验，请在审查代码时参考：\n\n"
         base = base.rstrip() + "\n\n" + section_title + domain_knowledge.strip() + "\n"
@@ -436,27 +437,18 @@ def _collect_evidence_only_suspects(
     从 proc_source_hints 中找出没有对应反编译代码片段的高信号嫌疑，
     供 with_source 模式以证据推断方式分析。
     """
-    # Build a set of (owner_name, file) pairs that already have code snippets
-    covered: set[str] = set()
-    for s in code_snippets:
-        owner = s.get("owner_name", "")
-        file_ = s.get("file", "")
-        if owner:
-            covered.add(owner)
-        if file_:
-            covered.add(file_)
-
     result = []
     for hint in proc_hints:
-        # Skip if any decompiled candidate is covered
-        candidates = hint.get("decompiled_candidates") or []
+        if any(source_path_aligned(s.get('file', ''), hint.get('source_path', '')) for s in code_snippets):
+            continue
+        candidates = hint.get('decompiled_candidates') or []
         if any(
-            c.get("owner_name", "") in covered or c.get("file", "") in covered
+            source_path_aligned(c.get('file', ''), hint.get('source_path', ''))
             for c in candidates
+            if c.get('code_snippet')
         ):
             continue
-        # Only include hints with meaningful signal
-        if hint.get("direct_hit_count", 0) >= 1 or hint.get("hit_count", 0) >= 3:
+        if hint.get('direct_hit_count', 0) >= 1 or hint.get('hit_count', 0) >= 3:
             result.append(hint)
 
-    return result[:4]  # cap at 4 to avoid token overload
+    return result[:4]
