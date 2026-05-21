@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .proc_source_match import source_path_aligned
+
 
 _CAMEL_TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 _LIST_UI_KEYS = {"waterflow", "lazyforeach", "list", "scroll", "foreach"}
@@ -352,6 +354,12 @@ class CodeIndexLookup:
             if "lottie" in collapsed and not query["animation_bias"]:
                 score -= 10
                 reasons.append("偏动画噪声")
+
+            source_path = str(hint.get("source_path", "") or "")
+            row_file = str(row.get("file", "") or "")
+            if source_path and source_path_aligned(row_file, source_path):
+                score += 80
+                reasons.append("file路径与/proc命中一致")
 
             if score <= 0:
                 continue

@@ -5,6 +5,6 @@ Provides automated root cause analysis for empty frame (空刷) issues
 by combining deterministic evidence extraction with LLM reasoning.
 """
 
-from .runner import run_empty_frame_analysis
+from .runner import apply_agent_result_to_report, run_empty_frame_analysis
 
-__all__ = ["run_empty_frame_analysis"]
+__all__ = ['apply_agent_result_to_report', 'run_empty_frame_analysis']

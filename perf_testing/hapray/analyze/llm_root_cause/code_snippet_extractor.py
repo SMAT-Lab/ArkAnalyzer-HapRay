@@ -15,6 +15,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .proc_source_match import resolve_decompiled_file
+
 
 _LIFECYCLE_RE = re.compile(
     r"\b(aboutToAppear|aboutToDisappear|onPageShow|onPageHide|"
@@ -183,9 +185,48 @@ class CodeSnippetExtractor:
     ) -> list[dict[str, Any]]:
         """给 proc_source_hints 中每个 hint 的 decompiled_candidates 注入代码片段。"""
         for hint in hints:
-            candidates = hint.get("decompiled_candidates") or []
+            direct = self._direct_proc_hint_candidate(hint)
+            candidates = list(hint.get("decompiled_candidates") or [])
+            if direct:
+                key = (direct.get('file'), direct.get('line_start'))
+                candidates = [direct] + [
+                    c for c in candidates
+                    if (c.get('file'), c.get('line_start')) != key
+                ]
+                hint['decompiled_candidates'] = candidates
             self.enrich_candidates(candidates)
+            if direct and direct.get('code_snippet'):
+                hint['direct_decompiled_snippet'] = direct
         return hints
+
+    def _direct_proc_hint_candidate(self, hint: dict[str, Any]) -> dict[str, Any] | None:
+        """按 /proc source_path + 行号在反编译树中直接定位文件（优先于模糊索引）。"""
+        source_path = str(hint.get('source_path') or '')
+        lines = hint.get('lines') or []
+        if not source_path or not lines:
+            return None
+        resolved = resolve_decompiled_file(self.root, source_path)
+        if resolved is None:
+            return None
+        try:
+            rel = str(resolved.relative_to(self.root)).replace('\\', '/')
+        except ValueError:
+            rel = str(resolved)
+        line = int(lines[0])
+        snippet = self.extract(rel, line, line, annotate=True)
+        if not snippet:
+            return None
+        owner = Path(source_path).stem
+        symbols = hint.get('symbols') or []
+        return {
+            'file': rel,
+            'line_start': line,
+            'line_end': line,
+            'owner_name': owner,
+            'symbol_name': str(symbols[0]) if symbols else '',
+            'match_kind': 'proc_path_direct',
+            'code_snippet': snippet,
+        }
 
     def summarize_snippet_quality(self, snippet: str | None) -> dict[str, Any]:
         """

@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from .formatting import nonempty_thread_name, thread_label
 
 _UI_NAME_RE = re.compile(r"\b[A-Z][A-Za-z0-9_]*(?:Page|View|Component|WebView|Container|Wrapper)\b")
 _CAMEL_TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
@@ -209,13 +210,13 @@ class EmptyFrameEvidenceExtractor:
         proc_hits = self._collect_proc_hits_from_callchains(
             normalized_callchains,
             frame_vsync=frame.get("vsync"),
-            frame_thread_name=frame.get("thread_name", "unknown"),
+            frame_thread_name=thread_label(frame.get("thread_name")),
         )
 
         return {
             "vsync": frame.get("vsync"),
             "flag": frame.get("flag"),
-            "thread_name": frame.get("thread_name", "unknown"),
+            "thread_name": thread_label(frame.get("thread_name")),
             "process_name": frame.get("process_name", "unknown"),
             "frame_load": self._safe_int(frame.get("frame_load")),
             "dur_ms": round(self._safe_float(frame.get("dur")) / 1_000_000, 2),
@@ -224,13 +225,13 @@ class EmptyFrameEvidenceExtractor:
             "sample_callchains_count": self._safe_int(frame.get("sample_callchains_count")),
             "wakeup_threads": [
                 {
-                    "thread_name": item.get("thread_name", "unknown"),
+                    "thread_name": thread_label(item.get("thread_name")),
                     "process_name": item.get("process_name", "unknown"),
                     "wakeup_depth": self._safe_int(item.get("wakeup_depth")),
                     "is_system_thread": bool(item.get("is_system_thread")),
                 }
                 for item in wakeup_threads[:5]
-                if isinstance(item, dict)
+                if isinstance(item, dict) and nonempty_thread_name(item.get("thread_name"))
             ],
             "symbol_hints": symbol_hints,
             "proc_source_hits": proc_hits,

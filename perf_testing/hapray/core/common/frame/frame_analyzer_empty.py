@@ -1072,11 +1072,14 @@ class EmptyFrameAnalyzer:
         for itid, depth in related_itids_ordered:
             if itid in thread_info_map:
                 thread_info = thread_info_map[itid]
+                raw_name = thread_info['thread_name']
+                if raw_name is None or not str(raw_name).strip():
+                    continue
                 wakeup_threads.append(
                     {
                         'itid': itid,
                         'thread_id': thread_info['tid'],  # 使用 thread_id 保持与 sample_callchains 一致
-                        'thread_name': thread_info['thread_name'],
+                        'thread_name': str(raw_name).strip(),
                         'pid': thread_info['pid'],
                         'process_name': thread_info['process_name'],
                         'is_system_thread': thread_info['is_system_thread'],

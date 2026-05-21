@@ -830,6 +830,44 @@ class ReportGenerator:
         logging.info('Report successfully %s for %s', 'updated' if skip_round_selection else 'generated', scene_dir)
         return True
 
+    def refresh_hapray_report_after_symbol_recovery(self, scene_dir: str) -> bool:
+        """符号恢复与 Step4 增强火焰图完成后，重生成 ``hapray_report.html`` 以嵌入增强版火焰图。
+
+        不重新跑 ``analyze_data``；从 ``report/hapray_report.json`` 恢复主 JSON，再由
+        ``ReportData.load_trace_data`` 读取 ``more_flame_graph.json`` 并替换为
+        ``hiperf_report_with_inferred_symbols.html`` 完整页面内容。
+        """
+        json_path = os.path.join(scene_dir, 'report', 'hapray_report.json')
+        if not os.path.isfile(json_path):
+            logging.warning(
+                'Cannot refresh composite report: missing %s (run update analyze pass first)',
+                json_path,
+            )
+            return False
+        try:
+            with open(json_path, encoding='utf-8') as f:
+                result = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logging.error('Failed to load %s for report refresh: %s', json_path, e)
+            return False
+        if not isinstance(result, dict):
+            logging.error('Invalid hapray_report.json (expected object): %s', json_path)
+            return False
+        try:
+            from hapray.core.common.root_cause_integration import (
+                embed_root_cause_into_hapray_html,
+                merge_root_cause_into_result,
+            )
+
+            merge_root_cause_into_result(scene_dir, result)
+            self._create_html_report(scene_dir, result)
+            embed_root_cause_into_hapray_html(scene_dir)
+            logging.info('Refreshed hapray_report.html after symbol recovery: %s', scene_dir)
+            return True
+        except Exception as e:
+            logging.error('Failed to refresh hapray_report.html for %s: %s', scene_dir, e)
+            return False
+
     def _select_round(self, scene_dirs: list[str], scene_dir: str) -> bool:
         """Select the best round for report generation"""
         if not scene_dirs:

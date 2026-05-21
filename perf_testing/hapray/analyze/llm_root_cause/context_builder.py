@@ -10,6 +10,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .formatting import thread_label
+
 
 @dataclass
 class AnalysisContext:
@@ -237,7 +239,7 @@ class ContextBuilder:
             lines.append("\n## 空刷高贡献线程")
             for thread in ctx.empty_frame_top_threads[:5]:
                 lines.append(
-                    f"- {thread.get('thread_name', 'unknown')} "
+                    f"- {thread_label(thread.get('thread_name'))} "
                     f"({thread.get('process_name', 'unknown')}) | "
                     f"占比={round(self._safe_float(thread.get('percentage', 0.0)), 2)}% | "
                     f"load={thread.get('total_load', 0)}"
@@ -247,7 +249,7 @@ class ContextBuilder:
             lines.append("\n## Top 空刷帧")
             for frame in ctx.empty_frame_top_frames[:5]:
                 lines.append(
-                    f"- vsync={frame.get('vsync')} | thread={frame.get('thread_name', 'unknown')} | "
+                    f"- vsync={frame.get('vsync')} | thread={thread_label(frame.get('thread_name'))} | "
                     f"load={frame.get('frame_load', 0)} | dur={frame.get('dur', 0)} | "
                     f"callstack_id={frame.get('callstack_id', 'unknown')}"
                 )
