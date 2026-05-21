@@ -87,8 +87,6 @@ ArkAnalyzer-HapRay-darwin-arm64-1.4.8/
 apps/
 data/
 docs/
-hapray
-haptest
 
 # Toolbox
 toolbox/
@@ -114,3 +112,5 @@ desktop/src-tauri/tools/
 
 perf_testing/hapray/testcases/__auto_generated__/
 perf_testing/hypium-5.0.7.200
+dist_binary_reports/
+.opencode/
