@@ -841,13 +841,15 @@ Set-Location <RUNTIME_ROOT>
 示例（`tag` 与文件名须与 §1.0、`version` 一致）：
 
 - `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.4/ArkAnalyzer-HapRay-win32-x64-1.5.4.zip`（`version: "1.5.4"` → `tag=v1.5.4`）
+- `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.4/ArkAnalyzer-HapRay_1.5.4_aarch64.dmg`（macOS Apple Silicon；`uname -m` 为 `arm64`，**附件名后缀为 `aarch64`**）
+- `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.4/ArkAnalyzer-HapRay_1.5.4_x64.dmg`（macOS Intel）
 
 ### 直链候选探测（无用户整链时的默认流程）
 
 当用户未提供 P0 整链时，**不得**要求用户先打开发布页；按以下顺序执行：
 
 1. 按 §1.0 得到 `tag`；若无 tag 则停止二进制分支（见 §1.0 第 4 点）。  
-2. **平台候选名生成**：按平台规则生成 `asset_name` 候选集合（mac Intel 须同时含 `ArkAnalyzer-HapRay-darwin-x64-<version>.dmg` 与 `ArkAnalyzer-HapRay_<version>_x64.dmg`）。  
+2. **平台候选名生成**：按平台规则生成 `asset_name` 候选集合（mac Apple Silicon **优先** `ArkAnalyzer-HapRay_<version>_aarch64.dmg`；mac Intel **优先** `ArkAnalyzer-HapRay_<version>_x64.dmg`，可次选 `ArkAnalyzer-HapRay-darwin-x64-<version>.dmg`）。  
 3. **逐一 GET 校验**：对每个 `(P1 或 P2 的 BASE, tag, candidate)` 拼直链并下载校验；先成功者采用。  
 4. **零命中 / 多命中无法消歧**：进入源码回退，执行轨迹记 `binary_failed_reason`；**禁止**再抓取 `.../releases` 或详情页 HTML。
 
@@ -916,14 +918,17 @@ Agent 执行规范（标准 Skill 描述，替代脚本模板）：
 - Windows x64：`ArkAnalyzer-HapRay-win32-x64-<version>.zip`
 - Linux Ubuntu 22.04 x64：`ArkAnalyzer-HapRay-linux-x64-ubuntu22.04-<version>.zip`
 - Linux Ubuntu 24.04 x64：`ArkAnalyzer-HapRay-linux-x64-ubuntu24.04-<version>.zip`
-- macOS Apple Silicon：`ArkAnalyzer-HapRay-darwin-arm64-<version>.dmg` 或 `ArkAnalyzer-HapRay_<version>_arm64.dmg`
-- macOS Intel：`ArkAnalyzer-HapRay-darwin-x64-<version>.dmg` 或 `ArkAnalyzer-HapRay_<version>_x64.dmg`
+- macOS Apple Silicon（**仅 DMG**，Tauri 产物；与 `desktop/scripts/build.js` 一致）：**`ArkAnalyzer-HapRay_<version>_aarch64.dmg`**（GitCode Release 附件名；**勿**用 `_arm64` 或 `darwin-arm64` 拼直链，会 404）
+- macOS Intel（**仅 DMG**）：**`ArkAnalyzer-HapRay_<version>_x64.dmg`**（优先）；次选 `ArkAnalyzer-HapRay-darwin-x64-<version>.dmg`（若存在）
 
 其中 `<version>` = `tag` 去掉前缀 `v`（例如 `v1.5.4 -> 1.5.4`）。
 
-macOS Intel 直链示例（已验证可用）：
+> **macOS 与 `uname` 的对应关系**：`uname -m` 为 `arm64` 时，Release DMG 后缀为 **`aarch64`**（非 `arm64`）；为 `x86_64` 时后缀为 **`x64`**。CI 上传路径为 `*_${dmg_arch}.dmg`，`dmg_arch` 在 Apple Silicon job 为 `aarch64`（见 `.github/workflows/build.yml`）。
 
-- `https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.4/ArkAnalyzer-HapRay_1.5.4_x64.dmg`
+macOS 直链示例（已验证可用，与 GitCode `v1.5.4` Release 一致）：
+
+- Apple Silicon：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.4/ArkAnalyzer-HapRay_1.5.4_aarch64.dmg`
+- Intel：`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/releases/download/v1.5.4/ArkAnalyzer-HapRay_1.5.4_x64.dmg`
 
 平台识别建议（必须先识别再选包）：
 
@@ -938,10 +943,10 @@ macOS Intel 直链示例（已验证可用）：
 | Windows x64 | `windows` / `win` + `x64` / `amd64` | `darwin` / `mac` / `arm64` |
 | Linux Ubuntu 22.04 x64 | `linux` + `x64` / `x86_64` / `amd64` + `ubuntu22.04` | `windows` / `darwin` / `mac` / `arm64` / `aarch64` / `ubuntu24.04` |
 | Linux Ubuntu 24.04 x64 | `linux` + `x64` / `x86_64` / `amd64` + `ubuntu24.04` | `windows` / `darwin` / `mac` / `arm64` / `aarch64` / `ubuntu22.04` |
-| macOS Intel | `darwin` / `macos` + `x64` / `x86_64` / `amd64` | `windows` / `arm64` / `aarch64` |
-| macOS Apple Silicon | `darwin` / `macos` + `arm64` / `aarch64` | `windows` / `x64` / `x86_64` |
+| macOS Intel | 附件名含 `_x64.dmg` 或 `x64` + `darwin`/`macos` | `windows` / `arm64` / `aarch64` / `_arm64` |
+| macOS Apple Silicon | 附件名含 **`_aarch64.dmg`**（首选）或 `aarch64` | `windows` / `x64` / `x86_64` / **`_arm64.dmg`** / `darwin-arm64`（非 Release 附件名） |
 
-> 依据 `.github/workflows/build.yml`：Linux 仅构建 Ubuntu 22.04/24.04 的 x64 产物，不构建 Linux ARM64。
+> 依据 `.github/workflows/build.yml`：Linux 仅构建 Ubuntu 22.04/24.04 的 x64 产物，不构建 Linux ARM64；macOS 仅发布 **DMG**（`npm run release` 在 darwin 上跳过 zip），附件名为 `ArkAnalyzer-HapRay_<version>_{aarch64|x64}.dmg`。
 
 Linux 选包执行步骤（必须全部满足）：
 
