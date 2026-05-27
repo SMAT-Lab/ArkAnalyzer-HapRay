@@ -4,12 +4,12 @@ version: "1.5.4"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
-  HapRay (ArkAnalyzer-HapRay) 精简主 Skill。**会话开头 STOP**：凡将跑 perf/update/符号恢复/root-cause，须先向用户索取 SO 目录与 root-cause 输入目录（源码或 HAP），收到明确回复前禁止执行任何 HapRay CLI。再判定源码轨/二进制轨与硬门禁。update 默认 Agent 符号恢复 + 集成 root-cause；用户提供路径则跳过 hdc 拉取。
+  HapRay (ArkAnalyzer-HapRay) 精简主 Skill。**会话开头 STOP**：凡将跑 perf/update/符号恢复/root-cause，须先向用户索取 SO 目录与 root-cause 输入目录（源码或 HAP），收到明确回复前禁止执行任何 HapRay CLI。真机采集：预设 PerfLoad_* 走 perf；无则 UI 映射探测、脚本须中文步骤注释、prepare 通过后再 perf；禁止照搬他案与默认 gui-agent/manual30s。再判定源码轨/二进制轨与硬门禁。update 默认 Agent 符号恢复 + 集成 root-cause；用户提供路径则跳过 hdc 拉取。
 metadata:
   short-description: >-
-    HapRay workflow: STOP at session start to ask user for SO and root-cause input paths before any CLI; then source/binary gate; perf/update with optional hdc fallback.
+    HapRay workflow: STOP at session start to ask user for SO and root-cause input paths before any CLI; then source/binary gate; perf with preset or Agent-authored testcase; perf/update with optional hdc fallback.
   zh-Hans: >-
-    会话开头阻塞询问双路径 → 源码/二进制门禁 → perf/update → 子 Skill 分析 → 报告落盘。未回复路径前禁止跑命令。
+    会话开头阻塞询问双路径 → 源码/二进制门禁 → 采集：预设 perf；无则 UI 探测、写带中文注释脚本、prepare 通过后再 perf → update → 子 Skill 分析 → 报告落盘。未回复路径前禁止跑命令。
   skill-paths:
     main: SKILL.md
     tool_result: hapray-tool-result.md
@@ -106,7 +106,7 @@ metadata:
    两条线不得以「有源码」代替「发布包已带齐模板/trace_streamer」或反之。  
 2. 判定路径：先分清 `<RUNTIME_ROOT>`（二进制运行目录）、`<REPO_ROOT>`（源码运行目录）与 `<PROJECT_ROOT>`（写报告）。  
 3. 先快诊后升级：默认 Quick，命中触发条件再升级 Full。  
-4. 跑命令：必须实际执行 `gui-agent/perf/opt/static` 之一（按意图）；**update 须带 §0 确认后的** `--so_dir` / `--app-packages-dir`（若用户已提供）。  
+4. 真机采集：按 **「真机采集路由」** — 预设 `PerfLoad_*` → `perf`；无则 **按本应用编写** `PerfLoad_*` → **`prepare` 完整试跑通过** → `perf`；**禁止**照搬他案用例、未通过 `prepare` 就 `perf`、无脚本默认 `gui-agent` / `perf --manual`。采集后 **必须** `update`（§0 路径参数）。  
 5. 读产物：从 `hapray-tool-result.json`（或 `--result-file`）取 `outputs.reports_path`。  
 6. 路由分析：按 `analysis/README.md` 逐项评估子 Skill；满足条件则执行，不满足写跳过原因。  
 7. 落盘报告：写到 `<PROJECT_ROOT>/reports/hapray-analysis-<YYYYMMDD>-<topic>.md`，正文固定结构 + 文末元信息与执行轨迹。
@@ -118,6 +118,293 @@ metadata:
 > - **root-cause 默认开启**（空刷根因）；用 `--no-root-cause` 跳过；Agent 编排与符号恢复一致（`HAPRAY_ROOT_CAUSE_AGENT_CMD`）
 > - **§0 双路径（MUST）**：**会话开头**向用户索取 SO + root-cause 输入路径，**收到回复前禁止任何 CLI**（见 §0）；非仅在 update 前才问
 > - **路径用法**：用户已提供 → update 带 `--so_dir` / `--app-packages-dir`，**禁止 hdc 拉取**；未提供 → 设备兜底；皆无 → 跳过符号恢复与 root-cause
+> - **采集路由（MUST）**：预设 `perf` 优先 → 无则用例则 **按本应用编写脚本 + `prepare` 完整试跑通过** 再 `perf`；**禁止**照搬他案用例、未通过 `prepare` 就 `perf`、无脚本默认 `gui-agent` / `perf --manual`（见「真机采集路由」）
+
+## 真机采集路由（预设脚本优先，MUST）
+
+> **范围**：真机场景下需要「跑脚本/UI 操作并采 perf+trace」时（`perf` 全流程等）。**SIMPLE 模式**（已有 `perf.data` + `trace.htrace`）直接 `update`，不适用本节。
+
+### 决策顺序（严格执行，禁止跳步）
+
+| 优先级 | 条件 | 执行动作 | 记录字段 |
+|:------:|------|----------|----------|
+| **1** | `testcases/<包名>/` 下存在 `PerfLoad_*.py` 或 `PerfLoad_*.yaml`（或 `--run_testcases` 能匹配） | `perf --run_testcases "<用例名>" --apps <包名> …` | `collection_mode=predefined` |
+| **2** | 上一步**无**匹配用例，且用户**未**明确要求 `gui-agent` / 「AI 探索」 | **按本应用编写** `PerfLoad_*` → **`prepare` 完整试跑**（须通过）→ `perf --run_testcases`（见下节） | `collection_mode=agent-authored` |
+| **3** | 用户**明确**要求 `gui-agent` / 「AI 探索 UI」/ 「无脚本让模型点手机」 | `gui-agent --apps <包名> [--scenes "…"] …`（需 `GLM_API_KEY`） | `collection_mode=gui-agent` |
+| **禁止默认** | 无预设用例、用户未要求 gui-agent | ❌ **不得**默认 `gui-agent`；❌ **不得** `perf --manual` / `PerfLoad_Manual`（仅 `sleep(30)`） | — |
+
+**包名**须通过 `hdc shell bm dump -a` 等设备查询确认，禁止臆造。
+
+### 发现预设用例（进入 `perf` 前 MUST）
+
+1. **源码轨**：`<REPO_ROOT>/perf_testing/hapray/testcases/<包名>/`  
+   **二进制轨**：`<RUNTIME_ROOT>/testcases/<包名>/`（若存在；否则同源码路径或用户给出的外部 `testcases/`）。  
+2. 收集 `PerfLoad_*`（`.py` / `.yaml`），在执行轨迹写明：`predefined_cases=[...]`。  
+3. 多个用例：用户指定 > 默认选与场景最相关的一条（须说明理由）。  
+4. `--run_testcases` 在磁盘上匹配失败 → 视为「无预设用例」→ 走优先级 **2**（写脚本），**不是** gui-agent。
+
+### 无预设用例时：Agent 按目标应用编写 `PerfLoad_*`（优先级 2，默认路径）
+
+**禁止**因「没有现成脚本」就直接 `gui-agent`。
+
+#### 核心原则（MUST）
+
+| 原则 | 说明 |
+|------|------|
+| **禁止照搬他案用例** | 不得把其他 `testcases/<其他包名>/` 里的包名、坐标、Tab 文案、页面顺序、Ability 名原样套到当前应用。那些文件**仅**可参考 `PerfTestCase` 的**类结构**与 `execute_performance_step` 用法，**不是**可复制的业务步骤。 |
+| **必须结合本应用** | 若 §0 提供且目录含**应用源码**：步骤须来自**源码分析** + 用户场景；否则来自包名、用户场景、本机 UI（截图/控件树/hdc），及 `wm size` 等。 |
+| **长等待保持亮屏** | 步骤间隔/ `sleep` / `wait` 过长须 `wake_up_display()` 或分段唤醒；**息屏、黑屏挂机跑完**视为无效（`prepare` 不得判通过）。 |
+| **步骤宜精** | 覆盖用户关心的**一条主路径**即可，避免无依据的多 Tab、十几次子点击或「全功能遍历」；步数由**本应用真实交互**决定，不机械套用其他 app 的步数。 |
+| **UI 映射探测** | **编写脚本前**须检查 Inspector 组件 `id` 映射；若可点击节点 **ID 全空** → 必须用**纯坐标**操作（见 §1.5），**禁止**依赖 `touch_by_id` / 无依据的 `touch_by_text`。 |
+| **步骤注释可读** | 脚本内**多写中文注释**：说明每步在做什么、点哪个控件、坐标/文案依据；**禁止**无注释的裸坐标或裸 `sleep`。 |
+| **`prepare` 硬门禁** | 编写后必须用 **`prepare` 完整跑通**用例；逐步操作须成功、运行流畅，**禁止**未通过就 `perf`。 |
+
+#### 流程
+
+```text
+确认包名与场景 → [有应用源码? 分析源码定步骤 : 收集 UI 依据]
+  → UI 坐标映射探测（§1.5，定 touch 策略）→ 编写 PerfLoad_*（本应用专用）
+  → prepare 完整试跑（失败则改脚本再 prepare）→ 通过 → perf → update
+```
+
+#### 1) 编写前路由：源码优先 vs 无源码（MUST）
+
+§0 已确认的 **root-cause 输入目录**（`app_packages_dir_user` / `--app-packages-dir` / `HAPRAY_APP_PACKAGES_DIR`）按下列规则分支；**未提供或用户跳过**则走 **B 无源码**。
+
+| 分支 | 判定（满足其一即视为「有应用源码」） | 编写依据 |
+|------|--------------------------------------|----------|
+| **A 有源码** | 目录下存在可分析的**应用源码/反编译树**：含足够 `*.ts` / `*.ets`、`decompiled/` + `index/`、`src/main/ets/`、`decompiled/index/symbol_index.jsonl` 等（与 `detect_root_cause_input_kind` → `source` 一致，见 `perf_testing/hapray/core/common/device_app_packages.py`） | **必须先阅读、分析该目录源码**，再编写用例；步骤、页面名、按钮文案、Ability 名须能从源码中找到依据 |
+| **B 无源码** | 用户跳过 root-cause 路径；或目录仅 `*.hap`、或无上述源码特征 | 沿用下文 **「无源码时的 UI 依据」**，禁止假装读过源码 |
+
+**A 有源码 — Agent 必须做的分析（再写脚本）**
+
+1. 定位源码根：优先 `decompiled/`、`src/main/ets/`，或用户给定树中 `.ts` 最集中的目录。  
+2. 结合用户场景，在源码中查找：**入口 Ability**、路由/页面（`@Entry`、`router`、`pages`）、目标页的 **按钮/Tab 文案**（`Text('…')`、`Resource`、常量字符串）、关键交互（播放、列表、跳转）。  
+3. 完成 **§1.5 UI 映射探测** 后，将步骤映射为脚本操作：有稳定 `id`/文案时用 `touch_by_id` / `touch_by_text`；**ID 全空**时仅用 **坐标**（`touch_by_coordinates` + `source_screen_*`），**禁止**臆造 id 或盲用文案。  
+4. 轨迹记录：`script_authored_from=source`、`source_paths=[...]`、`ui_mapping_mode=`、`app_specific_rationale=`。
+
+**B 无源码 — 编写前（MUST）**
+
+1. **包名**：`hdc list targets`；`hdc shell bm dump -n <包名>` 确认 `app_package`。  
+2. **场景**：向用户确认要压测的**一条**主路径。  
+3. **本应用 UI 依据**（至少其一，否则勿编造大量坐标）：用户说明、设备截图、UI 树/无障碍、hdc 真机观察。  
+4. **启动**：`start_app()` 或源码/ `bm dump` 核实的 **本应用** Ability。  
+5. 完成 **§1.5 UI 映射探测**（无源码时**强制**）。  
+6. 轨迹记录：`script_authored_from=ui-only`、`ui_mapping_mode=`。
+
+#### 1.5) UI 坐标映射探测（编写脚本前 MUST）
+
+> **目的**：Hypium 的 `find_component(BY.id/BY.text)` 依赖 Inspector 里**可映射**的组件属性。若 **所有（或目标路径上全部）可点击节点的 `attributes.id` 为空**，则 id/文案映射**不可靠**，脚本须改为**纯坐标**点击（`UIEventWrapper.touch_by_coordinates` + `CoordinateAdapter`，见 `ui_event_wrapper.py` / `coordinate_adapter.py`）。**禁止**在映射失败时仍写 `touch_by_id` / 猜测 `touch_by_text` 并指望 `prepare` 碰运气。
+
+**何时做**：在落盘 `PerfLoad_*.py` **之前**，对**待测主路径上的每一屏**（至少：首页、关键 Tab/入口、压测核心页）各探测一次。
+
+**采集 Inspector（真机前台须为目标 app 对应页面）**：
+
+```bash
+# 1) 启动并手动导航到待测页（或后续脚本首屏）
+# 2) dump Inspector + 截图（源码轨示例）
+cd <REPO_ROOT>/perf_testing
+uv run python -m scripts.main ui \
+  -o ./reports/_ui_probe_<包名> \
+  [--device <设备序列号>]
+```
+
+在输出目录下查找 `ui/step*/inspector*.json`（或 `inspector_page_*.json`，以 `capture_ui.py` 落盘为准）。**同时**记录采集坐标时的屏幕分辨率（供 `source_screen_width` / `source_screen_height`）：
+
+```bash
+hdc shell hidumper -s RenderService -a screen
+# 解析 render size / render resolution= WxH
+```
+
+**解析与判定**（结构同 `haptest/state_manager.py` 中 Inspector：`attributes.id`、`text`、`clickable`、`bounds`）：
+
+1. 递归遍历 JSON，统计 **`clickable=='true'`** 且 `bounds` 有效的节点。  
+2. 记 `clickable_total`、`id_non_empty`（`id` 非空字符串）、`text_non_empty`。  
+3. **判定**（写入轨迹 `ui_mapping_mode`）：
+
+| 条件 | `ui_mapping_mode` | 脚本操作要求 |
+|------|-------------------|--------------|
+| `clickable_total > 0` 且 `id_non_empty == 0` | **`coordinate-only`** | **必须**用 `touch_by_coordinates(x, y)`；坐标来自该屏 Inspector `bounds` **中心点**或同分辨率截图标注；**禁止**主路径使用 `touch_by_id`；**禁止**无探测依据的 `touch_by_text` |
+| `id_non_empty > 0` 且目标控件有稳定 `id` | `id`（可辅以 `text`） | 可用 `touch_by_id`；文案仍须在 Inspector/源码中可核对 |
+| 有稳定可见 `text`、无 `id` | `text` | 可用 `touch_by_text`；**须在 `prepare` 日志中确认无** `touch_by_text not found` |
+| Inspector 拉取失败或 `clickable_total == 0` | — | **STOP**：先解决 dump/前台 app，**禁止**编造坐标写脚本 |
+
+**`coordinate-only` 脚本要求（MUST）**：
+
+1. 在 `setup()`（或首次点击前）设置 **`self.source_screen_width` / `self.source_screen_height`** 为**采集该组坐标时**的屏幕宽高（与 hidumper 一致），否则 `convert_coordinate` 无法跨分辨率适配。  
+2. 每个点击使用 **`touch_by_coordinates`**，坐标与探测时**同一分辨率**下从 `bounds` 解析的中心点一一对应。  
+3. 滑动可继续用 `swipes_*` / `driver.swipe`；长等待仍须 §2 亮屏保活。  
+4. 轨迹：`ui_probe_paths=[...]`、`clickable_total=`、`id_non_empty=`、`ui_mapping_mode=coordinate-only`。
+
+示例（从 bounds 取中心并点击）：
+
+```python
+import re
+
+def _bounds_center(bounds_str: str) -> tuple[int, int]:
+    m = re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', bounds_str)
+    if not m:
+        raise ValueError(f'bad bounds: {bounds_str}')
+    l, t, r, b = map(int, m.groups())
+    return (l + r) // 2, (t + b) // 2
+
+def setup(self):
+    super().setup()
+    self.source_screen_width = 1216   # 替换为探测时记录的值
+    self.source_screen_height = 2688
+
+def _tap_bounds_center(self, bounds_str: str, wait_seconds: float = 2):
+    x, y = self._bounds_center(bounds_str)
+    self.touch_by_coordinates(x, y, wait_seconds)
+```
+
+#### 2) 编写与落盘
+
+- 路径：`perf_testing/hapray/testcases/<包名>/PerfLoad_<应用简称>_<四位编号>.py`  
+- 继承 `hapray.core.perf_testcase.PerfTestCase`；实现 `app_package` / `app_name`；`process()` 内用 `execute_performance_step('<本应用场景描述>', <秒数>, step_fn)`。  
+- 控件操作：**先按 §1.5 的 `ui_mapping_mode` 选型**——`coordinate-only` → 仅 `touch_by_coordinates`（+ `source_screen_*`）；`id`/`text` 模式才用 `touch_by_id` / `touch_by_text`；有源码时文案/路由仍须与源码或 Inspector 一致。  
+- **长等待须保持亮屏（MUST）**：perf 采集期间息屏会导致 trace/操作无效。脚本中凡 **单次 `time.sleep` / `driver.wait` ≥ 5 秒**，或 `execute_performance_step` 内连续等待较长时，须避免长时间黑屏：
+  - 等待前调用：`self.driver.wake_up_display()`
+  - 等待 **≥ 15 秒** 时：拆成多段 sleep（建议每 **≤ 10 秒** 一段），**每段前** `self.driver.wake_up_display()`，或封装为本用例内的 `_wait_keep_screen_on(seconds)`（内部循环 wake + sleep）
+  - **禁止** 在性能步骤内出现数十秒无任何亮屏保活的 `sleep`
+- 示例（长等待）：
+
+```python
+def _wait_keep_screen_on(self, seconds: float, chunk: float = 10):
+    remaining = seconds
+    while remaining > 0:
+        self.driver.wake_up_display()
+        time.sleep(min(chunk, remaining))
+        remaining -= chunk
+```
+
+- 在对话/轨迹中说明：`app_specific_rationale=`、`screen_keep_alive=…`（哪些等待做了亮屏处理）。
+
+**步骤注释（MUST，便于人工审阅与后续改脚本）**
+
+Agent 编写的 `PerfLoad_*.py` 须让**不读源码的人也能看懂每一步意图**，注释用**简体中文**（与业务场景一致即可）。
+
+| 位置 | 必须写清的内容 |
+|------|----------------|
+| **文件头** | 模块 docstring：应用名、包名、压测场景（用户原话摘要）、`ui_mapping_mode`、坐标采集分辨率（若 `coordinate-only`） |
+| **`process()`** | 用注释块列出**步骤总览**（Step1…StepN 各一句） |
+| **每个 `execute_performance_step`** | 步骤函数**上方** 2～5 行注释：本步目标、预期界面、与上一步关系 |
+| **每次 UI 操作前** | 单行注释：**做什么**（如「进入播放页 Tab」）+ **依据**（源码文案 / Inspector bounds / 截图点位） |
+| **坐标与等待** | 裸数字旁注释含义，例如 `# 中心 (608,1344)，来自 inspector 首页「播放」bounds`；`sleep` 注明「等列表加载 / 等播放稳定」 |
+| **辅助方法** | `_wait_keep_screen_on`、`_tap_bounds_center` 等须有 docstring 说明用途 |
+
+**禁止**：连续多行 `touch_by_coordinates` / `sleep` 无任何说明；仅用晦涩变量名代替注释；注释与实际操作不一致（改代码须同步改注释）。
+
+**结构示例**（节选，Agent 须按本应用扩写）：
+
+```python
+"""
+PerfLoad 用例：<应用中文名>（<包名>）
+场景：<用户场景，如「首页进入播放并后台播放 30s」>
+ui_mapping_mode: coordinate-only | text | id
+坐标基准分辨率: 1216x2688（与 §1.5 探测一致）
+"""
+
+
+class PerfLoadExample0001(PerfTestCase):
+    """<应用> — <一条主路径压测>"""
+
+    def process(self):
+        # --- 步骤总览 ---
+        # Step1: 冷启动并进入首页
+        # Step2: 点击底部「发现」Tab，进入列表
+        # Step3: 播放第一首，保持前台采集 N 秒
+
+        self.execute_performance_step('冷启动进入首页', 8, self._step_enter_home)
+        self.execute_performance_step('进入发现 Tab 并打开播放', 15, self._step_play_first)
+
+    def _step_enter_home(self):
+        # 启动主 Ability（依据：bm dump / 源码 EntryAbility）
+        self.start_app(page_name='EntryAbility')
+        time.sleep(3)  # 等首页骨架渲染完成
+
+    def _step_play_first(self):
+        # 点击底部 Tab「发现」— 文案来自源码 routes/Tab.ets
+        self.touch_by_text('发现', wait_seconds=2)
+        # 点击列表第一项播放按钮 — 坐标来自 inspector_page_1.json 可点击节点中心
+        self.touch_by_coordinates(608, 1200, wait_seconds=2)  # bounds [..][..] @ 探测目录
+        self._wait_keep_screen_on(25)  # 播放稳定期，perf 主要采集窗口；分段亮屏
+```
+
+#### 3) `prepare` 完整试跑（硬门禁，未通过禁止 `perf`）
+
+> **说明**：落盘后必须用 **`prepare`** 在真机上**完整执行**该 `PerfLoad_*` 一次（与 xDevice 跑用例路径一致，见 `prepare_action.py`）。**禁止**未跑 `prepare` 就 `perf`；**禁止**把「日志无异常但息屏/卡住/操作未生效」判为通过。
+
+**前置**（每次 `prepare` 前）：
+
+```bash
+hdc list targets
+hdc shell bm dump -n <包名>
+```
+
+**执行**（源码轨；二进制轨在 `<RUNTIME_ROOT>` 用等价 `hapray`/`perf-testing` 子命令）：
+
+```bash
+cd <REPO_ROOT>/perf_testing
+uv run python -m scripts.main prepare \
+  --run_testcases "PerfLoad_<应用简称>_<编号>" \
+  [--device <设备序列号>]
+```
+
+**通过标准**（须**全部**满足；缺一即 `prepare_passed=false`，**禁止** `perf`）：
+
+| 类别 | 要求 |
+|------|------|
+| **命令结果** | 进程 **exit code = 0**；日志含 `✅ Test case completed: PerfLoad_...`；**无** `❌ Test case failed`、无未处理 Traceback |
+| **逐步操作成功** | 通读 `prepare` 全程日志：不得存在 `touch_by_text not found`、关键 `Error`/`Exception`/`ConnectedError`；每个点击/滑动/启动应对应**有效 UI 反馈**（不能靠空 `sleep` 混过）。若 §1.5 为 `coordinate-only`，不得出现未转换坐标或错分辨率导致的连续误点 |
+| **完整跑完** | 所有 `execute_performance_step` 均执行完毕；总耗时与脚本设计量级相符（**禁止**某步卡死拖到超时仍算过） |
+| **流畅、非假跑** | 试跑过程中（Agent **须**目视真机或结合试跑中截图）：**目标 app 保持前台**；**屏幕保持亮屏**（脚本须已按 §2 做 `wake_up_display` / `_wait_keep_screen_on`）；界面随步骤**连续变化**，非长时间静止/锁屏/停在桌面 |
+| **场景达成** | 与用户约定的一条主路径在试跑中**实际走完**（非仅启动后休眠结束） |
+
+**不算通过（MUST 判失败）**：
+
+- 仅因 `sleep` 耗时而结束，但中途**息屏**、回到桌面、或停在启动页/弹窗未处理。  
+- 日志大量 `touch_by_text not found` 或点击无效仍继续。  
+- 应用 ANR、明显卡顿无响应、用例挂起需人工干预才结束。  
+- `prepare` 报错或 exit code 非 0。
+
+**失败时**：根据日志 + 真机现象修正**本应用**脚本（勿抄他案）→ **重新 `prepare`**，直至满足上表 → **禁止**带缺陷脚本进入 `perf`。
+
+**轨迹记录**：`prepare_attempts=`、`prepare_log_notes=`、`prepare_passed=true|false`。
+
+> **补充**：编写**前**可用 `hdc` 探路（查 Ability、截图、文案），但**不可替代** `prepare` 完整试跑。
+
+#### 4) `prepare` 通过后执行 `perf` → `update`
+
+```bash
+cd <REPO_ROOT>/perf_testing
+uv run python -m scripts.main perf \
+  --run_testcases "PerfLoad_<应用简称>_<编号>" \
+  --apps <包名> \
+  --round 1 \
+  -o ./reports
+```
+
+- `perf` 仍失败：结合 `prepare` / `perf` 日志修正脚本后，须重跑 `prepare` 通过再 `perf`。  
+- 随后 **必须** `update`（§0 路径）。`collection_mode=agent-authored`。
+
+> **二进制轨**：在 `<REPO_ROOT>` 写脚本、`prepare` 通过后源码轨 `perf`；**仍禁止**默认 `gui-agent`。
+
+### `gui-agent` 触发条件（仅优先级 3）
+
+- **仅当**用户在同一会话中**明确要求** `gui-agent`、AI 探索、或拒绝/无法编写 `PerfLoad_*` 脚本时。  
+- 缺 `GLM_API_KEY`：**STOP** 并提示配置；**不得**改用 `perf --manual` 或编造未落盘的用例名。  
+- `gui-agent` 完成后仍须 `update`（§0 路径）。
+
+### `perf --manual`（30 秒）— 仅显式请求
+
+- 对应用例 `testcases/manual/PerfLoad_Manual.py`。  
+- **仅当**用户明确说「手动测试 / 手动 30 秒 / `--manual`」时使用。  
+- **禁止**作为无预设脚本、不想写脚本、或 `gui-agent` 失败的自动兜底。
+
+### 采集后（与模式无关）
+
+- `perf` 或 `gui-agent` 产出报告目录后，**必须**执行 `update`（符号恢复 + 默认 root-cause），携带 §0 的 `--so_dir` / `--app-packages-dir`。
 
 ## 双路径参数说明（§0 确认后写入 update 命令）
 
@@ -531,13 +818,22 @@ Write-Host "第1-4步与第5步 Python/venv 全部 OK 后方可执行 perf/updat
 
 #### 标准工作流（两步必须都执行）
 
+> **第 1 步采集**：先按「真机采集路由」发现用例；有预设或 Agent 已编写脚本则 `perf`；仅用户明确要求时才 `gui-agent`。
+
 ```bash
-# 第1步：perf 采集（仅生成原始报告，无符号恢复）
+# 第0步（MUST）：列出 testcases/<包名>/ 的 PerfLoad_*；无则按本应用编写 PerfLoad_*.py
+
+# 第0.5步（MUST，无预设时）：prepare 完整试跑，prepare_passed=true 后再 perf
+
+# 第1步：perf 采集
 cd <REPO_ROOT>/perf_testing
 uv run python -m scripts.main perf \
-  --run_testcases "PerfLoad_Douyin_0010" \
+  --run_testcases "<PerfLoad_* 名>" \
+  --apps <包名> \
   --round 1 \
   -o ./reports
+
+# 禁止：未 prepare 通过就 perf；息屏/卡住/逐步操作失败仍 perf；默认 gui-agent / perf --manual
 
 # 第2步：update 进行符号恢复（必须执行，火焰图符号化关键步骤）
 uv run python -m scripts.main update \
@@ -830,9 +1126,38 @@ Set-Location <RUNTIME_ROOT>
 
 1. **仅**使用 `.../releases/download/<tag>/<asset_name>`（或 P0 等价整链）；**禁止**打开 `.../releases`、**禁止**抓取 `.../releases/<tag>` 附件列表、**禁止**用 `releases/latest` 推断版本。  
 2. `tag` 来自 §1.0 顺序；`asset_name` 由 **下文「标准命名约定」+ 平台规则** 生成候选集（允许多个文件名候选以覆盖 dmg 双命名等）；**禁止**臆造与约定无关的文件名。  
-3. 对每个 `(BASE 来自 P1/P2 或 P0 已解析的 host, tag, candidate_asset)` 拼直链，用 **GET 实际下载或流式校验**（禁止使用 HEAD）；唯一命中则下载落盘。  
-4. 解压到 `<RUNTIME_ROOT>`，记录 `tag`、`asset_name`、`download_url`、`tag_source` 到执行轨迹。  
+3. 对每个 `(BASE 来自 P1/P2 或 P0 已解析的 host, tag, candidate_asset)` 拼直链，用 **`curl` 校验与下载**（见下文「Release 下载：优先 curl」）；唯一命中则下载落盘。  
+4. 解压到 `<RUNTIME_ROOT>`，记录 `tag`、`asset_name`、`download_url`、`download_tool=curl`、`tag_source` 到执行轨迹。  
 5. 零命中或多命中且无法按 §1.1 规则消歧：**不得**再爬发布页；应提示用户给 **P0 整链** 或 **`HAPRAY_RELEASE_TAG` + 明确平台**，或进入 **§1.2 源码回退**。
+
+### Release 下载：优先 `curl`（MUST）
+
+> **工具选择**：凡下载 Release 制品（zip/dmg），**必须优先使用 `curl`**。仅在当前环境**确认无 `curl`**（`curl --version` 失败）时，方可降级 `wget`（Linux/macOS）或 PowerShell `Invoke-WebRequest`；降级须在轨迹记 `download_tool=wget|iwr`。**禁止**默认用浏览器、`Start-BitsTransfer`、Python `requests` 等替代 `curl`，除非 `curl` 不可用。
+
+**探测直链是否可下（候选校验，禁止仅用 HEAD 臆断）**：
+
+```bash
+# 返回 0 且能拿到有效响应头/体即视为可尝试下载（-f 对 4xx/5xx 失败）
+curl -fIL --connect-timeout 15 --max-time 60 "<完整直链URL>"
+```
+
+**正式下载（阻塞至结束，单文件最长等待 10 分钟）**：
+
+```bash
+# Linux / macOS / Windows（Git Bash、Win11 自带 curl）
+curl -fL --connect-timeout 30 --max-time 600 --retry 2 --retry-delay 3 \
+  -o "<本地保存路径/ArkAnalyzer-HapRay-....zip>" \
+  "<完整直链URL>"
+```
+
+```powershell
+# Windows PowerShell：同样优先 curl.exe（不要用 Invoke-WebRequest 除非 curl 不存在）
+curl.exe -fL --connect-timeout 30 --max-time 600 --retry 2 --retry-delay 3 `
+  -o "<本地保存路径>" `
+  "<完整直链URL>"
+```
+
+**下载后**：校验文件存在且大小 **> 0**；zip/dmg 再按平台解压到 `<RUNTIME_ROOT>`。
 
 直链形态（唯一允许的制品 URL 形态）：
 
@@ -850,7 +1175,7 @@ Set-Location <RUNTIME_ROOT>
 
 1. 按 §1.0 得到 `tag`；若无 tag 则停止二进制分支（见 §1.0 第 4 点）。  
 2. **平台候选名生成**：按平台规则生成 `asset_name` 候选集合（mac Apple Silicon **优先** `ArkAnalyzer-HapRay_<version>_aarch64.dmg`；mac Intel **优先** `ArkAnalyzer-HapRay_<version>_x64.dmg`，可次选 `ArkAnalyzer-HapRay-darwin-x64-<version>.dmg`）。  
-3. **逐一 GET 校验**：对每个 `(P1 或 P2 的 BASE, tag, candidate)` 拼直链并下载校验；先成功者采用。  
+3. **逐一 `curl` 校验**：对每个 `(P1 或 P2 的 BASE, tag, candidate)` 拼直链，用 `curl -fIL` 探测；可下载者再用 `curl -fL -o` 落盘；先成功者采用。  
 4. **零命中 / 多命中无法消歧**：进入源码回退，执行轨迹记 `binary_failed_reason`；**禁止**再抓取 `.../releases` 或详情页 HTML。
 
 ### 1.2) 源码回退（当二进制不可下载或不可运行时必须执行）
@@ -896,8 +1221,8 @@ Agent 执行规范 TL;DR（优先执行）：
 
 1. 若用户已提供 `releases/download/<tag>/<asset_name>` 整链（P0），优先直接下载；否则按 §1.0 取 `tag`（`HAPRAY_RELEASE_TAG` → Skill `version` 推导 `vX.Y.Z`），**禁止**访问 `releases` 列表页、`releases/<tag>` 详情页或 `releases/latest`。  
 2. 识别当前平台与架构（Windows / Ubuntu22|24 x64 / macOS Intel|Apple Silicon）。  
-3. 按命名约定生成 `asset_name` 候选，在 P1/P2 的 `BASE` 上拼直链并 GET 下载校验；**禁止**为匹配附件名去爬 HTML。  
-4. 下载到本地后做最小完整性校验（存在、非空、可读）。下载阶段必须等待完成，最长等待 10 分钟。  
+3. 按命名约定生成 `asset_name` 候选，在 P1/P2 的 `BASE` 上拼直链并用 **`curl`** 探测/下载（见「Release 下载：优先 curl」）；**禁止**为匹配附件名去爬 HTML。  
+4. **`curl` 下载**到本地后做最小完整性校验（存在、非空、可读）。须阻塞等待完成，最长等待 10 分钟。  
 5. 解压到 `<RUNTIME_ROOT>` 并执行 `hapray --help`（Windows 用 `hapray.exe --help`）。  
 6. 任一步失败必须显式报错并进入 §1.2 源码回退；禁止伪造“下载成功”。
 
@@ -907,7 +1232,7 @@ Agent 执行规范（标准 Skill 描述，替代脚本模板）：
 2. **识别平台**：识别 OS 与 CPU 架构（Windows/Linux/macOS，`x64` 或 `arm64`）。  
 3. **构造资产名**：按“平台选择规则”生成候选 `asset_name`；若无法消歧，提示用户给 P0 整链或 `HAPRAY_RELEASE_TAG` + 平台说明，或进入 §1.2。  
 4. **构造下载链接**：仅使用 `…/releases/download/<tag>/<asset_name>`（可配合 `HAPRAY_RELEASES_DOWNLOAD_BASE` / P2 根）。  
-5. **执行下载**：将文件下载到本地临时目录或用户指定目录；必须阻塞等待下载结束，超时时间上限为 10 分钟。  
+5. **执行下载（优先 `curl`）**：`curl -fL -o <本地路径> <直链>`（Windows 用 `curl.exe`）；必须阻塞等待结束，超时上限 10 分钟；无 `curl` 时才降级 `wget` / `Invoke-WebRequest` 并注明。  
 6. **完整性校验**：校验文件存在且非空，并执行最小可读性检查（可列目录/可读取镜像信息）。  
 7. **解压与落位**：将二进制解压到 `<RUNTIME_ROOT>`，保持目录结构完整。  
 8. **可执行自检**：Windows 执行 `.\"./hapray.exe --help`，Linux/macOS 执行 `./hapray --help`；禁止执行系统 PATH 中的 `hapray`。  
@@ -982,7 +1307,7 @@ Set-Location <RUNTIME_ROOT>
 
 适用：用户只需一次结论、时效优先。
 
-- 运行一次核心命令（`gui-agent` 或 `perf`）。
+- 按「真机采集路由」执行一次采集（预设 → `perf`；无预设 → 写脚本 → `prepare` 通过 → `perf`；仅用户要求时 `gui-agent`）。
 - 解析 `reports_path`，至少枚举 `trace.db`/`hiperf`/日志。
 - 至少执行一个匹配子 Skill。
 - 输出并落盘独立 `.md`（含证据路径与执行轨迹）。
@@ -1040,6 +1365,7 @@ Set-Location <RUNTIME_ROOT>
 ### MUST
 
 - **§0 双路径（最高优先级）**：凡本 Skill 驱动的 `perf`/`update`/`root-cause`/符号恢复链路，**会话第一条实质性回复**必须是 §0 必问模板（除非用户同条消息已给出两路径或明确「跳过/设备拉取」）。**在用户下一条消息回复路径之前，禁止执行任何 HapRay CLI。**  
+- **真机采集路由**：有预设 `PerfLoad_*` 则直接 `perf`；无则 **按本应用编写** `PerfLoad_*` 且 **`prepare` 完整试跑通过** 后再 `perf`；**禁止**未通过 `prepare` 就 `perf`、息屏/卡住伪通过、照搬他案用例、无脚本默认 `gui-agent` / `perf --manual`（除非用户明确要求）。  
 - **若为源码仓库（判定见「源码工作区硬门禁」），必须先完成该节最小自检清单（perf_testing、web 构建、`dist/tools/sa-cmd`、trace_streamer、**symbol_recovery 的 venv + `main.py --help`**）并留证据**，再执行 `perf`/`update`/符号恢复链路；**radare2 / r2dec / r2ghidra 未装不构成未完成硬门禁**。未完成硬门禁时禁止谎称环境就绪。  
 - **符号恢复必须一次性闭环交付**：若进入符号恢复链路，必须在同一次 `update` 内完成 `tasks -> symbol_recovery_external_results.json -> import -> 替换产物`，禁止“做一半停一半”。  
 - **符号恢复默认 Agent**：不得因未配置在线 LLM 就跳过符号恢复；`--symbol-recovery-llm-mode` 失败时**必须**同次切 Agent 完成闭环。  
@@ -1071,15 +1397,20 @@ Set-Location <RUNTIME_ROOT>
 
 与正文 **§0** 相同：**先于一切 CLI**。未完成则 **FAIL-CLOSED**，不得进入 `perf`/`update`。
 
-### 1) `gui-agent` 门禁（GLM）
+### 1) 真机采集与 `gui-agent` 门禁
 
-当意图需要 `gui-agent` 且缺少 `GLM_API_KEY`：
+**采集路由（先于 GLM 检查）**：必须先完成「真机采集路由」中的用例发现。有预设 `PerfLoad_*` → 只走 `perf`，**不要求** GLM。
+
+**无预设用例时（默认）**：按**本应用**编写 `PerfLoad_*.py` → **`prepare` 完整试跑通过** → `perf`；**禁止**照搬他案用例、未通过 `prepare` 就 `perf`、自动 `gui-agent` / `perf --manual`。
+
+**仅当用户明确要求 `gui-agent` 时**，若缺少 `GLM_API_KEY`：
 
 1. 明确提示用户配置（给出 [智谱 API Key 页面](https://bigmodel.cn/usercenter/proj-mgmt/apikeys)）。  
-2. 等待用户确认“已配置”或“明确不配置”。  
-3. 仅在用户明确“不配置 LLM”时，降级 `perf --run_testcases`。  
+2. 等待用户确认“已配置”，或改选「编写 PerfLoad 脚本」/ SIMPLE 模式上传已有 trace/perf。  
+3. **禁止**因缺 GLM 而自动 `perf --manual`（30 秒）或编造未落盘的 `--run_testcases`。  
+4. 用户明确「不配置 LLM、也不要写脚本」：说明无法自动探索 UI，请用户提供已有 `perf.data`+`trace.htrace`（SIMPLE）或自行编写用例。
 
-默认值：
+`gui-agent` 默认值：
 
 - `GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4`
 - `GLM_MODEL=autoglm-phone`
@@ -1145,8 +1476,8 @@ Set-Location <RUNTIME_ROOT>
 0. **§0 双路径确认**：发出必问模板并 **等待用户回复**；记录路径。未完成 **STOP**（见 §0）。  
 1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成「源码工作区硬门禁」；未完成则 **STOP**。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
-3. 按运行模式执行命令（**仅 §0 完成后**）：二进制轨 / 源码轨 CLI。  
-4. **perf 后必须 update**：携带 §0 确认的 `--so_dir`、`--app-packages-dir`（及用户要求的 `--no-root-cause` 等）。  
+3. **COLLECT + 采集**（**仅 §0 完成后**）：预设 → `perf`；无预设 → 写脚本 → **`prepare` 试跑通过** → `perf`；仅用户要求时 `gui-agent`。  
+4. **采集后必须 update**：携带 §0 确认的 `--so_dir`、`--app-packages-dir`（及用户要求的 `--no-root-cause` 等）。  
 5. 读取 `--result-file` 或 `hapray-tool-result.json`，解析 `outputs.reports_path`。  
 6. 枚举关键产物：`report/*.html`、`htrace/**/trace.db`、`hiperf/**`、日志。  
 7. 按子 Skill 路由做深入分析（满足则执行，不满足写跳过原因）。  
@@ -1155,7 +1486,9 @@ Set-Location <RUNTIME_ROOT>
 ## 异常与降级策略（Fail-Closed + 可交付）
 
 - 二进制下载失败（含超时/404/校验失败）或二进制不可运行：自动回退到源码下载与运行流程；源码流程失败后再停止并提示用户介入。  
-- `gui-agent` 不可用：在获得用户确认后降级到 `perf --run_testcases`，并记录“能力降级影响”。  
+- **无预设用例**：按本应用编写 `PerfLoad_*` → **`prepare` 完整试跑通过** → `perf`；失败则改脚本重跑 `prepare`；**禁止**未通过就 `perf`、抄他案用例、自动 `gui-agent` / `perf --manual`。  
+- **用户要求的 `gui-agent` 不可用**（缺 GLM / 失败）：提示配置 GLM，或编写脚本 + `prepare` / SIMPLE；**禁止**自动 `perf --manual`。  
+- **有预设或 `prepare` 已通过脚本**：不得因 GLM 改走 `gui-agent` / `--manual`。  
 - `symbol-recovery`：若已配置 LLM 环境但请求仍失败（额度/鉴权/网络），单次子进程内已尽力；若**未配置** LLM 环境，则必须走离线 tasks + 外部结果 JSON 回填，禁止把“仅导出 tasks”当作最终交付。  
 - `result-file` 缺失或损坏：尝试读取默认 `hapray-tool-result.json`；仍失败则进入“仅执行证据报告”，禁止输出伪分析结论。  
 - 关键产物缺失（如无 `trace.db`）：对应子 Skill 标记 `已跳过（数据不足）`，并给最小补采命令。  
@@ -1174,15 +1507,19 @@ Set-Location <RUNTIME_ROOT>
 
 ## 命令模板（最小可用）
 
-### 完整工作流（perf + update，推荐）
+### 完整工作流（采集 + update，推荐）
 
-> **§0**：先向用户发出双路径必问模板并 **等待回复**，再执行下方命令。
+> **§0**：先向用户发出双路径必问模板并 **等待回复**，再执行下方命令。  
+> **采集**：无预设时须 **按本应用编写** `PerfLoad_*`，**`prepare` 完整试跑通过** 后再 perf。
 
 ```bash
-# 第1步：perf 采集（§0 已完成）
+# 无预设：编写脚本 → prepare（见「真机采集路由」§3）→ perf（§0 已完成）
+cd <REPO_ROOT>/perf_testing
+uv run python -m scripts.main prepare --run_testcases "PerfLoad_<用例名>"
 cd <RUNTIME_ROOT>
 ./hapray --result-file /tmp/hapray-tool-result.json perf \
-  --run_testcases "PerfLoad_Douyin_0010" \
+  --run_testcases "PerfLoad_<用例名>" \
+  --apps <包名> \
   --round 1 \
   -o ./reports
 
@@ -1204,20 +1541,24 @@ uv run python -m scripts.main root-cause \
   --decompiled-dir <report_dir>/.app_packages/<包名>/decompiled
 ```
 
-### gui-agent 模式
+### gui-agent 模式（仅用户明确要求时）
+
+> **前置**：已确认无可用 `PerfLoad_*`，且用户**明确要求** gui-agent（非默认；默认应为本应用编写脚本 + **`prepare` 通过** 后 `perf`）。
 
 ```bash
 cd <RUNTIME_ROOT>
 ./hapray --result-file /tmp/hapray-tool-result.json gui-agent \
-  --apps com.ss.hm.ugc.aweme \
-  --scenes "浏览视频推荐流，滑动多屏并进入播放页" \
-  -o ./
+  --apps <包名> \
+  --scenes "<用户场景描述>" \
+  -o ./reports
+# 采集完成后同样必须 update
 ```
 
 ### 注意事项
 
 - `--round` 建议：冒烟 `1`；对比评估 `3` 或 `5`
-- **update 必须执行**：`perf` 后必须执行 `update`，否则火焰图无符号、无集成 root-cause
+- **采集路由**：预设 → `perf`；无预设 → 写脚本 → **`prepare` 通过** → `perf`；**禁止**未通过 `prepare`、照搬他案 / 默认 `gui-agent` / `perf --manual`
+- **update 必须执行**：`perf` / `gui-agent` 后必须执行 `update`，否则火焰图无符号、无集成 root-cause
 - **禁止无故 `--symbol-recovery-no-llm`**：会跳过符号恢复
 
 ## 独立分析报告规范
@@ -1240,6 +1581,7 @@ cd <RUNTIME_ROOT>
 ## 明确禁止
 
 - **禁止跳过 §0**：未在对话中向用户索取双路径、未等用户回复就执行 `perf`/`update`。  
+- **禁止错误的采集兜底**：无预设时默认 `gui-agent`；**未 `prepare` 通过就 `perf`**；息屏/卡住/逐步操作失败仍算过；照搬他案业务步骤；无脚本时 `perf --manual`；编造未落盘用例名。  
 - 禁止只给通用建议而不执行 CLI（除非用户明确声明不跑工具）。  
 - 禁止用自动摘要替代对原始产物的验证。  
 - 禁止在门禁未通过时“伪交付”（例如 GLM 未配置却直接出完整采集结论）。  
