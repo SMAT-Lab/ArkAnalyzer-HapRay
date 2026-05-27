@@ -43,6 +43,55 @@ from .structured_output import OUTPUT_SCHEMA_STR
 
 
 _KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
+_TIMER_RISK_RE = re.compile(r"\b(setInterval|requestAnimationFrame|setTimeout)\b")
+
+
+def _collect_timer_risk_snippets(
+    decompiled_root: Path,
+    owner_names: list[str],
+    extractor: Any,
+    *,
+    max_snippets: int = 3,
+) -> list[dict[str, Any]]:
+    """Scan owner source files for timer/VSync-risk APIs when /proc hints are missing."""
+    results: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for owner in owner_names:
+        if len(results) >= max_snippets:
+            break
+        matches = sorted(decompiled_root.rglob(f'{owner}.ets')) + sorted(decompiled_root.rglob(f'{owner}.ts'))
+        for path in matches[:2]:
+            try:
+                lines = path.read_text(encoding='utf-8', errors='replace').splitlines()
+            except OSError:
+                continue
+            rel = str(path.relative_to(decompiled_root)).replace('\\', '/')
+            for line_no, line in enumerate(lines, 1):
+                if not _TIMER_RISK_RE.search(line):
+                    continue
+                key = f'{rel}:{line_no}'
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                snippet = extractor.extract(rel, max(1, line_no - 3), min(len(lines), line_no + 8), annotate=True)
+                if not snippet:
+                    continue
+                results.append(
+                    {
+                        'file': rel,
+                        'line_start': line_no,
+                        'line_end': line_no,
+                        'owner_name': owner,
+                        'symbol_name': 'timer_callback',
+                        'match_kind': 'timer_risk_scan',
+                        'code_snippet': snippet,
+                        'confidence_hint': '含 setInterval/requestAnimationFrame/setTimeout',
+                    }
+                )
+                if len(results) >= max_snippets:
+                    break
+    return results
 
 
 def _enrich_with_code_and_callgraph(
@@ -58,12 +107,58 @@ def _enrich_with_code_and_callgraph(
     """
     from .code_snippet_extractor import CodeSnippetExtractor
     from .callgraph_traverser import CallgraphTraverser
-    from .code_index_lookup import get_module_attributions, format_module_attribution_text
+    from .code_index_lookup import CodeIndexLookup, get_module_attributions, format_module_attribution_text
 
     extractor = CodeSnippetExtractor(decompiled_root)
     proc_hints = evidence.get("proc_source_hints", [])
     proc_hints = extractor.enrich_proc_source_hints(proc_hints)
     evidence["proc_source_hints"] = proc_hints
+
+    ui_snapshot_hints = evidence.get("ui_snapshot_hints", []) or []
+    snapshot_owner_names = [
+        str(item.get("name") or "").strip()
+        for item in ui_snapshot_hints
+        if str(item.get("name") or "").strip()
+    ][:5]
+    ui_snapshot_snippets: list[dict[str, Any]] = []
+
+    if index_dir and ui_snapshot_hints:
+        lookup = CodeIndexLookup(index_dir)
+        ui_candidates = lookup.lookup_ui_snapshot_candidates(ui_snapshot_hints)
+        extractor.enrich_candidates(ui_candidates)
+        ui_snapshot_snippets = [item for item in ui_candidates if item.get("code_snippet")]
+        if ui_snapshot_snippets:
+            evidence["ui_snapshot_snippets"] = ui_snapshot_snippets
+            count_by_name = {
+                str(item.get("name") or ""): int(item.get("count", 0) or 0)
+                for item in ui_snapshot_hints
+            }
+            for item in ui_snapshot_snippets:
+                item["ui_snapshot_count"] = count_by_name.get(str(item.get("owner_name") or ""), 0)
+            logging.info(
+                "UI snapshot matched %d source snippets from symbol index",
+                len(ui_snapshot_snippets),
+            )
+
+    if snapshot_owner_names:
+        timer_snippets = _collect_timer_risk_snippets(
+            decompiled_root,
+            snapshot_owner_names,
+            extractor,
+            max_snippets=3,
+        )
+        if timer_snippets:
+            existing = evidence.get("ui_snapshot_snippets") or ui_snapshot_snippets
+            existing_keys = {f"{item.get('file')}:{item.get('line_start')}" for item in existing}
+            merged = list(existing)
+            for item in timer_snippets:
+                key = f"{item.get('file')}:{item.get('line_start')}"
+                if key not in existing_keys:
+                    merged.append(item)
+                    existing_keys.add(key)
+            evidence["ui_snapshot_snippets"] = merged
+            ui_snapshot_snippets = merged
+            logging.info("Timer-risk scan added %d source snippets", len(timer_snippets))
 
     if index_dir:
         ui_index_path = Path(index_dir) / "ui_index.jsonl"
@@ -74,9 +169,10 @@ def _enrich_with_code_and_callgraph(
                 for c in (h.get("decompiled_candidates") or [])
                 if c.get("owner_name")
             })
-            if existing_owners:
+            all_owners = list(dict.fromkeys(existing_owners + snapshot_owner_names))
+            if all_owners:
                 ui_extra = extractor.enrich_with_ui_index(
-                    owner_names=existing_owners,
+                    owner_names=all_owners,
                     ui_index_path=ui_index_path,
                     max_extra_snippets=4,
                 )
@@ -88,12 +184,15 @@ def _enrich_with_code_and_callgraph(
 
     module_attribution_text = ""
     if index_dir:
-        all_owners = list({
-            c.get("owner_name", "")
-            for h in proc_hints
-            for c in (h.get("decompiled_candidates") or [])
-            if c.get("owner_name")
-        })
+        all_owners = list(dict.fromkeys(
+            snapshot_owner_names
+            + [
+                c.get("owner_name", "")
+                for h in proc_hints
+                for c in (h.get("decompiled_candidates") or [])
+                if c.get("owner_name")
+            ]
+        ))
         if all_owners:
             attributions = get_module_attributions(index_dir, all_owners)
             evidence["module_attributions"] = attributions
@@ -162,11 +261,21 @@ def _collect_code_snippets_for_prompt(evidence: dict[str, Any]) -> list[dict[str
             hint=hint,
         )
 
+    for item in evidence.get('ui_snapshot_snippets', []):
+        _add_candidates([item], int(item.get('ui_snapshot_count', 0) or 0) or 1)
+
+    for item in evidence.get('ui_extra_snippets', []):
+        _add_candidates([item], 0)
+
     result.sort(
-        key=lambda c: (c.get('evidence_hits', 0), 1 if c.get('owner_name') else 0),
+        key=lambda c: (
+            c.get('evidence_hits', 0),
+            1 if c.get('match_kind') == 'ui_snapshot' else 0,
+            1 if c.get('owner_name') else 0,
+        ),
         reverse=True,
     )
-    return result[:5]
+    return result[:8]
 
 
 def _run_analyze_with_llm(
@@ -673,6 +782,17 @@ def run_empty_frame_analysis(
             evidence, decomp_path, index_dir=index_dir
         )
         code_snippets = _collect_code_snippets_for_prompt(evidence)
+        if evidence.get("ui_snapshot_snippets") and not evidence.get("proc_source_hints"):
+            updated_caveats = []
+            for caveat in evidence.get("caveats", []):
+                if "未命中可用的 /proc 用户态源码符号" in caveat:
+                    updated_caveats.append(
+                        "perf 采样未命中 /proc 用户态符号，已通过 UI 运行态快照 + 源码索引"
+                        "关联到具体 .ets 片段（见下方 UI 快照关联源码）。"
+                    )
+                else:
+                    updated_caveats.append(caveat)
+            evidence["caveats"] = updated_caveats
         # Include UI extra snippets
         ui_extra = evidence.get("ui_extra_snippets", [])
         main_keys = {f"{c.get('file')}:{c.get('line_start')}" for c in code_snippets}

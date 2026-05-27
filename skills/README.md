@@ -24,12 +24,13 @@ skills/
 ## HapRay 运行时交付建议（二进制优先 + 源码回退）
 
 对 `hapray` skill，推荐采用 **Release 二进制优先** 的运行方式；当二进制下载失败或二进制不可运行时，必须自动回退到源码方式。  
+**真机采集**：有预设则 `perf`；无预设时编写前须 **UI 映射探测**，脚本须**中文步骤注释**（每步做什么、依据何来），再 **`prepare` 通过** 后 `perf`。详见 `skills/hapray/SKILL.md`「真机采集路由」§2。  
 该策略应以 **标准 Skill 描述** 方式表达（流程规则），由 AI 按规则自动执行，而不是依赖用户手工改脚本：
 
 - **制品 URL 形态**：仅允许 `…/releases/download/<tag>/<asset_name>` 直链下载（或用户给出的等价整链）；**禁止**打开 GitCode 发布列表/详情页或 `releases/latest` 做「自动查最新」。
-- 运行策略：按 `skills/hapray/SKILL.md` §1.0 确定 `tag`（用户整链 / `HAPRAY_RELEASE_TAG` / Skill YAML `version`）与 `BASE`（`HAPRAY_RELEASES_DOWNLOAD_BASE` / 内置备用根），再按平台拼候选 `asset_name` 并 GET 校验下载（Windows / Linux Ubuntu 22.04/24.04 x64 / macOS Intel / macOS Apple Silicon）；失败时回退 `git clone` + `uv run python -m scripts.main`
+- 运行策略：按 `skills/hapray/SKILL.md` §1.0 确定 `tag` 与 `BASE`，再按平台拼候选 `asset_name` 并 **优先用 `curl`** 探测/下载 Release 制品；失败时回退 `git clone` + `uv run python -m scripts.main`
 - 分析流程：使用二进制执行采集，基于 `reports_path` 与相关产物做子 Skill 分析并输出报告
-- 最小自动化闭环：`直链/锚定 tag -> 平台识别 -> 候选资产名 GET -> 下载 -> 完整性校验 -> 可执行自检 -> 失败则源码回退`
+- 最小自动化闭环：`直链/锚定 tag -> 平台识别 -> 候选资产名 curl 探测 -> curl 下载 -> 完整性校验 -> 可执行自检 -> 失败则源码回退`
 - **镜像**：优先用户直链、`HAPRAY_RELEASES_DOWNLOAD_BASE` 或 `skills/hapray/SKILL.md` §1.0 表内备用根；全程不依赖浏览器打开发布页。
 
 > 说明：`skills/` 目录本身仍可随仓库、独立仓库或 zip 分发；以上建议仅针对 HapRay 工具运行时获取方式。
@@ -80,9 +81,9 @@ Copy-Item -Recurse -Force "skills\hapray" "$env:USERPROFILE\.cursor\skills\hapra
 | 全局 | `~/.config/opencode/skills/<skill-name>/SKILL.md` |
 | 全局（Claude / Agents 兼容） | `~/.claude/skills/…`、`~/.agents/skills/…` |
 
-**方式 A — 在本仓库内使用（推荐，已配置）**
+**方式 A — 在本仓库内通过 `opencode.json` 加载（当前未启用）**
 
-仓库根目录已有 `opencode.json`，将本目录加入额外扫描路径：
+仓库根 `opencode.json` **默认不包含** `skills.paths`，OpenCode **不会**自动加载本仓库 `skills/hapray/`。若需要，可自行在 `opencode.json` 增加：
 
 ```json
 {
@@ -93,9 +94,7 @@ Copy-Item -Recurse -Force "skills\hapray" "$env:USERPROFILE\.cursor\skills\hapra
 }
 ```
 
-在仓库根执行 `opencode`（或 `opencode run`）即可发现 `skills/hapray/SKILL.md`，**无需**再复制到 `.opencode/skills/`。若你 fork 了仓库，保留或合并该配置即可。
-
-**方式 B — 复制到项目 `.opencode/skills/`**
+**方式 B — 复制到项目 `.opencode/skills/`（可选）**
 
 适合只拷贝 skill、不带 `opencode.json` 的场景：
 

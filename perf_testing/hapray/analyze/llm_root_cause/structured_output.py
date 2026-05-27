@@ -310,7 +310,13 @@ def render_to_markdown(result: RootCauseResult) -> str:
                 lines.append(s.code_snippet.rstrip())
                 lines.append("```")
             else:
-                lines.append("- **源码**: *(反编译代码不可用，基于运行时证据推理)*")
+                if s.file and (s.file.endswith('.ets') or s.file.endswith('.ts')):
+                    lines.append("- **源码**: *(该嫌疑未附带代码片段)*")
+                else:
+                    lines.append(
+                        "- **源码**: *(运行时符号未映射到具体源码行，"
+                        "基于运行时证据推理；可参考报告中的 UI 快照源码片段)*"
+                    )
             lines.append("")
 
     if result.caveats:

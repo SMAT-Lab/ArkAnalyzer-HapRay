@@ -165,6 +165,90 @@ class CodeIndexLookup:
             )
         return resolved
 
+    def lookup_ui_snapshot_candidates(
+        self,
+        ui_snapshot_hints: list[dict[str, Any]],
+        *,
+        max_owners: int = 5,
+        limit_per_owner: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Map runtime UI snapshot component/page names to symbol_index entries."""
+        lifecycle_priority = (
+            "onpagehide",
+            "abouttodisappear",
+            "onpageshow",
+            "abouttoappear",
+            "initialrender",
+            "build",
+        )
+        ordered_names: list[str] = []
+        seen: set[str] = set()
+        for hint in sorted(
+            ui_snapshot_hints,
+            key=lambda item: (-int(item.get("count", 0) or 0), str(item.get("name", ""))),
+        ):
+            name = str(hint.get("name") or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            ordered_names.append(name)
+            if len(ordered_names) >= max_owners:
+                break
+
+        candidates: list[dict[str, Any]] = []
+        for name in ordered_names:
+            owner_norm = self._norm(name)
+            scored: list[dict[str, Any]] = []
+            for row in self.symbols:
+                if self._norm(row.get("owner_name")) != owner_norm:
+                    continue
+                symbol = self._norm(row.get("symbol_name"))
+                score = 0
+                reasons: list[str] = []
+                for idx, lifecycle in enumerate(lifecycle_priority):
+                    if symbol == lifecycle or symbol.endswith(lifecycle):
+                        score += 24 - idx
+                        reasons.append(f"lifecycle:{row.get('symbol_name')}")
+                        break
+                owner_type = self._norm(row.get("owner_type"))
+                if owner_type in {"page", "component", "view"}:
+                    score += 2
+                    reasons.append(f"owner_type={owner_type}")
+                if score <= 0:
+                    continue
+                enriched = dict(row)
+                enriched["_score"] = score
+                enriched["_reasons"] = self._dedupe_texts(reasons)
+                scored.append(enriched)
+
+            scored.sort(key=lambda item: (-item["_score"], item.get("file", ""), item.get("line_start", 0)))
+            ui_by_symbol = self._collect_ui_hits(scored[: limit_per_owner * 2])
+            for row in scored[:limit_per_owner]:
+                ui_hits = ui_by_symbol.get(row["id"], [])
+                ui_names = [item.get("ui_api") for item in ui_hits if item.get("ui_api")]
+                reasons = list(row.get("_reasons", []))
+                if ui_names:
+                    reasons.append(f"UI命中: {', '.join(ui_names[:3])}")
+                candidates.append(
+                    {
+                        "file": row.get("file"),
+                        "line_start": row.get("line_start"),
+                        "line_end": row.get("line_end"),
+                        "owner_name": row.get("owner_name"),
+                        "owner_type": row.get("owner_type", "unknown"),
+                        "symbol_name": row.get("symbol_name"),
+                        "module_path": row.get("module_path", ""),
+                        "module_path_short": self._short_module_path(row.get("module_path", "")),
+                        "ui_keywords": row.get("ui_keywords", []),
+                        "matched_ui_hits": ui_hits,
+                        "score": row.get("_score", 0),
+                        "reasons": self._dedupe_texts(reasons),
+                        "match_kind": "ui_snapshot",
+                    }
+                )
+
+        return self._dedupe_candidates(candidates)
+
     def _build_proc_source_query(self, hint: dict[str, Any]) -> dict[str, Any]:
         source_path = str(hint.get("source_path", "") or "")
         path_obj = Path(source_path) if source_path else None

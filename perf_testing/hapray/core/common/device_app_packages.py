@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from hapray.core.common.hap_decompiler_bridge import ensure_decompiler_env
+from hapray.core.common.root_cause_source import count_files_with_suffix, count_source_files
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +29,12 @@ ROOT_CAUSE_INPUT_NONE = 'none'
 
 
 def _count_files_with_suffix(path: Path, suffix: str, *, limit: int = 64) -> int:
-    if not path.is_dir():
-        return 0
-    n = 0
-    try:
-        for p in path.rglob(f'*{suffix}'):
-            if p.is_file():
-                n += 1
-                if n >= limit:
-                    break
-    except OSError:
-        return 0
-    return n
+    """向后兼容别名，见 ``root_cause_source.count_files_with_suffix``。"""
+    return count_files_with_suffix(path, suffix, limit=limit)
+
+
+def _count_source_files(path: Path, *, limit: int = 64) -> int:
+    return count_source_files(path, limit=limit)
 
 
 def _has_symbol_index(index_dir: Path) -> bool:
@@ -67,18 +62,18 @@ def resolve_decompiled_root(bundle_root: Path) -> Optional[Path]:
     decompiled = bundle_root / 'decompiled'
     if decompiled.is_dir() and (
         _has_symbol_index(decompiled / 'index')
-        or _count_files_with_suffix(decompiled, '.ts') > 0
+        or _count_source_files(decompiled) > 0
         or _count_files_with_suffix(decompiled, '.callgraph.json') > 0
     ):
         return decompiled.resolve()
 
-    if _count_files_with_suffix(bundle_root, '.ts') >= 3 or _count_files_with_suffix(
+    if _count_source_files(bundle_root) >= 3 or _count_files_with_suffix(
         bundle_root, '.callgraph.json'
     ) > 0:
         return bundle_root.resolve()
 
     src_main = bundle_root / 'src' / 'main' / 'ets'
-    if src_main.is_dir() and _count_files_with_suffix(src_main, '.ts') > 0:
+    if src_main.is_dir() and _count_source_files(src_main) > 0:
         return bundle_root.resolve()
 
     return None
@@ -87,7 +82,7 @@ def resolve_decompiled_root(bundle_root: Path) -> Optional[Path]:
 def detect_root_cause_input_kind(path: Path) -> str:
     """自动识别目录是反编译/源码（``source``）还是 HAP 包（``hap``）。
 
-    - **source**：含 ``symbol_index.jsonl``、足够 ``*.ts`` / ``*.callgraph.json``，或典型 ``src/main/ets`` 布局
+    - **source**：含 ``symbol_index.jsonl``、足够 ``*.ts`` / ``*.ets`` / ``*.callgraph.json``，或典型 ``src/main/ets`` 布局
     - **hap**：含 ``*.hap`` 且不具备源码树特征
     - **none**：均不满足
     """
@@ -99,20 +94,35 @@ def detect_root_cause_input_kind(path: Path) -> str:
         index_dir = decompiled / 'index' if decompiled.name == 'decompiled' else decompiled / 'index'
         if decompiled.name == 'decompiled' and _has_symbol_index(index_dir):
             return ROOT_CAUSE_INPUT_SOURCE
-        ts_under = _count_files_with_suffix(decompiled, '.ts')
+        src_under = _count_source_files(decompiled)
         cg_under = _count_files_with_suffix(decompiled, '.callgraph.json')
-        if _has_symbol_index(decompiled / 'index') or ts_under >= 3 or cg_under > 0:
+        if _has_symbol_index(decompiled / 'index') or src_under >= 3 or cg_under > 0:
+            return ROOT_CAUSE_INPUT_SOURCE
+        if (decompiled / 'src' / 'main' / 'ets').is_dir() and _count_source_files(decompiled / 'src' / 'main' / 'ets') > 0:
             return ROOT_CAUSE_INPUT_SOURCE
         if (path / 'decompiled').is_dir():
             inner = path / 'decompiled'
-            if _has_symbol_index(inner / 'index') or _count_files_with_suffix(inner, '.ts') >= 3:
+            if _has_symbol_index(inner / 'index') or _count_source_files(inner) >= 3:
+                return ROOT_CAUSE_INPUT_SOURCE
+            if (inner / 'src' / 'main' / 'ets').is_dir() and _count_source_files(inner / 'src' / 'main' / 'ets') > 0:
                 return ROOT_CAUSE_INPUT_SOURCE
 
-    ts_count = _count_files_with_suffix(path, '.ts')
+    manifest_path = path / MANIFEST_NAME
+    if manifest_path.is_file():
+        try:
+            raw = json.loads(manifest_path.read_text(encoding='utf-8'))
+            if isinstance(raw, dict) and raw.get('input_kind') == ROOT_CAUSE_INPUT_SOURCE:
+                declared = (raw.get('decompiled_dir') or '').strip()
+                if declared and Path(declared).is_dir() and _count_source_files(Path(declared)) > 0:
+                    return ROOT_CAUSE_INPUT_SOURCE
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    src_count = _count_source_files(path)
     cg_count = _count_files_with_suffix(path, '.callgraph.json')
-    if _has_symbol_index(path / 'index') or ts_count >= 3 or cg_count > 0:
+    if _has_symbol_index(path / 'index') or src_count >= 3 or cg_count > 0:
         return ROOT_CAUSE_INPUT_SOURCE
-    if (path / 'src' / 'main' / 'ets').is_dir() and _count_files_with_suffix(path / 'src' / 'main' / 'ets', '.ts') > 0:
+    if (path / 'src' / 'main' / 'ets').is_dir() and _count_source_files(path / 'src' / 'main' / 'ets') > 0:
         return ROOT_CAUSE_INPUT_SOURCE
 
     hap_count = len(list(path.glob('*.hap')))
@@ -202,6 +212,9 @@ def _materialize_user_source_tree(user_source: Path, dest_root: Path, bundle_nam
     decompiled = _stage_decompiled_source_into_dest(user_source, dest_root)
     if decompiled is None:
         return False
+    hap_dir = dest_root / 'hap'
+    if hap_dir.is_dir():
+        shutil.rmtree(hap_dir)
     index_dir = decompiled / 'index'
     _write_app_packages_manifest(
         dest_root,
@@ -242,11 +255,22 @@ def _materialize_user_hap_tree(user_source: Path, dest_root: Path, bundle_name: 
 def _materialize_user_app_packages(user_source: Path, dest_root: Path, bundle_name: str) -> bool:
     """将用户提供的 **源码树或 HAP** 整理到 ``dest_root``（自动识别，互斥处理）。"""
     dest_root.mkdir(parents=True, exist_ok=True)
-    if looks_like_app_packages_root(dest_root):
-        return True
-
     src = user_source.resolve()
-    kind = detect_root_cause_input_kind(src)
+    user_kind = detect_root_cause_input_kind(src)
+
+    if looks_like_app_packages_root(dest_root):
+        dest_kind = detect_root_cause_input_kind(dest_root)
+        # 用户给了源码树，但报告缓存里只有 HAP → 用用户源码覆盖，勿沿用旧 HAP
+        if user_kind == ROOT_CAUSE_INPUT_SOURCE and dest_kind == ROOT_CAUSE_INPUT_HAP:
+            logger.info(
+                'Replacing cached HAP under %s with user-provided source from %s',
+                dest_root,
+                src,
+            )
+        elif dest_kind != ROOT_CAUSE_INPUT_NONE:
+            return True
+
+    kind = user_kind
 
     # 用户已指向 report 下标准布局：<report>/.app_packages/<bundle>
     if src == dest_root.resolve():
@@ -322,7 +346,7 @@ def prepare_app_packages_for_report(
         if resolved:
             return (resolved, 'user')
         logger.warning(
-            'User app-packages path did not contain usable HAP artifacts: %s. '
+            'User app-packages path did not contain usable source/HAP artifacts: %s. '
             'Will try existing report cache or device pull.',
             user_source,
         )
@@ -520,8 +544,8 @@ def _ensure_index_for_decompiled_tree(
         _update_manifest_decompile_paths(bundle_pkg_dir, decompiled_root, index_dir)
         return (decompiled_root, index_dir)
 
-    if _count_files_with_suffix(decompiled_root, '.ts') == 0:
-        logger.warning('Source tree under %s has no .ts files; cannot build index', decompiled_root)
+    if _count_source_files(decompiled_root) == 0:
+        logger.warning('Source tree under %s has no .ts/.ets files; cannot build index', decompiled_root)
         return (decompiled_root, None)
 
     index_dir.mkdir(parents=True, exist_ok=True)
@@ -692,7 +716,7 @@ def resolve_root_cause_artifacts(report_dir: str, bundle_name: str) -> tuple[Opt
         except (OSError, json.JSONDecodeError):
             pass
 
-    if _count_files_with_suffix(decompiled, '.ts') > 0:
+    if _count_source_files(decompiled) > 0:
         return (None, str(decompiled.resolve()))
     return (None, None)
 
@@ -701,6 +725,6 @@ def root_cause_llm_mode_for_bundle(report_dir: str, bundle_name: str) -> str:
     """``with_source``：有反编译/源码树；``analyze``：仅 HAP 或无代码片段。"""
     _index, decompiled = resolve_root_cause_artifacts(report_dir, bundle_name)
     if decompiled and Path(decompiled).is_dir():
-        if _index or _count_files_with_suffix(Path(decompiled), '.ts') > 0:
+        if _index or _count_source_files(Path(decompiled)) > 0:
             return 'with_source'
     return 'analyze'
