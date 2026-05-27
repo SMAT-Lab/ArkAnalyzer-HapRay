@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 基于规则的 HAP 反编译结果索引构建脚本。
 
-输入：反编译输出目录（递归扫描 *.ts）
+输入：反编译输出目录或 HarmonyOS 源码树（递归扫描 *.ts / *.ets）
 输出：
   - symbol_index.jsonl  每个函数/方法一个索引项
   - ui_index.jsonl      每个 symbol 内命中的 UI 关键字摘要
@@ -23,9 +23,17 @@ from pathlib import Path
 from typing import Iterable, TextIO
 
 
-RECOVERED_RE = re.compile(r"^\s*//\s*recovered from:\s*(.+?)\s*$")
-CLASS_RE = re.compile(r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")
-FUNCTION_RE = re.compile(r"^\s*(async\s+function\*|async\s+function|function)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+from hapray.core.common.root_cause_source import collect_source_files
+
+RECOVERED_RE = re.compile(r'^\s*//\s*recovered from:\s*(.+?)\s*$')
+CLASS_RE = re.compile(r'^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{')
+FUNCTION_RE = re.compile(r'^\s*(async\s+function\*|async\s+function|function)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+STRUCT_RE = re.compile(r'^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:export\s+)?struct\s+([A-Za-z_][A-Za-z0-9_]*)\b')
+ETS_METHOD_RE = re.compile(
+    r'^\s*(?:public\s+|private\s+|protected\s+|static\s+|async\s+|override\s+)?'
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?::\s*[^{;]+)?\{',
+)
+_ETS_METHOD_SKIP = frozenset({'if', 'for', 'while', 'switch', 'catch', 'return'})
 CONFIDENCE_RE = re.compile(r"confidence:\s*(\d+)%")
 VERSION_SEGMENT_RE = re.compile(r"&\d+(?:\.\d+)+")
 SYNTHETIC_SEGMENT_RE = re.compile(r"\.?#~@\d+>#")
@@ -92,8 +100,8 @@ OWNER_TYPE_PATTERNS = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="构建反编译 TS 的规则索引")
-    parser.add_argument("--input", required=True, help="反编译输出目录，递归扫描其中的 *.ts 文件")
+    parser = argparse.ArgumentParser(description='构建反编译 TS / ArkTS ETS 的规则索引')
+    parser.add_argument('--input', required=True, help='源码或反编译目录，递归扫描 *.ts / *.ets')
     parser.add_argument("--output-dir", default=None, help="索引输出目录，默认写到 <input>/index")
     return parser.parse_args()
 
@@ -356,11 +364,40 @@ def scan_file(file_path: Path, input_root: Path, symbol_writer: TextIO, ui_write
                 for ui_name, category in iter_ui_hits(line):
                     register_ui_hit(current_symbol, line_no, ui_name, category)
 
-                current_symbol["brace_depth"] = brace_delta(line)
-                if current_symbol["brace_depth"] <= 0:
+                current_symbol['brace_depth'] = brace_delta(line)
+                if current_symbol['brace_depth'] <= 0:
                     finalize_symbol(current_symbol, line_no, symbol_writer, ui_writer, file_summary)
                     current_symbol = None
                 continue
+
+            struct_match = STRUCT_RE.match(line)
+            if struct_match:
+                current_class = struct_match.group(1)
+                continue
+
+            if file_path.suffix.lower() == '.ets':
+                method_match = ETS_METHOD_RE.match(line)
+                if method_match:
+                    symbol_name = method_match.group(1)
+                    if symbol_name not in _ETS_METHOD_SKIP:
+                        current_symbol = make_symbol_record(
+                            relative_file=relative_file,
+                            line_no=line_no,
+                            function_kind='method',
+                            symbol_name=symbol_name,
+                            raw_recovered=pending_recovered,
+                            current_class=current_class,
+                        )
+                        pending_recovered = None
+
+                        for ui_name, category in iter_ui_hits(line):
+                            register_ui_hit(current_symbol, line_no, ui_name, category)
+
+                        current_symbol['brace_depth'] = brace_delta(line)
+                        if current_symbol['brace_depth'] <= 0:
+                            finalize_symbol(current_symbol, line_no, symbol_writer, ui_writer, file_summary)
+                            current_symbol = None
+                        continue
 
             if line.strip():
                 pending_recovered = None
@@ -384,7 +421,8 @@ def scan_file(file_path: Path, input_root: Path, symbol_writer: TextIO, ui_write
 
 
 def collect_ts_files(input_root: Path) -> list[Path]:
-    return sorted(path for path in input_root.rglob("*.ts") if path.is_file())
+    """向后兼容别名。"""
+    return collect_source_files(input_root)
 
 
 def write_json(path: Path, data: object) -> None:
@@ -392,9 +430,9 @@ def write_json(path: Path, data: object) -> None:
 
 
 def build_index(input_root: Path, output_dir: Path) -> dict:
-    ts_files = collect_ts_files(input_root)
-    if not ts_files:
-        raise FileNotFoundError(f"未在目录中找到 .ts 文件: {input_root}")
+    source_files = collect_source_files(input_root)
+    if not source_files:
+        raise FileNotFoundError(f'未在目录中找到 .ts/.ets 文件: {input_root}')
 
     output_dir.mkdir(parents=True, exist_ok=True)
     symbol_index_path = output_dir / "symbol_index.jsonl"
@@ -411,7 +449,7 @@ def build_index(input_root: Path, output_dir: Path) -> dict:
     total_views = set()
 
     with symbol_index_path.open("w", encoding="utf-8") as symbol_writer, ui_index_path.open("w", encoding="utf-8") as ui_writer:
-        for file_path in ts_files:
+        for file_path in source_files:
             summary = scan_file(file_path, input_root, symbol_writer, ui_writer)
             file_summaries.append(summary)
             total_lines += summary["line_count"]
@@ -429,7 +467,7 @@ def build_index(input_root: Path, output_dir: Path) -> dict:
     stats = {
         "input_root": str(input_root),
         "output_dir": str(output_dir),
-        "file_count": len(ts_files),
+        'file_count': len(source_files),
         "total_lines": total_lines,
         "total_symbols": total_symbols,
         "total_lifecycle_symbols": total_lifecycle,

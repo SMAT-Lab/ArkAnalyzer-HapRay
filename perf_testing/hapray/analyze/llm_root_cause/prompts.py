@@ -381,7 +381,7 @@ def _build_with_source_user_prompt(
     if code_snippets:
         parts.append("\n## 反编译代码片段（类型 A 嫌疑）\n")
         parts.append("以下嫌疑有反编译源码，请做行级代码审查：\n")
-        for i, item in enumerate(code_snippets[:5], 1):
+        for i, item in enumerate(code_snippets[:8], 1):
             owner = item.get("owner_name", "unknown")
             symbol = item.get("symbol_name", "unknown")
             file_name = item.get("file", "unknown")
@@ -389,11 +389,17 @@ def _build_with_source_user_prompt(
             line_end = item.get("line_end", 0)
             snippet = item.get("code_snippet") or ""
             evidence_hits = item.get("evidence_hits", 0)
+            match_kind = item.get("match_kind", "")
 
             parts.append(f"### 片段 {i}: {owner}.{symbol}")
             parts.append(f"- 文件: `{file_name}:{line_start}-{line_end}`")
+            if match_kind:
+                parts.append(f"- 关联方式: {match_kind}")
             if evidence_hits:
                 parts.append(f"- 证据命中次数: {evidence_hits}")
+            ui_count = item.get("ui_snapshot_count")
+            if ui_count:
+                parts.append(f"- UI 运行态出现次数: {ui_count}")
             if snippet:
                 parts.append("```typescript")
                 parts.append(snippet)

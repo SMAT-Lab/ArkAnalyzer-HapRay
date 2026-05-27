@@ -81,6 +81,7 @@ class EvidenceReportRenderer:
 
         self._append_decompiled_scope_notice(lines, evidence)
         self._append_decompiled_snippets(lines, proc_source_hints)
+        self._append_ui_snapshot_snippets(lines, evidence.get("ui_snapshot_snippets", []))
 
         # UI snapshot
         if ui_snapshot_hints:
@@ -168,7 +169,7 @@ class EvidenceReportRenderer:
         lines.append("")
         if file_count:
             lines.append(
-                f"- 当前反编译树约 **{file_count}** 个 `.ts/.js` 文件"
+                f'- 当前源码树约 **{file_count}** 个 `.ts/.ets` 文件'
                 + (f"（根目录: `{input_root}`）" if input_root else "")
                 + (f"，顶层模块: `{', '.join(top_dirs)}`" if top_dirs else "")
             )
@@ -243,6 +244,34 @@ class EvidenceReportRenderer:
             )
             lines.append("")
         lines.extend(blocks)
+        lines.append("")
+
+    def _append_ui_snapshot_snippets(
+        self,
+        lines: list[str],
+        ui_snapshot_snippets: list[dict[str, Any]],
+    ) -> None:
+        if not ui_snapshot_snippets:
+            return
+
+        lines.append("## UI 快照关联源码（symbol index / 定时器扫描）")
+        lines.append("")
+        lines.append(
+            "> perf 采样未出现 /proc 用户态符号时，由 UI 运行态组件名在源码索引中定位"
+            "（生命周期入口 + setInterval/requestAnimationFrame 扫描）。"
+        )
+        lines.append("")
+        for item in ui_snapshot_snippets[:8]:
+            lines.extend(
+                self._format_snippet_block(
+                    title=(
+                        f"{item.get('owner_name', 'unknown')}.{item.get('symbol_name', 'unknown')} "
+                        f"(UI count={item.get('ui_snapshot_count', 0)})"
+                    ),
+                    candidate=item,
+                    match_note=str(item.get("match_kind") or item.get("confidence_hint") or "ui_snapshot"),
+                )
+            )
         lines.append("")
 
     @staticmethod
