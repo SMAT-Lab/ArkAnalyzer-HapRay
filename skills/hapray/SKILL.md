@@ -181,9 +181,9 @@ metadata:
    → 回复路径，或回复「跳过 SO」
 
 2) root-cause 输入目录（工具会自动识别，二选一即可）
-   · 反编译/源码树（推荐）：含 *.ts 或 decompiled/index/
+   · 源码分析树（推荐）：含 *.ts 或 source-analysis/index/
    · 仅 HAP 包：含 *.hap 的文件夹
-   例：D:/artifacts/<应用名>/decompiled/ 或 D:/artifacts/<应用名>/hap/
+   例：D:/artifacts/<应用名>/source-analysis/ 或 D:/artifacts/<应用名>/hap/
    → 回复路径，或回复「跳过 root-cause」
 
 也可回复「全部从设备拉取」尝试 hdc（可能失败则自动跳过对应步骤）。
@@ -314,12 +314,12 @@ metadata:
 
 | 分支 | 判定（满足其一即视为「有应用源码」） | 编写依据 |
 |------|--------------------------------------|----------|
-| **A 有源码** | 目录下存在可分析的**应用源码/反编译树**：含足够 `*.ts` / `*.ets`、`decompiled/` + `index/`、`src/main/ets/`、`decompiled/index/symbol_index.jsonl` 等（与 `detect_root_cause_input_kind` → `source` 一致，见 `perf_testing/hapray/core/common/device_app_packages.py`） | **必须先阅读、分析该目录源码**，再编写用例；步骤、页面名、按钮文案、Ability 名须能从源码中找到依据 |
+| **A 有源码** | 目录下存在可分析的**应用源码/解析树**：含足够 `*.ts` / `*.ets`、`source-analysis/` + `index/`、`src/main/ets/`、`source-analysis/index/symbol_index.jsonl` 等（与 `detect_root_cause_input_kind` → `source` 一致，见 `perf_testing/hapray/core/common/device_app_packages.py`） | **必须先阅读、分析该目录源码**，再编写用例；步骤、页面名、按钮文案、Ability 名须能从源码中找到依据 |
 | **B 无源码** | 用户跳过 root-cause 路径；或目录仅 `*.hap`、或无上述源码特征 | 沿用下文 **「无源码时的 UI 依据」**，禁止假装读过源码 |
 
 **A 有源码 — Agent 必须做的分析（再写脚本）**
 
-1. 定位源码根：优先 `decompiled/`、`src/main/ets/`，或用户给定树中 `.ts` 最集中的目录。  
+1. 定位源码根：优先 `source-analysis/`、`src/main/ets/`，或用户给定树中 `.ts` 最集中的目录。  
 2. 结合用户场景，在源码中查找：**入口 Ability**、路由/页面（`@Entry`、`router`、`pages`）、目标页的 **按钮/Tab 文案**（`Text('…')`、`Resource`、常量字符串）、关键交互（播放、列表、跳转）。  
 3. 完成 **§1.5 UI 映射探测** 后，将步骤映射为脚本操作：有稳定 `id`/文案时用 `touch_by_id` / `touch_by_text`；**ID 全空**时仅用 **坐标**（`touch_by_coordinates` + `source_screen_*`），**禁止**臆造 id 或盲用文案。  
 4. 轨迹记录：`script_authored_from=source`、`source_paths=[...]`、`ui_mapping_mode=`、`app_specific_rationale=`。
@@ -568,7 +568,7 @@ uv run python -m scripts.main perf \
 | 用途 | 用户需提供 | CLI | 环境变量 |
 |------|------------|-----|----------|
 | 符号恢复（strip `.so`） | 含 `*.so` 的文件夹（如 `libs/arm64`） | `--so_dir <路径>` | `HAPRAY_SO_DIR` |
-| 空刷 root-cause | **反编译源码**（`*.ts` / `decompiled/` / `src/main/ets`）或 **仅 HAP**（`*.hap`） | `--app-packages-dir <路径>` | `HAPRAY_APP_PACKAGES_DIR` |
+| 空刷 root-cause | **源码分析**（`*.ts` / `source-analysis/` / `src/main/ets`）或 **仅 HAP**（`*.hap`） | `--app-packages-dir <路径>` | `HAPRAY_APP_PACKAGES_DIR` |
 
 ### 6.2 路径决策顺序（与 `update_action.py` 一致）
 
@@ -617,6 +617,7 @@ Agent **必须先二选一判定**当前会话主路径属于哪一轨，再加�
 | **web / 报表模板** | 必须 `cd web && npm run build` 等写入 `perf_testing/resource/web/` | 依赖发布包已打入的 `resource/`；若运行时报缺模板，补全资源或换完整包，**不是**在二进制轨上从零跑 vite 工作流（除非团队明确该包为 dev 布局） |
 | **static_analyzer / trace_streamer** | 必须本地构建与 `npm run prebuild` | 依赖发布包内 `dist/tools/sa-cmd/`、`dist/tools/bin/`；缺失则换包或联系发布方 |
 | **符号恢复** | `tools/symbol_recovery` 下 `uv sync` + r2；由 `hapray`/`perf-testing` 同进程或子进程调 `main.py` | 常与主程序 **分包**；须满足 **可发现性**（见二进制节）：同级/上级目录中的 `symbol-recovery(.exe)`，或 `HAPRAY_SYMBOL_RECOVERY_ROOT` / `HAPRAY_SYMBOL_RECOVERY_EXE` / `HAPRAY_SYMBOL_RECOVERY_PYTHON` |
+|  | **说明**：使用 radare2 进行二进制分析，r2dec/r2ghidra 作为可选插件辅助解析热点函数 |  |
 | **写回 perf.json** | 默认同进程 `import` 工具库即可 | 无源码树时由 **子进程** 调用 `symbol-recovery --apply-excel-to-perf-json --symbol-mapping-excel … --perf-json …`（与引擎实现一致；无需手工执行） |
 | **update / LLM / Agent** | 两轨共用 **§6**（符号恢复 / root-cause / LLM→Agent） | 同上 |
 
@@ -661,11 +662,11 @@ Agent **必须先二选一判定**当前会话主路径属于哪一轨，再加�
 | 2 | **web** | 必选 | `cd web && npm install && npm run build` | `web/dist/index.html`、`report_template.html`、`hiperf_report_template.html` 均存在 |
 | 3 | **static_analyzer** | 必选 | `cd tools/static_analyzer && npm install && npm run build` | `dist/tools/sa-cmd/hapray-sa-cmd.js` 或 `.exe` 存在 |
 | 4 | **trace_streamer** | 必选 | 执行 `npm run prebuild` 解压 `third-party/trace_streamer_binary.zip` | `dist/tools/bin/trace_streamer_* --version` 可执行 |
-| 5 | **symbol_recovery** | 必选（venv）／ radare2+反编译 **建议** | `cd tools/symbol_recovery && uv venv .venv && uv sync`；radare2、r2dec/r2ghidra 见第5步正文（**能装则装**） | **硬门禁仅** `.venv` 下 `main.py --help` 可运行；**不**将 `r2` / `r2pm` 反编译插件缺失算作 ✗ 或 STOP 条件 |
+| 5 | **symbol_recovery** | 必选（venv）／ radare2+源码分析 **建议** | `cd tools/symbol_recovery && uv venv .venv && uv sync`；radare2、r2dec/r2ghidra 见第5步正文（**能装则装**） | **硬门禁仅** `.venv` 下 `main.py --help` 可运行；**不**将 `r2` / `r2pm` 源码分析插件缺失算作 ✗ 或 STOP 条件 |
 | 6 | hilogtool | 可选 | 从 release 复制到 `tools/bin/` | `tools/bin/hilogtool --help` 可执行 |
 | 7 | opt_detector | 可选 | 从 release 复制到 `tools/opt_detector/` | `tools/opt_detector/opt-detector --help` 可执行 |
 
-> **必选说明**：第5步 **硬门禁**仅为 `tools/symbol_recovery` 的 Python venv 与 `main.py --help`（涉及 `perf.data→perf.db`、`update` 符号恢复子进程等）。**radare2 与 r2dec/r2ghidra 反编译插件为建议项**：能装则装，装不上或网络差**不阻塞**后续 `perf`/`update`/报告链路；反编译与 LLM 证据质量可能降级，须在对话或报告中注明即可。国内拉 GitHub 慢时见第5步「国内网络」：**勿死等裸连**。
+> **必选说明**：第5步 **硬门禁**仅为 `tools/symbol_recovery` 的 Python venv 与 `main.py --help`（涉及 `perf.data→perf.db`、`update` 符号恢复子进程等）。**radare2 与 r2dec/r2ghidra 源码分析插件为建议项**：能装则装，装不上或网络差**不阻塞**后续 `perf`/`update`/报告链路；源码分析与 LLM 证据质量可能降级，须在对话或报告中注明即可。国内拉 GitHub 慢时见第5步「国内网络」：**勿死等裸连**。
 
 ---
 
@@ -768,7 +769,7 @@ dist/tools/bin/trace_streamer_windows.exe --version
 # macOS: dist/tools/bin/trace_streamer_mac --version
 ```
 
-#### 第5步：Symbol Recovery（必选）+ Radare2 / 反编译（建议）
+#### 第5步：Symbol Recovery（必选）+ Radare2 / 源码分析（建议）
 
 先创建 venv 并安装 Python 依赖（**以下为硬门禁**）：
 
@@ -779,7 +780,7 @@ uv sync
 # 或：uv pip install -e .
 ```
 
-**安装 radare2 + 反编译插件（建议，非硬门禁；能安则安，安不上可跳过）**：
+**安装 radare2 + 源码分析插件（建议，非硬门禁；能安则安，安不上可跳过）**：
 
 macOS：
 ```bash
@@ -795,12 +796,14 @@ winget install radare2
 # 方式二：Chocolatey
 choco install radare2
 
-# 安装完成后安装反编译插件
+# 安装完成后安装源码分析插件（r2dec/r2ghidra 辅助解析二进制）
 r2pm install r2dec
 # 或：r2pm install r2ghidra
 ```
 
 > **国内网络（安装 radare2 / r2pm 时）**：**默认禁止**为装 radare2/r2pm 访问 GitHub（见文首「全局规范」）。**①** 优先 `brew` / `winget` / `choco`；**②** `r2pm install` 若 **2～3 分钟无进度则直接跳过**（不影响硬门禁）；**③** 企业内网若有 radare2 离线 zip，解压并加 `PATH`；**④** macOS 可配 Homebrew 镜像后 `brew install radare2`。**禁止**死等 `github.com` 或要用户去 GitHub Releases 下载。
+> 
+> **符号恢复说明**：radare2 用于分析二进制文件中的热点函数，r2dec/r2ghidra 作为可选插件提供汇编到伪代码的转换能力，辅助 LLM 理解函数逻辑。
 
 **验证**：
 ```bash
@@ -873,13 +876,13 @@ else
     echo "   执行: cd tools/symbol_recovery && uv venv .venv && uv sync"
 fi
 
-# radare2 + 反编译插件（建议，非硬门禁）
+# radare2 + 源码分析插件（建议，非硬门禁）
 if command -v r2 >/dev/null 2>&1; then
     echo "○ 第5步(建议): radare2 已安装 ($(r2 -v 2>&1 | head -1))"
     if r2pm list 2>/dev/null | grep -qE "r2dec|r2ghidra"; then
-        echo "○ 第5步(建议): 反编译插件已安装 (r2dec/r2ghidra)"
+        echo "○ 第5步(建议): 源码分析插件已安装 (r2dec/r2ghidra)"
     else
-        echo "○ 第5步(建议): 反编译插件未装，可执行 r2pm install r2dec（装不上不阻塞 perf/update）"
+        echo "○ 第5步(建议): 源码分析插件未装，可执行 r2pm install r2dec（装不上不阻塞 perf/update）"
     fi
 else
     echo "○ 第5步(建议): radare2 未安装，可按上文安装（不阻塞 perf/update）"
@@ -950,15 +953,15 @@ if ((Test-Path $srPython) -and (& $srPython tools/symbol_recovery/main.py --help
     Write-Host "   执行: cd tools/symbol_recovery && uv venv .venv && uv sync" -ForegroundColor Yellow
 }
 
-# radare2 + 反编译插件（建议，非硬门禁）
+# radare2 + 源码分析插件（建议，非硬门禁）
 $r2check = Get-Command r2 -ErrorAction SilentlyContinue
 if ($r2check) {
     Write-Host "○ 第5步(建议): radare2 已安装" -ForegroundColor Cyan
     $r2pmList = & r2pm list 2>$null
     if ($r2pmList -match "r2dec|r2ghidra") {
-        Write-Host "○ 第5步(建议): 反编译插件已安装 (r2dec/r2ghidra)" -ForegroundColor Cyan
+        Write-Host "○ 第5步(建议): 源码分析插件已安装 (r2dec/r2ghidra)" -ForegroundColor Cyan
     } else {
-        Write-Host "○ 第5步(建议): 反编译插件未装，可 r2pm install r2dec（装不上不阻塞 perf/update）" -ForegroundColor Yellow
+        Write-Host "○ 第5步(建议): 源码分析插件未装，可 r2pm install r2dec（装不上不阻塞 perf/update）" -ForegroundColor Yellow
     }
 } else {
     Write-Host "○ 第5步(建议): radare2 未安装，可按上文安装（不阻塞 perf/update）" -ForegroundColor Yellow
@@ -1007,20 +1010,20 @@ uv run python -m scripts.main update \
 | 内容 | 本地路径 | 用途 | 用户提供时 |
 |------|----------|------|------------|
 | `.so` / `libs` | `--report_dir/.symbol_recovery_libs/<包名>/` | 符号恢复 | `--so_dir` / `HAPRAY_SO_DIR` → **不拉** |
-| **HAP 文件** | `--report_dir/.app_packages/<包名>/hap/*.hap` | root-cause 反编译输入 | `--app-packages-dir` / `HAPRAY_APP_PACKAGES_DIR` → **不拉** |
+| **HAP 文件** | `--report_dir/.app_packages/<包名>/hap/*.hap` | root-cause 源码解析输入 | `--app-packages-dir` / `HAPRAY_APP_PACKAGES_DIR` → **不拉** |
 | **安装目录树**（尽力） | `.app_packages/<包名>/bundle/` | 完整包资源 | 同上 |
-| 清单 | `.app_packages/<包名>/app_packages_manifest.json` | 记录路径、反编译/索引目录 | 同上 |
+| 清单 | `.app_packages/<包名>/app_packages_manifest.json` | 记录路径、源码解析/索引目录 | 同上 |
 
 **拉取/路径皆不可用时的行为**：无有效 SO → 跳过符号恢复；无 HAP → 自动关闭集成 root-cause（等价于本 run 加 `--no-root-cause` 效果，但无需用户手改参数）。
 
-可选反编译（配置后 update 自动执行）：
+可选源码解析（配置后 update 自动执行）：
 
 ```bash
 # 占位符：{hap} {output} {bundle} {out_dir}
-export HAPRAY_HAP_DECOMPILER_CMD='python /path/to/decompiler.py --input {hap} --output {output}'
+export HAPRAY_HAP_ANALYZER_CMD='python /path/to/analyzer.py --input {hap} --output {output}'
 ```
 
-反编译成功后索引位于 `.app_packages/<包名>/decompiled/index/`，root-cause 自动使用 **with_source** 模式。
+源码解析成功后索引位于 `.app_packages/<包名>/source-analysis/index/`，root-cause 自动使用 **with_source** 模式。
 
 **SO 目录获取方式**（优先级）：
 
@@ -1031,9 +1034,9 @@ export HAPRAY_HAP_DECOMPILER_CMD='python /path/to/decompiler.py --input {hap} --
 **root-cause 输入获取方式**（优先级；**自动识别源码 vs HAP**）：
 
 1. **用户本地路径（推荐）**：`--app-packages-dir` 或 `HAPRAY_APP_PACKAGES_DIR`
-   - 识别为 **源码/反编译树**（`*.ts`、`decompiled/`、`src/main/ets`）→ 直接 **with_source** 分析，**不**反编译 HAP
-   - 识别为 **仅 HAP**（`*.hap`）→ 走 HAP 反编译 + 索引（需 `HAPRAY_HAP_DECOMPILER_CMD`）
-2. **报告内已有**：`.app_packages/<包名>/decompiled/` 或 `hap/*.hap`
+   - 识别为 **源码/解析树**（`*.ts`、`source-analysis/`、`src/main/ets`）→ 直接 **with_source** 分析，**不**解析 HAP
+   - 识别为 **仅 HAP**（`*.hap`）→ 走 HAP 源码解析 + 索引（需 `HAPRAY_HAP_ANALYZER_CMD`）
+2. **报告内已有**：`.app_packages/<包名>/source-analysis/` 或 `hap/*.hap`
 3. **设备自动拉取（兜底）**：仅当未提供路径且设备在线时拉 HAP（拉取结果按 HAP 路径处理）
 
 #### 包名获取（必须通过设备查询，禁止臆造）
@@ -1159,7 +1162,7 @@ update 符号恢复按以下优先级处理（**默认不走在线 LLM**）：
 
 ### 自检执行规范（MUST）
 
-1. **进入源码轨时必须执行 §4 全部 7 步验证**（第 **5** 步硬门槛为 venv + `main.py --help`；radare2/反编译为建议项），不可假设「以前配置过」；**二进制轨**不做 §4，改做 **§5** 最小自检。
+1. **进入源码轨时必须执行 §4 全部 7 步验证**（第 **5** 步硬门槛为 venv + `main.py --help`；radare2/源码分析为建议项），不可假设「以前配置过」；**二进制轨**不做 §4，改做 **§5** 最小自检。
 2. **每步必须有验证证据**，在对话中输出验证结果（✓ 或 ✗）
 3. **任一必备步骤（1–4，以及第5步的 Python venv / `main.py --help`）为 ✗ 时，必须 STOP**，禁止继续执行 perf/update/static 等命令；**第5步中的 radare2 / r2dec / r2ghidra 缺失不算 ✗，不触发 STOP**  
 4. **可选步骤（第5步建议栈、第6–7步）为未就绪时，可降级继续**，但需告知用户哪些能力降级或不可用
@@ -1334,11 +1337,11 @@ wget --timeout=1800 --tries=3 -O "<本地保存路径>" "<完整直链URL>"
    - 安装依赖：`npm install`
    - 执行构建：`npm run build`
    - 验证：`ls ../../dist/tools/sa-cmd/` 目录存在且包含构建产物
-4. **安装 symbol_recovery（必选 venv；radare2/反编译为建议项，见 §4 第 5 步）**：
+4. **安装 symbol_recovery（必选 venv；radare2/源码分析为建议项，见 §4 第 5 步）**：
    - 进入 `<REPO_ROOT>/tools/symbol_recovery`
    - 创建虚拟环境：`uv venv .venv`
    - 安装依赖：`uv pip install --python ./.venv/bin/python -e .`（Linux/macOS）或 `uv pip install --python ./.venv/Scripts/python.exe -e .`（Windows）
-   - **安装 radare2 / 反编译插件（建议，装不上可跳过）**：
+   - **安装 radare2 / 源码分析插件（建议，装不上可跳过）**：
      - macOS：`brew install radare2` 后尝试 `r2pm install r2dec`（国内网络慢见上文第5步「国内网络」，**勿死等**）
      - Windows：`winget install radare2` 或 `choco install radare2` 后尝试 `r2pm install r2dec`
    - 验证（硬门禁仅前两行）：
@@ -1449,6 +1452,8 @@ Set-Location <RUNTIME_ROOT>
 | **双路径** | 同 §0；未完成 FAIL-CLOSED |
 | **真机 / gui-agent** | 先 §7 用例发现；有预设不要 GLM；仅用户明确要求 gui-agent 时检查 `GLM_API_KEY`，缺则 STOP（[智谱 API Key](https://bigmodel.cn/usercenter/proj-mgmt/apikeys)），禁止改 `perf --manual`。默认：`GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4`，`GLM_MODEL=autoglm-phone` |
 | **symbol-recovery** | 源码轨先 §4；按 `analysis/symbol-recovery-analysis.md` Step 0；默认主 Agent 一次闭环（§6.4–§6.6）；仅用户明确时才在线 LLM 或 `--no-llm` |
+
+> **符号恢复说明**：本工具使用 radare2 等二进制分析工具对 stripped `.so` 文件中的热点函数进行静态分析，结合 LLM 推断函数语义，属于**符号恢复**（Symbol Recovery）范畴，区别于传统的逆向工程操作。
 
 ### `hapray update` 集成（以代码为准，`update_action.py` + `perf_analyzer.py`）
 
