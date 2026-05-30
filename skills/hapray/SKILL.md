@@ -4,13 +4,14 @@ version: "1.5.4"
 license: Apache-2.0
 repository: "https://gitcode.com/SMAT/ArkAnalyzer-HapRay"
 description: |
-  【硬门禁·最先执行】path_prompt_done=false 时：禁止任何 Shell/终端命令（含 npm/uv/curl/hdc/perf/update/prepare/build）。唯一允许：在对话中发出 §0 必问模板并结束本轮，等用户下一条回复。用户已给路径或跳过/设备拉取后设 path_prompt_done=true 方可继续。
-  产出落盘当前工作区<PROJECT_ROOT>；无特殊说明禁止GitHub。HapRay：§0路径门禁→构建→perf→update。详见 SKILL.md。
+  【硬门禁·最先执行】path_prompt_done=false 时：禁止任何 Shell/终端命令（含 npm/uv/curl/hdc/perf/update/prepare/build）。唯一允许：在对话中按 §0 必问模板**依次询问**（第1项源码路径→第2项SO路径→汇总确认），等用户**逐项**回复。用户已给路径或跳过/设备拉取后设 path_prompt_done=true。
+  【第二硬门禁】path_prompt_done=true 后、skill_read_done=false 时：仍禁止 Shell；**必须先 Read 通读 SKILL.md 全文**（§0–§16），设 skill_read_done=true 后方可执行构建/下载/perf/update。
+  产出落盘当前工作区<PROJECT_ROOT>；无特殊说明禁止GitHub。HapRay：§0路径门禁→通读Skill→构建→perf→update。详见 SKILL.md。
 metadata:
   short-description: >-
-    BLOCK: path_prompt_done=false → no terminal commands at all; only post §0 path question and wait. Then hapray workflow.
+    BLOCK: path_prompt_done=false → no Shell, only §0 path questions. Then skill_read_done=false → must Read full SKILL.md before any Shell. Then hapray workflow.
   zh-Hans: >-
-    硬门禁：未 path_prompt_done 前禁止一切终端命令，只能对话发问 §0 并等待。之后才是构建/perf/update。
+    硬门禁1：未 path_prompt_done 前禁止 Shell，只能按序发问 §0。硬门禁2：路径确认后须 Read 通读 SKILL 全文（skill_read_done=true）才能构建/perf/update。禁止路径收齐后直接开跑。
   skill-paths:
     main: SKILL.md
     tool_result: hapray-tool-result.md
@@ -49,17 +50,19 @@ metadata:
 - 全部章节（§0–§16）及子章节
 - 所有命令模板、禁止项、失败速查表
 
+**执行前自检**（**每次**拟执行第一条 HapRay 相关 Shell 前必须全部通过）：
+```text
+[自检1] path_prompt_done == true ?  → 否则 STOP，先完成 §0 路径收集
+[自检2] skill_read_done == true ?   → 否则 STOP，先 Read 通读 SKILL.md 全文（§0–§16），再设 skill_read_done=true
+[自检3] 是否理解当前任务涉及的所有章节？→ 否则重新 Read 对应 §
+```
+
 **禁止行为**：
 - ❌ 仅阅读 TL;DR 或 §1 摘要后直接执行命令
+- ❌ **§0 路径收齐后直接 Shell**，跳过全文 Read（最常见失效）
 - ❌ 跳过 §0 硬门禁、§4 源码构建清单、§6 符号恢复细节等「看起来不相关」的章节
 - ❌ 凭记忆或片段印象臆造路径、参数、命令顺序
-- ❌ 将「曾经读过」视为「本次已读」——每次会话重新完整阅读
-
-**执行前自检**：
-```text
-[自检] 是否已完整阅读 §0–§16 全文？→ 否则 STOP，先 Read 完整文档
-[自检] 是否理解当前任务涉及的所有章节？→ 否则重新阅读对应 §
-```
+- ❌ 将「曾经读过」视为「本次已读」——**path_prompt_done 之后必须重新 Read 全文**
 
 ---
 
@@ -96,20 +99,27 @@ metadata:
 
 > ## ⛔ Agent 硬门禁（优先于本文其余一切，含 TL;DR / §11 / 命令模板）
 >
-> **会话变量**：`path_prompt_done` — 默认 **`false`**，仅当 §0 已满足「用户已答复」判定（见下）后设为 **`true`**。
+> **会话变量**：
+> - `path_prompt_done` — 默认 **`false`**，§0 路径收集完成并汇总确认后设为 **`true`**
+> - `skill_read_done` — 默认 **`false`**，**path_prompt_done 之后**用 Read 通读 SKILL.md 全文后设为 **`true`**
 >
-> | `path_prompt_done` | 允许 | 禁止 |
-> |--------------------|------|------|
-> | **`false`** | ① 向用户**在对话中**发出 §0「必问模板」全文；② 回答与路径无关的澄清问题 | **一切** `Shell`/`run_terminal_cmd`/`uv`/`npm`/`curl`/`hdc`/`git`/`python -m scripts.main`/`hapray`/`perf-testing`；含「先构建环境」「先查设备」「先下载二进制」 |
-> | **`true`** | 按 §1 起后续流程 | 仍禁止臆造路径；update 须带 §0 记录的 `--so_dir` / `--app-packages-dir` |
+> | 状态 | 允许 | 禁止 |
+> |------|------|------|
+> | **`path_prompt_done=false`** | ① 对话按 §0 **依次**问路径；② 路径无关澄清 | **一切** Shell（含构建/下载/hdc/perf/update） |
+> | **`path_prompt_done=true` 且 `skill_read_done=false`** | ① **Read** 通读 `SKILL.md` 全文；② 向用户说明「正在按 Skill 通读，读完再执行」 | **一切** Shell；**禁止**以「路径已齐/用户急/先下载 binary」为由跳过 Read |
+> | **两者均为 `true`** | 按 §1 起后续流程（§2 判轨 → §3/§4/§5 → §7 → update） | 仍禁止臆造路径；update 须带 §0 记录的 `--so_dir` / `--app-packages-dir` |
 >
-> **常见失效原因（必须避免）**：用户说「跑 perf / 分析性能」→ Agent 直接去 `npm run build`、`prepare`、`perf`；或把必问模板只写进报告、用户看不到。**正确做法**：第一条实质性回复 = **仅**必问模板（或确认用户同条消息已给路径），**本轮不得**附带任何终端命令；等用户**下一条**回复后再 `path_prompt_done=true` 并执行 CLI。
+> **常见失效原因（必须避免）**：
+> ① 用户说「跑 perf」→ Agent 直接去 `npm run build`（§0 未做）；
+> ② **路径收齐后直接去 `curl` 下 binary / `perf`**（**skill_read_done 仍为 false**）；
+> ③ 同条回复里既汇总路径又 Shell；④ 用户说「继续」但未给路径仍执行。
 >
-> **每次拟执行终端命令前**（即使用户已说「继续」），先自检：
+> **每次拟执行终端命令前**，先自检：
 >
 > ```text
-> [§0] path_prompt_done == true ?  → 否则 STOP，先发必问模板，不执行本命令
-> [§0] 本命令是否 hapray/perf/update/prepare/root-cause/hdc 采集链 ?  → 是且 path_prompt_done==false 则禁止
+> [§0] path_prompt_done == true ?  → 否则 STOP
+> [通读] skill_read_done == true ? → 否则 STOP，Read SKILL.md 全文后再执行
+> [§0] 本命令是否 hapray/perf/update/prepare/root-cause/hdc 采集链 ?  → 是且任一门禁未过则禁止
 > ```
 >
 > 细则全文：**§0**。
@@ -120,8 +130,8 @@ metadata:
 
 | 章节 | 内容 | 何时必读 |
 |------|------|----------|
-| **全局规范** | 完整阅读 Skill（§0）、产出落盘 `<PROJECT_ROOT>`；默认禁止 GitHub | **每次**会话开始，**执行任何命令前** |
-| **§0** | 双路径阻塞门禁（SO + root-cause 输入） | 会话内**第一次**跑任何 HapRay CLI 之前 |
+| **全局规范** | 完整阅读 Skill；产出落盘；禁止 GitHub | **path_prompt_done 后、第一条 Shell 前**（`SKILL_READ` 阶段） |
+| **§0** | 双路径阻塞门禁 | 会话内**第一次**跑 HapRay CLI 之前 |
 | **§1** | TL;DR + 执行状态机 | 总览与阶段检查点 |
 | **§2** | 路径术语 + 源码轨/二进制轨分叉 | 判定 `<REPO_ROOT>` / `<RUNTIME_ROOT>` |
 | **§3** | 识别系统 → 拼唯一直链 → `curl` 下载（不查发布页） | 获取运行环境 |
@@ -141,7 +151,7 @@ metadata:
 
 ## §0 会话开头阻塞门禁：双路径确认（最高优先级，默认 MUST）
 
-> **为何经常「拦不住」**：① 模型把 §0 当成「update 前再问」而先跑 `perf`/`prepare`/构建；② 同一条回复里既发问又 `Shell`；③ 用户说「继续/跑吧」但未给路径仍执行；④ `path_prompt_done` 未显式维护，默认当已完成。**本节 + 文首硬门禁表**要求：`path_prompt_done=false` 时**零终端命令**，先对话、后 CLI。
+> **为何经常「拦不住」**：① 模型把 §0 当成「update 前再问」而先跑 `perf`/`prepare`/构建；② **路径收齐后直接 Shell，跳过 Read 全文**；③ 同一条回复里既发问又 `Shell`；④ 用户说「继续/跑吧」但未给路径仍执行；⑤ `path_prompt_done` / `skill_read_done` 未显式维护。**本节 + 文首硬门禁表**要求：两门禁均过前**零终端命令**。
 
 ### 何时触发（满足任一即触发）
 
@@ -153,48 +163,97 @@ metadata:
 
 ### Agent 必须执行（不可省略）
 
-1. **设 `path_prompt_done=false`**（会话开始默认；若不确定则视为 false）。
-2. **STOP 一切终端**：在步骤 4 完成前，**禁止** Shell（含后台）。**特别禁止**以「先构建/先下载/先查 hdc」为由绕过 §0。
-3. **仅一轮对话输出**：在**面向用户的回复**中发出下方「必问模板」**全文**（可改 `<包名>`，须保留两项路径 + 跳过/设备拉取）。**禁止**与模板同条消息内执行任何工具调用。
-4. **等待用户下一条用户消息**（不是助手自己的「我继续」）：收到路径 / 跳过 / 设备拉取后 → 设 `path_prompt_done=true`，记录 `so_dir_user`、`app_packages_dir_user`。
-5. **之后**方可执行 §1 及以后步骤（构建、perf、update 等）。
+1. **设 `path_prompt_done=false`、`skill_read_done=false`**（会话开始默认；若不确定则视为 false）。
+2. **STOP 一切终端**：在步骤 6 完成前，**禁止** Shell（含后台）。**特别禁止**以「先构建/先下载/先查 hdc」为由绕过 §0。
+3. **依次对话收集路径**：在**面向用户的回复**中按 §0 模板**逐项**发问（源码路径 → SO 路径 → 汇总确认）。**禁止**与路径询问同条消息内执行任何工具调用。
+4. **等待用户逐项回复**：汇总确认且用户允许执行后 → 设 `path_prompt_done=true`，记录 `so_dir_user`、`app_packages_dir_user`。
+5. **通读 Skill（第二硬门禁，不可跳过）**：`path_prompt_done=true` 后、**第一条 Shell 之前**，必须用 **Read 工具通读** `skills/hapray/SKILL.md` **全文**（§0–§16；文件大可分段 Read，但须覆盖全文）。读完后设 `skill_read_done=true`，并在轨迹注明 `skill_read_done=true`、`skill_read_path=...`。
+6. **之后**方可执行 §1 及以后步骤（构建、perf、update 等）。
+
+> **`path_prompt_done=true` ≠ 可立即 Shell**。路径收齐后下一步永远是 **Read 全文**，不是下载 binary / 构建 / perf。
 
 ### 视为「用户已答复」（满足其一即可 `path_prompt_done=true`）
 
 | 用户表述 | Agent 记录 |
 |----------|------------|
-| 给出 **SO 目录** 绝对/相对路径 | `so_dir_user=<路径>`，update 时加 `--so_dir` |
-| 给出 **root-cause 输入** 路径（源码树或 HAP 目录） | `app_packages_dir_user=<路径>`，update 时加 `--app-packages-dir` |
-| 「跳过 SO」「不要符号恢复」 | 不填 SO；update 可加 `--symbol-recovery-no-llm`（须用户明确） |
-| 「跳过 root-cause」「不要根因」 | `--no-root-cause` |
-| 「都从手机拉」「设备拉取」 | 两路径留空，允许后续 hdc 兜底 |
+| 给出 **源码路径** 绝对/相对路径（含 *.ts、*.ets） | `app_packages_dir_user=<路径>`，update 时加 `--app-packages-dir` |
+| 第 1 项回复「跳过」/「skip」源码 | 标记 `--no-root-cause`，继续询问第 2 项 |
+| 给出 **SO 路径** 绝对/相对路径（含 *.so） | `so_dir_user=<路径>`，update 时加 `--so_dir` |
+| 第 2 项回复「跳过」/「skip」SO | 不填 SO；update 可加 `--symbol-recovery-no-llm`（须用户明确） |
+| 「都从手机拉」「设备拉取」「全部从设备拉取」 | 两路径均标记为「从设备拉取」，允许后续 hdc 兜底 |
 | 消息中已含 `--so_dir` / `--app-packages-dir` 或 `HAPRAY_SO_DIR` / `HAPRAY_APP_PACKAGES_DIR` | 同条消息可 `path_prompt_done=true`；**仍建议**复述路径并确认；**同条消息仍禁止**附带 Shell |
 | 用户仅说「继续」「跑吧」「开始」但**从未**给路径或跳过/拉取 | **不算**答复；**保持** `path_prompt_done=false`，**再次**发必问模板 |
+
+#### 分步询问流程状态
+
+```text
+path_prompt_state: 'waiting_source' → 'waiting_so' → 'waiting_confirm' → 'done'
+```
+
+- `waiting_source`：已发送第 1 项询问（源码路径），等待用户回复
+- `waiting_so`：收到源码路径回复，已发送第 2 项询问（SO 路径），等待用户回复
+- `waiting_confirm`：收到 SO 路径回复，已发送汇总确认，等待用户最终确认
+- `done`：用户确认或明确允许执行 → `path_prompt_done=true`
 
 ### 必问模板（须在对话中发给用户，禁止只写进报告）
 
 ```text
-在开始跑 HapRay（perf / update / 符号恢复 / 空刷根因）之前，需要先确认两个本地目录（从手机拉取 SO/HAP 经常失败，建议提前备好）：
 
-1) SO 目录（符号恢复用，目录内应有 *.so）
-   例：D:/artifacts/<应用名>/libs/arm64
-   → 回复路径，或回复「跳过 SO」
+**第 1/2 项：源码路径**
+接受含源码的目录：*.ts、*.ets 等
+→ 回复具体路径，或回复「跳过」
 
-2) root-cause 输入目录（工具会自动识别，二选一即可）
-   · 源码分析树（推荐）：含 *.ts 或 source-analysis/index/
-   · 仅 HAP 包：含 *.hap 的文件夹
-   例：D:/artifacts/<应用名>/source-analysis/ 或 D:/artifacts/<应用名>/hap/
-   → 回复路径，或回复「跳过 root-cause」
+---
 
-也可回复「全部从设备拉取」尝试 hdc（可能失败则自动跳过对应步骤）。
+收到第 1 项后，我会继续询问第 2 项。
+```
 
-请直接回复上述路径（可只给其中一项）。收到后我再开始执行命令。
+#### 第 2 项询问模板（收到第 1 项回复后使用）
+
+```text
+**第 2/2 项：SO 路径**
+接受含应用 *.so 文件的目录
+示例：<your path>/libs/arm64/
+→ 回复具体路径，或回复「跳过」
+
+---
+
+两项收集完毕。汇总确认：
+- 源码路径：<路径或「跳过」>
+- SO 路径：<路径或「跳过」>
+
+确认无误后，我将通读 SKILL 全文，再开始执行。
+```
+
+#### 用户回复处理规则
+
+| 用户回复 | 处理方式 |
+|----------|----------|
+| 具体路径 | 验证路径存在后继续下一项 |
+| 「跳过」/「skip」 | 标记该步骤为跳过，继续下一项 |
+| 「都从设备拉取」/「全部从设备拉取」 | 两项均标记为「从设备拉取」，后续尝试 hdc |
+
+#### 路径确认后（仍禁止 Shell，须先通读 Skill）
+
+两项都收集完成且用户确认后，**禁止**同条消息内执行 Shell。须：
+
+1. 输出路径汇总；
+2. **下一轮**先用 Read 通读 `SKILL.md` 全文 → `skill_read_done=true`；
+3. 再进入 §11 主流程。
+
+```text
+路径确认汇总：
+✓ 源码路径：<具体路径 或 跳过/设备拉取>
+✓ SO 路径：<具体路径 或 跳过/设备拉取>
+
+接下来我将按 Skill 要求通读全文，然后开始执行 HapRay 流程…
 ```
 
 ### 禁止行为（§0 违反 = 流程失败，须中止并道歉）
 
 - ❌ `path_prompt_done=false` 时执行**任何** Shell（含 `npm install`、`uv sync`、`curl` 下载、`hdc`、`prepare`、`perf`、`update`）
-- ❌ 同一条 assistant 回复里：既发必问模板又执行工具
+- ❌ **`path_prompt_done=true` 但 `skill_read_done=false` 时执行 Shell**（路径收齐后直接下载/构建/perf）
+- ❌ 同一条 assistant 回复里：路径汇总确认 + Shell / Read + Shell 混在同一条（路径确认轮应零 Shell；Read 轮应零 Shell 直到读完）
 - ❌ 未在**用户可见对话**中发必问模板就跑 CLI
 - ❌ 用户**下一条**消息之前臆造路径、默认设备拉取并开跑
 - ❌ 用户只说「继续」但未给路径 → 仍执行后续任务
@@ -220,29 +279,31 @@ metadata:
 
 | 步 | 动作 | 详见 |
 |:--:|------|------|
-| 0 | **§0** 双路径必问并**等待用户下一条回复**；此前禁止任何 CLI | §0 |
+| 0 | **§0** 双路径必问并**等待用户逐项回复**；此前禁止任何 CLI | §0 |
+| 0.5 | **`path_prompt_done=true` 后 Read 通读 SKILL 全文** → `skill_read_done=true`；此前仍禁止 Shell | 全局规范 §0 |
 | 1 | 二选一运行轨：源码轨 → §4 七步门禁；二进制轨 → §5 最小自检 | §2、§4、§5 |
 | 2 | 无现成环境时：§3 识别系统后拼直链 `curl` 下载，失败则 §4 源码回退 | §3 |
 | 3 | 真机采集：预设 `perf` → 无则写脚本 + **`prepare` 通过** → `perf`；仅用户明确要求才 `gui-agent` | §7 |
 | 4 | 采集后**必须** `update`（§6：符号恢复默认 Agent + 默认 root-cause） | §6 |
 | 5 | 解析 `hapray-tool-result.json` → 子 Skill（§9）→ 独立报告落盘 | §9、§13 |
 
-**不可省略的硬规则**（细则见 §6、§7、§10）：**`path_prompt_done=true` 前零 Shell**；`perf` 后必 `update`；禁止无故 `--symbol-recovery-no-llm`；用户已给 SO/HAP 路径则 update **禁止 hdc 拉取**；无预设脚本时禁止默认 `gui-agent` / `perf --manual`。
+**不可省略的硬规则**（细则见 §6、§7、§10）：**`path_prompt_done=true` 前零 Shell**；**`skill_read_done=true` 前零 Shell**；`perf` 后必 `update`；禁止无故 `--symbol-recovery-no-llm`；用户已给 SO/HAP 路径则 update **禁止 hdc 拉取**；无预设脚本时禁止默认 `gui-agent` / `perf --manual`。
 
 ### 执行状态机与检查点（可恢复）
 
-每个阶段输出：`状态(成功/失败/降级)`、`path_prompt_done`、`证据`、`下一动作`。
+每个阶段输出：`状态(成功/失败/降级)`、`path_prompt_done`、`skill_read_done`、`证据`、`下一动作`。
 
 | 状态 | 含义 | 进入条件 | **禁止**（未满足进入条件时） |
 |------|------|----------|------------------------------|
-| `PATH_PROMPT` | §0：对话发模板，**等待用户下一条** | 会话开始或 `path_prompt_done=false` | **一切** Shell；`DISCOVER`/`EXECUTE`/构建/下载/采集 |
-| `DISCOVER` | 路径判定、§4/§5 自检、`hdc` 检查 | **`path_prompt_done=true`** | `perf`/`update`/`prepare` |
+| `PATH_PROMPT` | §0：逐项问路径，**等待用户回复** | 会话开始或 `path_prompt_done=false` | **一切** Shell |
+| `SKILL_READ` | Read 通读 `SKILL.md` 全文 | **`path_prompt_done=true`** 且 `skill_read_done=false` | **一切** Shell；**禁止**跳过 Read 进 DISCOVER |
+| `DISCOVER` | 路径判定、§4/§5 自检、`hdc` 检查 | **`skill_read_done=true`** | `perf`/`update`/`prepare` |
 | `EXECUTE` | `prepare`/`perf`/`gui-agent`/`update` 等 | `DISCOVER` 通过 | — |
 | `PARSE` | 读 `hapray-tool-result.json` | `EXECUTE` 完成 | — |
 | `ANALYZE` | 子 Skill | `PARSE` 完成 | — |
 | `REPORT` | 独立 `.md` | — | — |
 
-**状态机铁律**：`PATH_PROMPT` 未完成时，不得以「用户急 / 先跑起来 / 环境要先装」为由进入 `DISCOVER` 或 `EXECUTE`。
+**状态机铁律**：`PATH_PROMPT` 或 `SKILL_READ` 未完成时，不得以「用户急 / 路径已齐 / 先跑起来 / 环境要先装」为由进入 `DISCOVER` 或 `EXECUTE`。
 
 ---
 
@@ -563,12 +624,14 @@ uv run python -m scripts.main perf \
 
 ### 6.1 双路径参数（§0 确认后写入 update）
 
-下列路径应在 **§0 必问模板** 中向用户索取（**不要**等到 perf 跑完才在内心「补问」而不发消息）：
+下列路径应在 **§0 必问模板** 中按序向用户索取（先问源码路径，再问 SO 路径，最后汇总确认）：
 
-| 用途 | 用户需提供 | CLI | 环境变量 |
-|------|------------|-----|----------|
-| 符号恢复（strip `.so`） | 含 `*.so` 的文件夹（如 `libs/arm64`） | `--so_dir <路径>` | `HAPRAY_SO_DIR` |
-| 空刷 root-cause | **源码分析**（`*.ts` / `source-analysis/` / `src/main/ets`）或 **仅 HAP**（`*.hap`） | `--app-packages-dir <路径>` | `HAPRAY_APP_PACKAGES_DIR` |
+| 顺序 | 用途 | 用户需提供 | CLI | 环境变量 |
+|:--:|------|------------|-----|----------|
+| 1 | 空刷 root-cause | **源码分析**目录（含 `*.ts`、`*.ets`）或 **仅 HAP**（`*.hap`） | `--app-packages-dir <路径>` | `HAPRAY_APP_PACKAGES_DIR` |
+| 2 | 符号恢复（strip `.so`） | 含 `*.so` 的文件夹（如 `libs/arm64`） | `--so_dir <路径>` | `HAPRAY_SO_DIR` |
+
+**询问流程**：第 1 项（源码路径）→ 等待回复 → 第 2 项（SO 路径）→ 等待回复 → 汇总确认 → 开始执行。
 
 ### 6.2 路径决策顺序（与 `update_action.py` 一致）
 
@@ -1229,13 +1292,13 @@ Set-Location <RUNTIME_ROOT>
 
 ### 3.1 二进制下载（识别系统 → 拼直链 → 下载）
 
-> **核心原则**：Release **只有固定命名**的制品（见下表）。Agent **禁止**打开 GitCode `.../releases` 列表页、Release 详情页、`releases/latest`，也**禁止**为「确认附件名」去网页或 API 查询。流程只能是：**判定本机平台 → 查表得到唯一 `asset_name` → 拼 URL → `curl -fL` 下载**。
+> **核心原则**：**禁止**访问 GitCode API、Release 页面、`releases/latest` 或任何版本查询接口。Release 文件名是**固定命名**（见下表），直接使用直链下载。
 
-#### 步骤（按序执行，禁止跳步或改去「查发布页」）
+#### 步骤（直接使用直链，禁止版本查询）
 
 | 步 | 动作 |
 |:--:|------|
-| 1 | **识别平台**（见 §3.1.1），得到唯一一行 `asset_name` |
+| 1 | **识别平台**（见 §3.1.1），得到唯一 `asset_name` |
 | 2 | **确定 `tag`**：用户整链 URL 中的 tag → 否则 `HAPRAY_RELEASE_TAG` → 否则 Skill YAML `version` → `v{version}`（如 `1.5.4` → `v1.5.4`） |
 | 3 | **确定 `version`**：`tag` 去掉前缀 `v`（`v1.5.4` → `1.5.4`），代入 `asset_name` 模板 |
 | 4 | **拼直链**：用户已给整链则直接用；否则 `{BASE}releases/download/{tag}/{asset_name}` |
@@ -1250,7 +1313,7 @@ Set-Location <RUNTIME_ROOT>
 | 2 | 环境变量 **`HAPRAY_RELEASES_DOWNLOAD_BASE`**（镜像根，格式同官方） |
 | 3 | 默认 **`https://gitcode.com/SMAT/ArkAnalyzer-HapRay/`** |
 
-下载 404/失败且已设 `HAPRAY_RELEASES_DOWNLOAD_BASE` 时：可用镜像 **BASE 重拼同一 URL 再下载一次**；仍失败则 **§3.2**，**禁止**转去发布页核对附件。
+下载 404/失败且已设 `HAPRAY_RELEASES_DOWNLOAD_BASE` 时：可用镜像 **BASE 重拼同一 URL 再下载一次**；仍失败则 **§3.2**，**禁止**转去发布页核对版本或附件。
 
 #### 3.1.1 平台 → 唯一 `asset_name`（查表即用，禁止多候选探测）
 
@@ -1426,7 +1489,8 @@ Set-Location <RUNTIME_ROOT>
 
 | 主题 | 要求 | 权威章节 |
 |------|------|----------|
-| 双路径 | `path_prompt_done=false` → **零 Shell**；首条实质性回复仅 §0 模板（或同条确认路径但**仍无 Shell**）；「继续」不算路径 | §0、文首硬门禁 |
+| 双路径 | `path_prompt_done=false` → **零 Shell**；依次问路径→汇总确认 | §0、文首硬门禁 |
+| 通读 Skill | `skill_read_done=false` → **零 Shell**；须 Read `SKILL.md` 全文后再执行；**禁止路径收齐后直接开跑** | 全局规范 §0 |
 | 真机采集 | 预设 → `perf`；无则本应用脚本 + **`prepare` 通过** → `perf`；自写须 `start_app` 开头、采集中勿退应用、结束靠 `teardown` 退出；禁止冷启动专测；禁止抄他案、未 prepare 就 perf、默认 gui-agent/manual | §7 |
 | 源码门禁 | 源码轨须完成 §4 七步（含 venv + `main.py --help`）；radare2/r2dec **不**算硬门禁 | §4 |
 | update | `perf` 后必须 `update`；禁止无故 `--symbol-recovery-no-llm` | §6 |
@@ -1449,7 +1513,8 @@ Set-Location <RUNTIME_ROOT>
 
 | 门禁 | 要点 |
 |------|------|
-| **双路径** | 同 §0；未完成 FAIL-CLOSED |
+| **双路径** | 同 §0；依次询问；未完成 FAIL-CLOSED |
+| **通读 Skill** | 同全局规范；`path_prompt_done` 后必须 Read 全文；未完成 FAIL-CLOSED |
 | **真机 / gui-agent** | 先 §7 用例发现；有预设不要 GLM；仅用户明确要求 gui-agent 时检查 `GLM_API_KEY`，缺则 STOP（[智谱 API Key](https://bigmodel.cn/usercenter/proj-mgmt/apikeys)），禁止改 `perf --manual`。默认：`GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4`，`GLM_MODEL=autoglm-phone` |
 | **symbol-recovery** | 源码轨先 §4；按 `analysis/symbol-recovery-analysis.md` Step 0；默认主 Agent 一次闭环（§6.4–§6.6）；仅用户明确时才在线 LLM 或 `--no-llm` |
 
@@ -1473,9 +1538,10 @@ Set-Location <RUNTIME_ROOT>
 
 ## §11 执行主流程（统一版）
 
-> **§11 前置**：下列步骤 1–8 **全部**要求 `path_prompt_done=true`。步骤 0 未完成时**禁止**执行步骤 1 及以后（含构建、下载、`hdc`）。
+> **§11 前置**：步骤 1–8 要求 **`path_prompt_done=true` 且 `skill_read_done=true`**。步骤 0 / 0.5 未完成时**禁止**执行步骤 1 及以后（含构建、下载、`hdc`）。
 
-0. **§0（`PATH_PROMPT`）**：`path_prompt_done=false` → 仅对话发必问模板，**本轮零 Shell** → 用户下一条消息 → `path_prompt_done=true`，记录路径。  
+0. **§0（`PATH_PROMPT`）**：`path_prompt_done=false` → 逐项问路径，**零 Shell** → 用户确认 → `path_prompt_done=true`，记录路径。  
+0.5. **通读 Skill（`SKILL_READ`）**：`skill_read_done=false` → **Read** `skills/hapray/SKILL.md` 全文（§0–§16）→ `skill_read_done=true`；此步仍 **零 Shell**。  
 1. 定位 `<RUNTIME_ROOT>`、`<REPO_ROOT>` 与 `<PROJECT_ROOT>`。**若确认为源码仓库**：必须已实质完成 **§4**；未完成则 **STOP**。  
 2. 真机场景先检查 `hdc list targets`（或 `hdc version`）。  
 3. **COLLECT + 采集**：预设 → `perf`；无预设 → 写脚本 → **`prepare` 试跑通过** → `perf`；仅用户要求时 `gui-agent`。  
@@ -1509,11 +1575,11 @@ Set-Location <RUNTIME_ROOT>
 
 ## §14 命令模板（最小可用）
 
-> ⛔ **`path_prompt_done=false` 时禁止复制执行本节任何命令。** 须先完成 §0 并在对话中收到用户路径回复。
+> ⛔ **`path_prompt_done=false` 或 `skill_read_done=false` 时禁止复制执行本节任何命令。** 须先完成 §0 路径确认 **且** Read 通读 SKILL 全文。
 
 ### 完整工作流（采集 + update，推荐）
 
-> **§0**：`path_prompt_done=true` 后方可执行下方命令。  
+> **§0 + 通读**：`path_prompt_done=true` 且 `skill_read_done=true` 后方可执行下方命令。  
 > **采集**：无预设时须 **按本应用编写** `PerfLoad_*`，**`prepare` 完整试跑通过** 后再 perf。
 
 ```bash
@@ -1586,7 +1652,7 @@ cd <RUNTIME_ROOT>
 
 - **禁止产出乱放**：报告、脚本、下载物、探测结果写到与 **`<PROJECT_ROOT>`** 无关的目录（如随意 `/tmp`、桌面、仓库外路径）。  
 - **禁止默认使用 GitHub**：无用户明确要求时不得 `git clone`/下载/文档引用依赖 `github.com`；用 GitCode 与 §3 直链。  
-- **禁止跳过 §0**：`path_prompt_done=false` 时任何 Shell；未在**对话**中发必问模板；同条消息发问+跑命令；用户「继续」但未给路径仍执行 `perf`/`update`/构建。  
+- **禁止跳过 §0 / 通读**：`path_prompt_done=false` 或 `skill_read_done=false` 时任何 Shell；路径收齐后直接下载/构建/perf；未 Read 全文就跑 CLI  
 - **禁止错误的采集兜底**：无预设时默认 `gui-agent`；**未 `prepare` 通过就 `perf`**；息屏/卡住/逐步操作失败仍算过；照搬他案业务步骤；无脚本时 `perf --manual`；编造未落盘用例名。  
 - **禁止自写脚本采集中途退应用**：无预设时不得在 `execute_performance_step` 内 `stop_app`/Home/切包；须 `process()` 首步 `start_app`；勿做冷启动专测（除非用户明确要求）。  
 - 禁止只给通用建议而不执行 CLI（除非用户明确声明不跑工具）。  
