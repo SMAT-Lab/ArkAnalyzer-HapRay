@@ -26,6 +26,15 @@ from typing import Optional
 
 from hapray import VERSION
 from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.common.device_app_packages import (
+    app_packages_ready_for_root_cause,
+    bundle_packages_dir,
+    download_app_packages_for_bundle,
+    prepare_app_packages_for_report,
+    resolve_user_app_packages_source,
+)
+from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
+from hapray.core.common.root_cause_integration import run_root_cause_for_case
 from hapray.core.common.symbol_recovery_bridge import (
     ENV_SO_DIR,
     ENV_SYMBOL_RECOVERY_EXE,
@@ -35,8 +44,6 @@ from hapray.core.common.symbol_recovery_bridge import (
     check_symbol_recovery_llm_ready,
     default_symbol_recovery_output_dir,
     embed_symbol_recovery_report_into_hiperf_html,
-    symbol_recovery_report_name,
-    symbol_recovery_replaced_html_name,
     llm_env_ready_for_symbol_recovery,
     maybe_generate_symbol_recovery_html_for_step,
     maybe_run_symbol_recovery_for_step,
@@ -49,17 +56,10 @@ from hapray.core.common.symbol_recovery_bridge import (
     resolve_symbol_recovery_python,
     resolve_symbol_recovery_root,
     run_symbol_recovery_agent_step2,
+    symbol_recovery_replaced_html_name,
+    symbol_recovery_report_name,
     try_load_dotenv_for_llm,
 )
-from hapray.core.common.device_app_packages import (
-    app_packages_ready_for_root_cause,
-    bundle_packages_dir,
-    download_app_packages_for_bundle,
-    prepare_app_packages_for_report,
-    resolve_user_app_packages_source,
-)
-from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
-from hapray.core.common.root_cause_integration import run_root_cause_for_case
 from hapray.core.config.config import Config
 from hapray.core.report import ReportGenerator, create_perf_summary_excel
 from hapray.ext.hapflow.runner import run_hapflow_pipeline
@@ -687,11 +687,7 @@ class UpdateAction:
         )
         env_agent_mode = UpdateAction._parse_bool_env('HAPRAY_SYMBOL_RECOVERY_AGENT_MODE', default=False)
         # update 默认 Agent 模式；仅显式 --symbol-recovery-llm-mode / HAPRAY_SYMBOL_RECOVERY_LLM_MODE 时先走在线 LLM
-        agent_mode = bool(
-            parsed_args.symbol_recovery_agent_mode
-            or env_agent_mode
-            or not use_llm_mode
-        )
+        agent_mode = bool(parsed_args.symbol_recovery_agent_mode or env_agent_mode or not use_llm_mode)
         llm_probe_ok = True
         if use_llm_mode and llm_ready and not agent_mode:
             sr_root_probe = resolve_symbol_recovery_root()
@@ -706,9 +702,7 @@ class UpdateAction:
                 agent_mode = True
         elif use_llm_mode and not llm_ready:
             agent_mode = True
-            logging.info(
-                '已请求 LLM 模式但未配置可用 LLM（缺少 API/base URL），本 run 改用 Agent 模式完成符号恢复。'
-            )
+            logging.info('已请求 LLM 模式但未配置可用 LLM（缺少 API/base URL），本 run 改用 Agent 模式完成符号恢复。')
         elif not use_llm_mode and not parsed_args.symbol_recovery_no_llm and effective_so:
             logging.info(
                 '符号恢复默认使用 Agent 模式（导出任务 + step2/环境命令推断）；'
@@ -969,10 +963,7 @@ class UpdateAction:
             return False
 
         # 功能描述不能是默认值
-        if not functionality or str(functionality) in ('未知', 'null', 'None', ''):
-            return False
-
-        return True
+        return not (not functionality or str(functionality) in ('未知', 'null', 'None', ''))
 
     @staticmethod
     def _cleanup_symbol_recovery_error_outputs(
@@ -1034,12 +1025,15 @@ class UpdateAction:
 
                             if valid_count == 0:
                                 should_delete = True
-                                invalid_reason = 'all results are invalid (null function names or unknown functionality)'
+                                invalid_reason = (
+                                    'all results are invalid (null function names or unknown functionality)'
+                                )
                             elif valid_count < len(data):
                                 # 部分无效，记录日志但仍保留（由后续处理决定）
                                 logging.debug(
                                     'Results JSON has %d/%d valid entries, keeping for partial recovery',
-                                    valid_count, len(data)
+                                    valid_count,
+                                    len(data),
                                 )
 
                     else:
@@ -1082,7 +1076,9 @@ class UpdateAction:
                     # 如果包含占位符或所有 function_name 都是 null，删除
                     if has_placeholder or (isinstance(data, list) and len(data) > 0 and all_null):
                         should_delete = True
-                        logging.info('Cleaned up error external results JSON with placeholders: %s', external_results_json)
+                        logging.info(
+                            'Cleaned up error external results JSON with placeholders: %s', external_results_json
+                        )
 
                 except (json.JSONDecodeError, OSError):
                     should_delete = True
@@ -1361,9 +1357,7 @@ class UpdateAction:
                 import_llm_results=import_results,
             )
             if ok and UpdateAction._check_symbol_recovery_results_valid(case_dir, step_name):
-                ok = UpdateAction._finalize_symbol_recovery_step(
-                    case_dir, step_name, perf_db, top_n, stat_method
-                )
+                ok = UpdateAction._finalize_symbol_recovery_step(case_dir, step_name, perf_db, top_n, stat_method)
             return ok
 
         ok = maybe_run_symbol_recovery_for_step(
@@ -1410,9 +1404,7 @@ class UpdateAction:
         if not UpdateAction._check_symbol_recovery_results_valid(case_dir, step_name):
             logging.warning('Agent mode: invalid replacements for %s/%s', case_dir, step_name)
             return False
-        return UpdateAction._finalize_symbol_recovery_step(
-            case_dir, step_name, perf_db, top_n, stat_method
-        )
+        return UpdateAction._finalize_symbol_recovery_step(case_dir, step_name, perf_db, top_n, stat_method)
 
     @staticmethod
     def _run_symbol_recovery_for_case(
@@ -1463,9 +1455,7 @@ class UpdateAction:
                         extra_args=None,
                         prompt_only=False,
                     )
-                    if llm_success and UpdateAction._check_symbol_recovery_results_valid(
-                        str(case_dir), step_name
-                    ):
+                    if llm_success and UpdateAction._check_symbol_recovery_results_valid(str(case_dir), step_name):
                         if UpdateAction._finalize_symbol_recovery_step(
                             str(case_dir), step_name, perf_db, top_n, stat_method
                         ):

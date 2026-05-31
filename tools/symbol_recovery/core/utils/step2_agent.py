@@ -11,6 +11,11 @@ from glob import glob
 from pathlib import Path
 from typing import Optional, TextIO
 
+from dotenv import load_dotenv
+from openai import OpenAI
+
+from core.utils.config import config
+
 _STDIO_REPLACE_ERRORS_APPLIED = False
 
 
@@ -32,7 +37,9 @@ def _ensure_stdio_replace_errors() -> None:
     _STDIO_REPLACE_ERRORS_APPLIED = True
 
 
-def _step2_print(*args: object, sep: str = ' ', end: str = '\n', flush: bool = False, file: Optional[TextIO] = None) -> None:
+def _step2_print(
+    *args: object, sep: str = ' ', end: str = '\n', flush: bool = False, file: Optional[TextIO] = None
+) -> None:
     """Step2 专用 stdout/stderr 输出：优先让控制台用 replace，失败则按字节写入。"""
     _ensure_stdio_replace_errors()
     out = file if file is not None else sys.stdout
@@ -105,10 +112,6 @@ def merge_symbol_recovery_agent_results(output_path: Path, result_files: list[st
 
 
 def _load_dotenv_sr_root(sr_root: Optional[Path]) -> None:
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
     if sr_root is not None:
         load_dotenv(sr_root / '.env', override=False)
 
@@ -116,12 +119,12 @@ def _load_dotenv_sr_root(sr_root: Optional[Path]) -> None:
 def _extract_json(text: str) -> dict:
     text = text.strip()
     if '```' in text:
-        for part in text.split('```'):
-            part = part.strip()
-            if part.startswith('json'):
-                part = part[4:].strip()
+        for segment in text.split('```'):
+            block = segment.strip()
+            if block.startswith('json'):
+                block = block[4:].strip()
             try:
-                return json.loads(part)
+                return json.loads(block)
             except Exception:
                 continue
     try:
@@ -153,13 +156,6 @@ def run_openai_symbol_recovery_tasks(
         if root_s not in sys.path:
             sys.path.insert(0, root_s)
 
-    try:
-        from openai import OpenAI
-    except ImportError as e:
-        raise RuntimeError('未找到 openai 库，请先安装：uv pip install openai') from e
-
-    from core.utils.config import config
-
     tasks_path = Path(tasks_path)
     output_path = Path(output_path)
     if not tasks_path.exists():
@@ -184,7 +180,9 @@ def run_openai_symbol_recovery_tasks(
     timeout = llm_cfg.get('timeout', 60)
 
     if not api_key:
-        raise RuntimeError('未找到 API Key（.env 或环境变量）。若要用对话 Agent 推断，请使用 split/merge 或 HAPRAY_SYMBOL_RECOVERY_AGENT_CMD。')
+        raise RuntimeError(
+            '未找到 API Key（.env 或环境变量）。若要用对话 Agent 推断，请使用 split/merge 或 HAPRAY_SYMBOL_RECOVERY_AGENT_CMD。'
+        )
 
     client = OpenAI(api_key=api_key, base_url=base_url)
     success = 0
@@ -254,7 +252,7 @@ def cmd_split(args: Namespace) -> None:
     _step2_print('下一步（在 Cursor 对话中交给 Agent，使用当前对话模型，而非 .env）：')
     _step2_print(f'  - 依次读取 {out_dir}/batch_*_of_*.json（任务切片，勿改 function_id）')
     _step2_print('  - 对每条任务按 prompt / expected_schema 推断，收集为 JSON 数组')
-    _step2_print(f'  - 将对应批的结果写入同目录，例如 batch_001_of_004_results.json（与输入批编号一致）')
+    _step2_print('  - 将对应批的结果写入同目录，例如 batch_001_of_004_results.json（与输入批编号一致）')
     _step2_print()
     _step2_print('合并命令示例（在 symbol_recovery 根目录，勿使用 scripts/run_step2.py）：')
     _step2_print(

@@ -33,7 +33,7 @@
 4. 用 `file_id` 去 `perf_files` 取 `path` / `symbol`，补出 `/proc/.../entry.hap`、`.so`、业务符号等信息。
 5. 用 `perf_thread` / `perf_report` 还原线程和事件类型上下文。
 
-这条链路正是后面要做的：**从空刷帧 -> 对齐 perf 采样 -> 回捞 `/proc` 用户态 file/symbol -> 缩小到反编译源码/控件范围。**
+这条链路正是后面要做的：**从空刷帧 -> 对齐 perf 采样 -> 回捞 `/proc` 用户态 file/symbol -> 缩小到应用源码/控件范围。**
 
 ## 3. 关键表说明
 
@@ -288,5 +288,5 @@ where B.process_id = 7863 and A.thread_id = B.thread_id;
 1. 从 `frame_slice` 把空刷帧落到具体 app 线程。
 2. 从 `perf_sample.timestamp_trace` 对齐 perf 采样。
 3. 从 `perf_callchain + perf_files` 回捞 `/proc` 用户态文件和符号。
-4. 把 `/proc/.../entry.hap`、业务 `.so`、ArkTS 符号映射到反编译源码范围。
+4. 把 `/proc/.../entry.hap`、业务 `.so`、ArkTS 符号映射到应用源码范围。
 5. 最终把输出从“泛化页面猜测”收敛到“更短的可疑源码/控件列表”。

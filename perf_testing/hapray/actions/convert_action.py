@@ -15,10 +15,10 @@ limitations under the License.
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 from hapray.core.common.action_return import ActionExecuteReturn
-
 
 # Mapping from Agent action names to HapRay script descriptions
 ACTION_DESCRIPTIONS = {
@@ -96,11 +96,11 @@ def _swipe_direction_from_step(step: dict) -> str:
         dx = end[0] - start[0]
         if dy < -100:
             return '向上'
-        elif dy > 100:
+        if dy > 100:
             return '向下'
-        elif dx < -100:
+        if dx < -100:
             return '向左'
-        elif dx > 100:
+        if dx > 100:
             return '向右'
     return '自定义'
 
@@ -114,11 +114,10 @@ def _describe_single_step(step: dict, app_name: str, index: int) -> str:
         text = step['params'].get('text', '')
         short = text[:10] + '...' if len(text) > 10 else text
         return f'step{index}-{app_name}-{action_cn}-{short}'
-    elif action == 'Swipe':
+    if action == 'Swipe':
         direction = _swipe_direction_from_step(step)
         return f'step{index}-{app_name}-{action_cn}-{direction}'
-    else:
-        return f'step{index}-{app_name}-{action_cn}'
+    return f'step{index}-{app_name}-{action_cn}'
 
 
 def _action_to_code(step: dict, src_w: int, src_h: int, indent: int = 12) -> str:
@@ -131,28 +130,28 @@ def _action_to_code(step: dict, src_w: int, src_h: int, indent: int = 12) -> str
         app = params.get('app', '')
         return f'{prefix}# 启动应用: {app}（已在前置准备中完成）'
 
-    elif action in ('Tap',):
+    if action in ('Tap',):
         element = params.get('element')
         if element and len(element) >= 2:
             x, y = convert_coordinates(element, src_w, src_h)
             return f'{prefix}self.touch_by_coordinates({x}, {y}, 2)'
         return f'{prefix}# {action} (no coordinates)'
 
-    elif action == 'Double Tap':
+    if action == 'Double Tap':
         element = params.get('element')
         if element and len(element) >= 2:
             x, y = convert_coordinates(element, src_w, src_h)
             return f'{prefix}self.driver.double_click(BY.coords({x}, {y}))'
         return f'{prefix}# {action} (no coordinates)'
 
-    elif action == 'Long Press':
+    if action == 'Long Press':
         element = params.get('element')
         if element and len(element) >= 2:
             x, y = convert_coordinates(element, src_w, src_h)
             return f'{prefix}self.driver.long_click(BY.coords({x}, {y}))'
         return f'{prefix}# {action} (no coordinates)'
 
-    elif action == 'Swipe':
+    if action == 'Swipe':
         start = params.get('start')
         end = params.get('end')
         if start and end and len(start) >= 2 and len(end) >= 2:
@@ -160,36 +159,34 @@ def _action_to_code(step: dict, src_w: int, src_h: int, indent: int = 12) -> str
             dx = end[0] - start[0]
             if dy < -100:
                 return f'{prefix}self.swipes_up(1, 1)'
-            elif dy > 100:
+            if dy > 100:
                 return f'{prefix}self.swipes_down(1, 1)'
-            elif dx < -100:
+            if dx < -100:
                 return f'{prefix}self.swipes_left(1, 1)'
-            elif dx > 100:
+            if dx > 100:
                 return f'{prefix}self.swipes_right(1, 1)'
-            else:
-                sx, sy = convert_coordinates(start, src_w, src_h)
-                ex, ey = convert_coordinates(end, src_w, src_h)
-                return f'{prefix}self.driver.drag(BY.coords({sx}, {sy}), BY.coords({ex}, {ey}))'
+            sx, sy = convert_coordinates(start, src_w, src_h)
+            ex, ey = convert_coordinates(end, src_w, src_h)
+            return f'{prefix}self.driver.drag(BY.coords({sx}, {sy}), BY.coords({ex}, {ey}))'
         return f'{prefix}# Swipe (no coordinates)'
 
-    elif action == 'Type':
+    if action == 'Type':
         text = params.get('text', '')
-        return f'{prefix}self.driver.input_text(BY.type(\'TextInput\'), {_py_str(text)})'
+        return f"{prefix}self.driver.input_text(BY.type('TextInput'), {_py_str(text)})"
 
-    elif action == 'Back':
+    if action == 'Back':
         return f'{prefix}self.swipe_to_back(1)'
 
-    elif action == 'Home':
+    if action == 'Home':
         return f'{prefix}self.swipe_to_home()'
 
-    elif action == 'Wait':
+    if action == 'Wait':
         duration = params.get('duration', '1 seconds')
         match = re.match(r'([\d.]+)', str(duration))
         seconds = match.group(1) if match else '1'
         return f'{prefix}self.driver.wait({seconds})'
 
-    else:
-        return f'{prefix}# Unsupported action: {action}'
+    return f'{prefix}# Unsupported action: {action}'
 
 
 def _get_auto_testcases_dir() -> Path:
@@ -263,7 +260,7 @@ def generate_hapray_script(
         lines.append('        def step1():')
         lines.append('            self.driver.wait(5)')
         lines.append('')
-        lines.append(f"        self.execute_performance_step({_py_str(app_name + '-基础场景')}, 15, step1)")
+        lines.append(f'        self.execute_performance_step({_py_str(app_name + "-基础场景")}, 15, step1)')
 
     # --- Assemble full script ---
     script_lines = [
@@ -277,8 +274,8 @@ def generate_hapray_script(
         '        self.TAG = self.__class__.__name__',
         '        super().__init__(self.TAG, controllers)',
         '',
-        f"        self._app_package = {_py_str(bundle_name)}",
-        f"        self._app_name = {_py_str(app_name)}",
+        f'        self._app_package = {_py_str(bundle_name)}',
+        f'        self._app_name = {_py_str(app_name)}',
         f'        self.source_screen_width = {screen_width}',
         f'        self.source_screen_height = {screen_height}',
         '',
@@ -310,7 +307,7 @@ def load_steps_from_pages_json(scene_dir: Path) -> list[dict]:
     if not pages_file.exists():
         raise FileNotFoundError(f'pages.json not found in {scene_dir}')
 
-    with open(pages_file, 'r', encoding='utf-8') as f:
+    with open(pages_file, encoding='utf-8') as f:
         pages = json.load(f)
 
     steps = []
@@ -338,12 +335,14 @@ def load_steps_from_pages_json(scene_dir: Path) -> list[dict]:
         # Build message annotation from gui_agent.message
         message = ga.get('message', '')
 
-        steps.append({
-            'index': ga.get('step_index', len(steps) + 1),
-            'action': action_name,
-            'params': action,
-            'message': message,
-        })
+        steps.append(
+            {
+                'index': ga.get('step_index', len(steps) + 1),
+                'action': action_name,
+                'params': action,
+                'message': message,
+            }
+        )
 
     return steps
 
@@ -352,7 +351,7 @@ def load_test_info(scene_dir: Path) -> dict:
     """Load testInfo.json from scene directory."""
     test_info_file = scene_dir / 'testInfo.json'
     if test_info_file.exists():
-        with open(test_info_file, 'r', encoding='utf-8') as f:
+        with open(test_info_file, encoding='utf-8') as f:
             return json.load(f)
     return {}
 
@@ -397,13 +396,13 @@ def convert_scene_to_script(scene_dir: str, device_id: str = None) -> ActionExec
 
     # Determine output directory and scene ID
     pinyin_id = app_name_to_pinyin_id(app_name)
-    auto_dir = _get_auto_testcases_dir() 
+    auto_dir = _get_auto_testcases_dir()
     auto_dir.mkdir(parents=True, exist_ok=True)
 
     # print(scene_dir)
     parts = Path(scene_dir).parts
-    scene_id_str = parts[-1]       # e.g. scene1
-    time_str = parts[-3]           # e.g. 20260408152721
+    scene_id_str = parts[-1]  # e.g. scene1
+    time_str = parts[-3]  # e.g. 20260408152721
 
     # Generate script
     script = generate_hapray_script(
@@ -422,35 +421,24 @@ def convert_scene_to_script(scene_dir: str, device_id: str = None) -> ActionExec
     output_path.write_text(script, encoding='utf-8')
 
     json_data = {
-        "description": "",
-        "environment": [
-            {
-                "type": "device",
-                "label": "phone"
-            }
-        ],
-        "driver": {
-            "type": "DeviceTest",
-            "py_file": [
-                f"{script_filename}"
-            ]
-        },
-        "kits": []
+        'description': '',
+        'environment': [{'type': 'device', 'label': 'phone'}],
+        'driver': {'type': 'DeviceTest', 'py_file': [f'{script_filename}']},
+        'kits': [],
     }
     json_filename = f'PerfLoad_{pinyin_id}_{scene_id_str}_{time_str}.json'
     output_path_json = auto_dir / json_filename
     with open(output_path_json, 'w', encoding='utf-8') as f:
         json.dump(json_data, f, indent=4, ensure_ascii=False)
 
-    print("")
-    print(f"report dir: {scene_dir}")
+    print('')
+    print(f'report dir: {scene_dir}')
     print(f'Generated: {output_path}')
     print(f'Generated: {output_path_json}')
     print(f'  App: {app_name} ({app_package})')
     print(f'  Steps: {len(steps)}')
     print(f'  Screen: {screen_width}x{screen_height} ')
-    print(f'test: python -m scripts.main perf --run_testcases PerfLoad_{pinyin_id}_{scene_id_str}_{time_str}'+"\n")
-
+    print(f'test: python -m scripts.main perf --run_testcases PerfLoad_{pinyin_id}_{scene_id_str}_{time_str}' + '\n')
 
     return (0, str(output_path))
 
@@ -458,12 +446,11 @@ def convert_scene_to_script(scene_dir: str, device_id: str = None) -> ActionExec
 def _get_device_display_size_by_hdc(device_id: str = None) -> tuple[int, int]:
     """Get display size via hdc shell hidumper DisplayManagerService."""
     try:
-        import subprocess
         cmd = ['hdc']
         if device_id:
             cmd.extend(['-t', device_id])
         cmd.extend(['shell', 'hidumper', '-s', 'DisplayManagerService', '-a', '-a'])
-        output = subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout
+        output = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False).stdout
         # Parse Bounds<L,T,W,H>: line
         match = re.search(r'Bounds<L,T,W,H>:\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)', output)
         if match:

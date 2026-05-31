@@ -55,6 +55,7 @@ KMP_CATEGORIES: list[str] = _make_kmp_categories()
 # 动态构建 KMP 背景块
 # ---------------------------------------------------------------------------
 
+
 def _build_kmp_context_block(so_name: str, app_name: str, categories: list[str]) -> str:
     """根据 so_name 和 app_name 动态生成 KMP 分析背景块。
 
@@ -232,13 +233,13 @@ class KMPBatchLLMAnalyzer(BatchLLMFunctionAnalyzer):
         super().__init__(*args, **kwargs)
         self._kmp_categories = _make_kmp_categories(app_name)
         cat_str = '/'.join(self._kmp_categories)
-        self._category_schema_field = (
-            f'      "kmp_category": "KMP组件分类，从以下选项中选一个：{cat_str}",'
-        )
+        self._category_schema_field = f'      "kmp_category": "KMP组件分类，从以下选项中选一个：{cat_str}",'
         self._kmp_context_block = _build_kmp_context_block(so_name, app_name, self._kmp_categories)
         logger.debug(
             'KMPBatchLLMAnalyzer initialized: so_name=%r, app_name=%r, categories=%s',
-            so_name, app_name, self._kmp_categories,
+            so_name,
+            app_name,
+            self._kmp_categories,
         )
 
     def _build_batch_prompt(self, functions_data: list[dict[str, Any]], context: Optional[str] = None) -> str:
@@ -265,15 +266,12 @@ class KMPBatchLLMAnalyzer(BatchLLMFunctionAnalyzer):
             base = base.replace(
                 note_marker,
                 '11. kmp_category：先检查 R1-R4 确定性规则；不命中时，根据函数的实际语义'
-                '（反编译逻辑 + 调用链 + 字符串）自由选择最匹配的分类，可以是任意分类\n'
-                + note_marker,
+                '（反编译逻辑 + 调用链 + 字符串）自由选择最匹配的分类，可以是任意分类\n' + note_marker,
             )
 
         return base
 
-    def _parse_batch_response(
-        self, response_text: str, functions_data: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _parse_batch_response(self, response_text: str, functions_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         results = super()._parse_batch_response(response_text, functions_data)
 
         # Try to extract kmp_category from the raw JSON in the response

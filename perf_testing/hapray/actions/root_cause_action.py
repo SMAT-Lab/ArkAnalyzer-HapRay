@@ -16,10 +16,13 @@ limitations under the License.
 import argparse
 import logging
 import os
-import sys
 from pathlib import Path
 
+import yaml
+
+from hapray.analyze.llm_root_cause import run_empty_frame_analysis
 from hapray.core.common.action_return import ActionExecuteReturn
+from hapray.core.config.config import Config
 
 try:
     from dotenv import load_dotenv
@@ -80,21 +83,21 @@ class RootCauseAction:
         parser.add_argument(
             '--index-dir',
             default=None,
-            help='Decompiled code index directory (contains symbol_index.jsonl / ui_index.jsonl)',
+            help='Source code index directory (contains symbol_index.jsonl / ui_index.jsonl)',
         )
         parser.add_argument(
-            '--decompiled-dir',
+            '--source-dir',
             default=None,
-            help='Decompiled source tree directory (*.ts / *.callgraph.json). '
-                 'Enables with_source LLM mode when combined with --index-dir.',
+            help='Application source tree directory (*.ts / *.ets / *.callgraph.json). '
+            'Enables with_source LLM mode when combined with --index-dir.',
         )
         parser.add_argument(
             '--llm-mode',
             default='analyze',
             choices=['analyze', 'with_source'],
             help='LLM analysis mode: analyze (default, reasons from evidence only) or '
-                 'with_source (reads decompiled source code for line-level fix recommendations, '
-                 'requires --decompiled-dir; auto-selected when --decompiled-dir is provided)',
+            'with_source (reads source code for line-level fix recommendations, '
+            'requires --source-dir; auto-selected when --source-dir is provided)',
         )
         parser.add_argument(
             '--config',
@@ -106,7 +109,7 @@ class RootCauseAction:
             default=None,
             dest='llm_tokens',
             help='Deprecated legacy token YAML. Prefer shared env/.env variables: '
-                 'LLM_SERVICE_TYPE, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL.',
+            'LLM_SERVICE_TYPE, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL.',
         )
         parser.add_argument(
             '--api-key',
@@ -145,8 +148,8 @@ class RootCauseAction:
             logging.error('Index directory does not exist: %s', parsed.index_dir)
             return (1, '')
 
-        if parsed.decompiled_dir and not Path(parsed.decompiled_dir).exists():
-            logging.error('Decompiled directory does not exist: %s', parsed.decompiled_dir)
+        if parsed.source_dir and not Path(parsed.source_dir).exists():
+            logging.error('Source directory does not exist: %s', parsed.source_dir)
             return (1, '')
 
         llm_config = RootCauseAction._load_config(parsed)
@@ -156,8 +159,6 @@ class RootCauseAction:
         output_path = parsed.output or str(report_dir / 'root_cause.md')
 
         try:
-            from hapray.analyze.llm_root_cause import run_empty_frame_analysis
-
             logging.info('Starting LLM root cause analysis...')
             logging.info('  Report dir : %s', report_dir)
             logging.info('  LLM mode   : %s', parsed.llm_mode)
@@ -168,7 +169,7 @@ class RootCauseAction:
                 output_path=output_path,
                 llm_config=llm_config,
                 index_dir=parsed.index_dir,
-                decompiled_dir=parsed.decompiled_dir,
+                source_dir=parsed.source_dir,
                 llm_mode=parsed.llm_mode,
                 stream=parsed.stream,
                 skip_llm=parsed.skip_llm,
@@ -202,8 +203,6 @@ class RootCauseAction:
         5. --config or config.yaml llm_root_cause defaults
         6. --llm-tokens legacy YAML overlay
         """
-        import yaml
-
         if parsed.config:
             config_path = Path(parsed.config)
             if not config_path.exists():
@@ -290,8 +289,6 @@ class RootCauseAction:
         Otherwise return None; root-cause now follows symbol_recovery and uses
         shared env/.env variables instead of auto-discovered token files.
         """
-        import yaml
-
         if explicit_path:
             tokens_path = Path(explicit_path)
             if not tokens_path.exists():
@@ -312,7 +309,6 @@ class RootCauseAction:
     def _config_from_hapray() -> dict:
         """Read the llm_root_cause section from hapray's main config.yaml."""
         try:
-            from hapray.core.config.config import Config
             hapray_cfg = Config.get_instance().config
             llm_section = hapray_cfg.get('llm_root_cause', {})
             if llm_section:

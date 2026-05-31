@@ -19,6 +19,7 @@ import sys
 import time
 
 from hapray import VERSION
+from hapray.actions.convert_action import convert_scene_to_script
 from hapray.core.common.action_return import ActionExecuteReturn
 from hapray.core.common.path_utils import get_user_data_root
 from hapray.core.config.config import Config
@@ -45,7 +46,7 @@ class GuiAgentAction:
         # Check for --convert mode early
         if '--convert' in args:
             idx = args.index('--convert')
-            convert_args = args[idx + 1:]  # skip the "gui-agent" and "convert" tokens
+            convert_args = args[idx + 1 :]  # skip the "gui-agent" and "convert" tokens
             return GuiAgentAction._execute_convert(convert_args)
 
         parser = argparse.ArgumentParser(
@@ -186,5 +187,4 @@ class GuiAgentAction:
         )
         parsed = parser.parse_args(args)
 
-        from hapray.actions.convert_action import convert_scene_to_script
         return convert_scene_to_script(parsed.report_dir, device_id=parsed.device_id)

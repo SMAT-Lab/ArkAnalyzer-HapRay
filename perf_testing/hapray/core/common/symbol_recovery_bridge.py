@@ -64,8 +64,7 @@ def _json_config_scalar_to_str(value: object) -> str:
         return ''
     if isinstance(value, bool):
         return 'true' if value else ''
-    s = str(value).strip()
-    return s
+    return str(value).strip()
 
 
 def try_load_llm_from_hapray_gui_config() -> None:
@@ -195,8 +194,7 @@ def probe_symbol_recovery_llm_runtime(sr_root: Optional[Path], timeout_sec: int 
         cp = subprocess.run(
             [str(py_exe), '-c', probe_code],
             cwd=str(sr_root) if sr_root else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=max(3, int(timeout_sec)),
             text=True,
             encoding='utf-8',
@@ -260,10 +258,9 @@ def resolve_symbol_recovery_root() -> Optional[Path]:
         if (root / 'main.py').is_file():
             return root
         # 也允许指向只含 symbol-recovery.exe 的目录（打包二进制场景）
-        if getattr(sys, 'frozen', False):
-            if _frozen_sr_exe_in_dir(root):
-                logger.debug('Resolved symbol recovery root (frozen, env var, exe-only): %s', root)
-                return root
+        if getattr(sys, 'frozen', False) and _frozen_sr_exe_in_dir(root):
+            logger.debug('Resolved symbol recovery root (frozen, env var, exe-only): %s', root)
+            return root
         logger.warning('%s is set but main.py not found under: %s', ENV_SYMBOL_RECOVERY_ROOT, root)
         return None
 
@@ -826,10 +823,7 @@ def embed_symbol_recovery_report_into_hiperf_html(
 """
     lower = text.lower()
     idx = lower.rfind('</body>')
-    if idx != -1:
-        new_text = text[:idx] + block + '\n' + text[idx:]
-    else:
-        new_text = text + '\n' + block
+    new_text = text[:idx] + block + '\n' + text[idx:] if idx != -1 else text + '\n' + block
     try:
         hiperf_report_html.write_text(new_text, encoding='utf-8')
     except OSError:

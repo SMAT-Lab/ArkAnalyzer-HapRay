@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
+from hapray.actions.root_cause_action import RootCauseAction
+from hapray.analyze.llm_root_cause import run_empty_frame_analysis
+from hapray.analyze.llm_root_cause.runner import apply_agent_result_to_report
 from hapray.core.common.device_app_packages import (
     ROOT_CAUSE_INPUT_HAP,
     bundle_packages_dir,
@@ -37,7 +40,6 @@ def trace_empty_frame_available(case_dir: str) -> bool:
 
 def load_root_cause_llm_config() -> dict:
     """与 ``RootCauseAction._load_config`` 对齐的轻量配置（无 argparse）。"""
-    from hapray.actions.root_cause_action import RootCauseAction
 
     class _Parsed:
         config = None
@@ -67,7 +69,7 @@ def run_root_cause_for_case(
     if pkg_root.is_dir():
         prepare_root_cause_artifacts(pkg_root)
     input_kind = detect_root_cause_input_kind(pkg_root) if pkg_root.is_dir() else ROOT_CAUSE_INPUT_HAP
-    index_dir, decompiled_dir = resolve_root_cause_artifacts(report_dir, bundle_name)
+    index_dir, source_dir = resolve_root_cause_artifacts(report_dir, bundle_name)
     llm_mode = root_cause_llm_mode_for_bundle(report_dir, bundle_name)
     if llm_mode == 'analyze' and input_kind == ROOT_CAUSE_INPUT_HAP:
         manifest = pkg_root / 'app_packages_manifest.json'
@@ -85,10 +87,10 @@ def run_root_cause_for_case(
                 pass
     elif llm_mode == 'with_source':
         logger.info(
-            'Root-cause with_source for %s (input_kind=%s, decompiled_dir=%s)',
+            'Root-cause with_source for %s (input_kind=%s, source_dir=%s)',
             bundle_name,
             input_kind,
-            decompiled_dir,
+            source_dir,
         )
 
     try_load_dotenv_for_llm()
@@ -97,18 +99,12 @@ def run_root_cause_for_case(
         logger.warning('Root-cause skipped: LLM config unavailable')
         return False
 
-    try:
-        from hapray.analyze.llm_root_cause import run_empty_frame_analysis
-    except ImportError as e:
-        logger.warning('Root-cause skipped: llm_root_cause not importable: %s', e)
-        return False
-
     logger.info(
-        'Running root-cause for %s (mode=%s, index_dir=%s, decompiled_dir=%s, skip_llm=%s)',
+        'Running root-cause for %s (mode=%s, index_dir=%s, source_dir=%s, skip_llm=%s)',
         case_dir,
         llm_mode,
         index_dir,
-        decompiled_dir,
+        source_dir,
         skip_llm,
     )
     try:
@@ -117,7 +113,7 @@ def run_root_cause_for_case(
             output_path=str(output_md),
             llm_config=llm_config,
             index_dir=index_dir,
-            decompiled_dir=decompiled_dir,
+            source_dir=source_dir,
             llm_mode=llm_mode,
             stream=False,
             skip_llm=skip_llm,
@@ -129,11 +125,12 @@ def run_root_cause_for_case(
         logger.exception('Root-cause failed for %s', case_dir)
         return False
 
-    if output_md.is_file() and 'Pending Agent Inference' in output_md.read_text(encoding='utf-8', errors='replace'):
-        from hapray.analyze.llm_root_cause.runner import apply_agent_result_to_report
-
-        if apply_agent_result_to_report(report_sub):
-            logger.info('Root-cause report finalized from agent result for %s', case_dir)
+    if (
+        output_md.is_file()
+        and 'Pending Agent Inference' in output_md.read_text(encoding='utf-8', errors='replace')
+        and apply_agent_result_to_report(report_sub)
+    ):
+        logger.info('Root-cause report finalized from agent result for %s', case_dir)
 
     return output_md.is_file()
 
@@ -199,10 +196,7 @@ def embed_root_cause_into_hapray_html(case_dir: str) -> bool:
     )
     lower = text.lower()
     idx = lower.rfind('</body>')
-    if idx != -1:
-        new_text = text[:idx] + block + '\n' + text[idx:]
-    else:
-        new_text = text + '\n' + block
+    new_text = text[:idx] + block + '\n' + text[idx:] if idx != -1 else text + '\n' + block
     try:
         html_path.write_text(new_text, encoding='utf-8')
     except OSError:

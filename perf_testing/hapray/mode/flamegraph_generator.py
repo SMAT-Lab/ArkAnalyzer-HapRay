@@ -1,14 +1,15 @@
 """
 火焰图生成模块 - 从 perf.db 获取火焰图数据并生成HTML报告
 """
+
 import base64
 import json
 import logging
-import os
 import sqlite3
 import zlib
 from pathlib import Path
-from typing import Optional
+
+from hapray.core.common.exe_utils import ExeUtils
 
 
 def _build_flame_tree(cursor, target_processes):
@@ -58,7 +59,7 @@ def _build_flame_tree(cursor, target_processes):
     # 构建火焰图
     callchains = {}
     for row in rows:
-        sample_id = row[0]
+        row[0]
         callchain_id = row[1]
         event_count = row[2]
         depth = row[3]
@@ -76,21 +77,19 @@ def _build_flame_tree(cursor, target_processes):
         file_path = file_path_map.get(file_id) if file_id is not None else None
         if ip:
             ip_str = f'0x{ip:x}'
-            if file_path:
-                # 取文件名末尾作为标识
-                name = f'{file_path}+{ip_str}'
-            else:
-                name = ip_str
+            name = f'{file_path}+{ip_str}' if file_path else ip_str
         else:
             name = 'unknown'
 
-        callchains[callchain_id]['frames'].append({
-            'depth': depth,
-            'ip': ip_str if ip else 'unknown',
-            'name': name,
-            'file_id': file_id,
-            'symbol_id': symbol_id,
-        })
+        callchains[callchain_id]['frames'].append(
+            {
+                'depth': depth,
+                'ip': ip_str if ip else 'unknown',
+                'name': name,
+                'file_id': file_id,
+                'symbol_id': symbol_id,
+            }
+        )
 
     for data in callchains.values():
         frames = data['frames']
@@ -180,12 +179,14 @@ def _build_callchain_hierarchy(cursor):
         cc_id = row[0]
         if cc_id not in callchain_frames:
             callchain_frames[cc_id] = []
-        callchain_frames[cc_id].append({
-            'depth': row[1],
-            'ip': row[2],
-            'file_id': row[3],
-            'name': row[4],
-        })
+        callchain_frames[cc_id].append(
+            {
+                'depth': row[1],
+                'ip': row[2],
+                'file_id': row[3],
+                'name': row[4],
+            }
+        )
 
     if not callchain_frames:
         logging.warning('No callchain data found in perf.db')
@@ -220,7 +221,9 @@ def _build_callchain_hierarchy(cursor):
 
     # 再从 perf_thread 补齐：thread_id == process_id 的主线程名即为进程名
     try:
-        cursor.execute('SELECT thread_id, thread_name FROM perf_thread WHERE thread_id = process_id AND thread_name IS NOT NULL')
+        cursor.execute(
+            'SELECT thread_id, thread_name FROM perf_thread WHERE thread_id = process_id AND thread_name IS NOT NULL'
+        )
         for row in cursor.fetchall():
             process_names[row[0]] = row[1]
     except Exception:
@@ -295,7 +298,10 @@ def _build_callchain_hierarchy(cursor):
             # 进程
             if process_id not in proc_map:
                 proc_map[process_id] = {
-                    'pid': process_id, 'processName': process_name, 'eventCount': 0, 'threads': {},
+                    'pid': process_id,
+                    'processName': process_name,
+                    'eventCount': 0,
+                    'threads': {},
                 }
             proc = proc_map[process_id]
             proc['eventCount'] += event_count
@@ -303,7 +309,11 @@ def _build_callchain_hierarchy(cursor):
             # 线程
             if thread_id not in proc['threads']:
                 proc['threads'][thread_id] = {
-                    'tid': thread_id, 'threadName': thread_name, 'eventCount': 0, 'sampleCount': 0, 'libs': {},
+                    'tid': thread_id,
+                    'threadName': thread_name,
+                    'eventCount': 0,
+                    'sampleCount': 0,
+                    'libs': {},
                 }
             thread = proc['threads'][thread_id]
             thread['eventCount'] += event_count
@@ -320,10 +330,10 @@ def _build_callchain_hierarchy(cursor):
             if sid not in lib['functions']:
                 lib['functions'][sid] = {'symbol': int(sid), 'counts': [0, 0, 0]}
             fn = lib['functions'][sid]
-            fn['counts'][0] += 1                    # call_count
-            fn['counts'][2] += event_count          # total_cost
+            fn['counts'][0] += 1  # call_count
+            fn['counts'][2] += event_count  # total_cost
             if frame['depth'] == 0:
-                fn['counts'][1] += event_count      # self_cost（仅叶子帧）
+                fn['counts'][1] += event_count  # self_cost（仅叶子帧）
 
     if not proc_map:
         logging.warning('No process hierarchy built from callchain data')
@@ -346,31 +356,40 @@ def _build_callchain_hierarchy(cursor):
             libs_list = []
             for file_idx in sorted(th['libs']):
                 lb = th['libs'][file_idx]
-                libs_list.append({
-                    'fileId': lb['fileId'],
-                    'eventCount': lb['eventCount'],
-                    'functions': sorted(lb['functions'].values(), key=lambda x: x['counts'][1], reverse=True),
-                })
+                libs_list.append(
+                    {
+                        'fileId': lb['fileId'],
+                        'eventCount': lb['eventCount'],
+                        'functions': sorted(lb['functions'].values(), key=lambda x: x['counts'][1], reverse=True),
+                    }
+                )
 
-            threads_list.append({
-                'tid': th['tid'],
-                'eventCount': th['eventCount'],
-                'sampleCount': th['sampleCount'],
-                'libs': libs_list,
-            })
+            threads_list.append(
+                {
+                    'tid': th['tid'],
+                    'eventCount': th['eventCount'],
+                    'sampleCount': th['sampleCount'],
+                    'libs': libs_list,
+                }
+            )
 
-        processes_list.append({
-            'pid': proc['pid'],
-            'eventCount': proc['eventCount'],
-            'threads': threads_list,
-        })
+        processes_list.append(
+            {
+                'pid': proc['pid'],
+                'eventCount': proc['eventCount'],
+                'threads': threads_list,
+            }
+        )
 
     total_event_count = sum(p['eventCount'] for p in processes_list)
 
     logging.info(
         'Built callchain hierarchy: %d processes, %d threads, %d symbols, %d files',
-        len(processes_list), len(new_thread_name_map),
-        len(symbol_map), len(file_list))
+        len(processes_list),
+        len(new_thread_name_map),
+        len(symbol_map),
+        len(file_list),
+    )
 
     return {
         'processes_list': processes_list,
@@ -423,17 +442,21 @@ def generate_perf_json_from_db(perf_db_path, output_path, package_name):
         record_sample_info = []
         if event_types:
             for row in event_types:
-                record_sample_info.append({
-                    'eventConfigName': f'Event-{row[0]}',
-                    'eventType': 'cpu-cycles',
-                    'index': row[0],
-                })
+                record_sample_info.append(
+                    {
+                        'eventConfigName': f'Event-{row[0]}',
+                        'eventType': 'cpu-cycles',
+                        'index': row[0],
+                    }
+                )
         else:
-            record_sample_info.append({
-                'eventConfigName': 'cpu-cycles',
-                'eventType': 'cpu-cycles',
-                'index': 0,
-            })
+            record_sample_info.append(
+                {
+                    'eventConfigName': 'cpu-cycles',
+                    'eventType': 'cpu-cycles',
+                    'index': 0,
+                }
+            )
 
         # 尝试从 callchain 数据构建完整层级结构
         hierarchy = _build_callchain_hierarchy(cursor)
@@ -501,10 +524,12 @@ def generate_perf_json_from_db(perf_db_path, output_path, package_name):
                     WHERE symbol IS NOT NULL AND symbol != ''
                 """)
                 for sym_name, file_path in cursor.fetchall():
-                    flame_data['SymbolMap'].append({
-                        'name': sym_name,
-                        'file': file_path or '',
-                    })
+                    flame_data['SymbolMap'].append(
+                        {
+                            'name': sym_name,
+                            'file': file_path or '',
+                        }
+                    )
             except sqlite3.OperationalError as e:
                 logging.warning('SymbolMap query failed: %s', str(e))
 
@@ -546,19 +571,16 @@ def generate_hiperf_report(perf_db_path, output_dir, package_name):
     try:
         # 首先生成 perf.json
         perf_json_path = Path(str(output_dir)) / 'perf.json'
-        if not generate_perf_json_from_db(
-            perf_db_path, str(perf_json_path), package_name
-        ):
+        if not generate_perf_json_from_db(perf_db_path, str(perf_json_path), package_name):
             logging.error('Failed to generate perf.json')
             return None
 
         # 读取 perf.json 数据
-        with open(str(perf_json_path), 'r', encoding='utf-8') as f:
+        with open(str(perf_json_path), encoding='utf-8') as f:
             perf_data = json.load(f)
 
         # 查找模板文件
         try:
-            from hapray.core.common.exe_utils import ExeUtils
             _web = ExeUtils.get_tools_dir('web', require=False)
             template_path = Path(_web) / 'hiperf_report_template.html' if _web else None
         except Exception:
@@ -576,7 +598,7 @@ def generate_hiperf_report(perf_db_path, output_dir, package_name):
             logging.error('Template not found: %s', template_path)
             return None
 
-        with open(str(template_path), 'r', encoding='utf-8') as f:
+        with open(str(template_path), encoding='utf-8') as f:
             template_html = f.read()
 
         # 压缩和编码 perf.json

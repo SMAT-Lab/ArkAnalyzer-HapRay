@@ -9,9 +9,8 @@ import json
 import re
 import sqlite3
 import zlib
-from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Optional
 
 from core.utils.logger import get_logger
 
@@ -78,16 +77,15 @@ class MemoryFlameGraphAnalyzer:
                                 logger.info(f'  ✅ 从 {html_file.name} 提取 JSON (gzip 压缩)')
                                 return json_str
                             # 检查是否是 zlib
-                            elif decoded[:2] in (b'x\x9c', b'x\xda', b'x\x01'):
+                            if decoded[:2] in (b'x\x9c', b'x\xda', b'x\x01'):
                                 decompressed = zlib.decompress(decoded)
                                 json_str = decompressed.decode('utf-8', errors='ignore')
                                 logger.info(f'  ✅ 从 {html_file.name} 提取 JSON (zlib 压缩)')
                                 return json_str
-                            else:
-                                # 直接解码为 UTF-8
-                                json_str = decoded.decode('utf-8', errors='ignore')
-                                logger.info(f'  ✅ 从 {html_file.name} 提取 JSON (base64 编码)')
-                                return json_str
+                            # 直接解码为 UTF-8
+                            json_str = decoded.decode('utf-8', errors='ignore')
+                            logger.info(f'  ✅ 从 {html_file.name} 提取 JSON (base64 编码)')
+                            return json_str
                         except Exception as e:
                             logger.warning(f'  ⚠️  解码失败: {e}')
                             continue
@@ -103,7 +101,7 @@ class MemoryFlameGraphAnalyzer:
             logger.error(f'  ❌ 读取 HTML 文件失败: {html_file.name}, 错误: {e}')
             return None
 
-    def extract_symbols_from_json(self, json_str: str) -> Tuple[Set[str], Dict[str, int]]:
+    def extract_symbols_from_json(self, json_str: str) -> tuple[set[str], dict[str, int]]:
         """
         从 JSON 字符串中提取所有符号地址和统计信息
 
@@ -125,9 +123,9 @@ class MemoryFlameGraphAnalyzer:
             if 'recordSampleInfo' in data and 'SymbolMap' in data:
                 record_sample_info = data.get('recordSampleInfo', [])
                 symbol_map = data.get('SymbolMap', {})
-                
+
                 logger.info('  从 recordSampleInfo 提取统计信息...')
-                
+
                 # 遍历 recordSampleInfo 提取统计信息
                 for sample_info in record_sample_info:
                     if isinstance(sample_info, dict) and 'processes' in sample_info:
@@ -141,7 +139,7 @@ class MemoryFlameGraphAnalyzer:
                                                     if isinstance(func, dict) and 'symbol' in func:
                                                         symbol_id = func.get('symbol')
                                                         counts = func.get('counts', [])
-                                                        
+
                                                         # 从 SymbolMap 中获取符号地址（尝试多种键类型）
                                                         symbol_info = None
                                                         if symbol_id in symbol_map:
@@ -150,23 +148,34 @@ class MemoryFlameGraphAnalyzer:
                                                             symbol_info = symbol_map[str(symbol_id)]
                                                         elif int(symbol_id) in symbol_map:
                                                             symbol_info = symbol_map[int(symbol_id)]
-                                                        
+
                                                         if symbol_info and isinstance(symbol_info, dict):
                                                             symbol_str = symbol_info.get('symbol', '')
                                                             # 提取 libxxx.so+0x... 格式
-                                                            match = re.search(r'(lib[\w_]+\.so\+0x[0-9a-fA-F]+)', symbol_str, re.IGNORECASE)
+                                                            match = re.search(
+                                                                r'(lib[\w_]+\.so\+0x[0-9a-fA-F]+)',
+                                                                symbol_str,
+                                                                re.IGNORECASE,
+                                                            )
                                                             if match:
                                                                 symbol = match.group(1)
                                                                 symbols.add(symbol)
-                                                                
+
                                                                 # 提取统计信息（counts 数组格式: [call_count, event_count, ...]）
                                                                 if counts and len(counts) >= 2:
                                                                     # counts[1] 是 event_count
                                                                     try:
-                                                                        event_count = int(counts[1]) if isinstance(counts[1], (int, float)) else 0
+                                                                        event_count = (
+                                                                            int(counts[1])
+                                                                            if isinstance(counts[1], (int, float))
+                                                                            else 0
+                                                                        )
                                                                         if event_count > 0:
                                                                             # 累加统计信息（同一个符号可能出现多次）
-                                                                            symbol_stats[symbol] = symbol_stats.get(symbol, 0) + event_count
+                                                                            symbol_stats[symbol] = (
+                                                                                symbol_stats.get(symbol, 0)
+                                                                                + event_count
+                                                                            )
                                                                     except (ValueError, TypeError):
                                                                         pass
 
@@ -178,7 +187,7 @@ class MemoryFlameGraphAnalyzer:
                 """递归提取符号地址（补充提取，不覆盖已有统计信息）"""
                 if isinstance(value, dict):
                     symbol = None
-                    
+
                     # 检查 symbol 字段
                     if 'symbol' in value:
                         symbol_str = value['symbol']
@@ -230,7 +239,7 @@ class MemoryFlameGraphAnalyzer:
 
         return symbols, symbol_stats
 
-    def collect_all_symbols(self) -> Tuple[Dict[str, Set[str]], Dict[str, int]]:
+    def collect_all_symbols(self) -> tuple[dict[str, set[str]], dict[str, int]]:
         """
         从所有 HTML 文件中收集符号地址和统计信息
 
@@ -255,17 +264,17 @@ class MemoryFlameGraphAnalyzer:
                 symbols, symbol_stats = self.extract_symbols_from_json(json_str)
                 all_symbols[html_file.name] = symbols
                 total_symbols.update(symbols)
-                
+
                 # 合并统计信息
                 for symbol, value in symbol_stats.items():
                     total_symbol_stats[symbol] = total_symbol_stats.get(symbol, 0) + value
-                
+
                 logger.info(f'    找到 {len(symbols)} 个唯一符号地址')
                 if symbol_stats:
                     logger.info(f'    提取了 {len(symbol_stats)} 个符号的统计信息')
                     # 显示一些统计信息示例
                     sorted_stats = sorted(symbol_stats.items(), key=lambda x: x[1], reverse=True)[:5]
-                    logger.info(f'    统计信息示例（前5个）:')
+                    logger.info('    统计信息示例（前5个）:')
                     for sym, count in sorted_stats:
                         logger.info(f'      {sym}: event_count={count}')
 
@@ -277,7 +286,7 @@ class MemoryFlameGraphAnalyzer:
                 max_count = max(total_symbol_stats.values())
                 min_count = min(total_symbol_stats.values())
                 logger.info(f'   统计信息范围: event_count 从 {min_count} 到 {max_count}')
-                logger.info(f'   top-n 功能可以正常工作 ✅')
+                logger.info('   top-n 功能可以正常工作 ✅')
         else:
             logger.warning('⚠️  未找到统计信息，所有符号的 event_count 将设为 1')
             logger.warning('   这意味着 top-n 功能无法正常工作（所有符号的统计值相同）')
@@ -285,7 +294,7 @@ class MemoryFlameGraphAnalyzer:
 
         return all_symbols, total_symbol_stats
 
-    def create_perf_db_from_symbols(self, symbols: Set[str], symbol_stats: Dict[str, int] = None) -> Path:
+    def create_perf_db_from_symbols(self, symbols: set[str], symbol_stats: dict[str, int] = None) -> Path:
         """
         从符号地址集合创建类似 perf.db 的 SQLite 数据库
 
@@ -307,7 +316,7 @@ class MemoryFlameGraphAnalyzer:
         cursor = conn.cursor()
 
         # 创建 perf_files 表（EventCountAnalyzer 需要）
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS perf_files (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 file_id INTEGER,
@@ -315,18 +324,18 @@ class MemoryFlameGraphAnalyzer:
                 symbol TEXT,
                 path TEXT
             )
-        ''')
+        """)
 
         # 创建 data_dict 表（EventCountAnalyzer 需要）
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS data_dict (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 data TEXT
             )
-        ''')
+        """)
 
         # 创建 perf_callchain 表（EventCountAnalyzer 需要）
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS perf_callchain (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 callchain_id INTEGER,
@@ -340,10 +349,10 @@ class MemoryFlameGraphAnalyzer:
                 source_file_id INTEGER,
                 line_number INTEGER
             )
-        ''')
+        """)
 
         # 创建 perf_sample 表（用于存储采样数据）
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS perf_sample (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 callchain_id INTEGER,
@@ -352,10 +361,10 @@ class MemoryFlameGraphAnalyzer:
                 event_count INTEGER DEFAULT 1,
                 call_count INTEGER DEFAULT 1
             )
-        ''')
+        """)
 
         # 创建 missing_symbols 表（用于存储缺失符号）
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS missing_symbols (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 address TEXT NOT NULL,
@@ -365,7 +374,7 @@ class MemoryFlameGraphAnalyzer:
                 event_count INTEGER DEFAULT 1,
                 UNIQUE(address)
             )
-        ''')
+        """)
 
         # 为每个符号创建 file_id 和 name_id（从符号中提取库名）
         file_id_map = {}  # {so_file: file_id}
@@ -392,10 +401,13 @@ class MemoryFlameGraphAnalyzer:
                     file_id_counter += 1
 
                     # 插入到 perf_files 表
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         INSERT INTO perf_files (file_id, symbol, path)
                         VALUES (?, ?, ?)
-                    ''', (file_id_map[so_file], so_file, so_file))
+                    """,
+                        (file_id_map[so_file], so_file, so_file),
+                    )
 
                 file_id = file_id_map[so_file]
 
@@ -405,10 +417,13 @@ class MemoryFlameGraphAnalyzer:
                     name_id_counter += 1
 
                     # 插入到 data_dict 表（存储符号地址）
-                    cursor.execute('''
+                    cursor.execute(
+                        """
                         INSERT INTO data_dict (id, data)
                         VALUES (?, ?)
-                    ''', (name_id_map[symbol], symbol))
+                    """,
+                        (name_id_map[symbol], symbol),
+                    )
 
                 name_id = name_id_map[symbol]
 
@@ -417,36 +432,45 @@ class MemoryFlameGraphAnalyzer:
                 callchain_id_counter += 1
 
                 # 插入到 perf_callchain 表（简化：每个符号一个调用链节点，depth=0）
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO perf_callchain (
                         callchain_id, depth, ip, vaddr_in_file, offset_to_vaddr,
                         file_id, symbol_id, name, source_file_id, line_number
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    callchain_id,  # callchain_id
-                    0,  # depth
-                    offset,  # ip (使用偏移量)
-                    offset,  # vaddr_in_file
-                    0,  # offset_to_vaddr
-                    file_id,  # file_id
-                    -1,  # symbol_id (-1 表示缺失符号)
-                    name_id,  # name (指向 data_dict)
-                    None,  # source_file_id
-                    None,  # line_number
-                ))
+                """,
+                    (
+                        callchain_id,  # callchain_id
+                        0,  # depth
+                        offset,  # ip (使用偏移量)
+                        offset,  # vaddr_in_file
+                        0,  # offset_to_vaddr
+                        file_id,  # file_id
+                        -1,  # symbol_id (-1 表示缺失符号)
+                        name_id,  # name (指向 data_dict)
+                        None,  # source_file_id
+                        None,  # line_number
+                    ),
+                )
 
                 # 插入到 perf_sample 表（使用统计信息）
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT INTO perf_sample (callchain_id, file_id, symbol, event_count, call_count)
                     VALUES (?, ?, ?, ?, ?)
-                ''', (callchain_id, file_id, symbol, event_count, call_count))
+                """,
+                    (callchain_id, file_id, symbol, event_count, call_count),
+                )
 
                 # 插入到 missing_symbols 表（使用统计信息）
-                cursor.execute('''
+                cursor.execute(
+                    """
                     INSERT OR IGNORE INTO missing_symbols (address, so_file, offset, call_count, event_count)
                     VALUES (?, ?, ?, ?, ?)
-                ''', (symbol, so_file, offset, call_count, event_count))
+                """,
+                    (symbol, so_file, offset, call_count, event_count),
+                )
 
         conn.commit()
         conn.close()
@@ -456,7 +480,7 @@ class MemoryFlameGraphAnalyzer:
         logger.info(f'   创建了 {len(name_id_map)} 个地址映射')
         return perf_db_file
 
-    def process_all_html_files(self) -> Tuple[Path, Dict[str, Set[str]]]:
+    def process_all_html_files(self) -> tuple[Path, dict[str, set[str]]]:
         """
         处理所有 HTML 文件，提取符号并创建 perf.db
 
@@ -483,4 +507,3 @@ class MemoryFlameGraphAnalyzer:
         perf_db_file = self.create_perf_db_from_symbols(all_symbols, total_symbol_stats)
 
         return perf_db_file, html_symbols
-

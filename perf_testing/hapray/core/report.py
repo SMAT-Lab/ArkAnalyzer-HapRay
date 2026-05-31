@@ -34,6 +34,10 @@ from hapray.analyze.symbol_statistic_analyzer import SymbolStatisticAnalyzer
 from hapray.core.common.excel_utils import ExcelReportSaver
 from hapray.core.common.exe_utils import ExeUtils
 from hapray.core.common.report_paths import find_testcase_dirs_under_report_root
+from hapray.core.common.root_cause_integration import (
+    embed_root_cause_into_hapray_html,
+    merge_root_cause_into_result,
+)
 from hapray.core.common.symbol_recovery_bridge import apply_symbol_recovery_manifest_to_scene_outputs
 from hapray.core.config.config import Config
 from hapray.mode.mode import Mode
@@ -100,7 +104,11 @@ def _testinfo_meta(scene_dir: str) -> dict[str, Any]:
 
 
 def _aggregate_one_from_steps_and_meta(
-    meta: dict[str, Any], steps_out: list[dict], har_acc: dict[str, int], perf_data_paths: list[str], perf_db_paths: list[str]
+    meta: dict[str, Any],
+    steps_out: list[dict],
+    har_acc: dict[str, int],
+    perf_data_paths: list[str],
+    perf_db_paths: list[str],
 ) -> list[dict[str, Any]]:
     aggregate: dict[str, Any] = {
         'rom_version': meta.get('rom_version', ''),
@@ -212,7 +220,9 @@ def materialize_hiperf_info_for_scene(scene_dir: str) -> None:
             if built_from_steps:
                 try:
                     root.write_text(json.dumps(built_from_steps, ensure_ascii=False, indent=2), encoding='utf-8')
-                    logging.info('Rebuilt hiperf_info.json at %s from step*/hiperf_info.json (replacing invalid root)', root)
+                    logging.info(
+                        'Rebuilt hiperf_info.json at %s from step*/hiperf_info.json (replacing invalid root)', root
+                    )
                 except OSError as e:
                     logging.warning('Failed to write aggregate hiperf_info.json: %s', e)
                 return
@@ -854,11 +864,6 @@ class ReportGenerator:
             logging.error('Invalid hapray_report.json (expected object): %s', json_path)
             return False
         try:
-            from hapray.core.common.root_cause_integration import (
-                embed_root_cause_into_hapray_html,
-                merge_root_cause_into_result,
-            )
-
             merge_root_cause_into_result(scene_dir, result)
             self._create_html_report(scene_dir, result)
             embed_root_cause_into_hapray_html(scene_dir)

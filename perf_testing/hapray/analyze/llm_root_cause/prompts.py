@@ -2,12 +2,13 @@
 prompts.py
 
 LLM 提示词。支持两种模式：
-  - analyze     : 默认模式，LLM 从原始证据独立推断根因（无需反编译代码）
-  - with_source : 增强模式，LLM 阅读反编译代码片段 + 调用链，给出行级修复建议
+  - analyze     : 默认模式，LLM 从原始证据独立推断根因（无需应用源码）
+  - with_source : 增强模式，LLM 阅读源码片段 + 调用链，给出行级修复建议
 """
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any
 
@@ -108,18 +109,18 @@ Output valid JSON only (no other text):
 """
 
 
-# ── with_source 模式（增强，需反编译源码）────────────────────────────────────
+# ── with_source 模式（增强，需应用源码）────────────────────────────────────
 
 _CODE_REVIEW_SYSTEM_PROMPT_ZH = """你是一名 HarmonyOS / ArkUI 性能专家，专精空刷（empty frame）根因分析。
 
 ## 你的任务
-结合性能采样证据、反编译代码片段（部分嫌疑有，部分无）和调用链路，输出**覆盖所有嫌疑**的结构化 JSON 根因报告。
+结合性能采样证据、源码片段（部分嫌疑有，部分无）和调用链路，输出**覆盖所有嫌疑**的结构化 JSON 根因报告。
 
 ## 混合分析规则（重要）
 
 你会收到两类嫌疑，必须都分析，不得遗漏：
 
-### 类型 A：有反编译代码片段的嫌疑（出现在"反编译代码片段"节）
+### 类型 A：有源码片段的嫌疑（出现在"源码片段"节）
 - 基于实际代码给出行级诊断，修复建议引用代码中的具体行/变量名
 - 置信度标准：`high`（发现明确问题模式）/ `medium`（有嫌疑待确认）/ `low`（代码可读性低）
 
@@ -154,14 +155,14 @@ _CODE_REVIEW_SYSTEM_PROMPT_ZH = """你是一名 HarmonyOS / ArkUI 性能专家�
 _CODE_REVIEW_SYSTEM_PROMPT_EN = """You are a HarmonyOS / ArkUI performance expert specializing in empty-frame root cause analysis.
 
 ## Your Task
-Analyze ALL suspects using both decompiled code snippets (where available) and evidence-based
+Analyze ALL suspects using both source code snippets (where available) and evidence-based
 reasoning (where code is unavailable). Output a comprehensive structured JSON root cause report.
 
 ## Hybrid Analysis Rules (Important)
 
 You will receive two types of suspects — analyze BOTH, do not skip either:
 
-### Type A: Suspects WITH decompiled code snippets (in the "Decompiled Code Snippets" section)
+### Type A: Suspects WITH source code snippets (in the "Source Code Snippets" section)
 - Give line-level diagnosis based on actual code; fix recommendations must reference specific lines
 - Confidence: high (clear problem found) / medium (suspicious, needs verification)
 
@@ -180,54 +181,55 @@ Output valid JSON only:
 """
 
 
-def _analyze_system_prompt(language: str, domain_knowledge: str = "") -> str:
-    base = _ANALYZE_SYSTEM_PROMPT_ZH if language == "zh" else _ANALYZE_SYSTEM_PROMPT_EN
-    base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_EXAMPLE_STR)
+def _analyze_system_prompt(language: str, domain_knowledge: str = '') -> str:
+    base = _ANALYZE_SYSTEM_PROMPT_ZH if language == 'zh' else _ANALYZE_SYSTEM_PROMPT_EN
+    base = base.replace('{OUTPUT_SCHEMA}', OUTPUT_EXAMPLE_STR)
     if domain_knowledge and domain_knowledge.strip():
-        section_title = "## 领域先验知识\n\n以下是人工积累的分析经验，请在推断根因时参考：\n\n"
-        base = base.rstrip() + "\n\n" + section_title + domain_knowledge.strip() + "\n"
+        section_title = '## 领域先验知识\n\n以下是人工积累的分析经验，请在推断根因时参考：\n\n'
+        base = base.rstrip() + '\n\n' + section_title + domain_knowledge.strip() + '\n'
     return base
 
 
-def _with_source_system_prompt(language: str, domain_knowledge: str = "") -> str:
-    base = _CODE_REVIEW_SYSTEM_PROMPT_ZH if language == "zh" else _CODE_REVIEW_SYSTEM_PROMPT_EN
-    base = base.replace("{OUTPUT_SCHEMA}", OUTPUT_EXAMPLE_STR)
+def _with_source_system_prompt(language: str, domain_knowledge: str = '') -> str:
+    base = _CODE_REVIEW_SYSTEM_PROMPT_ZH if language == 'zh' else _CODE_REVIEW_SYSTEM_PROMPT_EN
+    base = base.replace('{OUTPUT_SCHEMA}', OUTPUT_EXAMPLE_STR)
     if domain_knowledge and domain_knowledge.strip():
-        section_title = "## 领域先验知识\n\n以下是人工积累的分析经验，请在审查代码时参考：\n\n"
-        base = base.rstrip() + "\n\n" + section_title + domain_knowledge.strip() + "\n"
+        section_title = '## 领域先验知识\n\n以下是人工积累的分析经验，请在审查代码时参考：\n\n'
+        base = base.rstrip() + '\n\n' + section_title + domain_knowledge.strip() + '\n'
     return base
 
 
 # ── 公共接口 ──────────────────────────────────────────────────────────────
 
+
 def get_system_prompt(
-    language: str = "zh",
-    checker: str = "empty-frame",
-    mode: str = "analyze",
-    domain_knowledge: str = "",
+    language: str = 'zh',
+    checker: str = 'empty-frame',
+    mode: str = 'analyze',
+    domain_knowledge: str = '',
 ) -> str:
     """
     Parameters
     ----------
     mode : "analyze" | "with_source"
         - analyze     : 默认模式，LLM 从原始证据独立推断，输出结构化 JSON
-        - with_source : 增强模式，LLM 阅读反编译代码片段，给出行级修复建议
+        - with_source : 增强模式，LLM 阅读源码片段，给出行级修复建议
     domain_knowledge : str
         从 knowledge/ 目录加载的先验知识文本，注入 system prompt。
     """
-    if mode == "with_source":
+    if mode == 'with_source':
         return _with_source_system_prompt(language, domain_knowledge=domain_knowledge)
     return _analyze_system_prompt(language, domain_knowledge=domain_knowledge)
 
 
 def build_user_prompt(
     context_text: str,
-    extra_context: str = "",
-    checker: str = "empty-frame",
+    extra_context: str = '',
+    checker: str = 'empty-frame',
     structured_evidence: dict[str, Any] | None = None,
     code_snippets: list[dict[str, Any]] | None = None,
-    call_chains_text: str = "",
-    mode: str = "analyze",
+    call_chains_text: str = '',
+    mode: str = 'analyze',
 ) -> str:
     """
     构建 user prompt。
@@ -235,7 +237,7 @@ def build_user_prompt(
     mode="analyze"     : 传入结构化证据 JSON（+ 可选代码片段），LLM 独立推断根因
     mode="with_source" : 传入代码片段 + 调用链 + 精简证据，LLM 阅读代码给出行级建议
     """
-    if mode == "with_source":
+    if mode == 'with_source':
         return _build_with_source_user_prompt(
             context_text=context_text,
             code_snippets=code_snippets or [],
@@ -254,71 +256,64 @@ def _build_analyze_user_prompt(
     context_text: str,
     structured_evidence: dict[str, Any] | None,
     code_snippets: list[dict[str, Any]] | None = None,
-    extra_context: str = "",
+    extra_context: str = '',
 ) -> str:
     """analyze 模式的 user prompt：传入完整结构化证据（+ 可选代码片段），LLM 独立推断。"""
     parts: list[str] = []
-    parts.append("请分析以下空刷性能证据，推断根因并给出修复建议。\n")
+    parts.append('请分析以下空刷性能证据，推断根因并给出修复建议。\n')
 
-    parts.append("## 性能摘要\n")
+    parts.append('## 性能摘要\n')
     parts.append(context_text)
 
     if structured_evidence:
         # 传入精简版结构化证据（省略 code_snippet 内容，避免重复且节省 token）
         ev_clean = _strip_code_snippets_from_evidence(structured_evidence)
-        parts.append("\n## 结构化证据\n")
-        parts.append("```json")
+        parts.append('\n## 结构化证据\n')
+        parts.append('```json')
         parts.append(json.dumps(ev_clean, ensure_ascii=False, indent=2))
-        parts.append("```")
+        parts.append('```')
 
-    # 如果有反编译代码，单独展示供 LLM 直接引用
+    # 如果有源码，单独展示供 LLM 直接引用
     if code_snippets:
-        parts.append("\n## 反编译代码片段（请在分析中直接引用相关代码行）\n")
+        parts.append('\n## 源码片段（请在分析中直接引用相关代码行）\n')
         for i, item in enumerate(code_snippets[:6], 1):
-            owner = item.get("owner_name", "unknown")
-            symbol = item.get("symbol_name", "unknown")
-            file_name = item.get("file", "unknown")
-            line_start = item.get("line_start", 0)
-            line_end = item.get("line_end", 0)
-            snippet = item.get("code_snippet") or ""
-            hits = item.get("evidence_hits", item.get("hit_count", 0))
-            parts.append(
-                f"### [{i}] {owner}.{symbol}  "
-                f"({file_name}:{line_start}-{line_end}, 命中次数={hits})\n"
-            )
+            owner = item.get('owner_name', 'unknown')
+            symbol = item.get('symbol_name', 'unknown')
+            file_name = item.get('file', 'unknown')
+            line_start = item.get('line_start', 0)
+            line_end = item.get('line_end', 0)
+            snippet = item.get('code_snippet') or ''
+            hits = item.get('evidence_hits', item.get('hit_count', 0))
+            parts.append(f'### [{i}] {owner}.{symbol}  ({file_name}:{line_start}-{line_end}, 命中次数={hits})\n')
             if snippet.strip():
-                parts.append("```typescript")
+                parts.append('```typescript')
                 parts.append(snippet.rstrip())
-                parts.append("```\n")
+                parts.append('```\n')
 
     if extra_context:
-        parts.append(f"\n## 补充信息\n{extra_context}\n")
+        parts.append(f'\n## 补充信息\n{extra_context}\n')
 
-    parts.append("\n请输出 JSON 根因报告，不要输出其他内容。")
-    return "\n".join(parts).strip() + "\n"
+    parts.append('\n请输出 JSON 根因报告，不要输出其他内容。')
+    return '\n'.join(parts).strip() + '\n'
 
 
 def _strip_code_snippets_from_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     """
     Return a shallow copy of evidence with code_snippet fields removed from
-    proc_source_hints.decompiled_candidates to avoid duplicating large code blocks
+    proc_source_hints.source_candidates to avoid duplicating large code blocks
     when they're already shown in a dedicated section.
     """
-    import copy
     ev = copy.copy(evidence)
-    hints = evidence.get("proc_source_hints")
+    hints = evidence.get('proc_source_hints')
     if hints:
         clean_hints = []
         for h in hints:
             h2 = copy.copy(h)
-            cands = h.get("decompiled_candidates")
+            cands = h.get('source_candidates')
             if cands:
-                h2["decompiled_candidates"] = [
-                    {k: v for k, v in c.items() if k != "code_snippet"}
-                    for c in cands
-                ]
+                h2['source_candidates'] = [{k: v for k, v in c.items() if k != 'code_snippet'} for c in cands]
             clean_hints.append(h2)
-        ev["proc_source_hints"] = clean_hints
+        ev['proc_source_hints'] = clean_hints
     return ev
 
 
@@ -330,109 +325,107 @@ def _build_with_source_user_prompt(
 ) -> str:
     """with_source 模式的 user prompt 构建。"""
     parts: list[str] = []
-    parts.append("请分析以下空刷性能问题，输出结构化 JSON 根因报告。\n")
+    parts.append('请分析以下空刷性能问题，输出结构化 JSON 根因报告。\n')
 
-    parts.append("## 性能摘要\n")
+    parts.append('## 性能摘要\n')
     parts.append(context_text)
 
     # 精简证据摘要（只取最关键字段，减少 token 噪声）
     if structured_evidence:
-        overview = structured_evidence.get("overview", {})
-        dominant = structured_evidence.get("dominant_threads", [])[:3]
-        frames = structured_evidence.get("representative_frames", [])[:1]
-        proc_hints = structured_evidence.get("proc_source_hints", [])[:8]
+        overview = structured_evidence.get('overview', {})
+        dominant = structured_evidence.get('dominant_threads', [])[:3]
+        frames = structured_evidence.get('representative_frames', [])[:1]
+        proc_hints = structured_evidence.get('proc_source_hints', [])[:8]
         compact: dict[str, Any] = {
-            "empty_frames": overview.get("total_empty_frames"),
-            "empty_rate": overview.get("empty_frame_percentage"),
-            "severity": overview.get("severity_level"),
-            "main_thread_pct": overview.get("main_thread_percentage_in_empty_frame"),
-            "top_threads": [
-                name for t in dominant if (name := nonempty_thread_name(t.get("thread_name")))
-            ],
+            'empty_frames': overview.get('total_empty_frames'),
+            'empty_rate': overview.get('empty_frame_percentage'),
+            'severity': overview.get('severity_level'),
+            'main_thread_pct': overview.get('main_thread_percentage_in_empty_frame'),
+            'top_threads': [name for t in dominant if (name := nonempty_thread_name(t.get('thread_name')))],
         }
         if frames:
-            compact["top_frame_wakeup"] = wakeup_chain_labels(
-                frames[0].get("wakeup_threads"),
+            compact['top_frame_wakeup'] = wakeup_chain_labels(
+                frames[0].get('wakeup_threads'),
                 limit=4,
             )
-            compact["top_frame_symbols"] = frames[0].get("symbol_hints", [])[:4]
+            compact['top_frame_symbols'] = frames[0].get('symbol_hints', [])[:4]
         if proc_hints:
-            compact["proc_source_hits"] = [
+            compact['proc_source_hits'] = [
                 {
-                    "source": h.get("source_path", ""),
-                    "lines": h.get("lines", [])[:4],
-                    "symbols": h.get("symbols", [])[:4],
-                    "direct": h.get("direct_hit_count", 0),
-                    "perf": h.get("perf_hit_count", 0),
+                    'source': h.get('source_path', ''),
+                    'lines': h.get('lines', [])[:4],
+                    'symbols': h.get('symbols', [])[:4],
+                    'direct': h.get('direct_hit_count', 0),
+                    'perf': h.get('perf_hit_count', 0),
                 }
                 for h in proc_hints
             ]
-        parts.append("\n## 关键证据\n")
-        parts.append("```json")
+        parts.append('\n## 关键证据\n')
+        parts.append('```json')
         parts.append(json.dumps(compact, ensure_ascii=False, indent=2))
-        parts.append("```")
+        parts.append('```')
 
     # 调用链路
     if call_chains_text and call_chains_text.strip():
-        parts.append("\n## 触发调用链路\n")
+        parts.append('\n## 触发调用链路\n')
         parts.append(call_chains_text)
 
-    # 类型 A：有反编译代码的嫌疑（行级分析）
+    # 类型 A：有源码的嫌疑（行级分析）
     if code_snippets:
-        parts.append("\n## 反编译代码片段（类型 A 嫌疑）\n")
-        parts.append("以下嫌疑有反编译源码，请做行级代码审查：\n")
+        parts.append('\n## 源码片段（类型 A 嫌疑）\n')
+        parts.append('以下嫌疑有应用源码，请做行级代码审查：\n')
         for i, item in enumerate(code_snippets[:8], 1):
-            owner = item.get("owner_name", "unknown")
-            symbol = item.get("symbol_name", "unknown")
-            file_name = item.get("file", "unknown")
-            line_start = item.get("line_start", 0)
-            line_end = item.get("line_end", 0)
-            snippet = item.get("code_snippet") or ""
-            evidence_hits = item.get("evidence_hits", 0)
-            match_kind = item.get("match_kind", "")
+            owner = item.get('owner_name', 'unknown')
+            symbol = item.get('symbol_name', 'unknown')
+            file_name = item.get('file', 'unknown')
+            line_start = item.get('line_start', 0)
+            line_end = item.get('line_end', 0)
+            snippet = item.get('code_snippet') or ''
+            evidence_hits = item.get('evidence_hits', 0)
+            match_kind = item.get('match_kind', '')
 
-            parts.append(f"### 片段 {i}: {owner}.{symbol}")
-            parts.append(f"- 文件: `{file_name}:{line_start}-{line_end}`")
+            parts.append(f'### 片段 {i}: {owner}.{symbol}')
+            parts.append(f'- 文件: `{file_name}:{line_start}-{line_end}`')
             if match_kind:
-                parts.append(f"- 关联方式: {match_kind}")
+                parts.append(f'- 关联方式: {match_kind}')
             if evidence_hits:
-                parts.append(f"- 证据命中次数: {evidence_hits}")
-            ui_count = item.get("ui_snapshot_count")
+                parts.append(f'- 证据命中次数: {evidence_hits}')
+            ui_count = item.get('ui_snapshot_count')
             if ui_count:
-                parts.append(f"- UI 运行态出现次数: {ui_count}")
+                parts.append(f'- UI 运行态出现次数: {ui_count}')
             if snippet:
-                parts.append("```typescript")
+                parts.append('```typescript')
                 parts.append(snippet)
-                parts.append("```")
+                parts.append('```')
             else:
-                parts.append("（代码片段不可用）")
-            parts.append("")
+                parts.append('（代码片段不可用）')
+            parts.append('')
 
     # 类型 B：无源码但有证据的嫌疑（基于证据推断）
     evidence_only = _collect_evidence_only_suspects(
-        proc_hints=structured_evidence.get("proc_source_hints", []) if structured_evidence else [],
+        proc_hints=structured_evidence.get('proc_source_hints', []) if structured_evidence else [],
         code_snippets=code_snippets,
     )
     if evidence_only:
-        parts.append("\n## 无源码嫌疑（类型 B 嫌疑）\n")
+        parts.append('\n## 无源码嫌疑（类型 B 嫌疑）\n')
         parts.append(
-            "以下嫌疑有 /proc 命中证据，但无反编译源码可读。"
-            "请基于文件名、符号名和命中计数进行证据推断，**必须给出根因结论和修复方向**：\n"
+            '以下嫌疑有 /proc 命中证据，但无应用源码可读。'
+            '请基于文件名、符号名和命中计数进行证据推断，**必须给出根因结论和修复方向**：\n'
         )
         for hint in evidence_only:
-            path_short = hint.get("source_path", "").rsplit("/", 1)[-1] or hint.get("owner_name", "unknown")
-            lines_str = "/".join(str(ln) for ln in hint.get("lines", [])[:4])
-            syms = ", ".join(hint.get("symbols", [])[:4])
+            path_short = hint.get('source_path', '').rsplit('/', 1)[-1] or hint.get('owner_name', 'unknown')
+            lines_str = '/'.join(str(ln) for ln in hint.get('lines', [])[:4])
+            syms = ', '.join(hint.get('symbols', [])[:4])
             parts.append(
-                f"- `{path_short}:{lines_str}` "
-                f"hits={hint.get('hit_count', 0)} "
-                f"(direct={hint.get('direct_hit_count', 0)}, perf={hint.get('perf_hit_count', 0)})"
+                f'- `{path_short}:{lines_str}` '
+                f'hits={hint.get("hit_count", 0)} '
+                f'(direct={hint.get("direct_hit_count", 0)}, perf={hint.get("perf_hit_count", 0)})'
             )
             if syms:
-                parts.append(f"  symbols: {syms}")
+                parts.append(f'  symbols: {syms}')
 
-    parts.append("\n请输出 JSON 根因报告，不要输出其他内容。")
-    return "\n".join(parts).strip() + "\n"
+    parts.append('\n请输出 JSON 根因报告，不要输出其他内容。')
+    return '\n'.join(parts).strip() + '\n'
 
 
 def _collect_evidence_only_suspects(
@@ -440,14 +433,14 @@ def _collect_evidence_only_suspects(
     code_snippets: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """
-    从 proc_source_hints 中找出没有对应反编译代码片段的高信号嫌疑，
+    从 proc_source_hints 中找出没有对应源码片段的高信号嫌疑，
     供 with_source 模式以证据推断方式分析。
     """
     result = []
     for hint in proc_hints:
         if any(source_path_aligned(s.get('file', ''), hint.get('source_path', '')) for s in code_snippets):
             continue
-        candidates = hint.get('decompiled_candidates') or []
+        candidates = hint.get('source_candidates') or []
         if any(
             source_path_aligned(c.get('file', ''), hint.get('source_path', ''))
             for c in candidates
